@@ -93,9 +93,10 @@ postgres (healthy)
       ↓
 db-migrate  →  runs alembic upgrade head, then exits (service_completed_successfully)
       ↓
-ai-system-registry-backend  →  starts uvicorn
-ai-system-registry-frontend →  starts independently (static, no DB dependency)
-shell                        →  starts independently (static)
+ai-system-registry-backend (healthy)  →  starts uvicorn, healthcheck via healthcheck.py
+ai-system-registry-frontend           →  starts independently (static, no DB dependency)
+      ↓
+shell  →  waits for backend (service_healthy) + frontend (service_started)
 ```
 
 `db-migrate` is a one-shot container built from `libs/persistence/Dockerfile`. It owns all migrations. Backends never run migrations — they just start the API server.
@@ -142,15 +143,21 @@ Each component has:
 3. Add migration to `libs/persistence/migrations/versions/`
 4. Copy `ai-system-registry/backend/Dockerfile` pattern (build context must be repo root)
 5. Add `-e /app/libs/persistence` and `-e /app/libs/logging` to `requirements.txt`
-6. Add service to root `docker-compose.yml` with `depends_on: db-migrate`
-7. Add nav node to `shell/luigi-config.js`
+6. Add `healthcheck.py` to the backend (copy from `ai-system-registry/backend/healthcheck.py`, update port)
+7. Add service to root `docker-compose.yml` with `depends_on: db-migrate: condition: service_completed_successfully` and a `healthcheck`
+8. Add nav node to `shell/luigi-config.js`
 
 ### Backend structure (`ai-system-registry/backend/app/`)
 - `main.py` — FastAPI app, mounts routers, `/health` endpoint tests DB connectivity
-- `schemas.py` — Pydantic v2 request/response schemas (API-specific, stays per component). Also exports `VALID_LIFECYCLES` and `VALID_ROLES` constants
+- `schemas/` — Pydantic v2 request/response schemas, split by domain:
+  - `schemas/ai_system.py` — `AISystemCreate`, `AISystemUpdate`, `AISystemResponse`, `ClassificationResult`, `IntakeResponse`, `VALID_LIFECYCLES`, `VALID_ROLES`
+  - `schemas/model_card.py` — `ModelCardCreate`, `ModelCardUpdate`, `ModelCardResponse`
+  - `schemas/__init__.py` — re-exports everything; all routers import from `app.schemas`
 - `classifier.py` — EU AI Act 4-tier waterfall classifier (Art. 5 → GPAI → Annex III → Art. 50 → minimal), pure Python, no I/O, no DB
+- `healthcheck.py` — used by Docker healthcheck (`python healthcheck.py`), hits `/health` via stdlib urllib
 - `routers/intake.py` — `POST /api/v1/intake` (classify + persist)
-- `routers/systems.py` — `GET/PUT/DELETE /api/v1/systems` + `POST /api/v1/systems/{id}/reclassify`
+- `routers/systems.py` — `GET/PUT/DELETE /api/v1/systems`, `POST /api/v1/systems/{id}/reclassify`, `PUT /api/v1/systems/{id}/model` (link), `DELETE /api/v1/systems/{id}/model` (unlink)
+- `routers/model_cards.py` — `GET/POST/PUT/DELETE /api/v1/model-cards`
 
 ### Registration flow
 `POST /api/v1/intake` is the entry point for all new registrations. It runs the classifier synchronously (< 10ms), assigns a `SYS-XXXXXXXX` ID, persists to PostgreSQL, and returns the system + classification result. The frontend never sends a `tier` field — classification is backend-only.
@@ -176,13 +183,17 @@ Waterfall — returns at first match, highest priority first:
 Classification logic is hardcoded (EU AI Act is law, not config). Obligation texts and thresholds are constants in `classifier.py`.
 
 ### Database
-Shared PostgreSQL instance (one container, all components use the same DB). All migrations live in `libs/persistence/migrations/versions/`. Migration `0001` creates the `ai_systems` table.
+Shared PostgreSQL instance (one container, all components use the same DB). All migrations live in `libs/persistence/migrations/versions/`:
+- `0001` — creates `ai_systems` table
+- `0002` — creates `model_cards` table, adds `model_id` FK to `ai_systems`
+- `0003` — seeds 12 known LLM model cards (GPT-4o, Claude 3.5, Llama 3, etc.)
 
 ### Frontend MFE pattern
 Each MFE is a single `public/index.html` with:
 - UI5 Web Components v2 loaded from `unpkg.com`
 - Luigi Client loaded from `unpkg.com`
-- Vanilla JS with hash-based client-side routing
+- Vanilla JS with hash-based client-side routing (`#/systems`, `#/models`)
+- Backend health polling on load — shows a red banner with auto-retry if backend is unavailable
 - All API calls to `http://localhost:800x/api/v1/`
 - nginx headers: `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding)
 
@@ -197,3 +208,5 @@ Each MFE is a single `public/index.html` with:
 - `DATABASE_URL` is defined once as a YAML anchor (`x-db-env`) and merged into each service that needs it — never copy-paste it
 - Backend build context is always the repo root (`.`) so the Dockerfile can `COPY libs/persistence`
 - New backends follow the same pattern: `depends_on: db-migrate: condition: service_completed_successfully`
+- Each backend must have a `healthcheck.py` and declare a `healthcheck` in `docker-compose.yml` using `CMD python healthcheck.py` — no extra packages needed, uses Python stdlib `urllib`
+- Shell depends on backend via `condition: service_healthy` — it won't start until the backend passes its healthcheck
