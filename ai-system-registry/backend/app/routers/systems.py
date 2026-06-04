@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy import select
+
+from ai_trust_logging import get_logger
+from app.classifier import classify
+from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.models.ai_system import AISystem
+from app.schemas import (
+    AISystemCreate,
+    AISystemResponse,
+    AISystemUpdate,
+    IntakeResponse,
+    VALID_LIFECYCLES,
+    VALID_ROLES,
+)
+
+router = APIRouter(tags=["systems"])
+logger = get_logger(__name__)
+
+_IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
+
+
+@router.get("/systems", response_model=list[AISystemResponse])
+async def list_systems(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[AISystemResponse]:
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(AISystem).order_by(AISystem.created_at.desc()).limit(limit).offset(offset)
+        )
+        return [AISystemResponse.model_validate(r) for r in result.scalars().all()]
+
+
+@router.get("/systems/{system_id}", response_model=AISystemResponse)
+async def get_system(system_id: str) -> AISystemResponse:
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+        return AISystemResponse.model_validate(row)
+
+
+@router.put("/systems/{system_id}", response_model=AISystemResponse)
+async def update_system(system_id: str, body: AISystemUpdate) -> AISystemResponse:
+    updates = body.model_dump(exclude_none=True)
+
+    immutable_attempted = _IMMUTABLE_FIELDS & updates.keys()
+    if immutable_attempted:
+        raise HTTPException(422, f"Fields are immutable (use /reclassify): {sorted(immutable_attempted)}")
+
+    if body.lifecycle and body.lifecycle not in VALID_LIFECYCLES:
+        raise HTTPException(422, f"Invalid lifecycle '{body.lifecycle}'")
+    if body.org_role and body.org_role not in VALID_ROLES:
+        raise HTTPException(422, f"Invalid org_role '{body.org_role}'")
+
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+
+        for field, value in updates.items():
+            setattr(row, field, value)
+        row.updated_at = datetime.now(timezone.utc)
+
+        await session.commit()
+        await session.refresh(row)
+
+    logger.info("system.updated", extra={"system_id": system_id, "fields": sorted(updates.keys())})
+    return AISystemResponse.model_validate(row)
+
+
+@router.delete("/systems/{system_id}")
+async def delete_system(system_id: str) -> dict:
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+        name = row.name
+        session.delete(row)
+        await session.commit()
+    logger.info("system.deleted", extra={"system_id": system_id, "system_name": name})
+    return {"status": "deleted", "id": system_id, "name": name}
+
+
+@router.post("/systems/{system_id}/reclassify", response_model=IntakeResponse)
+async def reclassify_system(system_id: str) -> IntakeResponse:
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+
+        old_tier = row.tier
+        body = AISystemCreate.model_validate(row, from_attributes=True)
+        classification = classify(body)
+
+        row.tier = classification.tier
+        row.basis = classification.basis
+        row.annex_iii_area = classification.annex_iii_area
+        row.updated_at = datetime.now(timezone.utc)
+
+        await session.commit()
+        await session.refresh(row)
+
+    logger.info("system.reclassified", extra={
+        "system_id": system_id,
+        "old_tier": old_tier,
+        "new_tier": classification.tier,
+        "basis": classification.basis,
+    })
+
+    return IntakeResponse(
+        system=AISystemResponse.model_validate(row),
+        classification=classification,
+    )

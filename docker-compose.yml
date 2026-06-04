@@ -1,0 +1,57 @@
+version: "3.9"
+
+x-db-env: &db-env
+  DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/ai_trust
+
+services:
+  shell:
+    build: ./shell
+    ports:
+      - "8080:80"
+    depends_on:
+      - ai-system-registry-frontend
+
+  ai-system-registry-frontend:
+    build: ./ai-system-registry/frontend
+    ports:
+      - "3001:80"
+
+  db-migrate:
+    build: ./libs/persistence
+    environment:
+      <<: *db-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ai-system-registry-backend:
+    build:
+      context: .
+      dockerfile: ai-system-registry/backend/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      <<: *db-env
+      ALLOWED_ORIGINS: "http://localhost:3001,http://localhost:8080"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ai_trust
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
