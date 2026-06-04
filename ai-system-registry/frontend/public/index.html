@@ -474,6 +474,21 @@
 
     .hidden { display: none !important; }
 
+    /* ── Backend health banner ── */
+    .health-banner {
+      display: none;
+      background: #fde8e8;
+      border-bottom: 1px solid #f5b8b8;
+      padding: 10px 24px;
+      font-size: 13px;
+      color: #8b0000;
+      align-items: center;
+      gap: 12px;
+    }
+    .health-banner.show { display: flex; }
+    .health-banner .spinner { border-top-color: #8b0000; border-color: #f5b8b8; width: 14px; height: 14px; }
+    .health-banner a { color: #8b0000; font-weight: 600; cursor: pointer; text-decoration: underline; }
+
     @media (max-width: 600px) {
       .form-grid { grid-template-columns: 1fr; }
       .form-group.span2 { grid-column: span 1; }
@@ -502,6 +517,15 @@
 <div class="nav-tabs">
   <div class="nav-tab active" id="navSystems" onclick="switchView('systems')">AI Systems</div>
   <div class="nav-tab" id="navModels" onclick="switchView('models')">Model Catalog</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     BACKEND HEALTH BANNER
+═══════════════════════════════════════════════════════ -->
+<div class="health-banner" id="healthBanner">
+  <span class="spinner"></span>
+  <span id="healthBannerMsg">Backend is unavailable. Retrying…</span>
+  <a onclick="retryHealth()">Retry now</a>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
@@ -994,6 +1018,7 @@
 <script>
   // ── Config ──────────────────────────────────────────────────────────────────
   const API_BASE = window.AI_REGISTRY_API_BASE || "http://localhost:8001/api/v1";
+  const HEALTH_URL = API_BASE.replace("/api/v1", "") + "/health";
 
   // ── State ───────────────────────────────────────────────────────────────────
   let allSystems = [];
@@ -1001,12 +1026,12 @@
   let currentSystem = null;
   let editingModelId = null; // null = create, string = update
   let wizardStep = 0;
+  let _healthTimer = null;
+  let _backendOk = false;
 
   // ── Init ────────────────────────────────────────────────────────────────────
   document.addEventListener("DOMContentLoaded", () => {
-    loadSystems();
-    loadModels();
-    // Hash-based routing
+    checkBackendHealth();
     const hash = location.hash;
     if (hash === "#/models") switchView("models");
   });
@@ -1015,6 +1040,40 @@
     if (location.hash === "#/models") switchView("models");
     else switchView("systems");
   });
+
+  // ── Health polling ───────────────────────────────────────────────────────────
+  async function checkBackendHealth() {
+    try {
+      const res = await fetch(HEALTH_URL, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setBackendOk(true);
+    } catch {
+      setBackendOk(false);
+      _healthTimer = setTimeout(checkBackendHealth, 5000);
+    }
+  }
+
+  function setBackendOk(ok) {
+    const banner = document.getElementById("healthBanner");
+    if (ok) {
+      banner.classList.remove("show");
+      if (!_backendOk) {
+        loadSystems();
+        loadModels();
+      }
+      _backendOk = true;
+    } else {
+      banner.classList.add("show");
+      document.getElementById("healthBannerMsg").textContent = "Backend is unavailable. Retrying in 5 s…";
+      _backendOk = false;
+    }
+  }
+
+  function retryHealth() {
+    clearTimeout(_healthTimer);
+    document.getElementById("healthBannerMsg").textContent = "Retrying…";
+    checkBackendHealth();
+  }
 
   // ── View switching ───────────────────────────────────────────────────────────
   function switchView(view) {
