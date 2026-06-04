@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_persistence import SessionLocal
-from app.routers import intake, systems
+from app.routers import intake, systems, model_cards
 
 app = FastAPI(title="AI System Registry", version="1.0.0")
 logger = get_logger(__name__)
@@ -63,6 +63,7 @@ async def logging_middleware(request: Request, call_next) -> Response:
 
 app.include_router(intake.router, prefix="/api/v1")
 app.include_router(systems.router, prefix="/api/v1")
+app.include_router(model_cards.router, prefix="/api/v1")
 
 
 @app.get("/health")
