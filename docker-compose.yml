@@ -9,7 +9,10 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - ai-system-registry-frontend
+      ai-system-registry-frontend:
+        condition: service_started
+      ai-system-registry-backend:
+        condition: service_healthy
 
   ai-system-registry-frontend:
     build: ./ai-system-registry/frontend
@@ -36,6 +39,12 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   postgres:
     image: postgres:16-alpine
