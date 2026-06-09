@@ -65,25 +65,63 @@ python3.12 -m venv .venv
 | OpenAPI spec (JSON) | http://localhost:8001/openapi.json |
 | Health check (includes DB) | http://localhost:8001/health |
 | PostgreSQL | localhost:5432 / db: `ai_trust` |
+| OTel Collector (gRPC) | localhost:4317 |
+| OTel Collector (HTTP) | localhost:4318 |
+| OTel RMQ Bridge | http://localhost:8002 |
+| OTel RMQ Bridge health | http://localhost:8002/health |
+| RabbitMQ management UI | http://localhost:15672 (credentials from `.env`) |
+| ClickHouse HTTP API | http://localhost:8123 / db: `otel` |
 
 ## Architecture
+
+### Repository layout
 
 ```
 ai-trust-platform/
 ├── libs/
-│   └── persistence/              ← shared Python package (models, migrations, DB session)
-│       ├── Dockerfile            ← one-shot migration container
-│       ├── pyproject.toml        ← pip installable as ai-trust-persistence
-│       ├── alembic.ini           ← migration config, reads DATABASE_URL from env
-│       └── ai_trust_persistence/
-│           ├── database.py       ← engine (pool_size=5), SessionLocal, Base
-│           ├── models/           ← all SQLAlchemy ORM models (shared across all backends)
-│           └── migrations/       ← single Alembic setup for all tables
+│   ├── persistence/              ← shared Python package (models, migrations, DB session)
+│   │   ├── Dockerfile            ← one-shot migration container
+│   │   ├── pyproject.toml        ← pip installable as ai-trust-persistence
+│   │   ├── alembic.ini           ← migration config, reads DATABASE_URL from env
+│   │   └── ai_trust_persistence/
+│   │       ├── database.py       ← engine (pool_size=5), SessionLocal, Base
+│   │       ├── models/           ← all SQLAlchemy ORM models (shared across all backends)
+│   │       └── migrations/       ← single Alembic setup for all tables
+│   └── logging/                  ← shared structured JSON logging package
 ├── shell/                        ← Luigi host (nginx + luigi-config.js)
-├── ai-system-registry/           ← first component
+├── ai-system-registry/           ← EU AI Act registry component
 │   ├── frontend/                 ← static HTML + UI5 Web Components (nginx, port 3001)
 │   └── backend/                  ← FastAPI + SQLAlchemy async (port 8001)
+├── otel-observer/                ← GenAI observability pipeline
+│   ├── collector/                ← OTel Collector config
+│   │   └── otel-collector-config.yaml
+│   ├── rmq-bridge/               ← FastAPI OTLP→RabbitMQ bridge (port 8002)
+│   │   └── app/main.py
+│   └── clickhouse/               ← ClickHouse schema
+│       └── init.sql
+├── consumers/                    ← RabbitMQ consumers (one sub-dir per sink)
+│   └── clickhouse-consumer/      ← writes GenAI spans to ClickHouse
+│       └── main.py
 └── docker-compose.yml            ← orchestrates all services
+```
+
+### GenAI observability data flow
+
+```
+App (any language, OTLP configured)
+  └─ OTLP/gRPC (4317) or OTLP/HTTP (4318) ──→ otel-collector
+                                                     │
+                                              OTLP/HTTP JSON
+                                                     ↓
+                                            otel-rmq-bridge :8002
+                                                     │
+                                         RabbitMQ fanout: otel.traces
+                                                     │
+                                  ┌──────────────────┴──────────────────┐
+                          clickhouse-consumer                (future: sse-consumer)
+                                  │
+                             ClickHouse :8123
+                             otel.gen_ai_spans
 ```
 
 ## Docker Startup Order
@@ -97,6 +135,10 @@ ai-system-registry-backend (healthy)  →  starts uvicorn, healthcheck via healt
 ai-system-registry-frontend           →  starts independently (static, no DB dependency)
       ↓
 shell  →  waits for backend (service_healthy) + frontend (service_started)
+
+rabbitmq (healthy) → otel-rmq-bridge (healthy) → otel-collector
+clickhouse (healthy) ─┐
+rabbitmq (healthy)  ──┴→ otel-clickhouse-consumer
 ```
 
 `db-migrate` is a one-shot container built from `libs/persistence/Dockerfile`. It owns all migrations. Backends never run migrations — they just start the API server.
@@ -199,14 +241,62 @@ Each MFE is a single `public/index.html` with:
 
 ## Environment variables
 
-| Variable | Service | Default | Description |
+All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fill in values before running `docker compose up`. Never commit `.env`.
+
+| Variable | Service | Default in `.env` | Description |
 |---|---|---|---|
-| `DATABASE_URL` | all backends, db-migrate | `postgresql+asyncpg://postgres:postgres@postgres:5432/ai_trust` | Postgres connection string |
-| `ALLOWED_ORIGINS` | ai-system-registry-backend | *(required — no default)* | Comma-separated list of allowed CORS origins. App refuses to start if not set. Set to real domain(s) in production |
+| `POSTGRES_USER` | postgres, db-migrate, backends | `postgres` | PostgreSQL username |
+| `POSTGRES_PASSWORD` | postgres, db-migrate, backends | `postgres` | PostgreSQL password |
+| `RABBITMQ_USER` | rabbitmq, otel-rmq-bridge, consumers | `guest` | RabbitMQ username |
+| `RABBITMQ_PASSWORD` | rabbitmq, otel-rmq-bridge, consumers | `guest` | RabbitMQ password |
+| `CLICKHOUSE_USER` | clickhouse, otel-clickhouse-consumer | `default` | ClickHouse username |
+| `CLICKHOUSE_PASSWORD` | clickhouse, otel-clickhouse-consumer | *(empty)* | ClickHouse password |
+| `DATABASE_URL` | all backends, db-migrate | derived from `POSTGRES_*` above | Postgres connection string |
+| `ALLOWED_ORIGINS` | ai-system-registry-backend | *(required — no default)* | Comma-separated CORS origins. App refuses to start if not set. |
+
+All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code.
 
 ## docker-compose.yml conventions
-- `DATABASE_URL` is defined once as a YAML anchor (`x-db-env`) and merged into each service that needs it — never copy-paste it
+- Credentials are defined via YAML anchors (`x-db-env`, `x-rmq-env`, `x-ch-env`) and merged into each service — never copy-paste connection strings
 - Backend build context is always the repo root (`.`) so the Dockerfile can `COPY libs/persistence`
 - New backends follow the same pattern: `depends_on: db-migrate: condition: service_completed_successfully`
 - Each backend must have a `healthcheck.py` and declare a `healthcheck` in `docker-compose.yml` using `CMD python healthcheck.py` — no extra packages needed, uses Python stdlib `urllib`
 - Shell depends on backend via `condition: service_healthy` — it won't start until the backend passes its healthcheck
+- YAML does not allow two `<<:` merge keys in the same mapping block — expand env vars inline when a service needs multiple anchors (see `otel-clickhouse-consumer`)
+
+## otel-observer/
+
+GenAI observability pipeline. Receives OTLP from any application, routes through RabbitMQ, stores in ClickHouse.
+
+- **`collector/otel-collector-config.yaml`** — OTel Collector receives OTLP gRPC/HTTP and exports to rmq-bridge as OTLP/HTTP JSON. `encoding: json` and `compression: none` are required — the collector defaults to protobuf binary which the bridge cannot parse.
+- **`rmq-bridge/`** — FastAPI service. `POST /v1/traces` receives raw OTLP JSON and publishes it to RabbitMQ fanout exchange `otel.traces`. No parsing or filtering here — that is the consumer's job. Reads `RABBITMQ_URL` from env (fail-fast).
+- **`clickhouse/init.sql`** — Mounted into ClickHouse container at `/docker-entrypoint-initdb.d/init.sql`. Runs automatically on first container start. Creates `otel` database and `gen_ai_spans` MergeTree table ordered by `(received_at, service_name, request_model)`.
+
+### Connecting an external application
+
+Any app outside Docker can send spans to the collector running on the host:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://<host-ip>:4317   # gRPC
+# or
+OTEL_EXPORTER_OTLP_ENDPOINT=http://<host-ip>:4318   # HTTP
+```
+
+To capture prompt/response message content (off by default for privacy):
+
+```bash
+OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true
+```
+
+This env var is set on the **instrumented application**, not on this platform. When `false` (default), `input_messages` and `output_messages` columns in ClickHouse will be empty strings.
+
+## consumers/
+
+One sub-directory per RabbitMQ consumer. Each is a standalone Python worker: no FastAPI, `asyncio.run(main())` entrypoint, no HTTP port. All consumers bind a named durable queue to the `otel.traces` fanout exchange — messages are queued while a consumer is down and processed on reconnect.
+
+### Adding a new consumer
+1. Create `consumers/my-consumer/` with `main.py`, `requirements.txt`, `Dockerfile`, `entrypoint.sh`
+2. In `main.py`: declare a named durable queue (e.g. `"my-consumer"`) and bind it to the `otel.traces` fanout exchange
+3. Add service to `docker-compose.yml` with `depends_on: rabbitmq: condition: service_healthy` and `restart: on-failure`
+
+**`consumers/clickhouse-consumer/`** — Parses OTLP JSON, skips spans without `gen_ai.operation.name`, batch-inserts into `otel.gen_ai_spans`. Reads `RABBITMQ_URL`, `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` from env (all fail-fast).
