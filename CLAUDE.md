@@ -294,9 +294,6 @@ This env var is set on the **instrumented application**, not on this platform. W
 
 One sub-directory per RabbitMQ consumer. Each is a standalone Python worker: no FastAPI, `asyncio.run(main())` entrypoint, no HTTP port. All consumers bind a named durable queue to the `otel.traces` fanout exchange — messages are queued while a consumer is down and processed on reconnect.
 
-### Adding a new consumer
-1. Create `consumers/my-consumer/` with `main.py`, `requirements.txt`, `Dockerfile`, `entrypoint.sh`
-2. In `main.py`: declare a named durable queue (e.g. `"my-consumer"`) and bind it to the `otel.traces` fanout exchange
-3. Add service to `docker-compose.yml` with `depends_on: rabbitmq: condition: service_healthy` and `restart: on-failure`
+To add a new consumer, use the `/add-consumer` skill.
 
 **`consumers/clickhouse-consumer/`** — Parses OTLP JSON, skips spans without `gen_ai.operation.name`, batch-inserts into `otel.gen_ai_spans`. Reads `RABBITMQ_URL`, `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` from env (all fail-fast).
