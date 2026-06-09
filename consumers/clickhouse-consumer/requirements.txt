@@ -1,0 +1,2 @@
+aio-pika==9.4.3
+clickhouse-connect==0.8.0
