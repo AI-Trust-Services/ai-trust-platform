@@ -3,10 +3,7 @@ import os
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_trust",
-)
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 engine = create_async_engine(
     DATABASE_URL,
