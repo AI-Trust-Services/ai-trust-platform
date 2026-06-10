@@ -20,23 +20,20 @@ docker compose down --remove-orphans
 ### Backend development (local, no Docker)
 ```bash
 cd ai-system-registry/backend
-make setup  # first time only
+pip install -r requirements.txt
 # Set DATABASE_URL to a local postgres instance
 # Run migrations first (only needed once, or after pulling new migrations)
 cd ../../libs/persistence && alembic upgrade head && cd -
-ALLOWED_ORIGINS=http://localhost:3001 uvicorn app.main:app --reload --port 8001
+uvicorn app.main:app --reload --port 8001
 ```
 
 ### Run tests (local)
 ```bash
 cd ai-system-registry/backend
-make test-unit   # no Docker needed
-make test-e2e    # requires Postgres: docker compose up -d postgres
-make test        # all tests
+ALLOWED_ORIGINS=http://localhost:3001 .venv/bin/pytest tests/ -v
 ```
 
-- `tests/unit/` — pure unit tests, no DB required
-- `tests/e2e/` — full stack via ASGITransport, requires Postgres only (no running server needed), auto-creates `ai_trust_test` DB and runs migrations on first run
+Tests cover classifier logic (`tests/test_classifier.py`) and schema validation (`tests/test_schemas.py`). No DB required — these are pure unit tests.
 
 
 ```bash
@@ -77,7 +74,76 @@ python3.12 -m venv .venv
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for repo layout, GenAI observability data flow, and Docker startup order diagrams.
+### Repository layout
+
+```
+ai-trust-platform/
+├── libs/
+│   ├── persistence/              ← shared Python package (models, migrations, DB session)
+│   │   ├── Dockerfile            ← one-shot migration container
+│   │   ├── pyproject.toml        ← pip installable as ai-trust-persistence
+│   │   ├── alembic.ini           ← migration config, reads DATABASE_URL from env
+│   │   └── ai_trust_persistence/
+│   │       ├── database.py       ← engine (pool_size=5), SessionLocal, Base
+│   │       ├── models/           ← all SQLAlchemy ORM models (shared across all backends)
+│   │       └── migrations/       ← single Alembic setup for all tables
+│   └── logging/                  ← shared structured JSON logging package
+├── shell/                        ← Luigi host (nginx + luigi-config.js)
+├── ai-system-registry/           ← EU AI Act registry component
+│   ├── frontend/                 ← static HTML + UI5 Web Components (nginx, port 3001)
+│   └── backend/                  ← FastAPI + SQLAlchemy async (port 8001)
+├── otel-observer/                ← GenAI observability pipeline
+│   ├── collector/                ← OTel Collector config
+│   │   └── otel-collector-config.yaml
+│   ├── rmq-bridge/               ← FastAPI OTLP→RabbitMQ bridge (port 8002)
+│   │   └── app/main.py
+│   └── clickhouse/               ← ClickHouse schema
+│       └── init.sql
+├── consumers/                    ← RabbitMQ consumers (one sub-dir per sink)
+│   └── clickhouse-consumer/      ← writes GenAI spans to ClickHouse
+│       └── main.py
+└── docker-compose.yml            ← orchestrates all services
+```
+
+### GenAI observability data flow
+
+```
+App (any language, OTLP configured)
+  └─ OTLP/gRPC (4317) or OTLP/HTTP (4318) ──→ otel-collector
+                                                     │
+                                              OTLP/HTTP JSON
+                                                     ↓
+                                            otel-rmq-bridge :8002
+                                                     │
+                                         RabbitMQ fanout: otel.traces
+                                                     │
+                                  ┌──────────────────┴──────────────────┐
+                          clickhouse-consumer                (future: sse-consumer)
+                                  │
+                             ClickHouse :8123
+                             otel.gen_ai_spans
+```
+
+## Docker Startup Order
+
+```
+postgres (healthy)
+      ↓
+db-migrate  →  runs alembic upgrade head, then exits (service_completed_successfully)
+      ↓
+ai-system-registry-backend (healthy)  →  starts uvicorn, healthcheck via healthcheck.py
+ai-system-registry-frontend           →  starts independently (static, no DB dependency)
+      ↓
+shell  →  waits for backend (service_healthy) + frontend (service_started)
+
+rabbitmq (healthy) → otel-rmq-bridge (healthy) → otel-collector
+clickhouse (healthy) ─┐
+rabbitmq (healthy)  ──┴→ otel-clickhouse-consumer
+```
+
+`db-migrate` is a one-shot container built from `libs/persistence/Dockerfile`. It owns all migrations. Backends never run migrations — they just start the API server.
+
+**If db-migrate fails:** check logs with `docker compose logs db-migrate`. Common causes: postgres not ready (retry `docker compose up db-migrate`), or a bad migration file. Fix the migration, then re-run with `docker compose up --build db-migrate`. The backend will not start until db-migrate exits successfully.
 
 ## libs/persistence
 

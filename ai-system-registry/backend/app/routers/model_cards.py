@@ -48,7 +48,7 @@ async def create_model_card(body: ModelCardCreate) -> ModelCardResponse:
         session.add(row)
         await session.commit()
         await session.refresh(row)
-    logger.info("model_card.created", extra={"model_id": row.id, "model_name": row.name})
+    logger.info("model_card.created", extra={"model_id": row.id, "name": row.name})
     return ModelCardResponse.model_validate(row)
 
 
