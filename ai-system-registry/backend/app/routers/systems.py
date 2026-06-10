@@ -84,7 +84,7 @@ async def delete_system(system_id: str) -> dict:
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         name = row.name
-        session.delete(row)
+        await session.delete(row)
         await session.commit()
     logger.info("system.deleted", extra={"system_id": system_id, "system_name": name})
     return {"status": "deleted", "id": system_id, "name": name}
