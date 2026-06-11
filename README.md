@@ -8,6 +8,7 @@ A platform for governing AI systems under the **EU AI Act** — register AI syst
 |---|---|
 | [AI System Registry](ai-system-registry/) | Register and classify AI systems by EU AI Act risk tier (prohibited → high → limited → minimal) |
 | OTel Observer | Ingest GenAI spans from any application via OpenTelemetry → RabbitMQ → ClickHouse |
+| [Consumers](consumers/) | RabbitMQ consumers — one per sink (ClickHouse, SSE, etc.) |
 | Shell | Luigi micro-frontend host that composes all UIs into a single portal |
 
 See [docs/architecture.md](docs/architecture.md) for the full repo layout, data flow diagrams, and Docker startup order.
@@ -40,6 +41,3 @@ docker compose down -v --remove-orphans       # stop, wipe all data (fresh start
 - Docker + Docker Compose
 - No local language runtime needed — everything runs in containers
 
-## Architecture
-
-See [docs/architecture.md](docs/architecture.md).
