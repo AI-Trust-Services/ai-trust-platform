@@ -93,6 +93,14 @@ The shared DB package. All backends depend on it.
 3. Run `alembic revision --autogenerate -m "description"` from `libs/persistence/`
 4. Rebuild `db-migrate` container: `docker compose up --build -d db-migrate`
 
+## libs/clickhouse
+
+The shared ClickHouse package. All consumers and any future services that read/write ClickHouse depend on it.
+
+- **`database.py`** — ClickHouse connection factory, reads `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` from environment (fail-fast)
+- **`tables.py`** — single source of truth for table name (`GEN_AI_SPANS`) and column list (`COLUMNS`)
+- **`migrations/`** — versioned SQL migration files, applied in filename order
+
 ## libs/logging
 
 The shared structured logging package. All backends depend on it.
@@ -198,13 +206,20 @@ All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential def
 - Shell depends on backend via `condition: service_healthy` — it won't start until the backend passes its healthcheck
 - YAML does not allow two `<<:` merge keys in the same mapping block — expand env vars inline when a service needs multiple anchors (see `otel-clickhouse-consumer`)
 
-## otel-observer/
+## Dependency pinning
+
+All third-party package versions are pinned in **`pinned-deps.txt`** at the repo root. Every `requirements.txt` references it via `-c ../../pinned-deps.txt` and lists only package names (no versions). When adding or upgrading a dependency:
+
+1. Update the version in `pinned-deps.txt`
+2. Add the package name (no version) to the relevant `requirements.txt`
+
+## otel-pipeline/
 
 GenAI observability pipeline. Receives OTLP from any application, routes through RabbitMQ, stores in ClickHouse.
 
 - **`collector/otel-collector-config.yaml`** — OTel Collector receives OTLP gRPC/HTTP and exports to rmq-bridge as OTLP/HTTP JSON. `encoding: json` and `compression: none` are required — the collector defaults to protobuf binary which the bridge cannot parse.
 - **`rmq-bridge/`** — FastAPI service. `POST /v1/traces` receives raw OTLP JSON and publishes it to RabbitMQ fanout exchange `otel.traces`. No parsing or filtering here — that is the consumer's job. Reads `RABBITMQ_URL` from env (fail-fast).
-- **`clickhouse/init.sql`** — Mounted into ClickHouse container at `/docker-entrypoint-initdb.d/init.sql`. Runs automatically on first container start. Creates `otel` database and `gen_ai_spans` MergeTree table ordered by `(received_at, service_name, request_model)`.
+- **ClickHouse schema** — managed by the `clickhouse-migrate` service (see `libs/clickhouse/`). Schema migrations live in `libs/clickhouse/migrations/` and are tracked in `otel.schema_migrations`.
 
 ### Connecting an external application
 
@@ -230,4 +245,11 @@ One sub-directory per RabbitMQ consumer. Each is a standalone Python worker: no 
 
 To add a new consumer, use the `/add-consumer` skill.
 
-**`consumers/clickhouse-consumer/`** — Parses OTLP JSON, skips spans without `gen_ai.operation.name`, batch-inserts into `otel.gen_ai_spans`. Reads `RABBITMQ_URL`, `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` from env (all fail-fast).
+**`consumers/clickhouse-consumer/`** — Parses OTLP JSON, skips spans without `gen_ai.operation.name`, batch-inserts into `otel.gen_ai_spans`. Reads `RABBITMQ_URL`, `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` from env (all fail-fast). Imports connection and schema constants from `ai_trust_clickhouse`.
+
+### Run consumer tests (local)
+```bash
+cd consumers/clickhouse-consumer
+make setup      # first time only — creates .venv and installs deps
+make test-unit  # no Docker needed
+```

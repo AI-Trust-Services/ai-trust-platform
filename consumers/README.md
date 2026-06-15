@@ -1,6 +1,6 @@
 # Consumers
 
-RabbitMQ consumers for the [OTel Observer](../otel-observer/) pipeline. Each consumer binds a durable queue to the `otel.traces` fanout exchange and processes GenAI span messages independently.
+RabbitMQ consumers for the [OTel Pipeline](../otel-pipeline/) pipeline. Each consumer binds a durable queue to the `otel.traces` fanout exchange and processes GenAI span messages independently.
 
 Messages are queued while a consumer is down and processed on reconnect — no spans are lost during restarts.
 
@@ -8,7 +8,7 @@ Messages are queued while a consumer is down and processed on reconnect — no s
 
 | Consumer | Sink | Description |
 |---|---|---|
-| [clickhouse-consumer](clickhouse-consumer/) | ClickHouse `otel.gen_ai_spans` | Parses OTLP JSON, filters spans with `gen_ai.operation.name`, batch-inserts into ClickHouse |
+| [clickhouse-consumer](clickhouse-consumer/) | ClickHouse `otel.gen_ai_spans` | Parses OTLP JSON, filters spans with `gen_ai.operation.name`, batch-inserts into ClickHouse. Uses `ai_trust_clickhouse` for connection and schema constants |
 
 ## How it works
 

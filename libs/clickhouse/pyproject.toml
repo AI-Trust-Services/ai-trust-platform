@@ -3,16 +3,13 @@ requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ai-trust-persistence"
+name = "ai-trust-clickhouse"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
-    "sqlalchemy",
-    "asyncpg",
-    "alembic",
-    "greenlet",
+    "clickhouse-connect",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["ai_trust_persistence*"]
+include = ["ai_trust_clickhouse*"]

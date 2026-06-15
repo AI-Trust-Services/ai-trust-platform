@@ -5,32 +5,30 @@ import os
 from datetime import datetime, timezone
 
 import aio_pika
-import clickhouse_connect
+from ai_trust_clickhouse import COLUMNS, GEN_AI_SPANS, get_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-RABBITMQ_URL = os.environ["RABBITMQ_URL"]
-CLICKHOUSE_HOST = os.environ["CLICKHOUSE_HOST"]
-CLICKHOUSE_PORT = int(os.environ.get("CLICKHOUSE_PORT", "8123"))
-CLICKHOUSE_USER = os.environ["CLICKHOUSE_USER"]
-CLICKHOUSE_PASSWORD = os.environ["CLICKHOUSE_PASSWORD"]
 EXCHANGE_NAME = "otel.traces"
+QUEUE_NAME = "clickhouse-consumer"
 
 
-def _extract_attr(attributes: list, key: str) -> str | None:
-    for attr in attributes:
-        if attr.get("key") == key:
-            val = attr.get("value", {})
-            if "stringValue" in val:
-                return val["stringValue"]
-            if "intValue" in val:
-                return str(val["intValue"])
-            if "doubleValue" in val:
-                return str(val["doubleValue"])
-            if "boolValue" in val:
-                return str(val["boolValue"]).lower()
+def _extract_attr(attributes: dict, key: str) -> str | None:
+    val = attributes.get(key, {})
+    if "stringValue" in val:
+        return val["stringValue"]
+    if "intValue" in val:
+        return str(val["intValue"])
+    if "doubleValue" in val:
+        return str(val["doubleValue"])
+    if "boolValue" in val:
+        return str(val["boolValue"]).lower()
     return None
+
+
+def _attrs_dict(attributes: list) -> dict:
+    return {a["key"]: a.get("value", {}) for a in attributes if "key" in a}
 
 
 def _parse_nano(nano: str | None) -> datetime:
@@ -41,13 +39,14 @@ def _parse_nano(nano: str | None) -> datetime:
 
 def _process_payload(body: bytes) -> list[dict]:
     payload = json.loads(body)
+    received_at = datetime.now(timezone.utc)
     rows = []
     for resource_span in payload.get("resourceSpans", []):
-        resource_attrs = resource_span.get("resource", {}).get("attributes", [])
+        resource_attrs = _attrs_dict(resource_span.get("resource", {}).get("attributes", []))
         service_name = _extract_attr(resource_attrs, "service.name") or ""
         for scope_span in resource_span.get("scopeSpans", []):
             for span in scope_span.get("spans", []):
-                attrs = span.get("attributes", [])
+                attrs = _attrs_dict(span.get("attributes", []))
                 operation_name = _extract_attr(attrs, "gen_ai.operation.name")
                 if not operation_name:
                     continue
@@ -57,7 +56,7 @@ def _process_payload(body: bytes) -> list[dict]:
                 if start_nano and end_nano:
                     duration_ms = (int(end_nano) - int(start_nano)) / 1_000_000
                 rows.append({
-                    "received_at": datetime.now(timezone.utc),
+                    "received_at": received_at,
                     "started_at": _parse_nano(start_nano),
                     "trace_id": span.get("traceId", ""),
                     "span_id": span.get("spanId", ""),
@@ -78,19 +77,14 @@ def _process_payload(body: bytes) -> list[dict]:
 
 
 async def main() -> None:
-    log.info("Connecting to ClickHouse at %s:%s", CLICKHOUSE_HOST, CLICKHOUSE_PORT)
-    ch = clickhouse_connect.get_client(
-        host=CLICKHOUSE_HOST,
-        port=CLICKHOUSE_PORT,
-        username=CLICKHOUSE_USER,
-        password=CLICKHOUSE_PASSWORD,
-    )
+    rabbitmq_url = os.environ["RABBITMQ_URL"]
+    ch = get_client()
 
     log.info("Connecting to RabbitMQ (credentials masked)")
-    connection = await aio_pika.connect_robust(RABBITMQ_URL)
+    connection = await aio_pika.connect_robust(rabbitmq_url)
     channel = await connection.channel()
     exchange = await channel.declare_exchange(EXCHANGE_NAME, aio_pika.ExchangeType.FANOUT, durable=True)
-    queue = await channel.declare_queue("clickhouse-consumer", durable=True)
+    queue = await channel.declare_queue(QUEUE_NAME, durable=True)
     await queue.bind(exchange)
 
     log.info("Waiting for messages on exchange %s", EXCHANGE_NAME)
@@ -103,9 +97,9 @@ async def main() -> None:
                     if not rows:
                         continue
                     ch.insert(
-                        "otel.gen_ai_spans",
+                        GEN_AI_SPANS,
                         [list(r.values()) for r in rows],
-                        column_names=list(rows[0].keys()),
+                        column_names=COLUMNS,
                     )
                     log.info("Inserted %d GenAI span(s)", len(rows))
                 except Exception:

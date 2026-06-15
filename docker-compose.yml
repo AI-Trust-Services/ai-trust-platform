@@ -1,5 +1,3 @@
-version: "3.9"
-
 x-db-env: &db-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/ai_trust
 
@@ -92,7 +90,6 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
     volumes:
-      - ./otel-observer/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql
       - clickhouse_data:/var/lib/clickhouse
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --user $${CLICKHOUSE_USER} --password $${CLICKHOUSE_PASSWORD} --query 'SELECT 1'"]
@@ -100,8 +97,17 @@ services:
       timeout: 5s
       retries: 5
 
+  clickhouse-migrate:
+    build: ./libs/clickhouse
+    environment:
+      <<: *ch-env
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: on-failure
+
   otel-rmq-bridge:
-    build: ./otel-observer/rmq-bridge
+    build: ./otel-pipeline/rmq-bridge
     ports:
       - "8002:8002"
     environment:
@@ -119,7 +125,7 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.102.0
     volumes:
-      - ./otel-observer/collector/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+      - ./otel-pipeline/collector/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
     ports:
       - "4317:4317"
       - "4318:4318"
@@ -128,18 +134,17 @@ services:
         condition: service_healthy
 
   otel-clickhouse-consumer:
-    build: ./consumers/clickhouse-consumer
+    build:
+      context: .
+      dockerfile: consumers/clickhouse-consumer/Dockerfile
     environment:
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PORT: "8123"
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      <<: *ch-env
     depends_on:
       rabbitmq:
         condition: service_healthy
-      clickhouse:
-        condition: service_healthy
+      clickhouse-migrate:
+        condition: service_completed_successfully
     restart: on-failure
 
 volumes:

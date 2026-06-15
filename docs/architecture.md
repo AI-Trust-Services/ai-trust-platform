@@ -13,18 +13,24 @@ ai-trust-platform/
 │   │       ├── database.py       ← engine (pool_size=5), SessionLocal, Base
 │   │       ├── models/           ← all SQLAlchemy ORM models (shared across all backends)
 │   │       └── migrations/       ← single Alembic setup for all tables
+│   ├── clickhouse/               ← shared Python package (ClickHouse connection + schema)
+│   │   ├── Dockerfile            ← one-shot migration container
+│   │   ├── pyproject.toml        ← pip installable as ai-trust-clickhouse
+│   │   ├── migrate.py            ← idempotent migration runner
+│   │   ├── migrations/           ← versioned SQL files tracked in otel.schema_migrations
+│   │   └── ai_trust_clickhouse/
+│   │       ├── database.py       ← get_client() factory
+│   │       └── tables.py         ← GEN_AI_SPANS table name + COLUMNS list
 │   └── logging/                  ← shared structured JSON logging package
 ├── shell/                        ← Luigi host (nginx + luigi-config.js)
 ├── ai-system-registry/           ← EU AI Act registry component
 │   ├── frontend/                 ← static HTML + UI5 Web Components (nginx, port 3001)
 │   └── backend/                  ← FastAPI + SQLAlchemy async (port 8001)
-├── otel-observer/                ← GenAI observability pipeline
+├── otel-pipeline/                ← GenAI observability pipeline
 │   ├── collector/                ← OTel Collector config
 │   │   └── otel-collector-config.yaml
-│   ├── rmq-bridge/               ← FastAPI OTLP→RabbitMQ bridge (port 8002)
-│   │   └── app/main.py
-│   └── clickhouse/               ← ClickHouse schema
-│       └── init.sql
+│   └── rmq-bridge/               ← FastAPI OTLP→RabbitMQ bridge (port 8002)
+│       └── app/main.py
 ├── consumers/                    ← RabbitMQ consumers (one sub-dir per sink)
 │   └── clickhouse-consumer/      ← writes GenAI spans to ClickHouse
 │       └── main.py
@@ -60,6 +66,7 @@ flowchart TD
     Bridge["otel-rmq-bridge\n(healthy)"]
     Collector["otel-collector"]
     CH["clickhouse\n(healthy)"]
+    CHMigrate["clickhouse-migrate\nruns migrate.py\nthen exits"]
     CHConsumer["otel-clickhouse-consumer"]
 
     PG --> Migrate
@@ -71,10 +78,15 @@ flowchart TD
     RMQ --> Bridge
     Bridge --> Collector
 
-    CH --> CHConsumer
+    CH --> CHMigrate
+    CHMigrate --> CHConsumer
     RMQ --> CHConsumer
 ```
 
-`db-migrate` is a one-shot container built from `libs/persistence/Dockerfile`. It owns all migrations — backends never run migrations, they just start the API server.
+`db-migrate` is a one-shot container built from `libs/persistence/Dockerfile`. It owns all Postgres migrations — backends never run migrations, they just start the API server.
+
+`clickhouse-migrate` is a one-shot container built from `libs/clickhouse/Dockerfile`. It owns all ClickHouse schema migrations — consumers never run migrations.
 
 **If db-migrate fails:** check logs with `docker compose logs db-migrate`. Common causes: postgres not ready (retry `docker compose up db-migrate`), or a bad migration file. Fix the migration, then re-run with `docker compose up --build db-migrate`. The backend will not start until db-migrate exits successfully.
+
+**If clickhouse-migrate fails:** check logs with `docker compose logs clickhouse-migrate`. Common causes: clickhouse not ready (retry `docker compose up clickhouse-migrate`), or a bad SQL file. Fix the migration, then re-run with `docker compose up --build clickhouse-migrate`. The consumer will not start until clickhouse-migrate exits successfully.

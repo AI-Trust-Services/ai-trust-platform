@@ -1,0 +1,5 @@
+-c ../../pinned-deps.txt
+fastapi
+uvicorn[standard]
+pydantic
+aio-pika
