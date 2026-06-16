@@ -208,10 +208,10 @@ All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential def
 
 ## Dependency pinning
 
-All third-party package versions are pinned in **`pinned-deps.txt`** at the repo root. Every `requirements.txt` references it via `-c ../../pinned-deps.txt` and lists only package names (no versions). When adding or upgrading a dependency:
+Each service has its own `requirements.txt` with pinned versions directly in it (e.g. `fastapi==0.115.6`). When adding or upgrading a dependency:
 
-1. Update the version in `pinned-deps.txt`
-2. Add the package name (no version) to the relevant `requirements.txt`
+1. Edit the version directly in the relevant service's `requirements.txt`
+2. Rebuild the service: `docker compose up --build -d <service-name>`
 
 ## otel-pipeline/
 

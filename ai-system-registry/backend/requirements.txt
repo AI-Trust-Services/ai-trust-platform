@@ -1,10 +1,9 @@
--c ../../pinned-deps.txt
-fastapi
-uvicorn[standard]
-pydantic
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pytest==8.3.5
+pytest-asyncio==0.24.0
+httpx==0.28.1
+psycopg2-binary==2.9.10
 -e /app/libs/persistence
 -e /app/libs/logging
-pytest
-pytest-asyncio
-httpx
-psycopg2-binary
