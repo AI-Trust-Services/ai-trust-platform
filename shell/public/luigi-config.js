@@ -13,6 +13,13 @@ Luigi.setConfig({
             viewUrl: "http://localhost:3001/",
             navigationContext: "ai-system-registry",
           },
+          {
+            pathSegment: "monitoring",
+            label: "Monitoring",
+            icon: "line-chart",
+            viewUrl: "http://localhost:3002/",
+            navigationContext: "monitoring",
+          },
         ],
       },
     ],

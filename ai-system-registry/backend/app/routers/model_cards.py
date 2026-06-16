@@ -83,7 +83,7 @@ async def delete_model_card(model_id: str) -> dict:
         if not row:
             raise HTTPException(404, f"Model card {model_id} not found")
         name = row.name
-        session.delete(row)
+        await session.delete(row)
         await session.commit()
     logger.info("model_card.deleted", extra={"model_id": model_id, "name": name})
     return {"status": "deleted", "id": model_id, "name": name}

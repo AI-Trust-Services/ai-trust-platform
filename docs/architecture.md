@@ -26,6 +26,9 @@ ai-trust-platform/
 ├── ai-system-registry/           ← EU AI Act registry component
 │   ├── frontend/                 ← static HTML + UI5 Web Components (nginx, port 3001)
 │   └── backend/                  ← FastAPI + SQLAlchemy async (port 8001)
+├── monitoring/                   ← Monitoring MFE component
+│   ├── frontend/                 ← static HTML + Chart.js + SortableJS (nginx, port 3002)
+│   └── backend/                  ← FastAPI (port 8003), reads Postgres + ClickHouse
 ├── otel-pipeline/                ← GenAI observability pipeline
 │   ├── collector/                ← OTel Collector config
 │   │   └── otel-collector-config.yaml
@@ -47,8 +50,10 @@ flowchart TD
     Collector -->|"OTLP/HTTP JSON"| Bridge["otel-rmq-bridge :8002"]
     Bridge -->|"fanout: otel.traces"| RMQ["RabbitMQ"]
     RMQ --> CH["clickhouse-consumer"]
-    RMQ -.->|"future"| SSE["sse-consumer"]
     CH --> ClickHouse[("ClickHouse :8123\notel.gen_ai_spans")]
+    ClickHouse -->|"signals query"| MonBackend["monitoring-backend :8003"]
+    PG[("PostgreSQL :5432\nai_systems\nmodel_cards")] -->|"stats query"| MonBackend
+    MonBackend --> MonFE["monitoring-frontend :3002"]
 ```
 
 > **Note:** `encoding: json` and `compression: none` are required in the OTel Collector config — the collector defaults to protobuf binary which the bridge cannot parse.
@@ -61,6 +66,8 @@ flowchart TD
     Migrate["db-migrate\nruns alembic upgrade head\nthen exits"]
     Backend["ai-system-registry-backend\n(healthy)"]
     Frontend["ai-system-registry-frontend\n(service_started)"]
+    MonBackend["monitoring-backend\n(healthy)"]
+    MonFrontend["monitoring-frontend\n(service_started)"]
     Shell["shell :8080"]
     RMQ["rabbitmq\n(healthy)"]
     Bridge["otel-rmq-bridge\n(healthy)"]
@@ -72,8 +79,12 @@ flowchart TD
     PG --> Migrate
     Migrate --> Backend
     Migrate --> Frontend
+    Migrate --> MonBackend
+    CH --> MonBackend
     Backend --> Shell
     Frontend --> Shell
+    MonBackend --> Shell
+    MonFrontend --> Shell
 
     RMQ --> Bridge
     Bridge --> Collector

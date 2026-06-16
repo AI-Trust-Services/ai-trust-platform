@@ -20,11 +20,20 @@ services:
         condition: service_started
       ai-system-registry-backend:
         condition: service_healthy
+      monitoring-frontend:
+        condition: service_started
+      monitoring-backend:
+        condition: service_healthy
 
   ai-system-registry-frontend:
     build: ./ai-system-registry/frontend
     ports:
       - "3001:80"
+
+  monitoring-frontend:
+    build: ./monitoring/frontend
+    ports:
+      - "3002:80"
 
   db-migrate:
     build: ./libs/persistence
@@ -46,6 +55,31 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  monitoring-backend:
+    build:
+      context: .
+      dockerfile: monitoring/backend/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      <<: *db-env
+      ALLOWED_ORIGINS: "http://localhost:3002,http://localhost:8080"
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "healthcheck.py"]
       interval: 10s

@@ -67,6 +67,9 @@ python3.12 -m venv .venv
 | API docs (Swagger) | http://localhost:8001/docs |
 | OpenAPI spec (JSON) | http://localhost:8001/openapi.json |
 | Health check (includes DB) | http://localhost:8001/health |
+| Monitoring frontend | http://localhost:3002 |
+| Monitoring backend API | http://localhost:8003 |
+| Monitoring health check | http://localhost:8003/health |
 | PostgreSQL | localhost:5432 / db: `ai_trust` |
 | OTel Collector (gRPC) | localhost:4317 |
 | OTel Collector (HTTP) | localhost:4318 |
@@ -253,3 +256,37 @@ cd consumers/clickhouse-consumer
 make setup      # first time only — creates .venv and installs deps
 make test-unit  # no Docker needed
 ```
+
+## monitoring/
+
+The monitoring MFE — live observability signals from ClickHouse + registry analytics from Postgres. Runs as a separate Luigi microfrontend, independent from the AI System Registry.
+
+- `frontend/` — static HTML + Chart.js + SortableJS (no build step), served by nginx on port 3002
+- `backend/` — FastAPI on port 8003, reads from both Postgres and ClickHouse
+
+### Backend structure (`monitoring/backend/app/`)
+- `main.py` — FastAPI app, mounts monitoring router, `/health` endpoint
+- `routers/monitoring.py` — all monitoring endpoints:
+  - `GET /api/v1/monitoring/services` — distinct services + models seen in ClickHouse
+  - `GET /api/v1/monitoring/signals?service=&window=1h` — time-series inference count, latency, token usage from ClickHouse. `window` accepts `15m`, `1h`, `6h`, `24h`
+  - `GET /api/v1/monitoring/stats?lifecycle=` — registry analytics aggregated from Postgres (tier counts, compliance distribution, model breakdown etc.)
+
+### ClickHouse queries
+All ClickHouse queries use `clickhouse-connect` with **parameterized queries** (`{param:Type}` syntax) — never f-string interpolation of user input. `window` and `interval` values come from a server-side allowlist, not raw user input.
+
+### Frontend
+Single `public/index.html` with two sections:
+1. **Live Signals** — polls `/monitoring/signals` every 30s. Service and time-window selectors persist to `localStorage` (`ai_trust_monitoring_filters_v1`).
+2. **Registry Analytics** — customizable dashboard. Users add/remove/reorder charts via the "+ Add Graph" modal. Layout persists to `localStorage` (`ai_trust_dashboard_v4`).
+
+### Environment variables
+The monitoring backend reads the same `DATABASE_URL` as the registry backend (shared Postgres), plus the ClickHouse vars:
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | Postgres connection string (from `x-db-env` anchor) |
+| `CLICKHOUSE_HOST` | ClickHouse hostname |
+| `CLICKHOUSE_PORT` | ClickHouse HTTP port (default `8123`) |
+| `CLICKHOUSE_USER` | ClickHouse username |
+| `CLICKHOUSE_PASSWORD` | ClickHouse password |
+| `ALLOWED_ORIGINS` | Comma-separated CORS origins (required) |

@@ -6,9 +6,10 @@ A platform for governing AI systems under the **EU AI Act** — register AI syst
 
 | Component | Description |
 |---|---|
-| [AI System Registry](ai-system-registry/) | Register and classify AI systems by EU AI Act risk tier (prohibited → high → limited → minimal) |
+| [AI System Registry](ai-system-registry/) | Register and classify AI systems by EU AI Act risk tier (prohibited → high → limited → minimal). Manage model cards and link them to systems. |
+| [Monitoring](monitoring/) | Live observability dashboard — GenAI inference signals from ClickHouse + registry analytics from Postgres. Customizable chart dashboard. |
 | [OTel Pipeline](otel-pipeline/) | Ingest GenAI spans from any application via OpenTelemetry → RabbitMQ → ClickHouse |
-| [Consumers](consumers/) | RabbitMQ consumers — one per sink (ClickHouse, SSE, etc.) |
+| [Consumers](consumers/) | RabbitMQ consumers — one per sink (ClickHouse) |
 | Shell | Luigi micro-frontend host that composes all UIs into a single portal |
 
 See [docs/architecture.md](docs/architecture.md) for the full repo layout, data flow diagrams, and Docker startup order.
@@ -26,6 +27,8 @@ docker compose up --build -d
 | AI System Registry UI | http://localhost:3001 |
 | AI System Registry API | http://localhost:8001 |
 | API docs (Swagger) | http://localhost:8001/docs |
+| Monitoring UI | http://localhost:3002 |
+| Monitoring API | http://localhost:8003 |
 | RabbitMQ management | http://localhost:15672 |
 | ClickHouse HTTP API | http://localhost:8123 |
 
@@ -40,4 +43,5 @@ docker compose down -v --remove-orphans       # stop, wipe all data (fresh start
 
 - Docker + Docker Compose
 - No local language runtime needed — everything runs in containers
+
 
