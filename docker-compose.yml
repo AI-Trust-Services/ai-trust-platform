@@ -149,6 +149,8 @@ services:
       - "8002:8002"
     environment:
       <<: *rmq-env
+      RMQ_CONNECT_RETRIES: ${RMQ_CONNECT_RETRIES:-10}
+      RMQ_CONNECT_DELAY: ${RMQ_CONNECT_DELAY:-3.0}
     depends_on:
       rabbitmq:
         condition: service_healthy
