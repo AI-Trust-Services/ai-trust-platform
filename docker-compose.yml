@@ -34,7 +34,10 @@ services:
       - "3001:80"
 
   monitoring-frontend:
-    build: ./monitoring/frontend
+    build:
+      context: ./monitoring/frontend
+      args:
+        VITE_MONITORING_API_BASE: ${VITE_MONITORING_API_BASE}
     ports:
       - "3002:80"
 

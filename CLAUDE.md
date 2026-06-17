@@ -120,7 +120,7 @@ Static HTML + `luigi-config.js` served by nginx. Luigi core is loaded from CDN. 
 ## Components (e.g. `ai-system-registry/`)
 
 Each component has:
-- `frontend/` — static HTML + UI5 Web Components (no build step), served by nginx on port 3001+
+- `frontend/` — React 18 + Vite SPA, multi-stage Docker build, served by nginx on port 3001+
 - `backend/` — FastAPI + SQLAlchemy async, served on port 8001+
 - `docker-compose.yml` — standalone compose for isolated development
 
@@ -199,6 +199,7 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `DATABASE_URL` | all backends, db-migrate | derived from `POSTGRES_*` above | Postgres connection string |
 | `ALLOWED_ORIGINS` | ai-system-registry-backend | *(required — no default)* | Comma-separated CORS origins. App refuses to start if not set. |
 | `VITE_API_BASE` | ai-system-registry-frontend (build time) | `http://localhost:8001/api/v1` | Backend API base URL baked into the frontend bundle by Vite. |
+| `VITE_MONITORING_API_BASE` | monitoring-frontend (build time) | `http://localhost:8003/api/v1` | Monitoring backend API base URL baked into the monitoring bundle by Vite. |
 
 All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code.
 
@@ -262,7 +263,7 @@ make test-unit  # no Docker needed
 
 The monitoring MFE — live observability signals from ClickHouse + registry analytics from Postgres. Runs as a separate Luigi microfrontend, independent from the AI System Registry.
 
-- `frontend/` — static HTML + Chart.js + SortableJS (no build step), served by nginx on port 3002
+- `frontend/` — React 18 + Vite SPA (Recharts for charts), multi-stage Docker build, served by nginx on port 3002
 - `backend/` — FastAPI on port 8003, reads from both Postgres and ClickHouse
 
 ### Backend structure (`monitoring/backend/app/`)
@@ -276,9 +277,9 @@ The monitoring MFE — live observability signals from ClickHouse + registry ana
 All ClickHouse queries use `clickhouse-connect` with **parameterized queries** (`{param:Type}` syntax) — never f-string interpolation of user input. `window` and `interval` values come from a server-side allowlist, not raw user input.
 
 ### Frontend
-Single `public/index.html` with two sections:
-1. **Live Signals** — polls `/monitoring/signals` every 30s. Service and time-window selectors persist to `localStorage` (`ai_trust_monitoring_filters_v1`).
-2. **Registry Analytics** — customizable dashboard. Users add/remove/reorder charts via the "+ Add Graph" modal. Layout persists to `localStorage` (`ai_trust_dashboard_v4`).
+React 18 + Vite SPA with two views:
+1. **Live Signals** — polls `/monitoring/signals` every 5s. Service and time-window selectors persist to `localStorage` (`ai_trust_monitoring_filters_v1`). Recharts line charts for inference count and latency over time.
+2. **Registry Analytics** — reads `/monitoring/stats`. Tier breakdown, compliance histogram, recent systems table.
 
 ### Environment variables
 The monitoring backend reads the same `DATABASE_URL` as the registry backend (shared Postgres), plus the ClickHouse vars:

@@ -49,7 +49,7 @@ export default function App() {
     <ToastContext.Provider value={showToast}>
       <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen }}>
         <div className="page-header">
-          <h1>AI System Registry <span className="mfe-badge">EU AI Act</span></h1>
+          <h1>AI System Registry</h1>
           <div>
             {activeView === "systems" ? (
               <button className="btn-primary" onClick={() => setWizardOpen(true)}>
