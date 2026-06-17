@@ -176,13 +176,13 @@ Shared PostgreSQL instance (one container, all components use the same DB). All 
 - `0003` — seeds 12 known LLM model cards (GPT-4o, Claude 3.5, Llama 3, etc.)
 
 ### Frontend MFE pattern
-Each MFE is a single `public/index.html` with:
-- UI5 Web Components v2 loaded from `unpkg.com`
-- Luigi Client loaded from `unpkg.com`
-- Vanilla JS with hash-based client-side routing (`#/systems`, `#/models`)
-- Backend health polling on load — shows a red banner with auto-retry if backend is unavailable
-- All API calls to `http://localhost:800x/api/v1/`
-- nginx headers: `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding)
+Each MFE is a React 18 + Vite SPA built to static files and served by nginx:
+- **Build tool:** Vite 5 (`npm run build → dist/`), multi-stage Dockerfile (`node:20-alpine` build → `nginx:alpine` serve)
+- **Routing:** `HashRouter` (compatible with Luigi's `useHashRouting: true`)
+- **Luigi integration:** `@luigi-project/client` npm package; `addInitListener` handshake in `useLuigi.js`
+- **API base URL:** read from `import.meta.env.VITE_API_BASE` at build time; defaults to `http://localhost:800x/api/v1` for local dev
+- **Backend health polling:** shows a red banner with auto-retry if backend is unavailable
+- **nginx headers:** `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding)
 
 ## Environment variables
 
@@ -198,6 +198,7 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `CLICKHOUSE_PASSWORD` | clickhouse, otel-clickhouse-consumer | *(empty)* | ClickHouse password |
 | `DATABASE_URL` | all backends, db-migrate | derived from `POSTGRES_*` above | Postgres connection string |
 | `ALLOWED_ORIGINS` | ai-system-registry-backend | *(required — no default)* | Comma-separated CORS origins. App refuses to start if not set. |
+| `VITE_API_BASE` | ai-system-registry-frontend (build time) | `http://localhost:8001/api/v1` | Backend API base URL baked into the frontend bundle by Vite. |
 
 All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code.
 

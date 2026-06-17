@@ -26,7 +26,10 @@ services:
         condition: service_healthy
 
   ai-system-registry-frontend:
-    build: ./ai-system-registry/frontend
+    build:
+      context: ./ai-system-registry/frontend
+      args:
+        VITE_API_BASE: ${VITE_API_BASE}
     ports:
       - "3001:80"
 
