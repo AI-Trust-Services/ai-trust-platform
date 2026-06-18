@@ -22,13 +22,21 @@ ai-trust-platform/
 │   │       ├── database.py       ← get_client() factory
 │   │       └── tables.py         ← GEN_AI_SPANS table name + COLUMNS list
 │   └── logging/                  ← shared structured JSON logging package
-├── shell/                        ← Luigi host (nginx + luigi-config.js)
+├── shell/                        ← Luigi host (nginx + luigi-config.js); custom sidebar hamburger
 ├── ai-system-registry/           ← EU AI Act registry component
-│   ├── frontend/                 ← static HTML + UI5 Web Components (nginx, port 3001)
+│   ├── frontend/                 ← React 18 + Vite SPA (nginx, port 3001)
 │   └── backend/                  ← FastAPI + SQLAlchemy async (port 8001)
-├── monitoring/                   ← Monitoring MFE component
-│   ├── frontend/                 ← static HTML + Chart.js + SortableJS (nginx, port 3002)
+├── overview/                     ← Compliance overview MFE
+│   ├── frontend/                 ← static HTML + Chart.js (nginx, port 3003)
+│   └── backend/                  ← FastAPI (port 8004), reads Postgres only
+├── monitoring/                   ← Live signals MFE
+│   ├── frontend/                 ← static HTML + Chart.js (nginx, port 3002)
 │   └── backend/                  ← FastAPI (port 8003), reads Postgres + ClickHouse
+├── alerts/                       ← Alerts MFE
+│   ├── frontend/                 ← React 18 + TypeScript + Vite SPA (nginx, port 3004)
+│   └── backend/                  ← FastAPI (port 8005), reads Postgres (rules) + ClickHouse (events)
+├── policy-checker-worker/                 ← Background job, evaluates alert rules every N seconds
+│   └── main.py                   ← reads Postgres rules, writes ClickHouse events
 ├── otel-pipeline/                ← GenAI observability pipeline
 │   ├── collector/                ← OTel Collector config
 │   │   └── otel-collector-config.yaml
@@ -50,10 +58,18 @@ flowchart TD
     Collector -->|"OTLP/HTTP JSON"| Bridge["otel-rmq-bridge :8002"]
     Bridge -->|"fanout: otel.traces"| RMQ["RabbitMQ"]
     RMQ --> CH["clickhouse-consumer"]
-    CH --> ClickHouse[("ClickHouse :8123\notel.gen_ai_spans")]
+    CH --> ClickHouse[("ClickHouse :8123\notel.gen_ai_spans\notel.alert_events")]
     ClickHouse -->|"signals query"| MonBackend["monitoring-backend :8003"]
-    PG[("PostgreSQL :5432\nai_systems\nmodel_cards")] -->|"stats query"| MonBackend
+    PG[("PostgreSQL :5432\nai_systems, model_cards\nalert_rules")] -->|"stats query"| MonBackend
     MonBackend --> MonFE["monitoring-frontend :3002"]
+    PG -->|"stats query"| OvBackend["overview-backend :8004"]
+    OvBackend --> OvFE["overview-frontend :3003"]
+    PG -->|"rules"| AlertWorker["policy-checker-worker"]
+    ClickHouse -->|"signals"| AlertWorker
+    AlertWorker -->|"events"| ClickHouse
+    ClickHouse -->|"events"| AlertBackend["alerts-backend :8005"]
+    PG -->|"rules"| AlertBackend
+    AlertBackend --> AlertFE["alerts-frontend :3004"]
 ```
 
 > **Note:** `encoding: json` and `compression: none` are required in the OTel Collector config — the collector defaults to protobuf binary which the bridge cannot parse.
@@ -68,6 +84,11 @@ flowchart TD
     Frontend["ai-system-registry-frontend\n(service_started)"]
     MonBackend["monitoring-backend\n(healthy)"]
     MonFrontend["monitoring-frontend\n(service_started)"]
+    OvBackend["overview-backend\n(healthy)"]
+    OvFrontend["overview-frontend\n(service_started)"]
+    AlertBackend["alerts-backend\n(healthy)"]
+    AlertFrontend["alerts-frontend\n(service_started)"]
+    AlertWorker["policy-checker-worker\n(restart: on-failure)"]
     Shell["shell :8080"]
     RMQ["rabbitmq\n(healthy)"]
     Bridge["otel-rmq-bridge\n(healthy)"]
@@ -80,11 +101,20 @@ flowchart TD
     Migrate --> Backend
     Migrate --> Frontend
     Migrate --> MonBackend
+    Migrate --> OvBackend
+    Migrate --> AlertBackend
+    Migrate --> AlertWorker
     CH --> MonBackend
+    CH --> AlertBackend
+    CH --> AlertWorker
+    CHMigrate --> AlertWorker
+    CHMigrate --> AlertBackend
     Backend --> Shell
     Frontend --> Shell
     MonBackend --> Shell
     MonFrontend --> Shell
+    OvBackend --> Shell
+    OvFrontend --> Shell
 
     RMQ --> Bridge
     Bridge --> Collector

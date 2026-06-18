@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Overview</title>
+
+  <script type="module" src="https://unpkg.com/@ui5/webcomponents@2/dist/bundle.esm.js"></script>
+  <script type="module" src="https://unpkg.com/@ui5/webcomponents-fiori@2/dist/bundle.esm.js"></script>
+  <script src="https://unpkg.com/@luigi-project/client@latest/luigi-client.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+  <style>
+    :root {
+      --brand: #0a6ed1;
+      --brand-hover: #084fa3;
+      --bg: #f5f6f7;
+      --surface: #ffffff;
+      --border: #e4e6e8;
+      --text: #1d2d3e;
+      --text-secondary: #556b82;
+      --radius: 8px;
+      --shadow: 0 0 0 1px rgba(34,54,73,.04), 0 2px 8px rgba(34,54,73,.06);
+      font-family: "72", "72full", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-size: 14px; }
+
+    .page-header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 24px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: var(--shadow);
+    }
+    .page-header h1 { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+    .page-header p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .header-left { display: flex; flex-direction: column; justify-content: center; }
+    .mfe-badge {
+      background: var(--brand); color: #fff;
+      font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 500; letter-spacing: 0.5px;
+    }
+
+    button {
+      border: none; border-radius: var(--radius); padding: 7px 16px; font-size: 14px;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background 0.12s;
+    }
+    button.btn-primary { background: var(--brand); color: #fff; font-weight: 500; }
+    button.btn-primary:hover { background: var(--brand-hover); }
+    button.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    button.btn-ghost:hover { background: var(--bg); }
+    button.btn-icon {
+      background: transparent; color: var(--text-secondary);
+      padding: 5px 8px; border: 1px solid transparent; border-radius: 6px;
+    }
+    button.btn-icon:hover { background: var(--bg); border-color: var(--border); color: var(--brand); }
+
+    .health-banner {
+      display: none; background: #fde8e8; border-bottom: 2px solid #f5b8b8;
+      padding: 10px 24px; font-size: 13px; color: #8b0000;
+      align-items: center; gap: 12px;
+    }
+    .health-banner.show { display: flex; }
+    .health-banner a { cursor: pointer; text-decoration: underline; }
+    .spinner {
+      width: 14px; height: 14px; border: 2px solid #f5b8b8;
+      border-top-color: #bb0000; border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #1d2d3e; color: #fff; padding: 10px 20px; border-radius: var(--radius);
+      font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 9999;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { background: #bb0000; }
+
+    /* ── Badge helpers ── */
+    .badge {
+      display: inline-flex; align-items: center; padding: 3px 10px;
+      border-radius: 12px; font-size: 12px; font-weight: 500; white-space: nowrap;
+    }
+    .badge-prohibited    { background: #ffd5d5; color: #8b0000; }
+    .badge-high          { background: #fde8d0; color: #8b3a00; }
+    .badge-gpai-systemic { background: #e8d5fd; color: #5a0080; }
+    .badge-gpai-standard { background: #eed5fd; color: #4a0070; }
+    .badge-limited       { background: #fff3c4; color: #7a5900; }
+    .badge-minimal       { background: #d5f5e3; color: #1a5c35; }
+    .lc-badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    .lc-development   { background: #e8f0fb; color: #0a6ed1; }
+    .lc-testing       { background: #fff3c4; color: #7a5900; }
+    .lc-conformity    { background: #fde8d0; color: #8b3a00; }
+    .lc-market        { background: #d5f5e3; color: #1a5c35; }
+    .lc-post-market   { background: #c8f0d8; color: #0d4a28; }
+    .lc-decommissioned{ background: #eeeeee; color: #666; }
+    .progress-wrap { display: flex; align-items: center; gap: 8px; }
+    .progress-bar { width: 90px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; background: var(--brand); }
+
+    /* ── Overview fixed section ── */
+    .overview-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* KPI row */
+    .kpi-row {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    }
+    .kpi-card {
+      background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 20px 24px; display: flex; flex-direction: column; gap: 6px;
+    }
+    .kpi-card-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.4px; }
+    .kpi-card-value { font-size: 36px; font-weight: 700; color: var(--text); line-height: 1; }
+    .kpi-card-sub   { font-size: 12px; color: var(--text-secondary); }
+    .kpi-card-value.green  { color: #1a7a3c; }
+    .kpi-card-value.orange { color: #e05c00; }
+    .kpi-card-value.red    { color: #bb0000; }
+    .kpi-card-value.blue   { color: var(--brand); }
+
+    /* Charts row */
+    .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .chart-card {
+      background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 20px 24px;
+    }
+    .chart-canvas-wrap { height: 220px; position: relative; margin-top: 12px; }
+
+    /* ── Systems needing attention ── */
+    .attention-card {
+      background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .attention-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 24px 14px; border-bottom: 1px solid var(--border);
+    }
+    .attention-count {
+      font-size: 12px; font-weight: 600; background: #fde8e8; color: #8b0000;
+      padding: 2px 10px; border-radius: 10px;
+    }
+    .attention-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .attention-table thead th {
+      padding: 8px 16px; text-align: left; font-size: 11px; font-weight: 600;
+      color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.4px;
+      background: #f8f9fa; border-bottom: 1px solid var(--border);
+    }
+    .attention-table tbody tr { border-bottom: 1px solid var(--border); }
+    .attention-table tbody tr:last-child { border-bottom: none; }
+    .attention-table tbody tr:hover { background: #fafbfc; }
+    .attention-table tbody td { padding: 10px 16px; }
+    .reason-pill {
+      display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px;
+      background: #fff3c4; color: #7a5900; font-weight: 500;
+    }
+    .reason-pill.error { background: #fde8e8; color: #8b0000; }
+
+    /* ── Registry analytics dashboard (customizable) ── */
+    .analytics-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 16px;
+    }
+    .dash-card {
+      background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+      display: flex; flex-direction: column; overflow: hidden; position: relative;
+    }
+    .dash-card.kpi        { min-height: 100px; }
+    .dash-card.chart      { min-height: 280px; }
+    .dash-card.table-card { min-height: 240px; }
+    .dash-card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px 8px; border-bottom: 1px solid var(--border);
+    }
+    .dash-card-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.4px; }
+    .dash-card-actions { display: flex; gap: 4px; }
+    .drag-handle { cursor: grab; color: var(--text-secondary); padding: 2px 4px; font-size: 16px; line-height: 1; opacity: 0.4; }
+    .drag-handle:hover { opacity: 1; }
+    .dash-card-body { padding: 16px; flex: 1; display: flex; flex-direction: column; }
+    .kpi-value { font-size: 36px; font-weight: 700; color: var(--text); line-height: 1; }
+    .kpi-sub   { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+    .kpi-value.red    { color: #bb0000; }
+    .kpi-value.orange { color: #e05c00; }
+    .kpi-value.green  { color: #1a7a3c; }
+    .kpi-value.blue   { color: var(--brand); }
+    .chart-wrap { flex: 1; position: relative; min-height: 200px; }
+    .sortable-ghost { opacity: 0.4; }
+    .empty-dashboard { grid-column: 1 / -1; text-align: center; padding: 64px 24px; color: var(--text-secondary); }
+    .empty-dashboard h3 { font-size: 16px; margin-bottom: 8px; color: var(--text); }
+    .empty-dashboard p  { font-size: 13px; margin-bottom: 20px; }
+
+    /* ── Add / Edit graph modals ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45); z-index: 1000;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border-radius: var(--radius); box-shadow: 0 8px 40px rgba(0,0,0,.2);
+      width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto;
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 24px 14px; border-bottom: 1px solid var(--border);
+    }
+    .modal-header h2 { font-size: 16px; font-weight: 600; }
+    .btn-close { background: transparent; border: none; font-size: 20px; color: var(--text-secondary); cursor: pointer; padding: 0 4px; }
+    .modal-body { padding: 0; }
+    .modal-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+    .graph-modal-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 24px; background: #f8f9fa; }
+    .graph-modal-tab { padding: 12px 18px; font-size: 13px; cursor: pointer; color: var(--text-secondary); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+    .graph-modal-tab.active { color: var(--brand); border-bottom-color: var(--brand); font-weight: 500; }
+    .graph-tab-panel { display: none; padding: 20px 24px; }
+    .graph-tab-panel.active { display: block; }
+    .recommended-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .rec-card {
+      border: 1px solid var(--border); border-radius: var(--radius); padding: 14px;
+      cursor: pointer; transition: border-color 0.15s, background 0.15s;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .rec-card:hover { border-color: var(--brand); background: #f0f6ff; }
+    .rec-card.added { border-color: #1a7a3c; background: #edf7f0; pointer-events: none; }
+    .rec-card-icon { display: none; }
+    .rec-card-title { font-size: 13px; font-weight: 600; color: var(--text); }
+    .rec-card-desc  { font-size: 12px; color: var(--text-secondary); }
+    .rec-card-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--bg); color: var(--text-secondary); align-self: flex-start; }
+    .rec-card.added .rec-card-badge { background: #d5f5e3; color: #1a5c35; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.span2 { grid-column: span 2; }
+    .form-group label { font-size: 13px; font-weight: 500; color: var(--text); }
+    .form-group input, .form-select {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 7px 12px; font-size: 14px; color: var(--text); background: var(--surface); outline: none;
+    }
+    .form-group input:focus, .form-select:focus { border-color: var(--brand); }
+
+    @media (max-width: 900px) {
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .charts-row { grid-template-columns: 1fr; }
+    }
+    /* ── Alert bell button ── */
+    .alert-bell-btn {
+      background: transparent; border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 6px 10px; cursor: pointer; display: inline-flex; align-items: center;
+      gap: 6px; font-size: 14px; color: var(--text); position: relative;
+    }
+    .alert-bell-btn:hover { background: var(--bg); }
+    .alert-bell-btn.has-errors { border-color: #f5b8b8; color: #8b0000; background: #fde8e8; }
+    .alert-badge {
+      position: absolute; top: -6px; right: -6px;
+      background: #bb0000; color: #fff; font-size: 10px; font-weight: 700;
+      min-width: 16px; height: 16px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center; padding: 0 4px;
+    }
+    .alert-badge.hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="header-left">
+    <h1>Compliance Overview <span class="mfe-badge">EU AI Act</span></h1>
+    <p>Organisation compliance posture at a glance</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <a href="#" style="text-decoration:none" onclick="navigateToAlerts(event)">
+      <button class="alert-bell-btn" id="alertBellBtn">
+        Alerts
+        <span class="alert-badge hidden" id="alertBadge"></span>
+      </button>
+    </a>
+    <button class="btn-primary" onclick="window.location.href=REGISTRY_URL">+ Register System</button>
+  </div>
+</div>
+
+<div class="health-banner" id="healthBanner">
+  <span class="spinner"></span>
+  <span id="healthBannerMsg">Backend is unavailable. Retrying…</span>
+  <a onclick="retryHealth()">Retry now</a>
+</div>
+
+<div class="overview-body" id="overviewBody">
+
+  <!-- KPI row -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-card-label">Compliance Score</div>
+      <div class="kpi-card-value blue" id="kpi-compliance">—</div>
+      <div class="kpi-card-sub">average across all systems</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card-label">AI Systems</div>
+      <div class="kpi-card-value blue" id="kpi-total">—</div>
+      <div class="kpi-card-sub">registered in platform</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card-label">High-Risk on Market</div>
+      <div class="kpi-card-value" id="kpi-high-risk">—</div>
+      <div class="kpi-card-sub">requiring Art. 72 monitoring</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card-label">Fully Compliant</div>
+      <div class="kpi-card-value green" id="kpi-compliant">—</div>
+      <div class="kpi-card-sub" id="kpi-compliant-sub">of — systems</div>
+    </div>
+  </div>
+
+  <!-- Charts row -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="section-title">Systems by Risk Tier</div>
+      <div class="chart-canvas-wrap"><canvas id="tierChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="section-title">Avg Compliance by Tier</div>
+      <div class="chart-canvas-wrap"><canvas id="complianceChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Systems needing attention -->
+  <div class="attention-card" id="attentionSection" style="display:none">
+    <div class="attention-header">
+      <div class="section-title" style="margin-bottom:0">Systems Needing Attention</div>
+      <span class="attention-count" id="attentionCount">0</span>
+    </div>
+    <table class="attention-table">
+      <thead>
+        <tr>
+          <th>System</th>
+          <th>Tier</th>
+          <th>Lifecycle</th>
+          <th>Compliance</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody id="attentionTableBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Customizable analytics dashboard -->
+  <div>
+    <div class="analytics-header">
+      <div class="section-title" style="margin-bottom:0">Analytics Dashboard</div>
+      <button class="btn-primary" onclick="openAddGraph()"><span>+</span> Add Graph</button>
+    </div>
+    <div class="dashboard-grid" id="dashboardGrid"></div>
+  </div>
+
+</div>
+
+<!-- ADD GRAPH MODAL -->
+<div class="modal-overlay" id="addGraphModal">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-header">
+      <h2>Add Graph</h2>
+      <button class="btn-close" onclick="closeAddGraph()">×</button>
+    </div>
+    <div class="graph-modal-tabs">
+      <div class="graph-modal-tab active" id="gtab-recommended" onclick="switchGraphTab('recommended', this)">Recommended</div>
+      <div class="graph-modal-tab" id="gtab-custom" onclick="switchGraphTab('custom', this)">Custom</div>
+    </div>
+    <div class="modal-body">
+      <div class="graph-tab-panel active" id="gpanel-recommended">
+        <div class="recommended-grid" id="recommendedGrid"></div>
+      </div>
+      <div class="graph-tab-panel" id="gpanel-custom">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="customTitle">Chart Title</label>
+            <input type="text" id="customTitle" placeholder="e.g. My Custom Chart" />
+          </div>
+          <div class="form-group">
+            <label for="customChartType">Chart Type</label>
+            <select class="form-select" id="customChartType">
+              <option value="bar">Bar Chart</option>
+              <option value="doughnut">Donut Chart</option>
+              <option value="line">Line Chart</option>
+              <option value="pie">Pie Chart</option>
+            </select>
+          </div>
+          <div class="form-group span2">
+            <label for="customDataKey">Data Source</label>
+            <select class="form-select" id="customDataKey">
+              <option value="by_tier">Systems by Risk Tier</option>
+              <option value="by_lifecycle">Systems by Lifecycle State</option>
+              <option value="by_type">Systems by Type</option>
+              <option value="compliance_by_tier">Avg Compliance by Tier</option>
+              <option value="compliance_histogram">Compliance Distribution</option>
+              <option value="by_model_type">Models by Type</option>
+              <option value="by_model_provider">Models by Provider</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px">
+          <button class="btn-primary" onclick="addCustomGraph()">Add to Dashboard</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT CARD MODAL -->
+<div class="modal-overlay" id="editCardModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h2>Edit Graph</h2>
+      <button class="btn-close" onclick="closeEditCard()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="padding:24px">
+        <div class="form-grid" style="grid-template-columns:1fr">
+          <div class="form-group">
+            <label for="editCardTitle">Title</label>
+            <input type="text" id="editCardTitle" />
+          </div>
+          <div class="form-group">
+            <label for="editCardChartType">Chart Type</label>
+            <select class="form-select" id="editCardChartType">
+              <option value="bar">Bar Chart</option>
+              <option value="doughnut">Donut Chart</option>
+              <option value="line">Line Chart</option>
+              <option value="pie">Pie Chart</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="editCardDataKey">Data Source</label>
+            <select class="form-select" id="editCardDataKey">
+              <option value="by_tier">Systems by Risk Tier</option>
+              <option value="by_lifecycle">Systems by Lifecycle State</option>
+              <option value="by_type">Systems by Type</option>
+              <option value="compliance_by_tier">Avg Compliance by Tier</option>
+              <option value="compliance_histogram">Compliance Distribution</option>
+              <option value="by_model_type">Models by Type</option>
+              <option value="by_model_provider">Models by Provider</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeEditCard()">Cancel</button>
+      <button class="btn-primary" onclick="saveEditCard()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const API_BASE        = window.OVERVIEW_API_BASE || "http://localhost:8004/api/v1";
+  const HEALTH_URL      = API_BASE.replace("/api/v1", "") + "/health";
+  const ALERTS_API_BASE = window.ALERTS_API_BASE || "http://localhost:8005/api/v1";
+  const ALERTS_URL      = window.ALERTS_URL || "http://localhost:3004";
+  const REGISTRY_URL    = window.REGISTRY_URL || "http://localhost:3001";
+  const STORAGE_KEY = "ai_trust_overview_dashboard_v1";
+
+  let overviewStats = null;
+  let _healthTimer  = null;
+  let _backendOk    = false;
+  let _chartInstances = {};
+  let _tierChart = null;
+  let _complianceChart = null;
+  let dashboardCards = [];
+
+  const TIER_COLORS = {
+    prohibited:"#8b0000",high:"#e05c00","gpai-systemic":"#5a0080",
+    "gpai-standard":"#9b59b6",limited:"#e9a922",minimal:"#1a7a3c",
+  };
+  const LIFECYCLE_COLORS = {
+    development:"#0a6ed1",testing:"#e9a922",conformity:"#e05c00",
+    market:"#1a7a3c","post-market":"#0d7a3c",decommissioned:"#999999",
+  };
+  const PALETTE = ["#0a6ed1","#1a7a3c","#e05c00","#5a0080","#e9a922","#8b0000","#00758f","#3d6b99","#2e8b57","#c0392b"];
+  const HIST_COLORS = ["#bb0000","#e05c00","#e9a922","#3d9e6b","#1a7a3c"];
+
+  const RECOMMENDED_CHARTS = [
+    { id: "kpi_total_systems",     title: "Total AI Systems",       desc: "All registered systems",           type: "kpi",      badge: "KPI"   },
+    { id: "kpi_high_risk",         title: "High-Risk Systems",      desc: "Systems classified as high-risk",  type: "kpi",      badge: "KPI"   },
+    { id: "kpi_avg_compliance",    title: "Avg Compliance",         desc: "Average compliance % overall",     type: "kpi",      badge: "KPI"   },
+    { id: "kpi_total_models",      title: "Total Model Cards",      desc: "All model cards",                  type: "kpi",      badge: "KPI"   },
+    { id: "chart_by_tier",         title: "Systems by Risk Tier",   desc: "EU AI Act tier distribution",      type: "doughnut", dataKey: "by_tier",             badge: "Donut" },
+    { id: "chart_by_lifecycle",    title: "Systems by Lifecycle",   desc: "Count per lifecycle state",        type: "bar",      dataKey: "by_lifecycle",        badge: "Bar"   },
+    { id: "chart_compliance_tier", title: "Compliance by Tier",     desc: "Avg compliance per tier",          type: "bar",      dataKey: "compliance_by_tier",  badge: "Bar"   },
+    { id: "chart_compliance_hist", title: "Compliance Distribution",desc: "Systems spread across 0–100%",     type: "bar",      dataKey: "compliance_histogram", badge: "Bar"   },
+    { id: "chart_by_type",         title: "Systems by Type",        desc: "Application, model, service…",     type: "doughnut", dataKey: "by_type",             badge: "Donut" },
+    { id: "chart_by_model_type",   title: "Models by Type",         desc: "LLM, embedding, multimodal…",      type: "doughnut", dataKey: "by_model_type",       badge: "Donut" },
+    { id: "chart_by_model_provider",title:"Models by Provider",     desc: "Top model providers",              type: "bar",      dataKey: "by_model_provider",   badge: "Bar"   },
+    { id: "table_recent",          title: "Recent Registrations",   desc: "Last 10 registered systems",       type: "table",    badge: "Table" },
+  ];
+
+  // ── Health polling ──────────────────────────────────────────────────────────
+  async function checkBackendHealth() {
+    try {
+      const res = await fetch(HEALTH_URL);
+      setBackendOk(res.ok);
+    } catch { setBackendOk(false); }
+    _healthTimer = setTimeout(checkBackendHealth, 10000);
+  }
+
+  function setBackendOk(ok) {
+    const banner = document.getElementById("healthBanner");
+    if (ok) {
+      banner.classList.remove("show");
+      if (!_backendOk) { loadOverview(); loadDashboardFromStorage(); }
+      _backendOk = true;
+    } else {
+      banner.classList.add("show");
+      document.getElementById("healthBannerMsg").textContent = "Backend is unavailable. Retrying…";
+      _backendOk = false;
+    }
+  }
+
+  function retryHealth() {
+    clearTimeout(_healthTimer);
+    document.getElementById("healthBannerMsg").textContent = "Retrying…";
+    checkBackendHealth();
+  }
+
+  // ── Load data ───────────────────────────────────────────────────────────────
+  async function loadOverview() {
+    try {
+      const res = await fetch(`${API_BASE}/overview/stats`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      overviewStats = await res.json();
+      renderKpis(overviewStats);
+      renderTierChart(overviewStats.by_tier);
+      renderComplianceChart(overviewStats.compliance_by_tier);
+      renderAttention(overviewStats.attention || []);
+      renderDashboard();
+    } catch (e) {
+      showToast(`Failed to load overview: ${e.message}`, true);
+    }
+  }
+
+  // ── KPIs ────────────────────────────────────────────────────────────────────
+  function renderKpis(s) {
+    document.getElementById("kpi-compliance").textContent = s.avg_compliance + "%";
+    document.getElementById("kpi-compliance").className = `kpi-card-value ${s.avg_compliance >= 80 ? "green" : s.avg_compliance >= 50 ? "orange" : "red"}`;
+    document.getElementById("kpi-total").textContent = s.total_systems;
+    const hrEl = document.getElementById("kpi-high-risk");
+    hrEl.textContent = s.high_risk_on_market;
+    hrEl.className = `kpi-card-value ${s.high_risk_on_market > 0 ? "orange" : "green"}`;
+    document.getElementById("kpi-compliant").textContent = s.fully_compliant;
+    document.getElementById("kpi-compliant-sub").textContent = `of ${s.total_systems} systems`;
+  }
+
+  // ── Fixed charts ────────────────────────────────────────────────────────────
+  function renderTierChart(byTier) {
+    const labels = Object.keys(byTier);
+    const values = Object.values(byTier);
+    const colors = labels.map(l => TIER_COLORS[l] || PALETTE[0]);
+    if (_tierChart) _tierChart.destroy();
+    _tierChart = new Chart(document.getElementById("tierChart"), {
+      type: "doughnut",
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: "#fff", borderWidth: 2 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: "right", labels: { font: { size: 12 }, padding: 10 } } },
+      },
+    });
+  }
+
+  function renderComplianceChart(byTier) {
+    const labels = Object.keys(byTier);
+    const values = Object.values(byTier);
+    const colors = labels.map(l => TIER_COLORS[l] || PALETTE[0]);
+    if (_complianceChart) _complianceChart.destroy();
+    _complianceChart = new Chart(document.getElementById("complianceChart"), {
+      type: "bar",
+      data: { labels, datasets: [{ data: values, backgroundColor: colors.map(c => c + "cc"), borderWidth: 0 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, indexAxis: "y",
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `  ${ctx.parsed.x}%` } } },
+        scales: {
+          x: { max: 100, ticks: { font: { size: 11 }, callback: v => v + "%" } },
+          y: { ticks: { font: { size: 11 } } },
+        },
+      },
+    });
+  }
+
+  // ── Dashboard (customizable) ────────────────────────────────────────────────
+  function saveDashboardToStorage() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(
+      dashboardCards.map(c => ({ id: c.id, title: c.title, type: c.type, dataKey: c.dataKey }))
+    ));
+  }
+
+  function loadDashboardFromStorage() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) dashboardCards = JSON.parse(saved);
+    } catch { dashboardCards = []; }
+    renderDashboard();
+  }
+
+  function renderAttention(systems) {
+    const section = document.getElementById("attentionSection");
+    const tbody   = document.getElementById("attentionTableBody");
+    const count   = document.getElementById("attentionCount");
+
+    if (!systems.length) {
+      section.style.display = "none";
+      return;
+    }
+
+    section.style.display = "";
+    count.textContent = systems.length;
+
+    tbody.innerHTML = systems.map(s => {
+      const isError = s.tier === "prohibited" || (s.tier === "high" && s.compliance < 50);
+      return `
+        <tr>
+          <td>
+            <div style="font-weight:500">${esc(s.name)}</div>
+            <div style="font-size:11px;color:var(--text-secondary)">${esc(s.id)}</div>
+          </td>
+          <td>${tierBadge(s.tier)}</td>
+          <td><span class="lc-badge lc-${esc(s.lifecycle)}">${esc(s.lifecycle)}</span></td>
+          <td>
+            <div class="progress-wrap">
+              <div class="progress-bar"><div class="progress-fill" style="width:${s.compliance}%;background:${s.compliance < 50 ? '#bb0000' : s.compliance < 80 ? '#e9a922' : '#1a7a3c'}"></div></div>
+              <span style="font-size:12px;color:var(--text-secondary)">${s.compliance}%</span>
+            </div>
+          </td>
+          <td><span class="reason-pill ${isError ? 'error' : ''}">${esc(s.reason)}</span></td>
+        </tr>`;
+    }).join("");
+  }
+
+  function renderDashboard() {
+    const grid = document.getElementById("dashboardGrid");
+    Object.values(_chartInstances).forEach(c => c.destroy());
+    _chartInstances = {};
+
+    if (!dashboardCards.length) {
+      grid.innerHTML = `
+        <div class="empty-dashboard">
+          <h3>Analytics dashboard is empty</h3>
+          <p>Add charts to customise your overview.</p>
+          <button class="btn-primary" onclick="openAddGraph()"><span>+</span> Add Graph</button>
+        </div>`;
+      return;
+    }
+
+    grid.innerHTML = dashboardCards.map(card => buildCardHTML(card)).join("");
+    if (overviewStats) dashboardCards.forEach(card => renderCard(card));
+
+    Sortable.create(grid, {
+      animation: 150, ghostClass: "sortable-ghost", handle: ".drag-handle",
+      onEnd() {
+        const newOrder = [...grid.querySelectorAll(".dash-card")].map(el => el.dataset.cardId);
+        dashboardCards = newOrder.map(id => dashboardCards.find(c => c.id === id)).filter(Boolean);
+        saveDashboardToStorage();
+      },
+    });
+  }
+
+  function buildCardHTML(card) {
+    const isKpi = card.type === "kpi", isTable = card.type === "table";
+    const cls = isKpi ? "kpi" : isTable ? "table-card" : "chart";
+    return `
+      <div class="dash-card ${cls}" data-card-id="${esc(card.id)}">
+        <div class="dash-card-header">
+          <span class="dash-card-title">${esc(card.title)}</span>
+          <div class="dash-card-actions">
+            ${!isKpi ? `<button class="btn-icon" onclick="openEditCard('${esc(card.id)}')">✎</button>` : ""}
+            <span class="drag-handle">⠿</span>
+            <button class="btn-icon" onclick="removeCard('${esc(card.id)}')">✕</button>
+          </div>
+        </div>
+        <div class="dash-card-body" id="card-body-${esc(card.id)}">
+          ${isKpi  ? `<div class="kpi-value" id="kpi-val-${esc(card.id)}">—</div><div class="kpi-sub" id="kpi-sub-${esc(card.id)}"></div>` : ""}
+          ${!isKpi && !isTable ? `<div class="chart-wrap"><canvas id="canvas-${esc(card.id)}"></canvas></div>` : ""}
+          ${isTable ? `<div id="table-${esc(card.id)}"></div>` : ""}
+        </div>
+      </div>`;
+  }
+
+  function renderCard(card) {
+    const s = overviewStats;
+    if (!s) return;
+    if (card.type === "kpi") renderKpiCard(card, s);
+    else if (card.type === "table") renderTableCard(card, s);
+    else renderChartCard(card, s);
+  }
+
+  function renderKpiCard(card, s) {
+    const valEl = document.getElementById(`kpi-val-${card.id}`);
+    const subEl = document.getElementById(`kpi-sub-${card.id}`);
+    if (!valEl) return;
+    const map = {
+      kpi_total_systems:  { val: s.total_systems,    color: "blue",   sub: "registered systems" },
+      kpi_high_risk:      { val: s.high_count,        color: s.high_count > 0 ? "orange" : "green", sub: "high-risk" },
+      kpi_avg_compliance: { val: s.avg_compliance + "%", color: s.avg_compliance >= 80 ? "green" : s.avg_compliance >= 50 ? "orange" : "red", sub: "avg compliance" },
+      kpi_total_models:   { val: s.total_models,      color: "blue",   sub: "model cards" },
+    };
+    const kpi = map[card.id] || { val: "—", color: "", sub: "" };
+    valEl.textContent = kpi.val;
+    valEl.className = `kpi-value ${kpi.color}`;
+    subEl.textContent = kpi.sub;
+  }
+
+  function renderChartCard(card, s) {
+    const canvas = document.getElementById(`canvas-${card.id}`);
+    if (!canvas) return;
+    const rawData = s[card.dataKey] || {};
+    const labels = Object.keys(rawData);
+    const values = Object.values(rawData);
+    if (!labels.length) { canvas.parentElement.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-secondary);font-size:13px">No data yet</div>`; return; }
+
+    const isHist = card.dataKey === "compliance_histogram";
+    const isCompliance = card.dataKey === "compliance_by_tier";
+    const isBar = card.type === "bar";
+    const isHoriz = isBar && !isHist && labels.length > 5;
+    const total = values.reduce((a, b) => a + b, 0);
+
+    const colors = labels.map((l, i) =>
+      isHist ? HIST_COLORS[i % HIST_COLORS.length] :
+      card.dataKey === "by_tier" ? (TIER_COLORS[l] || PALETTE[i % PALETTE.length]) :
+      card.dataKey === "by_lifecycle" ? (LIFECYCLE_COLORS[l] || PALETTE[i % PALETTE.length]) :
+      PALETTE[i % PALETTE.length]
+    );
+
+    if (_chartInstances[card.id]) _chartInstances[card.id].destroy();
+    _chartInstances[card.id] = new Chart(canvas, {
+      type: card.type,
+      data: {
+        labels: labels.map(l => l.replace(/_/g, " ")),
+        datasets: [card.type === "line" ? {
+          data: values, borderColor: PALETTE[0], backgroundColor: PALETTE[0] + "20",
+          borderWidth: 2, fill: true, tension: 0.3, pointRadius: 3,
+        } : {
+          data: values,
+          backgroundColor: isBar ? colors.map(c => c + "cc") : colors,
+          borderColor: isBar ? colors : "#fff", borderWidth: isBar ? 0 : 2,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, indexAxis: isHoriz ? "y" : "x",
+        plugins: {
+          legend: { display: card.type !== "bar", position: "bottom", labels: { font: { size: 12 }, padding: 12 } },
+          tooltip: { callbacks: { label: ctx => {
+            const val = ctx.parsed.y ?? ctx.parsed.x ?? ctx.raw;
+            if (isCompliance) return `  Avg: ${val}%`;
+            if (isHist) return `  ${val} systems`;
+            if (card.type !== "bar") { const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0; return `  ${ctx.raw} (${pct}%)`; }
+            return `  ${val}`;
+          }}},
+        },
+        scales: isBar ? {
+          x: { grid: { display: !isHoriz }, ticks: { font: { size: 11 } } },
+          y: { grid: { display: isHoriz }, ticks: { font: { size: 11 }, callback: v => isCompliance ? v + "%" : v }, beginAtZero: true },
+        } : {},
+      },
+    });
+  }
+
+  function renderTableCard(card, s) {
+    const el = document.getElementById(`table-${card.id}`);
+    if (!el) return;
+    const rows = s.recent || [];
+    if (!rows.length) { el.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-secondary);font-size:13px">No systems yet</div>`; return; }
+    el.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          <th style="padding:6px 8px;text-align:left;color:var(--text-secondary);font-size:11px;text-transform:uppercase">System</th>
+          <th style="padding:6px 8px;text-align:left;color:var(--text-secondary);font-size:11px;text-transform:uppercase">Tier</th>
+          <th style="padding:6px 8px;text-align:left;color:var(--text-secondary);font-size:11px;text-transform:uppercase">Registered</th>
+        </tr></thead>
+        <tbody>${rows.map(r => `
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 8px"><div style="font-weight:500">${esc(r.name)}</div><div style="font-size:10px;color:var(--text-secondary)">${esc(r.id)}</div></td>
+            <td style="padding:6px 8px">${tierBadge(r.tier)}</td>
+            <td style="padding:6px 8px;color:var(--text-secondary)">${fmtDate(r.created_at)}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`;
+  }
+
+  function addCard(cardDef) {
+    if (dashboardCards.find(c => c.id === cardDef.id)) { showToast("Already on dashboard", true); return; }
+    dashboardCards.push({ id: cardDef.id, title: cardDef.title, type: cardDef.type, dataKey: cardDef.dataKey });
+    saveDashboardToStorage(); renderDashboard(); updateRecommendedGrid();
+  }
+
+  function removeCard(cardId) {
+    if (_chartInstances[cardId]) { _chartInstances[cardId].destroy(); delete _chartInstances[cardId]; }
+    dashboardCards = dashboardCards.filter(c => c.id !== cardId);
+    saveDashboardToStorage(); renderDashboard(); updateRecommendedGrid();
+  }
+
+  let _editingCardId = null;
+  function openEditCard(cardId) {
+    const card = dashboardCards.find(c => c.id === cardId); if (!card) return;
+    _editingCardId = cardId;
+    document.getElementById("editCardTitle").value = card.title;
+    document.getElementById("editCardChartType").value = card.type;
+    document.getElementById("editCardDataKey").value = card.dataKey || "by_tier";
+    document.getElementById("editCardModal").classList.add("open");
+  }
+  function closeEditCard() { document.getElementById("editCardModal").classList.remove("open"); _editingCardId = null; }
+  function saveEditCard() {
+    const card = dashboardCards.find(c => c.id === _editingCardId); if (!card) return;
+    card.title   = document.getElementById("editCardTitle").value.trim() || card.title;
+    card.type    = document.getElementById("editCardChartType").value;
+    card.dataKey = document.getElementById("editCardDataKey").value;
+    saveDashboardToStorage(); closeEditCard(); renderDashboard(); showToast("Graph updated");
+  }
+
+  function addCustomGraph() {
+    const title = document.getElementById("customTitle").value.trim() || "Custom Chart";
+    const type  = document.getElementById("customChartType").value;
+    const dataKey = document.getElementById("customDataKey").value;
+    addCard({ id: `custom_${dataKey}_${type}_${Date.now()}`, title, type, dataKey });
+    closeAddGraph(); showToast("Custom graph added");
+  }
+
+  function openAddGraph()  { updateRecommendedGrid(); document.getElementById("addGraphModal").classList.add("open"); }
+  function closeAddGraph() { document.getElementById("addGraphModal").classList.remove("open"); }
+
+  function switchGraphTab(tab, el) {
+    document.querySelectorAll(".graph-modal-tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".graph-tab-panel").forEach(p => p.classList.remove("active"));
+    el.classList.add("active");
+    document.getElementById(`gpanel-${tab}`).classList.add("active");
+  }
+
+  function updateRecommendedGrid() {
+    const grid = document.getElementById("recommendedGrid"); if (!grid) return;
+    const activeIds = new Set(dashboardCards.map(c => c.id));
+    grid.innerHTML = RECOMMENDED_CHARTS.map(rc => `
+      <div class="rec-card ${activeIds.has(rc.id) ? "added" : ""}" onclick="addCard(${JSON.stringify(rc).replace(/"/g, "&quot;")})">
+        <div class="rec-card-title">${esc(rc.title)}</div>
+        <div class="rec-card-desc">${esc(rc.desc)}</div>
+        <span class="rec-card-badge">${activeIds.has(rc.id) ? "Added ✓" : rc.badge}</span>
+      </div>`).join("");
+  }
+
+  // ── Utility ─────────────────────────────────────────────────────────────────
+  function esc(s) { return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  function fmtDate(iso) { if (!iso) return "—"; try { return new Date(iso).toLocaleDateString(); } catch { return iso; } }
+  function tierBadge(tier) {
+    const labels = { prohibited:"Prohibited",high:"High-Risk","gpai-systemic":"GPAI Systemic","gpai-standard":"GPAI Standard",limited:"Limited",minimal:"Minimal" };
+    return `<span class="badge badge-${esc(tier)}">${esc(labels[tier] || tier)}</span>`;
+  }
+
+  function showToast(msg, isError = false) {
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.className = `toast ${isError ? "error" : ""} show`;
+    setTimeout(() => t.classList.remove("show"), 3000);
+  }
+
+  document.getElementById("addGraphModal").addEventListener("click", e => { if (e.target === e.currentTarget) closeAddGraph(); });
+  document.getElementById("editCardModal").addEventListener("click", e => { if (e.target === e.currentTarget) closeEditCard(); });
+
+  document.addEventListener("DOMContentLoaded", () => {
+    checkBackendHealth();
+    refreshAlertBadge();
+    setInterval(refreshAlertBadge, 30000);
+  });
+
+  async function refreshAlertBadge() {
+    try {
+      const res = await fetch(`${ALERTS_API_BASE}/alerts/count`);
+      if (!res.ok) return;
+      const { count } = await res.json();
+      const btn   = document.getElementById("alertBellBtn");
+      const badge = document.getElementById("alertBadge");
+      if (count > 0) {
+        btn.className = "alert-bell-btn has-errors";
+        badge.classList.remove("hidden");
+        badge.textContent = count;
+      } else {
+        btn.className = "alert-bell-btn";
+        badge.classList.add("hidden");
+      }
+    } catch { /* alerts backend may not be running */ }
+  }
+
+  function navigateToAlerts(e) {
+    e.preventDefault();
+    try {
+      LuigiClient.linkManager().navigate('/home/alerts');
+    } catch {
+      window.location.href = ALERTS_URL;
+    }
+  }
+</script>
+</body>
+</html>

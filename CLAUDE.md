@@ -67,9 +67,15 @@ python3.12 -m venv .venv
 | API docs (Swagger) | http://localhost:8001/docs |
 | OpenAPI spec (JSON) | http://localhost:8001/openapi.json |
 | Health check (includes DB) | http://localhost:8001/health |
+| Overview frontend | http://localhost:3003 |
+| Overview backend API | http://localhost:8004 |
+| Overview health check | http://localhost:8004/health |
 | Monitoring frontend | http://localhost:3002 |
 | Monitoring backend API | http://localhost:8003 |
 | Monitoring health check | http://localhost:8003/health |
+| Alerts frontend | http://localhost:3004 |
+| Alerts backend API | http://localhost:8005 |
+| Alerts health check | http://localhost:8005/health |
 | PostgreSQL | localhost:5432 / db: `ai_trust` |
 | OTel Collector (gRPC) | localhost:4317 |
 | OTel Collector (HTTP) | localhost:4318 |
@@ -115,12 +121,18 @@ The shared structured logging package. All backends depend on it.
 
 ## Shell (`shell/`)
 
-Static HTML + `luigi-config.js` served by nginx. Luigi core is loaded from CDN. Navigation nodes in `luigi-config.js` define which MFEs are mounted and at what paths. To add a new component, add a `children` node with its `viewUrl`.
+Static HTML + `luigi-config.js` served by nginx. Luigi core is loaded from CDN. Navigation nodes in `luigi-config.js` define which MFEs are mounted and at what paths. To add a component to the nav, add a `children` node with its `viewUrl`.
+
+**Sidebar customization** — the sidebar uses `responsiveNavigation: "Fiori3"` with a custom animated hamburger injected via `luigiAfterInit`. Key settings:
+- `sideNavigation: { collapsed: true }` — starts collapsed (icons only)
+- The custom hamburger is injected into the sidebar DOM after Luigi renders
+- Alerts is registered as `hideFromNav: true` — accessible via bell badge but not shown in nav
+- `defaultChildNode: "overview"` — Overview loads by default when navigating to `/home`
 
 ## Components (e.g. `ai-system-registry/`)
 
 Each component has:
-- `frontend/` — React 18 + Vite SPA, multi-stage Docker build, served by nginx on port 3001+
+- `frontend/` — served by nginx on port 3001+. Either a **React + Vite SPA** (Registry, Alerts) or **static HTML** (Monitoring, Overview). React frontends require a multi-stage Docker build (`node:20-alpine` → `nginx:alpine`).
 - `backend/` — FastAPI + SQLAlchemy async, served on port 8001+
 - `docker-compose.yml` — standalone compose for isolated development
 
@@ -199,7 +211,6 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `DATABASE_URL` | all backends, db-migrate | derived from `POSTGRES_*` above | Postgres connection string |
 | `ALLOWED_ORIGINS` | ai-system-registry-backend | *(required — no default)* | Comma-separated CORS origins. App refuses to start if not set. |
 | `VITE_API_BASE` | ai-system-registry-frontend (build time) | `http://localhost:8001/api/v1` | Backend API base URL baked into the frontend bundle by Vite. |
-| `VITE_MONITORING_API_BASE` | monitoring-frontend (build time) | `http://localhost:8003/api/v1` | Monitoring backend API base URL baked into the monitoring bundle by Vite. |
 
 All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code.
 
@@ -263,7 +274,7 @@ make test-unit  # no Docker needed
 
 The monitoring MFE — live observability signals from ClickHouse + registry analytics from Postgres. Runs as a separate Luigi microfrontend, independent from the AI System Registry.
 
-- `frontend/` — React 18 + Vite SPA (Recharts for charts), multi-stage Docker build, served by nginx on port 3002
+- `frontend/` — static HTML + Chart.js + SortableJS (no build step), served by nginx on port 3002
 - `backend/` — FastAPI on port 8003, reads from both Postgres and ClickHouse
 
 ### Backend structure (`monitoring/backend/app/`)
@@ -277,9 +288,9 @@ The monitoring MFE — live observability signals from ClickHouse + registry ana
 All ClickHouse queries use `clickhouse-connect` with **parameterized queries** (`{param:Type}` syntax) — never f-string interpolation of user input. `window` and `interval` values come from a server-side allowlist, not raw user input.
 
 ### Frontend
-React 18 + Vite SPA with two views:
-1. **Live Signals** — polls `/monitoring/signals` every 5s. Service and time-window selectors persist to `localStorage` (`ai_trust_monitoring_filters_v1`). Recharts line charts for inference count and latency over time.
-2. **Registry Analytics** — reads `/monitoring/stats`. Tier breakdown, compliance histogram, recent systems table.
+Single `public/index.html` with two sections:
+1. **Live Signals** — polls `/monitoring/signals` every 30s. Service and time-window selectors persist to `localStorage` (`ai_trust_monitoring_filters_v1`).
+2. **Registry Analytics** — customizable dashboard. Users add/remove/reorder charts via the "+ Add Graph" modal. Layout persists to `localStorage` (`ai_trust_dashboard_v4`).
 
 ### Environment variables
 The monitoring backend reads the same `DATABASE_URL` as the registry backend (shared Postgres), plus the ClickHouse vars:
@@ -292,3 +303,72 @@ The monitoring backend reads the same `DATABASE_URL` as the registry backend (sh
 | `CLICKHOUSE_USER` | ClickHouse username |
 | `CLICKHOUSE_PASSWORD` | ClickHouse password |
 | `ALLOWED_ORIGINS` | Comma-separated CORS origins (required) |
+
+## overview/
+
+Compliance posture MFE. Reads from Postgres only (no ClickHouse dependency).
+
+- `frontend/` — static HTML + Chart.js + SortableJS (no build step), served by nginx on port 3003
+- `backend/` — FastAPI on port 8004, reads from Postgres only
+
+### Backend structure (`overview/backend/app/`)
+- `main.py` — FastAPI app, mounts overview router, `/health` endpoint
+- `routers/overview.py` — `GET /api/v1/overview/stats?lifecycle=` — KPI counts, tier distribution, compliance data, recent registrations
+
+### Frontend
+Single `public/index.html` with:
+1. **Fixed top section** — KPI cards (avg compliance, total systems, high-risk on market, fully compliant) + tier donut + compliance bar chart
+2. **Customizable analytics dashboard** — same Add Graph / drag-reorder pattern as monitoring. Layout persists to `localStorage` (`ai_trust_overview_dashboard_v1`).
+
+## alerts/
+
+Rule-based alerting MFE. Reads rules from Postgres, writes/reads events from ClickHouse.
+
+- `frontend/` — static HTML served by nginx on port 3004
+- `backend/` — FastAPI on port 8005, reads Postgres (rules) + ClickHouse (events)
+
+### Backend endpoints
+- `GET /api/v1/alerts/active` — unresolved, unhandled events from ClickHouse
+- `GET /api/v1/alerts/history` — resolved/handled events
+- `GET /api/v1/alerts/rules` — all rules from Postgres
+- `GET /api/v1/alerts/count` — fast count for bell badge polling
+- `POST /api/v1/alerts/events/{id}/handle` — mark event as handled (sets both `handled_at` and `resolved_at`)
+- `POST /api/v1/alerts/rules/{id}/toggle` — enable/disable a rule
+
+### policy-checker-worker/
+
+Standalone background job (no HTTP port). Evaluates all enabled rules every `ALERT_POLL_INTERVAL` seconds (default 10s dev / raise to 60s+ for production).
+
+- Reads enabled rules from Postgres `alert_rules` table
+- Evaluates each condition against live data (Postgres + ClickHouse)
+- Creates new events in ClickHouse `otel.alert_events` when conditions trigger
+- Auto-resolves threshold events when conditions clear
+- Event-type alerts (e.g. prohibited system) suppressed for 24h after being handled
+
+### Alert rules (seeded defaults)
+
+| Rule | Category | Condition type |
+|---|---|---|
+| Prohibited system registered | risk | `prohibited_exists` |
+| Average compliance below 70% | compliance | `avg_compliance_below` |
+| High-risk on market with compliance < 50% | compliance | `high_risk_on_market_low_compliance` |
+| No inference signals in last 30 min | observability | `no_signals` |
+| Avg latency > 500ms | observability | `high_latency` |
+| System on market without model card | compliance | `market_system_no_model_card` |
+| GPAI system with no compliance score | risk | `gpai_no_compliance` |
+
+### Database
+- **Postgres** — `alert_rules` table (rule config, seeded by migration `0004`)
+- **ClickHouse** — `otel.alert_events` table (append-only event log)
+
+### Environment variables
+Both alerts-backend and policy-checker-worker need Postgres + ClickHouse vars:
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | Postgres connection string |
+| `CLICKHOUSE_HOST` | ClickHouse hostname |
+| `CLICKHOUSE_PORT` | ClickHouse HTTP port |
+| `CLICKHOUSE_USER` | ClickHouse username |
+| `CLICKHOUSE_PASSWORD` | ClickHouse password |
+| `ALERT_POLL_INTERVAL` | Worker poll interval in seconds (default `10`, use `60`+ in production) |

@@ -24,6 +24,15 @@ services:
         condition: service_started
       monitoring-backend:
         condition: service_healthy
+      overview-frontend:
+        condition: service_started
+      overview-backend:
+        condition: service_healthy
+      alerts-frontend:
+        condition: service_started
+      alerts-backend:
+        condition: service_healthy
+
 
   ai-system-registry-frontend:
     build:
@@ -40,6 +49,20 @@ services:
         VITE_MONITORING_API_BASE: ${VITE_MONITORING_API_BASE}
     ports:
       - "3002:80"
+
+  overview-frontend:
+    build: ./overview/frontend
+    ports:
+      - "3003:80"
+
+  alerts-frontend:
+    build:
+      context: ./alerts/frontend
+      args:
+        VITE_API_BASE: ${VITE_ALERTS_API_BASE}
+        VITE_ALERTS_URL: ${VITE_ALERTS_URL}
+    ports:
+      - "3004:80"
 
   db-migrate:
     build: ./libs/persistence
@@ -92,6 +115,68 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  overview-backend:
+    build:
+      context: .
+      dockerfile: overview/backend/Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      <<: *db-env
+      ALLOWED_ORIGINS: "http://localhost:3003,http://localhost:8080"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  alerts-backend:
+    build:
+      context: .
+      dockerfile: alerts/backend/Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      <<: *db-env
+      ALLOWED_ORIGINS: "http://localhost:3004,http://localhost:8080,http://localhost:3001,http://localhost:3002,http://localhost:3003"
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      clickhouse-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  policy-checker-worker:
+    build:
+      context: .
+      dockerfile: policy-checker-worker/Dockerfile
+    environment:
+      <<: *db-env
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      ALERT_POLL_INTERVAL: "10"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      clickhouse-migrate:
+        condition: service_completed_successfully
+    restart: on-failure
 
   postgres:
     image: postgres:16-alpine

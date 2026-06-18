@@ -5,7 +5,7 @@ import asyncio
 from fastapi import APIRouter, Query
 from sqlalchemy import func, select
 
-from ai_trust_clickhouse import get_client
+from ai_trust_clickhouse import ch_query
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
@@ -14,19 +14,9 @@ from ai_trust_persistence.models.model_card import ModelCard
 router = APIRouter(tags=["monitoring"])
 logger = get_logger(__name__)
 
-
-async def _ch_query(sql: str, params: dict | None = None) -> list[dict]:
-    loop = asyncio.get_event_loop()
-    def _run():
-        client = get_client()
-        result = client.query(sql, parameters=params or {})
-        return [dict(zip(result.column_names, row)) for row in result.result_rows]
-    return await loop.run_in_executor(None, _run)
-
-
 @router.get("/monitoring/services")
 async def get_services() -> list[dict]:
-    rows = await _ch_query("""
+    rows = await ch_query("""
         SELECT
             service_name,
             request_model,
@@ -62,7 +52,7 @@ async def get_signals(
         params = {}
 
     timeseries, totals = await asyncio.gather(
-        _ch_query(f"""
+        ch_query(f"""
             SELECT
                 toString({bucket}(received_at)) AS time,
                 count()                          AS inference_count,
@@ -75,7 +65,7 @@ async def get_signals(
             GROUP BY time
             ORDER BY time ASC
         """, params),
-        _ch_query(f"""
+        ch_query(f"""
             SELECT
                 count()                    AS total_inferences,
                 round(avg(duration_ms), 2) AS avg_latency_ms,
