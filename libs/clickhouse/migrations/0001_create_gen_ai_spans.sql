@@ -19,4 +19,7 @@ CREATE TABLE IF NOT EXISTS otel.gen_ai_spans
     input_messages  String,
     output_messages String
 ) ENGINE = MergeTree()
-ORDER BY (received_at, service_name, request_model);
+PARTITION BY toYYYYMM(received_at)
+ORDER BY (received_at, service_name, request_model)
+TTL received_at + INTERVAL 7 DAY TO DISK 'minio'
+SETTINGS storage_policy = 'tiered';

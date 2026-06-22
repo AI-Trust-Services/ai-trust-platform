@@ -1,0 +1,29 @@
+<clickhouse>
+    <storage_configuration>
+        <disks>
+            <minio>
+                <type>s3</type>
+                <endpoint>http://minio:9000/clickhouse/</endpoint>
+                <access_key_id from_env="MINIO_ROOT_USER"/>
+                <secret_access_key from_env="MINIO_ROOT_PASSWORD"/>
+                <send_metadata>false</send_metadata>
+            </minio>
+        </disks>
+        <policies>
+            <tiered>
+                <volumes>
+                    <hot>
+                        <disk>default</disk>
+                    </hot>
+                    <cold>
+                        <disk>minio</disk>
+                    </cold>
+                </volumes>
+                <!-- Start moving parts to cold when hot disk is 90% full (i.e. keep max ~10GB on a 100GB disk).
+                     Set to a value matching your actual disk size. For explicit age-based moves, rely on the
+                     TTL clause in the table definition instead. -->
+                <move_factor>0.1</move_factor>
+            </tiered>
+        </policies>
+    </storage_configuration>
+</clickhouse>

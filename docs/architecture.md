@@ -40,6 +40,10 @@ ai-trust-platform/
 ├── otel-pipeline/                ← GenAI observability pipeline
 │   ├── collector/                ← OTel Collector config
 │   │   └── otel-collector-config.yaml
+│   ├── clickhouse-config/        ← ClickHouse server config overrides (mounted read-only)
+│   │   └── config.d/
+│   │       ├── storage.xml       ← S3 disk (MinIO) + tiered storage policy definition
+│   │       └── listen.xml        ← binds ClickHouse HTTP to 0.0.0.0 (required for Docker networking)
 │   └── rmq-bridge/               ← FastAPI OTLP→RabbitMQ bridge (port 8002)
 │       └── app/main.py
 ├── consumers/                    ← RabbitMQ consumers (one sub-dir per sink)
@@ -59,6 +63,7 @@ flowchart TD
     Bridge -->|"fanout: otel.traces"| RMQ["RabbitMQ"]
     RMQ --> CH["clickhouse-consumer"]
     CH --> ClickHouse[("ClickHouse :8123\notel.gen_ai_spans\notel.alert_events")]
+    ClickHouse -->|"cold storage\n(tiered MergeTree)"| MinIO[("MinIO :9000\nS3-compatible object store")]
     ClickHouse -->|"signals query"| MonBackend["monitoring-backend :8003"]
     PG[("PostgreSQL :5432\nai_systems, model_cards\nalert_rules")] -->|"stats query"| MonBackend
     MonBackend --> MonFE["monitoring-frontend :3002"]
@@ -93,6 +98,8 @@ flowchart TD
     RMQ["rabbitmq\n(healthy)"]
     Bridge["otel-rmq-bridge\n(healthy)"]
     Collector["otel-collector"]
+    MinIO["minio :9000\n(healthy)"]
+    MinIOInit["minio-init\ncreates clickhouse bucket\nthen exits"]
     CH["clickhouse\n(healthy)"]
     CHMigrate["clickhouse-migrate\nruns migrate.py\nthen exits"]
     CHConsumer["otel-clickhouse-consumer"]
@@ -104,6 +111,8 @@ flowchart TD
     Migrate --> OvBackend
     Migrate --> AlertBackend
     Migrate --> AlertWorker
+    MinIO --> MinIOInit
+    MinIOInit --> CH
     CH --> MonBackend
     CH --> AlertBackend
     CH --> AlertWorker
@@ -128,6 +137,10 @@ flowchart TD
 
 `clickhouse-migrate` is a one-shot container built from `libs/clickhouse/Dockerfile`. It owns all ClickHouse schema migrations — consumers never run migrations.
 
+`minio-init` is a one-shot container that creates the `clickhouse` bucket in MinIO on first startup. ClickHouse depends on it completing before it starts, ensuring the bucket exists before any data part moves to cold storage.
+
 **If db-migrate fails:** check logs with `docker compose logs db-migrate`. Common causes: postgres not ready (retry `docker compose up db-migrate`), or a bad migration file. Fix the migration, then re-run with `docker compose up --build db-migrate`. The backend will not start until db-migrate exits successfully.
 
 **If clickhouse-migrate fails:** check logs with `docker compose logs clickhouse-migrate`. Common causes: clickhouse not ready (retry `docker compose up clickhouse-migrate`), or a bad SQL file. Fix the migration, then re-run with `docker compose up --build clickhouse-migrate`. The consumer will not start until clickhouse-migrate exits successfully.
+
+**If minio-init fails:** check logs with `docker compose logs minio-init`. Most likely cause: MinIO not ready yet. Retry with `docker compose up minio-init`. ClickHouse will not start until minio-init exits successfully.

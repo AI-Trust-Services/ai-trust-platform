@@ -83,6 +83,8 @@ python3.12 -m venv .venv
 | OTel RMQ Bridge health | http://localhost:8002/health |
 | RabbitMQ management UI | http://localhost:15672 (credentials from `.env`) |
 | ClickHouse HTTP API | http://localhost:8123 / db: `otel` |
+| MinIO API | http://localhost:9000 |
+| MinIO console | http://localhost:9001 (credentials from `.env`) |
 
 ## Architecture
 
@@ -109,6 +111,26 @@ The shared ClickHouse package. All consumers and any future services that read/w
 - **`database.py`** — ClickHouse connection factory, reads `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` from environment (fail-fast)
 - **`tables.py`** — single source of truth for table name (`GEN_AI_SPANS`) and column list (`COLUMNS`)
 - **`migrations/`** — versioned SQL migration files, applied in filename order
+
+### Cold storage (tiered MergeTree → MinIO)
+
+Both `gen_ai_spans` and `alert_events` use a two-tier storage policy:
+
+| Tier | Storage | Trigger |
+|---|---|---|
+| Hot | Local disk (`clickhouse_data` volume) | Default for new data |
+| Cold | MinIO S3 (`minio_data` volume) | Age > 7 days **or** hot disk > 90% full |
+
+Key decisions:
+- **MinIO** — open-source S3-compatible object store, runs as a Docker container, no hyperscaler dependency. Swap to AWS S3 by changing three env vars — no code or schema changes needed.
+- **Queryable cold data** — tiered MergeTree keeps cold data queryable via SQL (slower, network round-trip to MinIO); data is never detached or exported
+- **No delete TTL** — data kept forever in MinIO (compliance audit trail)
+- **Full fidelity** — `input_messages` and `output_messages` are retained in cold storage (not stripped)
+- **Query routing** — all existing dashboard queries stay on hot storage naturally (24h max window); alert worker queries are explicitly bounded to recent data (e.g. last 1h) to avoid cold scans
+- **Credentials** — `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` in `.env`, with `x-minio-env` anchor in `docker-compose.yml`
+- **ClickHouse config** — storage policy defined in `otel-pipeline/clickhouse-config/config.d/storage.xml`, mounted into the ClickHouse container as read-only
+- **Bucket init** — `minio-init` one-shot container creates the `clickhouse` bucket on first startup; ClickHouse `depends_on: minio-init`
+- **Schema** — both tables are created with `PARTITION BY toYYYYMM(...)`, `TTL ... TO DISK 'minio'`, and `storage_policy = 'tiered'` (see `0001_create_gen_ai_spans.sql` and `0002_create_alert_events.sql`)
 
 ## libs/logging
 
@@ -208,6 +230,8 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `RABBITMQ_PASSWORD` | rabbitmq, otel-rmq-bridge, consumers | `guest` | RabbitMQ password |
 | `CLICKHOUSE_USER` | clickhouse, otel-clickhouse-consumer | `default` | ClickHouse username |
 | `CLICKHOUSE_PASSWORD` | clickhouse, otel-clickhouse-consumer | *(empty)* | ClickHouse password |
+| `MINIO_ROOT_USER` | minio, minio-init, clickhouse | `minioadmin` | MinIO access key (used by ClickHouse S3 disk) |
+| `MINIO_ROOT_PASSWORD` | minio, minio-init, clickhouse | `minioadmin` | MinIO secret key |
 | `DATABASE_URL` | all backends, db-migrate | derived from `POSTGRES_*` above | Postgres connection string |
 | `ALLOWED_ORIGINS` | ai-system-registry-backend | *(required — no default)* | Comma-separated CORS origins. App refuses to start if not set. |
 | `VITE_API_BASE` | ai-system-registry-frontend (build time) | `http://localhost:8001/api/v1` | Backend API base URL baked into the frontend bundle by Vite. |
@@ -215,7 +239,7 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code.
 
 ## docker-compose.yml conventions
-- Credentials are defined via YAML anchors (`x-db-env`, `x-rmq-env`, `x-ch-env`) and merged into each service — never copy-paste connection strings
+- Credentials are defined via YAML anchors (`x-db-env`, `x-rmq-env`, `x-ch-env`, `x-minio-env`) and merged into each service — never copy-paste connection strings
 - Backend build context is always the repo root (`.`) so the Dockerfile can `COPY libs/persistence`
 - New backends follow the same pattern: `depends_on: db-migrate: condition: service_completed_successfully`
 - Each backend must have a `healthcheck.py` and declare a `healthcheck` in `docker-compose.yml` using `CMD python healthcheck.py` — no extra packages needed, uses Python stdlib `urllib`
