@@ -31,7 +31,7 @@ Luigi.setConfig({
           {
             pathSegment: "alerts",
             label: "Alerts",
-            hideFromNav: true,
+            icon: "alert",
             viewUrl: "http://localhost:3004/",
             navigationContext: "alerts",
           },
@@ -65,43 +65,84 @@ Luigi.setConfig({
         }
 
         /* ── Shell bar ── */
-        .fd-shellbar,
-        .lui-shellbar,
-        [class*="shellbar"] {
+        .fd-shellbar {
           background: #0a6ed1 !important;
           border-bottom: none !important;
-          box-shadow: none !important;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
           height: 48px !important;
+          padding-left: 0 !important;
         }
         .fd-shellbar__title,
         .lui-shellbar__title,
         .shellbar-title {
           color: #ffffff !important;
+          font-family: "72", "72full", Arial, Helvetica, sans-serif !important;
           font-weight: 600 !important;
           font-size: 15px !important;
+          line-height: 1 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          height: auto !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          letter-spacing: 0 !important;
+        }
+        /* Hide the empty logo placeholder so the title isn't visually offset */
+        .fd-shellbar__logo:empty,
+        .fd-shellbar__logo--image-replaced {
+          display: none !important;
+        }
+        /* Pull the left group (hamburger + home button) flush to the left edge */
+        .fd-shellbar__group--product {
+          padding-left: 0 !important;
+          margin-left: 0 !important;
         }
 
-        /* ── Hamburger — make it obvious ── */
+        /* Shrink the home button to tightly wrap the title text */
+        .fd-shellbar__branding {
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          height: 32px !important;
+          padding: 0 8px !important;
+          background: transparent !important;
+          cursor: pointer !important;
+          outline: none !important;
+          border-radius: 4px !important;
+        }
+        .fd-shellbar__branding:hover {
+          background: rgba(255,255,255,0.10) !important;
+        }
+        .fd-shellbar__branding:focus {
+          outline: none !important;
+          box-shadow: none !important;
+        }
+        .fd-shellbar__branding:focus-visible {
+          outline: 2px solid rgba(255, 255, 255, 0.8) !important;
+          outline-offset: 2px !important;
+          box-shadow: none !important;
+        }
+
+        /* ── Hamburger — white icon on the dark blue shellbar ── */
         .lui-burger,
-        .fd-shellbar__hamburger,
-        button[aria-label="Navigation"],
-        button.fd-button--transparent.lui-burger,
-        .fd-shellbar .fd-button {
+        .fd-shellbar__button.lui-burger,
+        button.fd-button--transparent.lui-burger {
           color: #ffffff !important;
-          background: rgba(255,255,255,0.15) !important;
-          border: 1px solid rgba(255,255,255,0.3) !important;
-          border-radius: 6px !important;
+          background: transparent !important;
+          border: none !important;
           width: 36px !important;
           height: 36px !important;
           display: inline-flex !important;
           align-items: center !important;
           justify-content: center !important;
           cursor: pointer !important;
-          margin: 0 8px !important;
+          margin: 0 4px !important;
         }
-        .lui-burger:hover,
-        .fd-shellbar__hamburger:hover {
-          background: rgba(255,255,255,0.25) !important;
+        .lui-burger:hover {
+          background: rgba(255,255,255,0.15) !important;
+        }
+        .lui-burger .sap-icon {
+          color: #ffffff !important;
         }
 
         /* ── Sidebar ── */
@@ -195,96 +236,56 @@ Luigi.setConfig({
           margin: 0 !important;
         }
 
-        /* ── Hide Luigi's native hamburger — we inject our own ── */
-        .lui-burger,
-        .fd-shellbar__hamburger,
-        button[aria-label="Navigation"],
-        button.fd-button--transparent.lui-burger {
-          display: none !important;
+        /* ── Sidebar tooltip ── */
+        #luigi-nav-tooltip {
+          position: fixed;
+          background: #1d2d3e;
+          color: #ffffff;
+          padding: 6px 10px;
+          border-radius: 4px;
+          font-size: 13px;
+          font-weight: 500;
+          white-space: nowrap;
+          pointer-events: none;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+          z-index: 9999;
+          display: none;
         }
-
-        /* ── Make sidebar a flex column so hamburger sits above nav naturally ── */
-        .lui-side-nav,
-        .fd-side-nav {
-          display: flex !important;
-          flex-direction: column !important;
-          position: relative !important;
-        }
-
-        /* ── Custom hamburger button at top of sidebar ── */
-        #custom-hamburger {
-          width: 100%;
-          height: 48px;
-          min-height: 48px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          border-bottom: 1px solid #e4e6e8;
-          background: #ffffff;
-          flex-shrink: 0;
-          order: -1;
-        }
-        #custom-hamburger:hover { background: #f5f6f7; }
-        #custom-hamburger .hb {
-          width: 20px; height: 16px;
-          display: flex; flex-direction: column; justify-content: space-between;
-        }
-        #custom-hamburger .hb span {
-          display: block; height: 2px; width: 100%;
-          background: #556b82; border-radius: 2px;
-          transition: all 0.25s ease; transform-origin: center;
-        }
-        #custom-hamburger.open .hb span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
-        #custom-hamburger.open .hb span:nth-child(2) { opacity: 0; transform: scaleX(0); }
-        #custom-hamburger.open .hb span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
-        #custom-hamburger:hover .hb span { background: #0a6ed1; }
       `;
       document.head.appendChild(style);
 
-      const LUIGI_NAV_KEY = "luigi.preferences.navigation.collapsedNavigation";
+      // JS tooltip for collapsed sidebar icons
+      const tooltip = document.createElement("div");
+      tooltip.id = "luigi-nav-tooltip";
+      document.body.appendChild(tooltip);
 
-      // Inject custom hamburger into sidebar once Luigi has rendered
-      function injectHamburger() {
-        const sidebar = document.querySelector(
-          '.lui-side-nav, .fd-side-nav, [class*="side-nav"]'
-        );
-        if (!sidebar || document.getElementById("custom-hamburger")) return;
-
-        const btn = document.createElement("div");
-        btn.id = "custom-hamburger";
-        btn.innerHTML = `<div class="hb"><span></span><span></span><span></span></div>`;
-
-        // Read Luigi's actual current collapsed state
-        let collapsed = localStorage.getItem(LUIGI_NAV_KEY) === "true";
-        // "open" class = expanded (X icon), no "open" = collapsed (3 lines)
-        btn.classList.toggle("open", !collapsed);
-
-        btn.addEventListener("click", () => {
-          collapsed = !collapsed;
-          btn.classList.toggle("open", !collapsed);
-
-          // Toggle Luigi's collapsed state
-          const luigiBtn = document.querySelector(
-            '.lui-burger, button[aria-label="Navigation"]'
-          );
-          if (luigiBtn) {
-            luigiBtn.click();
-          } else {
-            sidebar.classList.toggle("lui-side-nav--collapsed", collapsed);
-          }
+      function attachTooltips() {
+        const links = document.querySelectorAll(".fd-nested-list__link[title]");
+        links.forEach(link => {
+          if (link.dataset.tooltipBound) return;
+          link.dataset.tooltipBound = "1";
+          link.addEventListener("mouseenter", () => {
+            if (!document.body.classList.contains("semiCollapsed")) return;
+            const rect = link.getBoundingClientRect();
+            tooltip.textContent = link.getAttribute("title");
+            tooltip.style.display = "block";
+            tooltip.style.left = (rect.right + 8) + "px";
+            tooltip.style.top = (rect.top + rect.height / 2 - tooltip.offsetHeight / 2) + "px";
+          });
+          link.addEventListener("mouseleave", () => {
+            tooltip.style.display = "none";
+          });
         });
-
-        sidebar.style.position = "relative";
-        sidebar.insertBefore(btn, sidebar.firstChild);
       }
 
-      // Retry until sidebar is in DOM
-      const interval = setInterval(() => {
-        const sidebar = document.querySelector('.lui-side-nav, .fd-side-nav');
-        if (sidebar) {
-          injectHamburger();
-          clearInterval(interval);
+      // Attach once sidebar is in DOM, re-check on nav changes
+      const observer = new MutationObserver(attachTooltips);
+      const waitForNav = setInterval(() => {
+        const nav = document.querySelector(".fd-nested-list");
+        if (nav) {
+          clearInterval(waitForNav);
+          attachTooltips();
+          observer.observe(nav, { childList: true, subtree: true });
         }
       }, 200);
     },
