@@ -56,28 +56,50 @@ ai-trust-platform/
 
 ```mermaid
 flowchart TD
-    App["App\n(any language, OTLP configured)"]
+    App["AI Application"]
 
-    App -->|"OTLP/gRPC :4317\nor OTLP/HTTP :4318"| Collector["otel-collector"]
-    Collector -->|"OTLP/HTTP JSON"| Bridge["otel-rmq-bridge :8002"]
-    Bridge -->|"fanout: otel.traces"| RMQ["RabbitMQ"]
-    RMQ --> CH["clickhouse-consumer"]
-    CH --> ClickHouse[("ClickHouse :8123\notel.gen_ai_spans\notel.alert_events")]
-    ClickHouse -->|"cold storage\n(tiered MergeTree)"| MinIO[("MinIO :9000\nS3-compatible object store")]
-    ClickHouse -->|"signals query"| MonBackend["monitoring-backend :8003"]
-    PG[("PostgreSQL :5432\nai_systems, model_cards\nalert_rules")] -->|"stats query"| MonBackend
-    MonBackend --> MonFE["monitoring-frontend :3002"]
-    PG -->|"stats query"| OvBackend["overview-backend :8004"]
-    OvBackend --> OvFE["overview-frontend :3003"]
-    PG -->|"rules"| AlertWorker["policy-checker-worker"]
-    ClickHouse -->|"signals"| AlertWorker
-    AlertWorker -->|"events"| ClickHouse
-    ClickHouse -->|"events"| AlertBackend["alerts-backend :8005"]
-    PG -->|"rules"| AlertBackend
-    AlertBackend --> AlertFE["alerts-frontend :3004"]
+    App -->|OTLP| Collector["OTel Collector"]
+    Collector -->|OTLP/HTTP JSON| Bridge["RMQ Bridge"]
+    Bridge -->|fanout exchange| RMQ["RabbitMQ"]
+    RMQ --> Consumer["ClickHouse Consumer"]
+
+    subgraph ClickHouse["ClickHouse"]
+        direction TB
+        Hot[("Hot Disk\nnew data")]
+        Hot -->|"age > 15min or disk > 90%"| MinIO[("MinIO\ncold data")]
+        MinIO <-->|"read-through cache"| Cache["Local Cache\nrecently read cold parts"]
+    end
+
+    Consumer -->|insert| Hot
+
+    ClickHouse --> Monitoring["Monitoring"]
+    ClickHouse --> Alerts["Alerts"]
+    PG[("PostgreSQL\nai_systems\nmodel_cards\nalert_rules")] --> Monitoring
+    PG --> Overview["Overview"]
+    PG --> Registry["AI System Registry"]
+    PG --> AlertWorker["Policy Checker Worker"]
+    ClickHouse --> AlertWorker
+    AlertWorker -->|writes events| ClickHouse
+    PG --> Alerts
 ```
 
 > **Note:** `encoding: json` and `compression: none` are required in the OTel Collector config — the collector defaults to protobuf binary which the bridge cannot parse.
+
+### ClickHouse Storage Tiers
+
+ClickHouse uses a **tiered MergeTree** storage policy with three layers:
+
+| Tier | Location | What lives here |
+|---|---|---|
+| Hot | Local disk (`clickhouse_data` volume) | All newly ingested data |
+| Cold | MinIO S3 (`minio_data` volume) | Data older than 7 days, or when hot disk > 90% full |
+| Cache | Local disk (`filesystem_cache/minio/`) | Recently read cold parts, up to 10 GB |
+
+**Read path:** ClickHouse checks hot disk first, then local cache, then fetches from MinIO (and populates the cache). This is fully transparent — all queries use normal SQL regardless of which tier the data is on.
+
+**Write path:** All inserts always go to hot disk. The TTL rule moves parts to MinIO in the background. The cache is never written to directly — it is populated lazily on first read of a cold part.
+
+**Cache invalidation:** Handled automatically by ClickHouse. When a mutation (`ALTER TABLE ... UPDATE/DELETE`) rewrites a part, the cached version is invalidated and the new part is fetched from MinIO on next read. In practice this is rare — `gen_ai_spans` is write-once (spans are never mutated), and `alert_events` mutations only occur when a user handles an alert.
 
 ## Docker Startup Order
 

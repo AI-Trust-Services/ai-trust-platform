@@ -8,6 +8,12 @@
                 <secret_access_key from_env="MINIO_ROOT_PASSWORD"/>
                 <send_metadata>false</send_metadata>
             </minio>
+            <minio_cache>
+                <type>cache</type>
+                <disk>minio</disk>
+                <path>/var/lib/clickhouse/filesystem_cache/minio/</path>
+                <max_size>10Gi</max_size>
+            </minio_cache>
         </disks>
         <policies>
             <tiered>
@@ -16,7 +22,7 @@
                         <disk>default</disk>
                     </hot>
                     <cold>
-                        <disk>minio</disk>
+                        <disk>minio_cache</disk>
                     </cold>
                 </volumes>
                 <!-- Start moving parts to cold when hot disk is 90% full (i.e. keep max ~10GB on a 100GB disk).
