@@ -45,7 +45,9 @@ async def eval_avg_compliance_below(rule: AlertRule, ch) -> tuple[bool, float]:
     async with SessionLocal() as session:
         avg = (await session.execute(
             select(func.avg(AISystem.compliance))
-        )).scalar_one() or 0.0
+        )).scalar_one()
+    if avg is None:
+        return False, 0.0
     avg = float(avg)
     return avg < rule.threshold, avg
 

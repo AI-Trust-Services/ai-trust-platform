@@ -19,11 +19,10 @@ async def get_services() -> list[dict]:
     rows = await ch_query("""
         SELECT
             service_name,
-            request_model,
             count() AS total_spans,
             toString(max(received_at)) AS last_seen
         FROM otel.gen_ai_spans
-        GROUP BY service_name, request_model
+        GROUP BY service_name
         ORDER BY total_spans DESC
     """)
     logger.info("monitoring.services_fetched", extra={"count": len(rows)})

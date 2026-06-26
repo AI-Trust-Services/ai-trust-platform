@@ -5,6 +5,7 @@ import {
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { fmtDateTime } from "../utils";
+import ExportModal from "../components/ExportModal";
 
 const STORAGE_KEY = "ai_trust_monitoring_filters_v1";
 const WINDOWS = [
@@ -18,11 +19,11 @@ function loadFilters() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { return {}; }
 }
 
-function saveFilters(filters) {
+function saveFilters(filters: Record<string, string>) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
 }
 
-function fmt(t) {
+function fmt(t: string) {
   return t ? t.slice(11, 16) : "";
 }
 
@@ -34,6 +35,10 @@ export default function LiveSignals() {
   const [signals, setSignals] = useState(null);
   const [loading, setLoading] = useState(false);
   const [stale, setStale] = useState(false);
+  const [staleThresholdMin, setStaleThresholdMin] = useState(3);
+  const [page, setPage] = useState(0);
+  const [showExport, setShowExport] = useState(false);
+  const ROWS_PER_PAGE = 10;
   const filtersRef = useRef({ service: saved.service || "", window: saved.window || "1h" });
   const showToast = useToast();
 
@@ -51,16 +56,22 @@ export default function LiveSignals() {
     }
   }, [showToast]);
 
-  const loadSignals = useCallback(async (service, window) => {
+  const loadSignals = useCallback(async (service: string, window: string) => {
     setLoading(true);
     try {
       const data = await api.getSignals(service, window);
       setSignals(data);
       if (data.timeseries?.length > 0) {
         const last = data.timeseries[data.timeseries.length - 1].time;
-        setStale((Date.now() - new Date(last).getTime()) > 5 * 60 * 1000);
+        // ClickHouse returns timestamps without timezone suffix — treat as UTC.
+        const lastUtcMs = new Date(last.replace(" ", "T") + "Z").getTime();
+        const staleMs: Record<string, number> = { "15m": 3, "1h": 3, "6h": 10, "24h": 20 };
+        const thresholdMin = staleMs[window] ?? 5;
+        setStaleThresholdMin(thresholdMin);
+        setStale((Date.now() - lastUtcMs) > thresholdMin * 60 * 1000);
       } else {
         setStale(false);
+        setStaleThresholdMin(3);
       }
     } catch (e) {
       showToast(`Failed to load signals: ${e.message}`, true);
@@ -88,20 +99,27 @@ export default function LiveSignals() {
     loadSignals(selectedService, selectedWindow);
   }, [selectedService, selectedWindow, loadSignals]);
 
-  function handleServiceChange(e) {
+  function handleServiceChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const v = e.target.value;
     setSelectedService(v);
+    setPage(0);
     saveFilters({ service: v, window: selectedWindow });
   }
 
-  function handleWindowChange(e) {
+  function handleWindowChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const v = e.target.value;
     setSelectedWindow(v);
+    setPage(0);
     saveFilters({ service: selectedService, window: v });
   }
 
   const kpis = signals?.kpis || {};
   const timeseries = signals?.timeseries || [];
+
+  function copyChartData(dataKey: string, header: string) {
+    const tsv = [header, ...timeseries.map((r: Record<string, unknown>) => `${r.time}\t${r[dataKey] ?? ""}`)].join("\n");
+    navigator.clipboard.writeText(tsv).then(() => showToast("Copied to clipboard")).catch(() => showToast("Failed to copy to clipboard", true));
+  }
 
   return (
     <>
@@ -116,6 +134,9 @@ export default function LiveSignals() {
           {WINDOWS.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
         </select>
         <div className="toolbar-spacer" />
+        <button className="btn-ghost" onClick={() => setShowExport(true)} disabled={timeseries.length === 0}>
+          ↓ Export
+        </button>
         <button className="btn-ghost" onClick={() => loadSignals(selectedService, selectedWindow)} disabled={loading}>
           {loading ? <span className="spinner" /> : "↺"} Refresh
         </button>
@@ -123,7 +144,7 @@ export default function LiveSignals() {
 
       {stale && (
         <div className="stale-banner">
-          ⚠ Signal data may be stale — last datapoint was more than 5 minutes ago.
+          ⚠ Signal data may be stale — last datapoint was more than {staleThresholdMin} minutes ago.
         </div>
       )}
 
@@ -149,29 +170,74 @@ export default function LiveSignals() {
 
         <div className="chart-grid">
           <div className="chart-card">
-            <div className="chart-title">Inference Count over Time</div>
+            <div className="chart-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              Inference Count over Time
+              <button className="btn-ghost" style={{ fontSize: 12, padding: "2px 8px" }} onClick={() => copyChartData("inference_count", "Time\tInference Count")}>⎘ Copy</button>
+            </div>
             <ResponsiveContainer width="100%" height={140}>
               <LineChart data={timeseries}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" />
                 <XAxis dataKey="time" tickFormatter={fmt} tick={{ fontSize: 11 }} interval="preserveStartEnd" />
                 <YAxis tick={{ fontSize: 11 }} width={40} />
                 <Tooltip labelFormatter={fmt} />
-                <Line type="monotone" dataKey="inference_count" stroke="#0a6ed1" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="inference_count" name="Inference Count" stroke="#0a6ed1" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
           <div className="chart-card">
-            <div className="chart-title">Avg Latency (ms) over Time</div>
+            <div className="chart-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              Avg Latency (ms) over Time
+              <button className="btn-ghost" style={{ fontSize: 12, padding: "2px 8px" }} onClick={() => copyChartData("avg_latency_ms", "Time\tAvg Latency (ms)")}>⎘ Copy</button>
+            </div>
             <ResponsiveContainer width="100%" height={140}>
               <LineChart data={timeseries}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" />
                 <XAxis dataKey="time" tickFormatter={fmt} tick={{ fontSize: 11 }} interval="preserveStartEnd" />
                 <YAxis tick={{ fontSize: 11 }} width={40} />
                 <Tooltip labelFormatter={fmt} />
-                <Line type="monotone" dataKey="avg_latency_ms" stroke="#e05c00" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="avg_latency_ms" name="Avg Latency (ms)" stroke="#e05c00" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
+        </div>
+
+        <div className="section-title">Inference Breakdown</div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time Bucket</th>
+                <th>Service</th>
+                <th>Inferences</th>
+                <th>Avg Latency (ms)</th>
+                <th>Input Tokens</th>
+                <th>Output Tokens</th>
+              </tr>
+            </thead>
+            <tbody>
+              {timeseries.length === 0 ? (
+                <tr className="empty-row"><td colSpan={6}>No inference data for this window.</td></tr>
+              ) : [...timeseries].reverse().slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map((row, i) => (
+                <tr key={i}>
+                  <td style={{ fontWeight: 500 }}>{row.time}</td>
+                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{selectedService || "All"}</td>
+                  <td style={{ fontSize: 13 }}>{row.inference_count?.toLocaleString()}</td>
+                  <td style={{ fontSize: 13 }}>{row.avg_latency_ms != null ? `${Number(row.avg_latency_ms).toFixed(0)} ms` : "—"}</td>
+                  <td style={{ fontSize: 13 }}>{row.input_tokens?.toLocaleString()}</td>
+                  <td style={{ fontSize: 13 }}>{row.output_tokens?.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {timeseries.length > ROWS_PER_PAGE && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 4px", fontSize: 13, color: "var(--text-secondary)" }}>
+              <span>{page * ROWS_PER_PAGE + 1}–{Math.min((page + 1) * ROWS_PER_PAGE, timeseries.length)} of {timeseries.length}</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn-ghost" onClick={() => setPage(p => p - 1)} disabled={page === 0}>← Prev</button>
+                <button className="btn-ghost" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * ROWS_PER_PAGE >= timeseries.length}>Next →</button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="section-title">Services</div>
@@ -180,18 +246,16 @@ export default function LiveSignals() {
             <thead>
               <tr>
                 <th>Service</th>
-                <th>Model</th>
                 <th>Total Spans</th>
                 <th>Last Seen</th>
               </tr>
             </thead>
             <tbody>
               {services.length === 0 ? (
-                <tr className="empty-row"><td colSpan={4}>No services observed yet.</td></tr>
+                <tr className="empty-row"><td colSpan={3}>No services observed yet.</td></tr>
               ) : services.map((s) => (
                 <tr key={s.service_name}>
                   <td style={{ fontWeight: 500 }}>{s.service_name}</td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{s.request_model || "—"}</td>
                   <td style={{ fontSize: 13 }}>{s.total_spans?.toLocaleString()}</td>
                   <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{fmtDateTime(s.last_seen)}</td>
                 </tr>
@@ -200,6 +264,13 @@ export default function LiveSignals() {
           </table>
         </div>
       </div>
+      {showExport && (
+        <ExportModal
+          onClose={() => setShowExport(false)}
+          currentService={selectedService}
+          currentWindow={selectedWindow}
+        />
+      )}
     </>
   );
 }

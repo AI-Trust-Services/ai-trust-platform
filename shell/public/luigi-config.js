@@ -53,6 +53,10 @@ Luigi.setConfig({
       collapsed: true,
     },
     theme: "sap_horizon",
+    iframeCreationInterceptor: (iframe) => {
+      iframe.setAttribute("allow", "downloads");
+      iframe.sandbox.add("allow-downloads");
+    },
   },
 
   lifecycleHooks: {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
-import { useNavigate, useLocation, Outlet } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { HEALTH_URL } from "./api/client";
 
@@ -10,8 +10,6 @@ export default function App() {
   const [backendOk, setBackendOk] = useState(null);
   const [toast, setToast] = useState(null);
   const healthTimer = useRef(null);
-  const navigate = useNavigate();
-  const location = useLocation();
 
   useLuigiInit(() => {});
 
@@ -37,27 +35,10 @@ export default function App() {
     setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const activeView = location.pathname.startsWith("/analytics") ? "analytics" : "signals";
-
   return (
     <ToastContext.Provider value={showToast}>
       <div className="page-header">
         <h1>Monitoring <span className="mfe-badge">Live</span></h1>
-      </div>
-
-      <div className="nav-tabs">
-        <div
-          className={`nav-tab${activeView === "signals" ? " active" : ""}`}
-          onClick={() => navigate("/signals")}
-        >
-          Live Signals
-        </div>
-        <div
-          className={`nav-tab${activeView === "analytics" ? " active" : ""}`}
-          onClick={() => navigate("/analytics")}
-        >
-          Registry Analytics
-        </div>
       </div>
 
       {backendOk === false && (

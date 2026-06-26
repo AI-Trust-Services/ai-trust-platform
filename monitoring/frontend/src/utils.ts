@@ -1,9 +1,9 @@
-export function fmtDate(iso) {
+export function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function fmtDateTime(iso) {
+export function fmtDateTime(iso: string | null | undefined) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("en-GB", {
     day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
