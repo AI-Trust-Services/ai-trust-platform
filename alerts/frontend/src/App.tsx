@@ -116,7 +116,7 @@ export default function App() {
         </div>
       </div>
 
-      {tab === "active"  && <ActiveAlerts alerts={activeAlerts} onRefresh={loadActive} />}
+      {tab === "active"  && <ActiveAlerts alerts={activeAlerts} rules={rules} onRefresh={loadActive} />}
       {tab === "history" && <AlertHistory alerts={history} />}
       {tab === "rules"   && <AlertRules   rules={rules}   onRefresh={loadRules} />}
     </ToastProvider>

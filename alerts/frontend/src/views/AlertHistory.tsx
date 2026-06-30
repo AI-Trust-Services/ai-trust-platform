@@ -39,6 +39,9 @@ export function AlertHistory({ alerts }: Props) {
               <span className="alert-severity-dot" />
               <span className={`alert-category-badge cat-${a.category}`}>{a.category}</span>
               <span className="alert-title">{a.rule_name}</span>
+              {a.entity_id && (
+                <span className="alert-entity-badge">{a.entity_id}</span>
+              )}
               <span className={`sev-badge sev-${a.severity}`}>{a.severity}</span>
               <span className="alert-time">{fmtDateTime(a.triggered_at)}</span>
               <span className="alert-chevron">▶</span>

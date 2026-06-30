@@ -355,15 +355,17 @@ Single `public/index.html` with:
 
 Rule-based alerting MFE. Reads rules from Postgres, writes/reads events from ClickHouse.
 
-- `frontend/` — static HTML served by nginx on port 3004
+- `frontend/` — React 18 + TypeScript + Vite SPA served by nginx on port 3004
 - `backend/` — FastAPI on port 8005, reads Postgres (rules) + ClickHouse (events)
 
 ### Backend endpoints
 - `GET /api/v1/alerts/active` — unresolved, unhandled events from ClickHouse
 - `GET /api/v1/alerts/history` — resolved/handled events
-- `GET /api/v1/alerts/rules` — all rules from Postgres
+- `GET /api/v1/alerts/rules` — all rules from Postgres (includes `parameters`, `is_custom`)
 - `GET /api/v1/alerts/count` — fast count for bell badge polling
 - `POST /api/v1/alerts/events/{id}/handle` — mark event as handled (sets both `handled_at` and `resolved_at`)
+- `POST /api/v1/alerts/events/{id}/approve-model` — approve a model change: marks handled + updates `service_model_baselines` to new model. Body: `{ service_name, new_model }`
+- `POST /api/v1/alerts/events/{id}/reject-model` — reject a model change: marks handled, baseline unchanged
 - `POST /api/v1/alerts/rules/{id}/toggle` — enable/disable a rule
 
 ### policy-checker-worker/
@@ -374,7 +376,8 @@ Standalone background job (no HTTP port). Evaluates all enabled rules every `ALE
 - Evaluates each condition against live data (Postgres + ClickHouse)
 - Creates new events in ClickHouse `otel.alert_events` when conditions trigger
 - Auto-resolves threshold events when conditions clear
-- Event-type alerts (e.g. prohibited system) suppressed for 24h after being handled
+- Event-type alerts suppressed for 24h after being handled (except `model_diverged` — baseline is the deduplication mechanism)
+- Supports two evaluator return types: `tuple[bool, float]` for aggregate rules, `list[EvalResult]` for entity-scoped rules (one event per entity)
 
 ### Alert rules (seeded defaults)
 
@@ -387,10 +390,21 @@ Standalone background job (no HTTP port). Evaluates all enabled rules every `ALE
 | Avg latency > 500ms | observability | `high_latency` |
 | System on market without model card | compliance | `market_system_no_model_card` |
 | GPAI system with no compliance score | risk | `gpai_no_compliance` |
+| Model version changed | observability | `model_diverged` |
+
+### Model divergence rule (`model_diverged`)
+
+Detects when a service switches to a different model. Uses a persistent baseline in `service_model_baselines` (Postgres) rather than a sliding window comparison.
+
+- On first span from a service → stores baseline, no alert
+- On subsequent spans → compares `argMax(request_model, received_at)` from ClickHouse against stored baseline
+- If different → fires alert with description "Model changed for {service}: {old} → {new}"
+- Baseline only updates when a human explicitly approves via **Approve new model** button
+- Rejecting an alert leaves the baseline unchanged; the alert re-fires every 24h until approved or the service reverts
 
 ### Database
-- **Postgres** — `alert_rules` table (rule config, seeded by migration `0004`)
-- **ClickHouse** — `otel.alert_events` table (append-only event log)
+- **Postgres** — `alert_rules` table (rule config, seeded by migration `0004`; `parameters` + `is_custom` columns added in `0005`); `service_model_baselines` table (model divergence baseline, migration `0006`)
+- **ClickHouse** — `otel.alert_events` table (append-only event log; `entity_id` + `entity_type` columns added in migration `0003`)
 
 ### Environment variables
 Both alerts-backend and policy-checker-worker need Postgres + ClickHouse vars:

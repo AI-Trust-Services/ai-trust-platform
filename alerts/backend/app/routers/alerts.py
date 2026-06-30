@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+from sqlalchemy import text, select
 
 from ai_trust_clickhouse import ch_command, ch_query
 from ai_trust_logging import get_logger
@@ -20,7 +20,7 @@ async def get_active_alerts() -> list[dict]:
         SELECT
             id, rule_id, rule_name, category, severity, alert_type, description,
             value_at_trigger, toString(triggered_at) AS triggered_at,
-            handled_at
+            handled_at, entity_id, entity_type, entity_model
         FROM otel.alert_events
         WHERE resolved_at IS NULL AND handled_at IS NULL
         ORDER BY
@@ -39,7 +39,8 @@ async def get_alert_history() -> list[dict]:
             value_at_trigger,
             toString(triggered_at) AS triggered_at,
             toString(resolved_at)  AS resolved_at,
-            toString(handled_at)   AS handled_at
+            toString(handled_at)   AS handled_at,
+            entity_id, entity_type, entity_model
         FROM otel.alert_events
         WHERE resolved_at IS NOT NULL OR handled_at IS NOT NULL
         ORDER BY triggered_at DESC
@@ -67,6 +68,8 @@ async def get_alert_rules() -> list[dict]:
             "source": r.source,
             "alert_type": r.alert_type,
             "enabled": r.enabled,
+            "parameters": r.parameters,
+            "is_custom": r.is_custom,
         }
         for r in rules
     ]
@@ -112,3 +115,56 @@ async def toggle_alert_rule(rule_id: str) -> dict:
         await session.refresh(rule)
     logger.info("alerts.rule_toggled", extra={"rule_id": rule_id, "enabled": rule.enabled})
     return {"rule_id": rule_id, "enabled": rule.enabled}
+
+
+@router.post("/alerts/events/{event_id}/approve-model")
+async def approve_model_change(event_id: str) -> dict:
+    """Approve a model change — marks event as handled and updates the service baseline."""
+    rows = await ch_query(
+        "SELECT entity_id, entity_model FROM otel.alert_events WHERE id = {id:String}",
+        {"id": event_id},
+    )
+    if not rows:
+        raise HTTPException(404, "Event not found")
+
+    service_name = rows[0]["entity_id"]
+    new_model = rows[0]["entity_model"]
+
+    if not new_model:
+        raise HTTPException(422, "Event has no entity_model — cannot approve")
+
+    now = datetime.now(timezone.utc)
+    await ch_command(
+        "ALTER TABLE otel.alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
+        "WHERE id = {id:String} AND handled_at IS NULL "
+        "SETTINGS mutations_sync = 1",
+        params={"ts": now, "id": event_id},
+    )
+    async with SessionLocal() as session:
+        result = await session.execute(
+            text("""
+                UPDATE service_model_baselines
+                SET model_name = :model, last_seen_at = :ts
+                WHERE service_name = :svc
+            """),
+            {"model": new_model, "ts": now, "svc": service_name},
+        )
+        if result.rowcount == 0:
+            raise HTTPException(404, f"No baseline found for service '{service_name}'")
+        await session.commit()
+    logger.info("alerts.model_approved", extra={"event_id": event_id, "service": service_name, "new_model": new_model})
+    return {"status": "approved", "event_id": event_id, "new_model": new_model}
+
+
+@router.post("/alerts/events/{event_id}/reject-model")
+async def reject_model_change(event_id: str) -> dict:
+    """Reject a model change — marks event as handled, baseline unchanged."""
+    now = datetime.now(timezone.utc)
+    await ch_command(
+        "ALTER TABLE otel.alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
+        "WHERE id = {id:String} AND handled_at IS NULL "
+        "SETTINGS mutations_sync = 1",
+        params={"ts": now, "id": event_id},
+    )
+    logger.info("alerts.model_rejected", extra={"event_id": event_id})
+    return {"status": "rejected", "event_id": event_id}

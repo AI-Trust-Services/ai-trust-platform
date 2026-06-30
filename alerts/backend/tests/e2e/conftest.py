@@ -96,6 +96,7 @@ def _truncate_pg() -> None:
     conn.autocommit = True
     cur = conn.cursor()
     cur.execute("TRUNCATE alert_rules RESTART IDENTITY CASCADE")
+    cur.execute("TRUNCATE service_model_baselines")
     cur.close()
     conn.close()
 
@@ -126,6 +127,9 @@ def insert_event(
     triggered_at=None,
     resolved_at=None,
     handled_at=None,
+    entity_id: str = "",
+    entity_type: str = "",
+    entity_model: str = "",
 ) -> str:
     event_id = str(uuid.uuid4())
     triggered = triggered_at if triggered_at is not None else datetime.now(timezone.utc)
@@ -133,10 +137,11 @@ def insert_event(
     client.insert(
         "otel.alert_events",
         [[event_id, rule_id, rule_name, category, severity, alert_type,
-          description, value, triggered, resolved_at, handled_at]],
+          description, value, triggered, resolved_at, handled_at, entity_id, entity_type, entity_model]],
         column_names=["id", "rule_id", "rule_name", "category", "severity",
                       "alert_type", "description", "value_at_trigger",
-                      "triggered_at", "resolved_at", "handled_at"],
+                      "triggered_at", "resolved_at", "handled_at",
+                      "entity_id", "entity_type", "entity_model"],
     )
     return event_id
 

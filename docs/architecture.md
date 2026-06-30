@@ -79,7 +79,7 @@ flowchart TD
 
         subgraph Storage["Storage"]
             direction LR
-            PG[("PostgreSQL\nai_systems\nmodel_cards\nalert_rules")]
+            PG[("PostgreSQL\nai_systems\nmodel_cards\nalert_rules\nservice_model_baselines")]
             subgraph CH["ClickHouse"]
                 direction TB
                 Hot[("Hot Disk\nnew data")]
@@ -103,7 +103,7 @@ flowchart TD
         PG --> Overview
         PG --> Monitoring
         PG --> Alerts
-        PG --> AlertWorker
+        PG -->|"rules + baselines"| AlertWorker
 
         CH --> Monitoring
         CH --> Alerts

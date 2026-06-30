@@ -1,17 +1,20 @@
 import React, { useState } from "react";
-import type { AlertEvent } from "../types";
+import type { AlertEvent, AlertRule } from "../types";
 import { api } from "../api/client";
 import { useToast } from "../components/Toast";
 import { fmtDateTime, fmtAge, fmtValue } from "../utils";
 
 interface Props {
   alerts: AlertEvent[];
+  rules: AlertRule[];
   onRefresh: () => void;
 }
 
-export function ActiveAlerts({ alerts, onRefresh }: Props) {
+export function ActiveAlerts({ alerts, rules, onRefresh }: Props) {
   const { showToast } = useToast();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const ruleMap = Object.fromEntries(rules.map((r) => [r.id, r]));
 
   function toggleExpand(id: string) {
     setExpanded((prev) => {
@@ -25,6 +28,26 @@ export function ActiveAlerts({ alerts, onRefresh }: Props) {
     try {
       await api.handleEvent(eventId);
       showToast("Alert marked as handled");
+      onRefresh();
+    } catch (e: any) {
+      showToast(e.message, true);
+    }
+  }
+
+  async function approveModel(eventId: string) {
+    try {
+      await api.approveModel(eventId);
+      showToast("Model change approved — baseline updated");
+      onRefresh();
+    } catch (e: any) {
+      showToast(e.message, true);
+    }
+  }
+
+  async function rejectModel(eventId: string) {
+    try {
+      await api.rejectModel(eventId);
+      showToast("Model change rejected — baseline unchanged");
       onRefresh();
     } catch (e: any) {
       showToast(e.message, true);
@@ -47,6 +70,8 @@ export function ActiveAlerts({ alerts, onRefresh }: Props) {
     <div className="content">
       {alerts.map((a) => {
         const isExpanded = expanded.has(a.id);
+        const rule = ruleMap[a.rule_id];
+        const isModelDivergence = rule?.condition_type === "model_diverged";
         const canHandle = a.alert_type === "event" && !a.handled_at;
         const valueText = fmtValue(a.rule_name, a.value_at_trigger);
         return (
@@ -55,6 +80,9 @@ export function ActiveAlerts({ alerts, onRefresh }: Props) {
               <span className="alert-severity-dot" />
               <span className={`alert-category-badge cat-${a.category}`}>{a.category}</span>
               <span className="alert-title">{a.rule_name}</span>
+              {a.entity_id && (
+                <span className="alert-entity-badge">{a.entity_id}</span>
+              )}
               <span className={`sev-badge sev-${a.severity}`}>{a.severity}</span>
               <span className="alert-time">{fmtAge(a.triggered_at)}</span>
               <span className="alert-chevron">▶</span>
@@ -65,9 +93,20 @@ export function ActiveAlerts({ alerts, onRefresh }: Props) {
               {valueText && <div className="alert-meta">{valueText}</div>}
               {canHandle && (
                 <div className="alert-actions">
-                  <button className="btn-danger btn-sm" onClick={() => handleAlert(a.id)}>
-                    Mark as handled
-                  </button>
+                  {isModelDivergence ? (
+                    <>
+                      <button className="btn-primary btn-sm" onClick={() => approveModel(a.id)}>
+                        Approve new model
+                      </button>
+                      <button className="btn-danger btn-sm" onClick={() => rejectModel(a.id)}>
+                        Reject
+                      </button>
+                    </>
+                  ) : (
+                    <button className="btn-danger btn-sm" onClick={() => handleAlert(a.id)}>
+                      Mark as handled
+                    </button>
+                  )}
                 </div>
               )}
             </div>

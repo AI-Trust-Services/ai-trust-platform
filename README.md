@@ -9,7 +9,7 @@ A platform for governing AI systems under the **EU AI Act** — register AI syst
 | [AI System Registry](ai-system-registry/) | Register and classify AI systems by EU AI Act risk tier (prohibited → high → limited → minimal). Manage model cards and link them to systems. |
 | [Overview](overview/) | Compliance posture at a glance — KPI cards, tier distribution, compliance charts, customizable analytics dashboard. |
 | [Monitoring](monitoring/) | Live observability dashboard — GenAI inference signals from ClickHouse + registry analytics from Postgres. Customizable chart dashboard. |
-| [Alerts](alerts/) | Rule-based alerting — active alerts, history, and configurable rules. Background worker evaluates conditions and auto-resolves when conditions clear. |
+| [Alerts](alerts/) | Rule-based alerting — active alerts, history, and 8 configurable rules. Background worker evaluates conditions per-entity (per service or per system), fires scoped alerts, and auto-resolves threshold events when conditions clear. Includes model version change detection with approve/reject workflow. |
 | [OTel Pipeline](otel-pipeline/) | Ingest GenAI spans from any application via OpenTelemetry → RabbitMQ → ClickHouse |
 | [Consumers](consumers/) | RabbitMQ consumers — one per sink (ClickHouse) |
 | [Policy Checker Worker](policy-checker-worker/) | Background job evaluating alert rules against Postgres + ClickHouse |

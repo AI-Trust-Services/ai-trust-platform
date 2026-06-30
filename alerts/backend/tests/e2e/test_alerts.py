@@ -23,6 +23,8 @@ def _rule(**kwargs) -> AlertRule:
         alert_type="event",
         enabled=True,
         source="AI System Registry",
+        parameters=None,
+        is_custom=False,
     )
     return AlertRule(**{**defaults, **kwargs})
 
@@ -317,3 +319,173 @@ async def test_toggle_rule_enables_disabled_rule(client: httpx.AsyncClient):
 async def test_toggle_rule_returns_404_for_unknown_id(client: httpx.AsyncClient):
     r = await client.post("/api/v1/alerts/rules/nonexistent-id/toggle")
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Entity fields (entity_id, entity_type, entity_model)
+# ---------------------------------------------------------------------------
+
+async def test_active_alerts_includes_entity_fields(client: httpx.AsyncClient):
+    insert_event("rule-1", entity_id="client-safety", entity_type="service", entity_model="llama3.1")
+
+    r = await client.get("/api/v1/alerts/active")
+    event = r.json()[0]
+    assert event["entity_id"] == "client-safety"
+    assert event["entity_type"] == "service"
+    assert event["entity_model"] == "llama3.1"
+
+
+async def test_history_includes_entity_fields(client: httpx.AsyncClient):
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    insert_event("rule-1", resolved_at=now, entity_id="client-llm", entity_type="service", entity_model="gpt-4o")
+
+    r = await client.get("/api/v1/alerts/history")
+    event = r.json()[0]
+    assert event["entity_id"] == "client-llm"
+    assert event["entity_type"] == "service"
+    assert event["entity_model"] == "gpt-4o"
+
+
+async def test_active_alerts_entity_fields_default_to_empty(client: httpx.AsyncClient):
+    insert_event("rule-1")
+
+    r = await client.get("/api/v1/alerts/active")
+    event = r.json()[0]
+    assert event["entity_id"] == ""
+    assert event["entity_type"] == ""
+    assert event["entity_model"] == ""
+
+
+# ---------------------------------------------------------------------------
+# POST /alerts/events/{id}/approve-model
+# ---------------------------------------------------------------------------
+
+async def test_approve_model_returns_404_for_unknown_event(client: httpx.AsyncClient):
+    r = await client.post("/api/v1/alerts/events/nonexistent-id/approve-model")
+    assert r.status_code == 404
+
+
+async def test_approve_model_returns_422_when_entity_model_empty(client: httpx.AsyncClient):
+    event_id = insert_event("rule-1", entity_id="client-safety", entity_type="service", entity_model="")
+
+    r = await client.post(f"/api/v1/alerts/events/{event_id}/approve-model")
+    assert r.status_code == 422
+
+
+async def test_approve_model_updates_baseline_and_handles_event(client: httpx.AsyncClient):
+    from sqlalchemy import text
+    from ai_trust_persistence.database import engine
+
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("INSERT INTO service_model_baselines (service_name, model_name, last_seen_at) "
+                 "VALUES ('client-safety', 'llama3.2', now())")
+        )
+
+    event_id = insert_event(
+        "rule-1",
+        alert_type="event",
+        entity_id="client-safety",
+        entity_type="service",
+        entity_model="llama3.1",
+    )
+
+    r = await client.post(f"/api/v1/alerts/events/{event_id}/approve-model")
+    assert r.status_code == 200
+    assert r.json()["status"] == "approved"
+    assert r.json()["new_model"] == "llama3.1"
+
+    history = await client.get("/api/v1/alerts/history")
+    ids = {e["id"] for e in history.json()}
+    assert event_id in ids
+
+    async with engine.begin() as conn:
+        result = await conn.execute(
+            text("SELECT model_name FROM service_model_baselines WHERE service_name = 'client-safety'")
+        )
+        model = result.scalar_one()
+    assert model == "llama3.1"
+
+
+async def test_approve_model_returns_404_when_no_baseline(client: httpx.AsyncClient):
+    event_id = insert_event(
+        "rule-1",
+        entity_id="unknown-service",
+        entity_type="service",
+        entity_model="llama3.1",
+    )
+
+    r = await client.post(f"/api/v1/alerts/events/{event_id}/approve-model")
+    assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /alerts/events/{id}/reject-model
+# ---------------------------------------------------------------------------
+
+async def test_reject_model_handles_event(client: httpx.AsyncClient):
+    event_id = insert_event("rule-1", alert_type="event")
+
+    r = await client.post(f"/api/v1/alerts/events/{event_id}/reject-model")
+    assert r.status_code == 200
+    assert r.json()["status"] == "rejected"
+
+    history = await client.get("/api/v1/alerts/history")
+    ids = {e["id"] for e in history.json()}
+    assert event_id in ids
+
+
+async def test_reject_model_leaves_baseline_unchanged(client: httpx.AsyncClient):
+    from sqlalchemy import text
+    from ai_trust_persistence.database import engine
+
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("INSERT INTO service_model_baselines (service_name, model_name, last_seen_at) "
+                 "VALUES ('client-safety', 'llama3.2', now())")
+        )
+
+    event_id = insert_event(
+        "rule-1",
+        entity_id="client-safety",
+        entity_type="service",
+        entity_model="llama3.1",
+    )
+
+    await client.post(f"/api/v1/alerts/events/{event_id}/reject-model")
+
+    async with engine.begin() as conn:
+        result = await conn.execute(
+            text("SELECT model_name FROM service_model_baselines WHERE service_name = 'client-safety'")
+        )
+        model = result.scalar_one()
+    assert model == "llama3.2"  # unchanged
+
+
+# ---------------------------------------------------------------------------
+# Alert rules — parameters and is_custom fields
+# ---------------------------------------------------------------------------
+
+async def test_rules_response_includes_parameters_and_is_custom(client: httpx.AsyncClient):
+    async with SessionLocal() as session:
+        session.add(_rule(parameters='{"service": "client-safety"}', is_custom=True))
+        await session.commit()
+
+    r = await client.get("/api/v1/alerts/rules")
+    rule = r.json()[0]
+    assert "parameters" in rule
+    assert "is_custom" in rule
+    assert rule["parameters"] == '{"service": "client-safety"}'
+    assert rule["is_custom"] is True
+
+
+async def test_rules_parameters_defaults_to_none(client: httpx.AsyncClient):
+    async with SessionLocal() as session:
+        session.add(_rule())
+        await session.commit()
+
+    r = await client.get("/api/v1/alerts/rules")
+    rule = r.json()[0]
+    assert rule["parameters"] is None
+    assert rule["is_custom"] is False

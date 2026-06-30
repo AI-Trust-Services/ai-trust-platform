@@ -21,6 +21,8 @@ class AlertRule(Base):
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     alert_type: Mapped[str] = mapped_column(String(20), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    parameters: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_custom: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

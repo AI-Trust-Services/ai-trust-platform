@@ -10,6 +10,9 @@ export interface AlertEvent {
   triggered_at: string;
   resolved_at: string | null;
   handled_at: string | null;
+  entity_id: string;
+  entity_type: string;
+  entity_model: string;
 }
 
 export interface AlertRule {
@@ -23,6 +26,8 @@ export interface AlertRule {
   source: string;
   alert_type: "event" | "threshold";
   enabled: boolean;
+  parameters: string | null;
+  is_custom: boolean;
 }
 
 export interface AlertCount {

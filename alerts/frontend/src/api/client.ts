@@ -22,6 +22,12 @@ export const api = {
   handleEvent: (eventId: string) =>
     request<{ status: string }>(`/alerts/events/${eventId}/handle`, { method: "POST" }),
 
+  approveModel: (eventId: string) =>
+    request<{ status: string }>(`/alerts/events/${eventId}/approve-model`, { method: "POST" }),
+
+  rejectModel: (eventId: string) =>
+    request<{ status: string }>(`/alerts/events/${eventId}/reject-model`, { method: "POST" }),
+
   toggleRule: (ruleId: string) =>
     request<{ rule_id: string; enabled: boolean }>(`/alerts/rules/${ruleId}/toggle`, { method: "POST" }),
 };
