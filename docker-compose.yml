@@ -307,6 +307,8 @@ services:
       dockerfile: consumers/clickhouse-consumer/Dockerfile
     environment:
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      BATCH_SIZE: "100"
+      BATCH_TIMEOUT: "5"
       <<: *ch-env
     depends_on:
       rabbitmq:

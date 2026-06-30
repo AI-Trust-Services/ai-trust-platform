@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
+from typing import Callable
 
 import aio_pika
 from ai_trust_clickhouse import COLUMNS, GEN_AI_SPANS, get_client
@@ -10,8 +11,43 @@ from ai_trust_clickhouse import COLUMNS, GEN_AI_SPANS, get_client
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
+
+class Batcher:
+    def __init__(self, batch_size: int, flush_fn: Callable):
+        self._batch_size = batch_size
+        self._flush_fn = flush_fn
+        self._buffer: list[tuple[list[dict], object]] = []
+        self._lock = asyncio.Lock()
+
+    async def add(self, rows: list[dict], message) -> None:
+        if not rows:
+            return
+        async with self._lock:
+            self._buffer.append((rows, message))
+            if sum(len(r) for r, _ in self._buffer) >= self._batch_size:
+                await self._flush_locked()
+
+    async def flush(self) -> None:
+        async with self._lock:
+            await self._flush_locked()
+
+    async def start_timer(self, interval: float) -> None:
+        while True:
+            await asyncio.sleep(interval)
+            await self.flush()
+
+    async def _flush_locked(self) -> None:
+        if not self._buffer:
+            return
+        snapshot = self._buffer
+        all_rows = [row for rows, _ in snapshot for row in rows]
+        messages = [msg for _, msg in snapshot]
+        await self._flush_fn(all_rows, messages)
+        self._buffer = []
+
 EXCHANGE_NAME = "otel.traces"
 QUEUE_NAME = "clickhouse-consumer"
+_RETRY_DELAYS = [1, 2, 4]
 
 
 def _extract_attr(attributes: dict, key: str) -> str | None:
@@ -76,34 +112,64 @@ def _process_payload(body: bytes) -> list[dict]:
     return rows
 
 
+def make_flush_fn(insert_fn: Callable, retry_delays: list[int] | None = None):
+    delays = retry_delays if retry_delays is not None else _RETRY_DELAYS
+
+    async def flush_fn(rows: list[dict], messages: list) -> None:
+        for attempt, delay in enumerate([0] + delays, start=1):
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                insert_fn(rows)
+                log.info("Inserted %d GenAI span(s) in batch of %d messages", len(rows), len(messages))
+                for m in messages:
+                    await m.ack()
+                return
+            except Exception:
+                log.warning("ClickHouse insert attempt %d/%d failed", attempt, len(delays) + 1, exc_info=True)
+        log.error("Dropping batch of %d rows after %d failed attempts", len(rows), len(delays) + 1)
+        for m in messages:
+            await m.ack()
+
+    return flush_fn
+
+
 async def main() -> None:
     rabbitmq_url = os.environ["RABBITMQ_URL"]
+    batch_size = int(os.environ.get("BATCH_SIZE", "100"))
+    batch_timeout = float(os.environ.get("BATCH_TIMEOUT", "5"))
     ch = get_client()
+
+    batcher = Batcher(
+        batch_size=batch_size,
+        flush_fn=make_flush_fn(
+            lambda rows: ch.insert(GEN_AI_SPANS, [list(r.values()) for r in rows], column_names=COLUMNS)
+        ),
+    )
 
     log.info("Connecting to RabbitMQ (credentials masked)")
     connection = await aio_pika.connect_robust(rabbitmq_url)
     channel = await connection.channel()
+    await channel.set_qos(prefetch_count=batch_size)
     exchange = await channel.declare_exchange(EXCHANGE_NAME, aio_pika.ExchangeType.FANOUT, durable=True)
     queue = await channel.declare_queue(QUEUE_NAME, durable=True)
     await queue.bind(exchange)
 
-    log.info("Waiting for messages on exchange %s", EXCHANGE_NAME)
+    log.info("Waiting for messages (batch_size=%d, batch_timeout=%ss)", batch_size, batch_timeout)
 
-    async with queue.iterator() as messages:
-        async for message in messages:
-            async with message.process():
+    timer_task = asyncio.create_task(batcher.start_timer(batch_timeout))
+    try:
+        async with queue.iterator() as messages:
+            async for message in messages:
                 try:
                     rows = _process_payload(message.body)
-                    if not rows:
-                        continue
-                    ch.insert(
-                        GEN_AI_SPANS,
-                        [list(r.values()) for r in rows],
-                        column_names=COLUMNS,
-                    )
-                    log.info("Inserted %d GenAI span(s)", len(rows))
+                    await batcher.add(rows, message)
                 except Exception:
-                    log.exception("Failed to process message")
+                    log.exception("Failed to process message — acking and skipping")
+                    await message.ack()
+    finally:
+        timer_task.cancel()
+        await batcher.flush()
 
 
 if __name__ == "__main__":

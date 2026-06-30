@@ -56,31 +56,64 @@ ai-trust-platform/
 
 ```mermaid
 flowchart TD
-    App["AI Application"]
-
-    App -->|OTLP| Collector["OTel Collector"]
-    Collector -->|OTLP/HTTP JSON| Bridge["RMQ Bridge"]
-    Bridge -->|fanout exchange| RMQ["RabbitMQ"]
-    RMQ --> Consumer["ClickHouse Consumer"]
-
-    subgraph ClickHouse["ClickHouse"]
-        direction TB
-        Hot[("Hot Disk\nnew data")]
-        Hot -->|"age > 15min or disk > 90%"| MinIO[("MinIO\ncold data")]
-        MinIO <-->|"read-through cache"| Cache["Local Cache\nrecently read cold parts"]
+    subgraph External["External (outside ai-trust-platform)"]
+        direction LR
+        App1["AI Application"]
+        App2["AI Agent"]
+        App3["..."]
     end
 
-    Consumer -->|insert| Hot
+    subgraph AiTrust["ai-trust-platform"]
+        direction TB
 
-    ClickHouse --> Monitoring["Monitoring"]
-    ClickHouse --> Alerts["Alerts"]
-    PG[("PostgreSQL\nai_systems\nmodel_cards\nalert_rules")] --> Monitoring
-    PG --> Overview["Overview"]
-    PG --> Registry["AI System Registry"]
-    PG --> AlertWorker["Policy Checker Worker"]
-    ClickHouse --> AlertWorker
-    AlertWorker -->|writes events| ClickHouse
-    PG --> Alerts
+        subgraph Pipeline["Ingestion Pipeline"]
+            direction LR
+            Collector["OTel Collector"]
+            Bridge["RMQ Bridge"]
+            RMQ["RabbitMQ"]
+            Consumer["ClickHouse Consumer"]
+            Collector -->|OTLP/HTTP JSON| Bridge
+            Bridge -->|fanout exchange| RMQ
+            RMQ --> Consumer
+        end
+
+        subgraph Storage["Storage"]
+            direction LR
+            PG[("PostgreSQL\nai_systems\nmodel_cards\nalert_rules")]
+            subgraph CH["ClickHouse"]
+                direction TB
+                Hot[("Hot Disk\nnew data")]
+                Hot -->|"age > 7 days or disk > 90%"| MinIO[("MinIO\ncold data")]
+                MinIO <-->|"read-through cache"| Cache["Local Cache\nrecently read cold parts"]
+            end
+        end
+
+        subgraph Services["Services"]
+            direction TB
+            Registry["AI System Registry"]
+            Overview["Overview"]
+            Monitoring["Monitoring"]
+            Alerts["Alerts"]
+            AlertWorker["Policy Checker Worker"]
+        end
+
+        Consumer -->|insert| Hot
+
+        PG --> Registry
+        PG --> Overview
+        PG --> Monitoring
+        PG --> Alerts
+        PG --> AlertWorker
+
+        CH --> Monitoring
+        CH --> Alerts
+        CH --> AlertWorker
+        AlertWorker -->|writes events| CH
+    end
+
+    App1 -->|OTLP| Collector
+    App2 -->|OTLP| Collector
+    App3 -->|OTLP| Collector
 ```
 
 > **Note:** `encoding: json` and `compression: none` are required in the OTel Collector config — the collector defaults to protobuf binary which the bridge cannot parse.

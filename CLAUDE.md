@@ -287,6 +287,13 @@ To add a new consumer, use the `/add-consumer` skill.
 
 **`consumers/clickhouse-consumer/`** — Parses OTLP JSON, skips spans without `gen_ai.operation.name`, batch-inserts into `otel.gen_ai_spans`. Reads `RABBITMQ_URL`, `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` from env (all fail-fast). Imports connection and schema constants from `ai_trust_clickhouse`.
 
+Batching is hybrid — flushes when the buffer reaches `BATCH_SIZE` rows **or** after `BATCH_TIMEOUT` seconds, whichever comes first. On ClickHouse failure, retries up to 3 times with exponential backoff (1s, 2s, 4s) then acks and drops the batch. On shutdown, flushes the remaining buffer before exiting.
+
+| Env var | Default | Description |
+|---|---|---|
+| `BATCH_SIZE` | `100` | Flush when buffer reaches this many rows |
+| `BATCH_TIMEOUT` | `5` | Flush after this many seconds if buffer is not full |
+
 ### Run consumer tests (local)
 ```bash
 cd consumers/clickhouse-consumer
