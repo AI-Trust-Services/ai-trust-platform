@@ -211,7 +211,7 @@ Shared PostgreSQL instance (one container, all components use the same DB). All 
 
 ### Frontend MFE pattern
 Each MFE is a React 18 + Vite SPA built to static files and served by nginx:
-- **Build tool:** Vite 5 (`npm run build → dist/`), multi-stage Dockerfile (`node:20-alpine` build → `nginx:alpine` serve)
+- **Build tool:** Vite 6 (`npm run build → dist/`), multi-stage Dockerfile (`node:20-alpine` build → `nginx:alpine` serve)
 - **Routing:** `HashRouter` (compatible with Luigi's `useHashRouting: true`)
 - **Luigi integration:** `@luigi-project/client` npm package; `addInitListener` handshake in `useLuigi.js`
 - **API base URL:** read from `import.meta.env.VITE_API_BASE` at build time; defaults to `http://localhost:800x/api/v1` for local dev
