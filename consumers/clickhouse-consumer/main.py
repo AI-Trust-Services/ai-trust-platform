@@ -60,17 +60,72 @@ def _extract_attr(attributes: dict, key: str) -> str | None:
         return str(val["doubleValue"])
     if "boolValue" in val:
         return str(val["boolValue"]).lower()
+    if "arrayValue" in val:
+        # OTel GenAI semconv defines several attributes as string[] — most
+        # importantly `gen_ai.response.finish_reasons`. OTLP wraps each item
+        # as a typed AnyValue. Flatten scalars to their string form and emit
+        # a JSON array so downstream readers can JSON.parse it (and the
+        # existing `[,\s]+`-based finish_reason parser still works on the
+        # bracketed form).
+        items = val["arrayValue"].get("values") or []
+        flat: list[str] = []
+        for item in items:
+            if "stringValue" in item:
+                flat.append(item["stringValue"])
+            elif "intValue" in item:
+                flat.append(str(item["intValue"]))
+            elif "doubleValue" in item:
+                flat.append(str(item["doubleValue"]))
+            elif "boolValue" in item:
+                flat.append(str(item["boolValue"]).lower())
+        return json.dumps(flat)
     return None
+
+
+def _value_to_string(val: dict) -> str:
+    """Flatten an OTLP AnyValue into a plain string for the attributes map.
+
+    OTLP encodes every attribute value as a typed wrapper ({"stringValue": ...},
+    {"intValue": ...}, etc.). For our generic Map(String, String) column we
+    don't care about the original type — we just need something searchable and
+    displayable. Arrays and KVLists are JSON-encoded so nothing is silently lost.
+    """
+    if "stringValue" in val:
+        return val["stringValue"]
+    if "intValue" in val:
+        return str(val["intValue"])
+    if "doubleValue" in val:
+        return str(val["doubleValue"])
+    if "boolValue" in val:
+        return str(val["boolValue"]).lower()
+    if "arrayValue" in val or "kvlistValue" in val or "bytesValue" in val:
+        return json.dumps(val)
+    return ""
 
 
 def _attrs_dict(attributes: list) -> dict:
     return {a["key"]: a.get("value", {}) for a in attributes if "key" in a}
 
 
-def _parse_nano(nano: str | None) -> datetime:
-    if not nano:
-        return datetime.now(timezone.utc)
-    return datetime.fromtimestamp(int(nano) / 1_000_000_000, tz=timezone.utc)
+def _attrs_as_map(attrs: dict) -> dict[str, str]:
+    """Convert the typed-value attrs dict into a plain {str: str} map for ClickHouse."""
+    return {k: _value_to_string(v) for k, v in attrs.items()}
+
+
+def _parse_nano(nano: str | int | None) -> datetime | None:
+    """Decode an OTLP nano-second wall-clock value to a UTC datetime.
+
+    Returns None when the field is missing or unparseable — the caller is
+    expected to drop the span. Falling back to `datetime.now()` here would
+    silently reorder a buggy span to the end of the trace, hiding the
+    instrumentation problem and breaking decision-path ordering downstream.
+    """
+    if nano is None or nano == "":
+        return None
+    try:
+        return datetime.fromtimestamp(int(nano) / 1_000_000_000, tz=timezone.utc)
+    except (TypeError, ValueError):
+        return None
 
 
 def _process_payload(body: bytes) -> list[dict]:
@@ -83,22 +138,41 @@ def _process_payload(body: bytes) -> list[dict]:
         for scope_span in resource_span.get("scopeSpans", []):
             for span in scope_span.get("spans", []):
                 attrs = _attrs_dict(span.get("attributes", []))
+                # Keep a span if EITHER convention identifies it as GenAI:
+                #   * OTel GenAI semconv  → gen_ai.operation.name
+                #   * OpenInference (LangChain auto-instrumentation) → openinference.span.kind
+                # Pure-infra spans (HTTP/DB clients) still get filtered out.
                 operation_name = _extract_attr(attrs, "gen_ai.operation.name")
-                if not operation_name:
+                openinference_kind = _extract_attr(attrs, "openinference.span.kind")
+                if not operation_name and not openinference_kind:
                     continue
                 start_nano = span.get("startTimeUnixNano")
                 end_nano = span.get("endTimeUnixNano")
+                started_at = _parse_nano(start_nano)
+                if started_at is None:
+                    # Drop spans without a usable wall-clock start — keeping
+                    # them with a synthetic "now" timestamp silently reorders
+                    # the trace and hides the instrumentation gap.
+                    log.warning(
+                        "Dropping span %s/%s: missing or invalid startTimeUnixNano=%r",
+                        span.get("traceId"), span.get("spanId"), start_nano,
+                    )
+                    continue
                 duration_ms = 0.0
                 if start_nano and end_nano:
-                    duration_ms = (int(end_nano) - int(start_nano)) / 1_000_000
+                    try:
+                        duration_ms = (int(end_nano) - int(start_nano)) / 1_000_000
+                    except (TypeError, ValueError):
+                        duration_ms = 0.0
+                status = span.get("status") or {}
                 rows.append({
                     "received_at": received_at,
-                    "started_at": _parse_nano(start_nano),
+                    "started_at": started_at,
                     "trace_id": span.get("traceId", ""),
                     "span_id": span.get("spanId", ""),
                     "service_name": service_name,
                     "gen_ai_system": _extract_attr(attrs, "gen_ai.system") or "",
-                    "operation_name": operation_name,
+                    "operation_name": operation_name or "",
                     "request_model": _extract_attr(attrs, "gen_ai.request.model") or "",
                     "response_model": _extract_attr(attrs, "gen_ai.response.model") or "",
                     "finish_reasons": _extract_attr(attrs, "gen_ai.response.finish_reasons") or "",
@@ -108,6 +182,13 @@ def _process_payload(body: bytes) -> list[dict]:
                     "duration_ms": duration_ms,
                     "input_messages": _extract_attr(attrs, "gen_ai.input.messages") or "",
                     "output_messages": _extract_attr(attrs, "gen_ai.output.messages") or "",
+                    # added in 0002 — order must match COLUMNS in tables.py
+                    "parent_span_id": span.get("parentSpanId", ""),
+                    "span_name": span.get("name", ""),
+                    "span_kind": int(span.get("kind", 0)),
+                    "status_code": int(status.get("code", 0)),
+                    "status_message": status.get("message", "") or "",
+                    "attributes": _attrs_as_map(attrs),
                 })
     return rows
 

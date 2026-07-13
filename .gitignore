@@ -17,8 +17,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -182,7 +182,12 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# Node.js
+# Node
 node_modules/
 dist/
+.vite/
 .npm/
+
+# Claude Code — per-developer permissions/settings
+.claude/settings.json
+.claude/settings.local.json

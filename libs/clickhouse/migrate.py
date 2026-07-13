@@ -24,7 +24,14 @@ def get_applied(client) -> set[str]:
 
 
 def _statements(sql: str) -> list[str]:
-    return [s.strip() for s in sql.split(";") if s.strip()]
+    # Strip `-- …` line comments before splitting on `;`. A semicolon inside
+    # a comment (e.g. a sentence in a header doc-block) would otherwise cut
+    # the comment into pieces and produce empty-query parts that ClickHouse
+    # rejects with SYNTAX_ERROR code 62.
+    no_comments = "\n".join(
+        line for line in sql.splitlines() if not line.lstrip().startswith("--")
+    )
+    return [s.strip() for s in no_comments.split(";") if s.strip()]
 
 
 def run() -> None:

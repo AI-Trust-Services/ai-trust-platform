@@ -1,0 +1,11 @@
+-- Promote started_at from DateTime (1s resolution) to DateTime64(9) (1ns).
+-- The OTLP payload carries startTimeUnixNano and the consumer already
+-- decodes the full value; writing it into a DateTime column truncated it
+-- to whole seconds. Consequences fixed by this migration:
+--   * sibling spans starting in the same second got identical timestamps,
+--     producing false-positive parallel-sibling indicators in the graph
+--   * Timeline-view bar start positions snapped to the second mark, so a
+--     sub-second retrieval feeding into a 12s LLM call looked simultaneous
+-- The cast is in-place. Safe because started_at is not part of the table
+-- ORDER BY (see 0001).
+ALTER TABLE otel.gen_ai_spans MODIFY COLUMN started_at DateTime64(9);

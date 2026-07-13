@@ -24,6 +24,8 @@ services:
         condition: service_started
       ai-system-registry-backend:
         condition: service_healthy
+      decision-trace-analyzer-frontend:
+        condition: service_started
       monitoring-frontend:
         condition: service_started
       monitoring-backend:
@@ -36,7 +38,7 @@ services:
         condition: service_started
       alerts-backend:
         condition: service_healthy
-
+    restart: on-failure
 
   ai-system-registry-frontend:
     build:
@@ -45,6 +47,7 @@ services:
         VITE_API_BASE: ${VITE_API_BASE}
     ports:
       - "3001:80"
+    restart: on-failure
 
   monitoring-frontend:
     build:
@@ -53,11 +56,13 @@ services:
         VITE_MONITORING_API_BASE: ${VITE_MONITORING_API_BASE}
     ports:
       - "3002:80"
+    restart: on-failure
 
   overview-frontend:
     build: ./overview/frontend
     ports:
       - "3003:80"
+    restart: on-failure
 
   alerts-frontend:
     build:
@@ -67,6 +72,7 @@ services:
         VITE_ALERTS_URL: ${VITE_ALERTS_URL}
     ports:
       - "3004:80"
+    restart: on-failure
 
   db-migrate:
     build: ./libs/persistence
@@ -75,6 +81,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    restart: on-failure
 
   ai-system-registry-backend:
     build:
@@ -94,6 +101,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    restart: on-failure
 
   monitoring-backend:
     build:
@@ -119,6 +127,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    restart: on-failure
 
   overview-backend:
     build:
@@ -138,6 +147,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    restart: on-failure
 
   alerts-backend:
     build:
@@ -163,6 +173,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    restart: on-failure
 
   policy-checker-worker:
     build:
@@ -197,6 +208,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: on-failure
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
@@ -210,6 +222,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: on-failure
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.5-alpine
@@ -232,6 +245,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    restart: on-failure
 
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
@@ -249,6 +263,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    restart: on-failure
 
   minio-init:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
@@ -262,6 +277,7 @@ services:
       mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
       mc mb --ignore-existing local/clickhouse
       "
+    restart: on-failure
 
   clickhouse-migrate:
     build: ./libs/clickhouse
@@ -289,6 +305,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    restart: on-failure
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.102.0
@@ -300,6 +317,7 @@ services:
     depends_on:
       otel-rmq-bridge:
         condition: service_healthy
+    restart: on-failure
 
   otel-clickhouse-consumer:
     build:
@@ -315,6 +333,38 @@ services:
         condition: service_healthy
       clickhouse-migrate:
         condition: service_completed_successfully
+    restart: on-failure
+
+  decision-trace-analyzer-frontend:
+    build:
+      context: ./decision-trace-analyzer/frontend
+      args:
+        VITE_API_BASE: ${VITE_DTA_API_BASE}
+    ports:
+      - "3005:80"
+    depends_on:
+      decision-trace-analyzer-backend:
+        condition: service_healthy
+    restart: on-failure
+
+  decision-trace-analyzer-backend:
+    build:
+      context: .
+      dockerfile: decision-trace-analyzer/backend/Dockerfile
+    ports:
+      - "8006:8006"
+    environment:
+      <<: *ch-env
+      ALLOWED_ORIGINS: "http://localhost:3005,http://localhost:8080"
+    depends_on:
+      clickhouse-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: on-failure
 
 volumes:

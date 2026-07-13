@@ -77,9 +77,23 @@ def test_duration_ms_computed_from_nano_timestamps():
     assert rows[0]["duration_ms"] == pytest.approx(500.0)
 
 
-def test_missing_timestamps_default_to_zero_duration():
+def test_span_without_start_timestamp_is_dropped():
+    # Without startTimeUnixNano we cannot place the span on the trace timeline.
+    # Dropping it (and logging) is correct — silently substituting `now()`
+    # silently reorders the trace and hides instrumentation bugs.
     body = _payload([_span([_attr("gen_ai.operation.name", "chat")], start_nano=None, end_nano=None)])
     rows = _process_payload(body)
+    assert rows == []
+
+
+def test_span_with_start_but_no_end_keeps_zero_duration():
+    body = _payload([_span(
+        [_attr("gen_ai.operation.name", "chat")],
+        start_nano="1000000000",
+        end_nano=None,
+    )])
+    rows = _process_payload(body)
+    assert len(rows) == 1
     assert rows[0]["duration_ms"] == 0.0
 
 
@@ -88,3 +102,78 @@ def test_row_keys_match_columns_constant():
     body = _payload([_span([_attr("gen_ai.operation.name", "chat")])])
     rows = _process_payload(body)
     assert list(rows[0].keys()) == COLUMNS
+
+
+def test_openinference_span_without_gen_ai_operation_is_kept():
+    # LangChain auto-instrumentation only sets openinference.span.kind on most
+    # child spans (no gen_ai.operation.name) — we still want to keep them so
+    # the trace graph is complete.
+    body = _payload([_span([_attr("openinference.span.kind", "LLM")])])
+    rows = _process_payload(body)
+    assert len(rows) == 1
+    assert rows[0]["operation_name"] == ""
+
+
+def test_span_level_fields_are_extracted():
+    span = _span([_attr("gen_ai.operation.name", "chat")])
+    span["parentSpanId"] = "parent123"
+    span["name"] = "ChatOllama"
+    span["kind"] = 3
+    span["status"] = {"code": 2, "message": "boom"}
+    rows = _process_payload(_payload([span]))
+    assert rows[0]["parent_span_id"] == "parent123"
+    assert rows[0]["span_name"] == "ChatOllama"
+    assert rows[0]["span_kind"] == 3
+    assert rows[0]["status_code"] == 2
+    assert rows[0]["status_message"] == "boom"
+
+
+def test_all_attributes_land_in_map():
+    body = _payload([_span([
+        _attr("gen_ai.operation.name", "chat"),
+        _attr("openinference.span.kind", "LLM"),
+        _attr("llm.model_name", "llama3.2"),
+        {"key": "llm.token_count.total", "value": {"intValue": 150}},
+    ])])
+    rows = _process_payload(body)
+    attrs = rows[0]["attributes"]
+    assert attrs["gen_ai.operation.name"] == "chat"
+    assert attrs["openinference.span.kind"] == "LLM"
+    assert attrs["llm.model_name"] == "llama3.2"
+    assert attrs["llm.token_count.total"] == "150"
+
+
+def test_array_value_finish_reasons_promoted_to_column():
+    # OTel GenAI semconv defines gen_ai.response.finish_reasons as string[].
+    # OTLP encodes it as arrayValue.values=[{stringValue: ...}, ...]; _extract_attr
+    # must flatten it to a JSON-array string so downstream readers see "stop".
+    body = _payload([_span([
+        _attr("gen_ai.operation.name", "chat"),
+        {"key": "gen_ai.response.finish_reasons", "value": {
+            "arrayValue": {"values": [
+                {"stringValue": "content_filter"},
+                {"stringValue": "stop"},
+            ]}
+        }},
+    ])])
+    rows = _process_payload(body)
+    assert rows[0]["finish_reasons"] == '["content_filter", "stop"]'
+
+
+def test_array_value_attribute_lands_in_map_as_json_array():
+    # Same arrayValue, surfaced through the generic attributes map. Both the
+    # promoted column AND the map must carry the data so summary._finish_reasons
+    # can fall back to the map when the column is empty.
+    body = _payload([_span([
+        _attr("gen_ai.operation.name", "chat"),
+        {"key": "gen_ai.response.finish_reasons", "value": {
+            "arrayValue": {"values": [{"stringValue": "stop"}]}
+        }},
+    ])])
+    rows = _process_payload(body)
+    assert rows[0]["attributes"]["gen_ai.response.finish_reasons"] in (
+        '{"arrayValue": {"values": [{"stringValue": "stop"}]}}',
+    )
+    # Note: the attributes map uses _value_to_string which dumps the whole
+    # arrayValue blob — kept as-is for forward compatibility with non-finish-
+    # reason array attrs. The promoted column is the canonical surface.

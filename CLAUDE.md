@@ -76,6 +76,8 @@ python3.12 -m venv .venv
 | Alerts frontend | http://localhost:3004 |
 | Alerts backend API | http://localhost:8005 |
 | Alerts health check | http://localhost:8005/health |
+| Decision Trace Analyzer frontend | http://localhost:3005 |
+| Decision Trace Analyzer backend API | http://localhost:8006 |
 | PostgreSQL | localhost:5432 / db: `ai_trust` |
 | OTel Collector (gRPC) | localhost:4317 |
 | OTel Collector (HTTP) | localhost:4318 |
@@ -89,6 +91,27 @@ python3.12 -m venv .venv
 ## Architecture
 
 See [docs/architecture.md](docs/architecture.md) for repo layout, GenAI observability data flow, and Docker startup order diagrams.
+
+## Frontend stacks
+
+| Component | Stack | Dev | Prod |
+|---|---|---|---|
+| AI System Registry | Vanilla HTML + UI5 Web Components | nginx serves static files directly | same |
+| Decision Trace Analyzer | React + TypeScript + Vite + UI5 Web Components | `npm run dev` (Vite, port 3005) | `npm run build` → nginx |
+
+### Decision Trace Analyzer frontend (`decision-trace-analyzer/frontend/`)
+- **React + TypeScript** — component-based UI
+- **Vite** — dev server with HMR, `npm run dev` starts on port 3005
+- **UI5 Web Components** — `<ui5-table>`, `<ui5-button>`, etc. for SAP Fiori look consistent with Luigi shell
+- **Dev proxy** — `vite.config.ts` proxies `/api/*` → `http://localhost:8006` (backend), so no CORS issues locally
+- **Prod** — multi-stage Dockerfile: Node builds `/dist`, nginx serves it and proxies `/api/` → `decision-trace-analyzer-backend:8006`
+- UI5 components are imported once per file: `import "@ui5/webcomponents/dist/Button.js"` then used as `<ui5-button>` JSX tags
+
+## Decision Trace Analyzer backend (`decision-trace-analyzer/backend/`)
+- FastAPI on port 8006, reads only from ClickHouse (no Postgres)
+- Single route: `GET /api/v1/traces` — groups spans by `trace_id`, returns paginated list
+- Uses `libs/clickhouse` shared package (`get_client()`, `GEN_AI_SPANS`)
+- `ALLOWED_ORIGINS` env var required (same pattern as ai-system-registry-backend)
 
 ## libs/persistence
 

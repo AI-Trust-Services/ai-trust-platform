@@ -1,0 +1,43 @@
+/*
+ * Design tokens for Decision Trace Analyzer
+ *
+ * We use UI5 Web Components with the "Morning Horizon" (sap_horizon) default theme.
+ * Theme preview:  https://ui5.github.io/webcomponents/play/  (theme switcher top-right)
+ * Theming docs:   https://ui5.github.io/webcomponents/docs/advanced/theming/
+ * Token source:   node_modules/@ui5/webcomponents-theming/dist/css/themes/sap_horizon/parameters-bundle.css
+ *                 (authoritative list of all --sap* variables and their values)
+ *
+ * The --sap* prefix is SAP's naming convention. We alias them here under neutral
+ * names so the rest of the codebase stays independent of the design system.
+ */
+
+:root {
+  /* Typography */
+  --font-family:    var(--sapFontFamily);
+  --font-size:      var(--sapFontSize);        /* 0.875rem / 14px */
+  --font-size-sm:   var(--sapFontSmallSize,  0.75rem);
+  --font-size-lg:   var(--sapFontLargeSize,  1rem);
+
+  /* Text colors */
+  --color-text:           var(--sapTextColor);       /* #131e29 — primary */
+  --color-text-secondary: var(--sapNeutralColor);    /* #788fa6 — secondary */
+  --color-link:           var(--sapLinkColor);       /* #0064d9 */
+
+  /* Brand */
+  --color-brand:    var(--sapBrandColor);            /* #0070f2 */
+
+  /* Backgrounds */
+  --color-bg:       var(--sapBackgroundColor);              /* #f5f6f7 — page background */
+  --color-surface:  var(--sapBaseColor);                    /* #fff    — cards, panels */
+  --color-border:   var(--sapList_BorderColor, #e4e6e8);
+  --color-code-bg:  var(--sapField_ReadOnly_Background, #eaecee); /* read-only fields, code/text boxes */
+
+  /* Semantic — info (used for model badge) */
+  --color-info-bg:  var(--sapInformationBackground); /* #e1f4ff */
+  --color-info-text: var(--sapInformativeTextColor); /* #0064d9 */
+
+  /* Semantic — error (used for error banner) */
+  --color-error-bg:     var(--sapErrorBackground);    /* #ffeaf4 */
+  --color-error-text:   var(--sapNegativeTextColor);  /* #aa0808 */
+  --color-error-border: var(--sapErrorBorderColor);   /* #e90b0b */
+}

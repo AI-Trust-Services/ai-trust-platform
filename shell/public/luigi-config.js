@@ -22,6 +22,13 @@ Luigi.setConfig({
             navigationContext: "ai-system-registry",
           },
           {
+            pathSegment: "decision-trace-analyzer",
+            label: "Trace Explorer",
+            icon: "detail-view",
+            viewUrl: "http://localhost:3005/",
+            navigationContext: "decision-trace-analyzer",
+          },
+          {
             pathSegment: "monitoring",
             label: "Monitoring",
             icon: "line-chart",
