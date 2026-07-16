@@ -38,13 +38,17 @@ services:
         condition: service_started
       alerts-backend:
         condition: service_healthy
+      compliance-frontend:
+        condition: service_started
+      compliance-backend:
+        condition: service_healthy
     restart: on-failure
 
   ai-system-registry-frontend:
     build:
       context: ./ai-system-registry/frontend
       args:
-        VITE_API_BASE: ${VITE_API_BASE}
+        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE}
     ports:
       - "3001:80"
     restart: on-failure
@@ -68,10 +72,20 @@ services:
     build:
       context: ./alerts/frontend
       args:
-        VITE_API_BASE: ${VITE_ALERTS_API_BASE}
+        VITE_ALERTS_API_BASE: ${VITE_ALERTS_API_BASE}
         VITE_ALERTS_URL: ${VITE_ALERTS_URL}
     ports:
       - "3004:80"
+    restart: on-failure
+
+  compliance-frontend:
+    build:
+      context: ./compliance/frontend
+      args:
+        VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE:-http://localhost:8007/api/v1}
+        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-http://localhost:8001/api/v1}
+    ports:
+      - "3006:80"
     restart: on-failure
 
   db-migrate:
@@ -91,7 +105,7 @@ services:
       - "8001:8001"
     environment:
       <<: *db-env
-      ALLOWED_ORIGINS: "http://localhost:3001,http://localhost:8080"
+      ALLOWED_ORIGINS: "http://localhost:3001,http://localhost:8080,http://localhost:3006"
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -167,6 +181,34 @@ services:
         condition: service_completed_successfully
       clickhouse-migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: on-failure
+
+  compliance-backend:
+    build:
+      context: .
+      dockerfile: compliance/backend/Dockerfile
+    ports:
+      - "8007:8007"
+    environment:
+      <<: *db-env
+      ALLOWED_ORIGINS: "http://localhost:3006,http://localhost:8080,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004"
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_SECURE: ${MINIO_SECURE}
+      MINIO_REGION: ${MINIO_REGION}
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "healthcheck.py"]
       interval: 10s
@@ -275,7 +317,8 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
-      mc mb --ignore-existing local/clickhouse
+      mc mb --ignore-existing local/clickhouse &&
+      mc mb --ignore-existing local/evidence-files
       "
     restart: on-failure
 
@@ -339,7 +382,7 @@ services:
     build:
       context: ./decision-trace-analyzer/frontend
       args:
-        VITE_API_BASE: ${VITE_DTA_API_BASE}
+        VITE_DTA_API_BASE: ${VITE_DTA_API_BASE}
     ports:
       - "3005:80"
     depends_on:

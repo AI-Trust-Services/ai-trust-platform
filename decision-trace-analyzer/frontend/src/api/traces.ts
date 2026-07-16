@@ -157,10 +157,10 @@ export interface TracesResponse {
 // Read the backend base URL from a build-time env var (per repo convention —
 // alerts / ai-system-registry do the same). Defaults to the relative "/api/v1"
 // so the deliberate proxy setup keeps working out of the box: Vite proxies it
-// in dev, nginx proxies it in prod. Override VITE_API_BASE only when the
+// in dev, nginx proxies it in prod. Override VITE_DTA_API_BASE only when the
 // platform is deployed behind a path prefix or a proxy that doesn't preserve
 // /api/. Relative default also stays iframe-safe (see fetchTraces below).
-const BASE = import.meta.env.VITE_API_BASE ?? "/api/v1";
+const BASE = import.meta.env.VITE_DTA_API_BASE ?? "/api/v1";
 
 /** Fetch JSON, with a clearer error than Safari's "The string did not match the
  *  expected pattern" when the response is HTML (e.g. Vite's SPA fallback because

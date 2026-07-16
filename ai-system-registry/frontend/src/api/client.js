@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE;
+const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 export const HEALTH_URL = API_BASE.replace("/api/v1", "") + "/health";
 
 async function request(path, options = {}) {

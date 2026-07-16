@@ -78,6 +78,10 @@ python3.12 -m venv .venv
 | Alerts health check | http://localhost:8005/health |
 | Decision Trace Analyzer frontend | http://localhost:3005 |
 | Decision Trace Analyzer backend API | http://localhost:8006 |
+| Compliance frontend | http://localhost:3006 |
+| Compliance backend API | http://localhost:8007/api/v1 |
+| Compliance API docs (Swagger) | http://localhost:8007/docs |
+| Compliance health check | http://localhost:8007/health |
 | PostgreSQL | localhost:5432 / db: `ai_trust` |
 | OTel Collector (gRPC) | localhost:4317 |
 | OTel Collector (HTTP) | localhost:4318 |
@@ -237,7 +241,7 @@ Each MFE is a React 18 + Vite SPA built to static files and served by nginx:
 - **Build tool:** Vite 6 (`npm run build → dist/`), multi-stage Dockerfile (`node:20-alpine` build → `nginx:alpine` serve)
 - **Routing:** `HashRouter` (compatible with Luigi's `useHashRouting: true`)
 - **Luigi integration:** `@luigi-project/client` npm package; `addInitListener` handshake in `useLuigi.js`
-- **API base URL:** read from `import.meta.env.VITE_API_BASE` at build time; defaults to `http://localhost:800x/api/v1` for local dev
+- **API base URL:** read from `import.meta.env.VITE_REGISTRY_API_BASE` at build time; defaults to `http://localhost:800x/api/v1` for local dev
 - **Backend health polling:** shows a red banner with auto-retry if backend is unavailable
 - **nginx headers:** `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding)
 
@@ -257,7 +261,12 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `MINIO_ROOT_PASSWORD` | minio, minio-init, clickhouse | `minioadmin` | MinIO secret key |
 | `DATABASE_URL` | all backends, db-migrate | derived from `POSTGRES_*` above | Postgres connection string |
 | `ALLOWED_ORIGINS` | ai-system-registry-backend | *(required — no default)* | Comma-separated CORS origins. App refuses to start if not set. |
-| `VITE_API_BASE` | ai-system-registry-frontend (build time) | `http://localhost:8001/api/v1` | Backend API base URL baked into the frontend bundle by Vite. |
+| `VITE_REGISTRY_API_BASE` | ai-system-registry-frontend, compliance-frontend (build time) | `http://localhost:8001/api/v1` | Registry backend API URL baked into the frontend bundle at build time. |
+| `VITE_COMPLIANCE_API_BASE` | compliance-frontend (build time) | `http://localhost:8007/api/v1` | Compliance backend API base URL baked into the compliance frontend bundle. |
+| `MINIO_ENDPOINT` | compliance-backend | *(required — see `.env.example`)* | In-cluster MinIO hostname:port for uploads (used inside the container). |
+| `MINIO_PUBLIC_ENDPOINT` | compliance-backend | *(required — see `.env.example`)* | Public-facing MinIO hostname:port for presigning download URLs the browser can reach. |
+| `MINIO_SECURE` | compliance-backend | *(required — see `.env.example`)* | Set to `true` if MinIO is behind TLS. |
+| `MINIO_REGION` | compliance-backend | *(required — see `.env.example`)* | Region used when presigning — avoids a GetBucketLocation network call from inside the container. |
 
 All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code.
 
@@ -440,3 +449,42 @@ Both alerts-backend and policy-checker-worker need Postgres + ClickHouse vars:
 | `CLICKHOUSE_USER` | ClickHouse username |
 | `CLICKHOUSE_PASSWORD` | ClickHouse password |
 | `ALERT_POLL_INTERVAL` | Worker poll interval in seconds (default `10`, use `60`+ in production) |
+
+## compliance/
+
+Governance chain MFE — assessments, obligations, controls, and evidence for EU AI Act / NIST / ISO compliance.
+
+- `frontend/` — React 18 + TypeScript + Vite SPA served by nginx on port 3006
+- `backend/` — FastAPI on port 8007, reads/writes Postgres; stores evidence files in MinIO
+
+### Backend structure (`compliance/backend/app/`)
+- `main.py` — FastAPI app, mounts all routers, `/health` endpoint, ensures MinIO bucket exists on startup
+- `cascade.py` — status cascade + score recalculation: approved evidence → effective control → fulfilled obligation → assessment score → `ai_systems.compliance`
+- `obligation_templates.py` — hardcoded obligation sets per (framework, tier); EU AI Act tiers + NIST AI RMF + ISO/IEC 42001
+- `ids.py` — `new_id(prefix)` for `ASS-XXXXXXXX`, `OBL-XXXXXXXX`, `CTL-XXXXXXXX`, `EVD-XXXXXXXX` IDs
+- `minio_client.py` — async wrapper around the synchronous `minio` SDK; handles upload, presigned GET, delete
+- `routers/frameworks.py` — `GET/PATCH /api/v1/frameworks`
+- `routers/assessments.py` — full CRUD + `/generate-obligations`, `/submit`, `/approve`
+- `routers/obligations.py` — full CRUD
+- `routers/controls.py` — full CRUD + `/link/{obligation_id}`, `/link/{obligation_id}` DELETE
+- `routers/evidence.py` — multipart upload, full CRUD + `/approve`, `/reject`, `/download-url`
+
+### Governance chain
+`POST /api/v1/assessments/{id}/generate-obligations` is the primary entry point: it reads the AI system's risk tier, selects obligations from `obligation_templates.py`, pre-fills owner/not-applicable from the most recent approved prior assessment (same system+framework), and persists them. Controls are then linked to obligations via `POST /api/v1/controls/{id}/link/{obligation_id}`. Evidence is uploaded as multipart form data; approving evidence cascades automatically through the chain.
+
+### Database
+- **Postgres** — `frameworks` (seeded by migration `0007`), `assessments`, `obligations`, `controls`, `evidence`, `control_obligations` (M2M), `evidence_controls` (M2M), `evidence_obligations` (M2M) — all in migration `0007`
+- **MinIO** — evidence files stored in the `evidence-files` bucket; object key pattern: `evidence/{evidence_id}/{filename}`
+
+### Environment variables
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | Postgres connection string |
+| `ALLOWED_ORIGINS` | Comma-separated CORS origins (required) |
+| `MINIO_ENDPOINT` | In-cluster MinIO `host:port` for uploads (required) |
+| `MINIO_PUBLIC_ENDPOINT` | Public-facing MinIO `host:port` for presigned download URLs (required) |
+| `MINIO_ROOT_USER` | MinIO access key |
+| `MINIO_ROOT_PASSWORD` | MinIO secret key |
+| `MINIO_SECURE` | `true` if MinIO is behind TLS (required) |
+| `MINIO_REGION` | Region for presigning (required) |

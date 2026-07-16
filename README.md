@@ -1,6 +1,6 @@
 # AI Trust Platform
 
-A platform for governing AI systems under the **EU AI Act** — register AI systems, classify their risk tier automatically, track model cards, and observe GenAI usage in production.
+A platform for governing AI systems under the **EU AI Act** — register AI systems, classify their risk tier automatically, track model cards, run structured compliance assessments, and observe GenAI usage in production.
 
 ## What's inside
 
@@ -10,6 +10,7 @@ A platform for governing AI systems under the **EU AI Act** — register AI syst
 | [Overview](overview/) | Compliance posture at a glance — KPI cards, tier distribution, compliance charts, customizable analytics dashboard. |
 | [Monitoring](monitoring/) | Live observability dashboard — GenAI inference signals from ClickHouse + registry analytics from Postgres. Customizable chart dashboard. |
 | [Alerts](alerts/) | Rule-based alerting — active alerts, history, and 8 configurable rules. Background worker evaluates conditions per-entity (per service or per system), fires scoped alerts, and auto-resolves threshold events when conditions clear. Includes model version change detection with approve/reject workflow. |
+| [Compliance](compliance/) | Governance chain — create assessments against EU AI Act / NIST AI RMF / ISO 42001 frameworks, auto-generate obligations from the AI system's risk tier, link controls, upload evidence, and track compliance scores that propagate back to the registry. |
 | [OTel Pipeline](otel-pipeline/) | Ingest GenAI spans from any application via OpenTelemetry → RabbitMQ → ClickHouse |
 | [Consumers](consumers/) | RabbitMQ consumers — one per sink (ClickHouse) |
 | [Policy Checker Worker](policy-checker-worker/) | Background job evaluating alert rules against Postgres + ClickHouse |
@@ -36,6 +37,8 @@ docker compose up --build -d
 | Monitoring API | http://localhost:8003 |
 | Alerts UI | http://localhost:3004 |
 | Alerts API | http://localhost:8005 |
+| Compliance UI | http://localhost:3006 |
+| Compliance API | http://localhost:8007 |
 | RabbitMQ management | http://localhost:15672 |
 | ClickHouse HTTP API | http://localhost:8123 |
 

@@ -1,6 +1,6 @@
 import type { AlertEvent, AlertRule, AlertCount } from "../types";
 
-const API_BASE = import.meta.env.VITE_API_BASE as string;
+const API_BASE = import.meta.env.VITE_ALERTS_API_BASE as string;
 export const HEALTH_URL = API_BASE.replace("/api/v1", "") + "/health";
 export const ALERTS_URL = (import.meta.env.VITE_ALERTS_URL as string) || "http://localhost:3004";
 

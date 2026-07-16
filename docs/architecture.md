@@ -35,6 +35,9 @@ ai-trust-platform/
 ├── alerts/                       ← Alerts MFE
 │   ├── frontend/                 ← React 18 + TypeScript + Vite SPA (nginx, port 3004)
 │   └── backend/                  ← FastAPI (port 8005), reads Postgres (rules) + ClickHouse (events)
+├── compliance/                   ← Governance chain MFE (assessments, obligations, controls, evidence)
+│   ├── frontend/                 ← React 18 + TypeScript + Vite SPA (nginx, port 3006)
+│   └── backend/                  ← FastAPI (port 8007), reads/writes Postgres + MinIO (evidence files)
 ├── policy-checker-worker/                 ← Background job, evaluates alert rules every N seconds
 │   └── main.py                   ← reads Postgres rules, writes ClickHouse events
 ├── otel-pipeline/                ← GenAI observability pipeline
@@ -79,11 +82,11 @@ flowchart TD
 
         subgraph Storage["Storage"]
             direction LR
-            PG[("PostgreSQL\nai_systems\nmodel_cards\nalert_rules\nservice_model_baselines")]
+            PG[("PostgreSQL\nai_systems\nmodel_cards\nalert_rules\nservice_model_baselines\nframeworks\nassessments\nobligations\ncontrols\nevidence")]
             subgraph CH["ClickHouse"]
                 direction TB
                 Hot[("Hot Disk\nnew data")]
-                Hot -->|"age > 7 days or disk > 90%"| MinIO[("MinIO\ncold data")]
+                Hot -->|"age > 7 days or disk > 90%"| MinIO[("MinIO\ncold data + evidence files")]
                 MinIO <-->|"read-through cache"| Cache["Local Cache\nrecently read cold parts"]
             end
         end
@@ -94,6 +97,7 @@ flowchart TD
             Overview["Overview"]
             Monitoring["Monitoring"]
             Alerts["Alerts"]
+            Compliance["Compliance"]
             AlertWorker["Policy Checker Worker"]
         end
 
@@ -103,12 +107,14 @@ flowchart TD
         PG --> Overview
         PG --> Monitoring
         PG --> Alerts
+        PG --> Compliance
         PG -->|"rules + baselines"| AlertWorker
 
         CH --> Monitoring
         CH --> Alerts
         CH --> AlertWorker
         AlertWorker -->|writes events| CH
+        Compliance -->|"evidence files"| MinIO
     end
 
     App1 -->|OTLP| Collector
@@ -149,12 +155,14 @@ flowchart TD
     AlertBackend["alerts-backend\n(healthy)"]
     AlertFrontend["alerts-frontend\n(service_started)"]
     AlertWorker["policy-checker-worker\n(restart: on-failure)"]
+    CompBackend["compliance-backend\n(healthy)"]
+    CompFrontend["compliance-frontend\n(service_started)"]
     Shell["shell :8080"]
     RMQ["rabbitmq\n(healthy)"]
     Bridge["otel-rmq-bridge\n(healthy)"]
     Collector["otel-collector"]
     MinIO["minio :9000\n(healthy)"]
-    MinIOInit["minio-init\ncreates clickhouse bucket\nthen exits"]
+    MinIOInit["minio-init\ncreates clickhouse + evidence-files buckets\nthen exits"]
     CH["clickhouse\n(healthy)"]
     CHMigrate["clickhouse-migrate\nruns migrate.py\nthen exits"]
     CHConsumer["otel-clickhouse-consumer"]
@@ -166,8 +174,10 @@ flowchart TD
     Migrate --> OvBackend
     Migrate --> AlertBackend
     Migrate --> AlertWorker
+    Migrate --> CompBackend
     MinIO --> MinIOInit
     MinIOInit --> CH
+    MinIOInit --> CompBackend
     CH --> MonBackend
     CH --> AlertBackend
     CH --> AlertWorker
@@ -179,6 +189,8 @@ flowchart TD
     MonFrontend --> Shell
     OvBackend --> Shell
     OvFrontend --> Shell
+    CompBackend --> Shell
+    CompFrontend --> Shell
 
     RMQ --> Bridge
     Bridge --> Collector
