@@ -102,6 +102,7 @@ See [docs/architecture.md](docs/architecture.md) for repo layout, GenAI observab
 |---|---|---|---|
 | AI System Registry | Vanilla HTML + UI5 Web Components | nginx serves static files directly | same |
 | Decision Trace Analyzer | React + TypeScript + Vite + UI5 Web Components | `npm run dev` (Vite, port 3005) | `npm run build` → nginx |
+| Compliance | React + TypeScript + Vite + Recharts | `npm run dev` (Vite, port 3006) | `npm run build` → nginx |
 
 ### Decision Trace Analyzer frontend (`decision-trace-analyzer/frontend/`)
 - **React + TypeScript** — component-based UI
@@ -457,6 +458,12 @@ Governance chain MFE — assessments, obligations, controls, and evidence for EU
 - `frontend/` — React 18 + TypeScript + Vite SPA served by nginx on port 3006
 - `backend/` — FastAPI on port 8007, reads/writes Postgres; stores evidence files in MinIO
 
+### Compliance frontend (`compliance/frontend/src/`)
+- **Recharts** (`^2.12.7`) — donut charts (status, type) and line chart (score trend) on the Assessments page. Same version as `monitoring/frontend` — upgrade both together.
+- **`components/AssessmentCharts.tsx`** — three-chart section rendered above the assessments table. All data computed client-side from the already-loaded `assessments` state; no extra API calls.
+- **`components/ScoreDonut.tsx`** — small inline donut shown in the assessment detail panel. Colour-coded green/amber/red by score threshold (≥80/≥50/<50).
+- **`components/KebabMenu.tsx`** — reusable `⋮` action menu. Accepts `MenuItem[]` (optional `id`, `label`, `danger`, `disabled`, `onClick`). Use on any page that has per-row actions.
+
 ### Backend structure (`compliance/backend/app/`)
 - `main.py` — FastAPI app, mounts all routers, `/health` endpoint, ensures MinIO bucket exists on startup
 - `cascade.py` — status cascade + score recalculation: approved evidence → effective control → fulfilled obligation → assessment score → `ai_systems.compliance`
@@ -470,7 +477,9 @@ Governance chain MFE — assessments, obligations, controls, and evidence for EU
 - `routers/evidence.py` — multipart upload, full CRUD + `/approve`, `/reject`, `/download-url`
 
 ### Governance chain
-`POST /api/v1/assessments/{id}/generate-obligations` is the primary entry point: it reads the AI system's risk tier, selects obligations from `obligation_templates.py`, pre-fills owner/not-applicable from the most recent approved prior assessment (same system+framework), and persists them. Controls are then linked to obligations via `POST /api/v1/controls/{id}/link/{obligation_id}`. Evidence is uploaded as multipart form data; approving evidence cascades automatically through the chain.
+`POST /api/v1/assessments` is the entry point: creating an assessment automatically generates obligations in the same transaction — no separate call needed. The obligations are selected from `obligation_templates.py` based on the AI system's risk tier, with owner/not-applicable pre-filled from the most recent approved prior assessment for the same (system, framework). The `/generate-obligations` endpoint remains available for API consumers but is no longer used by the frontend.
+
+Controls are linked to obligations via `POST /api/v1/controls/{id}/link/{obligation_id}`. Evidence is uploaded as multipart form data; approving evidence cascades automatically through the chain.
 
 ### Database
 - **Postgres** — `frameworks` (seeded by migration `0007`), `assessments`, `obligations`, `controls`, `evidence`, `control_obligations` (M2M), `evidence_controls` (M2M), `evidence_obligations` (M2M) — all in migration `0007`

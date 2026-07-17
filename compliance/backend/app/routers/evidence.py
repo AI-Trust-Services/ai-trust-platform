@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
@@ -55,7 +56,7 @@ def _parse_date(value: str | None, field: str) -> date | None:
         raise HTTPException(422, f"{field} must be an ISO date (YYYY-MM-DD)")
 
 
-async def _load(session, evidence_id: str) -> Evidence:
+async def _load(session: AsyncSession, evidence_id: str) -> Evidence:
     row = (await session.execute(
         select(Evidence).where(Evidence.id == evidence_id)
     )).scalar_one_or_none()
@@ -64,7 +65,7 @@ async def _load(session, evidence_id: str) -> Evidence:
     return row
 
 
-async def _linked_ids(session, evidence_id: str) -> tuple[list[str], list[str]]:
+async def _linked_ids(session: AsyncSession, evidence_id: str) -> tuple[list[str], list[str]]:
     control_ids = (await session.execute(
         select(evidence_controls.c.control_id).where(evidence_controls.c.evidence_id == evidence_id)
     )).scalars().all()
@@ -296,7 +297,7 @@ async def _set_status(evidence_id: str, status: str) -> EvidenceResponse:
     return EvidenceResponse.model_validate(row)
 
 
-async def _cascade_from_evidence(session, evidence_id: str) -> None:
+async def _cascade_from_evidence(session: AsyncSession, evidence_id: str) -> None:
     """Re-evaluate every control and directly-linked obligation this evidence backs."""
     control_ids = (await session.execute(
         select(evidence_controls.c.control_id).where(evidence_controls.c.evidence_id == evidence_id)

@@ -5,6 +5,9 @@ import { StatusBadge, ScoreBar } from "../components/Badges";
 import KpiCard from "../components/KpiCard";
 import DetailPanel, { DetailField, DetailSection } from "../components/DetailPanel";
 import CreateAssessmentModal from "../components/CreateAssessmentModal";
+import AssessmentCharts from "../components/AssessmentCharts";
+import KebabMenu from "../components/KebabMenu";
+import ScoreDonut from "../components/ScoreDonut";
 import { ASSESSMENT_STATUS_META, fmtDate, humanize } from "../utils";
 import type { Assessment, AssessmentDetail, AISystem, Framework } from "../types";
 
@@ -93,6 +96,8 @@ export default function AssessmentsPage(): JSX.Element {
         <KpiCard label="Draft" value={kpis.draft} />
       </div>
 
+      <AssessmentCharts assessments={assessments} />
+
       <div className="toolbar" style={{ marginTop: 12 }}>
         <input className="search-input" placeholder="Search assessments…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className="filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -129,39 +134,31 @@ export default function AssessmentsPage(): JSX.Element {
                   <td><StatusBadge meta={ASSESSMENT_STATUS_META} value={a.status} /></td>
                   <td><ScoreBar score={a.score} /></td>
                   <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{fmtDate(a.created_at)}</td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div className="actions">
-                      {a.status !== "approved" && (
-                        <button className="btn-ghost btn-sm" data-tip="Generate obligations from risk tier" disabled={busy === a.id}
-                          onClick={async () => {
-                            setBusy(a.id);
-                            try { const r = await api.generateObligations(a.id); showToast(r.message); await load(); }
-                            catch (e) { showToast((e as Error).message, true); }
-                            finally { setBusy(null); }
-                          }}>
-                          Generate
-                        </button>
-                      )}
-                      {a.status === "draft" && (
-                        <button className="btn-ghost btn-sm" data-tip="Submit for review" disabled={busy === a.id}
-                          onClick={() => act(api.submitAssessment, a.id, "Submitted")}>Submit</button>
-                      )}
-                      {a.status !== "approved" && (
-                        <button className="btn-ghost btn-sm" data-tip="Approve — one-way, cannot be undone" disabled={busy === a.id}
-                          onClick={() => act(api.approveAssessment, a.id, (r) => `Approved — score ${r.score ?? "N/A"}%`)}>Approve</button>
-                      )}
-                      <button className="btn-ghost btn-sm btn-danger" data-tip="Delete assessment and its obligations" disabled={busy === a.id}
-                        onClick={async () => {
+                  <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+                    <KebabMenu items={[
+                      ...(a.status === "draft" ? [{
+                        label: "Submit for Review",
+                        disabled: busy === a.id,
+                        onClick: () => act(api.submitAssessment, a.id, "Submitted"),
+                      }] : []),
+                      ...(a.status !== "approved" ? [{
+                        label: "Approve",
+                        disabled: busy === a.id,
+                        onClick: () => act(api.approveAssessment, a.id, (r) => `Approved — score ${r.score ?? "N/A"}%`),
+                      }] : []),
+                      {
+                        label: "Delete",
+                        danger: true,
+                        disabled: busy === a.id,
+                        onClick: async () => {
                           if (!confirm(`Delete "${a.title}"?`)) return;
                           setBusy(a.id);
                           try { await api.deleteAssessment(a.id); showToast("Deleted"); closePanel(); await load(); }
                           catch (e) { showToast((e as Error).message, true); }
                           finally { setBusy(null); }
-                        }}>Delete</button>
-
-                        {/* TODO - Question: Should be hidden/disabled when status === "approved" ?? */}
-
-                    </div>
+                        },
+                      },
+                    ]} />
                   </td>
                 </tr>
               ))}
@@ -186,12 +183,7 @@ export default function AssessmentsPage(): JSX.Element {
             <DetailField label="Created">{fmtDate(selectedDetail.created_at)}</DetailField>
           </DetailSection>
           <DetailSection title="Score">
-            <div style={{ padding: "8px 0" }}>
-              <ScoreBar score={selectedDetail.score} />
-              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>
-                {selectedDetail.fulfilled_count} / {selectedDetail.obligation_count} obligations fulfilled
-              </div>
-            </div>
+            <ScoreDonut detail={selectedDetail} />
           </DetailSection>
           {selectedDetail.notes && (
             <DetailSection title="Notes">
@@ -199,17 +191,6 @@ export default function AssessmentsPage(): JSX.Element {
             </DetailSection>
           )}
           <div className="dp-actions">
-            {selectedDetail.status !== "approved" && (
-              <button className="btn-primary btn-sm" disabled={busy === selectedDetail.id}
-                onClick={async () => {
-                  setBusy(selectedDetail.id);
-                  try { const r = await api.generateObligations(selectedDetail.id); showToast(r.message); await load(); if (selected === selectedDetail.id) setSelectedDetail(await api.getAssessment(selectedDetail.id)); }
-                  catch (e) { showToast((e as Error).message, true); }
-                  finally { setBusy(null); }
-                }}>
-                Generate Obligations
-              </button>
-            )}
             {selectedDetail.status === "draft" && (
               <button className="btn-ghost btn-sm" disabled={busy === selectedDetail.id}
                 onClick={() => act(api.submitAssessment, selectedDetail.id, "Submitted")}>Submit</button>

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
@@ -28,7 +29,7 @@ router = APIRouter(tags=["controls"])
 logger = get_logger(__name__)
 
 
-async def _load(session, control_id: str) -> Control:
+async def _load(session: AsyncSession, control_id: str) -> Control:
     row = (await session.execute(
         select(Control).where(Control.id == control_id)
     )).scalar_one_or_none()

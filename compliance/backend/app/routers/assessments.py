@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
@@ -25,7 +26,7 @@ logger = get_logger(__name__)
 
 ##todo - session: AsyncSession type annotation is missing at multiple places. Fix this.
 
-async def _load(session, assessment_id: str) -> Assessment:
+async def _load(session: AsyncSession, assessment_id: str) -> Assessment:
     row = (await session.execute(
         select(Assessment).where(Assessment.id == assessment_id)
     )).scalar_one_or_none()
@@ -78,6 +79,12 @@ async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
             status="draft",
         )
         session.add(row)
+        await session.flush()
+        created, _ = await _generate_obligations_in_session(session, row, system)
+        if not created:
+            logger.warning("assessment.no_obligations", extra={
+                "assessment_id": row.id, "framework": body.framework_id, "tier": system.tier,
+            })
         await session.commit()
         await session.refresh(row)
 
@@ -85,6 +92,61 @@ async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
         "assessment_id": row.id, "ai_system_id": row.ai_system_id, "framework_id": row.framework_id,
     })
     return AssessmentResponse.model_validate(row)
+
+
+async def _generate_obligations_in_session(
+    session: AsyncSession, assessment: Assessment, system: AISystem
+) -> tuple[list[Obligation], bool]:
+    """Generate obligation rows within the caller's transaction.
+
+    If this raises, the entire transaction (including the assessment row) is
+    rolled back atomically — an assessment without obligations is never persisted.
+
+    Returns (created_obligations, prior_prefilled) where prior_prefilled is True
+    if any owner/not_applicable values were carried forward from a prior assessment.
+    """
+    templates = obligations_for(assessment.framework_id, system.tier)
+
+    prior = (await session.execute(
+        select(Assessment)
+        .where(Assessment.ai_system_id == assessment.ai_system_id)
+        .where(Assessment.framework_id == assessment.framework_id)
+        .where(Assessment.status == "approved")
+        .where(Assessment.id != assessment.id)
+        .order_by(Assessment.created_at.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    prior_by_ref: dict[str, Obligation] = {}
+    if prior is not None:
+        prior_obs = (await session.execute(
+            select(Obligation).where(Obligation.assessment_id == prior.id)
+        )).scalars().all()
+        for po in prior_obs:
+            if po.article_ref:
+                prior_by_ref[po.article_ref] = po
+
+    created: list[Obligation] = []
+    for t in templates:
+        carried = prior_by_ref.get(t["article_ref"])
+        obl = Obligation(
+            id=new_id("OBL"),
+            assessment_id=assessment.id,
+            ai_system_id=assessment.ai_system_id,
+            framework_id=assessment.framework_id,
+            title=t["title"],
+            article_ref=t["article_ref"],
+            description=t["description"],
+            status=("not_applicable" if carried and carried.status == "not_applicable" else "applicable"),
+            owner=carried.owner if carried else "",
+        )
+        session.add(obl)
+        created.append(obl)
+
+    if created:
+        await session.flush()
+        await refresh_assessment_score(session, assessment.id)
+
+    return created, bool(prior_by_ref)
 
 
 @router.get("/assessments/{assessment_id}", response_model=AssessmentDetailResponse)
@@ -155,58 +217,16 @@ async def generate_obligations(assessment_id: str) -> GenerateObligationsRespons
         if not system:
             raise HTTPException(404, f"AI system {assessment.ai_system_id} not found")
 
-        templates = obligations_for(assessment.framework_id, system.tier)
-
-        # Pre-fill status/owner from the most recent *approved* prior assessment
-        # for the same (system, framework), matched by article_ref (spec §8.9).
-        prior = (await session.execute(
-            select(Assessment)
-            .where(Assessment.ai_system_id == assessment.ai_system_id)
-            .where(Assessment.framework_id == assessment.framework_id)
-            .where(Assessment.status == "approved")
-            .where(Assessment.id != assessment_id)
-            .order_by(Assessment.created_at.desc())
-            .limit(1)
-        )).scalar_one_or_none()
-        prior_by_ref: dict[str, Obligation] = {}
-        if prior is not None:
-            prior_obs = (await session.execute(
-                select(Obligation).where(Obligation.assessment_id == prior.id)
-            )).scalars().all()
-            for po in prior_obs:
-                if po.article_ref:
-                    prior_by_ref[po.article_ref] = po
-
-        created: list[Obligation] = []
-        for t in templates:
-            carried = prior_by_ref.get(t["article_ref"])
-            row = Obligation(
-                id=new_id("OBL"),
-                assessment_id=assessment_id,
-                ai_system_id=assessment.ai_system_id,
-                framework_id=assessment.framework_id,
-                title=t["title"],
-                article_ref=t["article_ref"],
-                description=t["description"],
-                # Never carry a terminal 'fulfilled' from a prior assessment —
-                # fulfilment must be re-earned via controls/evidence this round.
-                status=("not_applicable" if carried and carried.status == "not_applicable" else "applicable"),
-                owner=carried.owner if carried else "",
-            )
-            session.add(row)
-            created.append(row)
-
-        await session.flush()
-        await refresh_assessment_score(session, assessment_id)
+        created, prefilled = await _generate_obligations_in_session(session, assessment, system)
         await session.commit()
         for r in created:
             await session.refresh(r)
 
-        if not templates:
+        if not created:
             message = f"No obligations defined for framework {assessment.framework_id} at tier '{system.tier}'."
         else:
             message = f"Generated {len(created)} obligation(s) for tier '{system.tier}'."
-            if prior_by_ref:
+            if prefilled:
                 message += " Owner/not-applicable status pre-filled from prior approved assessment."
 
         logger.info("assessment.obligations_generated", extra={

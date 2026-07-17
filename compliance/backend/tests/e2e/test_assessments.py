@@ -82,6 +82,40 @@ async def test_create_assessment_rejects_decommissioned_system(client: httpx.Asy
     assert r.status_code == 422
 
 
+async def test_create_assessment_unknown_tier_yields_no_obligations(client: httpx.AsyncClient):
+    # obligations_for() returns [] for unknown tiers — assessment is created successfully
+    # but with zero obligations. Zero obligations is a valid state (logged as a warning).
+    system = await create_system(tier="unknown_tier")
+    ass = await create_assessment(client, system["id"])
+    obs = (await client.get(f"/api/v1/obligations?assessment_id={ass['id']}")).json()
+    assert len(obs) == 0
+
+
+async def test_create_assessment_obligation_failure_rolls_back_assessment(client: httpx.AsyncClient):
+    # If obligation generation raises inside the transaction, the assessment row must
+    # also be rolled back — no orphaned assessments with zero obligations from errors.
+    from unittest.mock import patch, AsyncMock
+    system = await create_system(tier="minimal")
+
+    try:
+        with patch(
+            "app.routers.assessments._generate_obligations_in_session",
+            new=AsyncMock(side_effect=RuntimeError("DB error")),
+        ):
+            await client.post("/api/v1/assessments", json={
+                "ai_system_id": system["id"],
+                "framework_id": "FRM-EU-AI-ACT",
+                "title": "Atomic Test",
+                "type": "compliance",
+            })
+    except Exception:
+        pass  # Unhandled server errors may surface as stream errors in ASGITransport
+
+    # No assessment should exist in the DB — the transaction was rolled back.
+    list_r = await client.get(f"/api/v1/assessments?ai_system_id={system['id']}")
+    assert len(list_r.json()) == 0
+
+
 # ---------------------------------------------------------------------------
 # GET /assessments
 # ---------------------------------------------------------------------------
@@ -183,20 +217,19 @@ async def test_delete_assessment_404_on_missing(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_generate_obligations_creates_correct_count(client: httpx.AsyncClient):
+    # Obligations are auto-generated on assessment creation.
+    # The endpoint still works but returns 409 if called again.
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
-    r = await client.post(f"/api/v1/assessments/{ass['id']}/generate-obligations")
-    assert r.status_code == 200
-    body = r.json()
-    assert len(body["created"]) == 11  # EU AI Act high-risk has 11 obligations
+    obs = (await client.get(f"/api/v1/obligations?assessment_id={ass['id']}")).json()
+    assert len(obs) == 11  # EU AI Act high-risk has 11 obligations
 
 
 async def test_generate_obligations_minimal_tier(client: httpx.AsyncClient):
     system = await create_system(tier="minimal")
     ass = await create_assessment(client, system["id"])
-    r = await client.post(f"/api/v1/assessments/{ass['id']}/generate-obligations")
-    assert r.status_code == 200
-    assert len(r.json()["created"]) == 3
+    obs = (await client.get(f"/api/v1/obligations?assessment_id={ass['id']}")).json()
+    assert len(obs) == 3
 
 
 async def test_generate_obligations_idempotent_fails_on_second_call(client: httpx.AsyncClient):
@@ -220,20 +253,18 @@ async def test_generate_obligations_approved_assessment_returns_409(client: http
 async def test_generate_obligations_prefills_from_prior_approved(client: httpx.AsyncClient):
     system = await create_system(tier="minimal")
 
-    # First assessment — approve it with one obligation marked not_applicable
+    # First assessment — auto-generated on create. Mark one obligation not_applicable and approve.
     ass1 = await create_assessment(client, system["id"])
-    await client.post(f"/api/v1/assessments/{ass1['id']}/generate-obligations")
     obs1 = (await client.get(f"/api/v1/obligations?assessment_id={ass1['id']}")).json()
     await client.put(f"/api/v1/obligations/{obs1[0]['id']}", json={"status": "not_applicable"})
     na_ref = obs1[0]["article_ref"]
     await client.post(f"/api/v1/assessments/{ass1['id']}/submit")
     await client.post(f"/api/v1/assessments/{ass1['id']}/approve")
 
-    # Second assessment — generate obligations, check the not_applicable is carried
+    # Second assessment — auto-generated on create, not_applicable should be carried forward
     ass2 = await create_assessment(client, system["id"])
-    r = await client.post(f"/api/v1/assessments/{ass2['id']}/generate-obligations")
-    assert r.status_code == 200
-    carried = [o for o in r.json()["created"] if o["article_ref"] == na_ref]
+    obs2 = (await client.get(f"/api/v1/obligations?assessment_id={ass2['id']}")).json()
+    carried = [o for o in obs2 if o["article_ref"] == na_ref]
     assert carried[0]["status"] == "not_applicable"
 
 
@@ -250,11 +281,13 @@ async def test_submit_assessment(client: httpx.AsyncClient):
     assert r.json()["status"] == "submitted"
 
 
-async def test_submit_without_obligations_returns_422(client: httpx.AsyncClient):
+async def test_submit_assessment_succeeds_with_auto_generated_obligations(client: httpx.AsyncClient):
+    # Obligations are auto-generated on create so submit should always succeed immediately.
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     r = await client.post(f"/api/v1/assessments/{ass['id']}/submit")
-    assert r.status_code == 422
+    assert r.status_code == 200
+    assert r.json()["status"] == "submitted"
 
 
 async def test_submit_approved_assessment_returns_409(client: httpx.AsyncClient):

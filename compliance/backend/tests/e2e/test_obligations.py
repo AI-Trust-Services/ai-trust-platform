@@ -65,13 +65,17 @@ async def test_list_obligations_filter_by_assessment(client: httpx.AsyncClient):
     system = await create_system()
     ass1 = await create_assessment(client, system["id"])
     ass2 = await create_assessment(client, system["id"])
+    # Auto-generation creates 3 obligations per assessment (minimal tier).
+    # Add 2 more manually to ass1 so we can assert the filter is working.
     await create_obligation(client, ass1["id"])
     await create_obligation(client, ass1["id"])
-    await create_obligation(client, ass2["id"])
 
     r = await client.get(f"/api/v1/obligations?assessment_id={ass1['id']}")
     assert r.status_code == 200
-    assert len(r.json()) == 2
+    assert len(r.json()) == 5  # 3 auto-generated + 2 manual
+
+    r2 = await client.get(f"/api/v1/obligations?assessment_id={ass2['id']}")
+    assert len(r2.json()) == 3  # only auto-generated
 
 
 async def test_list_obligations_filter_by_status(client: httpx.AsyncClient):
@@ -185,8 +189,10 @@ async def test_delete_obligation_404_on_missing(client: httpx.AsyncClient):
 async def test_marking_obligation_fulfilled_updates_score(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
-    obl = await create_obligation(client, ass["id"])
-    await client.put(f"/api/v1/obligations/{obl['id']}", json={"status": "fulfilled"})
+    # Auto-generation creates 3 obligations (minimal tier). Mark all fulfilled.
+    obs = (await client.get(f"/api/v1/obligations?assessment_id={ass['id']}")).json()
+    for o in obs:
+        await client.put(f"/api/v1/obligations/{o['id']}", json={"status": "fulfilled"})
 
     r = await client.get(f"/api/v1/assessments/{ass['id']}")
     assert r.json()["score"] == 100.0
@@ -195,8 +201,10 @@ async def test_marking_obligation_fulfilled_updates_score(client: httpx.AsyncCli
 async def test_marking_all_obligations_not_applicable_sets_score_none(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
-    obl = await create_obligation(client, ass["id"])
-    await client.put(f"/api/v1/obligations/{obl['id']}", json={"status": "not_applicable"})
+    # Auto-generation creates 3 obligations (minimal tier). Mark all not_applicable.
+    obs = (await client.get(f"/api/v1/obligations?assessment_id={ass['id']}")).json()
+    for o in obs:
+        await client.put(f"/api/v1/obligations/{o['id']}", json={"status": "not_applicable"})
 
     r = await client.get(f"/api/v1/assessments/{ass['id']}")
     assert r.json()["score"] is None

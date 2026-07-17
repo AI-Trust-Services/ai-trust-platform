@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
@@ -21,7 +22,7 @@ router = APIRouter(tags=["obligations"])
 logger = get_logger(__name__)
 
 
-async def _assessment_approved(session, assessment_id: str) -> bool:
+async def _assessment_approved(session: AsyncSession, assessment_id: str) -> bool:
     status = (await session.execute(
         select(Assessment.status).where(Assessment.id == assessment_id)
     )).scalar_one_or_none()
