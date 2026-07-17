@@ -1,21 +1,31 @@
-"""create governance chain tables (frameworks, assessments, obligations,
-controls, evidence) and seed frameworks
+"""Compliance tables: frameworks, assessments, obligations, controls, evidence,
+control_obligations, evidence_controls, evidence_obligations (+ seed 3 frameworks)
 
-Revision ID: 0007
-Revises: 0006
-Create Date: 2026-07-13
+Revision ID: 0003
+Revises: 0002
+Create Date: 2026-07-16
 """
 from datetime import datetime, timezone
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0007"
-down_revision = "0006"
+revision = "0003"
+down_revision = "0002"
 branch_labels = None
 depends_on = None
 
-SEED_FRAMEWORKS = [
+_frameworks_table = sa.table(
+    "frameworks",
+    sa.column("id", sa.String),
+    sa.column("name", sa.String),
+    sa.column("version", sa.String),
+    sa.column("description", sa.Text),
+    sa.column("enabled", sa.Boolean),
+    sa.column("created_at", sa.DateTime(timezone=True)),
+)
+
+_SEED_FRAMEWORKS = [
     {
         "id": "FRM-EU-AI-ACT",
         "name": "EU AI Act",
@@ -38,16 +48,6 @@ SEED_FRAMEWORKS = [
         "enabled": True,
     },
 ]
-
-_frameworks_table = sa.table(
-    "frameworks",
-    sa.column("id", sa.String),
-    sa.column("name", sa.String),
-    sa.column("version", sa.String),
-    sa.column("description", sa.Text),
-    sa.column("enabled", sa.Boolean),
-    sa.column("created_at", sa.DateTime(timezone=True)),
-)
 
 
 def upgrade() -> None:
@@ -156,7 +156,7 @@ def upgrade() -> None:
     )
 
     now = datetime.now(timezone.utc)
-    op.bulk_insert(_frameworks_table, [{**f, "created_at": now} for f in SEED_FRAMEWORKS])
+    op.bulk_insert(_frameworks_table, [{**f, "created_at": now} for f in _SEED_FRAMEWORKS])
 
 
 def downgrade() -> None:
