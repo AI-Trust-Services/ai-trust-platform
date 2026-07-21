@@ -51,12 +51,21 @@ class EvalResult:
 
 # ── Condition evaluators ──────────────────────────────────────────────────────
 
-async def eval_prohibited_exists(rule: AlertRule, ch) -> tuple[bool, float]:
+async def eval_prohibited_exists(rule: AlertRule, ch) -> list[EvalResult]:
     async with SessionLocal() as session:
-        count = (await session.execute(
-            select(func.count()).select_from(AISystem).where(AISystem.tier == "prohibited")
-        )).scalar_one()
-    return count > 0, float(count)
+        rows = (await session.execute(
+            select(AISystem.id, AISystem.name).where(AISystem.tier == "prohibited")
+        )).all()
+    return [
+        EvalResult(
+            triggered=True,
+            value=1.0,
+            description=f"Prohibited AI system registered: {name} ({sid})",
+            entity_id=sid,
+            entity_type="ai_system",
+        )
+        for sid, name in rows
+    ]
 
 
 async def eval_avg_compliance_below(rule: AlertRule, ch) -> tuple[bool, float]:
@@ -70,65 +79,160 @@ async def eval_avg_compliance_below(rule: AlertRule, ch) -> tuple[bool, float]:
     return avg < rule.threshold, avg
 
 
-async def eval_high_risk_on_market_low_compliance(rule: AlertRule, ch) -> tuple[bool, float]:
+async def eval_high_risk_on_market_low_compliance(rule: AlertRule, ch) -> list[EvalResult]:
+    # Candidate set = all high-risk systems on market. Triggered when compliance
+    # is below threshold; non-triggered results let cleared alerts auto-resolve.
     async with SessionLocal() as session:
-        count = (await session.execute(
-            select(func.count()).select_from(AISystem).where(
+        rows = (await session.execute(
+            select(AISystem.id, AISystem.name, AISystem.compliance).where(
                 AISystem.tier == "high",
                 AISystem.lifecycle.in_(["market", "post-market"]),
-                AISystem.compliance < rule.threshold,
             )
-        )).scalar_one()
-    return count > 0, float(count)
+        )).all()
+    results: list[EvalResult] = []
+    for sid, name, compliance in rows:
+        low = float(compliance) < rule.threshold
+        results.append(EvalResult(
+            triggered=low,
+            value=float(compliance),
+            description=(
+                f"High-risk system on market with low compliance: "
+                f"{name} ({sid}) at {float(compliance):.0f}%"
+            ) if low else "",
+            entity_id=sid,
+            entity_type="ai_system",
+        ))
+    return results
 
 
-async def eval_no_signals(rule: AlertRule, ch) -> tuple[bool, float]:
+async def eval_no_signals(rule: AlertRule, ch) -> list[EvalResult]:
+    # Per-system: a market/post-market system that has sent no spans in the
+    # window has gone silent. Systems in earlier lifecycle stages legitimately
+    # have no traffic, so they are not checked.
+    async with SessionLocal() as session:
+        systems = (await session.execute(
+            select(AISystem.id, AISystem.name).where(
+                AISystem.lifecycle.in_(["market", "post-market"]),
+            )
+        )).all()
+    if not systems:
+        return []
+
     rows = await ch_query(
-        "SELECT count() AS n FROM otel.gen_ai_spans "
-        "WHERE received_at >= now() - INTERVAL {minutes:UInt32} MINUTE",
+        "SELECT service_name, count() AS n FROM otel.gen_ai_spans "
+        "WHERE received_at >= now() - INTERVAL {minutes:UInt32} MINUTE "
+        "GROUP BY service_name",
         {"minutes": int(rule.threshold)},
     )
-    count = int(rows[0]["n"]) if rows else 0
-    return count == 0, float(count)
+    counts = {r["service_name"]: int(r["n"]) for r in rows}
+
+    results: list[EvalResult] = []
+    for sid, name in systems:
+        n = counts.get(sid, 0)
+        silent = n == 0
+        results.append(EvalResult(
+            triggered=silent,
+            value=float(n),
+            description=(
+                f"No inference signals from {name} ({sid}) "
+                f"in the last {int(rule.threshold)} min"
+            ) if silent else "",
+            entity_id=sid,
+            entity_type="ai_system",
+        ))
+    return results
 
 
-async def eval_high_latency(rule: AlertRule, ch) -> tuple[bool, float]:
+async def eval_high_latency(rule: AlertRule, ch) -> list[EvalResult]:
+    # Per-system average latency over the last hour. Only registered systems
+    # are considered; spans from unregistered service names are ignored.
     rows = await ch_query(
-        "SELECT round(avg(duration_ms), 2) AS avg_ms FROM otel.gen_ai_spans "
-        "WHERE received_at >= now() - INTERVAL 1 HOUR"
+        "SELECT service_name, round(avg(duration_ms), 2) AS avg_ms "
+        "FROM otel.gen_ai_spans "
+        "WHERE received_at >= now() - INTERVAL 1 HOUR "
+        "GROUP BY service_name"
     )
-    avg_ms = float(rows[0]["avg_ms"]) if rows and rows[0]["avg_ms"] is not None else 0.0
-    return avg_ms > rule.threshold, avg_ms
+    if not rows:
+        return []
+
+    service_names = [r["service_name"] for r in rows]
+    async with SessionLocal() as session:
+        sys_result = await session.execute(
+            select(AISystem.id, AISystem.name).where(AISystem.id.in_(service_names))
+        )
+        system_map = {row.id: row.name for row in sys_result}
+
+    results: list[EvalResult] = []
+    for r in rows:
+        service = r["service_name"]
+        if service not in system_map:
+            log.warning("alert_worker.unregistered_service", extra={"service_name": service})
+            continue
+        avg_ms = float(r["avg_ms"]) if r["avg_ms"] is not None else 0.0
+        high = avg_ms > rule.threshold
+        results.append(EvalResult(
+            triggered=high,
+            value=avg_ms,
+            description=(
+                f"High average latency for {system_map[service]} ({service}): "
+                f"{avg_ms}ms (> {rule.threshold}ms)"
+            ) if high else "",
+            entity_id=service,
+            entity_type="ai_system",
+        ))
+    return results
 
 
-async def eval_market_system_no_model_card(rule: AlertRule, ch) -> tuple[bool, float]:
+async def eval_market_system_no_model_card(rule: AlertRule, ch) -> list[EvalResult]:
+    # Candidate set = all market/post-market systems. Triggered when no model
+    # card is linked; non-triggered results let cleared alerts auto-resolve.
     async with SessionLocal() as session:
         rows = (await session.execute(
-            select(AISystem).where(
+            select(AISystem.id, AISystem.name, AISystem.model_id).where(
                 AISystem.lifecycle.in_(["market", "post-market"]),
-                AISystem.model_id.is_(None),
             )
-        )).scalars().all()
-    count = len(rows)
-    return count > 0, float(count)
+        )).all()
+    results: list[EvalResult] = []
+    for sid, name, model_id in rows:
+        missing = model_id is None
+        results.append(EvalResult(
+            triggered=missing,
+            value=1.0 if missing else 0.0,
+            description=f"System on market without a model card: {name} ({sid})" if missing else "",
+            entity_id=sid,
+            entity_type="ai_system",
+        ))
+    return results
 
 
-async def eval_gpai_no_compliance(rule: AlertRule, ch) -> tuple[bool, float]:
+async def eval_gpai_no_compliance(rule: AlertRule, ch) -> list[EvalResult]:
+    # Candidate set = all GPAI systems. Triggered when compliance score is 0;
+    # non-triggered results let cleared alerts auto-resolve.
     async with SessionLocal() as session:
         rows = (await session.execute(
-            select(AISystem).where(
+            select(AISystem.id, AISystem.name, AISystem.compliance).where(
                 AISystem.is_gpai.is_(True),
-                AISystem.compliance == 0,
             )
-        )).scalars().all()
-    count = len(rows)
-    return count > 0, float(count)
+        )).all()
+    results: list[EvalResult] = []
+    for sid, name, compliance in rows:
+        no_score = float(compliance) == 0
+        results.append(EvalResult(
+            triggered=no_score,
+            value=float(compliance),
+            description=f"GPAI system with no compliance score: {name} ({sid})" if no_score else "",
+            entity_id=sid,
+            entity_type="ai_system",
+        ))
+    return results
 
 
 async def eval_model_diverged(rule: AlertRule, ch) -> list[EvalResult]:
     """
-    For each service, compare the most recently seen request_model against a
-    persistent baseline stored in Postgres. Fire when the model changes.
+    For each service with recent spans, resolve the registered AI system via
+    system ID (service_name IS the system ID — OTEL_SERVICE_NAME = SYS-XXXXXXXX),
+    then compare the current model against the baseline stored in
+    service_model_baselines (keyed by system ID).
     Baseline is only updated by explicit human approval via the alerts UI.
     """
     params = json.loads(rule.parameters or "{}")
@@ -160,44 +264,59 @@ async def eval_model_diverged(rule: AlertRule, ch) -> list[EvalResult]:
     now = datetime.now(timezone.utc)
     results: list[EvalResult] = []
 
+    # service_name in ClickHouse IS the system ID (OTEL_SERVICE_NAME = SYS-XXXXXXXX)
+    service_names = [r["service_name"] for r in rows]
     async with SessionLocal() as session:
+        sys_result = await session.execute(
+            select(AISystem.id, AISystem.name)
+            .where(AISystem.id.in_(service_names))
+        )
+        system_map = {row.id: row.name for row in sys_result}
+
         for row in rows:
             service = row["service_name"]
             current_model = row["current_model"]
 
+            if service not in system_map:
+                log.warning("alert_worker.unregistered_service", extra={"service_name": service})
+                continue
+
+            system_id = service  # service_name IS the system ID
+            system_name = system_map[service]
+
             baseline_row = (await session.execute(
                 text("SELECT model_name FROM service_model_baselines WHERE service_name = :svc"),
-                {"svc": service},
+                {"svc": system_id},
             )).fetchone()
 
             if baseline_row is None:
-                # First time seeing this service — store baseline, no alert
+                # First time seeing this system — store baseline, no alert
                 await session.execute(
                     text("""
                         INSERT INTO service_model_baselines (service_name, model_name, last_seen_at)
                         VALUES (:svc, :model, :ts)
                         ON CONFLICT (service_name) DO NOTHING
                     """),
-                    {"svc": service, "model": current_model, "ts": now},
+                    {"svc": system_id, "model": current_model, "ts": now},
                 )
-                results.append(EvalResult(triggered=False, value=0.0, entity_id=service, entity_type="service"))
+                results.append(EvalResult(triggered=False, value=0.0, entity_id=system_id, entity_type="ai_system"))
             elif baseline_row[0] == current_model:
                 # Model unchanged — update last_seen_at
                 await session.execute(
                     text("UPDATE service_model_baselines SET last_seen_at = :ts WHERE service_name = :svc"),
-                    {"ts": now, "svc": service},
+                    {"ts": now, "svc": system_id},
                 )
-                results.append(EvalResult(triggered=False, value=0.0, entity_id=service, entity_type="service"))
+                results.append(EvalResult(triggered=False, value=0.0, entity_id=system_id, entity_type="ai_system"))
             else:
                 # Model changed — fire alert, leave baseline unchanged until human approves
                 old_model = baseline_row[0]
-                desc = f"Model changed for {service}: {old_model} → {current_model}"
+                desc = f"Model changed for {system_name}: {old_model} → {current_model}"
                 results.append(EvalResult(
                     triggered=True,
                     value=1.0,
                     description=desc,
-                    entity_id=service,
-                    entity_type="service",
+                    entity_id=system_id,
+                    entity_type="ai_system",
                     entity_model=current_model,
                 ))
 

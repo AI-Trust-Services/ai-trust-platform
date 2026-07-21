@@ -16,7 +16,8 @@ logger = get_logger(__name__)
 
 @router.get("/monitoring/services")
 async def get_services() -> list[dict]:
-    rows = await ch_query("""
+    # Step 1: get distinct service names + stats from ClickHouse
+    ch_rows = await ch_query("""
         SELECT
             service_name,
             count() AS total_spans,
@@ -25,13 +26,41 @@ async def get_services() -> list[dict]:
         GROUP BY service_name
         ORDER BY total_spans DESC
     """)
+
+    if not ch_rows:
+        return []
+
+    # Step 2: resolve service names (which are system IDs) to registered AI systems
+    service_names = [r["service_name"] for r in ch_rows]
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(AISystem.id, AISystem.name)
+            .where(AISystem.id.in_(service_names))
+        )
+        system_map = {row.id: row.name for row in result}
+
+    # Step 3: merge — only return services that match a registered system
+    rows = []
+    for r in ch_rows:
+        display_name = system_map.get(r["service_name"])
+        if display_name:
+            rows.append({
+                "service_name": r["service_name"],
+                "system_id": r["service_name"],
+                "display_name": display_name,
+                "total_spans": r["total_spans"],
+                "last_seen": r["last_seen"],
+            })
+        else:
+            logger.warning("monitoring.unregistered_service", extra={"service_name": r["service_name"]})
+
     logger.info("monitoring.services_fetched", extra={"count": len(rows)})
     return rows
 
 
 @router.get("/monitoring/signals")
 async def get_signals(
-    service: str = Query(default="", description="Filter by service_name"),
+    service: str = Query(default="", description="Filter by system_id"),
     window: str = Query(default="1h", description="Time window: 15m, 1h, 6h, 24h"),
 ) -> dict:
     window_map = {"15m": "15 MINUTE", "1h": "1 HOUR", "6h": "6 HOUR", "24h": "24 HOUR"}
@@ -42,13 +71,38 @@ async def get_signals(
         "toStartOfTenMinutes"
     )
 
-    # Use parameterized query to prevent SQL injection on service filter
+    # Resolve system_id to display name
+    display_name = service
     if service:
+        async with SessionLocal() as session:
+            result = await session.execute(
+                select(AISystem.name).where(AISystem.id == service)
+            )
+            row = result.scalar_one_or_none()
+            if row:
+                display_name = row
+
+    if service:
+        # Specific system selected — filter to that system's spans.
         service_filter = "AND service_name = {service:String}"
         params = {"service": service}
     else:
-        service_filter = ""
-        params = {}
+        # "All Systems" means all *registered* systems — never orphan spans
+        # from unregistered service names. Constrain to registered system IDs.
+        async with SessionLocal() as session:
+            registered_ids = (await session.execute(select(AISystem.id))).scalars().all()
+        if not registered_ids:
+            # No registered systems — nothing to show.
+            return {
+                "timeseries": [],
+                "display_name": service,
+                "kpis": {
+                    "total_inferences": 0, "avg_latency_ms": 0.0,
+                    "total_input_tokens": 0, "total_output_tokens": 0,
+                },
+            }
+        service_filter = "AND service_name IN {ids:Array(String)}"
+        params = {"ids": list(registered_ids)}
 
     timeseries, totals = await asyncio.gather(
         ch_query(f"""
@@ -80,11 +134,12 @@ async def get_signals(
     logger.info("monitoring.signals_fetched", extra={"service": service, "window": window})
     return {
         "timeseries": timeseries,
+        "display_name": display_name,
         "kpis": {
-            "total_inferences":   int(kpis.get("total_inferences", 0)),
-            "avg_latency_ms":     float(kpis.get("avg_latency_ms", 0)),
-            "total_input_tokens": int(kpis.get("total_input_tokens", 0)),
-            "total_output_tokens":int(kpis.get("total_output_tokens", 0)),
+            "total_inferences":    int(kpis.get("total_inferences", 0)),
+            "avg_latency_ms":      float(kpis.get("avg_latency_ms", 0)),
+            "total_input_tokens":  int(kpis.get("total_input_tokens", 0)),
+            "total_output_tokens": int(kpis.get("total_output_tokens", 0)),
         },
     }
 

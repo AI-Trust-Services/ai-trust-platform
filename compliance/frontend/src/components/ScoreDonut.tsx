@@ -25,7 +25,7 @@ export default function ScoreDonut({ detail }: Props): JSX.Element {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "8px 0" }}>
       <div style={{ position: "relative", width: 80, height: 80 }}>
-        <PieChart width={80} height={80}>
+        <PieChart width={80} height={80} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
           <Pie data={data} dataKey="value" cx={40} cy={40} innerRadius={26} outerRadius={36} startAngle={90} endAngle={-270} paddingAngle={0}>
             <Cell fill={color} />
             <Cell fill="var(--border)" />

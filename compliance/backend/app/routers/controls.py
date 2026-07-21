@@ -42,18 +42,22 @@ async def _load(session: AsyncSession, control_id: str) -> Control:
 async def list_controls(
     ai_system_id: str | None = Query(default=None),
     obligation_id: str | None = Query(default=None),
+    evidence_id: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[ControlResponse]:
     async with SessionLocal() as session:
         stmt = select(Control).order_by(Control.created_at.desc())
         if ai_system_id:
-            # Include org-wide controls (null ai_system_id) in a system's view.
             stmt = stmt.where(or_(Control.ai_system_id == ai_system_id, Control.ai_system_id.is_(None)))
         if obligation_id:
             stmt = stmt.join(
                 control_obligations, control_obligations.c.control_id == Control.id
             ).where(control_obligations.c.obligation_id == obligation_id)
+        if evidence_id:
+            stmt = stmt.join(
+                evidence_controls, evidence_controls.c.control_id == Control.id
+            ).where(evidence_controls.c.evidence_id == evidence_id)
         stmt = stmt.limit(limit).offset(offset)
         result = await session.execute(stmt)
         return [ControlResponse.model_validate(r) for r in result.scalars().all()]

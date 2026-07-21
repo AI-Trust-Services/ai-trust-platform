@@ -8,10 +8,29 @@ from sqlalchemy import text, select
 from ai_trust_clickhouse import ch_command, ch_query
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.alert_rule import AlertRule
 
 router = APIRouter(tags=["alerts"])
 logger = get_logger(__name__)
+
+
+async def _resolve_display_names(entity_ids: list[str]) -> dict[str, str]:
+    """Map system IDs to display names via Postgres. Falls back to the ID itself."""
+    if not entity_ids:
+        return {}
+    unique_ids = list({e for e in entity_ids if e})
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(AISystem.id, AISystem.name).where(AISystem.id.in_(unique_ids))
+        )
+        return {row.id: row.name for row in result}
+
+
+def _enrich(rows: list[dict], name_map: dict[str, str]) -> list[dict]:
+    for row in rows:
+        row["entity_display_name"] = name_map.get(row.get("entity_id", ""), row.get("entity_id", ""))
+    return rows
 
 
 @router.get("/alerts/active")
@@ -27,8 +46,10 @@ async def get_active_alerts() -> list[dict]:
             multiIf(severity='error', 0, severity='warning', 1, 2) ASC,
             triggered_at DESC
     """)
+    entity_ids = [r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"]
+    name_map = await _resolve_display_names(entity_ids)
     logger.info("alerts.active_fetched", extra={"count": len(rows)})
-    return rows
+    return _enrich(rows, name_map)
 
 
 @router.get("/alerts/history")
@@ -46,8 +67,10 @@ async def get_alert_history() -> list[dict]:
         ORDER BY triggered_at DESC
         LIMIT 100
     """)
+    entity_ids = [r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"]
+    name_map = await _resolve_display_names(entity_ids)
     logger.info("alerts.history_fetched", extra={"count": len(rows)})
-    return rows
+    return _enrich(rows, name_map)
 
 
 @router.get("/alerts/rules")

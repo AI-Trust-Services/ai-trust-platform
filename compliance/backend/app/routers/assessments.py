@@ -24,7 +24,6 @@ from app.schemas import (
 router = APIRouter(tags=["assessments"])
 logger = get_logger(__name__)
 
-##todo - session: AsyncSession type annotation is missing at multiple places. Fix this.
 
 async def _load(session: AsyncSession, assessment_id: str) -> Assessment:
     row = (await session.execute(

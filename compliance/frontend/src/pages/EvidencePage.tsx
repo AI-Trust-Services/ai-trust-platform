@@ -35,14 +35,13 @@ export default function EvidencePage(): JSX.Element {
   async function openDetail(e: Evidence) {
     setSelected(e.id);
     try {
+      // The evidence detail is the critical piece — load it first so the panel
+      // still opens even if the linked controls/obligations lookups fail.
       const det = await api.getEvidenceItem(e.id);
       setDetail(det);
-
-      //TODO: Improve for faster rendering.
-
       const [controls, obligations] = await Promise.all([
-        det.control_ids?.length ? Promise.all(det.control_ids.map((id) => api.getControl(id))) : Promise.resolve([]),
-        det.obligation_ids?.length ? Promise.all(det.obligation_ids.map((id) => api.getObligation(id))) : Promise.resolve([]),
+        api.getControls({ evidence_id: e.id }),
+        api.getObligations({ evidence_id: e.id }),
       ]);
       setDetailControls(controls);
       setDetailObligations(obligations);

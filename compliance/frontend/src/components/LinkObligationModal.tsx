@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
 import { useToast } from "../App";
-import type { Control, Obligation } from "../types";
+import type { AISystem, Assessment, Control, Obligation } from "../types";
 
 interface Props {
   open: boolean;
@@ -11,27 +11,52 @@ interface Props {
 }
 
 export default function LinkObligationModal({ open, control, onClose, onSuccess }: Props): JSX.Element | null {
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
+  const [assessmentId, setAssessmentId] = useState("");
   const [obligations, setObligations] = useState<Obligation[]>([]);
   const [linked, setLinked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const showToast = useToast();
 
+  // On open: load the assessment list (scoped to the control's system, or all
+  // assessments for an org-wide control) plus systems for labelling, and the
+  // control's currently-linked obligation IDs.
   const load = useCallback(async () => {
     if (!control) return;
     try {
-      const params = control.ai_system_id ? { ai_system_id: control.ai_system_id } : {};
-      const [all, detail] = await Promise.all([
-        api.getObligations(params),
+      const [assess, sys, detail] = await Promise.all([
+        api.getAssessments(control.ai_system_id ?? undefined),
+        api.getSystems(),
         api.getControl(control.id),
       ]);
-      setObligations(all);
+      setAssessments(assess);
+      setSystemsById(Object.fromEntries(sys.map((s) => [s.id, s])));
       setLinked(new Set(detail.obligation_ids));
     } catch (e) {
-      showToast(`Failed to load obligations: ${(e as Error).message}`, true);
+      showToast(`Failed to load: ${(e as Error).message}`, true);
     }
   }, [control, showToast]);
 
-  useEffect(() => { if (open) load(); }, [open, load]);
+  useEffect(() => {
+    if (open) {
+      setAssessmentId("");
+      setObligations([]);
+      load();
+    }
+  }, [open, load]);
+
+  // When an assessment is picked, load only that assessment's obligations.
+  useEffect(() => {
+    if (!assessmentId) { setObligations([]); return; }
+    (async () => {
+      try {
+        setObligations(await api.getObligations({ assessment_id: assessmentId }));
+      } catch (e) {
+        showToast(`Failed to load obligations: ${(e as Error).message}`, true);
+      }
+    })();
+  }, [assessmentId, showToast]);
 
   if (!open || !control) return null;
 
@@ -54,6 +79,8 @@ export default function LinkObligationModal({ open, control, onClose, onSuccess 
     }
   }
 
+  const orgWide = !control.ai_system_id;
+
   return (
     <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal">
@@ -65,12 +92,29 @@ export default function LinkObligationModal({ open, control, onClose, onSuccess 
           <div className="msg-strip info" style={{ margin: "16px 20px 0" }}>
             Linking a control marks its obligations "In Progress". When the control becomes Effective (via approved evidence), they become "Fulfilled".
           </div>
-          {obligations.length === 0 ? (
+          <div style={{ padding: "16px 20px 0" }}>
+            <label className="form-label" style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>
+              Assessment
+            </label>
+            <select className="filter-select" style={{ width: "100%" }} value={assessmentId} onChange={(e) => setAssessmentId(e.target.value)}>
+              <option value="">Select an assessment…</option>
+              {assessments.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {orgWide ? `${systemsById[a.ai_system_id]?.name ?? a.ai_system_id} — ${a.title}` : a.title}
+                </option>
+              ))}
+            </select>
+          </div>
+          {!assessmentId ? (
             <div style={{ padding: 24, textAlign: "center", color: "var(--text-secondary)" }}>
-              No obligations available. Generate them from an assessment first.
+              Select an assessment to see its obligations.
+            </div>
+          ) : obligations.length === 0 ? (
+            <div style={{ padding: 24, textAlign: "center", color: "var(--text-secondary)" }}>
+              This assessment has no obligations.
             </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
               <thead>
                 <tr>
                   <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, color: "var(--text-secondary)", borderBottom: "2px solid var(--border)" }}>Obligation</th>

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
-from ai_trust_persistence.models import Assessment, Obligation, control_obligations
+from ai_trust_persistence.models import Assessment, Obligation, control_obligations, evidence_obligations
 from app.cascade import refresh_assessment_score
 from app.ids import new_id
 from app.schemas import (
@@ -34,6 +34,8 @@ async def list_obligations(
     assessment_id: str | None = Query(default=None),
     ai_system_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
+    control_id: str | None = Query(default=None),
+    evidence_id: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[ObligationResponse]:
@@ -45,6 +47,14 @@ async def list_obligations(
             stmt = stmt.where(Obligation.ai_system_id == ai_system_id)
         if status:
             stmt = stmt.where(Obligation.status == status)
+        if control_id:
+            stmt = stmt.join(
+                control_obligations, control_obligations.c.obligation_id == Obligation.id
+            ).where(control_obligations.c.control_id == control_id)
+        if evidence_id:
+            stmt = stmt.join(
+                evidence_obligations, evidence_obligations.c.obligation_id == Obligation.id
+            ).where(evidence_obligations.c.evidence_id == evidence_id)
         stmt = stmt.limit(limit).offset(offset)
         result = await session.execute(stmt)
         return [ObligationResponse.model_validate(r) for r in result.scalars().all()]

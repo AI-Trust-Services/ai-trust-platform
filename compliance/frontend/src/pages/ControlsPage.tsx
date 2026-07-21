@@ -42,16 +42,11 @@ export default function ControlsPage(): JSX.Element {
   async function openDetail(c: Control | { id: string }) {
     setSelected(c.id);
     try {
-      const [det, evidence] = await Promise.all([
+      const [det, evidence, obligations] = await Promise.all([
         api.getControl(c.id),
         api.getEvidence({ control_id: c.id }),
+        api.getObligations({ control_id: c.id }),
       ]);
-
-      //TODO: Improve for faster rendering.
-
-      const obligations = det.obligation_ids.length
-        ? await Promise.all(det.obligation_ids.map((id) => api.getObligation(id)))
-        : [];
       setDetail(det);
       setDetailObligations(obligations);
       setDetailEvidence(evidence);
@@ -66,8 +61,8 @@ export default function ControlsPage(): JSX.Element {
     try {
       await api.updateControl(id, { status });
       showToast("Status updated");
-      load();
-      if (selected === id) openDetail({ id });
+      setControls((prev) => prev.map((c) => c.id === id ? { ...c, status } : c));
+      if (selected === id) setDetail((d) => d ? { ...d, status } : d);
     } catch (e) {
       showToast((e as Error).message, true);
     }
@@ -127,12 +122,13 @@ export default function ControlsPage(): JSX.Element {
                 <th>Owner</th>
                 <th>Status</th>
                 <th>Effectiveness</th>
+                <th>Due</th>
                 <th style={{ textAlign: "right" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr className="empty-row"><td colSpan={7}>No controls yet.</td></tr>
+                <tr className="empty-row"><td colSpan={8}>No controls yet.</td></tr>
               ) : filtered.map((c) => (
                 <tr key={c.id} className={`clickable${selected === c.id ? " selected" : ""}`} onClick={() => openDetail(c)}>
                   <td><div className="row-name">{c.title}</div><div className="row-sub">{c.id}</div></td>
@@ -141,6 +137,7 @@ export default function ControlsPage(): JSX.Element {
                   <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{c.owner || "—"}</td>
                   <td><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></td>
                   <td><span className="chip">{humanize(c.effectiveness)}</span></td>
+                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{fmtDate(c.due_date)}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div className="actions">
                       <button className="btn-ghost btn-sm" data-tip="Link or unlink obligations" onClick={() => setLinkControl(c)}>Link Obligations</button>

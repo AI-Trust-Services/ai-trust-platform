@@ -78,6 +78,21 @@ async def test_list_obligations_filter_by_assessment(client: httpx.AsyncClient):
     assert len(r2.json()) == 3  # only auto-generated
 
 
+async def test_list_obligations_filter_by_control(client: httpx.AsyncClient):
+    system = await create_system()
+    ass = await create_assessment(client, system["id"])
+    obs = (await client.get(f"/api/v1/obligations?assessment_id={ass['id']}")).json()
+    # Link a control to exactly one of the assessment's obligations.
+    ctl = await create_control(client, system["id"])
+    await client.post(f"/api/v1/controls/{ctl['id']}/link/{obs[0]['id']}")
+
+    r = await client.get(f"/api/v1/obligations?control_id={ctl['id']}")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["id"] == obs[0]["id"]
+
+
 async def test_list_obligations_filter_by_status(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])

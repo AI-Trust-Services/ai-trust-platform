@@ -13,6 +13,7 @@ export interface AlertEvent {
   entity_id: string;
   entity_type: string;
   entity_model: string;
+  entity_display_name: string;
 }
 
 export interface AlertRule {

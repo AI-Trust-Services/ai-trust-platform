@@ -125,9 +125,11 @@ export default function LiveSignals() {
     <>
       <div className="toolbar">
         <select className="filter-select" value={selectedService} onChange={handleServiceChange}>
-          <option value="">All Services</option>
+          <option value="">All Systems</option>
           {services.map((s) => (
-            <option key={s.service_name} value={s.service_name}>{s.service_name}</option>
+            <option key={s.system_id ?? s.service_name} value={s.system_id ?? s.service_name}>
+              {s.display_name ?? s.service_name}
+            </option>
           ))}
         </select>
         <select className="filter-select" value={selectedWindow} onChange={handleWindowChange}>
@@ -245,17 +247,20 @@ export default function LiveSignals() {
           <table>
             <thead>
               <tr>
-                <th>Service</th>
+                <th>System</th>
                 <th>Total Spans</th>
                 <th>Last Seen</th>
               </tr>
             </thead>
             <tbody>
               {services.length === 0 ? (
-                <tr className="empty-row"><td colSpan={3}>No services observed yet.</td></tr>
+                <tr className="empty-row"><td colSpan={3}>No registered systems with telemetry yet.</td></tr>
               ) : services.map((s) => (
-                <tr key={s.service_name}>
-                  <td style={{ fontWeight: 500 }}>{s.service_name}</td>
+                <tr key={s.system_id ?? s.service_name}>
+                  <td style={{ fontWeight: 500 }}>
+                    {s.display_name ?? s.service_name}
+                    <span style={{ fontSize: 11, color: "var(--text-secondary)", marginLeft: 6 }}>{s.service_name}</span>
+                  </td>
                   <td style={{ fontSize: 13 }}>{s.total_spans?.toLocaleString()}</td>
                   <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{fmtDateTime(s.last_seen)}</td>
                 </tr>

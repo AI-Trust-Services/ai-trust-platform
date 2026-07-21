@@ -265,6 +265,18 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                   ["Autonomy Level", (system.autonomy_level || "").replace(/_/g, " ")],
                   system.application_url && ["Application URL", <a key="url" href={system.application_url} target="_blank" rel="noreferrer" style={{ color: "var(--brand)" }}>{system.application_url}</a>],
                 ]} />
+                <div style={{ marginTop: 16, padding: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 8 }}>Telemetry Configuration</div>
+                  <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>Use this system ID as the telemetry service name (e.g. <code style={{ fontFamily: "monospace" }}>OTEL_SERVICE_NAME</code>) to link telemetry to this system:</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <code style={{ fontSize: 12, fontFamily: "monospace", flex: 1 }}>{system.id}</code>
+                    <button className="btn-ghost" style={{ fontSize: 11, padding: "3px 10px" }} onClick={() => {
+                      navigator.clipboard.writeText(system.id)
+                        .then(() => showToast("System ID copied"))
+                        .catch(() => showToast("Copy failed", true));
+                    }}>⎘ Copy ID</button>
+                  </div>
+                </div>
               </div>
               <div className="detail-section">
                 <h3>Purpose</h3>

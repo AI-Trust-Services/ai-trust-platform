@@ -73,7 +73,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .content { padding: 12px 20px; }
 
-.table-wrap { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.table-wrap { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: visible; }
 table { width: 100%; border-collapse: collapse; }
 thead th {
   background: #f8f9fa; border-bottom: 2px solid var(--border);

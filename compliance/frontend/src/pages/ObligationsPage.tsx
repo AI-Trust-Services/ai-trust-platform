@@ -67,8 +67,8 @@ export default function ObligationsPage(): JSX.Element {
     try {
       await api.updateObligation(id, { status });
       showToast("Status updated");
-      load();
-      if (selected === id) openDetail(obligations.find((o) => o.id === id) ?? { id } as Obligation);
+      setObligations((prev) => prev.map((o) => o.id === id ? { ...o, status } : o));
+      if (selected === id) setDetail((d) => d ? { ...d, status } : d);
     } catch (e) {
       showToast((e as Error).message, true);
     }
