@@ -489,3 +489,70 @@ async def test_rules_parameters_defaults_to_none(client: httpx.AsyncClient):
     rule = r.json()[0]
     assert rule["parameters"] is None
     assert rule["is_custom"] is False
+
+
+# ---------------------------------------------------------------------------
+# entity_display_name enrichment (PR #81)
+# ---------------------------------------------------------------------------
+
+async def test_active_alerts_resolves_ai_system_display_name(client: httpx.AsyncClient):
+    async with SessionLocal() as session:
+        from ai_trust_persistence.models.ai_system import AISystem
+        session.add(AISystem(id="SYS-DISP0001", name="Fraud Detector", tier="minimal", lifecycle="development", compliance=0.0))
+        await session.commit()
+
+    insert_event("rule-1", entity_id="SYS-DISP0001", entity_type="ai_system")
+
+    r = await client.get("/api/v1/alerts/active")
+    assert r.status_code == 200
+    assert len(r.json()) == 1
+    assert r.json()[0]["entity_display_name"] == "Fraud Detector"
+
+
+async def test_active_alerts_display_name_falls_back_to_entity_id_when_unregistered(client: httpx.AsyncClient):
+    insert_event("rule-1", entity_id="SYS-UNKNOWN99", entity_type="ai_system")
+
+    r = await client.get("/api/v1/alerts/active")
+    assert r.status_code == 200
+    assert len(r.json()) == 1
+    assert r.json()[0]["entity_display_name"] == "SYS-UNKNOWN99"
+
+
+async def test_active_alerts_non_ai_system_entity_gets_no_enrichment(client: httpx.AsyncClient):
+    insert_event("rule-1", entity_id="some-service", entity_type="service")
+
+    r = await client.get("/api/v1/alerts/active")
+    assert r.status_code == 200
+    assert len(r.json()) == 1
+    assert r.json()[0]["entity_display_name"] == "some-service"
+
+
+async def test_history_resolves_ai_system_display_name(client: httpx.AsyncClient):
+    async with SessionLocal() as session:
+        from ai_trust_persistence.models.ai_system import AISystem
+        session.add(AISystem(id="SYS-DISP0002", name="Risk Scorer", tier="high", lifecycle="market", compliance=50.0))
+        await session.commit()
+
+    now = datetime.now(timezone.utc)
+    insert_event("rule-1", entity_id="SYS-DISP0002", entity_type="ai_system", resolved_at=now)
+
+    r = await client.get("/api/v1/alerts/history")
+    assert r.status_code == 200
+    assert len(r.json()) == 1
+    assert r.json()[0]["entity_display_name"] == "Risk Scorer"
+
+
+async def test_active_alerts_response_includes_entity_display_name_field(client: httpx.AsyncClient):
+    insert_event("rule-1")
+    r = await client.get("/api/v1/alerts/active")
+    assert r.status_code == 200
+    assert len(r.json()) == 1
+    assert "entity_display_name" in r.json()[0]
+
+
+async def test_history_response_includes_entity_display_name_field(client: httpx.AsyncClient):
+    insert_event("rule-1", resolved_at=datetime.now(timezone.utc))
+    r = await client.get("/api/v1/alerts/history")
+    assert r.status_code == 200
+    assert len(r.json()) == 1
+    assert "entity_display_name" in r.json()[0]

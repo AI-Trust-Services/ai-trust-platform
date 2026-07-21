@@ -1,4 +1,11 @@
--r requirements.txt
+# PyPI deps only — the editable libs (persistence/logging/clickhouse) are
+# installed from their real relative paths by `make setup`, not from here.
+# (The service requirements.txt pins them at Docker paths `/app/libs/...`,
+# which are not valid locally.)
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+clickhouse-connect==0.8.0
 pytest==8.3.5
 pytest-asyncio==0.24.0
 httpx==0.28.1

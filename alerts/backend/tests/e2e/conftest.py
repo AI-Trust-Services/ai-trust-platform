@@ -97,6 +97,7 @@ def _truncate_pg() -> None:
     cur = conn.cursor()
     cur.execute("TRUNCATE alert_rules RESTART IDENTITY CASCADE")
     cur.execute("TRUNCATE service_model_baselines")
+    cur.execute("TRUNCATE ai_systems CASCADE")
     cur.close()
     conn.close()
 

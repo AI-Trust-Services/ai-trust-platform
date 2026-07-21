@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import httpx
 
-from tests.e2e.conftest import create_assessment, create_control, create_obligation, create_system
+from tests.e2e.conftest import create_assessment, create_control, create_evidence, create_obligation, create_system
 
 
 # ---------------------------------------------------------------------------
@@ -53,6 +53,20 @@ async def test_list_controls_for_system_includes_org_wide(client: httpx.AsyncCli
     r = await client.get(f"/api/v1/controls?ai_system_id={system['id']}")
     assert r.status_code == 200
     assert len(r.json()) == 2
+
+
+async def test_list_controls_filter_by_evidence(client: httpx.AsyncClient):
+    system = await create_system()
+    ctl_a = await create_control(client, system["id"])
+    ctl_b = await create_control(client, system["id"])
+    evd = await create_evidence(client, control_id=ctl_a["id"])
+
+    r = await client.get(f"/api/v1/controls?evidence_id={evd['id']}")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["id"] == ctl_a["id"]
+    assert all(c["id"] != ctl_b["id"] for c in body)
 
 
 async def test_list_controls_filter_by_obligation(client: httpx.AsyncClient):
