@@ -3,8 +3,9 @@ import { TierBadge } from "./Badges";
 import { previewClassify } from "../utils";
 import { api } from "../api/client";
 import { useToast } from "../App";
+import type { AISystemFormData } from "../types";
 
-const EMPTY_FORM = {
+const EMPTY_FORM: AISystemFormData = {
   name: "", version: "1.0.0", provider: "", org_name: "",
   org_role: "provider", provider_country: "DE", system_type: "application",
   autonomy_level: "decision_support", application_url: "",
@@ -23,7 +24,7 @@ const EMPTY_FORM = {
 
 const STEPS = ["Identity", "Purpose & Lifecycle", "Risk Flags", "Review"];
 
-function CollapsiblePanel({ title, children }) {
+function CollapsiblePanel({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
   return (
     <div className="panel">
@@ -35,7 +36,7 @@ function CollapsiblePanel({ title, children }) {
   );
 }
 
-function CheckItem({ id, label, checked, onChange }) {
+function CheckItem({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: React.ChangeEventHandler<HTMLInputElement> }) {
   return (
     <label className="check-item">
       <input type="checkbox" id={id} checked={checked} onChange={onChange} />
@@ -44,11 +45,17 @@ function CheckItem({ id, label, checked, onChange }) {
   );
 }
 
-export default function RegisterWizard({ open, onClose, onSuccess }) {
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export default function RegisterWizard({ open, onClose, onSuccess }: Props) {
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState<AISystemFormData>(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
-  const [registeredId, setRegisteredId] = useState(null);
+  const [registeredId, setRegisteredId] = useState<string | null>(null);
   const showToast = useToast();
 
   useEffect(() => {
@@ -57,8 +64,10 @@ export default function RegisterWizard({ open, onClose, onSuccess }) {
 
   if (!open) return null;
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
-  const setNum = (k) => (e) => setForm((f) => ({ ...f, [k]: parseFloat(e.target.value) || 0 }));
+  const set = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [k]: (e.target as HTMLInputElement).type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
+  const setNum = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((f) => ({ ...f, [k]: parseFloat(e.target.value) || 0 }));
 
   function handleNext() {
     if (step === 0 && !form.name.trim()) { showToast("System name is required", true); return; }
@@ -70,18 +79,18 @@ export default function RegisterWizard({ open, onClose, onSuccess }) {
     setLoading(true);
     try {
       const result = await api.intake({ ...form, version: form.version || "1.0.0", provider_country: form.provider_country || "DE" });
-      setRegisteredId(result.system.id);
+      setRegisteredId(result.id);
       showToast("AI system registered successfully");
       onSuccess();
     } catch (e) {
-      showToast(`Registration failed: ${e.message}`, true);
+      showToast(`Registration failed: ${(e as Error).message}`, true);
     } finally {
       setLoading(false);
     }
   }
 
   function handleCopyId() {
-    navigator.clipboard.writeText(registeredId)
+    navigator.clipboard.writeText(registeredId!)
       .then(() => showToast("System ID copied"))
       .catch(() => showToast("Copy failed", true));
   }
@@ -229,7 +238,7 @@ export default function RegisterWizard({ open, onClose, onSuccess }) {
                         ["predictive_policing", "Predictive policing"],
                         ["biometric_categorisation_sensitive", "Biometric categorisation (sensitive attrs.)"],
                       ].map(([k, label]) => (
-                        <CheckItem key={k} id={k} label={label} checked={form[k]} onChange={set(k)} />
+                        <CheckItem key={k} id={k} label={label} checked={form[k as keyof AISystemFormData] as boolean} onChange={set(k as keyof AISystemFormData)} />
                       ))}
                     </div>
                   </CollapsiblePanel>
@@ -247,7 +256,7 @@ export default function RegisterWizard({ open, onClose, onSuccess }) {
                         ["is_migration", "Migration & border control"],
                         ["is_judicial_admin", "Justice & democratic processes"],
                       ].map(([k, label]) => (
-                        <CheckItem key={k} id={k} label={label} checked={form[k]} onChange={set(k)} />
+                        <CheckItem key={k} id={k} label={label} checked={form[k as keyof AISystemFormData] as boolean} onChange={set(k as keyof AISystemFormData)} />
                       ))}
                     </div>
                   </CollapsiblePanel>

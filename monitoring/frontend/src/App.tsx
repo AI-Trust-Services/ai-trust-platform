@@ -3,18 +3,20 @@ import { Outlet } from "react-router-dom";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { HEALTH_URL } from "./api/client";
 
-const ToastContext = createContext(null);
-export const useToast = () => useContext(ToastContext);
+type ToastFn = (msg: string, isError?: boolean) => void;
+
+const ToastContext = createContext<ToastFn | null>(null);
+export const useToast = () => useContext(ToastContext)!;
 
 export default function App() {
-  const [backendOk, setBackendOk] = useState(null);
-  const [toast, setToast] = useState(null);
-  const healthTimer = useRef(null);
+  const [backendOk, setBackendOk] = useState<boolean | null>(null);
+  const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null);
+  const healthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useLuigiInit(() => {});
 
   const checkHealth = useCallback(async () => {
-    clearTimeout(healthTimer.current);
+    if (healthTimer.current) clearTimeout(healthTimer.current);
     try {
       const res = await fetch(HEALTH_URL, { cache: "no-store" });
       if (!res.ok) throw new Error();
@@ -27,10 +29,10 @@ export default function App() {
 
   useEffect(() => {
     checkHealth();
-    return () => clearTimeout(healthTimer.current);
+    return () => { if (healthTimer.current) clearTimeout(healthTimer.current); };
   }, [checkHealth]);
 
-  const showToast = useCallback((msg, isError = false) => {
+  const showToast = useCallback<ToastFn>((msg, isError = false) => {
     setToast({ msg, isError });
     setTimeout(() => setToast(null), 3500);
   }, []);

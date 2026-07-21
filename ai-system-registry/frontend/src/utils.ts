@@ -1,16 +1,18 @@
-export function fmtDate(iso) {
+import type { TierKey, LifecycleKey, AISystemFormData, PreviewResult } from "./types";
+
+export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function fmtDateTime(iso) {
+export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("en-GB", {
     day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
 
-export const TIER_META = {
+export const TIER_META: Record<TierKey, { label: string; cls: string }> = {
   "prohibited":    { label: "Prohibited",    cls: "badge-prohibited" },
   "high":          { label: "High-Risk",     cls: "badge-high" },
   "gpai-systemic": { label: "GPAI Systemic", cls: "badge-gpai-systemic" },
@@ -19,7 +21,7 @@ export const TIER_META = {
   "minimal":       { label: "Minimal",       cls: "badge-minimal" },
 };
 
-export const LIFECYCLE_LABELS = {
+export const LIFECYCLE_LABELS: Record<LifecycleKey, string> = {
   "development":    "Development",
   "testing":        "Testing",
   "conformity":     "Conformity",
@@ -30,8 +32,8 @@ export const LIFECYCLE_LABELS = {
 
 export const FLOPS_THRESHOLD = 1e25;
 
-export function previewClassify(flags, flops) {
-  const g = (k) => !!flags[k];
+export function previewClassify(flags: Partial<AISystemFormData>, flops: number): PreviewResult {
+  const g = (k: keyof AISystemFormData) => !!flags[k];
   if (g("subliminal_manipulation") || g("exploits_vulnerability") || g("social_scoring_public") ||
       g("real_time_biometric_public") || g("emotion_recognition_workplace") ||
       g("untargeted_facial_scraping") || g("predictive_policing") ||
@@ -40,7 +42,7 @@ export function previewClassify(flags, flops) {
       obligations: ["Art. 5 — Must not be placed on market"] };
   }
   if (g("is_gpai")) {
-    const systemic = (parseFloat(flops) || 0) >= FLOPS_THRESHOLD;
+    const systemic = (parseFloat(String(flops)) || 0) >= FLOPS_THRESHOLD;
     return {
       tier: systemic ? "gpai-systemic" : "gpai-standard",
       basis: systemic ? "GPAI — systemic risk (≥10²⁵ FLOPs)" : "GPAI — standard",

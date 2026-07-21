@@ -3,14 +3,15 @@ import { ModelTypeBadge } from "../components/Badges";
 import ModelModal from "../components/ModelModal";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
+import type { ModelCard } from "../types";
 
 export default function Models() {
-  const [models, setModels] = useState([]);
+  const [models, setModels] = useState<ModelCard[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingModel, setEditingModel] = useState(null);
+  const [editingModel, setEditingModel] = useState<ModelCard | null>(null);
   const { modelCreateOpen, setModelCreateOpen } = useModalControls();
   const showToast = useToast();
 
@@ -19,7 +20,7 @@ export default function Models() {
       const data = await api.getModels();
       setModels(data);
     } catch (e) {
-      showToast(`Failed to load models: ${e.message}`, true);
+      showToast(`Failed to load models: ${(e as Error).message}`, true);
     }
   }, [showToast]);
 
@@ -50,14 +51,14 @@ export default function Models() {
     });
   }, [models, search, typeFilter, providerFilter]);
 
-  async function handleDelete(id, name) {
+  async function handleDelete(id: string, name: string) {
     if (!confirm(`Delete model "${name}"?\n\nSystems linked to this model will have their link removed.`)) return;
     try {
       await api.deleteModel(id);
       showToast(`Model "${name}" deleted`);
       loadModels();
     } catch (e) {
-      showToast(`Delete failed: ${e.message}`, true);
+      showToast(`Delete failed: ${(e as Error).message}`, true);
     }
   }
 

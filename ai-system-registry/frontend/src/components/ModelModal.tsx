@@ -1,11 +1,19 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { useToast } from "../App";
+import type { ModelCard, ModelCardFormData } from "../types";
 
-const EMPTY = { name: "", provider: "", version: "", model_type: "llm", description: "", inference_url: "", open_weights: false };
+const EMPTY: ModelCardFormData = { name: "", provider: "", version: "", model_type: "llm", description: "", inference_url: "", open_weights: false };
 
-export default function ModelModal({ open, editingModel, onClose, onSuccess }) {
-  const [form, setForm] = useState(EMPTY);
+interface Props {
+  open: boolean;
+  editingModel: ModelCard | null;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export default function ModelModal({ open, editingModel, onClose, onSuccess }: Props) {
+  const [form, setForm] = useState<ModelCardFormData>(EMPTY);
   const [saving, setSaving] = useState(false);
   const showToast = useToast();
 
@@ -15,7 +23,8 @@ export default function ModelModal({ open, editingModel, onClose, onSuccess }) {
 
   if (!open) return null;
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
+  const set = (k: keyof ModelCardFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setForm((f) => ({ ...f, [k]: (e.target as HTMLInputElement).type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
 
   async function handleSave() {
     if (!form.name.trim() || !form.provider.trim()) {
@@ -33,7 +42,7 @@ export default function ModelModal({ open, editingModel, onClose, onSuccess }) {
       onClose();
       onSuccess();
     } catch (e) {
-      showToast(`Save failed: ${e.message}`, true);
+      showToast(`Save failed: ${(e as Error).message}`, true);
     } finally {
       setSaving(false);
     }

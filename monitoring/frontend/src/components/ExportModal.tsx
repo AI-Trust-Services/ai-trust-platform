@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
+import type { TimeseriesPoint, Kpis } from "../api/client";
 
 const COLUMNS = [
   { key: "time",            label: "Time Bucket" },
@@ -35,8 +36,8 @@ export default function ExportModal({ onClose, currentService, currentWindow }: 
   const [rowPreset, setRowPreset] = useState("All");
   const [customRows, setCustomRows] = useState("");
   const [timeWindow, setTimeWindow] = useState(currentWindow);
-  const [timeseries, setTimeseries] = useState<Record<string, unknown>[]>([]);
-  const [kpis, setKpis] = useState<Record<string, unknown>>({});
+  const [timeseries, setTimeseries] = useState<TimeseriesPoint[]>([]);
+  const [kpis, setKpis] = useState<Kpis | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
@@ -84,7 +85,7 @@ export default function ExportModal({ onClose, currentService, currentWindow }: 
         if (c.key === "time") return r.time;
         if (c.key === "service") return currentService || "All";
         if (c.key === "avg_latency_ms") return r.avg_latency_ms != null ? Number(r.avg_latency_ms).toFixed(0) : "";
-        return r[c.key] ?? "";
+        return (r as unknown as Record<string, unknown>)[c.key] ?? "";
       })
     );
   }
@@ -102,10 +103,10 @@ export default function ExportModal({ onClose, currentService, currentWindow }: 
       const payload: Record<string, unknown> = { data: json };
       if (includeSummary) {
         payload.summary = {
-          "Total Inferences": kpis.total_inferences ?? "",
-          "Avg Latency (ms)": kpis.avg_latency_ms != null ? Number(kpis.avg_latency_ms).toFixed(0) : "",
-          "Total Input Tokens": kpis.total_input_tokens ?? "",
-          "Total Output Tokens": kpis.total_output_tokens ?? "",
+          "Total Inferences": kpis?.total_inferences ?? "",
+          "Avg Latency (ms)": kpis?.avg_latency_ms != null ? Number(kpis.avg_latency_ms).toFixed(0) : "",
+          "Total Input Tokens": kpis?.total_input_tokens ?? "",
+          "Total Output Tokens": kpis?.total_output_tokens ?? "",
         };
       }
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -113,10 +114,10 @@ export default function ExportModal({ onClose, currentService, currentWindow }: 
     } else {
       const rows: unknown[][] = [cols.map((c) => c.label), ...dataRows];
       if (includeSummary) {
-        rows.push([], ["Summary"], ["Total Inferences", kpis.total_inferences ?? ""],
-          ["Avg Latency (ms)", kpis.avg_latency_ms != null ? Number(kpis.avg_latency_ms).toFixed(0) : ""],
-          ["Total Input Tokens", kpis.total_input_tokens ?? ""],
-          ["Total Output Tokens", kpis.total_output_tokens ?? ""]
+        rows.push([], ["Summary"], ["Total Inferences", kpis?.total_inferences ?? ""],
+          ["Avg Latency (ms)", kpis?.avg_latency_ms != null ? Number(kpis.avg_latency_ms).toFixed(0) : ""],
+          ["Total Input Tokens", kpis?.total_input_tokens ?? ""],
+          ["Total Output Tokens", kpis?.total_output_tokens ?? ""]
         );
       }
       const csv = rows.map((r) => (r as unknown[]).map((cell) => {

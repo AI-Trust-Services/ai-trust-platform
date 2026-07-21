@@ -5,7 +5,7 @@ import App from "./App";
 import Systems from "./views/Systems";
 import Models from "./views/Models";
 
-const root = createRoot(document.getElementById("root"));
+const root = createRoot(document.getElementById("root")!);
 root.render(
   <HashRouter>
     <Routes>

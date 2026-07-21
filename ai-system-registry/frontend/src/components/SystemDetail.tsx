@@ -3,11 +3,12 @@ import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS } from "../utils";
 import { api } from "../api/client";
 import { useToast } from "../App";
+import type { AISystem, ModelCard } from "../types";
 
-function DetailGrid({ rows }) {
+function DetailGrid({ rows }: { rows: ([string, React.ReactNode] | false | null | undefined)[] }) {
   return (
     <div className="detail-grid">
-      {rows.filter((r) => Array.isArray(r)).map(([label, value]) => (
+      {rows.filter((r): r is [string, React.ReactNode] => Array.isArray(r)).map(([label, value]) => (
         <Fragment key={label}>
           <span className="detail-label">{label}</span>
           <span className="detail-value">{value}</span>
@@ -17,7 +18,7 @@ function DetailGrid({ rows }) {
   );
 }
 
-function FlagPanel({ title, flags }) {
+function FlagPanel({ title, flags }: { title: string; flags: [unknown, string][] }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="panel" style={{ marginBottom: 10 }}>
@@ -40,7 +41,7 @@ function FlagPanel({ title, flags }) {
   );
 }
 
-function EditForm({ system, models, onSave, onClose }) {
+function EditForm({ system, models: _models, onSave, onClose }: { system: AISystem; models: ModelCard[]; onSave: (updated: AISystem) => void; onClose: () => void }) {
   const [form, setForm] = useState({
     name: system.name || "",
     version: system.version || "",
@@ -58,7 +59,8 @@ function EditForm({ system, models, onSave, onClose }) {
   const [saving, setSaving] = useState(false);
   const showToast = useToast();
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
 
   async function handleSave() {
     setSaving(true);
@@ -67,7 +69,7 @@ function EditForm({ system, models, onSave, onClose }) {
       showToast("System updated successfully");
       onSave(updated);
     } catch (e) {
-      showToast(`Update failed: ${e.message}`, true);
+      showToast(`Update failed: ${(e as Error).message}`, true);
     } finally {
       setSaving(false);
     }
@@ -129,7 +131,7 @@ function EditForm({ system, models, onSave, onClose }) {
   );
 }
 
-function ModelTab({ system, models, onSystemUpdate }) {
+function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models: ModelCard[]; onSystemUpdate: (updated: AISystem) => void }) {
   const [selectedModelId, setSelectedModelId] = useState(system.model_id || "");
   const [linking, setLinking] = useState(false);
   const showToast = useToast();
@@ -143,7 +145,7 @@ function ModelTab({ system, models, onSystemUpdate }) {
       showToast("Model linked successfully");
       onSystemUpdate(updated);
     } catch (e) {
-      showToast(`Link failed: ${e.message}`, true);
+      showToast(`Link failed: ${(e as Error).message}`, true);
     } finally {
       setLinking(false);
     }
@@ -155,7 +157,7 @@ function ModelTab({ system, models, onSystemUpdate }) {
       showToast("Model unlinked");
       onSystemUpdate(updated);
     } catch (e) {
-      showToast(`Unlink failed: ${e.message}`, true);
+      showToast(`Unlink failed: ${(e as Error).message}`, true);
     }
   }
 
@@ -201,29 +203,36 @@ function ModelTab({ system, models, onSystemUpdate }) {
   );
 }
 
-export default function SystemDetail({ system: initialSystem, models, open, onClose, onDelete, onUpdate }) {
+export default function SystemDetail({ system: initialSystem, models, open, onClose, onDelete, onUpdate }: {
+  system: AISystem | null;
+  models: ModelCard[];
+  open: boolean;
+  onClose: () => void;
+  onDelete: () => void;
+  onUpdate: (updated: AISystem) => void;
+}) {
   const [tab, setTab] = useState("overview");
-  const [system, setSystem] = useState(initialSystem);
+  const [system, setSystem] = useState<AISystem | null>(initialSystem);
   const showToast = useToast();
 
   useEffect(() => { setSystem(initialSystem); setTab("overview"); }, [initialSystem]);
 
   if (!open || !system) return null;
 
-  function handleSystemUpdate(updated) {
+  function handleSystemUpdate(updated: AISystem) {
     setSystem(updated);
     onUpdate(updated);
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete "${system.name}"?\n\nThis action cannot be undone.`)) return;
+    if (!confirm(`Delete "${system!.name}"?\n\nThis action cannot be undone.`)) return;
     try {
-      await api.deleteSystem(system.id);
+      await api.deleteSystem(system!.id);
       onClose();
       showToast("System deleted");
-      onDelete(system.id);
+      onDelete();
     } catch (e) {
-      showToast(`Delete failed: ${e.message}`, true);
+      showToast(`Delete failed: ${(e as Error).message}`, true);
     }
   }
 
@@ -263,7 +272,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                   ["Country", system.provider_country],
                   ["System Type", system.system_type],
                   ["Autonomy Level", (system.autonomy_level || "").replace(/_/g, " ")],
-                  system.application_url && ["Application URL", <a key="url" href={system.application_url} target="_blank" rel="noreferrer" style={{ color: "var(--brand)" }}>{system.application_url}</a>],
+                  !!system.application_url && ["Application URL", <a key="url" href={system.application_url} target="_blank" rel="noreferrer" style={{ color: "var(--brand)" }}>{system.application_url}</a>],
                 ]} />
                 <div style={{ marginTop: 16, padding: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius)" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 8 }}>Telemetry Configuration</div>
@@ -290,7 +299,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                 <DetailGrid rows={[
                   ["Risk Tier", <TierBadge key="tier" tier={system.tier} />],
                   ["Classification Basis", <span key="basis" style={{ fontSize: 13 }}>{system.basis}</span>],
-                  system.annex_iii_area && ["Annex III Area", `Area ${system.annex_iii_area}`],
+                  system.annex_iii_area != null && ["Annex III Area", `Area ${system.annex_iii_area}`],
                   ["GPAI", system.is_gpai ? <span key="gpai" style={{ color: "var(--brand)" }}>Yes</span> : "No"],
                 ]} />
               </div>

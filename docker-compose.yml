@@ -63,7 +63,12 @@ services:
     restart: on-failure
 
   overview-frontend:
-    build: ./overview/frontend
+    build:
+      context: ./overview/frontend
+      args:
+        VITE_OVERVIEW_API_BASE: ${VITE_OVERVIEW_API_BASE}
+        VITE_ALERTS_API_BASE: ${VITE_ALERTS_API_BASE}
+        VITE_ALERTS_URL: ${VITE_ALERTS_URL}
     ports:
       - "3003:80"
     restart: on-failure

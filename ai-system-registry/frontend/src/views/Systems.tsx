@@ -4,14 +4,15 @@ import SystemDetail from "../components/SystemDetail";
 import RegisterWizard from "../components/RegisterWizard";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
+import type { AISystem, ModelCard } from "../types";
 
 export default function Systems() {
-  const [systems, setSystems] = useState([]);
-  const [models, setModels] = useState([]);
+  const [systems, setSystems] = useState<AISystem[]>([]);
+  const [models, setModels] = useState<ModelCard[]>([]);
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("");
   const [lifecycleFilter, setLifecycleFilter] = useState("");
-  const [selectedSystem, setSelectedSystem] = useState(null);
+  const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const { wizardOpen, setWizardOpen } = useModalControls();
   const showToast = useToast();
@@ -21,7 +22,7 @@ export default function Systems() {
       const data = await api.getSystems();
       setSystems(data);
     } catch (e) {
-      showToast(`Failed to load systems: ${e.message}`, true);
+      showToast(`Failed to load systems: ${(e as Error).message}`, true);
     }
   }, [showToast]);
 
@@ -30,7 +31,7 @@ export default function Systems() {
       const data = await api.getModels();
       setModels(data);
     } catch (e) {
-      showToast(`Failed to load model catalog: ${e.message}`, true);
+      showToast(`Failed to load model catalog: ${(e as Error).message}`, true);
     }
   }, [showToast]);
 
@@ -47,18 +48,18 @@ export default function Systems() {
     });
   }, [systems, search, tierFilter, lifecycleFilter]);
 
-  function modelName(modelId) {
+  function modelName(modelId: string | null) {
     const m = models.find((x) => x.id === modelId);
     return m ? m.name : modelId;
   }
 
-  async function openDetail(id) {
+  async function openDetail(id: string) {
     try {
       const s = await api.getSystem(id);
       setSelectedSystem(s);
       setDetailOpen(true);
     } catch (e) {
-      showToast(`Failed to load system: ${e.message}`, true);
+      showToast(`Failed to load system: ${(e as Error).message}`, true);
     }
   }
 
@@ -132,7 +133,7 @@ export default function Systems() {
                             showToast("System deleted");
                             loadSystems();
                           } catch (e) {
-                            showToast(`Delete failed: ${e.message}`, true);
+                            showToast(`Delete failed: ${(e as Error).message}`, true);
                           }
                         }}
                       >✕</button>

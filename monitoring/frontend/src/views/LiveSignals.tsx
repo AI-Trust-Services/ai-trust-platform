@@ -3,6 +3,7 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts";
 import { api } from "../api/client";
+import type { ServiceInfo, SignalsData, TimeseriesPoint } from "../api/client";
 import { useToast } from "../App";
 import { fmtDateTime } from "../utils";
 import ExportModal from "../components/ExportModal";
@@ -15,8 +16,8 @@ const WINDOWS = [
   { value: "24h", label: "Last 24 hours" },
 ];
 
-function loadFilters() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { return {}; }
+function loadFilters(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") || {}; } catch { return {}; }
 }
 
 function saveFilters(filters: Record<string, string>) {
@@ -29,10 +30,10 @@ function fmt(t: string) {
 
 export default function LiveSignals() {
   const saved = loadFilters();
-  const [services, setServices] = useState([]);
+  const [services, setServices] = useState<ServiceInfo[]>([]);
   const [selectedService, setSelectedService] = useState(saved.service || "");
   const [selectedWindow, setSelectedWindow] = useState(saved.window || "1h");
-  const [signals, setSignals] = useState(null);
+  const [signals, setSignals] = useState<SignalsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [stale, setStale] = useState(false);
   const [staleThresholdMin, setStaleThresholdMin] = useState(3);
@@ -52,7 +53,7 @@ export default function LiveSignals() {
       const data = await api.getServices();
       setServices(data);
     } catch (e) {
-      showToast(`Failed to load services: ${e.message}`, true);
+      showToast(`Failed to load services: ${(e as Error).message}`, true);
     }
   }, [showToast]);
 
@@ -74,7 +75,7 @@ export default function LiveSignals() {
         setStaleThresholdMin(3);
       }
     } catch (e) {
-      showToast(`Failed to load signals: ${e.message}`, true);
+      showToast(`Failed to load signals: ${(e as Error).message}`, true);
     } finally {
       setLoading(false);
     }
@@ -113,11 +114,15 @@ export default function LiveSignals() {
     saveFilters({ service: selectedService, window: v });
   }
 
-  const kpis = signals?.kpis || {};
-  const timeseries = signals?.timeseries || [];
+  const kpis = signals?.kpis ?? null;
+  const timeseries = signals?.timeseries ?? [];
+  const k = kpis;
 
-  function copyChartData(dataKey: string, header: string) {
-    const tsv = [header, ...timeseries.map((r: Record<string, unknown>) => `${r.time}\t${r[dataKey] ?? ""}`)].join("\n");
+  function copyChartData(dataKey: keyof TimeseriesPoint, header: string) {
+    const tsv = [header, ...timeseries.map((r) => {
+      const val = r[dataKey];
+      return `${r.time}\t${val ?? ""}`;
+    })].join("\n");
     navigator.clipboard.writeText(tsv).then(() => showToast("Copied to clipboard")).catch(() => showToast("Failed to copy to clipboard", true));
   }
 
@@ -154,19 +159,19 @@ export default function LiveSignals() {
         <div className="kpi-grid">
           <div className="kpi-card">
             <div className="kpi-label">Total Inferences</div>
-            <div className="kpi-value">{kpis.total_inferences != null ? kpis.total_inferences.toLocaleString() : "—"}</div>
+            <div className="kpi-value">{k?.total_inferences != null ? k.total_inferences.toLocaleString() : "—"}</div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Avg Latency</div>
-            <div className="kpi-value">{kpis.avg_latency_ms != null ? `${kpis.avg_latency_ms.toFixed(0)} ms` : "—"}</div>
+            <div className="kpi-value">{k?.avg_latency_ms != null ? `${k.avg_latency_ms.toFixed(0)} ms` : "—"}</div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Input Tokens</div>
-            <div className="kpi-value">{kpis.total_input_tokens != null ? kpis.total_input_tokens.toLocaleString() : "—"}</div>
+            <div className="kpi-value">{k?.total_input_tokens != null ? k.total_input_tokens.toLocaleString() : "—"}</div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Output Tokens</div>
-            <div className="kpi-value">{kpis.total_output_tokens != null ? kpis.total_output_tokens.toLocaleString() : "—"}</div>
+            <div className="kpi-value">{k?.total_output_tokens != null ? k.total_output_tokens.toLocaleString() : "—"}</div>
           </div>
         </div>
 
