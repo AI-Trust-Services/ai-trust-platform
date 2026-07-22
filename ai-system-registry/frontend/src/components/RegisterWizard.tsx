@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { TierBadge } from "./Badges";
 import { previewClassify } from "../utils";
 import { api } from "../api/client";
@@ -55,11 +55,12 @@ export default function RegisterWizard({ open, onClose, onSuccess }: Props) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<AISystemFormData>(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
+  const submitting = useRef(false);
   const [registeredId, setRegisteredId] = useState<string | null>(null);
   const showToast = useToast();
 
   useEffect(() => {
-    if (open) { setStep(0); setForm(EMPTY_FORM); setRegisteredId(null); }
+    if (open) { setStep(0); setForm(EMPTY_FORM); setRegisteredId(null); submitting.current = false; }
   }, [open]);
 
   if (!open) return null;
@@ -76,6 +77,8 @@ export default function RegisterWizard({ open, onClose, onSuccess }: Props) {
 
   async function handleSubmit() {
     if (!form.name.trim()) { showToast("System name is required", true); return; }
+    if (submitting.current) return;
+    submitting.current = true;
     setLoading(true);
     try {
       const result = await api.intake({ ...form, version: form.version || "1.0.0", provider_country: form.provider_country || "DE" });
@@ -85,6 +88,7 @@ export default function RegisterWizard({ open, onClose, onSuccess }: Props) {
     } catch (e) {
       showToast(`Registration failed: ${(e as Error).message}`, true);
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   }

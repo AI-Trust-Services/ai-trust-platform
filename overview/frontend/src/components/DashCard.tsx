@@ -57,7 +57,7 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
   return (
     <div className="dash-card-body">
       <div className="chart-wrap">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={220}>
           {isPie ? (
             <PieChart>
               <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius="70%">

@@ -23,11 +23,11 @@ export const api = {
       body: JSON.stringify(data),
     }),
   intake: (data: AISystemFormData) =>
-    request<AISystem>("/intake", {
+    request<{ system: AISystem; classification: unknown }>("/intake", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
-    }),
+    }).then((r) => r.system),
   linkModel: (systemId: string, modelId: string) =>
     request<AISystem>(`/systems/${systemId}/model?model_id=${encodeURIComponent(modelId)}`, { method: "PUT" }),
   unlinkModel: (systemId: string) =>
