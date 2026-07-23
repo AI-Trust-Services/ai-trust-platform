@@ -2,6 +2,6 @@ fastapi==0.115.6
 uvicorn[standard]==0.32.1
 pydantic==2.10.3
 minio==7.2.7
-python-multipart==0.0.9
+python-multipart==0.0.31
 -e /app/libs/persistence
 -e /app/libs/logging
