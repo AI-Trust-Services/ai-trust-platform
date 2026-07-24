@@ -25,8 +25,7 @@ async def intake_system(body: AISystemCreate) -> IntakeResponse:
         basis=classification.basis,
         annex_iii_area=classification.annex_iii_area,
         compliance=0.0,
-        **{k: v for k, v in body.model_dump().items() if k != "lifecycle"},
-        lifecycle="development",
+        **body.model_dump(),
     )
 
     async with SessionLocal() as session:

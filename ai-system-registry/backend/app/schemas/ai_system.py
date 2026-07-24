@@ -24,6 +24,7 @@ class AISystemCreate(BaseModel):
     autonomy_level: str = Field(default="decision_support")
     application_url: str = Field(default="", max_length=500)
     provider_country: str = Field(default="DE", max_length=5)
+    lifecycle: str = Field(default="development")
 
     # Art. 5 flags
     subliminal_manipulation: bool = False
@@ -53,6 +54,13 @@ class AISystemCreate(BaseModel):
     # Art. 50
     is_chatbot: bool = False
     generates_synthetic_content: bool = False
+
+    @field_validator("lifecycle")
+    @classmethod
+    def lifecycle_valid(cls, v: str) -> str:
+        if v not in VALID_LIFECYCLES:
+            raise ValueError(f"Invalid lifecycle '{v}'")
+        return v
 
     @field_validator("name")
     @classmethod

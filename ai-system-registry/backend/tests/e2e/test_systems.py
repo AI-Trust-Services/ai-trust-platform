@@ -64,6 +64,12 @@ async def test_intake_rejects_missing_name(client: httpx.AsyncClient):
     assert r.status_code == 422
 
 
+async def test_intake_respects_lifecycle(client: httpx.AsyncClient):
+    r = await client.post("/api/v1/intake", json={**_minimal_system(), "lifecycle": "market"})
+    assert r.status_code == 201
+    assert r.json()["system"]["lifecycle"] == "market"
+
+
 # ---------------------------------------------------------------------------
 # GET /systems
 # ---------------------------------------------------------------------------
