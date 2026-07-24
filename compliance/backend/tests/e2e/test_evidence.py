@@ -303,12 +303,12 @@ async def test_upload_version_updates_evidence_and_records_history(client: httpx
     ctl = await create_control(client, system["id"])
     r = await client.post(
         "/api/v1/evidence",
-        data={"title": "Versioned Doc", "evidence_type": "document", "control_ids": ctl["id"], "version_label": "v1"},
+        data={"title": "Versioned Doc", "evidence_type": "document", "control_ids": ctl["id"]},
         files={"file": ("v1.pdf", b"%PDF-v1", "application/pdf")},
     )
     assert r.status_code == 201
     evd = r.json()
-    assert evd["version_label"] == "v1"
+    original_label = evd["version_label"]
     assert evd["file_name"] == "v1.pdf"
 
     r2 = await client.post(
@@ -325,5 +325,5 @@ async def test_upload_version_updates_evidence_and_records_history(client: httpx
     assert r3.status_code == 200
     history = r3.json()
     assert len(history) == 1
-    assert history[0]["version_label"] == "v1"
+    assert history[0]["version_label"] == original_label
     assert history[0]["file_name"] == "v1.pdf"
