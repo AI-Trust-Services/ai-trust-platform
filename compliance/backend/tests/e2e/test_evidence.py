@@ -22,7 +22,7 @@ async def test_create_evidence_linked_to_control(client: httpx.AsyncClient):
     r = await client.post("/api/v1/evidence", data={
         "title": "My Evidence",
         "evidence_type": "document",
-        "control_id": ctl["id"],
+        "control_ids": ctl["id"],
     })
     assert r.status_code == 201
     body = r.json()
@@ -38,7 +38,7 @@ async def test_create_evidence_linked_to_obligation(client: httpx.AsyncClient):
     r = await client.post("/api/v1/evidence", data={
         "title": "My Evidence",
         "evidence_type": "document",
-        "obligation_id": obl["id"],
+        "obligation_ids": obl["id"],
     })
     assert r.status_code == 201
     assert obl["id"] in r.json()["obligation_ids"]
@@ -62,7 +62,7 @@ async def test_create_evidence_404_on_missing_control(client: httpx.AsyncClient)
     r = await client.post("/api/v1/evidence", data={
         "title": "X",
         "evidence_type": "document",
-        "control_id": "CTL-NOTFOUND",
+        "control_ids": "CTL-NOTFOUND",
     })
     assert r.status_code == 404
 
@@ -72,7 +72,7 @@ async def test_create_evidence_rejects_disallowed_extension(client: httpx.AsyncC
     ctl = await create_control(client, system["id"])
     r = await client.post(
         "/api/v1/evidence",
-        data={"title": "X", "evidence_type": "document", "control_id": ctl["id"]},
+        data={"title": "X", "evidence_type": "document", "control_ids": ctl["id"]},
         files={"file": ("malware.exe", b"bad content", "application/octet-stream")},
     )
     assert r.status_code == 422
@@ -83,7 +83,7 @@ async def test_create_evidence_with_valid_file(client: httpx.AsyncClient):
     ctl = await create_control(client, system["id"])
     r = await client.post(
         "/api/v1/evidence",
-        data={"title": "Policy Doc", "evidence_type": "policy_document", "control_id": ctl["id"]},
+        data={"title": "Policy Doc", "evidence_type": "policy_document", "control_ids": ctl["id"]},
         files={"file": ("policy.pdf", b"%PDF-fake", "application/pdf")},
     )
     assert r.status_code == 201
@@ -99,7 +99,7 @@ async def test_create_evidence_with_valid_file(client: httpx.AsyncClient):
 async def test_list_evidence_filter_by_control(client: httpx.AsyncClient):
     system = await create_system()
     ctl = await create_control(client, system["id"])
-    await create_evidence(client, control_id=ctl["id"])
+    await create_evidence(client, control_ids=[ctl["id"]])
     await create_evidence(client, ai_system_id=system["id"])
 
     r = await client.get(f"/api/v1/evidence?control_id={ctl['id']}")
@@ -192,7 +192,7 @@ async def test_reject_evidence(client: httpx.AsyncClient):
 async def test_approve_evidence_promotes_linked_control_to_effective(client: httpx.AsyncClient):
     system = await create_system()
     ctl = await create_control(client, system["id"])
-    evd = await create_evidence(client, control_id=ctl["id"])
+    evd = await create_evidence(client, control_ids=[ctl["id"]])
 
     await client.post(f"/api/v1/evidence/{evd['id']}/approve")
 
@@ -206,7 +206,7 @@ async def test_approve_evidence_fulfills_obligation_via_effective_control(client
     obl = await create_obligation(client, ass["id"])
     ctl = await create_control(client, system["id"])
     await client.post(f"/api/v1/controls/{ctl['id']}/link/{obl['id']}")
-    evd = await create_evidence(client, control_id=ctl["id"])
+    evd = await create_evidence(client, control_ids=[ctl["id"]])
 
     await client.post(f"/api/v1/evidence/{evd['id']}/approve")
 
@@ -220,7 +220,7 @@ async def test_reject_evidence_demotes_control_from_effective(client: httpx.Asyn
     obl = await create_obligation(client, ass["id"])
     ctl = await create_control(client, system["id"])
     await client.post(f"/api/v1/controls/{ctl['id']}/link/{obl['id']}")
-    evd = await create_evidence(client, control_id=ctl["id"])
+    evd = await create_evidence(client, control_ids=[ctl["id"]])
     await client.post(f"/api/v1/evidence/{evd['id']}/approve")
 
     # Now reject — control should drop from effective
@@ -242,7 +242,7 @@ async def test_download_url_returned_for_evidence_with_file(client: httpx.AsyncC
     ctl = await create_control(client, system["id"])
     r = await client.post(
         "/api/v1/evidence",
-        data={"title": "Doc", "evidence_type": "document", "control_id": ctl["id"]},
+        data={"title": "Doc", "evidence_type": "document", "control_ids": ctl["id"]},
         files={"file": ("doc.pdf", b"%PDF-fake", "application/pdf")},
     )
     evd_id = r.json()["id"]
@@ -264,7 +264,7 @@ async def test_evidence_response_does_not_expose_internal_file_path(client: http
     ctl = await create_control(client, system["id"])
     r = await client.post(
         "/api/v1/evidence",
-        data={"title": "Doc", "evidence_type": "document", "control_id": ctl["id"]},
+        data={"title": "Doc", "evidence_type": "document", "control_ids": ctl["id"]},
         files={"file": ("policy.pdf", b"%PDF-fake", "application/pdf")},
     )
     assert r.status_code == 201
@@ -281,8 +281,49 @@ async def test_upload_evidence_rejects_oversized_file(client: httpx.AsyncClient)
     oversized = b"x" * (100 * 1024 * 1024 + 1)  # 1 byte over the 100 MB limit
     r = await client.post(
         "/api/v1/evidence",
-        data={"title": "Big file", "evidence_type": "document", "control_id": ctl["id"]},
+        data={"title": "Big file", "evidence_type": "document", "control_ids": ctl["id"]},
         files={"file": ("big.pdf", oversized, "application/pdf")},
         timeout=30,
     )
     assert r.status_code == 413
+
+
+async def test_evidence_versions_empty_on_fresh_item(client: httpx.AsyncClient):
+    system = await create_system()
+    ctl = await create_control(client, system["id"])
+    evd = await create_evidence(client, control_ids=[ctl["id"]])
+
+    r = await client.get(f"/api/v1/evidence/{evd['id']}/versions")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+async def test_upload_version_updates_evidence_and_records_history(client: httpx.AsyncClient):
+    system = await create_system()
+    ctl = await create_control(client, system["id"])
+    r = await client.post(
+        "/api/v1/evidence",
+        data={"title": "Versioned Doc", "evidence_type": "document", "control_ids": ctl["id"], "version_label": "v1"},
+        files={"file": ("v1.pdf", b"%PDF-v1", "application/pdf")},
+    )
+    assert r.status_code == 201
+    evd = r.json()
+    assert evd["version_label"] == "v1"
+    assert evd["file_name"] == "v1.pdf"
+
+    r2 = await client.post(
+        f"/api/v1/evidence/{evd['id']}/upload-version",
+        data={"version_label": "v2", "uploaded_by": "tester"},
+        files={"file": ("v2.pdf", b"%PDF-v2", "application/pdf")},
+    )
+    assert r2.status_code == 200
+    updated = r2.json()
+    assert updated["version_label"] == "v2"
+    assert updated["file_name"] == "v2.pdf"
+
+    r3 = await client.get(f"/api/v1/evidence/{evd['id']}/versions")
+    assert r3.status_code == 200
+    history = r3.json()
+    assert len(history) == 1
+    assert history[0]["version_label"] == "v1"
+    assert history[0]["file_name"] == "v1.pdf"

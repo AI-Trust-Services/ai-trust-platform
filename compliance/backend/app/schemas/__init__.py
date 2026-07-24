@@ -21,6 +21,7 @@ from app.schemas.evidence import (
     EvidenceDetailResponse,
     EvidenceResponse,
     EvidenceUpdate,
+    EvidenceVersionResponse,
     VALID_EVIDENCE_STATUSES,
     VALID_EVIDENCE_TYPES,
 )
@@ -57,6 +58,7 @@ __all__ = [
     "EvidenceUpdate",
     "EvidenceResponse",
     "EvidenceDetailResponse",
+    "EvidenceVersionResponse",
     "DownloadUrlResponse",
     "VALID_EVIDENCE_TYPES",
     "VALID_EVIDENCE_STATUSES",

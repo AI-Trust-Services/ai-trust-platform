@@ -1,6 +1,6 @@
 import type {
   AISystem, Assessment, AssessmentDetail, Control, ControlDetail,
-  Evidence, EvidenceDetail, Framework, GenerateObligationsResponse,
+  Evidence, EvidenceDetail, EvidenceVersion, Framework, GenerateObligationsResponse,
   DownloadUrlResponse, Obligation, ObligationDetail,
 } from "../types";
 
@@ -129,4 +129,8 @@ export const api = {
     request<Evidence>(API_BASE, `/evidence/${id}/reject`, { method: "POST" }),
   getDownloadUrl: (id: string): Promise<DownloadUrlResponse> =>
     request<DownloadUrlResponse>(API_BASE, `/evidence/${id}/download-url`),
+  getEvidenceVersions: (id: string): Promise<EvidenceVersion[]> =>
+    request<EvidenceVersion[]>(API_BASE, `/evidence/${id}/versions`),
+  uploadEvidenceVersion: (id: string, formData: FormData): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${id}/upload-version`, { method: "POST", body: formData }),
 };

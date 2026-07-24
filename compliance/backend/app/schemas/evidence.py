@@ -57,6 +57,7 @@ class EvidenceResponse(BaseModel):
     file_size: int
     mime_type: str
     uploaded_by: str
+    version_label: str
     created_at: datetime
     updated_at: datetime
 
@@ -66,6 +67,19 @@ class EvidenceResponse(BaseModel):
 class EvidenceDetailResponse(EvidenceResponse):
     control_ids: list[str] = []
     obligation_ids: list[str] = []
+
+
+class EvidenceVersionResponse(BaseModel):
+    id: str
+    evidence_id: str
+    version_label: str
+    file_name: str
+    file_size: int
+    mime_type: str
+    uploaded_by: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class DownloadUrlResponse(BaseModel):

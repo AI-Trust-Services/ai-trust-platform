@@ -4,6 +4,7 @@ from ai_trust_persistence.models.assessment import Assessment
 from ai_trust_persistence.models.control import Control, control_obligations
 from ai_trust_persistence.models.evidence import (
     Evidence,
+    EvidenceVersion,
     evidence_controls,
     evidence_obligations,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "Obligation",
     "Control",
     "Evidence",
+    "EvidenceVersion",
     "control_obligations",
     "evidence_controls",
     "evidence_obligations",

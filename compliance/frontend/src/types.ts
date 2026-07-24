@@ -79,6 +79,7 @@ export interface Evidence {
   file_size: number;
   mime_type: string;
   uploaded_by: string;
+  version_label: string;
   created_at: string;
   updated_at: string;
 }
@@ -86,6 +87,17 @@ export interface Evidence {
 export interface EvidenceDetail extends Evidence {
   control_ids: string[];
   obligation_ids: string[];
+}
+
+export interface EvidenceVersion {
+  id: string;
+  evidence_id: string;
+  version_label: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  uploaded_by: string;
+  created_at: string;
 }
 
 // Minimal shape from the registry API (read-only, used for pickers)

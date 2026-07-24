@@ -334,7 +334,13 @@ Governance chain MFE — assessments, obligations, controls, and evidence for EU
 - `routers/assessments.py` — full CRUD + `/generate-obligations`, `/submit`, `/approve`
 - `routers/obligations.py` — full CRUD
 - `routers/controls.py` — full CRUD + `/link/{obligation_id}`, `/link/{obligation_id}` DELETE
-- `routers/evidence.py` — multipart upload, full CRUD + `/approve`, `/reject`, `/download-url`
+- `routers/evidence.py` — multipart upload, full CRUD + `/approve`, `/reject`, `/download-url`, `/versions`, `/upload-version`
+
+#### Evidence multi-link
+`POST /api/v1/evidence` accepts `control_ids` and `obligation_ids` as **repeated form fields** (multiple values allowed). Each creates a row in the relevant M2M table. At least one of `control_ids`, `obligation_ids`, `ai_system_id`, or `assessment_id` must be provided.
+
+#### Evidence versioning
+Evidence items are versioned. `POST /api/v1/evidence/{id}/upload-version` snapshots the current file metadata to `evidence_versions` before replacing. `GET /api/v1/evidence/{id}/versions` returns the version history ordered oldest-first. The `version_label` field on the evidence row tracks the current version label. Old files are deleted from MinIO after a successful version upload (metadata snapshot retained in `evidence_versions`).
 
 #### Governance chain
 `POST /api/v1/assessments` is the entry point: creating an assessment automatically generates obligations in the same transaction — no separate call needed. Obligations are selected from `obligation_templates.py` based on the AI system's risk tier, with owner/not-applicable pre-filled from the most recent approved prior assessment for the same (system, framework). The `/generate-obligations` endpoint remains available for API consumers but is no longer used by the frontend.
@@ -342,6 +348,12 @@ Governance chain MFE — assessments, obligations, controls, and evidence for EU
 Controls are linked to obligations via `POST /api/v1/controls/{id}/link/{obligation_id}`. Evidence is uploaded as multipart form data; approving evidence cascades automatically through the chain.
 
 Evidence stored in MinIO bucket `evidence-files`, key pattern: `evidence/{evidence_id}/{filename}`.
+
+#### Evidence expiry (policy-checker-worker)
+Three alert rules seeded in migration `0004` drive evidence expiry:
+- `evidence_expired` — marks approved evidence past `validity_until` as `expired`, cascades control effectiveness + obligation status, fires alert
+- `evidence_expiring_30d` — fires warning for approved evidence expiring in 8–30 days
+- `evidence_expiring_7d` — fires warning for approved evidence expiring in 1–7 days; replaces the 30-day alert when evidence enters the 7-day window (auto-resolves the 30-day alert)
 
 ## Environment variables
 

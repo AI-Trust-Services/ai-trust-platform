@@ -29,6 +29,8 @@ export default function Overview() {
   const [cards, setCards] = useState<DashboardCard[]>(loadCards);
   const [addOpen, setAddOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<DashboardCard | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const showToast = useToast();
   const sortableRef = useRef<Sortable | null>(null);
   const cardsRef = useRef<DashboardCard[]>(cards);
@@ -126,33 +128,37 @@ export default function Overview() {
       <div className="charts-row">
         <div className="chart-card">
           <div className="chart-title">Systems by Risk Tier</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie data={tierData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={2}>
-                {tierEntries.map(([tier]) => (
-                  <Cell key={tier} fill={TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1"} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(v: number) => v.toLocaleString()} />
-              <Legend iconType="circle" iconSize={8} layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
+          {mounted && (
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={tierData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={2}>
+                  {tierEntries.map(([tier]) => (
+                    <Cell key={tier} fill={TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1"} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v: number) => v.toLocaleString()} />
+                <Legend iconType="circle" iconSize={8} layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
         <div className="chart-card">
           <div className="chart-title">Avg Compliance by Tier</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={complianceData} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" horizontal={false} />
-              <XAxis type="number" domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 11 }} />
-              <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={110} />
-              <Tooltip formatter={(v: number) => `${v}%`} />
-              <Bar dataKey="value" radius={[0, 3, 3, 0]}>
-                {complianceEntries.map(([tier]) => (
-                  <Cell key={tier} fill={LIFECYCLE_COLORS[tier] ?? TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1"} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {mounted && (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={complianceData} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" horizontal={false} />
+                <XAxis type="number" domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 11 }} />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={110} />
+                <Tooltip formatter={(v: number) => `${v}%`} />
+                <Bar dataKey="value" radius={[0, 3, 3, 0]}>
+                  {complianceEntries.map(([tier]) => (
+                    <Cell key={tier} fill={LIFECYCLE_COLORS[tier] ?? TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, CartesianGrid,
@@ -53,10 +54,13 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
   const chartData = entries.map(([name, value]) => ({ name: name.replace(/_/g, " "), value }));
   const isCompliance = card.dataKey === "compliance_by_tier";
   const isPie = card.type === "pie" || card.type === "doughnut";
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   return (
     <div className="dash-card-body">
       <div className="chart-wrap">
+        {mounted && (
         <ResponsiveContainer width="100%" height={220}>
           {isPie ? (
             <PieChart>
@@ -85,6 +89,7 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
             </BarChart>
           )}
         </ResponsiveContainer>
+        )}
       </div>
     </div>
   );

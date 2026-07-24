@@ -59,7 +59,7 @@ async def test_list_controls_filter_by_evidence(client: httpx.AsyncClient):
     system = await create_system()
     ctl_a = await create_control(client, system["id"])
     ctl_b = await create_control(client, system["id"])
-    evd = await create_evidence(client, control_id=ctl_a["id"])
+    evd = await create_evidence(client, control_ids=[ctl_a["id"]])
 
     r = await client.get(f"/api/v1/controls?evidence_id={evd['id']}")
     assert r.status_code == 200

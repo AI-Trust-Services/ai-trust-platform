@@ -17,16 +17,19 @@ import logging
 import os
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_trust_clickhouse import ch_command, ch_query, get_client
 from ai_trust_logging import get_logger
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.alert_rule import AlertRule
-
+from ai_trust_persistence.models.control import Control, control_obligations
+from ai_trust_persistence.models.evidence import Evidence, evidence_controls
+from ai_trust_persistence.models.obligation import Obligation
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = get_logger(__name__)
 
@@ -325,6 +328,157 @@ async def eval_model_diverged(rule: AlertRule, ch) -> list[EvalResult]:
     return results
 
 
+async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
+    """Mark approved evidence past validity_until as expired and cascade."""
+    today = date.today()
+    async with SessionLocal() as session:
+        rows = (await session.execute(
+            select(Evidence.id, Evidence.title, Evidence.ai_system_id)
+            .where(Evidence.validity_until.is_not(None))
+            .where(Evidence.validity_until < today)
+            .where(Evidence.status == "approved")
+        )).all()
+
+        if not rows:
+            return []
+
+        sys_ids = [r.ai_system_id for r in rows if r.ai_system_id]
+        sys_map: dict[str, str] = {}
+        if sys_ids:
+            sys_map = {r.id: r.name for r in (await session.execute(
+                select(AISystem.id, AISystem.name).where(AISystem.id.in_(sys_ids))
+            )).all()}
+
+        # Collect all linked control IDs in one query before any status mutations.
+        evd_ids = [r.id for r in rows]
+        ctrl_links = (await session.execute(
+            select(evidence_controls.c.evidence_id, evidence_controls.c.control_id)
+            .where(evidence_controls.c.evidence_id.in_(evd_ids))
+        )).all()
+        evd_ctrl_ids: dict[str, list[str]] = {r.id: [] for r in rows}
+        for link in ctrl_links:
+            evd_ctrl_ids[link.evidence_id].append(link.control_id)
+
+        # Bulk-mark all expiring evidence as expired in one statement, then cascade.
+        expired_ids = [evd.id for evd in rows]
+        await session.execute(
+            update(Evidence).where(Evidence.id.in_(expired_ids)).values(status="expired")
+        )
+        await session.flush()
+
+        results: list[EvalResult] = []
+        for evd in rows:
+            ctrl_ids = evd_ctrl_ids[evd.id]
+
+            # Cascade: for each linked control, re-check approved evidence count.
+            # If none remain, demote from effective → in_implementation.
+            # Then re-evaluate linked obligations.
+
+            for cid in ctrl_ids:
+                ctrl = (await session.execute(
+                    select(Control).where(Control.id == cid)
+                )).scalar_one_or_none()
+                if ctrl is None or ctrl.status in ("deactivated", "ineffective"):
+                    continue
+
+                approved_count = (await session.execute(
+                    select(func.count())
+                    .select_from(evidence_controls)
+                    .join(Evidence, Evidence.id == evidence_controls.c.evidence_id)
+                    .where(evidence_controls.c.control_id == cid)
+                    .where(Evidence.status == "approved")
+                )).scalar_one()
+
+                if approved_count == 0 and ctrl.status == "effective":
+                    ctrl.status = "in_implementation"
+                    await session.flush()
+
+                # Re-evaluate obligations linked to this control
+                obl_ids = (await session.execute(
+                    select(control_obligations.c.obligation_id)
+                    .where(control_obligations.c.control_id == cid)
+                )).scalars().all()
+                for oid in obl_ids:
+                    obl = (await session.execute(
+                        select(Obligation).where(Obligation.id == oid)
+                    )).scalar_one_or_none()
+                    if obl is None or obl.status in ("not_applicable", "overdue"):
+                        continue
+                    ctrl_statuses = (await session.execute(
+                        select(Control.status)
+                        .join(control_obligations, control_obligations.c.control_id == Control.id)
+                        .where(control_obligations.c.obligation_id == oid)
+                    )).scalars().all()
+                    if not ctrl_statuses:
+                        obl.status = "applicable"
+                    elif all(s == "effective" for s in ctrl_statuses):
+                        obl.status = "fulfilled"
+                    else:
+                        obl.status = "in_progress"
+                    await session.flush()
+
+            sys_name = sys_map.get(evd.ai_system_id, "") if evd.ai_system_id else ""
+            desc = f"Evidence expired: '{evd.title}'"
+            if sys_name:
+                desc += f" — {sys_name}"
+            results.append(EvalResult(
+                triggered=True, value=1.0, description=desc,
+                entity_id=evd.id, entity_type="evidence",
+            ))
+
+        await session.commit()
+    return results
+
+
+async def _eval_evidence_expiring(min_days: int, max_days: int) -> list[EvalResult]:
+    """Shared logic for expiring-soon evaluators."""
+    today = date.today()
+    cutoff_near = today + timedelta(days=max_days)
+    cutoff_far = today + timedelta(days=min_days)
+
+    async with SessionLocal() as session:
+        rows = (await session.execute(
+            select(Evidence.id, Evidence.title, Evidence.ai_system_id, Evidence.validity_until)
+            .where(Evidence.status == "approved")
+            .where(Evidence.validity_until.is_not(None))
+            .where(Evidence.validity_until >= cutoff_far)
+            .where(Evidence.validity_until <= cutoff_near)
+        )).all()
+
+        if not rows:
+            return []
+
+        sys_ids = [r.ai_system_id for r in rows if r.ai_system_id]
+        sys_map: dict[str, str] = {}
+        if sys_ids:
+            sys_map = {r.id: r.name for r in (await session.execute(
+                select(AISystem.id, AISystem.name).where(AISystem.id.in_(sys_ids))
+            )).all()}
+
+    results: list[EvalResult] = []
+    for evd in rows:
+        days_left = (evd.validity_until - today).days
+        sys_name = sys_map.get(evd.ai_system_id, "") if evd.ai_system_id else ""
+        desc = f"Evidence expiring in {days_left} day(s): '{evd.title}'"
+        if sys_name:
+            desc += f" — {sys_name}"
+        results.append(EvalResult(
+            triggered=True, value=float(days_left), description=desc,
+            entity_id=evd.id, entity_type="evidence",
+        ))
+    return results
+
+
+async def eval_evidence_expiring_30d(rule: AlertRule, ch) -> list[EvalResult]:
+    """Evidence expiring in 8–30 days; 7-day rule supersedes below 8."""
+    return await _eval_evidence_expiring(min_days=8, max_days=30)
+
+
+async def eval_evidence_expiring_7d(rule: AlertRule, ch) -> list[EvalResult]:
+    """Evidence expiring in 1–7 days; replaces the 30-day alert."""
+    return await _eval_evidence_expiring(min_days=1, max_days=7)
+
+
 EVALUATORS = {
     "prohibited_exists":                  eval_prohibited_exists,
     "avg_compliance_below":               eval_avg_compliance_below,
@@ -334,6 +488,9 @@ EVALUATORS = {
     "market_system_no_model_card":        eval_market_system_no_model_card,
     "gpai_no_compliance":                 eval_gpai_no_compliance,
     "model_diverged":                     eval_model_diverged,
+    "evidence_expired":                   eval_evidence_expired,
+    "evidence_expiring_30d":              eval_evidence_expiring_30d,
+    "evidence_expiring_7d":              eval_evidence_expiring_7d,
 }
 
 

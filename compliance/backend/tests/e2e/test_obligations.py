@@ -97,7 +97,7 @@ async def test_list_obligations_filter_by_evidence(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
-    evd = await create_evidence(client, obligation_id=obl["id"])
+    evd = await create_evidence(client, obligation_ids=[obl["id"]])
 
     r = await client.get(f"/api/v1/obligations?evidence_id={evd['id']}")
     assert r.status_code == 200

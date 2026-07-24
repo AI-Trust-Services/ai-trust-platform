@@ -15,6 +15,7 @@ from ai_trust_persistence.models import (
     Assessment,
     Control,
     Evidence,
+    EvidenceVersion,
     Obligation,
     evidence_controls,
     evidence_obligations,
@@ -27,6 +28,7 @@ from app.schemas import (
     EvidenceDetailResponse,
     EvidenceResponse,
     EvidenceUpdate,
+    EvidenceVersionResponse,
 )
 from app.schemas.evidence import VALID_EVIDENCE_TYPES
 
@@ -105,8 +107,8 @@ async def create_evidence(
     title: str = Form(...),
     description: str = Form(default=""),
     evidence_type: str = Form(default="document"),
-    control_id: str | None = Form(default=None),
-    obligation_id: str | None = Form(default=None),
+    control_ids: list[str] = Form(default=[]),
+    obligation_ids: list[str] = Form(default=[]),
     ai_system_id: str | None = Form(default=None),
     assessment_id: str | None = Form(default=None),
     validity_from: str | None = Form(default=None),
@@ -119,7 +121,7 @@ async def create_evidence(
     if evidence_type not in VALID_EVIDENCE_TYPES:
         raise HTTPException(422, f"invalid evidence type '{evidence_type}'")
     # At least one link target is required (spec EVD-FR-02).
-    if not any([control_id, obligation_id, ai_system_id, assessment_id]):
+    if not any([control_ids, obligation_ids, ai_system_id, assessment_id]):
         raise HTTPException(422, "Evidence must link to at least one of: control, obligation, AI system, or assessment")
 
     v_from = _parse_date(validity_from, "validity_from")
@@ -128,14 +130,16 @@ async def create_evidence(
     # 1) Validate every supplied link target in a short-lived session, so we
     #    return clean 404s and never touch object storage on a bad reference.
     async with SessionLocal() as session:
-        if control_id and not (await session.execute(
-            select(Control.id).where(Control.id == control_id)
-        )).scalar_one_or_none():
-            raise HTTPException(404, f"Control {control_id} not found")
-        if obligation_id and not (await session.execute(
-            select(Obligation.id).where(Obligation.id == obligation_id)
-        )).scalar_one_or_none():
-            raise HTTPException(404, f"Obligation {obligation_id} not found")
+        for cid in control_ids:
+            if not (await session.execute(
+                select(Control.id).where(Control.id == cid)
+            )).scalar_one_or_none():
+                raise HTTPException(404, f"Control {cid} not found")
+        for oid in obligation_ids:
+            if not (await session.execute(
+                select(Obligation.id).where(Obligation.id == oid)
+            )).scalar_one_or_none():
+                raise HTTPException(404, f"Obligation {oid} not found")
         if ai_system_id and not (await session.execute(
             select(AISystem.id).where(AISystem.id == ai_system_id)
         )).scalar_one_or_none():
@@ -191,16 +195,16 @@ async def create_evidence(
             session.add(row)
             await session.flush()
 
-            if control_id:
+            for cid in control_ids:
                 await session.execute(pg_insert(evidence_controls).values(
-                    evidence_id=evidence_id, control_id=control_id).on_conflict_do_nothing())
-            if obligation_id:
+                    evidence_id=evidence_id, control_id=cid).on_conflict_do_nothing())
+            for oid in obligation_ids:
                 await session.execute(pg_insert(evidence_obligations).values(
-                    evidence_id=evidence_id, obligation_id=obligation_id).on_conflict_do_nothing())
+                    evidence_id=evidence_id, obligation_id=oid).on_conflict_do_nothing())
 
             await session.commit()
             await session.refresh(row)
-            control_ids, obligation_ids = await _linked_ids(session, evidence_id)
+            linked_control_ids, linked_obligation_ids = await _linked_ids(session, evidence_id)
     except Exception:
         if file_path:
             await minio_client.delete_file(file_path)
@@ -210,8 +214,8 @@ async def create_evidence(
         "evidence_id": evidence_id, "has_file": bool(file_name), "size": file_size,
     })
     detail = EvidenceDetailResponse.model_validate(row)
-    detail.control_ids = control_ids
-    detail.obligation_ids = obligation_ids
+    detail.control_ids = linked_control_ids
+    detail.obligation_ids = linked_obligation_ids
     return detail
 
 
@@ -312,3 +316,94 @@ async def _cascade_from_evidence(session: AsyncSession, evidence_id: str) -> Non
     )).scalars().all()
     for oid in obligation_ids:
         await refresh_obligation(session, oid)
+
+
+@router.get("/evidence/{evidence_id}/versions", response_model=list[EvidenceVersionResponse])
+async def get_evidence_versions(evidence_id: str) -> list[EvidenceVersionResponse]:
+    async with SessionLocal() as session:
+        await _load(session, evidence_id)
+        rows = (await session.execute(
+            select(EvidenceVersion)
+            .where(EvidenceVersion.evidence_id == evidence_id)
+            .order_by(EvidenceVersion.created_at.asc())
+        )).scalars().all()
+    return [EvidenceVersionResponse.model_validate(r) for r in rows]
+
+
+@router.post("/evidence/{evidence_id}/upload-version", response_model=EvidenceDetailResponse)
+async def upload_evidence_version(
+    evidence_id: str,
+    version_label: str = Form(...),
+    uploaded_by: str = Form(default=""),
+    validity_until: str | None = Form(default=None),
+    file: UploadFile = File(...),
+) -> EvidenceDetailResponse:
+    # Validate evidence exists and file type/size before touching MinIO
+    async with SessionLocal() as session:
+        await _load(session, evidence_id)
+
+    if not file.filename:
+        raise HTTPException(422, "File must have a filename")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(422, f"File type '{ext}' is not allowed")
+    mime = file.content_type or "application/octet-stream"
+    if mime not in ALLOWED_MIME_TYPES:
+        raise HTTPException(422, f"MIME type '{mime}' is not allowed")
+    data = await file.read()
+    if len(data) > MAX_FILE_BYTES:
+        raise HTTPException(413, f"File exceeds maximum size of {MAX_FILE_BYTES // (1024 * 1024)} MB")
+
+    # Upload new file to MinIO before the write transaction
+    await minio_client.ensure_bucket()
+    new_file_path = await minio_client.upload_file(evidence_id, file.filename, data, mime)
+
+    # Write transaction. If it fails, delete the orphaned new file.
+    old_file_path = ""
+    linked_control_ids: list[str] = []
+    linked_obligation_ids: list[str] = []
+    try:
+        async with SessionLocal() as session:
+            row = await _load(session, evidence_id)
+            old_file_path = row.file_path
+
+            if row.file_path:
+                session.add(EvidenceVersion(
+                    id=new_id("EVV"),
+                    evidence_id=evidence_id,
+                    version_label=row.version_label,
+                    file_path=row.file_path,
+                    file_name=row.file_name,
+                    file_size=row.file_size,
+                    mime_type=row.mime_type,
+                    uploaded_by=row.uploaded_by,
+                ))
+
+            row.file_path = new_file_path
+            row.file_name = file.filename
+            row.file_size = len(data)
+            row.mime_type = mime
+            row.uploaded_by = uploaded_by
+            row.version_label = version_label
+            if validity_until:
+                row.validity_until = _parse_date(validity_until, "validity_until")
+            row.updated_at = datetime.now(timezone.utc)
+
+            await session.commit()
+            await session.refresh(row)
+            linked_control_ids, linked_obligation_ids = await _linked_ids(session, evidence_id)
+    except Exception:
+        await minio_client.delete_file(new_file_path)
+        raise
+
+    # Delete the replaced file from MinIO after a successful DB commit
+    if old_file_path and old_file_path != new_file_path:
+        await minio_client.delete_file(old_file_path)
+
+    logger.info("evidence.version_uploaded", extra={
+        "evidence_id": evidence_id, "version_label": version_label,
+    })
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = linked_control_ids
+    detail.obligation_ids = linked_obligation_ids
+    return detail
