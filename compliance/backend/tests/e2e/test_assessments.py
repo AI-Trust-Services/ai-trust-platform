@@ -354,3 +354,135 @@ async def test_approve_updates_system_compliance(client: httpx.AsyncClient):
         # Score = 0/3 * 100 = 0.0 because no obligations are fulfilled yet,
         # but compliance field should be updated (not stale)
         assert row.compliance == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Control auto-generation (on assessment creation)
+# ---------------------------------------------------------------------------
+
+async def test_create_assessment_auto_generates_controls(client: httpx.AsyncClient):
+    # High-risk EU obligations (11) map to 41 tier-scoped control templates.
+    system = await create_system(tier="high")
+    await create_assessment(client, system["id"])
+    controls = (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()
+    assert len(controls) == 41
+
+
+async def test_generated_controls_have_control_ref(client: httpx.AsyncClient):
+    system = await create_system(tier="minimal")
+    await create_assessment(client, system["id"])
+    controls = (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()
+    assert len(controls) == 3
+    for c in controls:
+        # control_ref is "{article_ref}:{slug}"
+        assert c["control_ref"]
+        assert ":" in c["control_ref"]
+
+
+async def test_generated_controls_linked_to_obligations(client: httpx.AsyncClient):
+    system = await create_system(tier="high")
+    ass = await create_assessment(client, system["id"])
+    obs = (await client.get(f"/api/v1/obligations?assessment_id={ass['id']}")).json()
+    art9 = [o for o in obs if o["article_ref"] == "Art. 9"][0]
+    linked = (await client.get(f"/api/v1/controls?obligation_id={art9['id']}")).json()
+    assert len(linked) == 5  # Art. 9 -> 5 controls
+
+
+async def test_generated_controls_flip_obligations_in_progress(client: httpx.AsyncClient):
+    # Cascade: linking >=1 non-effective control moves obligation applicable -> in_progress.
+    system = await create_system(tier="high")
+    ass = await create_assessment(client, system["id"])
+    obs = (await client.get(f"/api/v1/obligations?assessment_id={ass['id']}")).json()
+    assert all(o["status"] == "in_progress" for o in obs)
+
+
+async def test_generated_controls_start_not_started(client: httpx.AsyncClient):
+    system = await create_system(tier="minimal")
+    await create_assessment(client, system["id"])
+    controls = (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()
+    assert all(c["status"] == "not_started" for c in controls)
+
+
+async def test_prohibited_controls_scoped_to_prohibited_tier(client: httpx.AsyncClient):
+    # A prohibited assessment gets the 8 Art. 5 prohibited-practice controls.
+    system = await create_system(tier="prohibited")
+    await create_assessment(client, system["id"])
+    controls = (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()
+    assert len(controls) == 8
+    assert all(c["control_ref"].startswith("Art. 5:") for c in controls)
+
+
+async def test_unknown_tier_generates_no_controls(client: httpx.AsyncClient):
+    # No obligations -> no controls, assessment still created.
+    system = await create_system(tier="unknown_tier")
+    await create_assessment(client, system["id"])
+    controls = (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()
+    assert len(controls) == 0
+
+
+# ---------------------------------------------------------------------------
+# POST /assessments/{id}/generate-controls (standalone)
+# ---------------------------------------------------------------------------
+
+async def test_generate_controls_skips_obligations_with_existing_controls(client: httpx.AsyncClient):
+    # Controls were already generated on create, so a re-run generates nothing new.
+    system = await create_system(tier="high")
+    ass = await create_assessment(client, system["id"])
+    r = await client.post(f"/api/v1/assessments/{ass['id']}/generate-controls")
+    assert r.status_code == 200
+    assert r.json()["created"] == []
+
+
+async def test_generate_controls_creates_for_obligations_without_controls(client: httpx.AsyncClient):
+    # Manually create an obligation (no controls), then generate.
+    system = await create_system(tier="minimal")
+    ass = await create_assessment(client, system["id"])
+    # Manual obligation with a template-backed article_ref but no controls yet.
+    await create_obligation(client, ass["id"], article_ref="Art. 69", title="Manual")
+    # The auto-generated minimal obligations already have controls; only the manual
+    # Art. 69 obligation lacks them -> its 1 control is generated.
+    r = await client.post(f"/api/v1/assessments/{ass['id']}/generate-controls")
+    assert r.status_code == 200
+    created = r.json()["created"]
+    assert len(created) == 1
+    assert created[0]["control_ref"] == "Art. 69:AITP-VOL-001"
+
+
+async def test_generate_controls_approved_assessment_returns_409(client: httpx.AsyncClient):
+    system = await create_system(tier="minimal")
+    ass = await create_assessment(client, system["id"])
+    await client.post(f"/api/v1/assessments/{ass['id']}/submit")
+    await client.post(f"/api/v1/assessments/{ass['id']}/approve")
+    r = await client.post(f"/api/v1/assessments/{ass['id']}/generate-controls")
+    assert r.status_code == 409
+
+
+async def test_generate_controls_no_obligations_returns_422(client: httpx.AsyncClient):
+    system = await create_system(tier="unknown_tier")  # yields zero obligations
+    ass = await create_assessment(client, system["id"])
+    r = await client.post(f"/api/v1/assessments/{ass['id']}/generate-controls")
+    assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Owner carry-forward for controls
+# ---------------------------------------------------------------------------
+
+async def test_control_owner_carried_forward_from_prior(client: httpx.AsyncClient):
+    system = await create_system(tier="minimal")
+
+    # First assessment — set an owner on a generated control, then approve.
+    ass1 = await create_assessment(client, system["id"])
+    controls1 = (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()
+    target = controls1[0]
+    await client.put(f"/api/v1/controls/{target['id']}", json={"owner": "Alice"})
+    await client.post(f"/api/v1/assessments/{ass1['id']}/submit")
+    await client.post(f"/api/v1/assessments/{ass1['id']}/approve")
+
+    # Second assessment — the control with the same control_ref carries Alice.
+    await create_assessment(client, system["id"])
+    all_controls = (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()
+    carried = [c for c in all_controls
+               if c["control_ref"] == target["control_ref"] and c["id"] != target["id"]]
+    assert len(carried) == 1
+    assert carried[0]["owner"] == "Alice"
