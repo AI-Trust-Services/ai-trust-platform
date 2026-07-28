@@ -74,6 +74,7 @@ class ControlUpdate(BaseModel):
 class ControlResponse(BaseModel):
     id: str
     ai_system_id: str | None
+    control_ref: str | None
     title: str
     description: str
     category: str
