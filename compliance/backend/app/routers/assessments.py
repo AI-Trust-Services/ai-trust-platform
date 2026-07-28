@@ -4,12 +4,21 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
-from ai_trust_persistence.models import AISystem, Assessment, Framework, Obligation
-from app.cascade import refresh_assessment_score, sync_system_compliance
+from ai_trust_persistence.models import (
+    AISystem,
+    Assessment,
+    Control,
+    Framework,
+    Obligation,
+    control_obligations,
+)
+from app.cascade import refresh_assessment_score, refresh_obligation, sync_system_compliance
+from app.control_templates import controls_for
 from app.ids import new_id
 from app.obligation_templates import obligations_for
 from app.schemas import (
@@ -17,6 +26,8 @@ from app.schemas import (
     AssessmentDetailResponse,
     AssessmentResponse,
     AssessmentUpdate,
+    ControlResponse,
+    GenerateControlsResponse,
     GenerateObligationsResponse,
     ObligationResponse,
 )
@@ -84,6 +95,8 @@ async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
             logger.warning("assessment.no_obligations", extra={
                 "assessment_id": row.id, "framework": body.framework_id, "tier": system.tier,
             })
+        else:
+            await _generate_controls_in_session(session, created, system.tier)
         await session.commit()
         await session.refresh(row)
 
@@ -146,6 +159,85 @@ async def _generate_obligations_in_session(
         await refresh_assessment_score(session, assessment.id)
 
     return created, bool(prior_by_ref)
+
+
+async def _generate_controls_in_session(
+    session: AsyncSession, obligations: list[Obligation], tier: str
+) -> list[Control]:
+    """Generate + link controls for the given obligations within the caller's txn.
+
+    For each obligation, `controls_for(article_ref, tier)` yields the tier-scoped
+    control templates; each becomes a Control row (control_ref = "{article_ref}:{slug}")
+    linked to the obligation via control_obligations. Owner is carried forward from
+    the most recent prior control with the same control_ref (see _prior_owners_by_ref).
+
+    After linking, each touched obligation is refreshed so its status reflects the
+    new controls (applicable -> in_progress). If this raises, the whole transaction
+    rolls back. Returns the created Control rows.
+    """
+    if not obligations:
+        return []
+
+    ai_system_id = obligations[0].ai_system_id
+    prior_owner_by_ref = await _prior_owners_by_ref(session, ai_system_id)
+
+    created: list[Control] = []
+    for obl in obligations:
+        templates = controls_for(obl.article_ref, tier)
+        if not templates:
+            logger.warning("assessment.control_template_missing", extra={
+                "assessment_id": obl.assessment_id, "article_ref": obl.article_ref, "tier": tier,
+            })
+            continue
+        for t in templates:
+            control_ref = f"{obl.article_ref}:{t['slug']}"
+            control = Control(
+                id=new_id("CTL"),
+                ai_system_id=ai_system_id,
+                control_ref=control_ref,
+                title=t["title"],
+                description=t["description"],
+                category=t["category"],
+                status="not_started",
+                effectiveness="medium",
+                owner=prior_owner_by_ref.get(control_ref, ""),
+            )
+            session.add(control)
+            await session.flush()  # assign control.id before linking
+            await session.execute(
+                pg_insert(control_obligations)
+                .values(control_id=control.id, obligation_id=obl.id)
+                .on_conflict_do_nothing()
+            )
+            created.append(control)
+        # Recompute the obligation's status now that controls are linked.
+        await session.flush()
+        await refresh_obligation(session, obl.id)
+
+    return created
+
+
+async def _prior_owners_by_ref(
+    session: AsyncSession, ai_system_id: str
+) -> dict[str, str]:
+    """Map control_ref -> owner from the most recent prior controls for this system.
+
+    Controls carry no assessment_id, so "prior controls" are those linked (via
+    control_obligations) to obligations of the same system. We keep the owner from
+    the most recently-created control per control_ref, ignoring blank owners so an
+    unassigned prior control does not shadow an assignment from an earlier cycle.
+    """
+    rows = (await session.execute(
+        select(Control.control_ref, Control.owner)
+        .join(control_obligations, control_obligations.c.control_id == Control.id)
+        .join(Obligation, Obligation.id == control_obligations.c.obligation_id)
+        .where(Obligation.ai_system_id == ai_system_id)
+        .where(Control.control_ref.is_not(None))
+        .where(Control.owner != "")
+        .order_by(Control.created_at.asc())
+    )).all()
+    # asc() order means later rows overwrite earlier ones -> newest owner wins.
+    return {ref: owner for ref, owner in rows}
 
 
 @router.get("/assessments/{assessment_id}", response_model=AssessmentDetailResponse)
@@ -233,6 +325,56 @@ async def generate_obligations(assessment_id: str) -> GenerateObligationsRespons
         })
         return GenerateObligationsResponse(
             created=[ObligationResponse.model_validate(r) for r in created],
+            message=message,
+        )
+
+
+@router.post("/assessments/{assessment_id}/generate-controls", response_model=GenerateControlsResponse)
+async def generate_controls(assessment_id: str) -> GenerateControlsResponse:
+    async with SessionLocal() as session:
+        assessment = await _load(session, assessment_id)
+        if assessment.status == "approved":
+            raise HTTPException(409, "Approved assessments are immutable")
+
+        system = (await session.execute(
+            select(AISystem).where(AISystem.id == assessment.ai_system_id)
+        )).scalar_one_or_none()
+        if not system:
+            raise HTTPException(404, f"AI system {assessment.ai_system_id} not found")
+
+        obligations = (await session.execute(
+            select(Obligation).where(Obligation.assessment_id == assessment_id)
+        )).scalars().all()
+        if not obligations:
+            raise HTTPException(422, "No obligations to generate controls for — generate obligations first")
+
+        # Idempotent: skip any obligation that already has >=1 linked control.
+        linked_obl_ids = set((await session.execute(
+            select(control_obligations.c.obligation_id).where(
+                control_obligations.c.obligation_id.in_([o.id for o in obligations])
+            )
+        )).scalars().all())
+        targets = [o for o in obligations if o.id not in linked_obl_ids]
+
+        created = await _generate_controls_in_session(session, targets, system.tier)
+        await session.commit()
+        for r in created:
+            await session.refresh(r)
+
+        skipped = len(obligations) - len(targets)
+        if not created:
+            message = "No new controls generated — all obligations already have controls or none are defined."
+        else:
+            message = f"Generated {len(created)} control(s) for tier '{system.tier}'."
+            if skipped:
+                message += f" Skipped {skipped} obligation(s) that already had controls."
+
+        logger.info("assessment.controls_generated", extra={
+            "assessment_id": assessment_id, "tier": system.tier,
+            "count": len(created), "skipped": skipped,
+        })
+        return GenerateControlsResponse(
+            created=[ControlResponse.model_validate(r) for r in created],
             message=message,
         )
 

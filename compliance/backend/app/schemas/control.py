@@ -91,3 +91,8 @@ class ControlResponse(BaseModel):
 class ControlDetailResponse(ControlResponse):
     obligation_ids: list[str] = []
     evidence_count: int = 0
+
+
+class GenerateControlsResponse(BaseModel):
+    created: list[ControlResponse]
+    message: str

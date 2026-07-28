@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from app.control_templates import _CONTROL_TEMPLATES, _tier_allows, controls_for
 from app.obligation_templates import obligations_for
+from app.schemas.control import VALID_CONTROL_CATEGORIES
 
 
 # ---------------------------------------------------------------------------
@@ -178,3 +179,11 @@ def test_slugs_unique_within_each_article():
     for ref, templates in _CONTROL_TEMPLATES.items():
         slugs = [t["slug"] for t in templates]
         assert len(slugs) == len(set(slugs)), f"duplicate slug in {ref}"
+
+
+def test_all_categories_are_valid():
+    # Generated controls must use categories a human can later edit without a
+    # ControlUpdate validation error (schemas.control.VALID_CONTROL_CATEGORIES).
+    for ref, templates in _CONTROL_TEMPLATES.items():
+        for t in templates:
+            assert t["category"] in VALID_CONTROL_CATEGORIES, f"{ref}: {t['category']}"
