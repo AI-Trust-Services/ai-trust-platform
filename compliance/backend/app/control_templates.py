@@ -259,6 +259,9 @@ _CONTROL_TEMPLATES: dict[str, list[dict]] = {
          "title": "GPAI model — information to downstream providers",
          "description": "Provide downstream providers with sufficient information and documentation, including capabilities and limitations, to enable their own compliance (Art. 53(1)(b))."},
     ],
+    # AISEC-GP-002 covers both sub-articles in the source library; deliberately
+    # reused here. control_ref is "{article_ref}:{slug}", so the two refs stay
+    # distinct ("Art. 53(1)(c):AISEC-GP-002" vs "Art. 53(1)(d):AISEC-GP-002").
     "Art. 53(1)(c)": [
         {"slug": "AISEC-GP-002", "category": "general", "risk_category": "GPAI",
          "title": "GPAI model — copyright compliance policy",

@@ -90,9 +90,13 @@ export default function ControlsPage(): JSX.Element {
   // Reset to the first page whenever the filtered set changes.
   useEffect(() => { setPage(1); }, [search, categoryFilter, statusFilter, effectivenessFilter, systemFilter]);
 
+  // Clamp to a valid page — the list can shrink under us (delete, status change
+  // filtering a row out) while `page` stays high, which would show an empty table.
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, pageCount);
   const paged = useMemo(
-    () => filtered.slice((page - 1) * pageSize, page * pageSize),
-    [filtered, page, pageSize]
+    () => filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filtered, safePage, pageSize]
   );
 
   const categories = useMemo(() => [...new Set(controls.map((c) => c.category))].sort(), [controls]);
@@ -212,7 +216,7 @@ export default function ControlsPage(): JSX.Element {
           </table>
         </div>
         <Pagination
-          page={page}
+          page={safePage}
           pageSize={pageSize}
           total={filtered.length}
           onPageChange={setPage}
