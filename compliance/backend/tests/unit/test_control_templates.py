@@ -105,7 +105,6 @@ def test_prohibited_controls_only_for_prohibited_tier():
 
 def test_gpai_systemic_controls_excluded_from_standard():
     # Art. 55 safety framework is GPAI-Systemic — not for gpai-standard.
-    assert controls_for("Art. 55", "gpai-systemic") == controls_for("Art. 55", "gpai-systemic")
     assert len(controls_for("Art. 55", "gpai-systemic")) == 1
     assert controls_for("Art. 55", "gpai-standard") == []
 
