@@ -6,6 +6,7 @@ import KpiCard from "../components/KpiCard";
 import DetailPanel, { DetailField, DetailSection } from "../components/DetailPanel";
 import CreateControlModal from "../components/CreateControlModal";
 import LinkObligationModal from "../components/LinkObligationModal";
+import Pagination from "../components/Pagination";
 import { CONTROL_STATUS_META, OBLIGATION_STATUS_META, EVIDENCE_STATUS_META, fmtDate, humanize } from "../utils";
 import type { AISystem, Control, ControlDetail, Evidence, Obligation } from "../types";
 
@@ -16,9 +17,15 @@ const STATUS_OPTIONS = [
 
 export default function ControlsPage(): JSX.Element {
   const [controls, setControls] = useState<Control[]>([]);
+  const [systems, setSystems] = useState<AISystem[]>([]);
   const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [systemFilter, setSystemFilter] = useState("");
+  const [effectivenessFilter, setEffectivenessFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<ControlDetail | null>(null);
   const [detailObligations, setDetailObligations] = useState<Obligation[]>([]);
@@ -31,6 +38,7 @@ export default function ControlsPage(): JSX.Element {
     try {
       const [ctl, sys] = await Promise.all([api.getControls(), api.getSystems()]);
       setControls(ctl);
+      setSystems(sys);
       setSystemsById(Object.fromEntries(sys.map((s) => [s.id, s])));
     } catch (e) {
       showToast(`Failed to load: ${(e as Error).message}`, true);
@@ -71,12 +79,41 @@ export default function ControlsPage(): JSX.Element {
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
     return controls.filter((c) =>
-      (!s || c.title.toLowerCase().includes(s)) &&
-      (!categoryFilter || c.category === categoryFilter)
+      (!s || c.title.toLowerCase().includes(s) || c.id.toLowerCase().includes(s)) &&
+      (!categoryFilter || c.category === categoryFilter) &&
+      (!statusFilter || c.status === statusFilter) &&
+      (!effectivenessFilter || c.effectiveness === effectivenessFilter) &&
+      (!systemFilter || (systemFilter === "__org__" ? !c.ai_system_id : c.ai_system_id === systemFilter))
     );
-  }, [controls, search, categoryFilter]);
+  }, [controls, search, categoryFilter, statusFilter, effectivenessFilter, systemFilter]);
+
+  // Reset to the first page whenever the filtered set changes.
+  useEffect(() => { setPage(1); }, [search, categoryFilter, statusFilter, effectivenessFilter, systemFilter]);
+
+  const paged = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize]
+  );
 
   const categories = useMemo(() => [...new Set(controls.map((c) => c.category))].sort(), [controls]);
+  const systemOptions = useMemo(() => {
+    // Only systems that have controls; ordered latest-first (API returns systems
+    // ordered by created_at desc, so preserve that order rather than re-sorting).
+    const withControls = new Set<string>();
+    controls.forEach((c) => { if (c.ai_system_id) withControls.add(c.ai_system_id); });
+    return systems
+      .filter((s) => withControls.has(s.id))
+      .map((s) => ({ id: s.id, name: s.name }));
+  }, [controls, systems]);
+  const hasOrgWide = useMemo(() => controls.some((c) => !c.ai_system_id), [controls]);
+  const activeFilterCount =
+    (categoryFilter ? 1 : 0) + (statusFilter ? 1 : 0) +
+    (effectivenessFilter ? 1 : 0) + (systemFilter ? 1 : 0);
+
+  function clearFilters() {
+    setSearch(""); setCategoryFilter(""); setStatusFilter("");
+    setEffectivenessFilter(""); setSystemFilter("");
+  }
 
   const kpis = useMemo(() => ({
     total: controls.length,
@@ -104,11 +141,28 @@ export default function ControlsPage(): JSX.Element {
 
       <div className="toolbar" style={{ marginTop: 12 }}>
         <input className="search-input" placeholder="Search controls…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select className="filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="">All Statuses</option>
+          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{CONTROL_STATUS_META[s].label}</option>)}
+        </select>
         <select className="filter-select" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="">All Categories</option>
           {categories.map((c) => <option key={c} value={c}>{humanize(c)}</option>)}
         </select>
+        <select className="filter-select" value={effectivenessFilter} onChange={(e) => setEffectivenessFilter(e.target.value)}>
+          <option value="">All Effectiveness</option>
+          {["high", "medium", "low"].map((e) => <option key={e} value={e}>{humanize(e)}</option>)}
+        </select>
+        <select className="filter-select" value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
+          <option value="">All AI Systems</option>
+          {hasOrgWide && <option value="__org__">Org-wide</option>}
+          {systemOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        {activeFilterCount > 0 && (
+          <button className="btn-ghost btn-sm" onClick={clearFilters}>Clear filters ({activeFilterCount})</button>
+        )}
         <div className="toolbar-spacer" />
+        <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>{filtered.length} of {controls.length}</span>
       </div>
 
       <div className="content">
@@ -129,7 +183,7 @@ export default function ControlsPage(): JSX.Element {
             <tbody>
               {filtered.length === 0 ? (
                 <tr className="empty-row"><td colSpan={8}>No controls yet.</td></tr>
-              ) : filtered.map((c) => (
+              ) : paged.map((c) => (
                 <tr key={c.id} className={`clickable${selected === c.id ? " selected" : ""}`} onClick={() => openDetail(c)}>
                   <td><div className="row-name">{c.title}</div><div className="row-sub">{c.id}</div></td>
                   <td style={{ fontSize: 13 }}>{humanize(c.category)}</td>
@@ -157,6 +211,13 @@ export default function ControlsPage(): JSX.Element {
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={filtered.length}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+        />
       </div>
 
       {detail && (
