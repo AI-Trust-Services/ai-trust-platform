@@ -4,7 +4,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from tests.e2e.conftest import create_assessment, create_obligation, create_system
+from tests.e2e.conftest import create_assessment, create_control, create_obligation, create_system
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +210,57 @@ async def test_delete_assessment(client: httpx.AsyncClient):
 async def test_delete_assessment_404_on_missing(client: httpx.AsyncClient):
     r = await client.delete("/api/v1/assessments/ASS-NOTFOUND")
     assert r.status_code == 404
+
+
+async def test_delete_assessment_removes_generated_controls(client: httpx.AsyncClient):
+    # Auto-generated controls should be cleaned up when the assessment is deleted.
+    system = await create_system(tier="minimal")
+    ass = await create_assessment(client, system["id"])
+    before = (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()
+    assert len(before) == 3
+
+    r = await client.delete(f"/api/v1/assessments/{ass['id']}")
+    assert r.status_code == 200
+    assert r.json()["controls_deleted"] == 3
+
+    after = (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()
+    assert len(after) == 0
+
+
+async def test_delete_assessment_keeps_manual_controls(client: httpx.AsyncClient):
+    # Manually-created controls (no control_ref) must survive assessment deletion.
+    system = await create_system(tier="minimal")
+    ass = await create_assessment(client, system["id"])
+    manual = await create_control(client, system_id=system["id"], title="Manual control")
+
+    r = await client.delete(f"/api/v1/assessments/{ass['id']}")
+    assert r.status_code == 200
+    assert r.json()["controls_deleted"] == 3  # only the 3 generated ones
+
+    remaining = (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()
+    ids = [c["id"] for c in remaining]
+    assert ids == [manual["id"]]
+
+
+async def test_delete_assessment_keeps_shared_controls(client: httpx.AsyncClient):
+    # A generated control also linked to another assessment's obligation is kept.
+    system = await create_system(tier="minimal")
+    ass1 = await create_assessment(client, system["id"])
+    ass2 = await create_assessment(client, system["id"])
+
+    # Pick a generated control from ass1 and link it to an obligation of ass2.
+    controls = (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()
+    obs2 = (await client.get(f"/api/v1/obligations?assessment_id={ass2['id']}")).json()
+    shared = controls[0]
+    await client.post(f"/api/v1/controls/{shared['id']}/link/{obs2[0]['id']}")
+
+    r = await client.delete(f"/api/v1/assessments/{ass1['id']}")
+    assert r.status_code == 200
+
+    # The shared control must survive because it still links to ass2.
+    remaining_ids = [c["id"] for c in
+                     (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()]
+    assert shared["id"] in remaining_ids
 
 
 # ---------------------------------------------------------------------------

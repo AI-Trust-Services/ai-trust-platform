@@ -348,6 +348,8 @@ Evidence items are versioned. `POST /api/v1/evidence/{id}/upload-version` snapsh
 
 Controls are auto-generated from `control_templates.py`: for each obligation, `controls_for(article_ref, tier)` yields the tier-scoped control templates, each persisted as a `Control` (with a stable `control_ref = "{article_ref}:{slug}"`) and linked to its obligation via `control_obligations`. Because a freshly-linked control is `not_started` (not `effective`), the cascade immediately moves each obligation `applicable → in_progress`. Owner is carried forward from the most recent prior control with the same `control_ref` for that system (owner only — never status/effectiveness/due_date). Standalone `POST /api/v1/assessments/{id}/generate-controls` re-runs generation for API consumers and is idempotent: it skips any obligation that already has ≥1 linked control. Controls can also be linked to obligations manually via `POST /api/v1/controls/{id}/link/{obligation_id}`. Evidence is uploaded as multipart form data; approving evidence cascades automatically through the chain.
 
+Deleting an assessment cascades its obligations (FK `ondelete=CASCADE`) and cleans up the controls that were auto-generated for it: `DELETE /api/v1/assessments/{id}` removes controls that are auto-generated (`control_ref` not null) **and** linked only to that assessment's obligations. Manually-created controls (`control_ref` null) and controls shared with another assessment are always kept. The response includes `controls_deleted`.
+
 Evidence stored in MinIO bucket `evidence-files`, key pattern: `evidence/{evidence_id}/{filename}`.
 
 #### Evidence expiry (policy-checker-worker)

@@ -280,12 +280,54 @@ async def delete_assessment(assessment_id: str) -> dict:
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
         ai_system_id = row.ai_system_id
+
+        deleted_controls = await _delete_generated_controls(session, assessment_id)
+
         await session.delete(row)
         await session.flush()
         await sync_system_compliance(session, ai_system_id)
         await session.commit()
-    logger.info("assessment.deleted", extra={"assessment_id": assessment_id})
-    return {"status": "deleted", "id": assessment_id}
+    logger.info("assessment.deleted", extra={
+        "assessment_id": assessment_id, "controls_deleted": deleted_controls,
+    })
+    return {"status": "deleted", "id": assessment_id, "controls_deleted": deleted_controls}
+
+
+async def _delete_generated_controls(session: AsyncSession, assessment_id: str) -> int:
+    """Delete controls that were auto-generated for this assessment's obligations.
+
+    Scoped so manual and shared controls are never removed: a control is deleted
+    only if it is auto-generated (control_ref is not null) AND every obligation it
+    links to belongs to this assessment (not shared with another assessment). Runs
+    before the assessment is deleted, while its obligations and links still exist.
+    Returns the number of controls deleted.
+    """
+    # Candidate controls: auto-generated and linked to an obligation of this assessment.
+    candidates = (await session.execute(
+        select(Control.id)
+        .join(control_obligations, control_obligations.c.control_id == Control.id)
+        .join(Obligation, Obligation.id == control_obligations.c.obligation_id)
+        .where(Obligation.assessment_id == assessment_id)
+        .where(Control.control_ref.is_not(None))
+        .distinct()
+    )).scalars().all()
+    if not candidates:
+        return 0
+
+    # Keep any candidate that is also linked to an obligation outside this assessment.
+    shared = set((await session.execute(
+        select(control_obligations.c.control_id)
+        .join(Obligation, Obligation.id == control_obligations.c.obligation_id)
+        .where(control_obligations.c.control_id.in_(candidates))
+        .where(Obligation.assessment_id != assessment_id)
+    )).scalars().all())
+
+    to_delete = [cid for cid in candidates if cid not in shared]
+    if not to_delete:
+        return 0
+
+    await session.execute(Control.__table__.delete().where(Control.id.in_(to_delete)))
+    return len(to_delete)
 
 
 @router.post("/assessments/{assessment_id}/generate-obligations", response_model=GenerateObligationsResponse)
