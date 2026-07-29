@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Sortable from "sortablejs";
 import {
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, CartesianGrid, Legend,
+  XAxis, YAxis, Tooltip, CartesianGrid, Legend, LabelList,
 } from "recharts";
 import { api, ALERTS_URL, COMPLIANCE_URL, REGISTRY_URL } from "../api/client";
 import { useToast, useHeader } from "../App";
@@ -226,33 +226,41 @@ export default function Overview() {
         <div className="chart-card">
           <div className="chart-title">Systems by Risk Tier</div>
           {mounted && (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie data={tierData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={2}>
-                  {tierEntries.map(([tier]) => (
-                    <Cell key={tier} fill={TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1"} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: number) => v.toLocaleString()} />
-                <Legend
-                  iconType="circle"
-                  iconSize={8}
-                  layout="vertical"
-                  align="right"
-                  verticalAlign="middle"
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  formatter={(value: string, entry: any) => `${value} (${(entry?.payload?.value ?? 0).toLocaleString()})`}
-                  wrapperStyle={{ fontSize: 12 }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            <div style={{ position: "relative" }}>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={tierData} dataKey="value" nameKey="name" cx="40%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={2}>
+                    {tierEntries.map(([tier]) => (
+                      <Cell key={tier} fill={TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1"} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => v.toLocaleString()} />
+                  <Legend
+                    iconType="circle" iconSize={8} layout="vertical" align="right" verticalAlign="middle"
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    formatter={(value: string, entry: any) => `${value} (${(entry?.payload?.value ?? 0).toLocaleString()})`}
+                    wrapperStyle={{ fontSize: 12 }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div style={{
+                position: "absolute", top: "50%", left: "33.2%",
+                transform: "translate(-50%, -50%)",
+                textAlign: "center", pointerEvents: "none",
+              }}>
+                <div style={{ fontSize: 24, fontWeight: 700, color: "var(--text)", lineHeight: 1 }}>
+                  {total_systems.toLocaleString()}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3 }}>total</div>
+              </div>
+            </div>
           )}
         </div>
         <div className="chart-card">
           <div className="chart-title">Avg Compliance by Tier</div>
           {mounted && (
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={complianceData} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+              <BarChart data={complianceData} layout="vertical" margin={{ left: 8, right: 40, top: 4, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" horizontal={false} />
                 <XAxis type="number" domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 11 }} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={110} />
@@ -261,6 +269,12 @@ export default function Overview() {
                   {complianceEntries.map(([tier]) => (
                     <Cell key={tier} fill={LIFECYCLE_COLORS[tier] ?? TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1"} />
                   ))}
+                  <LabelList
+                    dataKey="value"
+                    position="right"
+                    style={{ fontSize: 11, fill: "var(--text-secondary)" }}
+                    formatter={(v: number) => `${v}%`}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
