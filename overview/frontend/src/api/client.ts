@@ -10,6 +10,7 @@ function requireEnv(key: keyof ImportMetaEnv): string {
 const API_BASE = requireEnv("VITE_OVERVIEW_API_BASE");
 export const HEALTH_URL = API_BASE.replace("/api/v1", "") + "/health";
 export const ALERTS_API_BASE = requireEnv("VITE_ALERTS_API_BASE");
+export const COMPLIANCE_API_BASE = requireEnv("VITE_COMPLIANCE_API_BASE");
 export const ALERTS_URL = requireEnv("VITE_ALERTS_URL");
 export const REGISTRY_URL = requireEnv("VITE_REGISTRY_URL");
 export const COMPLIANCE_URL = requireEnv("VITE_COMPLIANCE_URL");
@@ -20,13 +21,23 @@ async function request<T>(path: string, base: string = API_BASE): Promise<T> {
   return res.json();
 }
 
+interface AssessmentTrendRow {
+  id: string;
+  score: number | null;
+  updated_at: string;
+  status: string;
+}
+
 export const api = {
   getStats: () => request<OverviewStats>("/overview/stats"),
   getComplianceStats: (windowDays = 30) =>
     request<ComplianceStats>(`/overview/compliance-stats?window_days=${windowDays}`),
-  // Alerts live on a separate backend; route through request<T>() for type safety and
-  // consistent error handling. Callers decide how to degrade if alerts is unavailable
-  // (the dashboard tolerates alert failures without failing the whole page).
+  // Alerts and assessments live on separate backends; route through request<T>() for
+  // type safety and consistent error handling. Callers decide how to degrade if a
+  // dependency is unavailable (the dashboard tolerates these failures without failing
+  // the whole page).
   getActiveAlerts: () => request<AlertEvent[]>("/alerts/active", ALERTS_API_BASE),
   getAlertCount: () => request<{ count: number }>("/alerts/count", ALERTS_API_BASE),
+  getAssessments: () =>
+    request<AssessmentTrendRow[]>("/assessments?limit=500", COMPLIANCE_API_BASE),
 };

@@ -17,8 +17,8 @@ import DateRangeFilter from "../components/DateRangeFilter";
 import ObligationDonut from "../components/ObligationDonut";
 import FrameworkBreakdown from "../components/FrameworkBreakdown";
 import EvidenceGapCard from "../components/EvidenceGapCard";
-import RiskHeatMap from "../components/RiskHeatMap";
 import AlertFeed from "../components/AlertFeed";
+import ComplianceTrend from "../components/ComplianceTrend";
 import UpcomingDeadlines from "../components/UpcomingDeadlines";
 
 const STORAGE_KEY = "ai_trust_overview_dashboard_v1";
@@ -36,6 +36,7 @@ export default function Overview() {
   const [stats, setStats] = useState<OverviewStats | null>(null);
   const [complianceStats, setComplianceStats] = useState<ComplianceStats | null>(null);
   const [activeAlerts, setActiveAlerts] = useState<AlertEvent[]>([]);
+  const [assessments, setAssessments] = useState<{ id: string; score: number | null; updated_at: string; status: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange>({ preset: "30d", days: 30 });
   const [cards, setCards] = useState<DashboardCard[]>(loadCards);
@@ -54,16 +55,19 @@ export default function Overview() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, cs, aa] = await Promise.all([
+      const [s, cs, aa, assess] = await Promise.all([
         api.getStats(),
         api.getComplianceStats(dateRange.days),
-        // Alerts degrade independently — a down alerts backend must not fail the
-        // whole dashboard, so swallow its error and fall back to an empty list.
+        // Alerts and assessments degrade independently — a down alerts/compliance
+        // backend must not fail the whole dashboard, so swallow their errors and
+        // fall back to empty lists.
         api.getActiveAlerts().catch(() => [] as AlertEvent[]),
+        api.getAssessments().catch(() => []),
       ]);
       setStats(s);
       setComplianceStats(cs);
-      setActiveAlerts(aa.slice(0, 10));
+      setActiveAlerts(aa.slice(0, 5));
+      setAssessments(assess);
     } catch (e) {
       showToast(`Failed to load dashboard: ${(e as Error).message}`, true);
     } finally {
@@ -206,11 +210,12 @@ export default function Overview() {
         />
       </div>
 
-      {/* 2-col row: risk heat map | alert feed */}
+      {/* 2-col row: compliance trend | alert feed */}
       <div className="charts-row">
-        <RiskHeatMap
-          data={complianceStats?.risk_heatmap ?? []}
-          onClick={() => navigateTo("/home/ai-system-registry", REGISTRY_URL)}
+        <ComplianceTrend
+          assessments={assessments}
+          windowDays={dateRange.days}
+          onClick={() => navigateTo("/home/assessments", COMPLIANCE_URL)}
         />
         <AlertFeed alerts={activeAlerts} loading={loading && activeAlerts.length === 0} />
       </div>

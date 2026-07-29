@@ -71,6 +71,7 @@ services:
         VITE_ALERTS_URL: ${VITE_ALERTS_URL}
         VITE_REGISTRY_URL: ${VITE_REGISTRY_URL}
         VITE_COMPLIANCE_URL: ${VITE_COMPLIANCE_URL}
+        VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE}
     ports:
       - "3003:80"
     restart: on-failure
