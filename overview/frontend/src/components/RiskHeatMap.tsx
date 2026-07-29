@@ -32,7 +32,7 @@ function severityColor(tierX: number, residualY: number): string {
   const combined = (tierSeverity * 0.5) + (compSeverity * 0.5);
 
   if (combined < 0.25) return "#1a7a3c"; // green
-  if (combined < 0.45) return "#5a9e6f"; // light green
+  if (combined < 0.45) return "#3d9e6b"; // light green
   if (combined < 0.60) return "#e9a922"; // amber
   if (combined < 0.75) return "#e05c00"; // orange
   return "#bb0000";                       // red
