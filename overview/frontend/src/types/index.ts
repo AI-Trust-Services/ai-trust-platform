@@ -43,7 +43,9 @@ export type ChartType = "bar" | "doughnut" | "line" | "pie";
 export type DataKey =
   | "by_tier" | "by_lifecycle" | "by_type"
   | "compliance_by_tier" | "compliance_histogram"
-  | "by_model_type" | "by_model_provider";
+  | "by_model_type" | "by_model_provider"
+  | "obligation_status" | "evidence_gap" | "framework_compliance"
+  | "upcoming_deadlines" | "active_alerts";
 
 export interface DashboardCard {
   id: string;
@@ -60,3 +62,74 @@ export interface RecommendedChart {
   dataKey?: DataKey;
   badge: string;
 }
+
+// --- Compliance stats types ---
+
+export interface ObligationStatusCounts {
+  applicable: number;
+  in_progress: number;
+  overdue: number;
+  fulfilled: number;
+  not_applicable: number;
+}
+
+export interface EvidenceGap {
+  expired: number;
+  expiring_soon: number;
+  missing: number;
+}
+
+export interface FrameworkScore {
+  framework_id: string;
+  framework_name: string;
+  total_obligations: number;
+  fulfilled: number;
+  score: number | null;
+}
+
+export interface RiskHeatCell {
+  tier: string;
+  tier_x: number;
+  residual_risk_y: number;
+  count: number;
+}
+
+export interface Deadline {
+  type: "obligation" | "evidence";
+  id: string;
+  title: string;
+  due_date: string | null;
+  status: string;
+  ai_system_id: string | null;
+  ai_system_name: string | null;
+  framework_id: string | null;
+}
+
+export interface AlertEvent {
+  id: string;
+  rule_id: string;
+  rule_name: string;
+  category: string;
+  severity: "error" | "warning" | "info";
+  alert_type: string;
+  description: string;
+  value_at_trigger: number | null;
+  triggered_at: string;
+  entity_id: string;
+  entity_type: string;
+  entity_display_name: string;
+}
+
+export interface ComplianceStats {
+  obligation_status: ObligationStatusCounts;
+  evidence_gap: EvidenceGap;
+  framework_compliance: FrameworkScore[];
+  upcoming_deadlines: Deadline[];
+  risk_heatmap: RiskHeatCell[];
+}
+
+export interface DateRange {
+  preset: "7d" | "30d" | "90d";
+  days: number;
+}
+
