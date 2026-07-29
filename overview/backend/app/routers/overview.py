@@ -1,12 +1,18 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
-from sqlalchemy import and_, func, or_, select
+from datetime import date, timedelta
+
+from fastapi import APIRouter, Query
+from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy.orm import aliased
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
+from ai_trust_persistence.models.evidence import Evidence, evidence_obligations
+from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
+from ai_trust_persistence.models.obligation import Obligation
 
 router = APIRouter(tags=["overview"])
 logger = get_logger(__name__)
@@ -33,12 +39,10 @@ async def get_overview_stats() -> dict:
         )).all()
         by_lifecycle = {r.lifecycle: r.n for r in lifecycle_rows}
 
-        # Fully compliant = compliance >= 100
         fully_compliant = (await session.execute(
             select(func.count()).select_from(AISystem).where(AISystem.compliance >= 100)
         )).scalar_one()
 
-        # High risk = high tier on market or post-market
         high_risk_on_market = (await session.execute(
             select(func.count()).select_from(AISystem).where(
                 AISystem.tier == "high",
@@ -70,15 +74,23 @@ async def get_overview_stats() -> dict:
         )).all()
         by_model_provider = {r.provider: r.n for r in model_provider_rows}
 
-        buckets = {"0–20": 0, "20–40": 0, "40–60": 0, "60–80": 0, "80–100": 0}
-        compliance_vals = (await session.execute(select(AISystem.compliance))).scalars().all()
-        for val in compliance_vals:
-            v = float(val or 0)
-            if v < 20:   buckets["0–20"]   += 1
-            elif v < 40: buckets["20–40"]  += 1
-            elif v < 60: buckets["40–60"]  += 1
-            elif v < 80: buckets["60–80"]  += 1
-            else:        buckets["80–100"] += 1
+        # Compliance histogram — single aggregate query instead of loading all rows.
+        hist_row = (await session.execute(
+            select(
+                func.sum(case((AISystem.compliance < 20, 1), else_=0)).label("b0"),
+                func.sum(case((and_(AISystem.compliance >= 20, AISystem.compliance < 40), 1), else_=0)).label("b1"),
+                func.sum(case((and_(AISystem.compliance >= 40, AISystem.compliance < 60), 1), else_=0)).label("b2"),
+                func.sum(case((and_(AISystem.compliance >= 60, AISystem.compliance < 80), 1), else_=0)).label("b3"),
+                func.sum(case((AISystem.compliance >= 80, 1), else_=0)).label("b4"),
+            )
+        )).one()
+        buckets = {
+            "0–20":   int(hist_row.b0 or 0),
+            "20–40":  int(hist_row.b1 or 0),
+            "40–60":  int(hist_row.b2 or 0),
+            "60–80":  int(hist_row.b3 or 0),
+            "80–100": int(hist_row.b4 or 0),
+        }
 
         recent_rows = (await session.execute(
             select(AISystem).order_by(AISystem.created_at.desc()).limit(10)
@@ -92,7 +104,6 @@ async def get_overview_stats() -> dict:
             for r in recent_rows
         ]
 
-        # Systems needing attention
         attention_rows = (await session.execute(
             select(AISystem).where(
                 or_(
@@ -128,20 +139,204 @@ async def get_overview_stats() -> dict:
 
     logger.info("overview.stats_fetched", extra={"total": total})
     return {
-        "total_systems":       total,
-        "avg_compliance":      round(avg_compliance, 1),
-        "fully_compliant":     fully_compliant,
-        "high_risk_on_market": high_risk_on_market,
-        "prohibited_count":    by_tier.get("prohibited", 0),
-        "high_count":          by_tier.get("high", 0),
-        "total_models":        total_models,
-        "by_tier":             by_tier,
-        "by_lifecycle":        by_lifecycle,
-        "by_type":             by_type,
-        "compliance_by_tier":  compliance_by_tier,
+        "total_systems":        total,
+        "avg_compliance":       round(avg_compliance, 1),
+        "fully_compliant":      fully_compliant,
+        "high_risk_on_market":  high_risk_on_market,
+        "prohibited_count":     by_tier.get("prohibited", 0),
+        "high_count":           by_tier.get("high", 0),
+        "total_models":         total_models,
+        "by_tier":              by_tier,
+        "by_lifecycle":         by_lifecycle,
+        "by_type":              by_type,
+        "compliance_by_tier":   compliance_by_tier,
         "compliance_histogram": buckets,
-        "by_model_type":       by_model_type,
-        "by_model_provider":   by_model_provider,
-        "recent":              recent,
-        "attention":           attention,
+        "by_model_type":        by_model_type,
+        "by_model_provider":    by_model_provider,
+        "recent":               recent,
+        "attention":            attention,
+    }
+
+
+@router.get("/overview/compliance-stats")
+async def get_compliance_stats(
+    window_days: int = Query(default=30, ge=1, le=365),
+) -> dict:
+    today = date.today()
+    window_end = today + timedelta(days=window_days)
+
+    async with SessionLocal() as session:
+        # Obligation status counts
+        obl_rows = (await session.execute(
+            select(Obligation.status, func.count().label("n")).group_by(Obligation.status)
+        )).all()
+        obligation_status = {r.status: r.n for r in obl_rows}
+
+        # Evidence gap
+        expired_count = (await session.execute(
+            select(func.count()).select_from(Evidence).where(
+                Evidence.status == "approved",
+                Evidence.validity_until < today,
+            )
+        )).scalar_one()
+
+        expiring_count = (await session.execute(
+            select(func.count()).select_from(Evidence).where(
+                Evidence.status == "approved",
+                Evidence.validity_until >= today,
+                Evidence.validity_until < window_end,
+            )
+        )).scalar_one()
+
+        # Obligations with no approved evidence linked — NOT EXISTS subquery
+        missing_count = (await session.execute(
+            select(func.count()).select_from(Obligation).where(
+                Obligation.status.not_in(["fulfilled", "not_applicable"]),
+                ~(
+                    select(evidence_obligations.c.obligation_id)
+                    .join(Evidence, Evidence.id == evidence_obligations.c.evidence_id)
+                    .where(
+                        evidence_obligations.c.obligation_id == Obligation.id,
+                        Evidence.status == "approved",
+                    )
+                    .correlate(Obligation)
+                    .exists()
+                ),
+            )
+        )).scalar_one()
+
+        # Framework compliance
+        fw_rows = (await session.execute(
+            select(
+                Framework.id,
+                Framework.name,
+                func.count(Obligation.id).label("total"),
+                func.sum(case((Obligation.status == "fulfilled", 1), else_=0)).label("fulfilled"),
+            )
+            .outerjoin(Obligation, Obligation.framework_id == Framework.id)
+            .where(Framework.enabled == True)
+            .group_by(Framework.id, Framework.name)
+            .order_by(Framework.name)
+        )).all()
+        framework_compliance = [
+            {
+                "framework_id":      r.id,
+                "framework_name":    r.name,
+                "total_obligations": int(r.total or 0),
+                "fulfilled":         int(r.fulfilled or 0),
+                "score":             round(int(r.fulfilled or 0) / int(r.total) * 100, 1) if r.total else None,
+            }
+            for r in fw_rows
+        ]
+
+        # Upcoming deadlines — obligations + evidence within window, sorted, LIMIT 30
+        obl_sys = aliased(AISystem)
+        obl_deadlines = (await session.execute(
+            select(
+                Obligation.id,
+                Obligation.title,
+                Obligation.due_date,
+                Obligation.status,
+                Obligation.ai_system_id,
+                Obligation.framework_id,
+                obl_sys.name.label("ai_system_name"),
+            )
+            .join(obl_sys, obl_sys.id == Obligation.ai_system_id)
+            .where(
+                Obligation.due_date >= today,
+                Obligation.due_date < window_end,
+                Obligation.status.not_in(["fulfilled", "not_applicable"]),
+            )
+            .order_by(Obligation.due_date.asc())
+            .limit(30)
+        )).all()
+
+        evd_sys = aliased(AISystem)
+        evd_deadlines = (await session.execute(
+            select(
+                Evidence.id,
+                Evidence.title,
+                Evidence.validity_until.label("due_date"),
+                Evidence.status,
+                Evidence.ai_system_id,
+                evd_sys.name.label("ai_system_name"),
+            )
+            .join(evd_sys, evd_sys.id == Evidence.ai_system_id)
+            .where(
+                Evidence.validity_until >= today,
+                Evidence.validity_until < window_end,
+                Evidence.status == "approved",
+            )
+            .order_by(Evidence.validity_until.asc())
+            .limit(30)
+        )).all()
+
+        deadlines = sorted(
+            [
+                {
+                    "type":           "obligation",
+                    "id":             r.id,
+                    "title":          r.title,
+                    "due_date":       r.due_date.isoformat() if r.due_date else None,
+                    "status":         r.status,
+                    "ai_system_id":   r.ai_system_id,
+                    "ai_system_name": r.ai_system_name,
+                    "framework_id":   r.framework_id,
+                }
+                for r in obl_deadlines
+            ] + [
+                {
+                    "type":           "evidence",
+                    "id":             r.id,
+                    "title":          r.title,
+                    "due_date":       r.due_date.isoformat() if r.due_date else None,
+                    "status":         r.status,
+                    "ai_system_id":   r.ai_system_id,
+                    "ai_system_name": r.ai_system_name,
+                    "framework_id":   None,
+                }
+                for r in evd_deadlines
+            ],
+            key=lambda x: x["due_date"] or "",
+        )[:30]
+
+        # Risk heat map — GROUP BY tier x compliance bucket, max 20 rows
+        tier_x = case(
+            (AISystem.tier == "minimal",       1),
+            (AISystem.tier == "limited",       2),
+            (AISystem.tier == "gpai-standard", 2),
+            (AISystem.tier == "high",          3),
+            (AISystem.tier == "gpai-systemic", 3),
+            (AISystem.tier == "prohibited",    4),
+            else_=1,
+        ).label("tier_x")
+
+        residual_y = case(
+            (AISystem.compliance >= 80, 10),
+            (AISystem.compliance >= 60, 30),
+            (AISystem.compliance >= 40, 50),
+            (AISystem.compliance >= 20, 70),
+            else_=90,
+        ).label("residual_risk_y")
+
+        heatmap_rows = (await session.execute(
+            select(AISystem.tier, tier_x, residual_y, func.count().label("n"))
+            .group_by(AISystem.tier, tier_x, residual_y)
+        )).all()
+        risk_heatmap = [
+            {"tier": r.tier, "tier_x": r.tier_x, "residual_risk_y": r.residual_risk_y, "count": r.n}
+            for r in heatmap_rows
+        ]
+
+    logger.info("overview.compliance_stats_fetched", extra={"window_days": window_days})
+    return {
+        "obligation_status":    obligation_status,
+        "evidence_gap": {
+            "expired":       int(expired_count),
+            "expiring_soon": int(expiring_count),
+            "missing":       int(missing_count),
+        },
+        "framework_compliance": framework_compliance,
+        "upcoming_deadlines":   deadlines,
+        "risk_heatmap":         risk_heatmap,
     }
