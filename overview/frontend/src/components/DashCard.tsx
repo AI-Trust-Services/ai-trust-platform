@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, CartesianGrid,
+  XAxis, YAxis, Tooltip, CartesianGrid, Legend, LabelList,
 } from "recharts";
 import type { DashboardCard, OverviewStats, RecentSystem } from "../types";
 import { TierBadge, FormattedDate } from "./Badges";
@@ -58,22 +58,39 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
+  const total = entries.reduce((acc, [, v]) => acc + v, 0);
+
   return (
     <div className="dash-card-body">
       <div className="chart-wrap">
         {mounted && (
-        <ResponsiveContainer width="100%" height={220}>
+        <ResponsiveContainer width="100%" height={240}>
           {isPie ? (
             <PieChart>
-              <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius="70%">
+              <Pie
+                data={chartData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%" cy="50%"
+                outerRadius="60%"
+                label={({ value }) => `${((value / total) * 100).toFixed(0)}%`}
+                labelLine={true}
+              >
                 {chartData.map((entry, i) => (
                   <Cell key={entry.name} fill={colorFor(card.dataKey, entries[i][0], i)} />
                 ))}
               </Pie>
-              <Tooltip formatter={(val: number) => val.toLocaleString()} />
+              <Tooltip formatter={(val: number) => [val.toLocaleString(), ""]} />
+              <Legend
+                iconType="circle"
+                iconSize={8}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                formatter={(value: string, entry: any) => `${value} (${(entry?.payload?.value ?? 0).toLocaleString()})`}
+                wrapperStyle={{ fontSize: 11 }}
+              />
             </PieChart>
           ) : (
-            <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+            <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 40, top: 4, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" horizontal={false} />
               <XAxis
                 type="number"
@@ -86,6 +103,12 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
                 {chartData.map((entry, i) => (
                   <Cell key={entry.name} fill={colorFor(card.dataKey, entries[i][0], i)} />
                 ))}
+                <LabelList
+                  dataKey="value"
+                  position="right"
+                  style={{ fontSize: 11, fill: "var(--text-secondary)" }}
+                  formatter={(v: number) => isCompliance ? `${v}%` : v.toLocaleString()}
+                />
               </Bar>
             </BarChart>
           )}
