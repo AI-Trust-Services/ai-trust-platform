@@ -203,8 +203,8 @@ tbody td { padding: 12px 16px; vertical-align: middle; font-size: 14px; }
 .empty-dashboard p { font-size: 13px; margin-bottom: 20px; }
 
 /* ── Add Graph modal ── */
-.add-graph-modal { width: 860px !important; max-width: 96vw; }
-.add-graph-body { display: flex; height: 460px; overflow: hidden; }
+.add-graph-modal { width: 960px !important; max-width: 96vw !important; max-height: 90vh; overflow-y: visible; }
+.add-graph-body { display: flex; height: 560px; overflow: hidden; }
 
 .add-graph-list {
   width: 260px; flex-shrink: 0; overflow-y: auto;
