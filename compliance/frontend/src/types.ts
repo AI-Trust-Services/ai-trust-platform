@@ -49,6 +49,7 @@ export interface ObligationDetail extends Obligation {
 export interface Control {
   id: string;
   ai_system_id: string | null;
+  control_ref: string | null;
   title: string;
   description: string;
   category: string;

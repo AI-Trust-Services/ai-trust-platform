@@ -73,12 +73,30 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .content { padding: 12px 20px; }
 
+.pagination {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 4px 0;
+}
+.pagination-summary { color: var(--text-secondary); font-size: 13px; justify-self: start; }
+.pagination-nav { display: flex; align-items: center; gap: 6px; justify-self: center; }
+.pagination-size-wrap { justify-self: end; }
+.pagination-size { min-width: auto; }
+.pagination-gap { color: var(--text-secondary); padding: 0 2px; }
+button.pagination-page { min-width: 32px; }
+button.pagination-page.active {
+  background: var(--brand); color: #fff; border-color: var(--brand);
+}
+
 .table-wrap { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: visible; }
 table { width: 100%; border-collapse: collapse; }
 thead th {
   background: #f8f9fa; border-bottom: 2px solid var(--border);
   padding: 7px 12px; text-align: left; font-size: 11px; font-weight: 600;
   color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;
+  position: sticky; top: 0; z-index: 2;
 }
 tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
 tbody tr:last-child { border-bottom: none; }

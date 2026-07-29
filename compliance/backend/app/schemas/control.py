@@ -74,6 +74,7 @@ class ControlUpdate(BaseModel):
 class ControlResponse(BaseModel):
     id: str
     ai_system_id: str | None
+    control_ref: str | None
     title: str
     description: str
     category: str
@@ -90,3 +91,8 @@ class ControlResponse(BaseModel):
 class ControlDetailResponse(ControlResponse):
     obligation_ids: list[str] = []
     evidence_count: int = 0
+
+
+class GenerateControlsResponse(BaseModel):
+    created: list[ControlResponse]
+    message: str
