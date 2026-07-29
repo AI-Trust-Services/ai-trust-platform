@@ -226,7 +226,16 @@ export default function Overview() {
                   ))}
                 </Pie>
                 <Tooltip formatter={(v: number) => v.toLocaleString()} />
-                <Legend iconType="circle" iconSize={8} layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12 }} />
+                <Legend
+                  iconType="circle"
+                  iconSize={8}
+                  layout="vertical"
+                  align="right"
+                  verticalAlign="middle"
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  formatter={(value: string, entry: any) => `${value} (${(entry?.payload?.value ?? 0).toLocaleString()})`}
+                  wrapperStyle={{ fontSize: 12 }}
+                />
               </PieChart>
             </ResponsiveContainer>
           )}

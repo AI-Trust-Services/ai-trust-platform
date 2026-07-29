@@ -1,8 +1,4 @@
 import { useMemo } from "react";
-import {
-  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer,
-} from "recharts";
 import type { RiskHeatCell } from "../types";
 import { TIER_COLORS, TIER_LABELS } from "../utils";
 
@@ -11,70 +7,97 @@ interface Props {
   onClick?: () => void;
 }
 
-const X_TICKS = [1, 2, 3, 4];
-const X_LABELS: Record<number, string> = { 1: "Minimal", 2: "Limited", 3: "High", 4: "Prohibited" };
-const Y_LABELS: Record<number, string> = { 10: "80–100%", 30: "60–80%", 50: "40–60%", 70: "20–40%", 90: "0–20%" };
+const X_COLS = [
+  { x: 1, label: "Minimal" },
+  { x: 2, label: "Limited" },
+  { x: 3, label: "High" },
+  { x: 4, label: "Prohibited" },
+];
 
-function CustomDot(props: {
-  cx?: number; cy?: number;
-  payload?: RiskHeatCell;
-}): JSX.Element {
-  const { cx = 0, cy = 0, payload } = props;
-  if (!payload) return <g />;
-  const r = Math.max(8, Math.sqrt(payload.count) * 6);
-  const fill = TIER_COLORS[payload.tier as keyof typeof TIER_COLORS] ?? "#0a6ed1";
-  return (
-    <circle cx={cx} cy={cy} r={r} fill={fill} fillOpacity={0.75} stroke={fill} strokeWidth={1} />
-  );
-}
-
-function CustomTooltip({ active, payload }: { active?: boolean; payload?: { payload: RiskHeatCell }[] }): JSX.Element | null {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  const tierLabel = TIER_LABELS[d.tier as keyof typeof TIER_LABELS] ?? d.tier;
-  const riskBand = Y_LABELS[d.residual_risk_y] ?? `${d.residual_risk_y}%`;
-  return (
-    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6, padding: "8px 12px", fontSize: 12 }}>
-      <div style={{ fontWeight: 600 }}>{tierLabel}</div>
-      <div style={{ color: "var(--text-secondary)" }}>Compliance: {riskBand}</div>
-      <div style={{ color: "var(--text-secondary)" }}>{d.count} system{d.count !== 1 ? "s" : ""}</div>
-    </div>
-  );
-}
+const Y_ROWS = [
+  { y: 90, label: "0–20%",   desc: "Very high risk" },
+  { y: 70, label: "20–40%",  desc: "High risk"      },
+  { y: 50, label: "40–60%",  desc: "Medium risk"    },
+  { y: 30, label: "60–80%",  desc: "Low risk"       },
+  { y: 10, label: "80–100%", desc: "Very low risk"  },
+];
 
 export default function RiskHeatMap({ data, onClick }: Props): JSX.Element {
-  const points = useMemo(() => data.map((d) => ({ ...d })), [data]);
+  // Build lookup: "tier_x:residual_y" -> cell
+  const lookup = useMemo(() => {
+    const m: Record<string, RiskHeatCell> = {};
+    for (const d of data) m[`${d.tier_x}:${d.residual_risk_y}`] = d;
+    return m;
+  }, [data]);
+
+  // Map tier_x back to a tier string for colour lookup
+  const tierByX = useMemo(() => {
+    const m: Record<number, string> = {};
+    for (const d of data) m[d.tier_x] = d.tier;
+    return m;
+  }, [data]);
 
   return (
-    <div className="chart-card" onClick={onClick} style={{ cursor: onClick ? "pointer" : undefined }}>
+    <div className="chart-card" onClick={onClick} style={{ cursor: onClick ? "pointer" : undefined, display: "flex", flexDirection: "column" }}>
       <div className="chart-title">Risk Heat Map</div>
-      <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>
+      <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 8 }}>
         X = inherent risk tier · Y = residual risk (100 − compliance%)
       </div>
-      <ResponsiveContainer width="100%" height={220}>
-        <ScatterChart margin={{ left: 8, right: 16, top: 8, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" />
-          <XAxis
-            type="number"
-            dataKey="tier_x"
-            domain={[0.5, 4.5]}
-            ticks={X_TICKS}
-            tickFormatter={(v: number) => X_LABELS[v] ?? ""}
-            tick={{ fontSize: 11 }}
-          />
-          <YAxis
-            type="number"
-            dataKey="residual_risk_y"
-            domain={[0, 100]}
-            ticks={[10, 30, 50, 70, 90]}
-            tickFormatter={(v: number) => Y_LABELS[v] ?? `${v}%`}
-            tick={{ fontSize: 11 }}
-            width={64}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Scatter data={points} shape={<CustomDot />} />
-        </ScatterChart>
-      </ResponsiveContainer>
+      <div style={{ display: "flex", gap: 8, flex: 1 }}>
+        {/* Y-axis labels */}
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-around", paddingBottom: 20 }}>
+          {Y_ROWS.map((row) => (
+            <div key={row.y} style={{ fontSize: 10, color: "var(--text-secondary)", textAlign: "right", width: 50 }}>
+              {row.label}
+            </div>
+          ))}
+        </div>
+        {/* Grid + X labels */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+          {/* Grid rows */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+            {Y_ROWS.map((row) => (
+              <div key={row.y} style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${X_COLS.length}, 1fr)`, gap: 3 }}>
+                {X_COLS.map((col) => {
+                  const cell = lookup[`${col.x}:${row.y}`];
+                  const count = cell?.count ?? 0;
+                  const tier = tierByX[col.x] ?? "";
+                  const bg = count > 0 ? (TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1") : "#f0f1f2";
+                  const opacity = count > 0 ? Math.min(0.35 + (count / 8) * 0.65, 1) : 1;
+                  return (
+                    <div
+                      key={`${col.x}:${row.y}`}
+                      title={count > 0 ? `${TIER_LABELS[tier as keyof typeof TIER_LABELS] ?? tier} · ${row.desc} · ${count} system${count !== 1 ? "s" : ""}` : undefined}
+                      style={{
+                        borderRadius: 4,
+                        background: bg,
+                        opacity,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: count > 0 ? "#fff" : "transparent",
+                        minHeight: 28,
+                      }}
+                    >
+                      {count > 0 ? count : ""}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          {/* X-axis labels */}
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${X_COLS.length}, 1fr)`, gap: 3 }}>
+            {X_COLS.map((col) => (
+              <div key={col.x} style={{ fontSize: 10, color: "var(--text-secondary)", textAlign: "center" }}>
+                {col.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

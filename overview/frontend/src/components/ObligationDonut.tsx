@@ -8,11 +8,11 @@ interface Props {
 }
 
 const SLICES = [
-  { key: "fulfilled",     label: "Fulfilled",      color: "#1a7a3c" },
-  { key: "in_progress",   label: "In Progress",    color: "#0a6ed1" },
-  { key: "applicable",    label: "Applicable",     color: "#e9a922" },
-  { key: "overdue",       label: "Overdue",        color: "#bb0000" },
-  { key: "not_applicable",label: "Not Applicable", color: "#999999" },
+  { key: "fulfilled",      label: "Fulfilled",      color: "#1a7a3c" },
+  { key: "in_progress",    label: "In Progress",    color: "#0a6ed1" },
+  { key: "applicable",     label: "Applicable",     color: "#e9a922" },
+  { key: "overdue",        label: "Overdue",        color: "#bb0000" },
+  { key: "not_applicable", label: "Not Applicable", color: "#999999" },
 ] as const;
 
 export default function ObligationDonut({ data, onClick }: Props): JSX.Element {
@@ -26,27 +26,50 @@ export default function ObligationDonut({ data, onClick }: Props): JSX.Element {
   return (
     <div className="chart-card" onClick={onClick} style={{ cursor: onClick ? "pointer" : undefined }}>
       <div className="chart-title">Obligation Status</div>
-      <ResponsiveContainer width="100%" height={220}>
-        <PieChart>
-          <Pie
-            data={chartData}
-            dataKey="value"
-            nameKey="name"
-            cx="50%" cy="50%"
-            innerRadius={55}
-            outerRadius={80}
-            paddingAngle={2}
-          >
-            {chartData.map((entry) => (
-              <Cell key={entry.name} fill={entry.color} />
-            ))}
-          </Pie>
-          <Tooltip formatter={(v: number) => v.toLocaleString()} />
-          <Legend iconType="circle" iconSize={8} layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12 }} />
-        </PieChart>
-      </ResponsiveContainer>
-      <div style={{ textAlign: "center", fontSize: 12, color: "var(--text-secondary)", marginTop: -8 }}>
-        {total.toLocaleString()} total
+      {/* position:relative so the center label can be absolutely placed over the donut hole */}
+      <div style={{ position: "relative" }}>
+        <ResponsiveContainer width="100%" height={220}>
+          <PieChart>
+            <Pie
+              data={chartData}
+              dataKey="value"
+              nameKey="name"
+              cx="40%"
+              cy="50%"
+              innerRadius={55}
+              outerRadius={80}
+              paddingAngle={2}
+            >
+              {chartData.map((entry) => (
+                <Cell key={entry.name} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(v: number) => v.toLocaleString()} />
+            <Legend
+              iconType="circle"
+              iconSize={8}
+              layout="vertical"
+              align="right"
+              verticalAlign="middle"
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter={(value: string, entry: any) =>
+                `${value} (${(entry?.payload?.value ?? 0).toLocaleString()})`
+              }
+              wrapperStyle={{ fontSize: 12 }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+        {/* Center label — absolutely positioned over the donut hole (cx=40%, cy=50%) */}
+        <div style={{
+          position: "absolute", top: "50%", left: "26.6%",
+          transform: "translate(-50%, -50%)",
+          textAlign: "center", pointerEvents: "none",
+        }}>
+          <div style={{ fontSize: 24, fontWeight: 700, color: "var(--text)", lineHeight: 1 }}>
+            {total.toLocaleString()}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3 }}>total</div>
+        </div>
       </div>
     </div>
   );
