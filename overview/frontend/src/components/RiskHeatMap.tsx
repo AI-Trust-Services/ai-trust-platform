@@ -1,5 +1,4 @@
 import type { RiskHeatCell } from "../types";
-import { TIER_LABELS } from "../utils";
 import { useMemo } from "react";
 
 interface Props {
@@ -46,12 +45,6 @@ export default function RiskHeatMap({ data, onClick }: Props): JSX.Element {
     return m;
   }, [data]);
 
-  const tierByX = useMemo(() => {
-    const m: Record<number, string> = {};
-    for (const d of data) m[d.tier_x] = d.tier;
-    return m;
-  }, [data]);
-
   const isEmpty = data.length === 0;
 
   return (
@@ -84,14 +77,12 @@ export default function RiskHeatMap({ data, onClick }: Props): JSX.Element {
                     {X_COLS.map((col) => {
                       const cell = lookup[`${col.x}:${row.y}`];
                       const count = cell?.count ?? 0;
-                      const tier = tierByX[col.x] ?? "";
                       const bg = count > 0 ? severityColor(col.x, row.y) : "#f0f1f2";
                       const opacity = count > 0 ? Math.min(0.4 + (count / 8) * 0.6, 1) : 1;
-                      const tierLabel = TIER_LABELS[tier as keyof typeof TIER_LABELS] ?? tier;
                       return (
                         <div
                           key={`${col.x}:${row.y}`}
-                          title={count > 0 ? `${tierLabel} · ${row.desc} · ${count} system${count !== 1 ? "s" : ""}` : `${col.label} · ${row.label} · no systems`}
+                          title={count > 0 ? `${col.label} · ${row.desc} · ${count} system${count !== 1 ? "s" : ""}` : `${col.label} · ${row.label} · no systems`}
                           style={{
                             borderRadius: 4,
                             background: bg,
