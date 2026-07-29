@@ -112,6 +112,12 @@ export default function Overview() {
     setEditingCard(null);
     showToast("Graph updated");
   }
+  function resetToDefaults() {
+    if (!confirm("Reset dashboard to default layout? This will remove your current configuration.")) return;
+    setCards([]);
+    saveCards([]);
+    showToast("Dashboard reset");
+  }
 
   // Derived KPI values
   const { avg_compliance = 0, total_systems = 0, high_risk_on_market = 0 } = stats ?? {};
@@ -271,7 +277,10 @@ export default function Overview() {
       <div>
         <div className="analytics-header">
           <span className="section-title" style={{ marginBottom: 0 }}>Analytics Dashboard</span>
-          <button className="btn-primary" onClick={() => setAddOpen(true)}>+ Add Graph</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn-ghost" onClick={resetToDefaults}>↺ Reset</button>
+            <button className="btn-primary" onClick={() => setAddOpen(true)}>+ Add Graph</button>
+          </div>
         </div>
         {cards.length === 0 ? (
           <div className="empty-dashboard">
@@ -297,6 +306,7 @@ export default function Overview() {
       {addOpen && (
         <AddGraphModal
           activeIds={new Set(cards.map((c) => c.id))}
+          stats={stats}
           onAdd={addCard}
           onRemove={removeCard}
           onClose={() => setAddOpen(false)}

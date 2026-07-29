@@ -203,7 +203,35 @@ tbody td { padding: 12px 16px; vertical-align: middle; font-size: 14px; }
 .empty-dashboard p { font-size: 13px; margin-bottom: 20px; }
 
 /* ── Add Graph modal ── */
-.add-graph-modal { width: 720px !important; max-width: 95vw; }
+.add-graph-modal { width: 860px !important; max-width: 96vw; }
+.add-graph-body { display: flex; height: 460px; overflow: hidden; }
+
+.add-graph-list {
+  width: 260px; flex-shrink: 0; overflow-y: auto;
+  border-right: 1px solid var(--border); padding: 12px 0;
+}
+.rec-section-title {
+  font-size: 10px; font-weight: 700; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.6px; padding: 0 16px 6px;
+}
+.rec-list-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; cursor: pointer;
+  border-left: 3px solid transparent; transition: background 0.1s;
+}
+.rec-list-item:hover, .rec-list-item.focused { background: #f0f6ff; border-left-color: var(--brand); }
+.rec-list-item.added { background: #edf7f0; border-left-color: #1a7a3c; }
+.rec-list-item.added:hover { background: #fde8e8; border-left-color: #bb0000; }
+.rec-list-title { font-size: 13px; font-weight: 500; color: var(--text); }
+.rec-list-desc  { font-size: 11px; color: var(--text-secondary); }
+
+.add-graph-preview { flex: 1; padding: 16px; overflow-y: auto; background: var(--bg); }
+.add-graph-preview-empty {
+  height: 100%; display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary); font-size: 13px;
+}
+
+/* keep old grid styles for any surviving refs */
 .graph-modal-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 24px; background: #f8f9fa; }
 .graph-modal-tab {
   padding: 12px 18px; font-size: 13px; cursor: pointer;

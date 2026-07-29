@@ -40,7 +40,8 @@ function KpiCardBody({ card, stats }: { card: DashboardCard; stats: OverviewStat
 }
 
 function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewStats }) {
-  const rawData = card.dataKey ? (stats[card.dataKey] as Record<string, number> | undefined) ?? {} : {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawData = card.dataKey ? ((stats as any)[card.dataKey] as Record<string, number> | undefined) ?? {} : {};
   const entries = Object.entries(rawData);
 
   if (!entries.length) {
