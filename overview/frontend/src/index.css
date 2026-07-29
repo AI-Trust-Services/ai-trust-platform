@@ -259,3 +259,82 @@ tbody td { padding: 12px 16px; vertical-align: middle; font-size: 14px; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .charts-row { grid-template-columns: 1fr; }
 }
+
+/* ── Dashboard controls bar ── */
+.dashboard-controls {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.dashboard-actions { display: flex; align-items: center; gap: 8px; }
+
+/* ── Date range filter ── */
+.date-range-filter { display: flex; gap: 4px; }
+.date-range-btn {
+  padding: 5px 12px; font-size: 12px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-secondary); cursor: pointer;
+}
+.date-range-btn:hover { border-color: var(--brand); color: var(--brand); }
+.date-range-btn.active {
+  background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 500;
+}
+
+/* ── 6-tile KPI grid ── */
+.kpi-grid-6 { grid-template-columns: repeat(6, 1fr); }
+.kpi-card.clickable { cursor: pointer; transition: box-shadow 0.15s; }
+.kpi-card.clickable:hover { box-shadow: 0 0 0 2px var(--brand), var(--shadow); }
+
+/* ── Fixed widget grid (3 cols: donut / framework bar / evidence gap) ── */
+.fixed-widgets-grid {
+  display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 16px;
+}
+
+/* ── Alert feed ── */
+.alert-feed-card { display: flex; flex-direction: column; }
+.alert-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.alert-row:last-child { border-bottom: none; }
+.severity-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Upcoming deadlines ── */
+.deadlines-card { display: flex; flex-direction: column; }
+.deadline-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.deadline-row:last-child { border-bottom: none; }
+.days-pill {
+  padding: 2px 8px; border-radius: 10px;
+  font-size: 12px; font-weight: 600; flex-shrink: 0;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1200px) {
+  .kpi-grid-6 { grid-template-columns: repeat(3, 1fr); }
+  .fixed-widgets-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 900px) {
+  .kpi-grid-6 { grid-template-columns: repeat(2, 1fr); }
+  .fixed-widgets-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Print / PDF export ── */
+@media print {
+  .page-header, .dashboard-controls, .modal-overlay, .toast,
+  .health-banner, .drag-handle, .dash-card-actions,
+  .analytics-header .btn-primary { display: none !important; }
+
+  body { background: #fff; }
+  .overview-body { padding: 8px; gap: 12px; }
+  .kpi-grid-6 { grid-template-columns: repeat(3, 1fr); }
+  .fixed-widgets-grid, .charts-row, .dashboard-grid { grid-template-columns: 1fr 1fr; }
+
+  .kpi-card, .chart-card, .dash-card, .attention-card,
+  .deadlines-card, .alert-feed-card {
+    break-inside: avoid;
+    box-shadow: none;
+    border: 1px solid #e4e6e8;
+  }
+}
