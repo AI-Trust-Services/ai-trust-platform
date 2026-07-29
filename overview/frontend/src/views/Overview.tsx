@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Sortable from "sortablejs";
 import {
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, CartesianGrid, Legend, LabelList,
+  XAxis, YAxis, Tooltip, CartesianGrid, Legend, LabelList, Label,
 } from "recharts";
 import { api, ALERTS_URL, COMPLIANCE_URL, REGISTRY_URL } from "../api/client";
 import { useToast, useHeader } from "../App";
@@ -226,34 +226,41 @@ export default function Overview() {
         <div className="chart-card">
           <div className="chart-title">Systems by Risk Tier</div>
           {mounted && (
-            <div style={{ position: "relative" }}>
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={tierData} dataKey="value" nameKey="name" cx="40%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={2}>
-                    {tierEntries.map(([tier]) => (
-                      <Cell key={tier} fill={TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1"} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => v.toLocaleString()} />
-                  <Legend
-                    iconType="circle" iconSize={8} layout="vertical" align="right" verticalAlign="middle"
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={tierData} dataKey="value" nameKey="name" cx="40%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={2}>
+                  {tierEntries.map(([tier]) => (
+                    <Cell key={tier} fill={TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1"} />
+                  ))}
+                  <Label
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    formatter={(value: string, entry: any) => `${value} (${(entry?.payload?.value ?? 0).toLocaleString()})`}
-                    wrapperStyle={{ fontSize: 12 }}
+                    content={({ viewBox }: any) => {
+                      const { cx = 0, cy = 0 } = viewBox ?? {};
+                      return (
+                        <>
+                          <text x={cx} y={cy - 6} textAnchor="middle" dominantBaseline="middle"
+                            style={{ fontSize: 22, fontWeight: 700, fill: "var(--text)" }}>
+                            {total_systems.toLocaleString()}
+                          </text>
+                          <text x={cx} y={cy + 14} textAnchor="middle" dominantBaseline="middle"
+                            style={{ fontSize: 11, fill: "var(--text-secondary)" }}>
+                            total
+                          </text>
+                        </>
+                      );
+                    }}
+                    position="center"
                   />
-                </PieChart>
-              </ResponsiveContainer>
-              <div style={{
-                position: "absolute", top: "50%", left: "33.2%",
-                transform: "translate(-50%, -50%)",
-                textAlign: "center", pointerEvents: "none",
-              }}>
-                <div style={{ fontSize: 24, fontWeight: 700, color: "var(--text)", lineHeight: 1 }}>
-                  {total_systems.toLocaleString()}
-                </div>
-                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3 }}>total</div>
-              </div>
-            </div>
+                </Pie>
+                <Tooltip formatter={(v: number) => v.toLocaleString()} />
+                <Legend
+                  iconType="circle" iconSize={8} layout="vertical" align="right" verticalAlign="middle"
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  formatter={(value: string, entry: any) => `${value} (${(entry?.payload?.value ?? 0).toLocaleString()})`}
+                  wrapperStyle={{ fontSize: 12 }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
           )}
         </div>
         <div className="chart-card">
