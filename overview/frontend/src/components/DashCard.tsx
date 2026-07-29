@@ -120,7 +120,7 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
 }
 
 function TableCardBody({ stats }: { stats: OverviewStats }) {
-  const rows: RecentSystem[] = stats.recent ?? [];
+  const rows: RecentSystem[] = (stats.recent ?? []).slice(0, 5);
   if (!rows.length) {
     return (
       <div className="dash-card-body" style={{ color: "var(--text-secondary)", fontSize: 13 }}>
@@ -129,7 +129,7 @@ function TableCardBody({ stats }: { stats: OverviewStats }) {
     );
   }
   return (
-    <div className="dash-card-body" style={{ padding: 0 }}>
+    <div className="dash-card-body" style={{ padding: 0, overflow: "auto", flex: 1 }}>
       <table>
         <thead>
           <tr>
@@ -158,7 +158,7 @@ function TableCardBody({ stats }: { stats: OverviewStats }) {
 export default function DashCard({ card, stats, onEdit, onRemove }: Props) {
   const isKpi   = card.type === "kpi";
   const isTable = card.type === "table";
-  const cls     = isKpi ? "kpi" : isTable ? "table-card" : "chart";
+  const cls     = isKpi ? "kpi" : "chart"; // table uses chart height, not its own class
 
   return (
     <div className={`dash-card ${cls}`} data-card-id={card.id}>
