@@ -4,14 +4,22 @@ import {
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from "recharts";
-import { api } from "../api/client";
-import { useToast } from "../App";
-import type { OverviewStats, DashboardCard } from "../types";
+import { api, ALERTS_URL, COMPLIANCE_URL, REGISTRY_URL } from "../api/client";
+import { useToast, useHeader } from "../App";
+import { navigateTo } from "../hooks/useLuigi";
+import type { ComplianceStats, DashboardCard, DateRange, OverviewStats, AlertEvent } from "../types";
 import { TIER_COLORS, LIFECYCLE_COLORS } from "../utils";
 import AttentionTable from "../components/AttentionTable";
 import DashCard from "../components/DashCard";
 import AddGraphModal from "../components/AddGraphModal";
 import EditCardModal from "../components/EditCardModal";
+import DateRangeFilter from "../components/DateRangeFilter";
+import ObligationDonut from "../components/ObligationDonut";
+import FrameworkBreakdown from "../components/FrameworkBreakdown";
+import EvidenceGapCard from "../components/EvidenceGapCard";
+import RiskHeatMap from "../components/RiskHeatMap";
+import AlertFeed from "../components/AlertFeed";
+import UpcomingDeadlines from "../components/UpcomingDeadlines";
 
 const STORAGE_KEY = "ai_trust_overview_dashboard_v1";
 
@@ -26,31 +34,49 @@ function saveCards(cards: DashboardCard[]) {
 
 export default function Overview() {
   const [stats, setStats] = useState<OverviewStats | null>(null);
+  const [complianceStats, setComplianceStats] = useState<ComplianceStats | null>(null);
+  const [activeAlerts, setActiveAlerts] = useState<AlertEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRange>({ preset: "30d", days: 30 });
   const [cards, setCards] = useState<DashboardCard[]>(loadCards);
   const [addOpen, setAddOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<DashboardCard | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
   const showToast = useToast();
+  const { alertCount } = useHeader();
+
   const sortableRef = useRef<Sortable | null>(null);
   const cardsRef = useRef<DashboardCard[]>(cards);
   cardsRef.current = cards;
 
-  const loadStats = useCallback(async () => {
+  const refresh = useCallback(async () => {
+    setLoading(true);
     try {
-      setStats(await api.getStats());
+      const [s, cs, aa] = await Promise.all([
+        api.getStats(),
+        api.getComplianceStats(dateRange.days),
+        // Alerts degrade independently — a down alerts backend must not fail the
+        // whole dashboard, so swallow its error and fall back to an empty list.
+        api.getActiveAlerts().catch(() => [] as AlertEvent[]),
+      ]);
+      setStats(s);
+      setComplianceStats(cs);
+      setActiveAlerts(aa.slice(0, 10));
     } catch (e) {
-      showToast(`Failed to load overview: ${(e as Error).message}`, true);
+      showToast(`Failed to load dashboard: ${(e as Error).message}`, true);
+    } finally {
+      setLoading(false);
     }
-  }, [showToast]);
+  }, [dateRange.days, showToast]);
 
-  useEffect(() => { loadStats(); }, [loadStats]);
+  useEffect(() => {
+    refresh();
+    const id = setInterval(refresh, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [refresh]);
 
-  // Callback ref: create Sortable exactly once when the grid node mounts,
-  // destroy exactly once when it unmounts. The grid is conditionally rendered
-  // (empty state renders a different element), so this fires with `null` on
-  // unmount. Adding/removing cards keeps the same instance alive — SortableJS
-  // delegates to children, so new cards are draggable without re-creating it.
   const gridRefCallback = useCallback((node: HTMLDivElement | null) => {
     if (node) {
       sortableRef.current = Sortable.create(node, {
@@ -78,53 +104,118 @@ export default function Overview() {
     if (cards.find((c) => c.id === card.id)) { showToast("Already on dashboard", true); return; }
     setCards((prev) => { const next = [...prev, card]; saveCards(next); return next; });
   }
-
   function removeCard(id: string) {
     setCards((prev) => { const next = prev.filter((c) => c.id !== id); saveCards(next); return next; });
   }
-
   function saveEdit(updated: DashboardCard) {
     setCards((prev) => { const next = prev.map((c) => c.id === updated.id ? updated : c); saveCards(next); return next; });
     setEditingCard(null);
     showToast("Graph updated");
   }
 
+  // Derived KPI values
+  const { avg_compliance = 0, total_systems = 0, high_risk_on_market = 0 } = stats ?? {};
+  const complianceColor = avg_compliance >= 80 ? "#1a7a3c" : avg_compliance >= 50 ? "#e05c00" : "#bb0000";
+  const highRiskColor   = high_risk_on_market > 0 ? "#e05c00" : "#1a7a3c";
+
+  const openObligations = complianceStats
+    ? (complianceStats.obligation_status.applicable ?? 0)
+      + (complianceStats.obligation_status.in_progress ?? 0)
+      + (complianceStats.obligation_status.overdue ?? 0)
+    : null;
+  const evidenceGapCount = complianceStats
+    ? (complianceStats.evidence_gap.expired ?? 0) + (complianceStats.evidence_gap.expiring_soon ?? 0)
+    : null;
+  const oblColor   = openObligations === null ? "var(--brand)" : openObligations > 0 ? "#e05c00" : "#1a7a3c";
+  const evdColor   = evidenceGapCount === null ? "var(--brand)" : evidenceGapCount > 0 ? "#bb0000" : "#1a7a3c";
+  const alertColor = alertCount > 0 ? "#bb0000" : "#1a7a3c";
+
+  // Chart data for existing fixed charts (kept as-is)
   const tierEntries = Object.entries(stats?.by_tier ?? {});
   const complianceEntries = Object.entries(stats?.compliance_by_tier ?? {});
   const tierData = tierEntries.map(([name, value]) => ({ name: name.replace(/-/g, " "), value }));
   const complianceData = complianceEntries.map(([name, value]) => ({ name: name.replace(/-/g, " "), value }));
 
-  const { avg_compliance = 0, total_systems = 0, high_risk_on_market = 0, fully_compliant = 0 } = stats ?? {};
-  const complianceColor = avg_compliance >= 80 ? "#1a7a3c" : avg_compliance >= 50 ? "#e05c00" : "#bb0000";
-  const highRiskColor   = high_risk_on_market > 0 ? "#e05c00" : "#1a7a3c";
-
   return (
     <div className="overview-body">
-      {/* KPI row */}
-      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
-        <div className="kpi-card">
-          <div className="kpi-label">Compliance Score</div>
-          <div className="kpi-value" style={{ color: complianceColor }}>{avg_compliance}%</div>
-          <div className="kpi-sub">average across all systems</div>
+
+      {/* Controls bar */}
+      <div className="dashboard-controls">
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
+        <div className="dashboard-actions">
+          {loading && <span className="spinner" />}
+          <button className="btn-ghost" onClick={refresh} disabled={loading}>↺ Refresh</button>
+          <button className="btn-ghost" onClick={() => window.print()}>⬇ Export PDF</button>
         </div>
-        <div className="kpi-card">
+      </div>
+
+      {/* 6-tile KPI row */}
+      <div className="kpi-grid kpi-grid-6">
+        <div className="kpi-card clickable" onClick={() => navigateTo("/home/ai-system-registry", REGISTRY_URL)}>
           <div className="kpi-label">AI Systems</div>
           <div className="kpi-value" style={{ color: "var(--brand)" }}>{total_systems}</div>
           <div className="kpi-sub">registered in platform</div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-label">High-Risk on Market</div>
+        <div className="kpi-card clickable" onClick={() => navigateTo("/home/ai-system-registry", REGISTRY_URL)}>
+          <div className="kpi-label">High-Risk Systems</div>
           <div className="kpi-value" style={{ color: highRiskColor }}>{high_risk_on_market}</div>
-          <div className="kpi-sub">requiring Art. 72 monitoring</div>
+          <div className="kpi-sub">on market / post-market</div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Fully Compliant</div>
-          <div className="kpi-value" style={{ color: "#1a7a3c" }}>{fully_compliant}</div>
-          <div className="kpi-sub">of {total_systems} systems</div>
+        <div className="kpi-card clickable" onClick={() => navigateTo("/home/assessments", COMPLIANCE_URL)}>
+          <div className="kpi-label">Compliance Score</div>
+          <div className="kpi-value" style={{ color: complianceColor }}>{avg_compliance}%</div>
+          <div className="kpi-sub">average across all systems</div>
+        </div>
+        <div className="kpi-card clickable" onClick={() => navigateTo("/home/obligations", COMPLIANCE_URL)}>
+          <div className="kpi-label">Open Obligations</div>
+          <div className="kpi-value" style={{ color: oblColor }}>{openObligations ?? "—"}</div>
+          <div className="kpi-sub">applicable + in progress + overdue</div>
+        </div>
+        <div className="kpi-card clickable" onClick={() => navigateTo("/home/evidence", COMPLIANCE_URL)}>
+          <div className="kpi-label">Evidence Gap</div>
+          <div className="kpi-value" style={{ color: evdColor }}>{evidenceGapCount ?? "—"}</div>
+          <div className="kpi-sub">expired or expiring soon</div>
+        </div>
+        <div className="kpi-card clickable" onClick={() => navigateTo("/home/alerts", ALERTS_URL)}>
+          <div className="kpi-label">Open Alerts</div>
+          <div className="kpi-value" style={{ color: alertColor }}>{alertCount}</div>
+          <div className="kpi-sub">unhandled alerts</div>
         </div>
       </div>
 
-      {/* Fixed charts */}
+      {/* Fixed 3-col widget row: obligation donut | framework bar | evidence gap */}
+      <div className="fixed-widgets-grid">
+        <ObligationDonut
+          data={complianceStats?.obligation_status ?? { applicable: 0, in_progress: 0, overdue: 0, fulfilled: 0, not_applicable: 0 }}
+          onClick={() => navigateTo("/home/obligations", COMPLIANCE_URL)}
+        />
+        <FrameworkBreakdown
+          data={complianceStats?.framework_compliance ?? []}
+          onClick={() => navigateTo("/home/assessments", COMPLIANCE_URL)}
+        />
+        <EvidenceGapCard
+          data={complianceStats?.evidence_gap ?? { expired: 0, expiring_soon: 0, missing: 0 }}
+          windowDays={dateRange.days}
+          onClick={() => navigateTo("/home/evidence", COMPLIANCE_URL)}
+        />
+      </div>
+
+      {/* 2-col row: risk heat map | alert feed */}
+      <div className="charts-row">
+        <RiskHeatMap
+          data={complianceStats?.risk_heatmap ?? []}
+          onClick={() => navigateTo("/home/ai-system-registry", REGISTRY_URL)}
+        />
+        <AlertFeed alerts={activeAlerts} loading={loading && activeAlerts.length === 0} />
+      </div>
+
+      {/* Upcoming deadlines */}
+      <UpcomingDeadlines
+        deadlines={complianceStats?.upcoming_deadlines ?? []}
+        windowDays={dateRange.days}
+      />
+
+      {/* Existing fixed charts (registry data) */}
       <div className="charts-row">
         <div className="chart-card">
           <div className="chart-title">Systems by Risk Tier</div>
@@ -137,7 +228,16 @@ export default function Overview() {
                   ))}
                 </Pie>
                 <Tooltip formatter={(v: number) => v.toLocaleString()} />
-                <Legend iconType="circle" iconSize={8} layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12 }} />
+                <Legend
+                  iconType="circle"
+                  iconSize={8}
+                  layout="vertical"
+                  align="right"
+                  verticalAlign="middle"
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  formatter={(value: string, entry: any) => `${value} (${(entry?.payload?.value ?? 0).toLocaleString()})`}
+                  wrapperStyle={{ fontSize: 12 }}
+                />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -167,7 +267,7 @@ export default function Overview() {
         <AttentionTable systems={stats.attention} />
       )}
 
-      {/* Customizable dashboard */}
+      {/* Customisable analytics dashboard (unchanged) */}
       <div>
         <div className="analytics-header">
           <span className="section-title" style={{ marginBottom: 0 }}>Analytics Dashboard</span>
@@ -202,7 +302,6 @@ export default function Overview() {
           onClose={() => setAddOpen(false)}
         />
       )}
-
       {editingCard && (
         <EditCardModal
           card={editingCard}
