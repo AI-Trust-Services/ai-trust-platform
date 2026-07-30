@@ -229,28 +229,8 @@ async def get_compliance_stats(
             for r in fw_rows
         ]
 
-        # Upcoming deadlines — obligations + evidence within window, sorted, LIMIT 30
-        obl_sys = aliased(AISystem)
-        obl_deadlines = (await session.execute(
-            select(
-                Obligation.id,
-                Obligation.title,
-                Obligation.due_date,
-                Obligation.status,
-                Obligation.ai_system_id,
-                Obligation.framework_id,
-                obl_sys.name.label("ai_system_name"),
-            )
-            .join(obl_sys, obl_sys.id == Obligation.ai_system_id)
-            .where(
-                Obligation.due_date >= today,
-                Obligation.due_date < window_end,
-                Obligation.status.not_in(["fulfilled", "not_applicable"]),
-            )
-            .order_by(Obligation.due_date.asc())
-            .limit(30)
-        )).all()
-
+        # Expiring evidence — approved evidence with validity_until within the window,
+        # soonest first. (Powers the "Evidence Expiring Soon" widget.)
         evd_sys = aliased(AISystem)
         evd_deadlines = (await session.execute(
             select(
@@ -271,34 +251,19 @@ async def get_compliance_stats(
             .limit(30)
         )).all()
 
-        deadlines = sorted(
-            [
-                {
-                    "type":           "obligation",
-                    "id":             r.id,
-                    "title":          r.title,
-                    "due_date":       r.due_date.isoformat() if r.due_date else None,
-                    "status":         r.status,
-                    "ai_system_id":   r.ai_system_id,
-                    "ai_system_name": r.ai_system_name,
-                    "framework_id":   r.framework_id,
-                }
-                for r in obl_deadlines
-            ] + [
-                {
-                    "type":           "evidence",
-                    "id":             r.id,
-                    "title":          r.title,
-                    "due_date":       r.due_date.isoformat() if r.due_date else None,
-                    "status":         r.status,
-                    "ai_system_id":   r.ai_system_id,
-                    "ai_system_name": r.ai_system_name,
-                    "framework_id":   None,
-                }
-                for r in evd_deadlines
-            ],
-            key=lambda x: x["due_date"] or "",
-        )[:30]
+        deadlines = [
+            {
+                "type":           "evidence",
+                "id":             r.id,
+                "title":          r.title,
+                "due_date":       r.due_date.isoformat() if r.due_date else None,
+                "status":         r.status,
+                "ai_system_id":   r.ai_system_id,
+                "ai_system_name": r.ai_system_name,
+                "framework_id":   None,
+            }
+            for r in evd_deadlines
+        ]
 
         # Risk heat map — GROUP BY tier x compliance bucket, max 20 rows
         tier_x = case(
