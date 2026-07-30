@@ -57,7 +57,9 @@ export default function Overview() {
       const [s, cs, aa] = await Promise.all([
         api.getStats(),
         api.getComplianceStats(dateRange.days),
-        api.getActiveAlerts(),
+        // Alerts degrade independently — a down alerts backend must not fail the
+        // whole dashboard, so swallow its error and fall back to an empty list.
+        api.getActiveAlerts().catch(() => [] as AlertEvent[]),
       ]);
       setStats(s);
       setComplianceStats(cs);
