@@ -2,12 +2,18 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date, timedelta
 
 import httpx
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
+from ai_trust_persistence.models.assessment import Assessment
+from ai_trust_persistence.models.evidence import Evidence, evidence_obligations
+from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
+from ai_trust_persistence.models.obligation import Obligation
 
 
 def _sys(**kwargs) -> AISystem:
@@ -324,3 +330,218 @@ async def test_attention_excludes_clean_systems(client: httpx.AsyncClient):
 
     r = await client.get("/api/v1/overview/stats")
     assert r.json()["attention"] == []
+
+
+# ---------------------------------------------------------------------------
+# GET /overview/compliance-stats
+# ---------------------------------------------------------------------------
+#
+# FK chain: Framework <- Assessment <- Obligation; Evidence links to Obligation
+# via the evidence_obligations M2M table. Obligation.assessment_id is NOT NULL,
+# so every obligation needs a parent assessment. `frameworks` is seeded by
+# migrations and never truncated, so framework_compliance is never empty.
+
+def _fw(**kwargs) -> Framework:
+    defaults = dict(id=f"FRM-{uuid.uuid4().hex[:8].upper()}", name="Test Framework", enabled=True)
+    return Framework(**{**defaults, **kwargs})
+
+
+def _ass(sys_id: str, fw_id: str, **kwargs) -> Assessment:
+    defaults = dict(
+        id=f"ASS-{uuid.uuid4().hex[:8].upper()}",
+        ai_system_id=sys_id,
+        framework_id=fw_id,
+        title="Test Assessment",
+        status="draft",
+    )
+    return Assessment(**{**defaults, **kwargs})
+
+
+def _obl(ass_id: str, sys_id: str, fw_id: str, status: str = "applicable", **kwargs) -> Obligation:
+    defaults = dict(
+        id=f"OBL-{uuid.uuid4().hex[:8].upper()}",
+        assessment_id=ass_id,
+        ai_system_id=sys_id,
+        framework_id=fw_id,
+        title="Test Obligation",
+        status=status,
+    )
+    return Obligation(**{**defaults, **kwargs})
+
+
+def _evd(sys_id: str, status: str = "approved", validity_until: date | None = None) -> Evidence:
+    return Evidence(
+        id=f"EVD-{uuid.uuid4().hex[:8].upper()}",
+        ai_system_id=sys_id,
+        title="Test Evidence",
+        status=status,
+        validity_until=validity_until,
+    )
+
+
+async def test_compliance_stats_response_shape(client: httpx.AsyncClient):
+    r = await client.get("/api/v1/overview/compliance-stats")
+    assert r.status_code == 200
+    body = r.json()
+    assert {"obligation_status", "evidence_gap", "framework_compliance",
+            "upcoming_deadlines", "risk_heatmap"} <= body.keys()
+    assert {"expired", "expiring_soon", "missing"} <= body["evidence_gap"].keys()
+
+
+async def test_compliance_stats_empty_db(client: httpx.AsyncClient):
+    # No user data — but frameworks are seeded by migrations, so
+    # framework_compliance carries a row per enabled framework (0 obligations each).
+    r = await client.get("/api/v1/overview/compliance-stats")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["obligation_status"] == {}
+    assert body["evidence_gap"] == {"expired": 0, "expiring_soon": 0, "missing": 0}
+    assert body["upcoming_deadlines"] == []
+    assert body["risk_heatmap"] == []
+    for fw in body["framework_compliance"]:
+        assert {"framework_id", "framework_name", "total_obligations",
+                "fulfilled", "score"} <= fw.keys()
+        assert fw["total_obligations"] == 0
+        assert fw["score"] is None  # no obligations -> null score, not 0%
+
+
+async def test_obligation_status_counts(client: httpx.AsyncClient):
+    sys_id = f"SYS-{uuid.uuid4().hex[:8].upper()}"
+    async with SessionLocal() as session:
+        session.add(_sys(id=sys_id))
+        fw = _fw()
+        session.add(fw)
+        await session.flush()
+        ass = _ass(sys_id, fw.id)
+        session.add(ass)
+        await session.flush()
+        session.add_all([
+            _obl(ass.id, sys_id, fw.id, status="applicable"),
+            _obl(ass.id, sys_id, fw.id, status="fulfilled"),
+            _obl(ass.id, sys_id, fw.id, status="fulfilled"),
+        ])
+        await session.commit()
+
+    r = await client.get("/api/v1/overview/compliance-stats")
+    assert r.json()["obligation_status"] == {"applicable": 1, "fulfilled": 2}
+
+
+async def test_window_days_filters_expiring_soon(client: httpx.AsyncClient):
+    today = date.today()
+    sys_id = f"SYS-{uuid.uuid4().hex[:8].upper()}"
+    async with SessionLocal() as session:
+        session.add(_sys(id=sys_id))
+        await session.flush()
+        # expires in 5 days — inside a 7-day window, outside a 3-day window
+        session.add(_evd(sys_id, validity_until=today + timedelta(days=5)))
+        await session.commit()
+
+    r7 = await client.get("/api/v1/overview/compliance-stats?window_days=7")
+    r3 = await client.get("/api/v1/overview/compliance-stats?window_days=3")
+    assert r7.json()["evidence_gap"]["expiring_soon"] == 1
+    assert r3.json()["evidence_gap"]["expiring_soon"] == 0
+    # And it appears in upcoming_deadlines only when inside the window
+    assert len(r7.json()["upcoming_deadlines"]) == 1
+    assert r3.json()["upcoming_deadlines"] == []
+
+
+async def test_expired_counts_only_approved(client: httpx.AsyncClient):
+    today = date.today()
+    sys_id = f"SYS-{uuid.uuid4().hex[:8].upper()}"
+    async with SessionLocal() as session:
+        session.add(_sys(id=sys_id))
+        await session.flush()
+        session.add(_evd(sys_id, status="approved", validity_until=today - timedelta(days=1)))
+        session.add(_evd(sys_id, status="pending", validity_until=today - timedelta(days=1)))
+        await session.commit()
+
+    r = await client.get("/api/v1/overview/compliance-stats")
+    assert r.json()["evidence_gap"]["expired"] == 1  # pending one excluded
+
+
+async def test_missing_count_excludes_fulfilled_and_na(client: httpx.AsyncClient):
+    sys_id = f"SYS-{uuid.uuid4().hex[:8].upper()}"
+    async with SessionLocal() as session:
+        session.add(_sys(id=sys_id))
+        fw = _fw()
+        session.add(fw)
+        await session.flush()
+        ass = _ass(sys_id, fw.id)
+        session.add(ass)
+        await session.flush()
+        session.add_all([
+            _obl(ass.id, sys_id, fw.id, status="applicable"),       # missing
+            _obl(ass.id, sys_id, fw.id, status="fulfilled"),        # excluded
+            _obl(ass.id, sys_id, fw.id, status="not_applicable"),   # excluded
+        ])
+        await session.commit()
+
+    r = await client.get("/api/v1/overview/compliance-stats")
+    assert r.json()["evidence_gap"]["missing"] == 1
+
+
+async def test_missing_count_excludes_obligations_with_approved_evidence(client: httpx.AsyncClient):
+    sys_id = f"SYS-{uuid.uuid4().hex[:8].upper()}"
+    async with SessionLocal() as session:
+        session.add(_sys(id=sys_id))
+        fw = _fw()
+        session.add(fw)
+        await session.flush()
+        ass = _ass(sys_id, fw.id)
+        session.add(ass)
+        await session.flush()
+        obl = _obl(ass.id, sys_id, fw.id, status="in_progress")
+        evd = _evd(sys_id, status="approved")
+        session.add_all([obl, evd])
+        await session.flush()
+        await session.execute(
+            pg_insert(evidence_obligations)
+            .values(evidence_id=evd.id, obligation_id=obl.id)
+            .on_conflict_do_nothing()
+        )
+        await session.commit()
+
+    r = await client.get("/api/v1/overview/compliance-stats")
+    # in_progress but has approved evidence linked -> not counted as missing
+    assert r.json()["evidence_gap"]["missing"] == 0
+
+
+async def test_framework_compliance_score(client: httpx.AsyncClient):
+    sys_id = f"SYS-{uuid.uuid4().hex[:8].upper()}"
+    async with SessionLocal() as session:
+        session.add(_sys(id=sys_id))
+        fw = _fw(name="My Framework")
+        session.add(fw)
+        await session.flush()
+        ass = _ass(sys_id, fw.id)
+        session.add(ass)
+        await session.flush()
+        session.add_all([
+            _obl(ass.id, sys_id, fw.id, status="fulfilled"),
+            _obl(ass.id, sys_id, fw.id, status="fulfilled"),
+            _obl(ass.id, sys_id, fw.id, status="in_progress"),
+        ])
+        await session.commit()
+
+    r = await client.get("/api/v1/overview/compliance-stats")
+    entry = next(f for f in r.json()["framework_compliance"] if f["framework_id"] == fw.id)
+    assert entry["total_obligations"] == 3
+    assert entry["fulfilled"] == 2
+    assert entry["score"] == round(2 / 3 * 100, 1)
+
+
+async def test_risk_heatmap_groups_by_tier_and_compliance(client: httpx.AsyncClient):
+    async with SessionLocal() as session:
+        session.add_all([
+            _sys(tier="high", compliance=10.0),      # tier_x=3, residual_y=90
+            _sys(tier="high", compliance=10.0),      # same bucket
+            _sys(tier="minimal", compliance=90.0),   # tier_x=1, residual_y=10
+        ])
+        await session.commit()
+
+    r = await client.get("/api/v1/overview/compliance-stats")
+    heatmap = r.json()["risk_heatmap"]
+    high_bad = next(c for c in heatmap if c["tier"] == "high" and c["residual_risk_y"] == 90)
+    minimal_good = next(c for c in heatmap if c["tier"] == "minimal" and c["residual_risk_y"] == 10)
+    assert high_bad["count"] == 2
+    assert minimal_good["count"] == 1

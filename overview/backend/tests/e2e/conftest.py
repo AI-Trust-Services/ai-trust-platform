@@ -78,7 +78,21 @@ def _truncate() -> None:
     )
     conn.autocommit = True
     cur = conn.cursor()
-    cur.execute("TRUNCATE ai_systems, model_cards RESTART IDENTITY CASCADE")
+    # Terminate connections in ClientRead (sent query, waiting for next command) that
+    # block TRUNCATE's ACCESS EXCLUSIVE lock. These are asyncpg connections whose
+    # Python-side session has been closed but whose TCP connection hasn't been released.
+    cur.execute(
+        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+        "WHERE datname = %s AND pid <> pg_backend_pid() "
+        "AND (state IN ('idle', 'idle in transaction') "
+        "     OR (state = 'active' AND wait_event = 'ClientRead'))",
+        (_TEST_DB,),
+    )
+    # frameworks is excluded — seeded by migration, never modified by tests.
+    cur.execute(
+        "TRUNCATE ai_systems, model_cards, assessments, obligations, evidence, "
+        "evidence_obligations, evidence_controls RESTART IDENTITY CASCADE"
+    )
     cur.close()
     conn.close()
 
@@ -99,9 +113,6 @@ def e2e_setup():
 def truncate_tables(e2e_setup):
     yield
     _truncate()
-    from ai_trust_persistence.database import engine
-    import asyncio
-    asyncio.run(engine.dispose())
 
 
 @pytest_asyncio.fixture
