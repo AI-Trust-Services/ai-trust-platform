@@ -89,10 +89,12 @@ Luigi.setConfig({
     },
     theme: "sap_horizon",
     iframeCreationInterceptor: (iframe) => {
-      // Grant clipboard access to embedded MFEs — without this, the Permissions
+      // Grant clipboard *write* to embedded MFEs — without this, the Permissions
       // Policy on the iframe blocks navigator.clipboard.writeText() (e.g. the
       // registry "Copy ID" button) with a permissions-policy violation.
-      iframe.setAttribute("allow", "downloads; clipboard-write; clipboard-read");
+      // Deliberately NOT granting clipboard-read: no MFE reads the clipboard, and
+      // read access would let an MFE silently exfiltrate whatever the user copied.
+      iframe.setAttribute("allow", "downloads; clipboard-write");
       iframe.sandbox.add("allow-downloads");
     },
   },
