@@ -38,6 +38,11 @@ export const api = {
   // the whole page).
   getActiveAlerts: () => request<AlertEvent[]>("/alerts/active", ALERTS_API_BASE),
   getAlertCount: () => request<{ count: number }>("/alerts/count", ALERTS_API_BASE),
-  getAssessments: () =>
-    request<AssessmentTrendRow[]>("/assessments?limit=500", COMPLIANCE_API_BASE),
+  // Scope to the trend window via updated_after so the query is time-bounded rather
+  // than relying on the limit=500 cap (which would silently truncate over time).
+  getAssessments: (updatedAfter: string) =>
+    request<AssessmentTrendRow[]>(
+      `/assessments?updated_after=${updatedAfter}&limit=500`,
+      COMPLIANCE_API_BASE,
+    ),
 };

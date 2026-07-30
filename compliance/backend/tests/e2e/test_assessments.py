@@ -148,6 +148,28 @@ async def test_list_assessments_pagination(client: httpx.AsyncClient):
     assert len(r.json()) == 2
 
 
+async def test_list_assessments_updated_after_includes_recent(client: httpx.AsyncClient):
+    from datetime import date, timedelta
+    system = await create_system()
+    await create_assessment(client, system["id"])
+    # cutoff a week ago — the just-created assessment is newer, so it's included
+    cutoff = (date.today() - timedelta(days=7)).isoformat()
+    r = await client.get(f"/api/v1/assessments?updated_after={cutoff}")
+    assert r.status_code == 200
+    assert len(r.json()) == 1
+
+
+async def test_list_assessments_updated_after_excludes_old(client: httpx.AsyncClient):
+    from datetime import date, timedelta
+    system = await create_system()
+    await create_assessment(client, system["id"])
+    # cutoff tomorrow — the just-created assessment is older than the cutoff, so excluded
+    cutoff = (date.today() + timedelta(days=1)).isoformat()
+    r = await client.get(f"/api/v1/assessments?updated_after={cutoff}")
+    assert r.status_code == 200
+    assert len(r.json()) == 0
+
+
 # ---------------------------------------------------------------------------
 # GET /assessments/{id}
 # ---------------------------------------------------------------------------

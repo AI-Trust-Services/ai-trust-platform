@@ -54,6 +54,10 @@ export default function Overview() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    // Cutoff for the assessment trend query — scope to the selected window (YYYY-MM-DD).
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - dateRange.days);
+    const updatedAfter = cutoff.toISOString().slice(0, 10);
     try {
       const [s, cs, aa, assess] = await Promise.all([
         api.getStats(),
@@ -62,7 +66,7 @@ export default function Overview() {
         // backend must not fail the whole dashboard, so swallow their errors and
         // fall back to empty lists.
         api.getActiveAlerts().catch(() => [] as AlertEvent[]),
-        api.getAssessments().catch(() => []),
+        api.getAssessments(updatedAfter).catch(() => []),
       ]);
       setStats(s);
       setComplianceStats(cs);
