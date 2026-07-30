@@ -21,10 +21,10 @@ function pillStyle(days: number): { color: string; background: string } {
 export default function UpcomingDeadlines({ deadlines, windowDays }: Props): JSX.Element {
   return (
     <div className="chart-card deadlines-card">
-      <div className="chart-title">Upcoming Deadlines <span style={{ fontWeight: 400, color: "var(--text-secondary)", fontSize: 12 }}>— next {windowDays} days</span></div>
+      <div className="chart-title">Evidence Expiring Soon</div>
       {deadlines.length === 0 ? (
         <div style={{ padding: "20px 0", textAlign: "center", color: "var(--text-secondary)", fontSize: 13 }}>
-          No deadlines in the next {windowDays} days
+          No evidence expiring in the next {windowDays} days
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>

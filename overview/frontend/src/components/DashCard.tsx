@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, CartesianGrid,
+  XAxis, YAxis, Tooltip, CartesianGrid, Legend, LabelList,
 } from "recharts";
 import type { DashboardCard, OverviewStats, RecentSystem } from "../types";
 import { TierBadge, FormattedDate } from "./Badges";
@@ -40,7 +40,8 @@ function KpiCardBody({ card, stats }: { card: DashboardCard; stats: OverviewStat
 }
 
 function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewStats }) {
-  const rawData = card.dataKey ? (stats[card.dataKey] as Record<string, number> | undefined) ?? {} : {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawData = card.dataKey ? ((stats as any)[card.dataKey] as Record<string, number> | undefined) ?? {} : {};
   const entries = Object.entries(rawData);
 
   if (!entries.length) {
@@ -57,22 +58,39 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
+  const total = entries.reduce((acc, [, v]) => acc + v, 0);
+
   return (
     <div className="dash-card-body">
       <div className="chart-wrap">
         {mounted && (
-        <ResponsiveContainer width="100%" height={220}>
+        <ResponsiveContainer width="100%" height={240}>
           {isPie ? (
             <PieChart>
-              <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius="70%">
+              <Pie
+                data={chartData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%" cy="50%"
+                outerRadius="60%"
+                label={({ value }) => `${((value / total) * 100).toFixed(0)}%`}
+                labelLine={true}
+              >
                 {chartData.map((entry, i) => (
                   <Cell key={entry.name} fill={colorFor(card.dataKey, entries[i][0], i)} />
                 ))}
               </Pie>
-              <Tooltip formatter={(val: number) => val.toLocaleString()} />
+              <Tooltip formatter={(val: number) => [val.toLocaleString(), ""]} />
+              <Legend
+                iconType="circle"
+                iconSize={8}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                formatter={(value: string, entry: any) => `${value} (${(entry?.payload?.value ?? 0).toLocaleString()})`}
+                wrapperStyle={{ fontSize: 11 }}
+              />
             </PieChart>
           ) : (
-            <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+            <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 40, top: 4, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" horizontal={false} />
               <XAxis
                 type="number"
@@ -85,6 +103,12 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
                 {chartData.map((entry, i) => (
                   <Cell key={entry.name} fill={colorFor(card.dataKey, entries[i][0], i)} />
                 ))}
+                <LabelList
+                  dataKey="value"
+                  position="right"
+                  style={{ fontSize: 11, fill: "var(--text-secondary)" }}
+                  formatter={(v: number) => isCompliance ? `${v}%` : v.toLocaleString()}
+                />
               </Bar>
             </BarChart>
           )}
@@ -96,7 +120,7 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
 }
 
 function TableCardBody({ stats }: { stats: OverviewStats }) {
-  const rows: RecentSystem[] = stats.recent ?? [];
+  const rows: RecentSystem[] = (stats.recent ?? []).slice(0, 5);
   if (!rows.length) {
     return (
       <div className="dash-card-body" style={{ color: "var(--text-secondary)", fontSize: 13 }}>
@@ -105,7 +129,7 @@ function TableCardBody({ stats }: { stats: OverviewStats }) {
     );
   }
   return (
-    <div className="dash-card-body" style={{ padding: 0 }}>
+    <div className="dash-card-body" style={{ padding: 0, overflow: "auto", flex: 1 }}>
       <table>
         <thead>
           <tr>
@@ -134,7 +158,7 @@ function TableCardBody({ stats }: { stats: OverviewStats }) {
 export default function DashCard({ card, stats, onEdit, onRemove }: Props) {
   const isKpi   = card.type === "kpi";
   const isTable = card.type === "table";
-  const cls     = isKpi ? "kpi" : isTable ? "table-card" : "chart";
+  const cls     = isKpi ? "kpi" : "chart"; // table uses chart height, not its own class
 
   return (
     <div className={`dash-card ${cls}`} data-card-id={card.id}>

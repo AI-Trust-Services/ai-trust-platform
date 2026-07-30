@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
@@ -48,6 +48,10 @@ async def _load(session: AsyncSession, assessment_id: str) -> Assessment:
 @router.get("/assessments", response_model=list[AssessmentResponse])
 async def list_assessments(
     ai_system_id: str | None = Query(default=None),
+    updated_after: date | None = Query(
+        default=None,
+        description="Only assessments updated on or after this date (e.g. for time-scoped trend charts).",
+    ),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[AssessmentResponse]:
@@ -55,6 +59,8 @@ async def list_assessments(
         stmt = select(Assessment).order_by(Assessment.created_at.desc())
         if ai_system_id:
             stmt = stmt.where(Assessment.ai_system_id == ai_system_id)
+        if updated_after is not None:
+            stmt = stmt.where(Assessment.updated_at >= updated_after)
         stmt = stmt.limit(limit).offset(offset)
         result = await session.execute(stmt)
         return [AssessmentResponse.model_validate(r) for r in result.scalars().all()]

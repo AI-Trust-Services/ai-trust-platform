@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Sortable from "sortablejs";
 import {
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, CartesianGrid, Legend,
+  XAxis, YAxis, Tooltip, CartesianGrid, Legend, LabelList, Label,
 } from "recharts";
 import { api, ALERTS_URL, COMPLIANCE_URL, REGISTRY_URL } from "../api/client";
 import { useToast, useHeader } from "../App";
@@ -17,8 +17,8 @@ import DateRangeFilter from "../components/DateRangeFilter";
 import ObligationDonut from "../components/ObligationDonut";
 import FrameworkBreakdown from "../components/FrameworkBreakdown";
 import EvidenceGapCard from "../components/EvidenceGapCard";
-import RiskHeatMap from "../components/RiskHeatMap";
 import AlertFeed from "../components/AlertFeed";
+import ComplianceTrend from "../components/ComplianceTrend";
 import UpcomingDeadlines from "../components/UpcomingDeadlines";
 
 const STORAGE_KEY = "ai_trust_overview_dashboard_v1";
@@ -36,6 +36,7 @@ export default function Overview() {
   const [stats, setStats] = useState<OverviewStats | null>(null);
   const [complianceStats, setComplianceStats] = useState<ComplianceStats | null>(null);
   const [activeAlerts, setActiveAlerts] = useState<AlertEvent[]>([]);
+  const [assessments, setAssessments] = useState<{ id: string; score: number | null; updated_at: string; status: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange>({ preset: "30d", days: 30 });
   const [cards, setCards] = useState<DashboardCard[]>(loadCards);
@@ -53,17 +54,24 @@ export default function Overview() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    // Cutoff for the assessment trend query — scope to the selected window (YYYY-MM-DD).
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - dateRange.days);
+    const updatedAfter = cutoff.toISOString().slice(0, 10);
     try {
-      const [s, cs, aa] = await Promise.all([
+      const [s, cs, aa, assess] = await Promise.all([
         api.getStats(),
         api.getComplianceStats(dateRange.days),
-        // Alerts degrade independently — a down alerts backend must not fail the
-        // whole dashboard, so swallow its error and fall back to an empty list.
+        // Alerts and assessments degrade independently — a down alerts/compliance
+        // backend must not fail the whole dashboard, so swallow their errors and
+        // fall back to empty lists.
         api.getActiveAlerts().catch(() => [] as AlertEvent[]),
+        api.getAssessments(updatedAfter).catch(() => []),
       ]);
       setStats(s);
       setComplianceStats(cs);
-      setActiveAlerts(aa.slice(0, 10));
+      setActiveAlerts(aa.slice(0, 5));
+      setAssessments(assess);
     } catch (e) {
       showToast(`Failed to load dashboard: ${(e as Error).message}`, true);
     } finally {
@@ -111,6 +119,12 @@ export default function Overview() {
     setCards((prev) => { const next = prev.map((c) => c.id === updated.id ? updated : c); saveCards(next); return next; });
     setEditingCard(null);
     showToast("Graph updated");
+  }
+  function resetToDefaults() {
+    if (!confirm("Reset dashboard to default layout? This will remove your current configuration.")) return;
+    setCards([]);
+    saveCards([]);
+    showToast("Dashboard reset");
   }
 
   // Derived KPI values
@@ -200,11 +214,12 @@ export default function Overview() {
         />
       </div>
 
-      {/* 2-col row: risk heat map | alert feed */}
+      {/* 2-col row: compliance trend | alert feed */}
       <div className="charts-row">
-        <RiskHeatMap
-          data={complianceStats?.risk_heatmap ?? []}
-          onClick={() => navigateTo("/home/ai-system-registry", REGISTRY_URL)}
+        <ComplianceTrend
+          assessments={assessments}
+          windowDays={dateRange.days}
+          onClick={() => navigateTo("/home/assessments", COMPLIANCE_URL)}
         />
         <AlertFeed alerts={activeAlerts} loading={loading && activeAlerts.length === 0} />
       </div>
@@ -222,18 +237,33 @@ export default function Overview() {
           {mounted && (
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
-                <Pie data={tierData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={2}>
+                <Pie data={tierData} dataKey="value" nameKey="name" cx="40%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={2}>
                   {tierEntries.map(([tier]) => (
                     <Cell key={tier} fill={TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1"} />
                   ))}
+                  <Label
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    content={({ viewBox }: any) => {
+                      const { cx = 0, cy = 0 } = viewBox ?? {};
+                      return (
+                        <>
+                          <text x={cx} y={cy - 6} textAnchor="middle" dominantBaseline="middle"
+                            style={{ fontSize: 22, fontWeight: 700, fill: "var(--text)" }}>
+                            {total_systems.toLocaleString()}
+                          </text>
+                          <text x={cx} y={cy + 14} textAnchor="middle" dominantBaseline="middle"
+                            style={{ fontSize: 11, fill: "var(--text-secondary)" }}>
+                            total
+                          </text>
+                        </>
+                      );
+                    }}
+                    position="center"
+                  />
                 </Pie>
                 <Tooltip formatter={(v: number) => v.toLocaleString()} />
                 <Legend
-                  iconType="circle"
-                  iconSize={8}
-                  layout="vertical"
-                  align="right"
-                  verticalAlign="middle"
+                  iconType="circle" iconSize={8} layout="vertical" align="right" verticalAlign="middle"
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   formatter={(value: string, entry: any) => `${value} (${(entry?.payload?.value ?? 0).toLocaleString()})`}
                   wrapperStyle={{ fontSize: 12 }}
@@ -246,7 +276,7 @@ export default function Overview() {
           <div className="chart-title">Avg Compliance by Tier</div>
           {mounted && (
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={complianceData} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+              <BarChart data={complianceData} layout="vertical" margin={{ left: 8, right: 40, top: 4, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" horizontal={false} />
                 <XAxis type="number" domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 11 }} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={110} />
@@ -255,6 +285,12 @@ export default function Overview() {
                   {complianceEntries.map(([tier]) => (
                     <Cell key={tier} fill={LIFECYCLE_COLORS[tier] ?? TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1"} />
                   ))}
+                  <LabelList
+                    dataKey="value"
+                    position="right"
+                    style={{ fontSize: 11, fill: "var(--text-secondary)" }}
+                    formatter={(v: number) => `${v}%`}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -271,7 +307,10 @@ export default function Overview() {
       <div>
         <div className="analytics-header">
           <span className="section-title" style={{ marginBottom: 0 }}>Analytics Dashboard</span>
-          <button className="btn-primary" onClick={() => setAddOpen(true)}>+ Add Graph</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn-ghost" onClick={resetToDefaults}>↺ Reset</button>
+            <button className="btn-primary" onClick={() => setAddOpen(true)}>+ Add Graph</button>
+          </div>
         </div>
         {cards.length === 0 ? (
           <div className="empty-dashboard">
@@ -297,6 +336,7 @@ export default function Overview() {
       {addOpen && (
         <AddGraphModal
           activeIds={new Set(cards.map((c) => c.id))}
+          stats={stats}
           onAdd={addCard}
           onRemove={removeCard}
           onClose={() => setAddOpen(false)}

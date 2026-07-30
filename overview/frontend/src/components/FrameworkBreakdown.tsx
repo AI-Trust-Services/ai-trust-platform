@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, LabelList } from "recharts";
 import type { FrameworkScore } from "../types";
 
 interface Props {
@@ -13,6 +13,12 @@ function scoreColor(score: number | null): string {
   if (score >= 50) return "#e05c00";
   return "#bb0000";
 }
+
+const COLOR_LEGEND = [
+  { color: "#1a7a3c", label: "≥ 80% — On track" },
+  { color: "#e05c00", label: "50–79% — Needs attention" },
+  { color: "#bb0000", label: "< 50% — At risk" },
+];
 
 export default function FrameworkBreakdown({ data, onClick }: Props): JSX.Element {
   const chartData = useMemo(() =>
@@ -41,8 +47,8 @@ export default function FrameworkBreakdown({ data, onClick }: Props): JSX.Elemen
   return (
     <div className="chart-card" onClick={onClick} style={{ cursor: onClick ? "pointer" : undefined }}>
       <div className="chart-title">Framework Compliance</div>
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={chartData} margin={{ left: 0, right: 16, top: 4, bottom: 4 }}>
+      <ResponsiveContainer width="100%" height={200}>
+        <BarChart data={chartData} margin={{ left: 0, right: 16, top: 16, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" vertical={false} />
           <XAxis dataKey="name" tick={{ fontSize: 11 }} />
           <YAxis domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 11 }} width={36} />
@@ -55,9 +61,24 @@ export default function FrameworkBreakdown({ data, onClick }: Props): JSX.Elemen
             {chartData.map((entry) => (
               <Cell key={entry.name} fill={entry.color} />
             ))}
+            <LabelList
+              dataKey="score"
+              position="top"
+              style={{ fontSize: 11, fontWeight: 600, fill: "var(--text-secondary)" }}
+              formatter={(v: number) => `${v}%`}
+            />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      {/* Color coding legend */}
+      <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
+        {COLOR_LEGEND.map((l) => (
+          <div key={l.color} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--text-secondary)" }}>
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: l.color, flexShrink: 0 }} />
+            {l.label}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
