@@ -1,11 +1,18 @@
 import type { AlertEvent, ComplianceStats, OverviewStats } from "../types";
 
-const API_BASE = import.meta.env.VITE_OVERVIEW_API_BASE;
+/** Read a required build-time env var; throw if missing so misconfiguration fails loudly. */
+function requireEnv(key: keyof ImportMetaEnv): string {
+  const value = import.meta.env[key];
+  if (!value) throw new Error(`Missing required environment variable: ${key}`);
+  return value;
+}
+
+const API_BASE = requireEnv("VITE_OVERVIEW_API_BASE");
 export const HEALTH_URL = API_BASE.replace("/api/v1", "") + "/health";
-export const ALERTS_API_BASE = import.meta.env.VITE_ALERTS_API_BASE;
-export const ALERTS_URL = import.meta.env.VITE_ALERTS_URL || "http://localhost:3004";
-export const REGISTRY_URL = import.meta.env.VITE_REGISTRY_URL || "http://localhost:3001";
-export const COMPLIANCE_URL = import.meta.env.VITE_COMPLIANCE_URL || "http://localhost:3006";
+export const ALERTS_API_BASE = requireEnv("VITE_ALERTS_API_BASE");
+export const ALERTS_URL = requireEnv("VITE_ALERTS_URL");
+export const REGISTRY_URL = requireEnv("VITE_REGISTRY_URL");
+export const COMPLIANCE_URL = requireEnv("VITE_COMPLIANCE_URL");
 
 async function request<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`);
