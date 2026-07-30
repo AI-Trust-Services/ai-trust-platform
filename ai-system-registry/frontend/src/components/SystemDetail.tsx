@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from "react";
 import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
-import { fmtDateTime, LIFECYCLE_LABELS } from "../utils";
+import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard } from "../utils";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import type { AISystem, ModelCard } from "../types";
@@ -280,7 +280,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <code style={{ fontSize: 12, fontFamily: "monospace", flex: 1 }}>{system.id}</code>
                     <button className="btn-ghost" style={{ fontSize: 11, padding: "3px 10px" }} onClick={() => {
-                      navigator.clipboard.writeText(system.id)
+                      copyToClipboard(system.id)
                         .then(() => showToast("System ID copied"))
                         .catch(() => showToast("Copy failed", true));
                     }}>⎘ Copy ID</button>

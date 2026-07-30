@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import { TierBadge } from "./Badges";
-import { previewClassify } from "../utils";
+import { previewClassify, copyToClipboard } from "../utils";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import type { AISystemFormData } from "../types";
@@ -94,7 +94,7 @@ export default function RegisterWizard({ open, onClose, onSuccess }: Props) {
   }
 
   function handleCopyId() {
-    navigator.clipboard.writeText(registeredId!)
+    copyToClipboard(registeredId!)
       .then(() => showToast("System ID copied"))
       .catch(() => showToast("Copy failed", true));
   }
