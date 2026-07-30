@@ -89,7 +89,10 @@ Luigi.setConfig({
     },
     theme: "sap_horizon",
     iframeCreationInterceptor: (iframe) => {
-      iframe.setAttribute("allow", "downloads");
+      // Grant clipboard access to embedded MFEs — without this, the Permissions
+      // Policy on the iframe blocks navigator.clipboard.writeText() (e.g. the
+      // registry "Copy ID" button) with a permissions-policy violation.
+      iframe.setAttribute("allow", "downloads; clipboard-write; clipboard-read");
       iframe.sandbox.add("allow-downloads");
     },
   },
