@@ -64,3 +64,34 @@ export function previewClassify(flags: Partial<AISystemFormData>, flops: number)
   }
   return { tier: "minimal", basis: "Minimal risk — no mandatory obligations", obligations: [] };
 }
+
+/**
+ * Copy text to the clipboard, resilient across browsers and contexts.
+ *
+ * Tries the async Clipboard API first (works on Chrome + secure contexts), then
+ * falls back to the legacy execCommand("copy") path when writeText is missing or
+ * rejects — e.g. Firefox/Safari clipboard-permission denials, or an unfocused
+ * document. The fallback does not require the clipboard-write permission.
+ */
+export async function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // fall through to legacy path
+    }
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.top = "-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    if (!document.execCommand("copy")) throw new Error("execCommand copy failed");
+  } finally {
+    document.body.removeChild(ta);
+  }
+}
