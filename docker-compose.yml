@@ -194,6 +194,7 @@ services:
     environment:
       <<: *db-env
       ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/registry"
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -212,6 +213,7 @@ services:
     environment:
       <<: *db-env
       ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/monitoring"
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: "8123"
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
@@ -236,6 +238,7 @@ services:
     environment:
       <<: *db-env
       ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/overview"
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -254,6 +257,7 @@ services:
     environment:
       <<: *db-env
       ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/alerts"
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: "8123"
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
@@ -278,6 +282,7 @@ services:
     environment:
       <<: *db-env
       ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/compliance"
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -458,6 +463,7 @@ services:
     environment:
       <<: *ch-env
       ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/dta"
     depends_on:
       clickhouse-migrate:
         condition: service_completed_successfully

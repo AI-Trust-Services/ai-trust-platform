@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Compliance API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Compliance API", version="1.0.0", lifespan=lifespan, root_path=os.environ.get("ROOT_PATH", ""))
 
 app.add_middleware(
     CORSMiddleware,
