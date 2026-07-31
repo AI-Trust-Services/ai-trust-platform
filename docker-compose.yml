@@ -174,8 +174,8 @@ services:
     build:
       context: ./compliance/frontend
       args:
-        VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE:-/api/compliance/api/v1}
-        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/api/v1}
+        VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE:-/api/compliance/v1}
+        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/v1}
     restart: on-failure
 
   db-migrate:

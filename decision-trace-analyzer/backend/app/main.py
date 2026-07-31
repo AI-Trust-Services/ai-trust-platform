@@ -62,7 +62,7 @@ async def logging_middleware(request: Request, call_next) -> Response:
     return response
 
 
-app.include_router(traces.router, prefix="/api/v1")
+app.include_router(traces.router, prefix="/v1")
 
 
 @app.get("/health")

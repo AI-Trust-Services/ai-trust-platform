@@ -53,7 +53,7 @@ async def test_health_returns_ok(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_services_empty_when_no_spans(client: httpx.AsyncClient):
-    r = await client.get("/api/v1/monitoring/services")
+    r = await client.get("/v1/services")
     assert r.status_code == 200
     assert r.json() == []
 
@@ -66,7 +66,7 @@ async def test_services_returns_registered_system(client: httpx.AsyncClient):
     insert_span("SYS-AAAA1111")
     insert_span("SYS-AAAA1111")
 
-    r = await client.get("/api/v1/monitoring/services")
+    r = await client.get("/v1/services")
     assert r.status_code == 200
     rows = r.json()
     assert len(rows) == 1
@@ -82,7 +82,7 @@ async def test_services_drops_unregistered_service_names(client: httpx.AsyncClie
     # Span whose service_name matches no registered system → must be dropped.
     insert_span("unregistered-service")
 
-    r = await client.get("/api/v1/monitoring/services")
+    r = await client.get("/v1/services")
     assert r.status_code == 200
     assert r.json() == []
 
@@ -103,7 +103,7 @@ async def test_services_returns_only_registered_and_orders_by_span_count(
     insert_span("SYS-REG20002")
     insert_span("orphan-service")
 
-    r = await client.get("/api/v1/monitoring/services")
+    r = await client.get("/v1/services")
     rows = r.json()
     assert [row["system_id"] for row in rows] == ["SYS-REG10001", "SYS-REG20002"]
     assert rows[0]["total_spans"] == 3
@@ -118,7 +118,7 @@ async def test_signals_empty_registry_returns_zeroed_shape(client: httpx.AsyncCl
     # No registered systems at all → early return with zeroed KPIs.
     insert_span("orphan-service")  # present in CH but no registry rows
 
-    r = await client.get("/api/v1/monitoring/signals")
+    r = await client.get("/v1/signals")
     assert r.status_code == 200
     body = r.json()
     assert body["timeseries"] == []
@@ -138,7 +138,7 @@ async def test_signals_specific_service_aggregates_kpis(client: httpx.AsyncClien
     insert_span("SYS-SIG10001", duration_ms=100.0, input_tokens=50, output_tokens=30)
     insert_span("SYS-SIG10001", duration_ms=200.0, input_tokens=10, output_tokens=20)
 
-    r = await client.get("/api/v1/monitoring/signals?service=SYS-SIG10001")
+    r = await client.get("/v1/signals?service=SYS-SIG10001")
     assert r.status_code == 200
     body = r.json()
     assert body["display_name"] == "Signal System"
@@ -161,7 +161,7 @@ async def test_signals_all_systems_excludes_orphan_spans(client: httpx.AsyncClie
     insert_span("orphan-service", input_tokens=999, output_tokens=999)
 
     # "All Systems" (no service param) → registered IDs only, orphan excluded.
-    r = await client.get("/api/v1/monitoring/signals")
+    r = await client.get("/v1/signals")
     assert r.status_code == 200
     kpis = r.json()["kpis"]
     assert kpis["total_inferences"] == 1
@@ -176,7 +176,7 @@ async def test_signals_unknown_window_does_not_error(client: httpx.AsyncClient):
         await session.commit()
     insert_span("SYS-SIG30003")
 
-    r = await client.get("/api/v1/monitoring/signals?service=SYS-SIG30003&window=bogus")
+    r = await client.get("/v1/signals?service=SYS-SIG30003&window=bogus")
     assert r.status_code == 200
     assert r.json()["kpis"]["total_inferences"] == 1
 
@@ -189,7 +189,7 @@ async def test_signals_valid_windows_accepted(client: httpx.AsyncClient):
 
     for window in ("15m", "1h", "6h", "24h"):
         r = await client.get(
-            f"/api/v1/monitoring/signals?service=SYS-SIG40004&window={window}"
+            f"/v1/signals?service=SYS-SIG40004&window={window}"
         )
         assert r.status_code == 200, window
         assert r.json()["kpis"]["total_inferences"] == 1, window
@@ -200,7 +200,7 @@ async def test_signals_valid_windows_accepted(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_stats_empty_db(client: httpx.AsyncClient):
-    r = await client.get("/api/v1/monitoring/stats")
+    r = await client.get("/v1/stats")
     assert r.status_code == 200
     body = r.json()
     assert body["total_systems"] == 0
@@ -237,7 +237,7 @@ async def test_stats_kpi_counts(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/monitoring/stats")
+    r = await client.get("/v1/stats")
     body = r.json()
     assert body["total_systems"] == 4
     assert body["avg_compliance"] == 55.0  # (10+90+40+80)/4
@@ -255,7 +255,7 @@ async def test_stats_by_tier(client: httpx.AsyncClient):
         session.add_all([_sys(tier="minimal"), _sys(tier="minimal"), _sys(tier="high")])
         await session.commit()
 
-    r = await client.get("/api/v1/monitoring/stats")
+    r = await client.get("/v1/stats")
     assert r.json()["by_tier"] == {"minimal": 2, "high": 1}
 
 
@@ -268,7 +268,7 @@ async def test_stats_by_type_and_autonomy(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/monitoring/stats")
+    r = await client.get("/v1/stats")
     body = r.json()
     assert body["by_type"] == {"application": 2, "model": 1}
     assert body["by_autonomy"] == {"decision_support": 1, "autonomous": 2}
@@ -286,7 +286,7 @@ async def test_stats_compliance_histogram(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/monitoring/stats")
+    r = await client.get("/v1/stats")
     assert r.json()["compliance_histogram"] == {
         "0–20": 1, "20–40": 1, "40–60": 1, "60–80": 1, "80–100": 2
     }
@@ -301,7 +301,7 @@ async def test_stats_compliance_by_tier(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/monitoring/stats")
+    r = await client.get("/v1/stats")
     cbt = r.json()["compliance_by_tier"]
     assert cbt["high"] == 50.0
     assert cbt["minimal"] == 80.0
@@ -320,7 +320,7 @@ async def test_stats_model_card_distributions(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/monitoring/stats")
+    r = await client.get("/v1/stats")
     body = r.json()
     assert body["total_models"] == 3
     assert body["by_model_type"] == {"llm": 2, "vision": 1}
@@ -340,7 +340,7 @@ async def test_stats_recent_returns_latest_10_ordered(client: httpx.AsyncClient)
             session.add(_sys(name=f"System {i:02d}"))
             await session.commit()
 
-    r = await client.get("/api/v1/monitoring/stats")
+    r = await client.get("/v1/stats")
     recent = r.json()["recent"]
     assert len(recent) == 10
     assert recent[0]["name"] == "System 11"
@@ -362,7 +362,7 @@ async def test_stats_lifecycle_filter_narrows_counts(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/monitoring/stats?lifecycle=market")
+    r = await client.get("/v1/stats?lifecycle=market")
     body = r.json()
     # total_systems and by_tier respect the filter...
     assert body["total_systems"] == 2

@@ -1,4 +1,4 @@
-"""E2E tests for /api/v1/obligations."""
+"""E2E tests for /v1/obligations."""
 from __future__ import annotations
 
 import httpx
@@ -13,7 +13,7 @@ from tests.e2e.conftest import create_assessment, create_control, create_evidenc
 async def test_create_obligation_returns_201(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
-    r = await client.post("/api/v1/obligations", json={
+    r = await client.post("/v1/obligations", json={
         "assessment_id": ass["id"],
         "title": "My Obligation",
         "article_ref": "Art. 9",
@@ -27,7 +27,7 @@ async def test_create_obligation_returns_201(client: httpx.AsyncClient):
 
 
 async def test_create_obligation_404_on_missing_assessment(client: httpx.AsyncClient):
-    r = await client.post("/api/v1/obligations", json={
+    r = await client.post("/v1/obligations", json={
         "assessment_id": "ASS-NOTFOUND",
         "title": "X",
     })
@@ -38,9 +38,9 @@ async def test_create_obligation_in_approved_assessment_returns_409(client: http
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     await create_obligation(client, ass["id"])
-    await client.post(f"/api/v1/assessments/{ass['id']}/submit")
-    await client.post(f"/api/v1/assessments/{ass['id']}/approve")
-    r = await client.post("/api/v1/obligations", json={
+    await client.post(f"/v1/assessments/{ass['id']}/submit")
+    await client.post(f"/v1/assessments/{ass['id']}/approve")
+    r = await client.post("/v1/obligations", json={
         "assessment_id": ass["id"],
         "title": "Late Obligation",
     })
@@ -50,7 +50,7 @@ async def test_create_obligation_in_approved_assessment_returns_409(client: http
 async def test_create_obligation_blank_title_returns_422(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
-    r = await client.post("/api/v1/obligations", json={
+    r = await client.post("/v1/obligations", json={
         "assessment_id": ass["id"],
         "title": "   ",
     })
@@ -70,23 +70,23 @@ async def test_list_obligations_filter_by_assessment(client: httpx.AsyncClient):
     await create_obligation(client, ass1["id"])
     await create_obligation(client, ass1["id"])
 
-    r = await client.get(f"/api/v1/obligations?assessment_id={ass1['id']}")
+    r = await client.get(f"/v1/obligations?assessment_id={ass1['id']}")
     assert r.status_code == 200
     assert len(r.json()) == 5  # 3 auto-generated + 2 manual
 
-    r2 = await client.get(f"/api/v1/obligations?assessment_id={ass2['id']}")
+    r2 = await client.get(f"/v1/obligations?assessment_id={ass2['id']}")
     assert len(r2.json()) == 3  # only auto-generated
 
 
 async def test_list_obligations_filter_by_control(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
-    obs = (await client.get(f"/api/v1/obligations?assessment_id={ass['id']}")).json()
+    obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
     # Link a control to exactly one of the assessment's obligations.
     ctl = await create_control(client, system["id"])
-    await client.post(f"/api/v1/controls/{ctl['id']}/link/{obs[0]['id']}")
+    await client.post(f"/v1/controls/{ctl['id']}/link/{obs[0]['id']}")
 
-    r = await client.get(f"/api/v1/obligations?control_id={ctl['id']}")
+    r = await client.get(f"/v1/obligations?control_id={ctl['id']}")
     assert r.status_code == 200
     body = r.json()
     assert len(body) == 1
@@ -99,7 +99,7 @@ async def test_list_obligations_filter_by_evidence(client: httpx.AsyncClient):
     obl = await create_obligation(client, ass["id"])
     evd = await create_evidence(client, obligation_ids=[obl["id"]])
 
-    r = await client.get(f"/api/v1/obligations?evidence_id={evd['id']}")
+    r = await client.get(f"/v1/obligations?evidence_id={evd['id']}")
     assert r.status_code == 200
     body = r.json()
     assert len(body) == 1
@@ -110,9 +110,9 @@ async def test_list_obligations_filter_by_status(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
-    await client.put(f"/api/v1/obligations/{obl['id']}", json={"status": "not_applicable"})
+    await client.put(f"/v1/obligations/{obl['id']}", json={"status": "not_applicable"})
 
-    r = await client.get("/api/v1/obligations?status=not_applicable")
+    r = await client.get("/v1/obligations?status=not_applicable")
     assert r.status_code == 200
     assert all(o["status"] == "not_applicable" for o in r.json())
 
@@ -125,7 +125,7 @@ async def test_get_obligation_returns_detail(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
-    r = await client.get(f"/api/v1/obligations/{obl['id']}")
+    r = await client.get(f"/v1/obligations/{obl['id']}")
     assert r.status_code == 200
     body = r.json()
     assert body["id"] == obl["id"]
@@ -133,7 +133,7 @@ async def test_get_obligation_returns_detail(client: httpx.AsyncClient):
 
 
 async def test_get_obligation_404_on_missing(client: httpx.AsyncClient):
-    r = await client.get("/api/v1/obligations/OBL-NOTFOUND")
+    r = await client.get("/v1/obligations/OBL-NOTFOUND")
     assert r.status_code == 404
 
 
@@ -145,7 +145,7 @@ async def test_update_obligation_title(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
-    r = await client.put(f"/api/v1/obligations/{obl['id']}", json={"title": "Updated"})
+    r = await client.put(f"/v1/obligations/{obl['id']}", json={"title": "Updated"})
     assert r.status_code == 200
     assert r.json()["title"] == "Updated"
 
@@ -154,7 +154,7 @@ async def test_update_obligation_status_to_not_applicable(client: httpx.AsyncCli
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
-    r = await client.put(f"/api/v1/obligations/{obl['id']}", json={"status": "not_applicable"})
+    r = await client.put(f"/v1/obligations/{obl['id']}", json={"status": "not_applicable"})
     assert r.status_code == 200
     assert r.json()["status"] == "not_applicable"
 
@@ -163,7 +163,7 @@ async def test_update_obligation_invalid_status_returns_422(client: httpx.AsyncC
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
-    r = await client.put(f"/api/v1/obligations/{obl['id']}", json={"status": "invalid"})
+    r = await client.put(f"/v1/obligations/{obl['id']}", json={"status": "invalid"})
     assert r.status_code == 422
 
 
@@ -171,14 +171,14 @@ async def test_update_obligation_in_approved_assessment_returns_409(client: http
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
-    await client.post(f"/api/v1/assessments/{ass['id']}/submit")
-    await client.post(f"/api/v1/assessments/{ass['id']}/approve")
-    r = await client.put(f"/api/v1/obligations/{obl['id']}", json={"title": "X"})
+    await client.post(f"/v1/assessments/{ass['id']}/submit")
+    await client.post(f"/v1/assessments/{ass['id']}/approve")
+    r = await client.put(f"/v1/obligations/{obl['id']}", json={"title": "X"})
     assert r.status_code == 409
 
 
 async def test_update_obligation_404_on_missing(client: httpx.AsyncClient):
-    r = await client.put("/api/v1/obligations/OBL-NOTFOUND", json={"title": "X"})
+    r = await client.put("/v1/obligations/OBL-NOTFOUND", json={"title": "X"})
     assert r.status_code == 404
 
 
@@ -190,23 +190,23 @@ async def test_delete_obligation(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
-    r = await client.delete(f"/api/v1/obligations/{obl['id']}")
+    r = await client.delete(f"/v1/obligations/{obl['id']}")
     assert r.status_code == 200
-    assert (await client.get(f"/api/v1/obligations/{obl['id']}")).status_code == 404
+    assert (await client.get(f"/v1/obligations/{obl['id']}")).status_code == 404
 
 
 async def test_delete_obligation_in_approved_assessment_returns_409(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
-    await client.post(f"/api/v1/assessments/{ass['id']}/submit")
-    await client.post(f"/api/v1/assessments/{ass['id']}/approve")
-    r = await client.delete(f"/api/v1/obligations/{obl['id']}")
+    await client.post(f"/v1/assessments/{ass['id']}/submit")
+    await client.post(f"/v1/assessments/{ass['id']}/approve")
+    r = await client.delete(f"/v1/obligations/{obl['id']}")
     assert r.status_code == 409
 
 
 async def test_delete_obligation_404_on_missing(client: httpx.AsyncClient):
-    r = await client.delete("/api/v1/obligations/OBL-NOTFOUND")
+    r = await client.delete("/v1/obligations/OBL-NOTFOUND")
     assert r.status_code == 404
 
 
@@ -218,11 +218,11 @@ async def test_marking_obligation_fulfilled_updates_score(client: httpx.AsyncCli
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     # Auto-generation creates 3 obligations (minimal tier). Mark all fulfilled.
-    obs = (await client.get(f"/api/v1/obligations?assessment_id={ass['id']}")).json()
+    obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
     for o in obs:
-        await client.put(f"/api/v1/obligations/{o['id']}", json={"status": "fulfilled"})
+        await client.put(f"/v1/obligations/{o['id']}", json={"status": "fulfilled"})
 
-    r = await client.get(f"/api/v1/assessments/{ass['id']}")
+    r = await client.get(f"/v1/assessments/{ass['id']}")
     assert r.json()["score"] == 100.0
 
 
@@ -230,9 +230,9 @@ async def test_marking_all_obligations_not_applicable_sets_score_none(client: ht
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     # Auto-generation creates 3 obligations (minimal tier). Mark all not_applicable.
-    obs = (await client.get(f"/api/v1/obligations?assessment_id={ass['id']}")).json()
+    obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
     for o in obs:
-        await client.put(f"/api/v1/obligations/{o['id']}", json={"status": "not_applicable"})
+        await client.put(f"/v1/obligations/{o['id']}", json={"status": "not_applicable"})
 
-    r = await client.get(f"/api/v1/assessments/{ass['id']}")
+    r = await client.get(f"/v1/assessments/{ass['id']}")
     assert r.json()["score"] is None

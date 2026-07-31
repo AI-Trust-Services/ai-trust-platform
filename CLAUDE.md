@@ -93,23 +93,23 @@ All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports 
 | Luigi shell / entry point | http://localhost:8080 |
 | Keycloak (browser login) | http://localhost:8180 |
 | AI System Registry frontend | http://localhost:8080/registry/ |
-| AI System Registry backend API | http://localhost:8080/api/registry/api/v1 |
+| AI System Registry backend API | http://localhost:8080/api/registry/v1 |
 | AI System Registry API docs | http://localhost:8080/api/registry/docs |
 | AI System Registry health | http://localhost:8080/api/registry/health |
 | Overview frontend | http://localhost:8080/overview/ |
-| Overview backend API | http://localhost:8080/api/overview/api/v1 |
+| Overview backend API | http://localhost:8080/api/overview/v1 |
 | Overview health | http://localhost:8080/api/overview/health |
 | Monitoring frontend | http://localhost:8080/monitoring/ |
-| Monitoring backend API | http://localhost:8080/api/monitoring/api/v1 |
+| Monitoring backend API | http://localhost:8080/api/monitoring/v1 |
 | Monitoring health | http://localhost:8080/api/monitoring/health |
 | Alerts frontend | http://localhost:8080/alerts/ |
-| Alerts backend API | http://localhost:8080/api/alerts/api/v1 |
+| Alerts backend API | http://localhost:8080/api/alerts/v1 |
 | Alerts health | http://localhost:8080/api/alerts/health |
 | Decision Trace Analyzer frontend | http://localhost:8080/dta/ |
-| Decision Trace Analyzer backend API | http://localhost:8080/api/dta/api/v1 |
+| Decision Trace Analyzer backend API | http://localhost:8080/api/dta/v1 |
 | Decision Trace Analyzer health | http://localhost:8080/api/dta/health |
 | Compliance frontend | http://localhost:8080/compliance/ |
-| Compliance backend API | http://localhost:8080/api/compliance/api/v1 |
+| Compliance backend API | http://localhost:8080/api/compliance/v1 |
 | Compliance health | http://localhost:8080/api/compliance/health |
 | PostgreSQL | localhost:5432 / db: `ai_trust` |
 | OTel Collector (gRPC) | localhost:4317 |
@@ -155,7 +155,7 @@ All React frontends (AI System Registry, Alerts, Decision Trace Analyzer, Compli
 - **Base path:** `base` set in `vite.config.ts` (e.g. `/registry/`) so assets resolve correctly when served under a sub-path via the shell proxy
 - **Routing:** `HashRouter` (compatible with Luigi's `useHashRouting: true`)
 - **Luigi integration:** `@luigi-project/client` npm package; `addInitListener` handshake in `useLuigi.js`
-- **API base URL:** read from `import.meta.env.VITE_*_API_BASE` at build time — all relative paths (e.g. `/api/registry/api/v1`)
+- **API base URL:** read from `import.meta.env.VITE_*_API_BASE` at build time — all relative paths (e.g. `/api/registry/v1`)
 - **Backend health polling:** shows a red banner with auto-retry if backend is unavailable
 - **nginx headers:** `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding)
 - **UI5 Web Components** — `<ui5-button>` etc. for SAP Fiori look. Import once per file: `import "@ui5/webcomponents/dist/Button.js"` then use as `<ui5-button>` JSX tags
@@ -277,16 +277,16 @@ Classification logic is hardcoded (EU AI Act is law, not config). Obligation tex
 
 Compliance posture MFE. Reads Postgres only. Static HTML frontend (no build step).
 
-- `GET /api/v1/overview/stats?lifecycle=` — KPI counts, tier distribution, compliance data, recent registrations
+- `GET /api/overview/v1/stats?lifecycle=` — KPI counts, tier distribution, compliance data, recent registrations
 - Frontend: fixed top section (KPI cards + tier donut + compliance bar chart) + customizable analytics dashboard. Layout persists to `localStorage` (`ai_trust_overview_dashboard_v1`)
 
 ### monitoring/ (internal port 8003, accessed via /api/monitoring/)
 
 Live observability signals from ClickHouse + registry analytics from Postgres.
 
-- `GET /api/v1/monitoring/services` — distinct services + models seen in ClickHouse
-- `GET /api/v1/monitoring/signals?service=&window=1h` — time-series inference count, latency, token usage from ClickHouse. `window` accepts `15m`, `1h`, `6h`, `24h`
-- `GET /api/v1/monitoring/stats?lifecycle=` — registry analytics aggregated from Postgres
+- `GET /api/monitoring/v1/services` — distinct services + models seen in ClickHouse
+- `GET /api/monitoring/v1/signals?service=&window=1h` — time-series inference count, latency, token usage from ClickHouse. `window` accepts `15m`, `1h`, `6h`, `24h`
+- `GET /api/monitoring/v1/stats?lifecycle=` — registry analytics aggregated from Postgres
 - All ClickHouse queries use `clickhouse-connect` with **parameterized queries** (`{param:Type}` syntax) — never f-string interpolation of user input. `window` and `interval` values come from a server-side allowlist
 - Frontend: Live Signals section polls every 30s; selectors persist to `localStorage` (`ai_trust_monitoring_filters_v1`). Registry Analytics section layout persists to `localStorage` (`ai_trust_dashboard_v4`)
 
@@ -294,14 +294,14 @@ Live observability signals from ClickHouse + registry analytics from Postgres.
 
 Rule-based alerting. Rules in Postgres, events in ClickHouse.
 
-- `GET /api/v1/alerts/active` — unresolved, unhandled events from ClickHouse
-- `GET /api/v1/alerts/history` — resolved/handled events
-- `GET /api/v1/alerts/rules` — all rules from Postgres (includes `parameters`, `is_custom`)
-- `GET /api/v1/alerts/count` — fast count for bell badge polling
-- `POST /api/v1/alerts/events/{id}/handle` — mark event as handled (sets both `handled_at` and `resolved_at`)
-- `POST /api/v1/alerts/events/{id}/approve-model` — approve a model change: marks handled + updates `service_model_baselines` to new model. Body: `{ service_name, new_model }`
-- `POST /api/v1/alerts/events/{id}/reject-model` — reject a model change: marks handled, baseline unchanged
-- `POST /api/v1/alerts/rules/{id}/toggle` — enable/disable a rule
+- `GET /api/alerts/v1/active` — unresolved, unhandled events from ClickHouse
+- `GET /api/alerts/v1/history` — resolved/handled events
+- `GET /api/alerts/v1/rules` — all rules from Postgres (includes `parameters`, `is_custom`)
+- `GET /api/alerts/v1/count` — fast count for bell badge polling
+- `POST /api/alerts/v1/events/{id}/handle` — mark event as handled (sets both `handled_at` and `resolved_at`)
+- `POST /api/alerts/v1/events/{id}/approve-model` — approve a model change: marks handled + updates `service_model_baselines` to new model. Body: `{ service_name, new_model }`
+- `POST /api/alerts/v1/events/{id}/reject-model` — reject a model change: marks handled, baseline unchanged
+- `POST /api/alerts/v1/rules/{id}/toggle` — enable/disable a rule
 
 #### policy-checker-worker/
 
@@ -399,14 +399,14 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `MINIO_ROOT_PASSWORD` | minio, minio-init, clickhouse, compliance | `minioadmin` | MinIO secret key |
 | `DATABASE_URL` | all backends, db-migrate | derived from `POSTGRES_*` | Postgres connection string |
 | `ALLOWED_ORIGINS` | all backends | *(required — no default)* | Comma-separated CORS origins. App refuses to start if not set |
-| `VITE_ALERTS_API_BASE` | alerts frontend (build time) | `/api/alerts/api/v1` | Alerts API URL baked into bundle |
+| `VITE_ALERTS_API_BASE` | alerts frontend (build time) | `/api/alerts/v1` | Alerts API URL baked into bundle |
 | `VITE_ALERTS_URL` | alerts frontend (build time) | `http://localhost:8080/alerts` | Alerts frontend URL (used for bell badge deep-link) |
-| `VITE_COMPLIANCE_API_BASE` | compliance frontend (build time) | `/api/compliance/api/v1` | Compliance API URL baked into bundle |
+| `VITE_COMPLIANCE_API_BASE` | compliance frontend (build time) | `/api/compliance/v1` | Compliance API URL baked into bundle |
 | `VITE_COMPLIANCE_URL` | alerts + overview frontends (build time) | `http://localhost:8080/compliance` | Compliance frontend URL |
-| `VITE_DTA_API_BASE` | DTA frontend (build time) | `/api/dta/api/v1` | DTA API base — relative path via shell nginx proxy |
-| `VITE_MONITORING_API_BASE` | monitoring frontend (build time) | `/api/monitoring/api/v1` | Monitoring API URL baked into bundle |
-| `VITE_OVERVIEW_API_BASE` | overview frontend (build time) | `/api/overview/api/v1` | Overview API URL baked into bundle |
-| `VITE_REGISTRY_API_BASE` | registry + compliance frontends (build time) | `/api/registry/api/v1` | Registry API URL baked into bundle |
+| `VITE_DTA_API_BASE` | DTA frontend (build time) | `/api/dta/v1` | DTA API base — relative path via shell nginx proxy |
+| `VITE_MONITORING_API_BASE` | monitoring frontend (build time) | `/api/monitoring/v1` | Monitoring API URL baked into bundle |
+| `VITE_OVERVIEW_API_BASE` | overview frontend (build time) | `/api/overview/v1` | Overview API URL baked into bundle |
+| `VITE_REGISTRY_API_BASE` | registry + compliance frontends (build time) | `/api/registry/v1` | Registry API URL baked into bundle |
 | `VITE_REGISTRY_URL` | overview + compliance frontends (build time) | `http://localhost:8080/registry` | Registry frontend URL |
 | `KEYCLOAK_ADMIN` | keycloak, keycloak-provision | `admin` | Keycloak admin username |
 | `KEYCLOAK_ADMIN_PASSWORD` | keycloak, keycloak-provision | `admin` | Keycloak admin password |

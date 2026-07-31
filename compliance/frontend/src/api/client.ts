@@ -6,7 +6,7 @@ import type {
 
 const API_BASE = import.meta.env.VITE_COMPLIANCE_API_BASE as string;
 const REGISTRY_API_BASE = import.meta.env.VITE_REGISTRY_API_BASE as string;
-export const HEALTH_URL = API_BASE.replace("/api/v1", "") + "/health";
+export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 
 function formatDetail(detail: unknown): string {
   if (!detail) return "";

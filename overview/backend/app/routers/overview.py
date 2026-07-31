@@ -18,7 +18,7 @@ router = APIRouter(tags=["overview"])
 logger = get_logger(__name__)
 
 
-@router.get("/overview/stats")
+@router.get("/stats")
 async def get_overview_stats() -> dict:
     async with SessionLocal() as session:
         total = (await session.execute(
@@ -158,7 +158,7 @@ async def get_overview_stats() -> dict:
     }
 
 
-@router.get("/overview/compliance-stats")
+@router.get("/compliance-stats")
 async def get_compliance_stats(
     window_days: int = Query(default=30, ge=1, le=365),
 ) -> dict:

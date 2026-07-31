@@ -28,7 +28,7 @@ export interface SignalsData {
 }
 
 const API_BASE = import.meta.env.VITE_MONITORING_API_BASE;
-export const HEALTH_URL = API_BASE.replace("/api/v1", "") + "/health";
+export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, options);
@@ -40,10 +40,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  getServices: () => request<ServiceInfo[]>("/monitoring/services"),
+  getServices: () => request<ServiceInfo[]>("/services"),
   getSignals: (service: string, window: string) => {
     const params = new URLSearchParams({ window });
     if (service) params.append("service", service);
-    return request<SignalsData>(`/monitoring/signals?${params}`);
+    return request<SignalsData>(`/signals?${params}`);
   },
 };
