@@ -4,6 +4,7 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  base: "/registry/",
   envDir: path.resolve(__dirname, "../.."),
   build: {
     outDir: "dist",

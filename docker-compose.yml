@@ -93,7 +93,6 @@ services:
       - --cookie-secure=false
       - --email-domain=*
       - --pass-authorization-header=true
-      - --set-authorization-header=true
       - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout
     depends_on:
       keycloak-provision:
@@ -111,6 +110,8 @@ services:
         condition: service_healthy
       decision-trace-analyzer-frontend:
         condition: service_started
+      decision-trace-analyzer-backend:
+        condition: service_healthy
       monitoring-frontend:
         condition: service_started
       monitoring-backend:
@@ -134,8 +135,6 @@ services:
       context: ./ai-system-registry/frontend
       args:
         VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE}
-    ports:
-      - "3001:80"
     restart: on-failure
 
   monitoring-frontend:
@@ -143,8 +142,6 @@ services:
       context: ./monitoring/frontend
       args:
         VITE_MONITORING_API_BASE: ${VITE_MONITORING_API_BASE}
-    ports:
-      - "3002:80"
     restart: on-failure
 
   overview-frontend:
@@ -157,8 +154,6 @@ services:
         VITE_REGISTRY_URL: ${VITE_REGISTRY_URL}
         VITE_COMPLIANCE_URL: ${VITE_COMPLIANCE_URL}
         VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE}
-    ports:
-      - "3003:80"
     restart: on-failure
 
   alerts-frontend:
@@ -167,18 +162,14 @@ services:
       args:
         VITE_ALERTS_API_BASE: ${VITE_ALERTS_API_BASE}
         VITE_ALERTS_URL: ${VITE_ALERTS_URL}
-    ports:
-      - "3004:80"
     restart: on-failure
 
   compliance-frontend:
     build:
       context: ./compliance/frontend
       args:
-        VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE:-http://localhost:8007/api/v1}
-        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-http://localhost:8001/api/v1}
-    ports:
-      - "3006:80"
+        VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE:-/api/compliance/api/v1}
+        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/api/v1}
     restart: on-failure
 
   db-migrate:
@@ -194,11 +185,9 @@ services:
     build:
       context: .
       dockerfile: ai-system-registry/backend/Dockerfile
-    ports:
-      - "8001:8001"
     environment:
       <<: *db-env
-      ALLOWED_ORIGINS: "http://localhost:3001,http://localhost:8080,http://localhost:3006"
+      ALLOWED_ORIGINS: "http://localhost:8080"
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -214,11 +203,9 @@ services:
     build:
       context: .
       dockerfile: monitoring/backend/Dockerfile
-    ports:
-      - "8003:8003"
     environment:
       <<: *db-env
-      ALLOWED_ORIGINS: "http://localhost:3002,http://localhost:8080"
+      ALLOWED_ORIGINS: "http://localhost:8080"
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: "8123"
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
@@ -240,11 +227,9 @@ services:
     build:
       context: .
       dockerfile: overview/backend/Dockerfile
-    ports:
-      - "8004:8004"
     environment:
       <<: *db-env
-      ALLOWED_ORIGINS: "http://localhost:3003,http://localhost:8080"
+      ALLOWED_ORIGINS: "http://localhost:8080"
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -260,11 +245,9 @@ services:
     build:
       context: .
       dockerfile: alerts/backend/Dockerfile
-    ports:
-      - "8005:8005"
     environment:
       <<: *db-env
-      ALLOWED_ORIGINS: "http://localhost:3004,http://localhost:8080,http://localhost:3001,http://localhost:3002,http://localhost:3003"
+      ALLOWED_ORIGINS: "http://localhost:8080"
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: "8123"
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
@@ -286,11 +269,9 @@ services:
     build:
       context: .
       dockerfile: compliance/backend/Dockerfile
-    ports:
-      - "8007:8007"
     environment:
       <<: *db-env
-      ALLOWED_ORIGINS: "http://localhost:3006,http://localhost:8080,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004"
+      ALLOWED_ORIGINS: "http://localhost:8080"
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -459,8 +440,6 @@ services:
       context: ./decision-trace-analyzer/frontend
       args:
         VITE_DTA_API_BASE: ${VITE_DTA_API_BASE}
-    ports:
-      - "3005:80"
     depends_on:
       decision-trace-analyzer-backend:
         condition: service_healthy
@@ -470,11 +449,9 @@ services:
     build:
       context: .
       dockerfile: decision-trace-analyzer/backend/Dockerfile
-    ports:
-      - "8006:8006"
     environment:
       <<: *ch-env
-      ALLOWED_ORIGINS: "http://localhost:3005,http://localhost:8080"
+      ALLOWED_ORIGINS: "http://localhost:8080"
     depends_on:
       clickhouse-migrate:
         condition: service_completed_successfully
