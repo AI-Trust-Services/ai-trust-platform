@@ -42,32 +42,24 @@ def get_admin_token(client: httpx.Client) -> str:
 
 
 def ensure_realm(client: httpx.Client) -> None:
+    realm_config = {
+        "realm": REALM,
+        "enabled": True,
+        "displayName": "AI Trust Platform",
+        "sslRequired": "none",
+        "registrationAllowed": False,
+        "loginWithEmailAllowed": False,
+        "accessTokenLifespan": 900,
+        "ssoSessionIdleTimeout": 28800,
+        "ssoSessionMaxLifespan": 28800,
+    }
     resp = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}")
     if resp.status_code == 200:
         print(f"Realm '{REALM}' already exists, updating...")
-        client.put(f"{KEYCLOAK_URL}/admin/realms/{REALM}", json={
-            "enabled": True,
-            "displayName": "AI Trust Platform",
-            "sslRequired": "none",
-            "registrationAllowed": False,
-            "loginWithEmailAllowed": False,
-            "accessTokenLifespan": 900,
-            "ssoSessionIdleTimeout": 28800,
-            "ssoSessionMaxLifespan": 28800,
-        }).raise_for_status()
+        client.put(f"{KEYCLOAK_URL}/admin/realms/{REALM}", json=realm_config).raise_for_status()
     else:
         print(f"Creating realm '{REALM}'...")
-        client.post(f"{KEYCLOAK_URL}/admin/realms", json={
-            "realm": REALM,
-            "enabled": True,
-            "displayName": "AI Trust Platform",
-            "sslRequired": "none",
-            "registrationAllowed": False,
-            "loginWithEmailAllowed": False,
-            "accessTokenLifespan": 900,
-            "ssoSessionIdleTimeout": 28800,
-            "ssoSessionMaxLifespan": 28800,
-        }).raise_for_status()
+        client.post(f"{KEYCLOAK_URL}/admin/realms", json=realm_config).raise_for_status()
 
 
 
