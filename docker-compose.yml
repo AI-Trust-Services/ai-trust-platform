@@ -94,6 +94,7 @@ services:
       - --email-domain=*
       - --pass-authorization-header=true
       - --set-authorization-header=true
+      - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout
     depends_on:
       keycloak-provision:
         condition: service_completed_successfully

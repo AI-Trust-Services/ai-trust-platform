@@ -102,8 +102,7 @@ Luigi.setConfig({
   lifecycleHooks: {
     luigiAfterInit: () => {
       const style = document.createElement("style");
-      style.textContent = `
-        :root {
+      style.textContent = `:root {
           --luigi-nav-bg: #ffffff;
           --luigi-nav-width: 256px;
         }
@@ -330,6 +329,28 @@ Luigi.setConfig({
           clearInterval(waitForNav);
           attachTooltips();
           observer.observe(nav, { childList: true, subtree: true });
+        }
+      }, 200);
+
+      // Inject sign-out button into shell bar
+      const waitForShellbar = setInterval(() => {
+        const shellbar = document.querySelector(".fd-shellbar__group--actions, .fd-shellbar__actions");
+        if (shellbar) {
+          clearInterval(waitForShellbar);
+          const btn = document.createElement("a");
+          btn.href = "/oauth2/sign_out";
+          btn.title = "Sign out";
+          btn.style.cssText = `
+            display: inline-flex; align-items: center; gap: 6px;
+            color: #ffffff; text-decoration: none; font-size: 13px;
+            font-weight: 500; padding: 6px 12px; border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.4);
+            margin-right: 8px; cursor: pointer;
+          `;
+          btn.innerHTML = `<span class="sap-icon sap-icon--log" style="font-size:16px;color:#fff"></span> Sign out`;
+          btn.addEventListener("mouseenter", () => btn.style.background = "rgba(255,255,255,0.15)");
+          btn.addEventListener("mouseleave", () => btn.style.background = "transparent");
+          shellbar.prepend(btn);
         }
       }, 200);
     },
