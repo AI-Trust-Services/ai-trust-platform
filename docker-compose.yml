@@ -84,17 +84,18 @@ services:
       - --login-url=${KEYCLOAK_PUBLIC_URL}/realms/ai-trust/protocol/openid-connect/auth
       - --redeem-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/token
       - --oidc-jwks-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/certs
-      # skip-oidc-discovery + insecure-oidc-skip-issuer-verification: Keycloak's internal
-      # token issuer (http://keycloak:8080) differs from the public URL the browser uses
-      # (KEYCLOAK_PUBLIC_URL). Discovery would fail or produce mismatched issuer claims.
-      # Remove both flags in production if issuer URL matches the public Keycloak URL.
+      # skip-oidc-discovery + insecure-oidc-skip-issuer-verification: needed because
+      # Keycloak's internal issuer (http://keycloak:8080) differs from the public browser URL
+      # (KEYCLOAK_PUBLIC_URL). The JWT issuer claim would not match --oidc-issuer-url otherwise.
+      # Production alternative: set KC_HOSTNAME in Keycloak so the issuer claim matches the
+      # public URL, then remove both flags and drop the manual --login-url/--redeem-url/--oidc-jwks-url.
       - --skip-oidc-discovery=true
       - --insecure-oidc-skip-issuer-verification=true
       - --redirect-url=${APP_PUBLIC_URL}/oauth2/callback
       - --upstream=http://shell:80
       - --http-address=0.0.0.0:4180
       - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
-      # cookie-secure=false required for HTTP (local dev). Set to true in production (HTTPS only).
+      # cookie-secure=false: required for HTTP localhost dev. Must be true in production (HTTPS).
       - --cookie-secure=false
       - --email-domain=*
       - --pass-authorization-header=true

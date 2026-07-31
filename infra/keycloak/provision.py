@@ -46,6 +46,7 @@ def ensure_realm(client: httpx.Client) -> None:
         "realm": REALM,
         "enabled": True,
         "displayName": "AI Trust Platform",
+        # "none" is fine for local dev (HTTP). Use "external" or "all" in production.
         "sslRequired": "none",
         "registrationAllowed": False,
         "loginWithEmailAllowed": False,
