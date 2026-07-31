@@ -23,8 +23,8 @@ legitimately evergreen. That is an application-layer concern, not a DB invariant
 """
 from alembic import op
 
-revision = "0008"
-down_revision = "0007"
+revision = "0007"
+down_revision = "0006"
 branch_labels = None
 depends_on = None
 
