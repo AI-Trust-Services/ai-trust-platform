@@ -83,10 +83,12 @@ async def test_create_assessment_rejects_decommissioned_system(client: httpx.Asy
 
 
 async def test_create_assessment_unknown_tier_yields_no_obligations(client: httpx.AsyncClient):
-    # obligations_for() returns [] for unknown tiers — assessment is created successfully
-    # but with zero obligations. Zero obligations is a valid state (logged as a warning).
-    system = await create_system(tier="unknown_tier")
-    ass = await create_assessment(client, system["id"])
+    # obligations_for() returns [] when no templates match — assessment is created
+    # successfully but with zero obligations. Zero obligations is a valid state.
+    from unittest.mock import patch
+    system = await create_system(tier="minimal")
+    with patch("app.routers.assessments.obligations_for", return_value=[]):
+        ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/api/v1/obligations?assessment_id={ass['id']}")).json()
     assert len(obs) == 0
 
@@ -487,8 +489,10 @@ async def test_prohibited_controls_scoped_to_prohibited_tier(client: httpx.Async
 
 async def test_unknown_tier_generates_no_controls(client: httpx.AsyncClient):
     # No obligations -> no controls, assessment still created.
-    system = await create_system(tier="unknown_tier")
-    await create_assessment(client, system["id"])
+    from unittest.mock import patch
+    system = await create_system(tier="minimal")
+    with patch("app.routers.assessments.obligations_for", return_value=[]):
+        await create_assessment(client, system["id"])
     controls = (await client.get(f"/api/v1/controls?ai_system_id={system['id']}")).json()
     assert len(controls) == 0
 
@@ -531,8 +535,10 @@ async def test_generate_controls_approved_assessment_returns_409(client: httpx.A
 
 
 async def test_generate_controls_no_obligations_returns_422(client: httpx.AsyncClient):
-    system = await create_system(tier="unknown_tier")  # yields zero obligations
-    ass = await create_assessment(client, system["id"])
+    from unittest.mock import patch
+    system = await create_system(tier="minimal")
+    with patch("app.routers.assessments.obligations_for", return_value=[]):
+        ass = await create_assessment(client, system["id"])
     r = await client.post(f"/api/v1/assessments/{ass['id']}/generate-controls")
     assert r.status_code == 422
 
