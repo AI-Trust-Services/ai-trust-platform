@@ -86,39 +86,31 @@ All response schemas set `model_config = {"from_attributes": True}`. Convert ORM
 
 ## Service URLs
 
+All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports are not exposed — only accessible via the shell nginx reverse proxy.
+
 | Service | URL |
 |---|---|
-| Luigi shell | http://localhost:8080 |
-| AI System Registry frontend | http://localhost:3001 |
-| AI System Registry backend API | http://localhost:8001 |
-| AI System Registry API docs | http://localhost:8001/docs |
-| AI System Registry OpenAPI spec | http://localhost:8001/openapi.json |
-| AI System Registry health | http://localhost:8001/health |
-| Overview frontend | http://localhost:3003 |
-| Overview backend API | http://localhost:8004 |
-| Overview API docs | http://localhost:8004/docs |
-| Overview OpenAPI spec | http://localhost:8004/openapi.json |
-| Overview health | http://localhost:8004/health |
-| Monitoring frontend | http://localhost:3002 |
-| Monitoring backend API | http://localhost:8003 |
-| Monitoring API docs | http://localhost:8003/docs |
-| Monitoring OpenAPI spec | http://localhost:8003/openapi.json |
-| Monitoring health | http://localhost:8003/health |
-| Alerts frontend | http://localhost:3004 |
-| Alerts backend API | http://localhost:8005 |
-| Alerts API docs | http://localhost:8005/docs |
-| Alerts OpenAPI spec | http://localhost:8005/openapi.json |
-| Alerts health | http://localhost:8005/health |
-| Decision Trace Analyzer frontend | http://localhost:3005 |
-| Decision Trace Analyzer backend API | http://localhost:8006 |
-| Decision Trace Analyzer API docs | http://localhost:8006/docs |
-| Decision Trace Analyzer OpenAPI spec | http://localhost:8006/openapi.json |
-| Decision Trace Analyzer health | http://localhost:8006/health |
-| Compliance frontend | http://localhost:3006 |
-| Compliance backend API | http://localhost:8007/api/v1 |
-| Compliance API docs | http://localhost:8007/docs |
-| Compliance OpenAPI spec | http://localhost:8007/openapi.json |
-| Compliance health | http://localhost:8007/health |
+| Luigi shell / entry point | http://localhost:8080 |
+| Keycloak (browser login) | http://localhost:8180 |
+| AI System Registry frontend | http://localhost:8080/registry/ |
+| AI System Registry backend API | http://localhost:8080/api/registry/api/v1 |
+| AI System Registry API docs | http://localhost:8080/api/registry/docs |
+| AI System Registry health | http://localhost:8080/api/registry/health |
+| Overview frontend | http://localhost:8080/overview/ |
+| Overview backend API | http://localhost:8080/api/overview/api/v1 |
+| Overview health | http://localhost:8080/api/overview/health |
+| Monitoring frontend | http://localhost:8080/monitoring/ |
+| Monitoring backend API | http://localhost:8080/api/monitoring/api/v1 |
+| Monitoring health | http://localhost:8080/api/monitoring/health |
+| Alerts frontend | http://localhost:8080/alerts/ |
+| Alerts backend API | http://localhost:8080/api/alerts/api/v1 |
+| Alerts health | http://localhost:8080/api/alerts/health |
+| Decision Trace Analyzer frontend | http://localhost:8080/dta/ |
+| Decision Trace Analyzer backend API | http://localhost:8080/api/dta/api/v1 |
+| Decision Trace Analyzer health | http://localhost:8080/api/dta/health |
+| Compliance frontend | http://localhost:8080/compliance/ |
+| Compliance backend API | http://localhost:8080/api/compliance/api/v1 |
+| Compliance health | http://localhost:8080/api/compliance/health |
 | PostgreSQL | localhost:5432 / db: `ai_trust` |
 | OTel Collector (gRPC) | localhost:4317 |
 | OTel Collector (HTTP) | localhost:4318 |
@@ -129,6 +121,29 @@ All response schemas set `model_config = {"from_attributes": True}`. Convert ORM
 | MinIO API | http://localhost:9000 |
 | MinIO console | http://localhost:9001 (credentials from `.env`) |
 
+## Authentication
+
+All traffic enters through **oauth2-proxy** at port 8080. No backend or frontend is reachable directly from the browser — all ports are internal to Docker.
+
+### Flow
+1. Browser hits `http://localhost:8080` → oauth2-proxy checks session cookie
+2. No session → redirects browser to Keycloak login at `KEYCLOAK_PUBLIC_URL` (port 8180)
+3. User logs in → Keycloak redirects back to `/oauth2/callback` with auth code
+4. oauth2-proxy exchanges code for JWT, stores it in an encrypted session cookie
+5. All subsequent requests: oauth2-proxy validates cookie, forwards to shell with `Authorization: Bearer <JWT>` added server-side
+6. Browser only ever sees the encrypted session cookie — JWT never exposed
+
+### Components
+- **Keycloak 25** (`infra/keycloak/`) — identity provider, realm `ai-trust`, port 8180
+- **keycloak-provision** — one-shot container that configures realm/client/users via Admin API on startup. Idempotent. Config driven by `APP_PUBLIC_URL` — no hardcoded URLs
+- **oauth2-proxy v7.6.0** — gateway at port 8080, enforces authentication on all paths
+- **Sign out** — shell bar button links to `/oauth2/sign_out`, which clears the session and calls Keycloak's logout endpoint server-side (`--backend-logout-url`)
+
+Set `PROVISION_DEV_USERS=true` in `.env` to have `keycloak-provision` create dev users on startup (local development only). Keep `false` in production — provision real users via the Keycloak admin console at `http://localhost:8180`.
+
+### Phase 2 (not yet implemented)
+Authorization (what each user can do) will be handled by OpenFGA. Keycloak roles are intentionally omitted until then.
+
 ## Architecture
 
 See [docs/architecture.md](docs/architecture.md) for repo layout, GenAI observability data flow, and Docker startup order diagrams.
@@ -137,9 +152,10 @@ See [docs/architecture.md](docs/architecture.md) for repo layout, GenAI observab
 
 All React frontends (AI System Registry, Alerts, Decision Trace Analyzer, Compliance) share the same pattern:
 - **Build tool:** Vite 6 (`npm run build → dist/`), multi-stage Dockerfile (`node:20-alpine` build → `nginx:alpine` serve)
+- **Base path:** `base` set in `vite.config.ts` (e.g. `/registry/`) so assets resolve correctly when served under a sub-path via the shell proxy
 - **Routing:** `HashRouter` (compatible with Luigi's `useHashRouting: true`)
 - **Luigi integration:** `@luigi-project/client` npm package; `addInitListener` handshake in `useLuigi.js`
-- **API base URL:** read from `import.meta.env.VITE_*_API_BASE` at build time
+- **API base URL:** read from `import.meta.env.VITE_*_API_BASE` at build time — all relative paths (e.g. `/api/registry/api/v1`)
 - **Backend health polling:** shows a red banner with auto-retry if backend is unavailable
 - **nginx headers:** `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding)
 - **UI5 Web Components** — `<ui5-button>` etc. for SAP Fiori look. Import once per file: `import "@ui5/webcomponents/dist/Button.js"` then use as `<ui5-button>` JSX tags
@@ -204,15 +220,22 @@ The shared structured logging package. All backends depend on it.
 
 Static HTML + `luigi-config.js` served by nginx. Luigi core is loaded from CDN. Navigation nodes in `luigi-config.js` define which MFEs are mounted and at what paths. To add a component to the nav, add a `children` node with its `viewUrl`.
 
+The shell nginx also acts as a **reverse proxy** — all MFE and backend API traffic routes through it:
+- `/registry/`, `/monitoring/`, `/overview/`, `/alerts/`, `/compliance/`, `/dta/` → frontend containers
+- `/api/registry/`, `/api/monitoring/`, `/api/overview/`, `/api/alerts/`, `/api/compliance/`, `/api/dta/` → backend containers
+
+If a container restarts and nginx returns 502, run `docker compose restart shell` to clear the stale DNS cache.
+
 **Sidebar customization** — the sidebar uses `responsiveNavigation: "Fiori3"` with a custom animated hamburger injected via `luigiAfterInit`. Key settings:
 - `sideNavigation: { collapsed: true }` — starts collapsed (icons only)
 - The custom hamburger is injected into the sidebar DOM after Luigi renders
 - Alerts is registered as `hideFromNav: true` — accessible via bell badge but not shown in nav
 - `defaultChildNode: "overview"` — Overview loads by default when navigating to `/home`
+- "Sign out" button injected into the shell bar via `luigiAfterInit`, links to `/oauth2/sign_out`
 
 ## Components
 
-Each component has `frontend/` (nginx, port 3001+) and `backend/` (FastAPI, port 8001+).
+Each component has `frontend/` (nginx, internal only) and `backend/` (FastAPI, internal only). All traffic is routed through port 8080 via the shell nginx reverse proxy.
 
 ### Adding a new component
 1. Create `new-component/frontend/` and `new-component/backend/`
@@ -221,10 +244,12 @@ Each component has `frontend/` (nginx, port 3001+) and `backend/` (FastAPI, port
 4. Copy `ai-system-registry/backend/Dockerfile` pattern (build context must be repo root)
 5. Add the libs your component needs to `requirements.txt`: `-e /app/libs/persistence` (Postgres), `-e /app/libs/clickhouse` (ClickHouse), `-e /app/libs/logging` (all backends)
 6. Add `healthcheck.py` to the backend (copy from `ai-system-registry/backend/healthcheck.py`, update port)
-7. Add service to root `docker-compose.yml` with `depends_on: db-migrate: condition: service_completed_successfully` and a `healthcheck`
-8. Add nav node to `shell/luigi-config.js`
+7. Add service to root `docker-compose.yml` with `depends_on: db-migrate: condition: service_completed_successfully` and a `healthcheck`. Do **not** add `ports:` — traffic goes through the shell proxy
+8. Add proxy routes to `shell/nginx.conf` for the frontend (`/new-component/`) and backend API (`/api/new-component/`)
+9. Add `base: "/new-component/"` to the frontend's `vite.config.ts`
+10. Add nav node to `shell/luigi-config.js` with `viewUrl: "http://localhost:8080/new-component/"`
 
-### ai-system-registry/ (port 3001 / 8001)
+### ai-system-registry/ (internal port 8001, accessed via /api/registry/)
 
 AI system registration and EU AI Act classification.
 
@@ -248,14 +273,14 @@ Waterfall — returns at first match, highest priority first:
 
 Classification logic is hardcoded (EU AI Act is law, not config). Obligation texts and thresholds are constants in `classifier.py`.
 
-### overview/ (port 3003 / 8004)
+### overview/ (internal port 8004, accessed via /api/overview/)
 
 Compliance posture MFE. Reads Postgres only. Static HTML frontend (no build step).
 
 - `GET /api/v1/overview/stats?lifecycle=` — KPI counts, tier distribution, compliance data, recent registrations
 - Frontend: fixed top section (KPI cards + tier donut + compliance bar chart) + customizable analytics dashboard. Layout persists to `localStorage` (`ai_trust_overview_dashboard_v1`)
 
-### monitoring/ (port 3002 / 8003)
+### monitoring/ (internal port 8003, accessed via /api/monitoring/)
 
 Live observability signals from ClickHouse + registry analytics from Postgres.
 
@@ -265,7 +290,7 @@ Live observability signals from ClickHouse + registry analytics from Postgres.
 - All ClickHouse queries use `clickhouse-connect` with **parameterized queries** (`{param:Type}` syntax) — never f-string interpolation of user input. `window` and `interval` values come from a server-side allowlist
 - Frontend: Live Signals section polls every 30s; selectors persist to `localStorage` (`ai_trust_monitoring_filters_v1`). Registry Analytics section layout persists to `localStorage` (`ai_trust_dashboard_v4`)
 
-### alerts/ (port 3004 / 8005)
+### alerts/ (internal port 8005, accessed via /api/alerts/)
 
 Rule-based alerting. Rules in Postgres, events in ClickHouse.
 
@@ -312,7 +337,7 @@ Detects when a service switches to a different model. Uses a persistent baseline
 - Baseline only updates when a human explicitly approves via **Approve new model** button
 - Rejecting an alert leaves the baseline unchanged; the alert re-fires every 24h until approved or the service reverts
 
-### decision-trace-analyzer/ (port 3005 / 8006)
+### decision-trace-analyzer/ (internal port 8006, accessed via /api/dta/)
 
 Trace viewer for GenAI spans. Reads ClickHouse only (no Postgres).
 
@@ -320,7 +345,7 @@ Trace viewer for GenAI spans. Reads ClickHouse only (no Postgres).
 - Dev proxy — `vite.config.ts` proxies `/api/*` → `http://localhost:8006`, so no CORS issues locally
 - Prod — nginx proxies `/api/` → `decision-trace-analyzer-backend:8006`
 
-### compliance/ (port 3006 / 8007)
+### compliance/ (internal port 8007, accessed via /api/compliance/)
 
 Governance chain MFE — assessments, obligations, controls, and evidence for EU AI Act / NIST / ISO compliance. Reads/writes Postgres; stores evidence files in MinIO.
 
@@ -374,12 +399,22 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `MINIO_ROOT_PASSWORD` | minio, minio-init, clickhouse, compliance | `minioadmin` | MinIO secret key |
 | `DATABASE_URL` | all backends, db-migrate | derived from `POSTGRES_*` | Postgres connection string |
 | `ALLOWED_ORIGINS` | all backends | *(required — no default)* | Comma-separated CORS origins. App refuses to start if not set |
-| `VITE_REGISTRY_API_BASE` | registry + compliance frontends (build time) | `http://localhost:8001/api/v1` | Registry API URL baked into bundle |
-| `VITE_MONITORING_API_BASE` | monitoring frontend (build time) | `http://localhost:8003/api/v1` | Monitoring API URL baked into bundle |
-| `VITE_ALERTS_API_BASE` | alerts frontend (build time) | `http://localhost:8005/api/v1` | Alerts API URL baked into bundle |
-| `VITE_ALERTS_URL` | alerts frontend (build time) | `http://localhost:3004` | Alerts frontend URL (used for bell badge deep-link) |
-| `VITE_DTA_API_BASE` | DTA frontend (build time) | `/api/v1` | DTA API base — relative by default (iframe-safe via nginx proxy) |
-| `VITE_COMPLIANCE_API_BASE` | compliance frontend (build time) | `http://localhost:8007/api/v1` | Compliance API URL baked into bundle |
+| `VITE_ALERTS_API_BASE` | alerts frontend (build time) | `/api/alerts/api/v1` | Alerts API URL baked into bundle |
+| `VITE_ALERTS_URL` | alerts frontend (build time) | `http://localhost:8080/alerts` | Alerts frontend URL (used for bell badge deep-link) |
+| `VITE_COMPLIANCE_API_BASE` | compliance frontend (build time) | `/api/compliance/api/v1` | Compliance API URL baked into bundle |
+| `VITE_COMPLIANCE_URL` | alerts + overview frontends (build time) | `http://localhost:8080/compliance` | Compliance frontend URL |
+| `VITE_DTA_API_BASE` | DTA frontend (build time) | `/api/dta/api/v1` | DTA API base — relative path via shell nginx proxy |
+| `VITE_MONITORING_API_BASE` | monitoring frontend (build time) | `/api/monitoring/api/v1` | Monitoring API URL baked into bundle |
+| `VITE_OVERVIEW_API_BASE` | overview frontend (build time) | `/api/overview/api/v1` | Overview API URL baked into bundle |
+| `VITE_REGISTRY_API_BASE` | registry + compliance frontends (build time) | `/api/registry/api/v1` | Registry API URL baked into bundle |
+| `VITE_REGISTRY_URL` | overview + compliance frontends (build time) | `http://localhost:8080/registry` | Registry frontend URL |
+| `KEYCLOAK_ADMIN` | keycloak, keycloak-provision | `admin` | Keycloak admin username |
+| `KEYCLOAK_ADMIN_PASSWORD` | keycloak, keycloak-provision | `admin` | Keycloak admin password |
+| `KEYCLOAK_CLIENT_SECRET` | keycloak-provision, oauth2-proxy | *(required)* | Shared secret for the oauth2-proxy OIDC client |
+| `KEYCLOAK_PUBLIC_URL` | oauth2-proxy | `http://localhost:8180` | Public Keycloak URL reachable by the browser (for login redirect) |
+| `APP_PUBLIC_URL` | keycloak-provision | `http://localhost:8080` | Public app URL — used to set oauth2-proxy redirect URIs in Keycloak |
+| `PROVISION_DEV_USERS` | keycloak-provision | `false` | Set to `true` to create dev users on startup (local only) |
+| `OAUTH2_PROXY_COOKIE_SECRET` | oauth2-proxy | *(required)* | Cookie encryption key — must be exactly 16, 24, or 32 characters |
 | `MINIO_ENDPOINT` | compliance-backend | `minio:9000` | In-cluster MinIO host:port for uploads (used inside the container) |
 | `MINIO_PUBLIC_ENDPOINT` | compliance-backend | `localhost:9000` | Public-facing MinIO host:port for presigning download URLs the browser can reach |
 | `MINIO_SECURE` | compliance-backend | `false` | Set to `true` if MinIO is behind TLS |
