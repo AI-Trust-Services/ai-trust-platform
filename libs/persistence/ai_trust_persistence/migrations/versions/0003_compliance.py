@@ -77,6 +77,8 @@ def upgrade() -> None:
     op.create_index("ix_assessments_ai_system_id", "assessments", ["ai_system_id"])
     op.create_index("ix_assessments_framework_id", "assessments", ["framework_id"])
     op.create_index("ix_assessments_status", "assessments", ["status"])
+    op.create_index("ix_assessments_system_status", "assessments", ["ai_system_id", "status"])
+    op.create_index("ix_assessments_updated_at", "assessments", ["updated_at"])
 
     op.create_table(
         "obligations",
@@ -96,6 +98,8 @@ def upgrade() -> None:
     op.create_index("ix_obligations_assessment_id", "obligations", ["assessment_id"])
     op.create_index("ix_obligations_ai_system_id", "obligations", ["ai_system_id"])
     op.create_index("ix_obligations_status", "obligations", ["status"])
+    op.create_index("ix_obligations_assessment_status", "obligations", ["assessment_id", "status"])
+    op.create_index("ix_obligations_article_ref", "obligations", ["article_ref"])
 
     op.create_table(
         "controls",
@@ -119,6 +123,7 @@ def upgrade() -> None:
         sa.Column("control_id", sa.String(30), sa.ForeignKey("controls.id", ondelete="CASCADE"), primary_key=True),
         sa.Column("obligation_id", sa.String(30), sa.ForeignKey("obligations.id", ondelete="CASCADE"), primary_key=True),
     )
+    op.create_index("ix_control_obligations_obligation_id", "control_obligations", ["obligation_id"])
 
     op.create_table(
         "evidence",
@@ -142,40 +147,51 @@ def upgrade() -> None:
     op.create_index("ix_evidence_ai_system_id", "evidence", ["ai_system_id"])
     op.create_index("ix_evidence_assessment_id", "evidence", ["assessment_id"])
     op.create_index("ix_evidence_status", "evidence", ["status"])
+    op.create_index("ix_evidence_validity_until", "evidence", ["validity_until"])
 
     op.create_table(
         "evidence_controls",
         sa.Column("evidence_id", sa.String(30), sa.ForeignKey("evidence.id", ondelete="CASCADE"), primary_key=True),
         sa.Column("control_id", sa.String(30), sa.ForeignKey("controls.id", ondelete="CASCADE"), primary_key=True),
     )
+    op.create_index("ix_evidence_controls_control_id", "evidence_controls", ["control_id"])
 
     op.create_table(
         "evidence_obligations",
         sa.Column("evidence_id", sa.String(30), sa.ForeignKey("evidence.id", ondelete="CASCADE"), primary_key=True),
         sa.Column("obligation_id", sa.String(30), sa.ForeignKey("obligations.id", ondelete="CASCADE"), primary_key=True),
     )
+    op.create_index("ix_evidence_obligations_obligation_id", "evidence_obligations", ["obligation_id"])
 
     now = datetime.now(timezone.utc)
     op.bulk_insert(_frameworks_table, [{**f, "created_at": now} for f in _SEED_FRAMEWORKS])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_evidence_obligations_obligation_id", table_name="evidence_obligations")
     op.drop_table("evidence_obligations")
+    op.drop_index("ix_evidence_controls_control_id", table_name="evidence_controls")
     op.drop_table("evidence_controls")
-    op.drop_index("ix_evidence_status", "evidence")
-    op.drop_index("ix_evidence_assessment_id", "evidence")
-    op.drop_index("ix_evidence_ai_system_id", "evidence")
+    op.drop_index("ix_evidence_validity_until", table_name="evidence")
+    op.drop_index("ix_evidence_status", table_name="evidence")
+    op.drop_index("ix_evidence_assessment_id", table_name="evidence")
+    op.drop_index("ix_evidence_ai_system_id", table_name="evidence")
     op.drop_table("evidence")
+    op.drop_index("ix_control_obligations_obligation_id", table_name="control_obligations")
     op.drop_table("control_obligations")
-    op.drop_index("ix_controls_status", "controls")
-    op.drop_index("ix_controls_ai_system_id", "controls")
+    op.drop_index("ix_controls_status", table_name="controls")
+    op.drop_index("ix_controls_ai_system_id", table_name="controls")
     op.drop_table("controls")
-    op.drop_index("ix_obligations_status", "obligations")
-    op.drop_index("ix_obligations_ai_system_id", "obligations")
-    op.drop_index("ix_obligations_assessment_id", "obligations")
+    op.drop_index("ix_obligations_article_ref", table_name="obligations")
+    op.drop_index("ix_obligations_assessment_status", table_name="obligations")
+    op.drop_index("ix_obligations_status", table_name="obligations")
+    op.drop_index("ix_obligations_ai_system_id", table_name="obligations")
+    op.drop_index("ix_obligations_assessment_id", table_name="obligations")
     op.drop_table("obligations")
-    op.drop_index("ix_assessments_status", "assessments")
-    op.drop_index("ix_assessments_framework_id", "assessments")
-    op.drop_index("ix_assessments_ai_system_id", "assessments")
+    op.drop_index("ix_assessments_updated_at", table_name="assessments")
+    op.drop_index("ix_assessments_system_status", table_name="assessments")
+    op.drop_index("ix_assessments_status", table_name="assessments")
+    op.drop_index("ix_assessments_framework_id", table_name="assessments")
+    op.drop_index("ix_assessments_ai_system_id", table_name="assessments")
     op.drop_table("assessments")
     op.drop_table("frameworks")

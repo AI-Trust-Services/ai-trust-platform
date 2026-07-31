@@ -1,8 +1,7 @@
-"""Verify that migration 0007 created all expected indexes.
+"""Verify that migrations created all expected indexes.
 
-Queries pg_indexes (a Postgres system catalog view) directly — no application
-logic, just schema assertions. Runs as part of the e2e suite because it needs
-a live Postgres connection with the migrations applied.
+M2M reverse indexes are defined in 0003_compliance.py alongside their tables.
+Composite and single-column hot-path indexes are defined in 0007_indexes.py.
 """
 from __future__ import annotations
 
