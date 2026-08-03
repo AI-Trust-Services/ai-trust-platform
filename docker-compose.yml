@@ -100,7 +100,7 @@ services:
       - --cookie-secure=false
       - --email-domain=*
       - --pass-authorization-header=true
-      - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout
+      - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout?id_token_hint={id_token}
     depends_on:
       keycloak-provision:
         condition: service_completed_successfully

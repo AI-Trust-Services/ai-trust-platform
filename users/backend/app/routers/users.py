@@ -213,9 +213,12 @@ def remove_role(user_id: str, role_name: str):
         if role_resp.status_code == 404:
             raise HTTPException(404, f"Role '{role_name}' not found in Keycloak.")
         role_resp.raise_for_status()
-        kc.delete(
+        import json as _json
+        kc.request(
+            "DELETE",
             f"/users/{user_id}/role-mappings/realm",
-            json=[role_resp.json()],
+            content=_json.dumps([role_resp.json()]),
+            headers={"Content-Type": "application/json"},
         ).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()

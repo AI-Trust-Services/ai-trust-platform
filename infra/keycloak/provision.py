@@ -181,22 +181,22 @@ def ensure_users_backend_client(client: httpx.Client) -> None:
         f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients/{rm_client_id}/roles"
     )
     rm_roles_resp.raise_for_status()
-    manage_users_role = next(
-        r for r in rm_roles_resp.json() if r["name"] == "manage-users"
-    )
+    needed_roles = {r["name"]: r for r in rm_roles_resp.json() if r["name"] in ("manage-users", "view-realm")}
 
     already_assigned = client.get(
         f"{KEYCLOAK_URL}/admin/realms/{REALM}/users/{sa_user_id}/role-mappings/clients/{rm_client_id}"
     ).json()
     already_names = {r["name"] for r in already_assigned}
-    if "manage-users" not in already_names:
-        print("Granting manage-users to users-backend service account...")
+
+    to_assign = [r for name, r in needed_roles.items() if name not in already_names]
+    if to_assign:
+        print(f"Granting {[r['name'] for r in to_assign]} to users-backend service account...")
         client.post(
             f"{KEYCLOAK_URL}/admin/realms/{REALM}/users/{sa_user_id}/role-mappings/clients/{rm_client_id}",
-            json=[manage_users_role],
+            json=to_assign,
         ).raise_for_status()
     else:
-        print("users-backend service account already has manage-users.")
+        print("users-backend service account already has required roles.")
 
 
 def assign_dev_user_roles(client: httpx.Client) -> None:

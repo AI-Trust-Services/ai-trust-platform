@@ -1,5 +1,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+html, body { width: 100%; min-height: 100vh; }
+
 body {
   font-family: "72", Arial, Helvetica, sans-serif;
   font-size: 14px;
@@ -8,7 +10,7 @@ body {
 }
 
 /* ── Layout ── */
-.page { padding: 24px; max-width: 1400px; }
+.page { padding: 24px; width: 100%; }
 .page-header { margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
 .page-title { font-size: 20px; font-weight: 600; color: #1d2d3e; }
 .page-subtitle { font-size: 13px; color: #556b82; margin-top: 2px; }
@@ -31,7 +33,7 @@ body {
 .search-input:focus { border-color: #0a6ed1; }
 
 /* ── Table ── */
-.table-wrap { background: #fff; border: 1px solid #e4e6e8; border-radius: 8px; overflow: hidden; }
+.table-wrap { background: #fff; border: 1px solid #e4e6e8; border-radius: 8px; overflow: visible; }
 table { width: 100%; border-collapse: collapse; }
 thead th {
   background: #f5f6f7; padding: 10px 14px; text-align: left;
