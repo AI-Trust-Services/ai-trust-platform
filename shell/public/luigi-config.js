@@ -1,4 +1,97 @@
-Luigi.setConfig({
+// Fetch the current user's permissions before building the nav so that
+// admin-only nodes (IAM) are only shown to users who hold iam:manage.
+// The check is UX-only; every backend enforces permissions independently.
+(async function initShell() {
+  let permissions = [];
+  try {
+    const res = await fetch("/api/registry/v1/me/permissions", { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      permissions = data.permissions || [];
+    }
+  } catch (e) {
+    // If the permissions endpoint is unreachable, fall back to hiding admin nodes.
+    permissions = [];
+  }
+  const canManageIam = permissions.includes("iam:manage");
+
+  const children = [
+      {
+        pathSegment: "overview",
+        label: "Overview",
+        icon: "home",
+        viewUrl: "http://localhost:8080/overview/",
+        navigationContext: "overview",
+      },
+      {
+        pathSegment: "ai-system-registry",
+        label: "AI System Registry",
+        icon: "database",
+        viewUrl: "http://localhost:8080/registry/",
+        navigationContext: "ai-system-registry",
+      },
+      {
+        pathSegment: "decision-trace-analyzer",
+        label: "Trace Explorer",
+        icon: "detail-view",
+        viewUrl: "http://localhost:8080/dta/",
+        navigationContext: "decision-trace-analyzer",
+      },
+      {
+        pathSegment: "monitoring",
+        label: "Monitoring",
+        icon: "line-chart",
+        viewUrl: "http://localhost:8080/monitoring/",
+        navigationContext: "monitoring",
+      },
+      {
+        pathSegment: "alerts",
+        label: "Alerts",
+        icon: "alert",
+        viewUrl: "http://localhost:8080/alerts/",
+        navigationContext: "alerts",
+      },
+      {
+        pathSegment: "assessments",
+        label: "Assessments",
+        icon: "task",
+        viewUrl: "http://localhost:8080/compliance/#/assessments",
+        navigationContext: "assessments",
+      },
+      {
+        pathSegment: "obligations",
+        label: "Obligations",
+        icon: "checklist-item",
+        viewUrl: "http://localhost:8080/compliance/#/obligations",
+        navigationContext: "obligations",
+      },
+      {
+        pathSegment: "controls",
+        label: "Controls",
+        icon: "shield",
+        viewUrl: "http://localhost:8080/compliance/#/controls",
+        navigationContext: "controls",
+      },
+      {
+        pathSegment: "evidence",
+        label: "Evidence",
+        icon: "attachment",
+        viewUrl: "http://localhost:8080/compliance/#/evidence",
+        navigationContext: "evidence",
+      },
+  ];
+
+  if (canManageIam) {
+    children.push({
+      pathSegment: "iam",
+      label: "Role Management",
+      icon: "person-placeholder",
+      viewUrl: "http://localhost:8080/iam/",
+      navigationContext: "iam",
+    });
+  }
+
+  Luigi.setConfig({
   navigation: {
     nodes: [
       {
@@ -6,71 +99,7 @@ Luigi.setConfig({
         label: "Home",
         hideFromNav: true,
         defaultChildNode: "overview",
-        children: [
-          {
-            pathSegment: "overview",
-            label: "Overview",
-            icon: "home",
-            viewUrl: "http://localhost:8080/overview/",
-            navigationContext: "overview",
-          },
-          {
-            pathSegment: "ai-system-registry",
-            label: "AI System Registry",
-            icon: "database",
-            viewUrl: "http://localhost:8080/registry/",
-            navigationContext: "ai-system-registry",
-          },
-          {
-            pathSegment: "decision-trace-analyzer",
-            label: "Trace Explorer",
-            icon: "detail-view",
-            viewUrl: "http://localhost:8080/dta/",
-            navigationContext: "decision-trace-analyzer",
-          },
-          {
-            pathSegment: "monitoring",
-            label: "Monitoring",
-            icon: "line-chart",
-            viewUrl: "http://localhost:8080/monitoring/",
-            navigationContext: "monitoring",
-          },
-          {
-            pathSegment: "alerts",
-            label: "Alerts",
-            icon: "alert",
-            viewUrl: "http://localhost:8080/alerts/",
-            navigationContext: "alerts",
-          },
-          {
-            pathSegment: "assessments",
-            label: "Assessments",
-            icon: "task",
-            viewUrl: "http://localhost:8080/compliance/#/assessments",
-            navigationContext: "assessments",
-          },
-          {
-            pathSegment: "obligations",
-            label: "Obligations",
-            icon: "checklist-item",
-            viewUrl: "http://localhost:8080/compliance/#/obligations",
-            navigationContext: "obligations",
-          },
-          {
-            pathSegment: "controls",
-            label: "Controls",
-            icon: "shield",
-            viewUrl: "http://localhost:8080/compliance/#/controls",
-            navigationContext: "controls",
-          },
-          {
-            pathSegment: "evidence",
-            label: "Evidence",
-            icon: "attachment",
-            viewUrl: "http://localhost:8080/compliance/#/evidence",
-            navigationContext: "evidence",
-          },
-        ],
+        children: children,
       },
     ],
   },
@@ -355,4 +384,5 @@ Luigi.setConfig({
       }, 200);
     },
   },
-});
+  });
+})();
