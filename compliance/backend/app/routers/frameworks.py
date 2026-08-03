@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
+from ai_trust_authorization import require_permission
+from ai_trust_authorization.constants import ASSESSMENTS_READ, ASSESSMENTS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import Framework
@@ -12,14 +14,14 @@ router = APIRouter(tags=["frameworks"])
 logger = get_logger(__name__)
 
 
-@router.get("/frameworks", response_model=list[FrameworkResponse])
+@router.get("/frameworks", response_model=list[FrameworkResponse], dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
 async def list_frameworks() -> list[FrameworkResponse]:
     async with SessionLocal() as session:
         result = await session.execute(select(Framework).order_by(Framework.name))
         return [FrameworkResponse.model_validate(r) for r in result.scalars().all()]
 
 
-@router.get("/frameworks/{framework_id}", response_model=FrameworkResponse)
+@router.get("/frameworks/{framework_id}", response_model=FrameworkResponse, dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
 async def get_framework(framework_id: str) -> FrameworkResponse:
     async with SessionLocal() as session:
         result = await session.execute(select(Framework).where(Framework.id == framework_id))
@@ -29,7 +31,7 @@ async def get_framework(framework_id: str) -> FrameworkResponse:
         return FrameworkResponse.model_validate(row)
 
 
-@router.patch("/frameworks/{framework_id}", response_model=FrameworkResponse)
+@router.patch("/frameworks/{framework_id}", response_model=FrameworkResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def update_framework(framework_id: str, body: FrameworkUpdate) -> FrameworkResponse:
     async with SessionLocal() as session:
         result = await session.execute(select(Framework).where(Framework.id == framework_id))

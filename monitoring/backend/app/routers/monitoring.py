@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 
+from ai_trust_authorization import require_permission
+from ai_trust_authorization.constants import MONITORING_READ
 from ai_trust_clickhouse import ch_query
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
@@ -14,7 +16,7 @@ from ai_trust_persistence.models.model_card import ModelCard
 router = APIRouter(tags=["monitoring"])
 logger = get_logger(__name__)
 
-@router.get("/services")
+@router.get("/services", dependencies=[Depends(require_permission(MONITORING_READ))])
 async def get_services() -> list[dict]:
     # Step 1: get distinct service names + stats from ClickHouse
     ch_rows = await ch_query("""
@@ -58,7 +60,7 @@ async def get_services() -> list[dict]:
     return rows
 
 
-@router.get("/signals")
+@router.get("/signals", dependencies=[Depends(require_permission(MONITORING_READ))])
 async def get_signals(
     service: str = Query(default="", description="Filter by system_id"),
     window: str = Query(default="1h", description="Time window: 15m, 1h, 6h, 24h"),
@@ -145,7 +147,7 @@ async def get_signals(
 
 
 
-@router.get("/stats")
+@router.get("/stats", dependencies=[Depends(require_permission(MONITORING_READ))])
 async def get_monitoring_stats(lifecycle: str = Query(default="")) -> dict:
     async with SessionLocal() as session:
         lc_filter = AISystem.lifecycle == lifecycle if lifecycle else True
