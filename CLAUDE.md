@@ -111,6 +111,9 @@ All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports 
 | Compliance frontend | http://localhost:8080/compliance/ |
 | Compliance backend API | http://localhost:8080/api/compliance/v1 |
 | Compliance health | http://localhost:8080/api/compliance/health |
+| Role Management (IAM) frontend | http://localhost:8080/iam/ |
+| IAM / roles API | http://localhost:8080/api/registry/v1/iam |
+| Current user permissions | http://localhost:8080/api/registry/v1/me/permissions |
 | PostgreSQL | localhost:5432 / db: `ai_trust` |
 | OTel Collector (gRPC) | localhost:4317 |
 | OTel Collector (HTTP) | localhost:4318 |
@@ -141,8 +144,15 @@ All traffic enters through **oauth2-proxy** at port 8080. No backend or frontend
 
 Set `PROVISION_DEV_USERS=true` in `.env` to have `keycloak-provision` create dev users on startup (local development only). Keep `false` in production — provision real users via the Keycloak admin console at `http://localhost:8180`.
 
-### Phase 2 (not yet implemented)
-Authorization (what each user can do) will be handled by OpenFGA. Keycloak roles are intentionally omitted until then.
+### Phase 2 (Authorization — RBAC via OpenFGA)
+Authorization (what each user can do) is handled by **OpenFGA**, running as a dedicated Docker service. See [docs/rbac-design.md](docs/rbac-design.md) for the full design.
+
+- **Model** — flat RBAC: users are members of roles, roles grant permissions on a single `platform:global` object. No per-object tuples in Phase 2 (BU scoping deferred to Phase 3).
+- **`libs/authorization`** — shared lib. `require_permission("evidence:approve")` is a FastAPI `Depends()` that reads `X-Forwarded-User` (set by oauth2-proxy), calls OpenFGA, and returns 403 on denial. **Fails closed** — any OpenFGA error denies. Permission strings + role definitions live in `ai_trust_authorization.constants` (single source of truth).
+- **`openfga` + `openfga-provision`** — OpenFGA uses its own Postgres DB (`openfga`, created by `infra/keycloak/init.sh`). `openfga-provision` (one-shot, like `keycloak-provision`) creates the store, uploads the model generated from `constants.py`, seeds role→permission tuples, seeds `user:admin` as Platform Admin when `PROVISION_DEV_USERS=true` (or `INITIAL_ADMIN_USER` in prod), and writes the store ID to the `openfga-config` volume. Backends read the store ID from `/config/store_id` on startup.
+- **IAM API** — `ai-system-registry` backend hosts `routers/iam.py`: `GET /iam/roles`, `GET /iam/users` (live from Keycloak Admin API), `PUT/DELETE /iam/users/{username}/role`, and `GET /me/permissions` (used by the shell to gate the IAM nav node, and by MFEs to grey out unauthorized actions).
+- **IAM UI** — separate `iam/` frontend MFE (Role Management), proxied at `/iam/`, shown in the Luigi nav only to users with `iam:manage`.
+- **Built-in roles** — `platform_admin`, `ai_engineer`, `compliance_officer`, `business_owner`, `auditor`, `executive`. Custom roles deferred to Phase 3.
 
 ## Architecture
 
