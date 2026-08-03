@@ -5,5 +5,6 @@ clickhouse-connect==0.8.0
 -e /app/libs/persistence
 -e /app/libs/logging
 -e /app/libs/clickhouse
+-e /app/libs/authorization
 pytest==9.0.3
 pytest-asyncio==1.4.0

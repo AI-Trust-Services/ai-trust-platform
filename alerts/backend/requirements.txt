@@ -5,3 +5,4 @@ clickhouse-connect==0.8.0
 -e /app/libs/persistence
 -e /app/libs/logging
 -e /app/libs/clickhouse
+-e /app/libs/authorization

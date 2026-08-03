@@ -5,6 +5,7 @@ WORKDIR /app
 COPY libs/persistence /app/libs/persistence
 COPY libs/logging /app/libs/logging
 COPY libs/clickhouse /app/libs/clickhouse
+COPY libs/authorization /app/libs/authorization
 COPY alerts/backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

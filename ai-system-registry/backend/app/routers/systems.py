@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 
+from ai_trust_authorization import require_permission
+from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
 from ai_trust_logging import get_logger
 from app.classifier import classify
 from ai_trust_persistence import SessionLocal
@@ -24,7 +26,7 @@ logger = get_logger(__name__)
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
 
 
-@router.get("/systems", response_model=list[AISystemResponse])
+@router.get("/systems", response_model=list[AISystemResponse], dependencies=[Depends(require_permission(SYSTEMS_READ))])
 async def list_systems(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
@@ -36,7 +38,7 @@ async def list_systems(
         return [AISystemResponse.model_validate(r) for r in result.scalars().all()]
 
 
-@router.get("/systems/{system_id}", response_model=AISystemResponse)
+@router.get("/systems/{system_id}", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_READ))])
 async def get_system(system_id: str) -> AISystemResponse:
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
@@ -46,7 +48,7 @@ async def get_system(system_id: str) -> AISystemResponse:
         return AISystemResponse.model_validate(row)
 
 
-@router.put("/systems/{system_id}", response_model=AISystemResponse)
+@router.put("/systems/{system_id}", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
 async def update_system(system_id: str, body: AISystemUpdate) -> AISystemResponse:
     updates = body.model_dump(exclude_none=True)
 
@@ -76,7 +78,7 @@ async def update_system(system_id: str, body: AISystemUpdate) -> AISystemRespons
     return AISystemResponse.model_validate(row)
 
 
-@router.delete("/systems/{system_id}")
+@router.delete("/systems/{system_id}", dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
 async def delete_system(system_id: str) -> dict:
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
@@ -90,7 +92,7 @@ async def delete_system(system_id: str) -> dict:
     return {"status": "deleted", "id": system_id, "name": name}
 
 
-@router.post("/systems/{system_id}/reclassify", response_model=IntakeResponse)
+@router.post("/systems/{system_id}/reclassify", response_model=IntakeResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
 async def reclassify_system(system_id: str) -> IntakeResponse:
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
@@ -123,7 +125,7 @@ async def reclassify_system(system_id: str) -> IntakeResponse:
     )
 
 
-@router.put("/systems/{system_id}/model", response_model=AISystemResponse)
+@router.put("/systems/{system_id}/model", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
 async def link_model(system_id: str, model_id: str = Query(...)) -> AISystemResponse:
     async with SessionLocal() as session:
         sys_result = await session.execute(select(AISystem).where(AISystem.id == system_id))
@@ -144,7 +146,7 @@ async def link_model(system_id: str, model_id: str = Query(...)) -> AISystemResp
     return AISystemResponse.model_validate(row)
 
 
-@router.delete("/systems/{system_id}/model", response_model=AISystemResponse)
+@router.delete("/systems/{system_id}/model", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
 async def unlink_model(system_id: str) -> AISystemResponse:
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
