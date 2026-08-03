@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY libs/persistence /app/libs/persistence
 COPY libs/logging /app/libs/logging
+COPY libs/authorization /app/libs/authorization
 COPY ai-system-registry/backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
