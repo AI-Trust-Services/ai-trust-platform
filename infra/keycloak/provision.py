@@ -31,9 +31,8 @@ REALM = "ai-trust"
 ROLES = [
     "platform_administrator",
     "ai_engineer",
-    "app_owner",
-    "compliance_officer",
-    "risk_manager",
+    "business_owner",
+    "ai_compliance_officer",
     "auditor",
     "executive",
 ]
@@ -41,7 +40,7 @@ ROLES = [
 DEV_USER_ROLES = {
     "admin":      "platform_administrator",
     "engineer":   "ai_engineer",
-    "compliance": "compliance_officer",
+    "compliance": "ai_compliance_officer",
     "auditor":    "auditor",
 }
 
