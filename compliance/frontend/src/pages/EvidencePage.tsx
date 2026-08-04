@@ -7,6 +7,7 @@ import DetailPanel, { DetailField, DetailSection } from "../components/DetailPan
 import UploadEvidenceModal from "../components/UploadEvidenceModal";
 import UploadVersionModal from "../components/UploadVersionModal";
 import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, OBLIGATION_STATUS_META, fmtDate, humanize } from "../utils";
+import { usePermissions } from "../hooks/usePermissions";
 import type { AISystem, Control, Evidence, EvidenceDetail, EvidenceVersion, Obligation } from "../types";
 
 export default function EvidencePage(): JSX.Element {
@@ -26,6 +27,11 @@ export default function EvidencePage(): JSX.Element {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [versionOpen, setVersionOpen] = useState(false);
   const showToast = useToast();
+  const { can } = usePermissions();
+  const mayWrite = can("evidence:write");
+  const mayApprove = can("evidence:approve");
+  const noWriteTitle = "Erfordert Berechtigung: evidence:write";
+  const noApproveTitle = "Erfordert Berechtigung: evidence:approve";
 
   const load = useCallback(async () => {
     try {
@@ -121,7 +127,12 @@ export default function EvidencePage(): JSX.Element {
         <h1>Evidence</h1>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn-ghost" onClick={load}>↺ Refresh</button>
-          <button className="btn-primary" onClick={() => setUploadOpen(true)}>+ Upload Evidence</button>
+          <button
+            className="btn-primary"
+            disabled={!mayWrite}
+            title={mayWrite ? undefined : noWriteTitle}
+            onClick={() => setUploadOpen(true)}
+          >+ Upload Evidence</button>
         </div>
       </div>
 
@@ -191,13 +202,16 @@ export default function EvidencePage(): JSX.Element {
                     <div className="actions">
                       {e.status !== "approved" && (
                         <button className="btn-ghost btn-sm" data-tip="Mark as approved — triggers compliance cascade"
+                          disabled={!mayApprove} title={mayApprove ? undefined : noApproveTitle}
                           onClick={() => act(api.approveEvidence, e.id, "Approved")}>Approve</button>
                       )}
                       {e.status !== "rejected" && (
                         <button className="btn-ghost btn-sm" data-tip="Mark as rejected"
+                          disabled={!mayApprove} title={mayApprove ? undefined : noApproveTitle}
                           onClick={() => act(api.rejectEvidence, e.id, "Rejected")}>Reject</button>
                       )}
                       <button className="btn-ghost btn-sm btn-danger" data-tip="Delete evidence and remove file"
+                        disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
                         onClick={async () => {
                           if (!confirm(`Delete "${e.title}"?`)) return;
                           try { await api.deleteEvidence(e.id); showToast("Deleted"); load(); closePanel(); }
@@ -268,12 +282,15 @@ export default function EvidencePage(): JSX.Element {
             {detail.file_name && (
               <button className="btn-ghost btn-sm" onClick={() => copyDownloadUrl(detail.id)}>⬇ Download URL</button>
             )}
-            <button className="btn-ghost btn-sm" onClick={() => setVersionOpen(true)}>↑ New Version</button>
+            <button className="btn-ghost btn-sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+              onClick={() => setVersionOpen(true)}>↑ New Version</button>
             {detail.status !== "approved" && (
-              <button className="btn-primary btn-sm" onClick={() => act(api.approveEvidence, detail.id, "Approved")}>✓ Approve</button>
+              <button className="btn-primary btn-sm" disabled={!mayApprove} title={mayApprove ? undefined : noApproveTitle}
+                onClick={() => act(api.approveEvidence, detail.id, "Approved")}>✓ Approve</button>
             )}
             {detail.status !== "rejected" && (
-              <button className="btn-ghost btn-sm" onClick={() => act(api.rejectEvidence, detail.id, "Rejected")}>✗ Reject</button>
+              <button className="btn-ghost btn-sm" disabled={!mayApprove} title={mayApprove ? undefined : noApproveTitle}
+                onClick={() => act(api.rejectEvidence, detail.id, "Rejected")}>✗ Reject</button>
             )}
           </div>
 
