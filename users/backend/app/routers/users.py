@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.keycloak import admin_client
+from ai_trust_logging import get_logger
 from app.schemas import (
     InviteUserRequest,
     UpdateUserRequest,
@@ -16,6 +17,7 @@ from app.schemas import (
 from ai_trust_authorization import openfga_client, require_permission
 
 router = APIRouter(prefix="/users", tags=["users"])
+logger = get_logger(__name__)
 
 MANAGED_ROLES = {
     "platform_administrator",
@@ -102,6 +104,11 @@ def invite_user(body: InviteUserRequest):
         resp = kc.post("/users", json=payload)
         if resp.status_code == 409:
             raise HTTPException(409, "A user with that username or email already exists.")
+        if resp.status_code == 400:
+            body = resp.json()
+            msg = body.get("errorMessage", "Invalid user data.")
+            logger.warning("user.create_failed", extra={"keycloak_response": body})
+            raise HTTPException(400, msg)
         resp.raise_for_status()
 
         location = resp.headers.get("Location", "")
