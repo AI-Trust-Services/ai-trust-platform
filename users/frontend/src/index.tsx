@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
 import App from "./App";
 import UsersPage from "./pages/UsersPage";
+import RolesPage from "./pages/RolesPage";
 
 const root = createRoot(document.getElementById("root") as HTMLElement);
 root.render(
@@ -10,6 +11,7 @@ root.render(
     <Routes>
       <Route path="/" element={<App />}>
         <Route path="users" element={<UsersPage />} />
+        <Route path="roles" element={<RolesPage />} />
         <Route index element={<Navigate to="users" replace />} />
         <Route path="*" element={<Navigate to="users" replace />} />
       </Route>

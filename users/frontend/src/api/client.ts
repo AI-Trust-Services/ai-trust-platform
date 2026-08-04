@@ -1,5 +1,6 @@
 import type {
   InviteUserRequest,
+  RoleInfo,
   RoleSummary,
   UpdateUserRequest,
   UserDetail,
@@ -7,6 +8,7 @@ import type {
 } from "../types";
 
 const API_BASE = import.meta.env.VITE_USERS_API_BASE as string;
+const REGISTRY_API_BASE = import.meta.env.VITE_REGISTRY_API_BASE as string;
 export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 
 function formatDetail(detail: unknown): string {
@@ -78,4 +80,8 @@ export const api = {
 
   getRoles: (): Promise<RoleSummary[]> =>
     request<RoleSummary[]>("/roles"),
+
+  getRoleDetails: (): Promise<RoleInfo[]> =>
+    fetch(`${REGISTRY_API_BASE}/iam/roles`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))) as Promise<RoleInfo[]>,
 };

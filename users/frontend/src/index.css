@@ -167,5 +167,14 @@ input:focus, select:focus { border-color: #0a6ed1; }
 .pagination button:disabled { opacity: 0.4; cursor: default; }
 .pagination-info { color: #556b82; }
 
+/* ── Tabs ── */
+.tab-bar { display: flex; gap: 0; border-bottom: 1px solid #e4e6e8; background: #fff; padding: 0 24px; }
+.tab {
+  padding: 12px 16px; font-size: 14px; font-weight: 500; color: #556b82;
+  text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab:hover { color: #0a6ed1; }
+.tab-active { color: #0a6ed1; border-bottom-color: #0a6ed1; }
+
 /* ── Empty ── */
 .empty { text-align: center; padding: 48px 24px; color: #556b82; }

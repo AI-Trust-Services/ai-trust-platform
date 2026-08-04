@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, NavLink } from "react-router-dom";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { HEALTH_URL } from "./api/client";
 
@@ -49,6 +49,10 @@ export default function App(): JSX.Element {
           <a onClick={checkHealth}>Retry now</a>
         </div>
       )}
+      <div className="tab-bar">
+        <NavLink to="users" className={({ isActive }) => "tab" + (isActive ? " tab-active" : "")}>Users</NavLink>
+        <NavLink to="roles" className={({ isActive }) => "tab" + (isActive ? " tab-active" : "")}>Roles &amp; Permissions</NavLink>
+      </div>
       <Outlet />
       {toast && (
         <div className={`toast${toast.isError ? " error" : ""}`}>{toast.msg}</div>

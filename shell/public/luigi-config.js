@@ -28,7 +28,6 @@
     "obligations": ["assessments:read", "assessments:write", "assessments:approve"],
     "controls": ["assessments:read", "assessments:write", "assessments:approve"],
     "evidence": ["evidence:read", "evidence:write", "evidence:approve"],
-    "iam": ["iam:manage"],
     "users": ["iam:manage"],
   };
   const canSee = (seg) =>
@@ -104,13 +103,6 @@
         icon: "employee",
         viewUrl: "http://localhost:8080/users/",
         navigationContext: "users",
-      },
-      {
-        pathSegment: "iam",
-        label: "Role Management",
-        icon: "person-placeholder",
-        viewUrl: "http://localhost:8080/iam/",
-        navigationContext: "iam",
       },
   ].filter((node) => canSee(node.pathSegment));
 

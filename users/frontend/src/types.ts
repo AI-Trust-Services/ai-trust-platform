@@ -25,6 +25,11 @@ export interface RoleSummary {
   description: string;
 }
 
+export interface RoleInfo {
+  name: string;
+  permissions: string[];
+}
+
 export interface InviteUserRequest {
   username: string;
   email: string;

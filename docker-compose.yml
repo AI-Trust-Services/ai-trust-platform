@@ -188,8 +188,6 @@ services:
         condition: service_started
       users-backend:
         condition: service_healthy
-      iam-frontend:
-        condition: service_started
     restart: on-failure
 
   ai-system-registry-frontend:
@@ -240,6 +238,7 @@ services:
       context: ./users/frontend
       args:
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
+        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/v1}
     restart: on-failure
 
   users-backend:
@@ -253,6 +252,7 @@ services:
       KEYCLOAK_REALM: ai-trust
       USERS_BACKEND_CLIENT_ID: users-backend
       USERS_BACKEND_CLIENT_SECRET: ${USERS_BACKEND_CLIENT_SECRET}
+      OPENFGA_URL: http://openfga:8080
     volumes:
       - openfga-config:/config:ro
     depends_on:
@@ -266,13 +266,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-    restart: on-failure
-
-  iam-frontend:
-    build:
-      context: ./iam/frontend
-      args:
-        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/v1}
     restart: on-failure
 
   db-migrate:
