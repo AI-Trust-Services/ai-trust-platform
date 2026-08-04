@@ -1,7 +1,7 @@
 import type { AlertEvent, AlertRule, AlertCount, PermissionsResponse } from "../types";
 
 const API_BASE = import.meta.env.VITE_ALERTS_API_BASE as string;
-const REGISTRY_API_BASE = import.meta.env.VITE_REGISTRY_API_BASE as string;
+const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE as string;
 export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 export const ALERTS_URL = (import.meta.env.VITE_ALERTS_URL as string) || "http://localhost:3004";
 
@@ -37,5 +37,5 @@ export const api = {
     request<{ rule_id: string; enabled: boolean }>(`/rules/${ruleId}/toggle`, { method: "POST" }),
 
   // Current user's effective permissions — served by the registry backend.
-  myPermissions: () => requestBase<PermissionsResponse>(REGISTRY_API_BASE, "/me/permissions"),
+  myPermissions: () => requestBase<PermissionsResponse>(USERS_API_BASE, "/me/permissions"),
 };

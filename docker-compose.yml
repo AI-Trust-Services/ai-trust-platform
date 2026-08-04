@@ -195,6 +195,7 @@ services:
       context: ./ai-system-registry/frontend
       args:
         VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE}
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
     restart: on-failure
 
   monitoring-frontend:
@@ -214,6 +215,7 @@ services:
         VITE_REGISTRY_URL: ${VITE_REGISTRY_URL}
         VITE_COMPLIANCE_URL: ${VITE_COMPLIANCE_URL}
         VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE}
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
     restart: on-failure
 
   alerts-frontend:
@@ -222,7 +224,7 @@ services:
       args:
         VITE_ALERTS_API_BASE: ${VITE_ALERTS_API_BASE}
         VITE_ALERTS_URL: ${VITE_ALERTS_URL}
-        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/v1}
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
     restart: on-failure
 
   compliance-frontend:
@@ -231,6 +233,7 @@ services:
       args:
         VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE:-/api/compliance/v1}
         VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/v1}
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
     restart: on-failure
 
   users-frontend:
@@ -238,7 +241,6 @@ services:
       context: ./users/frontend
       args:
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
-        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/v1}
     restart: on-failure
 
   users-backend:

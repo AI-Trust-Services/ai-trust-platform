@@ -1,10 +1,11 @@
 import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse } from "../types";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
+const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
 export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, options);
+async function request<T>(path: string, options: RequestInit = {}, base: string = API_BASE): Promise<T> {
+  const res = await fetch(`${base}${path}`, options);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `HTTP ${res.status}`);
@@ -48,6 +49,5 @@ export const api = {
     }),
   deleteModel: (id: string) => request<null>(`/model-cards/${id}`, { method: "DELETE" }),
 
-  // Current user's effective permissions — used to grey out actions the user cannot perform.
-  myPermissions: () => request<PermissionsResponse>("/me/permissions"),
+  myPermissions: () => request<PermissionsResponse>("/me/permissions", {}, USERS_API_BASE),
 };
