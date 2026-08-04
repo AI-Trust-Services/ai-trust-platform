@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { api, HEALTH_URL, ALERTS_URL } from "./api/client";
 import { useLuigiInit, navigateTo } from "./hooks/useLuigi";
+import { usePermissions } from "./hooks/usePermissions";
 import { ToastProvider } from "./components/Toast";
+import { NoAccess } from "./components/NoAccess";
 import { ActiveAlerts } from "./views/ActiveAlerts";
 import { AlertHistory } from "./views/AlertHistory";
 import { AlertRules } from "./views/AlertRules";
@@ -11,6 +13,10 @@ type Tab = "active" | "history" | "rules";
 
 export default function App() {
   useLuigiInit(() => {});
+
+  const { can, loading: permsLoading } = usePermissions();
+  const mayViewAlerts =
+    can("alerts:read") || can("alerts:handle") || can("alerts:manage_rules");
 
   const [tab, setTab]               = useState<Tab>("active");
   const [backendOk, setBackendOk]   = useState<boolean | null>(null);
@@ -84,41 +90,47 @@ export default function App() {
         <button className="btn-ghost" onClick={loadActive}>↺ Refresh</button>
       </div>
 
-      {backendOk === false && (
-        <div className="health-banner show">
-          Backend is unavailable. Retrying…
-        </div>
-      )}
-
-      <div className="nav-tabs">
-        <div
-          className={`nav-tab${tab === "active" ? " active" : ""}`}
-          onClick={() => switchTab("active")}
-        >
-          Active Alerts{alertCount > 0 && (
-            <span style={{
-              marginLeft: 6, background: "#bb0000", color: "#fff",
-              fontSize: 10, padding: "1px 6px", borderRadius: 8,
-            }}>{alertCount}</span>
+      {permsLoading ? null : !mayViewAlerts ? (
+        <NoAccess />
+      ) : (
+        <>
+          {backendOk === false && (
+            <div className="health-banner show">
+              Backend is unavailable. Retrying…
+            </div>
           )}
-        </div>
-        <div
-          className={`nav-tab${tab === "history" ? " active" : ""}`}
-          onClick={() => switchTab("history")}
-        >
-          History
-        </div>
-        <div
-          className={`nav-tab${tab === "rules" ? " active" : ""}`}
-          onClick={() => switchTab("rules")}
-        >
-          Alert Rules
-        </div>
-      </div>
 
-      {tab === "active"  && <ActiveAlerts alerts={activeAlerts} rules={rules} onRefresh={loadActive} />}
-      {tab === "history" && <AlertHistory alerts={history} />}
-      {tab === "rules"   && <AlertRules   rules={rules}   onRefresh={loadRules} />}
+          <div className="nav-tabs">
+            <div
+              className={`nav-tab${tab === "active" ? " active" : ""}`}
+              onClick={() => switchTab("active")}
+            >
+              Active Alerts{alertCount > 0 && (
+                <span style={{
+                  marginLeft: 6, background: "#bb0000", color: "#fff",
+                  fontSize: 10, padding: "1px 6px", borderRadius: 8,
+                }}>{alertCount}</span>
+              )}
+            </div>
+            <div
+              className={`nav-tab${tab === "history" ? " active" : ""}`}
+              onClick={() => switchTab("history")}
+            >
+              History
+            </div>
+            <div
+              className={`nav-tab${tab === "rules" ? " active" : ""}`}
+              onClick={() => switchTab("rules")}
+            >
+              Alert Rules
+            </div>
+          </div>
+
+          {tab === "active"  && <ActiveAlerts alerts={activeAlerts} rules={rules} onRefresh={loadActive} />}
+          {tab === "history" && <AlertHistory alerts={history} />}
+          {tab === "rules"   && <AlertRules   rules={rules}   onRefresh={loadRules} />}
+        </>
+      )}
     </ToastProvider>
   );
 }
