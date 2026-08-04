@@ -15,10 +15,100 @@ x-minio-env: &minio-env
   MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ai_trust
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/keycloak/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: on-failure
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    command: start-dev
+    ports:
+      - "8180:8080"
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /realms/master HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q '200'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: on-failure
+
+  keycloak-provision:
+    build: ./infra/keycloak
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      PROVISION_DEV_USERS: ${PROVISION_DEV_USERS:-false}
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    restart: on-failure
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    ports:
+      - "8080:4180"
+    command:
+      - --provider=oidc
+      - --client-id=oauth2-proxy
+      - --client-secret=${KEYCLOAK_CLIENT_SECRET}
+      - --oidc-issuer-url=http://keycloak:8080/realms/ai-trust
+      - --login-url=${KEYCLOAK_PUBLIC_URL}/realms/ai-trust/protocol/openid-connect/auth
+      - --redeem-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/token
+      - --oidc-jwks-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/certs
+      # skip-oidc-discovery + insecure-oidc-skip-issuer-verification: needed because
+      # Keycloak's internal issuer (http://keycloak:8080) differs from the public browser URL
+      # (KEYCLOAK_PUBLIC_URL). The JWT issuer claim would not match --oidc-issuer-url otherwise.
+      # Production alternative: set KC_HOSTNAME in Keycloak so the issuer claim matches the
+      # public URL, then remove both flags and drop the manual --login-url/--redeem-url/--oidc-jwks-url.
+      - --skip-oidc-discovery=true
+      - --insecure-oidc-skip-issuer-verification=true
+      - --redirect-url=${APP_PUBLIC_URL}/oauth2/callback
+      - --upstream=http://shell:80
+      - --http-address=0.0.0.0:4180
+      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
+      # cookie-secure=false: required for HTTP localhost dev. Must be true in production (HTTPS).
+      - --cookie-secure=false
+      - --email-domain=*
+      - --pass-authorization-header=true
+      - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout
+    depends_on:
+      keycloak-provision:
+        condition: service_completed_successfully
+      shell:
+        condition: service_started
+    restart: on-failure
+
   shell:
     build: ./shell
-    ports:
-      - "8080:80"
     depends_on:
       ai-system-registry-frontend:
         condition: service_started
@@ -26,6 +116,8 @@ services:
         condition: service_healthy
       decision-trace-analyzer-frontend:
         condition: service_started
+      decision-trace-analyzer-backend:
+        condition: service_healthy
       monitoring-frontend:
         condition: service_started
       monitoring-backend:
@@ -49,8 +141,6 @@ services:
       context: ./ai-system-registry/frontend
       args:
         VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE}
-    ports:
-      - "3001:80"
     restart: on-failure
 
   monitoring-frontend:
@@ -58,8 +148,6 @@ services:
       context: ./monitoring/frontend
       args:
         VITE_MONITORING_API_BASE: ${VITE_MONITORING_API_BASE}
-    ports:
-      - "3002:80"
     restart: on-failure
 
   overview-frontend:
@@ -72,8 +160,6 @@ services:
         VITE_REGISTRY_URL: ${VITE_REGISTRY_URL}
         VITE_COMPLIANCE_URL: ${VITE_COMPLIANCE_URL}
         VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE}
-    ports:
-      - "3003:80"
     restart: on-failure
 
   alerts-frontend:
@@ -82,18 +168,14 @@ services:
       args:
         VITE_ALERTS_API_BASE: ${VITE_ALERTS_API_BASE}
         VITE_ALERTS_URL: ${VITE_ALERTS_URL}
-    ports:
-      - "3004:80"
     restart: on-failure
 
   compliance-frontend:
     build:
       context: ./compliance/frontend
       args:
-        VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE:-http://localhost:8007/api/v1}
-        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-http://localhost:8001/api/v1}
-    ports:
-      - "3006:80"
+        VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE:-/api/compliance/v1}
+        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/v1}
     restart: on-failure
 
   db-migrate:
@@ -109,11 +191,10 @@ services:
     build:
       context: .
       dockerfile: ai-system-registry/backend/Dockerfile
-    ports:
-      - "8001:8001"
     environment:
       <<: *db-env
-      ALLOWED_ORIGINS: "http://localhost:3001,http://localhost:8080,http://localhost:3006"
+      ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/registry"
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -129,11 +210,10 @@ services:
     build:
       context: .
       dockerfile: monitoring/backend/Dockerfile
-    ports:
-      - "8003:8003"
     environment:
       <<: *db-env
-      ALLOWED_ORIGINS: "http://localhost:3002,http://localhost:8080"
+      ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/monitoring"
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: "8123"
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
@@ -155,11 +235,10 @@ services:
     build:
       context: .
       dockerfile: overview/backend/Dockerfile
-    ports:
-      - "8004:8004"
     environment:
       <<: *db-env
-      ALLOWED_ORIGINS: "http://localhost:3003,http://localhost:8080"
+      ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/overview"
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -175,11 +254,10 @@ services:
     build:
       context: .
       dockerfile: alerts/backend/Dockerfile
-    ports:
-      - "8005:8005"
     environment:
       <<: *db-env
-      ALLOWED_ORIGINS: "http://localhost:3004,http://localhost:8080,http://localhost:3001,http://localhost:3002,http://localhost:3003"
+      ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/alerts"
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: "8123"
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
@@ -201,11 +279,10 @@ services:
     build:
       context: .
       dockerfile: compliance/backend/Dockerfile
-    ports:
-      - "8007:8007"
     environment:
       <<: *db-env
-      ALLOWED_ORIGINS: "http://localhost:3006,http://localhost:8080,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004"
+      ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/compliance"
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -241,23 +318,6 @@ services:
         condition: service_completed_successfully
       clickhouse-migrate:
         condition: service_completed_successfully
-    restart: on-failure
-
-  postgres:
-    image: postgres:16-alpine
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ai_trust
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
     restart: on-failure
 
   rabbitmq:
@@ -391,8 +451,6 @@ services:
       context: ./decision-trace-analyzer/frontend
       args:
         VITE_DTA_API_BASE: ${VITE_DTA_API_BASE}
-    ports:
-      - "3005:80"
     depends_on:
       decision-trace-analyzer-backend:
         condition: service_healthy
@@ -402,11 +460,10 @@ services:
     build:
       context: .
       dockerfile: decision-trace-analyzer/backend/Dockerfile
-    ports:
-      - "8006:8006"
     environment:
       <<: *ch-env
-      ALLOWED_ORIGINS: "http://localhost:3005,http://localhost:8080"
+      ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/dta"
     depends_on:
       clickhouse-migrate:
         condition: service_completed_successfully

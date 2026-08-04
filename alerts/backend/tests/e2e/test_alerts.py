@@ -45,7 +45,7 @@ async def test_health_returns_ok(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_active_alerts_empty(client: httpx.AsyncClient):
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     assert r.status_code == 200
     assert r.json() == []
 
@@ -54,7 +54,7 @@ async def test_active_alerts_returns_unresolved_events(client: httpx.AsyncClient
     insert_event("rule-1", rule_name="Prohibited System", severity="error")
     insert_event("rule-2", rule_name="High Latency", severity="warning")
 
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     assert r.status_code == 200
     events = r.json()
     assert len(events) == 2
@@ -67,7 +67,7 @@ async def test_active_alerts_excludes_resolved(client: httpx.AsyncClient):
     insert_event("rule-1", rule_name="Active")
     insert_event("rule-2", rule_name="Resolved", resolved_at=now)
 
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     events = r.json()
     assert len(events) == 1
     assert events[0]["rule_name"] == "Active"
@@ -78,7 +78,7 @@ async def test_active_alerts_excludes_handled(client: httpx.AsyncClient):
     insert_event("rule-1", rule_name="Active")
     insert_event("rule-2", rule_name="Handled", handled_at=now)
 
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     events = r.json()
     assert len(events) == 1
     assert events[0]["rule_name"] == "Active"
@@ -90,7 +90,7 @@ async def test_active_alerts_sorted_by_severity(client: httpx.AsyncClient):
     insert_event("rule-1", rule_name="Warning Alert", severity="warning")
     insert_event("rule-2", rule_name="Error Alert", severity="error")
 
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     events = r.json()
     assert events[0]["severity"] == "error"
     assert events[1]["severity"] == "warning"
@@ -106,7 +106,7 @@ async def test_active_alerts_sorted_by_time_within_same_severity(client: httpx.A
     insert_event("rule-1", rule_name="Older", severity="error", triggered_at=older)
     insert_event("rule-2", rule_name="Newer", severity="error", triggered_at=newer)
 
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     events = r.json()
     assert events[0]["rule_name"] == "Newer"
     assert events[1]["rule_name"] == "Older"
@@ -114,7 +114,7 @@ async def test_active_alerts_sorted_by_time_within_same_severity(client: httpx.A
 
 async def test_active_alerts_response_fields(client: httpx.AsyncClient):
     insert_event("rule-1")
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     event = r.json()[0]
     for field in ["id", "rule_id", "rule_name", "category", "severity",
                   "alert_type", "description", "value_at_trigger", "triggered_at"]:
@@ -126,7 +126,7 @@ async def test_active_alerts_response_fields(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_history_empty(client: httpx.AsyncClient):
-    r = await client.get("/api/v1/alerts/history")
+    r = await client.get("/v1/history")
     assert r.status_code == 200
     assert r.json() == []
 
@@ -136,7 +136,7 @@ async def test_history_returns_resolved_events(client: httpx.AsyncClient):
     insert_event("rule-1", rule_name="Resolved", resolved_at=now)
     insert_event("rule-2", rule_name="Active")  # should not appear
 
-    r = await client.get("/api/v1/alerts/history")
+    r = await client.get("/v1/history")
     events = r.json()
     assert len(events) == 1
     assert events[0]["rule_name"] == "Resolved"
@@ -146,7 +146,7 @@ async def test_history_returns_handled_events(client: httpx.AsyncClient):
     now = datetime.now(timezone.utc)
     insert_event("rule-1", rule_name="Handled", handled_at=now)
 
-    r = await client.get("/api/v1/alerts/history")
+    r = await client.get("/v1/history")
     events = r.json()
     assert len(events) == 1
     assert events[0]["rule_name"] == "Handled"
@@ -155,7 +155,7 @@ async def test_history_returns_handled_events(client: httpx.AsyncClient):
 async def test_history_response_fields(client: httpx.AsyncClient):
     now = datetime.now(timezone.utc)
     insert_event("rule-1", resolved_at=now)
-    r = await client.get("/api/v1/alerts/history")
+    r = await client.get("/v1/history")
     event = r.json()[0]
     for field in ["id", "rule_id", "rule_name", "category", "severity",
                   "alert_type", "description", "value_at_trigger",
@@ -168,7 +168,7 @@ async def test_history_capped_at_100(client: httpx.AsyncClient):
     for _ in range(110):
         insert_event("rule-1", resolved_at=now)
 
-    r = await client.get("/api/v1/alerts/history")
+    r = await client.get("/v1/history")
     assert len(r.json()) == 100
 
 
@@ -177,7 +177,7 @@ async def test_history_capped_at_100(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_count_zero_when_empty(client: httpx.AsyncClient):
-    r = await client.get("/api/v1/alerts/count")
+    r = await client.get("/v1/count")
     assert r.status_code == 200
     assert r.json() == {"count": 0}
 
@@ -188,7 +188,7 @@ async def test_count_returns_active_only(client: httpx.AsyncClient):
     insert_event("rule-2")
     insert_event("rule-3", resolved_at=now)  # resolved — not counted
 
-    r = await client.get("/api/v1/alerts/count")
+    r = await client.get("/v1/count")
     assert r.json()["count"] == 2
 
 
@@ -197,7 +197,7 @@ async def test_count_returns_active_only(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_rules_empty(client: httpx.AsyncClient):
-    r = await client.get("/api/v1/alerts/rules")
+    r = await client.get("/v1/rules")
     assert r.status_code == 200
     assert r.json() == []
 
@@ -210,7 +210,7 @@ async def test_rules_returns_seeded_rules(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/alerts/rules")
+    r = await client.get("/v1/rules")
     rules = r.json()
     assert len(rules) == 2
     names = {ru["name"] for ru in rules}
@@ -222,7 +222,7 @@ async def test_rules_response_fields(client: httpx.AsyncClient):
         session.add(_rule())
         await session.commit()
 
-    r = await client.get("/api/v1/alerts/rules")
+    r = await client.get("/v1/rules")
     rule = r.json()[0]
     for field in ["id", "name", "category", "severity", "description",
                   "condition_type", "threshold", "source", "alert_type", "enabled"]:
@@ -238,7 +238,7 @@ async def test_rules_ordered_by_category_then_name(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/alerts/rules")
+    r = await client.get("/v1/rules")
     rules = r.json()
     assert rules[0]["name"] == "A Rule"
     assert rules[1]["name"] == "Z Rule"
@@ -252,7 +252,7 @@ async def test_rules_ordered_by_category_then_name(client: httpx.AsyncClient):
 async def test_handle_event_returns_handled_status(client: httpx.AsyncClient):
     event_id = insert_event("rule-1")
 
-    r = await client.post(f"/api/v1/alerts/events/{event_id}/handle")
+    r = await client.post(f"/v1/events/{event_id}/handle")
     assert r.status_code == 200
     assert r.json()["status"] == "handled"
     assert r.json()["event_id"] == event_id
@@ -261,10 +261,10 @@ async def test_handle_event_returns_handled_status(client: httpx.AsyncClient):
 async def test_handle_event_moves_to_history(client: httpx.AsyncClient):
     event_id = insert_event("rule-1")
 
-    await client.post(f"/api/v1/alerts/events/{event_id}/handle")
+    await client.post(f"/v1/events/{event_id}/handle")
 
-    active = await client.get("/api/v1/alerts/active")
-    history = await client.get("/api/v1/alerts/history")
+    active = await client.get("/v1/active")
+    history = await client.get("/v1/history")
 
     active_ids = {e["id"] for e in active.json()}
     history_ids = {e["id"] for e in history.json()}
@@ -276,13 +276,13 @@ async def test_handle_event_moves_to_history(client: httpx.AsyncClient):
 async def test_handle_event_is_idempotent(client: httpx.AsyncClient):
     event_id = insert_event("rule-1")
 
-    r1 = await client.post(f"/api/v1/alerts/events/{event_id}/handle")
-    r2 = await client.post(f"/api/v1/alerts/events/{event_id}/handle")
+    r1 = await client.post(f"/v1/events/{event_id}/handle")
+    r2 = await client.post(f"/v1/events/{event_id}/handle")
 
     assert r1.status_code == 200
     assert r2.status_code == 200
     # Event should still be in history exactly once after a second handle.
-    history = await client.get("/api/v1/alerts/history")
+    history = await client.get("/v1/history")
     matching = [e for e in history.json() if e["id"] == event_id]
     assert len(matching) == 1
     assert matching[0]["handled_at"] is not None
@@ -299,7 +299,7 @@ async def test_toggle_rule_disables_enabled_rule(client: httpx.AsyncClient):
         await session.commit()
         rule_id = rule.id
 
-    r = await client.post(f"/api/v1/alerts/rules/{rule_id}/toggle")
+    r = await client.post(f"/v1/rules/{rule_id}/toggle")
     assert r.status_code == 200
     assert r.json()["enabled"] is False
 
@@ -311,13 +311,13 @@ async def test_toggle_rule_enables_disabled_rule(client: httpx.AsyncClient):
         await session.commit()
         rule_id = rule.id
 
-    r = await client.post(f"/api/v1/alerts/rules/{rule_id}/toggle")
+    r = await client.post(f"/v1/rules/{rule_id}/toggle")
     assert r.status_code == 200
     assert r.json()["enabled"] is True
 
 
 async def test_toggle_rule_returns_404_for_unknown_id(client: httpx.AsyncClient):
-    r = await client.post("/api/v1/alerts/rules/nonexistent-id/toggle")
+    r = await client.post("/v1/rules/nonexistent-id/toggle")
     assert r.status_code == 404
 
 
@@ -328,7 +328,7 @@ async def test_toggle_rule_returns_404_for_unknown_id(client: httpx.AsyncClient)
 async def test_active_alerts_includes_entity_fields(client: httpx.AsyncClient):
     insert_event("rule-1", entity_id="client-safety", entity_type="service", entity_model="llama3.1")
 
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     event = r.json()[0]
     assert event["entity_id"] == "client-safety"
     assert event["entity_type"] == "service"
@@ -340,7 +340,7 @@ async def test_history_includes_entity_fields(client: httpx.AsyncClient):
     now = datetime.now(timezone.utc)
     insert_event("rule-1", resolved_at=now, entity_id="client-llm", entity_type="service", entity_model="gpt-4o")
 
-    r = await client.get("/api/v1/alerts/history")
+    r = await client.get("/v1/history")
     event = r.json()[0]
     assert event["entity_id"] == "client-llm"
     assert event["entity_type"] == "service"
@@ -350,7 +350,7 @@ async def test_history_includes_entity_fields(client: httpx.AsyncClient):
 async def test_active_alerts_entity_fields_default_to_empty(client: httpx.AsyncClient):
     insert_event("rule-1")
 
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     event = r.json()[0]
     assert event["entity_id"] == ""
     assert event["entity_type"] == ""
@@ -362,14 +362,14 @@ async def test_active_alerts_entity_fields_default_to_empty(client: httpx.AsyncC
 # ---------------------------------------------------------------------------
 
 async def test_approve_model_returns_404_for_unknown_event(client: httpx.AsyncClient):
-    r = await client.post("/api/v1/alerts/events/nonexistent-id/approve-model")
+    r = await client.post("/v1/events/nonexistent-id/approve-model")
     assert r.status_code == 404
 
 
 async def test_approve_model_returns_422_when_entity_model_empty(client: httpx.AsyncClient):
     event_id = insert_event("rule-1", entity_id="client-safety", entity_type="service", entity_model="")
 
-    r = await client.post(f"/api/v1/alerts/events/{event_id}/approve-model")
+    r = await client.post(f"/v1/events/{event_id}/approve-model")
     assert r.status_code == 422
 
 
@@ -391,12 +391,12 @@ async def test_approve_model_updates_baseline_and_handles_event(client: httpx.As
         entity_model="llama3.1",
     )
 
-    r = await client.post(f"/api/v1/alerts/events/{event_id}/approve-model")
+    r = await client.post(f"/v1/events/{event_id}/approve-model")
     assert r.status_code == 200
     assert r.json()["status"] == "approved"
     assert r.json()["new_model"] == "llama3.1"
 
-    history = await client.get("/api/v1/alerts/history")
+    history = await client.get("/v1/history")
     ids = {e["id"] for e in history.json()}
     assert event_id in ids
 
@@ -416,7 +416,7 @@ async def test_approve_model_returns_404_when_no_baseline(client: httpx.AsyncCli
         entity_model="llama3.1",
     )
 
-    r = await client.post(f"/api/v1/alerts/events/{event_id}/approve-model")
+    r = await client.post(f"/v1/events/{event_id}/approve-model")
     assert r.status_code == 404
 
 
@@ -427,11 +427,11 @@ async def test_approve_model_returns_404_when_no_baseline(client: httpx.AsyncCli
 async def test_reject_model_handles_event(client: httpx.AsyncClient):
     event_id = insert_event("rule-1", alert_type="event")
 
-    r = await client.post(f"/api/v1/alerts/events/{event_id}/reject-model")
+    r = await client.post(f"/v1/events/{event_id}/reject-model")
     assert r.status_code == 200
     assert r.json()["status"] == "rejected"
 
-    history = await client.get("/api/v1/alerts/history")
+    history = await client.get("/v1/history")
     ids = {e["id"] for e in history.json()}
     assert event_id in ids
 
@@ -453,7 +453,7 @@ async def test_reject_model_leaves_baseline_unchanged(client: httpx.AsyncClient)
         entity_model="llama3.1",
     )
 
-    await client.post(f"/api/v1/alerts/events/{event_id}/reject-model")
+    await client.post(f"/v1/events/{event_id}/reject-model")
 
     async with engine.begin() as conn:
         result = await conn.execute(
@@ -472,7 +472,7 @@ async def test_rules_response_includes_parameters_and_is_custom(client: httpx.As
         session.add(_rule(parameters='{"service": "client-safety"}', is_custom=True))
         await session.commit()
 
-    r = await client.get("/api/v1/alerts/rules")
+    r = await client.get("/v1/rules")
     rule = r.json()[0]
     assert "parameters" in rule
     assert "is_custom" in rule
@@ -485,7 +485,7 @@ async def test_rules_parameters_defaults_to_none(client: httpx.AsyncClient):
         session.add(_rule())
         await session.commit()
 
-    r = await client.get("/api/v1/alerts/rules")
+    r = await client.get("/v1/rules")
     rule = r.json()[0]
     assert rule["parameters"] is None
     assert rule["is_custom"] is False
@@ -503,7 +503,7 @@ async def test_active_alerts_resolves_ai_system_display_name(client: httpx.Async
 
     insert_event("rule-1", entity_id="SYS-DISP0001", entity_type="ai_system")
 
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     assert r.status_code == 200
     assert len(r.json()) == 1
     assert r.json()[0]["entity_display_name"] == "Fraud Detector"
@@ -512,7 +512,7 @@ async def test_active_alerts_resolves_ai_system_display_name(client: httpx.Async
 async def test_active_alerts_display_name_falls_back_to_entity_id_when_unregistered(client: httpx.AsyncClient):
     insert_event("rule-1", entity_id="SYS-UNKNOWN99", entity_type="ai_system")
 
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     assert r.status_code == 200
     assert len(r.json()) == 1
     assert r.json()[0]["entity_display_name"] == "SYS-UNKNOWN99"
@@ -521,7 +521,7 @@ async def test_active_alerts_display_name_falls_back_to_entity_id_when_unregiste
 async def test_active_alerts_non_ai_system_entity_gets_no_enrichment(client: httpx.AsyncClient):
     insert_event("rule-1", entity_id="some-service", entity_type="service")
 
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     assert r.status_code == 200
     assert len(r.json()) == 1
     assert r.json()[0]["entity_display_name"] == "some-service"
@@ -536,7 +536,7 @@ async def test_history_resolves_ai_system_display_name(client: httpx.AsyncClient
     now = datetime.now(timezone.utc)
     insert_event("rule-1", entity_id="SYS-DISP0002", entity_type="ai_system", resolved_at=now)
 
-    r = await client.get("/api/v1/alerts/history")
+    r = await client.get("/v1/history")
     assert r.status_code == 200
     assert len(r.json()) == 1
     assert r.json()[0]["entity_display_name"] == "Risk Scorer"
@@ -544,7 +544,7 @@ async def test_history_resolves_ai_system_display_name(client: httpx.AsyncClient
 
 async def test_active_alerts_response_includes_entity_display_name_field(client: httpx.AsyncClient):
     insert_event("rule-1")
-    r = await client.get("/api/v1/alerts/active")
+    r = await client.get("/v1/active")
     assert r.status_code == 200
     assert len(r.json()) == 1
     assert "entity_display_name" in r.json()[0]
@@ -552,7 +552,7 @@ async def test_active_alerts_response_includes_entity_display_name_field(client:
 
 async def test_history_response_includes_entity_display_name_field(client: httpx.AsyncClient):
     insert_event("rule-1", resolved_at=datetime.now(timezone.utc))
-    r = await client.get("/api/v1/alerts/history")
+    r = await client.get("/v1/history")
     assert r.status_code == 200
     assert len(r.json()) == 1
     assert "entity_display_name" in r.json()[0]

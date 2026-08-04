@@ -4,6 +4,11 @@
 
 ```
 ai-trust-platform/
+├── infra/
+│   └── keycloak/                 ← Keycloak provisioning
+│       ├── Dockerfile            ← one-shot provision container
+│       ├── init.sh               ← creates keycloak DB in PostgreSQL on first boot
+│       └── provision.py          ← idempotent Admin API script (realm, client, dev users)
 ├── libs/
 │   ├── persistence/              ← shared Python package (models, migrations, DB session)
 │   │   ├── Dockerfile            ← one-shot migration container
@@ -22,22 +27,22 @@ ai-trust-platform/
 │   │       ├── database.py       ← get_client() factory
 │   │       └── tables.py         ← GEN_AI_SPANS table name + COLUMNS list
 │   └── logging/                  ← shared structured JSON logging package
-├── shell/                        ← Luigi host (nginx + luigi-config.js); custom sidebar hamburger
+├── shell/                        ← Luigi host (nginx + luigi-config.js); reverse proxy for all MFEs and APIs
 ├── ai-system-registry/           ← EU AI Act registry component
-│   ├── frontend/                 ← React 18 + Vite SPA (nginx, port 3001)
-│   └── backend/                  ← FastAPI + SQLAlchemy async (port 8001)
+│   ├── frontend/                 ← React 18 + Vite SPA (nginx, internal port 80, served at /registry/)
+│   └── backend/                  ← FastAPI + SQLAlchemy async (internal port 8001, served at /api/registry/)
 ├── overview/                     ← Compliance overview MFE
-│   ├── frontend/                 ← static HTML + Chart.js (nginx, port 3003)
-│   └── backend/                  ← FastAPI (port 8004), reads Postgres only
+│   ├── frontend/                 ← static HTML + Chart.js (nginx, internal port 80, served at /overview/)
+│   └── backend/                  ← FastAPI (internal port 8004, served at /api/overview/), reads Postgres only
 ├── monitoring/                   ← Live signals MFE
-│   ├── frontend/                 ← static HTML + Chart.js (nginx, port 3002)
-│   └── backend/                  ← FastAPI (port 8003), reads Postgres + ClickHouse
+│   ├── frontend/                 ← static HTML + Chart.js (nginx, internal port 80, served at /monitoring/)
+│   └── backend/                  ← FastAPI (internal port 8003, served at /api/monitoring/), reads Postgres + ClickHouse
 ├── alerts/                       ← Alerts MFE
-│   ├── frontend/                 ← React 18 + TypeScript + Vite SPA (nginx, port 3004)
-│   └── backend/                  ← FastAPI (port 8005), reads Postgres (rules) + ClickHouse (events)
+│   ├── frontend/                 ← React 18 + TypeScript + Vite SPA (nginx, internal port 80, served at /alerts/)
+│   └── backend/                  ← FastAPI (internal port 8005, served at /api/alerts/), reads Postgres (rules) + ClickHouse (events)
 ├── compliance/                   ← Governance chain MFE (assessments, obligations, controls, evidence)
-│   ├── frontend/                 ← React 18 + TypeScript + Vite SPA (nginx, port 3006)
-│   └── backend/                  ← FastAPI (port 8007), reads/writes Postgres + MinIO (evidence files)
+│   ├── frontend/                 ← React 18 + TypeScript + Vite SPA (nginx, internal port 80, served at /compliance/)
+│   └── backend/                  ← FastAPI (internal port 8007, served at /api/compliance/), reads/writes Postgres + MinIO (evidence files)
 ├── policy-checker-worker/                 ← Background job, evaluates alert rules every N seconds
 │   └── main.py                   ← reads Postgres rules, writes ClickHouse events
 ├── otel-pipeline/                ← GenAI observability pipeline
@@ -157,7 +162,12 @@ flowchart TD
     AlertWorker["policy-checker-worker\n(restart: on-failure)"]
     CompBackend["compliance-backend\n(healthy)"]
     CompFrontend["compliance-frontend\n(service_started)"]
-    Shell["shell :8080"]
+    DTABackend["decision-trace-analyzer-backend\n(healthy)"]
+    DTAFrontend["decision-trace-analyzer-frontend\n(service_started)"]
+    KC["keycloak :8180\n(healthy)"]
+    KCProv["keycloak-provision\ncreates realm, client, dev users\nthen exits"]
+    OP["oauth2-proxy :8080\nsingle entry point"]
+    Shell["shell\n(nginx reverse proxy)"]
     RMQ["rabbitmq\n(healthy)"]
     Bridge["otel-rmq-bridge\n(healthy)"]
     Collector["otel-collector"]
@@ -168,6 +178,9 @@ flowchart TD
     CHConsumer["otel-clickhouse-consumer"]
 
     PG --> Migrate
+    PG --> KC
+    KC --> KCProv
+    KCProv --> OP
     Migrate --> Backend
     Migrate --> Frontend
     Migrate --> MonBackend
@@ -183,6 +196,7 @@ flowchart TD
     CH --> AlertWorker
     CHMigrate --> AlertWorker
     CHMigrate --> AlertBackend
+    CHMigrate --> DTABackend
     Backend --> Shell
     Frontend --> Shell
     MonBackend --> Shell
@@ -191,6 +205,10 @@ flowchart TD
     OvFrontend --> Shell
     CompBackend --> Shell
     CompFrontend --> Shell
+    AlertFrontend --> Shell
+    DTABackend --> Shell
+    DTAFrontend --> Shell
+    Shell --> OP
 
     RMQ --> Bridge
     Bridge --> Collector
@@ -204,7 +222,9 @@ flowchart TD
 
 `clickhouse-migrate` is a one-shot container built from `libs/clickhouse/Dockerfile`. It owns all ClickHouse schema migrations — consumers never run migrations.
 
-`minio-init` is a one-shot container that creates the `clickhouse` bucket in MinIO on first startup. ClickHouse depends on it completing before it starts, ensuring the bucket exists before any data part moves to cold storage.
+`minio-init` is a one-shot container that creates the `clickhouse` and `evidence-files` buckets in MinIO on first startup. ClickHouse depends on it completing before it starts, ensuring the bucket exists before any data part moves to cold storage.
+
+`keycloak-provision` is a one-shot container built from `infra/keycloak/Dockerfile`. It uses the Keycloak Admin REST API to idempotently configure the `ai-trust` realm, the `oauth2-proxy` OIDC client, and (when `PROVISION_DEV_USERS=true`) the four dev users. oauth2-proxy depends on it completing successfully before starting.
 
 **If db-migrate fails:** check logs with `docker compose logs db-migrate`. Common causes: postgres not ready (retry `docker compose up db-migrate`), or a bad migration file. Fix the migration, then re-run with `docker compose up --build db-migrate`. The backend will not start until db-migrate exits successfully.
 

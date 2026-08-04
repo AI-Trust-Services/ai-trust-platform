@@ -53,7 +53,7 @@ async def test_health_returns_ok(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_stats_empty_db(client: httpx.AsyncClient):
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     assert r.status_code == 200
     body = r.json()
 
@@ -84,7 +84,7 @@ async def test_total_systems(client: httpx.AsyncClient):
         session.add_all([_sys(name="A"), _sys(name="B"), _sys(name="C")])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     assert r.json()["total_systems"] == 3
 
 
@@ -96,7 +96,7 @@ async def test_avg_compliance(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     assert r.json()["avg_compliance"] == 60.0
 
 
@@ -109,7 +109,7 @@ async def test_fully_compliant_count(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     assert r.json()["fully_compliant"] == 2
 
 
@@ -123,7 +123,7 @@ async def test_high_risk_on_market(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     assert r.json()["high_risk_on_market"] == 2
 
 
@@ -137,7 +137,7 @@ async def test_prohibited_count_and_high_count(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     body = r.json()
     assert body["prohibited_count"] == 2
     assert body["high_count"] == 1
@@ -156,7 +156,7 @@ async def test_by_tier(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     assert r.json()["by_tier"] == {"minimal": 2, "high": 1}
 
 
@@ -169,7 +169,7 @@ async def test_by_lifecycle(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     assert r.json()["by_lifecycle"] == {"development": 1, "market": 2}
 
 
@@ -182,7 +182,7 @@ async def test_by_type(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     assert r.json()["by_type"] == {"application": 2, "model": 1}
 
 
@@ -198,7 +198,7 @@ async def test_compliance_histogram(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     hist = r.json()["compliance_histogram"]
     assert hist == {"0–20": 1, "20–40": 1, "40–60": 1, "60–80": 1, "80–100": 2}
 
@@ -212,7 +212,7 @@ async def test_compliance_by_tier(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     cbt = r.json()["compliance_by_tier"]
     assert cbt["high"] == 50.0
     assert cbt["minimal"] == 80.0
@@ -231,7 +231,7 @@ async def test_total_models_and_distributions(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     body = r.json()
     assert body["total_models"] == 3
     assert body["by_model_type"] == {"llm": 2, "vision": 1}
@@ -251,7 +251,7 @@ async def test_recent_returns_latest_10_ordered(client: httpx.AsyncClient):
             session.add(_sys(name=f"System {i:02d}"))
             await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     recent = r.json()["recent"]
     assert len(recent) == 10
     # Latest first: System 11 is newest, System 02 is the 10th most recent.
@@ -270,7 +270,7 @@ async def test_attention_includes_prohibited(client: httpx.AsyncClient):
         session.add(_sys(name="Bad Bot", tier="prohibited", lifecycle="market"))
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     attention = r.json()["attention"]
     assert len(attention) == 1
     item = attention[0]
@@ -289,7 +289,7 @@ async def test_attention_includes_high_risk_low_compliance_on_market(client: htt
         session.add(_sys(tier="high", lifecycle="market", compliance=60.0, model_id=mc.id))
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     attention = r.json()["attention"]
     assert len(attention) == 1
     assert attention[0]["reason"] == "High-risk on market with low compliance"
@@ -306,7 +306,7 @@ async def test_attention_includes_on_market_without_model_card(client: httpx.Asy
         session.add(_sys(tier="minimal", lifecycle="market", model_id=mc.id))
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     attention = r.json()["attention"]
     assert len(attention) == 1
     assert attention[0]["reason"] == "On market without model card"
@@ -318,7 +318,7 @@ async def test_attention_capped_at_20(client: httpx.AsyncClient):
             session.add(_sys(tier="prohibited"))
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     assert len(r.json()["attention"]) == 20
 
 
@@ -328,7 +328,7 @@ async def test_attention_excludes_clean_systems(client: httpx.AsyncClient):
         session.add(_sys(tier="minimal", lifecycle="development", model_id=None))
         await session.commit()
 
-    r = await client.get("/api/v1/overview/stats")
+    r = await client.get("/v1/stats")
     assert r.json()["attention"] == []
 
 
@@ -380,7 +380,7 @@ def _evd(sys_id: str, status: str = "approved", validity_until: date | None = No
 
 
 async def test_compliance_stats_response_shape(client: httpx.AsyncClient):
-    r = await client.get("/api/v1/overview/compliance-stats")
+    r = await client.get("/v1/compliance-stats")
     assert r.status_code == 200
     body = r.json()
     assert {"obligation_status", "evidence_gap", "framework_compliance",
@@ -391,7 +391,7 @@ async def test_compliance_stats_response_shape(client: httpx.AsyncClient):
 async def test_compliance_stats_empty_db(client: httpx.AsyncClient):
     # No user data — but frameworks are seeded by migrations, so
     # framework_compliance carries a row per enabled framework (0 obligations each).
-    r = await client.get("/api/v1/overview/compliance-stats")
+    r = await client.get("/v1/compliance-stats")
     assert r.status_code == 200
     body = r.json()
     assert body["obligation_status"] == {}
@@ -422,7 +422,7 @@ async def test_obligation_status_counts(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/compliance-stats")
+    r = await client.get("/v1/compliance-stats")
     assert r.json()["obligation_status"] == {"applicable": 1, "fulfilled": 2}
 
 
@@ -436,8 +436,8 @@ async def test_window_days_filters_expiring_soon(client: httpx.AsyncClient):
         session.add(_evd(sys_id, validity_until=today + timedelta(days=5)))
         await session.commit()
 
-    r7 = await client.get("/api/v1/overview/compliance-stats?window_days=7")
-    r3 = await client.get("/api/v1/overview/compliance-stats?window_days=3")
+    r7 = await client.get("/v1/compliance-stats?window_days=7")
+    r3 = await client.get("/v1/compliance-stats?window_days=3")
     assert r7.json()["evidence_gap"]["expiring_soon"] == 1
     assert r3.json()["evidence_gap"]["expiring_soon"] == 0
     # And it appears in upcoming_deadlines only when inside the window
@@ -455,7 +455,7 @@ async def test_expired_counts_only_approved(client: httpx.AsyncClient):
         session.add(_evd(sys_id, status="pending", validity_until=today - timedelta(days=1)))
         await session.commit()
 
-    r = await client.get("/api/v1/overview/compliance-stats")
+    r = await client.get("/v1/compliance-stats")
     assert r.json()["evidence_gap"]["expired"] == 1  # pending one excluded
 
 
@@ -476,7 +476,7 @@ async def test_missing_count_excludes_fulfilled_and_na(client: httpx.AsyncClient
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/compliance-stats")
+    r = await client.get("/v1/compliance-stats")
     assert r.json()["evidence_gap"]["missing"] == 1
 
 
@@ -501,7 +501,7 @@ async def test_missing_count_excludes_obligations_with_approved_evidence(client:
         )
         await session.commit()
 
-    r = await client.get("/api/v1/overview/compliance-stats")
+    r = await client.get("/v1/compliance-stats")
     # in_progress but has approved evidence linked -> not counted as missing
     assert r.json()["evidence_gap"]["missing"] == 0
 
@@ -523,7 +523,7 @@ async def test_framework_compliance_score(client: httpx.AsyncClient):
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/compliance-stats")
+    r = await client.get("/v1/compliance-stats")
     entry = next(f for f in r.json()["framework_compliance"] if f["framework_id"] == fw.id)
     assert entry["total_obligations"] == 3
     assert entry["fulfilled"] == 2
@@ -539,7 +539,7 @@ async def test_risk_heatmap_groups_by_tier_and_compliance(client: httpx.AsyncCli
         ])
         await session.commit()
 
-    r = await client.get("/api/v1/overview/compliance-stats")
+    r = await client.get("/v1/compliance-stats")
     heatmap = r.json()["risk_heatmap"]
     high_bad = next(c for c in heatmap if c["tier"] == "high" and c["residual_risk_y"] == 90)
     minimal_good = next(c for c in heatmap if c["tier"] == "minimal" and c["residual_risk_y"] == 10)

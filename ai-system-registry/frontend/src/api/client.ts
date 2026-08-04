@@ -1,7 +1,7 @@
 import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData } from "../types";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
-export const HEALTH_URL = API_BASE.replace("/api/v1", "") + "/health";
+export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, options);

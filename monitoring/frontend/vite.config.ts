@@ -4,6 +4,7 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  base: "/monitoring/",
   envDir: path.resolve(__dirname, "../.."),
   build: {
     outDir: "dist",

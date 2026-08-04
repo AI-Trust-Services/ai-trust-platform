@@ -220,7 +220,7 @@ async def create_assessment(client: httpx.AsyncClient, system_id: str, **kwargs)
         "type": "compliance",
         **kwargs,
     }
-    r = await client.post("/api/v1/assessments", json=payload)
+    r = await client.post("/v1/assessments", json=payload)
     assert r.status_code == 201, r.text
     return r.json()
 
@@ -231,7 +231,7 @@ async def create_obligation(client: httpx.AsyncClient, assessment_id: str, **kwa
         "title": "Test Obligation",
         **kwargs,
     }
-    r = await client.post("/api/v1/obligations", json=payload)
+    r = await client.post("/v1/obligations", json=payload)
     assert r.status_code == 201, r.text
     return r.json()
 
@@ -244,7 +244,7 @@ async def create_control(client: httpx.AsyncClient, system_id: str | None = None
     }
     if system_id:
         payload["ai_system_id"] = system_id
-    r = await client.post("/api/v1/controls", json=payload)
+    r = await client.post("/v1/controls", json=payload)
     assert r.status_code == 201, r.text
     return r.json()
 
@@ -252,6 +252,6 @@ async def create_control(client: httpx.AsyncClient, system_id: str | None = None
 async def create_evidence(client: httpx.AsyncClient, **kwargs) -> dict:
     """Creates evidence without a file. At least one link target required."""
     data = {"title": "Test Evidence", "evidence_type": "document", **kwargs}
-    r = await client.post("/api/v1/evidence", data=data)
+    r = await client.post("/v1/evidence", data=data)
     assert r.status_code == 201, r.text
     return r.json()

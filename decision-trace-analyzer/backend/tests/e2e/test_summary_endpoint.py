@@ -78,7 +78,7 @@ async def test_summary_endpoint_returns_decision_record(client):
 
     with patch("app.routers.traces.get_client",
                return_value=_make_fake_ch_with_rows(rows)):
-        resp = await client.get("/api/v1/traces/abc123/summary")
+        resp = await client.get("/v1/traces/abc123/summary")
 
     assert resp.status_code == 200
     body = resp.json()
@@ -96,7 +96,7 @@ async def test_summary_endpoint_404_when_no_spans(client):
     """No spans for the trace id → 404, not an empty record."""
     with patch("app.routers.traces.get_client",
                return_value=_make_fake_ch_with_rows([])):
-        resp = await client.get("/api/v1/traces/unknown-id/summary")
+        resp = await client.get("/v1/traces/unknown-id/summary")
 
     assert resp.status_code == 404
     assert "not found" in resp.json()["detail"].lower()
@@ -115,7 +115,7 @@ async def test_summary_endpoint_errored_outcome(client):
 
     with patch("app.routers.traces.get_client",
                return_value=_make_fake_ch_with_rows(rows)):
-        resp = await client.get("/api/v1/traces/err-trace/summary")
+        resp = await client.get("/v1/traces/err-trace/summary")
 
     assert resp.status_code == 200
     assert resp.json()["outcome"] == "errored"
@@ -128,7 +128,7 @@ async def test_summary_endpoint_503_when_clickhouse_unavailable(client):
     ch.query.side_effect = RuntimeError("connection refused")
 
     with patch("app.routers.traces.get_client", return_value=ch):
-        resp = await client.get("/api/v1/traces/any-id/summary")
+        resp = await client.get("/v1/traces/any-id/summary")
 
     assert resp.status_code == 503
     assert resp.json()["detail"] == "Data store unavailable"
@@ -141,7 +141,7 @@ async def test_list_traces_503_when_clickhouse_unavailable(client):
     ch.query.side_effect = RuntimeError("connection refused")
 
     with patch("app.routers.traces.get_client", return_value=ch):
-        resp = await client.get("/api/v1/traces")
+        resp = await client.get("/v1/traces")
 
     assert resp.status_code == 503
     assert resp.json()["detail"] == "Data store unavailable"

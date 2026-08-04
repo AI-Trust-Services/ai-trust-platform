@@ -11,63 +11,63 @@ Luigi.setConfig({
             pathSegment: "overview",
             label: "Overview",
             icon: "home",
-            viewUrl: "http://localhost:3003/",
+            viewUrl: "http://localhost:8080/overview/",
             navigationContext: "overview",
           },
           {
             pathSegment: "ai-system-registry",
             label: "AI System Registry",
             icon: "database",
-            viewUrl: "http://localhost:3001/",
+            viewUrl: "http://localhost:8080/registry/",
             navigationContext: "ai-system-registry",
           },
           {
             pathSegment: "decision-trace-analyzer",
             label: "Trace Explorer",
             icon: "detail-view",
-            viewUrl: "http://localhost:3005/",
+            viewUrl: "http://localhost:8080/dta/",
             navigationContext: "decision-trace-analyzer",
           },
           {
             pathSegment: "monitoring",
             label: "Monitoring",
             icon: "line-chart",
-            viewUrl: "http://localhost:3002/",
+            viewUrl: "http://localhost:8080/monitoring/",
             navigationContext: "monitoring",
           },
           {
             pathSegment: "alerts",
             label: "Alerts",
             icon: "alert",
-            viewUrl: "http://localhost:3004/",
+            viewUrl: "http://localhost:8080/alerts/",
             navigationContext: "alerts",
           },
           {
             pathSegment: "assessments",
             label: "Assessments",
             icon: "task",
-            viewUrl: "http://localhost:3006/#/assessments",
+            viewUrl: "http://localhost:8080/compliance/#/assessments",
             navigationContext: "assessments",
           },
           {
             pathSegment: "obligations",
             label: "Obligations",
             icon: "checklist-item",
-            viewUrl: "http://localhost:3006/#/obligations",
+            viewUrl: "http://localhost:8080/compliance/#/obligations",
             navigationContext: "obligations",
           },
           {
             pathSegment: "controls",
             label: "Controls",
             icon: "shield",
-            viewUrl: "http://localhost:3006/#/controls",
+            viewUrl: "http://localhost:8080/compliance/#/controls",
             navigationContext: "controls",
           },
           {
             pathSegment: "evidence",
             label: "Evidence",
             icon: "attachment",
-            viewUrl: "http://localhost:3006/#/evidence",
+            viewUrl: "http://localhost:8080/compliance/#/evidence",
             navigationContext: "evidence",
           },
         ],
@@ -102,8 +102,7 @@ Luigi.setConfig({
   lifecycleHooks: {
     luigiAfterInit: () => {
       const style = document.createElement("style");
-      style.textContent = `
-        :root {
+      style.textContent = `:root {
           --luigi-nav-bg: #ffffff;
           --luigi-nav-width: 256px;
         }
@@ -330,6 +329,28 @@ Luigi.setConfig({
           clearInterval(waitForNav);
           attachTooltips();
           observer.observe(nav, { childList: true, subtree: true });
+        }
+      }, 200);
+
+      // Inject sign-out button into shell bar
+      const waitForShellbar = setInterval(() => {
+        const shellbar = document.querySelector(".fd-shellbar__group--actions, .fd-shellbar__actions");
+        if (shellbar) {
+          clearInterval(waitForShellbar);
+          const btn = document.createElement("a");
+          btn.href = "/oauth2/sign_out";
+          btn.title = "Sign out";
+          btn.style.cssText = `
+            display: inline-flex; align-items: center; gap: 6px;
+            color: #ffffff; text-decoration: none; font-size: 13px;
+            font-weight: 500; padding: 6px 12px; border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.4);
+            margin-right: 8px; cursor: pointer;
+          `;
+          btn.innerHTML = `<span class="sap-icon sap-icon--log" style="font-size:16px;color:#fff"></span> Sign out`;
+          btn.addEventListener("mouseenter", () => btn.style.background = "rgba(255,255,255,0.15)");
+          btn.addEventListener("mouseleave", () => btn.style.background = "transparent");
+          shellbar.prepend(btn);
         }
       }, 200);
     },

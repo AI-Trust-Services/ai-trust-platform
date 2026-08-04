@@ -1,7 +1,7 @@
 import type { AlertEvent, AlertRule, AlertCount } from "../types";
 
 const API_BASE = import.meta.env.VITE_ALERTS_API_BASE as string;
-export const HEALTH_URL = API_BASE.replace("/api/v1", "") + "/health";
+export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 export const ALERTS_URL = (import.meta.env.VITE_ALERTS_URL as string) || "http://localhost:3004";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -14,20 +14,20 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  getActiveAlerts: () => request<AlertEvent[]>("/alerts/active"),
-  getAlertHistory: () => request<AlertEvent[]>("/alerts/history"),
-  getAlertRules:   () => request<AlertRule[]>("/alerts/rules"),
-  getAlertCount:   () => request<AlertCount>("/alerts/count"),
+  getActiveAlerts: () => request<AlertEvent[]>("/active"),
+  getAlertHistory: () => request<AlertEvent[]>("/history"),
+  getAlertRules:   () => request<AlertRule[]>("/rules"),
+  getAlertCount:   () => request<AlertCount>("/count"),
 
   handleEvent: (eventId: string) =>
-    request<{ status: string }>(`/alerts/events/${eventId}/handle`, { method: "POST" }),
+    request<{ status: string }>(`/events/${eventId}/handle`, { method: "POST" }),
 
   approveModel: (eventId: string) =>
-    request<{ status: string }>(`/alerts/events/${eventId}/approve-model`, { method: "POST" }),
+    request<{ status: string }>(`/events/${eventId}/approve-model`, { method: "POST" }),
 
   rejectModel: (eventId: string) =>
-    request<{ status: string }>(`/alerts/events/${eventId}/reject-model`, { method: "POST" }),
+    request<{ status: string }>(`/events/${eventId}/reject-model`, { method: "POST" }),
 
   toggleRule: (ruleId: string) =>
-    request<{ rule_id: string; enabled: boolean }>(`/alerts/rules/${ruleId}/toggle`, { method: "POST" }),
+    request<{ rule_id: string; enabled: boolean }>(`/rules/${ruleId}/toggle`, { method: "POST" }),
 };
