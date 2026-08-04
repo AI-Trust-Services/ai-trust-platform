@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ai_trust_logging import correlation_id_var, get_logger
-from app.routers import roles, users
+from app.routers import roles, users, permissions, iam
 
 logger = get_logger(__name__)
 
@@ -62,6 +62,8 @@ async def logging_middleware(request: Request, call_next) -> Response:
 
 app.include_router(users.router, prefix="/v1")
 app.include_router(roles.router, prefix="/v1")
+app.include_router(permissions.router, prefix="/v1")
+app.include_router(iam.router, prefix="/v1")
 
 
 @app.get("/health")

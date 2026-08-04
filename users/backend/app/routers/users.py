@@ -3,7 +3,7 @@ from __future__ import annotations
 import json as _json
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.keycloak import admin_client
 from app.schemas import (
@@ -13,7 +13,7 @@ from app.schemas import (
     UserSummary,
     UsersListResponse,
 )
-from ai_trust_authorization import openfga_client
+from ai_trust_authorization import openfga_client, require_permission
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -189,7 +189,7 @@ def delete_user(user_id: str):
 
 
 @router.post("/{user_id}/roles/{role_name}", response_model=UserDetail)
-async def assign_role(user_id: str, role_name: str):
+async def assign_role(user_id: str, role_name: str, _: str = Depends(require_permission("iam:manage"))):
     if role_name not in MANAGED_ROLES:
         raise HTTPException(400, f"Unknown role '{role_name}'.")
     with admin_client() as kc:
@@ -209,7 +209,7 @@ async def assign_role(user_id: str, role_name: str):
 
 
 @router.delete("/{user_id}/roles/{role_name}", response_model=UserDetail)
-async def remove_role(user_id: str, role_name: str):
+async def remove_role(user_id: str, role_name: str, _: str = Depends(require_permission("iam:manage"))):
     if role_name not in MANAGED_ROLES:
         raise HTTPException(400, f"Unknown role '{role_name}'.")
     with admin_client() as kc:

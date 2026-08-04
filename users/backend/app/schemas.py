@@ -52,3 +52,8 @@ class RoleSummary(BaseModel):
 class UsersListResponse(BaseModel):
     total: int
     users: list[UserSummary]
+
+
+class PermissionsResponse(BaseModel):
+    username: str
+    permissions: list[str]

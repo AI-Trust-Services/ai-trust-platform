@@ -6,7 +6,7 @@
 (async function initShell() {
   let permissions = [];
   try {
-    const res = await fetch("/api/registry/v1/me/permissions", { cache: "no-store" });
+    const res = await fetch("/api/users/v1/me/permissions", { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       permissions = data.permissions || [];
@@ -21,6 +21,7 @@
   // A pathSegment absent from this map is always visible (e.g. "overview").
   const PAGE_PERMISSIONS = {
     "ai-system-registry": ["systems:read", "systems:write"],
+    // DTA has no dedicated permission — reuse monitoring:read (same audience).
     "decision-trace-analyzer": ["monitoring:read"],
     "monitoring": ["monitoring:read"],
     "alerts": ["alerts:read", "alerts:handle", "alerts:manage_rules"],
