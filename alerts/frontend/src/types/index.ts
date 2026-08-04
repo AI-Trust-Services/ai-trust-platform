@@ -34,3 +34,8 @@ export interface AlertRule {
 export interface AlertCount {
   count: number;
 }
+
+export interface PermissionsResponse {
+  username: string;
+  permissions: string[];
+}

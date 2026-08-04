@@ -5,3 +5,4 @@ minio==7.2.7
 python-multipart==0.0.31
 -e /app/libs/persistence
 -e /app/libs/logging
+-e /app/libs/authorization

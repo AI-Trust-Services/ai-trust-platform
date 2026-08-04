@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json as _json
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -12,6 +13,7 @@ from app.schemas import (
     UserSummary,
     UsersListResponse,
 )
+from ai_trust_authorization import openfga_client
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -187,7 +189,7 @@ def delete_user(user_id: str):
 
 
 @router.post("/{user_id}/roles/{role_name}", response_model=UserDetail)
-def assign_role(user_id: str, role_name: str):
+async def assign_role(user_id: str, role_name: str):
     if role_name not in MANAGED_ROLES:
         raise HTTPException(400, f"Unknown role '{role_name}'.")
     with admin_client() as kc:
@@ -201,11 +203,13 @@ def assign_role(user_id: str, role_name: str):
         ).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()
-        return _to_detail(updated.json())
+        username = updated.json().get("username", user_id)
+    await openfga_client.write_tuple(f"user:{username}", "member", f"role:{role_name}")
+    return _to_detail(updated.json())
 
 
 @router.delete("/{user_id}/roles/{role_name}", response_model=UserDetail)
-def remove_role(user_id: str, role_name: str):
+async def remove_role(user_id: str, role_name: str):
     if role_name not in MANAGED_ROLES:
         raise HTTPException(400, f"Unknown role '{role_name}'.")
     with admin_client() as kc:
@@ -213,7 +217,6 @@ def remove_role(user_id: str, role_name: str):
         if role_resp.status_code == 404:
             raise HTTPException(404, f"Role '{role_name}' not found in Keycloak.")
         role_resp.raise_for_status()
-        import json as _json
         kc.request(
             "DELETE",
             f"/users/{user_id}/role-mappings/realm",
@@ -222,4 +225,6 @@ def remove_role(user_id: str, role_name: str):
         ).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()
-        return _to_detail(updated.json())
+        username = updated.json().get("username", user_id)
+    await openfga_client.delete_tuple(f"user:{username}", "member", f"role:{role_name}")
+    return _to_detail(updated.json())

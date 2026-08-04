@@ -9,6 +9,7 @@ import AssessmentCharts from "../components/AssessmentCharts";
 import KebabMenu from "../components/KebabMenu";
 import ScoreDonut from "../components/ScoreDonut";
 import { ASSESSMENT_STATUS_META, fmtDate, humanize } from "../utils";
+import { usePermissions } from "../hooks/usePermissions";
 import type { Assessment, AssessmentDetail, AISystem, Framework } from "../types";
 
 export default function AssessmentsPage(): JSX.Element {
@@ -22,6 +23,11 @@ export default function AssessmentsPage(): JSX.Element {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const showToast = useToast();
+  const { can } = usePermissions();
+  const mayWrite = can("assessments:write");
+  const mayApprove = can("assessments:approve");
+  const noWriteTitle = "Erfordert Berechtigung: assessments:write";
+  const noApproveTitle = "Erfordert Berechtigung: assessments:approve";
 
   const load = useCallback(async () => {
     try {
@@ -85,7 +91,12 @@ export default function AssessmentsPage(): JSX.Element {
         <h1>Assessments</h1>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn-ghost" onClick={load}>↺ Refresh</button>
-          <button className="btn-primary" onClick={() => setCreateOpen(true)}>+ New Assessment</button>
+          <button
+            className="btn-primary"
+            disabled={!mayWrite}
+            title={mayWrite ? undefined : noWriteTitle}
+            onClick={() => setCreateOpen(true)}
+          >+ New Assessment</button>
         </div>
       </div>
 
@@ -138,18 +149,18 @@ export default function AssessmentsPage(): JSX.Element {
                     <KebabMenu items={[
                       ...(a.status === "draft" ? [{
                         label: "Submit for Review",
-                        disabled: busy === a.id,
+                        disabled: busy === a.id || !mayWrite,
                         onClick: () => act(api.submitAssessment, a.id, "Submitted"),
                       }] : []),
                       ...(a.status !== "approved" ? [{
                         label: "Approve",
-                        disabled: busy === a.id,
+                        disabled: busy === a.id || !mayApprove,
                         onClick: () => act(api.approveAssessment, a.id, (r) => `Approved — score ${r.score ?? "N/A"}%`),
                       }] : []),
                       {
                         label: "Delete",
                         danger: true,
-                        disabled: busy === a.id,
+                        disabled: busy === a.id || !mayWrite,
                         onClick: async () => {
                           if (!confirm(`Delete "${a.title}"?`)) return;
                           setBusy(a.id);
@@ -192,11 +203,13 @@ export default function AssessmentsPage(): JSX.Element {
           )}
           <div className="dp-actions">
             {selectedDetail.status === "draft" && (
-              <button className="btn-ghost btn-sm" disabled={busy === selectedDetail.id}
+              <button className="btn-ghost btn-sm" disabled={busy === selectedDetail.id || !mayWrite}
+                title={mayWrite ? undefined : noWriteTitle}
                 onClick={() => act(api.submitAssessment, selectedDetail.id, "Submitted")}>Submit</button>
             )}
             {selectedDetail.status !== "approved" && (
-              <button className="btn-ghost btn-sm" disabled={busy === selectedDetail.id}
+              <button className="btn-ghost btn-sm" disabled={busy === selectedDetail.id || !mayApprove}
+                title={mayApprove ? undefined : noApproveTitle}
                 onClick={() => act(api.approveAssessment, selectedDetail.id, (r) => `Approved — score ${r.score ?? "N/A"}%`)}>Approve</button>
             )}
           </div>

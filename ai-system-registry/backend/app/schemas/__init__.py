@@ -13,6 +13,12 @@ from app.schemas.model_card import (
     ModelCardUpdate,
     ModelCardResponse,
 )
+from app.schemas.iam import (
+    RoleInfo,
+    UserRole,
+    AssignRoleRequest,
+    PermissionsResponse,
+)
 
 __all__ = [
     "AISystemCreate",
@@ -25,4 +31,8 @@ __all__ = [
     "ModelCardCreate",
     "ModelCardUpdate",
     "ModelCardResponse",
+    "RoleInfo",
+    "UserRole",
+    "AssignRoleRequest",
+    "PermissionsResponse",
 ]

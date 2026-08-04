@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_trust_authorization import require_permission
+from ai_trust_authorization.constants import ASSESSMENTS_READ, ASSESSMENTS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import (
@@ -38,7 +40,7 @@ async def _load(session: AsyncSession, control_id: str) -> Control:
     return row
 
 
-@router.get("/controls", response_model=list[ControlResponse])
+@router.get("/controls", response_model=list[ControlResponse], dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
 async def list_controls(
     ai_system_id: str | None = Query(default=None),
     obligation_id: str | None = Query(default=None),
@@ -63,7 +65,7 @@ async def list_controls(
         return [ControlResponse.model_validate(r) for r in result.scalars().all()]
 
 
-@router.post("/controls", response_model=ControlResponse, status_code=201)
+@router.post("/controls", response_model=ControlResponse, status_code=201, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def create_control(body: ControlCreate) -> ControlResponse:
     async with SessionLocal() as session:
         if body.ai_system_id and not (await session.execute(
@@ -88,7 +90,7 @@ async def create_control(body: ControlCreate) -> ControlResponse:
     return ControlResponse.model_validate(row)
 
 
-@router.get("/controls/{control_id}", response_model=ControlDetailResponse)
+@router.get("/controls/{control_id}", response_model=ControlDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
 async def get_control(control_id: str) -> ControlDetailResponse:
     async with SessionLocal() as session:
         row = await _load(session, control_id)
@@ -106,7 +108,7 @@ async def get_control(control_id: str) -> ControlDetailResponse:
         return detail
 
 
-@router.put("/controls/{control_id}", response_model=ControlResponse)
+@router.put("/controls/{control_id}", response_model=ControlResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def update_control(control_id: str, body: ControlUpdate) -> ControlResponse:
     updates = body.model_dump(exclude_none=True)
     async with SessionLocal() as session:
@@ -124,7 +126,7 @@ async def update_control(control_id: str, body: ControlUpdate) -> ControlRespons
     return ControlResponse.model_validate(row)
 
 
-@router.delete("/controls/{control_id}")
+@router.delete("/controls/{control_id}", dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def delete_control(control_id: str) -> dict:
     async with SessionLocal() as session:
         row = await _load(session, control_id)
@@ -142,7 +144,7 @@ async def delete_control(control_id: str) -> dict:
     return {"status": "deleted", "id": control_id}
 
 
-@router.post("/controls/{control_id}/link/{obligation_id}", response_model=ControlDetailResponse)
+@router.post("/controls/{control_id}/link/{obligation_id}", response_model=ControlDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def link_obligation(control_id: str, obligation_id: str) -> ControlDetailResponse:
     async with SessionLocal() as session:
         await _load(session, control_id)
@@ -165,7 +167,7 @@ async def link_obligation(control_id: str, obligation_id: str) -> ControlDetailR
     return await get_control(control_id)
 
 
-@router.delete("/controls/{control_id}/link/{obligation_id}", response_model=ControlDetailResponse)
+@router.delete("/controls/{control_id}/link/{obligation_id}", response_model=ControlDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def unlink_obligation(control_id: str, obligation_id: str) -> ControlDetailResponse:
     async with SessionLocal() as session:
         await _load(session, control_id)

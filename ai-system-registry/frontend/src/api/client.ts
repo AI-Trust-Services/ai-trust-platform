@@ -1,4 +1,4 @@
-import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData } from "../types";
+import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse } from "../types";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
@@ -47,4 +47,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
   deleteModel: (id: string) => request<null>(`/model-cards/${id}`, { method: "DELETE" }),
+
+  // Current user's effective permissions — used to grey out actions the user cannot perform.
+  myPermissions: () => request<PermissionsResponse>("/me/permissions"),
 };
