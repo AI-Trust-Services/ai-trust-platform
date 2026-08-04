@@ -86,7 +86,7 @@ def invite_user(body: InviteUserRequest):
         "firstName": body.firstName,
         "lastName": body.lastName,
         "enabled": True,
-        "emailVerified": False,
+        "emailVerified": True,
         "credentials": [{"type": "password", "value": body.temporaryPassword, "temporary": True}],
         "attributes": {
             "department": [body.department],
