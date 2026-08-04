@@ -1,5 +1,7 @@
-// Fetch the current user's permissions before building the nav so that
-// admin-only nodes (IAM) are only shown to users who hold iam:manage.
+// Fetch the current user's permissions before building the nav so that each
+// nav node is only shown to users who hold at least one of its permissions.
+// A page a role has no permission for at all (e.g. Executive → Alerts/Evidence)
+// is hidden entirely rather than shown with everything greyed out.
 // The check is UX-only; every backend enforces permissions independently.
 (async function initShell() {
   let permissions = [];
@@ -10,10 +12,26 @@
       permissions = data.permissions || [];
     }
   } catch (e) {
-    // If the permissions endpoint is unreachable, fall back to hiding admin nodes.
+    // If the permissions endpoint is unreachable, fail closed: only nodes
+    // without a permission requirement (Overview) remain visible.
     permissions = [];
   }
-  const canManageIam = permissions.includes("iam:manage");
+
+  // pathSegment → permissions that make the node visible (ANY of them suffices).
+  // A pathSegment absent from this map is always visible (e.g. "overview").
+  const PAGE_PERMISSIONS = {
+    "ai-system-registry": ["systems:read", "systems:write"],
+    "decision-trace-analyzer": ["monitoring:read"],
+    "monitoring": ["monitoring:read"],
+    "alerts": ["alerts:read", "alerts:handle", "alerts:manage_rules"],
+    "assessments": ["assessments:read", "assessments:write", "assessments:approve"],
+    "obligations": ["assessments:read", "assessments:write", "assessments:approve"],
+    "controls": ["assessments:read", "assessments:write", "assessments:approve"],
+    "evidence": ["evidence:read", "evidence:write", "evidence:approve"],
+    "iam": ["iam:manage"],
+  };
+  const canSee = (seg) =>
+    !PAGE_PERMISSIONS[seg] || PAGE_PERMISSIONS[seg].some((p) => permissions.includes(p));
 
   const children = [
       {
@@ -79,17 +97,14 @@
         viewUrl: "http://localhost:8080/compliance/#/evidence",
         navigationContext: "evidence",
       },
-  ];
-
-  if (canManageIam) {
-    children.push({
-      pathSegment: "iam",
-      label: "Role Management",
-      icon: "person-placeholder",
-      viewUrl: "http://localhost:8080/iam/",
-      navigationContext: "iam",
-    });
-  }
+      {
+        pathSegment: "iam",
+        label: "Role Management",
+        icon: "person-placeholder",
+        viewUrl: "http://localhost:8080/iam/",
+        navigationContext: "iam",
+      },
+  ].filter((node) => canSee(node.pathSegment));
 
   Luigi.setConfig({
   navigation: {
