@@ -14,7 +14,7 @@ export default function Models() {
   const [editingModel, setEditingModel] = useState<ModelCard | null>(null);
   const { modelCreateOpen, setModelCreateOpen, mayWrite } = useModalControls();
   const showToast = useToast();
-  const noWriteTitle = "Erfordert Berechtigung: systems:write";
+  const noWriteTitle = "Requires permission: systems:write";
 
   const loadModels = useCallback(async () => {
     try {

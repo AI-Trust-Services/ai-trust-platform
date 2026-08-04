@@ -15,7 +15,7 @@ export function ActiveAlerts({ alerts, rules, onRefresh }: Props) {
   const { showToast } = useToast();
   const { can } = usePermissions();
   const mayHandle = can("alerts:handle");
-  const noHandleTitle = "Erfordert Berechtigung: alerts:handle";
+  const noHandleTitle = "Requires permission: alerts:handle";
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const ruleMap = Object.fromEntries(rules.map((r) => [r.id, r]));

@@ -30,7 +30,7 @@ export default function App() {
   const location = useLocation();
   const { can } = usePermissions();
   const mayWrite = can("systems:write");
-  const noWriteTitle = "Erfordert Berechtigung: systems:write";
+  const noWriteTitle = "Requires permission: systems:write";
 
   useLuigiInit(() => {});
 

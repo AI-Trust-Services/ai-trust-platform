@@ -27,7 +27,7 @@ export default function ObligationsPage(): JSX.Element {
   const showToast = useToast();
   const { can } = usePermissions();
   const mayWrite = can("assessments:write");
-  const noWriteTitle = "Erfordert Berechtigung: assessments:write";
+  const noWriteTitle = "Requires permission: assessments:write";
 
   const load = useCallback(async () => {
     try {

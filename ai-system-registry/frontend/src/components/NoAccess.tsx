@@ -8,8 +8,8 @@ export function NoAccess() {
     <div className="content">
       <div className="empty-state">
         <div className="empty-icon">🔒</div>
-        <h3>Kein Zugriff</h3>
-        <p>Ihnen fehlt die Berechtigung für diese Seite.</p>
+        <h3>No Access</h3>
+        <p>You don't have permission to view this page.</p>
       </div>
     </div>
   );

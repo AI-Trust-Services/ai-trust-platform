@@ -49,7 +49,7 @@ export function AlertRules({ rules, onRefresh }: Props) {
                     className="btn-ghost btn-sm"
                     style={{ marginLeft: "auto" }}
                     disabled={!mayManage}
-                    title={mayManage ? undefined : "Erfordert Berechtigung: alerts:manage_rules"}
+                    title={mayManage ? undefined : "Requires permission: alerts:manage_rules"}
                     onClick={() => toggleRule(r.id)}
                   >
                     {r.enabled ? "Disable" : "Enable"}

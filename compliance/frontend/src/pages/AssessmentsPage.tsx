@@ -26,8 +26,8 @@ export default function AssessmentsPage(): JSX.Element {
   const { can } = usePermissions();
   const mayWrite = can("assessments:write");
   const mayApprove = can("assessments:approve");
-  const noWriteTitle = "Erfordert Berechtigung: assessments:write";
-  const noApproveTitle = "Erfordert Berechtigung: assessments:approve";
+  const noWriteTitle = "Requires permission: assessments:write";
+  const noApproveTitle = "Requires permission: assessments:approve";
 
   const load = useCallback(async () => {
     try {

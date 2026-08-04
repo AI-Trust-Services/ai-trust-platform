@@ -16,7 +16,7 @@ export default function Systems() {
   const [detailOpen, setDetailOpen] = useState(false);
   const { wizardOpen, setWizardOpen, mayWrite } = useModalControls();
   const showToast = useToast();
-  const noWriteTitle = "Erfordert Berechtigung: systems:write";
+  const noWriteTitle = "Requires permission: systems:write";
 
   const loadSystems = useCallback(async () => {
     try {

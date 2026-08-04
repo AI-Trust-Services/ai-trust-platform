@@ -30,8 +30,8 @@ export default function EvidencePage(): JSX.Element {
   const { can } = usePermissions();
   const mayWrite = can("evidence:write");
   const mayApprove = can("evidence:approve");
-  const noWriteTitle = "Erfordert Berechtigung: evidence:write";
-  const noApproveTitle = "Erfordert Berechtigung: evidence:approve";
+  const noWriteTitle = "Requires permission: evidence:write";
+  const noApproveTitle = "Requires permission: evidence:approve";
 
   const load = useCallback(async () => {
     try {

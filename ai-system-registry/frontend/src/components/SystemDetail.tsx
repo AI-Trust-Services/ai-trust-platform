@@ -5,7 +5,7 @@ import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import type { AISystem, ModelCard } from "../types";
 
-const NO_WRITE_TITLE = "Erfordert Berechtigung: systems:write";
+const NO_WRITE_TITLE = "Requires permission: systems:write";
 
 function DetailGrid({ rows }: { rows: ([string, React.ReactNode] | false | null | undefined)[] }) {
   return (
