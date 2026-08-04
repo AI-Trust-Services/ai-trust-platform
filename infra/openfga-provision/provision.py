@@ -98,6 +98,14 @@ async def find_or_create_store(client: OpenFgaClient) -> str:
     return created.id
 
 
+async def write_model_if_needed(client: OpenFgaClient) -> None:
+    existing = await client.read_authorization_models()
+    if existing.authorization_models:
+        print("Authorization model already exists, skipping write.")
+        return
+    await write_model(client)
+
+
 async def write_model(client: OpenFgaClient) -> None:
     model = build_model()
     request = WriteAuthorizationModelRequest(
@@ -180,7 +188,7 @@ async def main() -> None:
         store_id = await find_or_create_store(client)
         client.set_store_id(store_id)
 
-        await write_model(client)
+        await write_model_if_needed(client)
         await seed_role_tuples(client)
         await seed_admin_users(client)
 

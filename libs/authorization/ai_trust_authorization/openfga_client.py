@@ -123,13 +123,18 @@ async def read_role_members(role_object: str) -> list[str]:
 
 
 async def read_user_roles(user: str) -> list[str]:
-    """Return the role objects (e.g. 'role:auditor') a user is a member of."""
-    from openfga_sdk.models.read_request_tuple_key import ReadRequestTupleKey
+    """Return the role objects (e.g. 'role:auditor') a user is a member of.
 
-    async with get_client() as client:
-        # Read all member tuples for this user across role objects. OpenFGA's
-        # read API requires an object *type* even when listing across all IDs —
-        # `role:` (type prefix, empty id) filters to every role:* object.
-        body = ReadRequestTupleKey(user=user, relation="member", object="role:")
-        response = await client.read(body)
-        return [t.key.object for t in (response.tuples or [])]
+    Iterates over BUILT_IN_ROLES individually rather than using the type-prefix
+    syntax (`object="role:"`) which openfga_sdk 0.10.x may reject for objects
+    with an empty ID segment.
+    """
+    from ai_trust_authorization.constants import BUILT_IN_ROLES
+
+    result = []
+    for role in BUILT_IN_ROLES:
+        role_object = f"role:{role}"
+        members = await read_role_members(role_object)
+        if user in members:
+            result.append(role_object)
+    return result
