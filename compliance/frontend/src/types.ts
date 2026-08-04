@@ -125,3 +125,8 @@ export interface BadgeMeta {
   label: string;
   cls: string;
 }
+
+export interface PermissionsResponse {
+  username: string;
+  permissions: string[];
+}

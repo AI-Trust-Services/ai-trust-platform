@@ -6,6 +6,7 @@ import KpiCard from "../components/KpiCard";
 import DetailPanel, { DetailField, DetailSection } from "../components/DetailPanel";
 import CreateObligationModal from "../components/CreateObligationModal";
 import { OBLIGATION_STATUS_META, CONTROL_STATUS_META, EVIDENCE_STATUS_META, fmtDate } from "../utils";
+import { usePermissions } from "../hooks/usePermissions";
 import type { AISystem, Assessment, Control, Evidence, Obligation, ObligationDetail } from "../types";
 
 const STATUS_OPTIONS = ["applicable", "in_progress", "fulfilled", "not_applicable", "overdue"] as const;
@@ -24,6 +25,9 @@ export default function ObligationsPage(): JSX.Element {
   const [detailEvidence, setDetailEvidence] = useState<Evidence[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const showToast = useToast();
+  const { can } = usePermissions();
+  const mayWrite = can("assessments:write");
+  const noWriteTitle = "Erfordert Berechtigung: assessments:write";
 
   const load = useCallback(async () => {
     try {
@@ -100,7 +104,8 @@ export default function ObligationsPage(): JSX.Element {
         <h1>Obligations</h1>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn-ghost" onClick={load}>↺ Refresh</button>
-          <button className="btn-primary" onClick={() => setCreateOpen(true)}>+ New Obligation</button>
+          <button className="btn-primary" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+            onClick={() => setCreateOpen(true)}>+ New Obligation</button>
         </div>
       </div>
 
@@ -155,10 +160,13 @@ export default function ObligationsPage(): JSX.Element {
                   <td style={{ color: o.status === "overdue" ? "#bb0000" : "var(--text-secondary)", fontSize: 13 }}>{fmtDate(o.due_date)}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div className="actions">
-                      <select className="inline-select" value={o.status} onChange={(e) => changeStatus(o.id, e.target.value)}>
+                      <select className="inline-select" value={o.status} disabled={!mayWrite}
+                        title={mayWrite ? undefined : noWriteTitle}
+                        onChange={(e) => changeStatus(o.id, e.target.value)}>
                         {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{OBLIGATION_STATUS_META[s].label}</option>)}
                       </select>
                       <button className="btn-ghost btn-sm btn-danger" data-tip="Delete this obligation"
+                        disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
                         onClick={async () => {
                           if (!confirm(`Delete "${o.title}"?`)) return;
                           try { await api.deleteObligation(o.id); showToast("Deleted"); load(); closePanel(); }
@@ -210,7 +218,8 @@ export default function ObligationsPage(): JSX.Element {
             }
           </DetailSection>
           <div className="dp-actions">
-            <select className="form-select" value={detail.status}
+            <select className="form-select" value={detail.status} disabled={!mayWrite}
+              title={mayWrite ? undefined : noWriteTitle}
               onChange={async (e) => {
                 await changeStatus(detail.id, e.target.value);
                 setDetail((d) => d ? { ...d, status: e.target.value } : d);
