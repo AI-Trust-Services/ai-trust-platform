@@ -219,6 +219,7 @@ services:
       args:
         VITE_ALERTS_API_BASE: ${VITE_ALERTS_API_BASE}
         VITE_ALERTS_URL: ${VITE_ALERTS_URL}
+        VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/v1}
     restart: on-failure
 
   compliance-frontend:
