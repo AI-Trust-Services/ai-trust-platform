@@ -70,6 +70,13 @@ Luigi.setConfig({
             viewUrl: "http://localhost:8080/compliance/#/evidence",
             navigationContext: "evidence",
           },
+          {
+            pathSegment: "users",
+            label: "Users & Roles",
+            icon: "employee",
+            viewUrl: "http://localhost:8080/users/",
+            navigationContext: "users",
+          },
         ],
       },
     ],
