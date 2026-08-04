@@ -111,3 +111,8 @@ export interface ModelCardFormData {
   inference_url: string;
   open_weights: boolean;
 }
+
+export interface PermissionsResponse {
+  username: string;
+  permissions: string[];
+}

@@ -2,8 +2,10 @@ import { useState, useEffect, Fragment } from "react";
 import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard } from "../utils";
 import { api } from "../api/client";
-import { useToast } from "../App";
+import { useToast, useModalControls } from "../App";
 import type { AISystem, ModelCard } from "../types";
+
+const NO_WRITE_TITLE = "Erfordert Berechtigung: systems:write";
 
 function DetailGrid({ rows }: { rows: ([string, React.ReactNode] | false | null | undefined)[] }) {
   return (
@@ -58,6 +60,7 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
   });
   const [saving, setSaving] = useState(false);
   const showToast = useToast();
+  const { mayWrite } = useModalControls();
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -123,7 +126,8 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, gap: 8 }}>
         <button className="btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={handleSave} disabled={saving}>
+        <button className="btn-primary" onClick={handleSave} disabled={saving || !mayWrite}
+          title={mayWrite ? undefined : NO_WRITE_TITLE}>
           {saving && <span className="spinner" />} Save Changes
         </button>
       </div>
@@ -135,6 +139,7 @@ function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models
   const [selectedModelId, setSelectedModelId] = useState(system.model_id || "");
   const [linking, setLinking] = useState(false);
   const showToast = useToast();
+  const { mayWrite } = useModalControls();
   const linkedModel = models.find((m) => m.id === system.model_id);
 
   async function handleLink() {
@@ -176,7 +181,8 @@ function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models
             </div>
             {linkedModel?.description && <div style={{ marginTop: 6, fontSize: 13, color: "var(--text-secondary)" }}>{linkedModel.description}</div>}
           </div>
-          <button className="btn-ghost" style={{ marginTop: 4 }} onClick={handleUnlink}>Unlink Model</button>
+          <button className="btn-ghost" style={{ marginTop: 4 }} disabled={!mayWrite}
+            title={mayWrite ? undefined : NO_WRITE_TITLE} onClick={handleUnlink}>Unlink Model</button>
         </div>
       ) : (
         <div className="msg-strip info" style={{ marginBottom: 16 }}>No model card is linked to this system yet.</div>
@@ -193,7 +199,8 @@ function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models
               ))}
             </select>
           </div>
-          <button className="btn-primary" onClick={handleLink} disabled={linking}>Link</button>
+          <button className="btn-primary" onClick={handleLink} disabled={linking || !mayWrite}
+            title={mayWrite ? undefined : NO_WRITE_TITLE}>Link</button>
         </div>
         <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
           Linking a model records which LLM or AI model powers this system. One system can have at most one linked model.
@@ -214,6 +221,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
   const [tab, setTab] = useState("overview");
   const [system, setSystem] = useState<AISystem | null>(initialSystem);
   const showToast = useToast();
+  const { mayWrite } = useModalControls();
 
   useEffect(() => { setSystem(initialSystem); setTab("overview"); }, [initialSystem]);
 
@@ -353,7 +361,8 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
         </div>
 
         <div className="modal-footer">
-          <button className="btn-danger" onClick={handleDelete}>Delete System</button>
+          <button className="btn-danger" onClick={handleDelete} disabled={!mayWrite}
+            title={mayWrite ? undefined : NO_WRITE_TITLE}>Delete System</button>
           <div className="toolbar-spacer" />
           <button className="btn-ghost" onClick={onClose}>Close</button>
         </div>
