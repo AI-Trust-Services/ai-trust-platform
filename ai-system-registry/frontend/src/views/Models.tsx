@@ -12,8 +12,9 @@ export default function Models() {
   const [providerFilter, setProviderFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingModel, setEditingModel] = useState<ModelCard | null>(null);
-  const { modelCreateOpen, setModelCreateOpen } = useModalControls();
+  const { modelCreateOpen, setModelCreateOpen, mayWrite } = useModalControls();
   const showToast = useToast();
+  const noWriteTitle = "Erfordert Berechtigung: systems:write";
 
   const loadModels = useCallback(async () => {
     try {
@@ -79,7 +80,8 @@ export default function Models() {
         </select>
         <div className="toolbar-spacer" />
         <button className="btn-ghost" onClick={loadModels}>↺ Refresh</button>
-        <button className="btn-primary" onClick={() => { setEditingModel(null); setModalOpen(true); }}>+ Add Model</button>
+        <button className="btn-primary" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+          onClick={() => { setEditingModel(null); setModalOpen(true); }}>+ Add Model</button>
       </div>
 
       <div className="content">
@@ -114,8 +116,10 @@ export default function Models() {
                   </td>
                   <td>
                     <div className="actions">
-                      <button className="btn-icon" title="Edit" onClick={() => { setEditingModel(m); setModalOpen(true); }}>✎</button>
-                      <button className="btn-icon btn-danger" title="Delete" onClick={() => handleDelete(m.id, m.name)}>✕</button>
+                      <button className="btn-icon" title={mayWrite ? "Edit" : noWriteTitle} disabled={!mayWrite}
+                        onClick={() => { setEditingModel(m); setModalOpen(true); }}>✎</button>
+                      <button className="btn-icon btn-danger" title={mayWrite ? "Delete" : noWriteTitle} disabled={!mayWrite}
+                        onClick={() => handleDelete(m.id, m.name)}>✕</button>
                     </div>
                   </td>
                 </tr>
