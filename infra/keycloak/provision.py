@@ -9,9 +9,8 @@ Required env vars:
   KEYCLOAK_ADMIN_PASSWORD     admin password
   APP_PUBLIC_URL              public app URL e.g. https://app.yourdomain.com
   KEYCLOAK_CLIENT_SECRET      secret for the oauth2-proxy client
-
-Optional env vars:
-  PROVISION_DEV_USERS         set to "true" to create dev users (local only)
+  APP_ADMIN_USERNAME          bootstrap platform admin username
+  APP_ADMIN_PASSWORD          bootstrap platform admin password
 """
 import os
 import sys
@@ -22,7 +21,8 @@ ADMIN                = os.environ["KEYCLOAK_ADMIN"]
 ADMIN_PASSWORD       = os.environ["KEYCLOAK_ADMIN_PASSWORD"]
 APP_PUBLIC_URL       = os.environ["APP_PUBLIC_URL"]
 CLIENT_SECRET        = os.environ["KEYCLOAK_CLIENT_SECRET"]
-PROVISION_DEV_USERS  = os.environ.get("PROVISION_DEV_USERS", "false").lower() == "true"
+APP_ADMIN_USERNAME   = os.environ["APP_ADMIN_USERNAME"]
+APP_ADMIN_PASSWORD   = os.environ["APP_ADMIN_PASSWORD"]
 
 REALM = "ai-trust"
 
@@ -91,32 +91,21 @@ def ensure_client(client: httpx.Client) -> None:
         client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients", json=config).raise_for_status()
 
 
-def ensure_dev_users(client: httpx.Client) -> None:
-    dev_users = [
-        {"username": "admin",      "email": "admin@local.dev",      "firstName": "Platform",   "lastName": "Admin"},
-        {"username": "engineer",   "email": "engineer@local.dev",   "firstName": "AI",         "lastName": "Engineer"},
-        {"username": "compliance", "email": "compliance@local.dev", "firstName": "Compliance", "lastName": "Officer"},
-        {"username": "auditor",    "email": "auditor@local.dev",    "firstName": "Platform",   "lastName": "Auditor"},
-    ]
-    passwords = {
-        "admin": "admin123", "engineer": "engineer123",
-        "compliance": "compliance123", "auditor": "auditor123",
-    }
-    for u in dev_users:
-        existing = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", params={"username": u["username"]}).json()
-        if existing:
-            print(f"Dev user '{u['username']}' already exists, skipping.")
-            continue
-        print(f"Creating dev user '{u['username']}'...")
-        client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", json={
-            "username": u["username"],
-            "email": u["email"],
-            "firstName": u["firstName"],
-            "lastName": u["lastName"],
-            "enabled": True,
-            "emailVerified": True,
-            "credentials": [{"type": "password", "value": passwords[u["username"]], "temporary": False}],
-        }).raise_for_status()
+def ensure_admin_user(client: httpx.Client) -> None:
+    existing = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", params={"username": APP_ADMIN_USERNAME}).json()
+    if existing:
+        print(f"Admin user '{APP_ADMIN_USERNAME}' already exists, skipping.")
+        return
+    print(f"Creating admin user '{APP_ADMIN_USERNAME}'...")
+    client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", json={
+        "username": APP_ADMIN_USERNAME,
+        "email": f"{APP_ADMIN_USERNAME}@local.dev",  # TODO: do we want to require a real email for the admin user? If yes, we will move it to env var.
+        "emailVerified": True,
+        "firstName": "Platform",
+        "lastName": "Admin",
+        "enabled": True,
+        "credentials": [{"type": "password", "value": APP_ADMIN_PASSWORD, "temporary": False}],
+    }).raise_for_status()
 
 
 def main() -> None:
@@ -126,12 +115,7 @@ def main() -> None:
 
         ensure_realm(client)
         ensure_client(client)
-
-        if PROVISION_DEV_USERS:
-            print("Provisioning dev users...")
-            ensure_dev_users(client)
-        else:
-            print("Skipping dev users (PROVISION_DEV_USERS not set).")
+        ensure_admin_user(client)
 
     print("Keycloak provisioning complete.")
 

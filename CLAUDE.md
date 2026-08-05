@@ -139,7 +139,7 @@ All traffic enters through **oauth2-proxy** at port 8080. No backend or frontend
 - **oauth2-proxy v7.6.0** — gateway at port 8080, enforces authentication on all paths
 - **Sign out** — shell bar button links to `/oauth2/sign_out`, which clears the session and calls Keycloak's logout endpoint server-side (`--backend-logout-url`)
 
-Set `PROVISION_DEV_USERS=true` in `.env` to have `keycloak-provision` create dev users on startup (local development only). Keep `false` in production — provision real users via the Keycloak admin console at `http://localhost:8180`.
+A single bootstrap admin user is always created on startup with credentials from `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` in `.env`.
 
 ### Phase 2 (not yet implemented)
 Authorization (what each user can do) will be handled by OpenFGA. Keycloak roles are intentionally omitted until then.
@@ -413,7 +413,8 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `KEYCLOAK_CLIENT_SECRET` | keycloak-provision, oauth2-proxy | *(required)* | Shared secret for the oauth2-proxy OIDC client |
 | `KEYCLOAK_PUBLIC_URL` | oauth2-proxy | `http://localhost:8180` | Public Keycloak URL reachable by the browser (for login redirect) |
 | `APP_PUBLIC_URL` | keycloak-provision | `http://localhost:8080` | Public app URL — used to set oauth2-proxy redirect URIs in Keycloak |
-| `PROVISION_DEV_USERS` | keycloak-provision | `false` | Set to `true` to create dev users on startup (local only) |
+| `APP_ADMIN_USERNAME` | keycloak-provision | `admin` | Bootstrap platform admin username |
+| `APP_ADMIN_PASSWORD` | keycloak-provision | `password` | Bootstrap platform admin password — change before any non-local deployment |
 | `OAUTH2_PROXY_COOKIE_SECRET` | oauth2-proxy | *(required)* | Cookie encryption key — must be exactly 16, 24, or 32 characters |
 | `MINIO_ENDPOINT` | compliance-backend | `minio:9000` | In-cluster MinIO host:port for uploads (used inside the container) |
 | `MINIO_PUBLIC_ENDPOINT` | compliance-backend | `localhost:9000` | Public-facing MinIO host:port for presigning download URLs the browser can reach |
