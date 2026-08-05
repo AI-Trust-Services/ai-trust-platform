@@ -99,7 +99,7 @@ def ensure_admin_user(client: httpx.Client) -> None:
     print(f"Creating admin user '{APP_ADMIN_USERNAME}'...")
     client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", json={
         "username": APP_ADMIN_USERNAME,
-        "email": f"{APP_ADMIN_USERNAME}@local.dev",
+        "email": f"{APP_ADMIN_USERNAME}@local.dev",  # TODO: do we want to require a real email for the admin user? If yes, we will move it to env var.
         "emailVerified": True,
         "firstName": "Platform",
         "lastName": "Admin",
