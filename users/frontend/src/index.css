@@ -34,6 +34,7 @@ body {
 .filter-select {
   padding: 7px 10px; border: 1px solid #c9cdd4; border-radius: 6px;
   font-size: 13px; outline: none; background: #fff; color: #1d2d3e;
+  width: auto;
 }
 .filter-select:focus { border-color: #0a6ed1; }
 
@@ -193,8 +194,15 @@ input:focus, select:focus { border-color: #0a6ed1; }
   border-radius: 6px; font-size: 13px; margin-bottom: 16px;
 }
 
-/* ── Permission badge (monospace) ── */
-.perm-badge { font-family: monospace; font-size: 11px; }
+/* ── Roles grid ── */
+.roles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.role-card { background: #fff; border: 1px solid #e4e6e8; border-radius: 8px; overflow: hidden; }
+.role-card-header { padding: 16px 20px 12px; border-bottom: 1px solid #f0f1f2; }
+.role-card-name { font-size: 15px; font-weight: 600; color: #1d2d3e; margin-bottom: 4px; }
+.role-card-desc { font-size: 12px; color: #556b82; line-height: 1.5; }
+.perm-list { list-style: none; padding: 12px 20px; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.perm-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1d2d3e; }
+.perm-check { color: #2e7d32; font-size: 12px; flex-shrink: 0; }
 
 /* ── Empty ── */
 .empty { text-align: center; padding: 48px 24px; color: #556b82; }
