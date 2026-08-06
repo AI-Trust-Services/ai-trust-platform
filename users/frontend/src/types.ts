@@ -53,3 +53,22 @@ export interface UpdateUserRequest {
   phone?: string;
   preferredLanguage?: string;
 }
+
+export interface CustomRole {
+  id: string;
+  name: string;
+  description: string;
+  permissions: string[];
+  created_at: string;
+}
+
+export interface CustomRoleCreate {
+  name: string;
+  description: string;
+  permissions: string[];
+}
+
+export interface CustomRoleUpdate {
+  description?: string;
+  permissions?: string[];
+}
