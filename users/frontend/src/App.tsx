@@ -46,7 +46,7 @@ export default function App(): JSX.Element {
       {backendOk === false && (
         <div className="health-banner">
           Backend is unavailable. Retrying in 5s…{" "}
-          <a onClick={checkHealth}>Retry now</a>
+          <button className="health-retry-btn" onClick={checkHealth}>Retry now</button>
         </div>
       )}
       <div className="tab-bar">

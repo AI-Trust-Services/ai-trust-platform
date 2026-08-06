@@ -16,13 +16,14 @@ export default function RolesPage(): JSX.Element {
   const showToast = useToast();
   const [roles, setRoles] = useState<RoleInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.getRoleDetails()
-      .then(setRoles)
-      .catch(err => showToast(String(err), true))
+      .then(data => { setRoles(data); setError(null); })
+      .catch(err => setError(String(err)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [showToast]);
 
   return (
     <div className="page">
@@ -35,7 +36,15 @@ export default function RolesPage(): JSX.Element {
 
       {loading && <div className="empty">Loading…</div>}
 
-      {!loading && (
+      {!loading && error && (
+        <div className="error-banner">Failed to load roles: {error}</div>
+      )}
+
+      {!loading && !error && roles.length === 0 && (
+        <div className="empty">No roles found.</div>
+      )}
+
+      {!loading && !error && roles.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {roles.map(role => (
             <div key={role.name} className="table-wrap" style={{ padding: "16px 20px" }}>
@@ -44,7 +53,7 @@ export default function RolesPage(): JSX.Element {
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {role.permissions.map(p => (
-                  <span key={p} className="badge badge-role" style={{ fontFamily: "monospace", fontSize: 11 }}>{p}</span>
+                  <span key={p} className="badge badge-role perm-badge">{p}</span>
                 ))}
               </div>
             </div>

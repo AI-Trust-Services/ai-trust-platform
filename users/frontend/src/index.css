@@ -159,7 +159,10 @@ input:focus, select:focus { border-color: #0a6ed1; }
   background: #fce4e4; color: #8b0000; padding: 8px 16px;
   font-size: 13px; display: flex; align-items: center; gap: 8px;
 }
-.health-banner a { color: #0a6ed1; cursor: pointer; text-decoration: underline; }
+.health-retry-btn {
+  background: none; border: none; padding: 0; color: #0a6ed1;
+  cursor: pointer; text-decoration: underline; font-size: 13px;
+}
 
 /* ── Toast ── */
 .toast {
@@ -183,6 +186,15 @@ input:focus, select:focus { border-color: #0a6ed1; }
 }
 .tab:hover { color: #0a6ed1; }
 .tab-active { color: #0a6ed1; border-bottom-color: #0a6ed1; }
+
+/* ── Error banner ── */
+.error-banner {
+  background: #fce4e4; color: #8b0000; padding: 12px 16px;
+  border-radius: 6px; font-size: 13px; margin-bottom: 16px;
+}
+
+/* ── Permission badge (monospace) ── */
+.perm-badge { font-family: monospace; font-size: 11px; }
 
 /* ── Empty ── */
 .empty { text-align: center; padding: 48px 24px; color: #556b82; }
