@@ -15,18 +15,12 @@ from app.schemas import (
     UsersListResponse,
 )
 from ai_trust_authorization import openfga_client, require_permission
+from ai_trust_authorization.constants import BUILT_IN_ROLES
 
 router = APIRouter(prefix="/users", tags=["users"])
 logger = get_logger(__name__)
 
-MANAGED_ROLES = {
-    "platform_administrator",
-    "ai_engineer",
-    "business_owner",
-    "ai_compliance_officer",
-    "auditor",
-    "executive",
-}
+MANAGED_ROLES = set(BUILT_IN_ROLES)
 
 
 def _user_roles(user_id: str) -> list[str]:
@@ -62,6 +56,7 @@ def list_users(
     enabled: Optional[bool] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    _: str = Depends(require_permission("iam:manage")),
 ):
     params: dict = {"max": limit, "first": offset}
     if search:
@@ -83,7 +78,7 @@ def list_users(
 
 
 @router.post("", response_model=UserDetail, status_code=201)
-def invite_user(body: InviteUserRequest):
+def invite_user(body: InviteUserRequest, _: str = Depends(require_permission("iam:manage"))):
     payload = {
         "username": body.username,
         "email": body.email,
@@ -119,7 +114,7 @@ def invite_user(body: InviteUserRequest):
 
 
 @router.get("/{user_id}", response_model=UserDetail)
-def get_user(user_id: str):
+def get_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
     with admin_client() as kc:
         resp = kc.get(f"/users/{user_id}")
         if resp.status_code == 404:
@@ -129,7 +124,7 @@ def get_user(user_id: str):
 
 
 @router.put("/{user_id}", response_model=UserDetail)
-def update_user(user_id: str, body: UpdateUserRequest):
+def update_user(user_id: str, body: UpdateUserRequest, _: str = Depends(require_permission("iam:manage"))):
     with admin_client() as kc:
         existing_resp = kc.get(f"/users/{user_id}")
         if existing_resp.status_code == 404:
@@ -159,7 +154,7 @@ def update_user(user_id: str, body: UpdateUserRequest):
 
 
 @router.post("/{user_id}/deactivate", response_model=UserDetail)
-def deactivate_user(user_id: str):
+def deactivate_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
     with admin_client() as kc:
         existing_resp = kc.get(f"/users/{user_id}")
         if existing_resp.status_code == 404:
@@ -173,7 +168,7 @@ def deactivate_user(user_id: str):
 
 
 @router.post("/{user_id}/activate", response_model=UserDetail)
-def activate_user(user_id: str):
+def activate_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
     with admin_client() as kc:
         existing_resp = kc.get(f"/users/{user_id}")
         if existing_resp.status_code == 404:
@@ -187,7 +182,7 @@ def activate_user(user_id: str):
 
 
 @router.delete("/{user_id}", status_code=204)
-def delete_user(user_id: str):
+def delete_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
     with admin_client() as kc:
         resp = kc.delete(f"/users/{user_id}")
         if resp.status_code == 404:

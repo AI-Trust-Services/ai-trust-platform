@@ -421,9 +421,12 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `KEYCLOAK_ADMIN` | keycloak, keycloak-provision | `admin` | Keycloak admin username |
 | `KEYCLOAK_ADMIN_PASSWORD` | keycloak, keycloak-provision | `admin` | Keycloak admin password |
 | `KEYCLOAK_CLIENT_SECRET` | keycloak-provision, oauth2-proxy | *(required)* | Shared secret for the oauth2-proxy OIDC client |
+| `USERS_BACKEND_CLIENT_SECRET` | keycloak-provision, users-backend | *(required)* | Secret for the users-backend service account client in Keycloak |
 | `KEYCLOAK_PUBLIC_URL` | oauth2-proxy | `http://localhost:8180` | Public Keycloak URL reachable by the browser (for login redirect) |
 | `APP_PUBLIC_URL` | keycloak-provision | `http://localhost:8080` | Public app URL — used to set oauth2-proxy redirect URIs in Keycloak |
-| `PROVISION_DEV_USERS` | keycloak-provision | `false` | Set to `true` to create dev users on startup (local only) |
+| `PROVISION_DEV_USERS` | keycloak-provision, openfga-provision | `false` | Set to `true` to create dev users on startup (local only) |
+| `INITIAL_ADMIN_USER` | openfga-provision | *(empty)* | Username to seed as Platform Administrator in production (bootstrap first admin) |
+| `VITE_USERS_API_BASE` | users frontend (build time) | `/api/users/v1` | Users API URL baked into bundle |
 | `OAUTH2_PROXY_COOKIE_SECRET` | oauth2-proxy | *(required)* | Cookie encryption key — must be exactly 16, 24, or 32 characters |
 | `MINIO_ENDPOINT` | compliance-backend | `minio:9000` | In-cluster MinIO host:port for uploads (used inside the container) |
 | `MINIO_PUBLIC_ENDPOINT` | compliance-backend | `localhost:9000` | Public-facing MinIO host:port for presigning download URLs the browser can reach |

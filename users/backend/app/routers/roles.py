@@ -1,18 +1,12 @@
 from fastapi import APIRouter
 
+from ai_trust_authorization.constants import BUILT_IN_ROLES
 from app.keycloak import admin_client
 from app.schemas import RoleSummary
 
 router = APIRouter(prefix="/roles", tags=["roles"])
 
-MANAGED_ROLES = {
-    "platform_administrator",
-    "ai_engineer",
-    "business_owner",
-    "ai_compliance_officer",
-    "auditor",
-    "executive",
-}
+MANAGED_ROLES = set(BUILT_IN_ROLES)
 
 
 @router.get("", response_model=list[RoleSummary])
