@@ -31,6 +31,11 @@ body {
   font-size: 13px; width: 260px; outline: none;
 }
 .search-input:focus { border-color: #0a6ed1; }
+.filter-select {
+  padding: 7px 10px; border: 1px solid #c9cdd4; border-radius: 6px;
+  font-size: 13px; outline: none; background: #fff; color: #1d2d3e;
+}
+.filter-select:focus { border-color: #0a6ed1; }
 
 /* ── Table ── */
 .table-wrap { background: #fff; border: 1px solid #e4e6e8; border-radius: 8px; overflow: visible; }
@@ -43,6 +48,7 @@ thead th {
 tbody tr { border-bottom: 1px solid #f0f1f2; }
 tbody tr:last-child { border-bottom: none; }
 tbody tr:hover { background: #fafbfc; }
+tbody tr.clickable-row { cursor: pointer; }
 tbody td { padding: 10px 14px; font-size: 13px; vertical-align: middle; }
 
 /* ── Badges ── */
@@ -59,12 +65,13 @@ tbody td { padding: 10px 14px; font-size: 13px; vertical-align: middle; }
   padding: 7px 14px; border-radius: 6px; font-size: 13px; font-weight: 500;
   cursor: pointer; border: none; transition: background 0.12s;
 }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primary   { background: #0a6ed1; color: #fff; }
-.btn-primary:hover { background: #085caf; }
+.btn-primary:not(:disabled):hover { background: #085caf; }
 .btn-secondary { background: #fff; color: #1d2d3e; border: 1px solid #c9cdd4; }
-.btn-secondary:hover { background: #f5f6f7; }
+.btn-secondary:not(:disabled):hover { background: #f5f6f7; }
 .btn-danger    { background: #fff; color: #c62828; border: 1px solid #f5c6c6; }
-.btn-danger:hover { background: #fce4e4; }
+.btn-danger:not(:disabled):hover { background: #fce4e4; }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
 
 /* ── Action menu ── */
@@ -125,6 +132,7 @@ tbody td { padding: 10px 14px; font-size: 13px; vertical-align: middle; }
   background: #fff; border-radius: 10px; width: 480px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.15); overflow: hidden;
 }
+.modal.confirm-dialog { width: 360px; }
 .modal-header {
   padding: 20px 24px 16px; border-bottom: 1px solid #e4e6e8;
   display: flex; align-items: center; justify-content: space-between;
