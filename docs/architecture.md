@@ -8,7 +8,7 @@ ai-trust-platform/
 │   └── keycloak/                 ← Keycloak provisioning
 │       ├── Dockerfile            ← one-shot provision container
 │       ├── init.sh               ← creates keycloak DB in PostgreSQL on first boot
-│       └── provision.py          ← idempotent Admin API script (realm, client, dev users)
+│       └── provision.py          ← idempotent Admin API script (realm, client, bootstrap admin user)
 ├── libs/
 │   ├── persistence/              ← shared Python package (models, migrations, DB session)
 │   │   ├── Dockerfile            ← one-shot migration container
@@ -165,7 +165,7 @@ flowchart TD
     DTABackend["decision-trace-analyzer-backend\n(healthy)"]
     DTAFrontend["decision-trace-analyzer-frontend\n(service_started)"]
     KC["keycloak :8180\n(healthy)"]
-    KCProv["keycloak-provision\ncreates realm, client, dev users\nthen exits"]
+    KCProv["keycloak-provision\ncreates realm, client, bootstrap admin\nthen exits"]
     OP["oauth2-proxy :8080\nsingle entry point"]
     Shell["shell\n(nginx reverse proxy)"]
     RMQ["rabbitmq\n(healthy)"]
@@ -224,7 +224,7 @@ flowchart TD
 
 `minio-init` is a one-shot container that creates the `clickhouse` and `evidence-files` buckets in MinIO on first startup. ClickHouse depends on it completing before it starts, ensuring the bucket exists before any data part moves to cold storage.
 
-`keycloak-provision` is a one-shot container built from `infra/keycloak/Dockerfile`. It uses the Keycloak Admin REST API to idempotently configure the `ai-trust` realm, the `oauth2-proxy` OIDC client, and (when `PROVISION_DEV_USERS=true`) the four dev users. oauth2-proxy depends on it completing successfully before starting.
+`keycloak-provision` is a one-shot container built from `infra/keycloak/Dockerfile`. It uses the Keycloak Admin REST API to idempotently configure the `ai-trust` realm, the `oauth2-proxy` OIDC client, and the bootstrap admin user (credentials from `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD`). oauth2-proxy depends on it completing successfully before starting.
 
 **If db-migrate fails:** check logs with `docker compose logs db-migrate`. Common causes: postgres not ready (retry `docker compose up db-migrate`), or a bad migration file. Fix the migration, then re-run with `docker compose up --build db-migrate`. The backend will not start until db-migrate exits successfully.
 
