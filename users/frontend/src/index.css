@@ -221,7 +221,8 @@ input:focus, select:focus { border-color: #0a6ed1; }
 
 /* ── Custom role modal ── */
 .custom-role-modal { width: 560px; max-height: 90vh; display: flex; flex-direction: column; }
-.custom-role-modal .modal-body { overflow-y: auto; }
+.custom-role-modal form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.custom-role-modal .modal-body { overflow-y: auto; flex: 1; min-height: 0; }
 .perm-groups { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
 .perm-group { border: 1px solid #e4e6e8; border-radius: 6px; overflow: hidden; }
 .perm-group-header {

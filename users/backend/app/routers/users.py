@@ -24,6 +24,17 @@ router = APIRouter(prefix="/users", tags=["users"])
 logger = get_logger(__name__)
 
 MANAGED_ROLES = set(BUILT_IN_ROLES)
+_KEYCLOAK_DEFAULT_ROLE = "default-roles-ai-trust"
+
+
+async def _is_valid_role(role_name: str) -> bool:
+    if role_name in MANAGED_ROLES:
+        return True
+    async with SessionLocal() as session:
+        custom = (await session.execute(
+            select(CustomRole).where(CustomRole.name == role_name)
+        )).scalar_one_or_none()
+    return custom is not None
 
 
 def _user_roles(user_id: str) -> list[str]:
@@ -31,7 +42,7 @@ def _user_roles(user_id: str) -> list[str]:
         resp = kc.get(f"/users/{user_id}/role-mappings/realm")
         if not resp.is_success:
             return []
-        return [r["name"] for r in resp.json() if r["name"] in MANAGED_ROLES]
+        return [r["name"] for r in resp.json() if r["name"] != _KEYCLOAK_DEFAULT_ROLE]
 
 
 def _to_summary(u: dict) -> UserSummary:
@@ -195,14 +206,8 @@ def delete_user(user_id: str, _: str = Depends(require_permission("iam:manage"))
 
 @router.post("/{user_id}/roles/{role_name}", response_model=UserDetail)
 async def assign_role(user_id: str, role_name: str, _: str = Depends(require_permission("iam:manage"))):
-    # Accept built-in roles and any existing custom role
-    if role_name not in MANAGED_ROLES:
-        async with SessionLocal() as session:
-            custom = (await session.execute(
-                select(CustomRole).where(CustomRole.name == role_name)
-            )).scalar_one_or_none()
-        if not custom:
-            raise HTTPException(400, f"Unknown role '{role_name}'.")
+    if not await _is_valid_role(role_name):
+        raise HTTPException(400, f"Unknown role '{role_name}'.")
 
     with admin_client() as kc:
         role_resp = kc.get(f"/roles/{role_name}")
@@ -210,7 +215,6 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
             raise HTTPException(404, f"Role '{role_name}' not found in Keycloak.")
         role_resp.raise_for_status()
 
-        # Single-role invariant: remove all existing realm roles first
         user_resp = kc.get(f"/users/{user_id}")
         if user_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
@@ -220,7 +224,13 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
             raise HTTPException(500, "Keycloak returned a user without a username.")
 
         existing_roles = kc.get(f"/users/{user_id}/role-mappings/realm").json()
-        managed = [r for r in existing_roles if r["name"] in MANAGED_ROLES]
+        managed = [r for r in existing_roles if r["name"] != _KEYCLOAK_DEFAULT_ROLE]
+
+        # Guard: don't demote the last platform_administrator
+        if any(r["name"] == "platform_administrator" for r in managed) and role_name != "platform_administrator":
+            pa_members = await openfga_client.read_role_members("role:platform_administrator")
+            if len(pa_members) <= 1:
+                raise HTTPException(409, "Cannot reassign the last platform administrator.")
 
     # Write OpenFGA first — if Keycloak fails after, user has no Keycloak role
     # so they get no access (safe failure mode). Reverse order would silently
@@ -252,7 +262,7 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
 
 @router.delete("/{user_id}/roles/{role_name}", response_model=UserDetail)
 async def remove_role(user_id: str, role_name: str, _: str = Depends(require_permission("iam:manage"))):
-    if role_name not in MANAGED_ROLES:
+    if not await _is_valid_role(role_name):
         raise HTTPException(400, f"Unknown role '{role_name}'.")
     with admin_client() as kc:
         role_resp = kc.get(f"/roles/{role_name}")

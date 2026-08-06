@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "../App";
 import { api } from "../api/client";
 import type { CustomRole, CustomRoleCreate } from "../types";
@@ -42,6 +42,11 @@ export function CustomRoleModal({ role, onClose, onSaved }: Props) {
   const [permissions, setPermissions] = useState<Set<string>>(
     new Set(role?.permissions ?? [])
   );
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
 
   function togglePermission(p: string) {
     setPermissions(prev => {

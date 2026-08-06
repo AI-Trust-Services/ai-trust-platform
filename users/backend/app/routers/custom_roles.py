@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -41,14 +41,14 @@ class CustomRoleResponse(BaseModel):
     id: str
     name: str
     description: str
-    permissions: list[str]
+    permissions: list[str] = []
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
 def _role_object(name: str) -> str:
-    return f"role:{name}"
+    return f"role:{name.replace(' ', '_')}"
 
 
 def _validate_permissions(permissions: list[str]) -> None:
@@ -60,12 +60,17 @@ def _validate_permissions(permissions: list[str]) -> None:
 async def _get_role_permissions(role_name: str) -> list[str]:
     """Read current permission tuples for a role from OpenFGA."""
     from openfga_sdk.models.read_request_tuple_key import ReadRequestTupleKey
+    target_user = f"{_role_object(role_name)}#member"
     async with openfga_client.get_client() as client:
-        body = ReadRequestTupleKey(user=f"role:{role_name}#member", object=PLATFORM_OBJECT)
+        body = ReadRequestTupleKey(object=PLATFORM_OBJECT)
         response = await client.read(body)
         tuples = response.tuples or []
     relation_to_perm = {v: k for k, v in RELATION_BY_PERMISSION.items()}
-    return [relation_to_perm[t.key.relation] for t in tuples if t.key.relation in relation_to_perm]
+    return [
+        relation_to_perm[t.key.relation]
+        for t in tuples
+        if t.key.user == target_user and t.key.relation in relation_to_perm
+    ]
 
 
 async def _set_role_permissions(role_name: str, permissions: list[str]) -> None:
@@ -73,13 +78,14 @@ async def _set_role_permissions(role_name: str, permissions: list[str]) -> None:
     existing = await _get_role_permissions(role_name)
     to_remove = set(existing) - set(permissions)
     to_add = set(permissions) - set(existing)
+    role_user = f"{_role_object(role_name)}#member"
     for p in to_remove:
         await openfga_client.delete_tuple(
-            f"role:{role_name}#member", RELATION_BY_PERMISSION[p], PLATFORM_OBJECT
+            role_user, RELATION_BY_PERMISSION[p], PLATFORM_OBJECT
         )
     for p in to_add:
         await openfga_client.write_tuple(
-            f"role:{role_name}#member", RELATION_BY_PERMISSION[p], PLATFORM_OBJECT
+            role_user, RELATION_BY_PERMISSION[p], PLATFORM_OBJECT
         )
 
 
@@ -172,7 +178,7 @@ async def create_custom_role(
                 await session.commit()
         raise
 
-    logger.info("custom_role.created", extra={"role_id": row.id, "name": body.name})
+    logger.info("custom_role.created", extra={"role_id": row.id, "role_name": body.name})
     result = CustomRoleResponse.model_validate(row)
     result.permissions = body.permissions
     return result
@@ -201,17 +207,17 @@ async def update_custom_role(
         await _set_role_permissions(row.name, body.permissions)
 
     permissions = await _get_role_permissions(row.name)
-    logger.info("custom_role.updated", extra={"role_id": role_id, "name": row.name})
+    logger.info("custom_role.updated", extra={"role_id": role_id, "role_name": row.name})
     result = CustomRoleResponse.model_validate(row)
     result.permissions = permissions
     return result
 
 
-@router.delete("/custom-roles/{role_id}", status_code=204)
+@router.delete("/custom-roles/{role_id}")
 async def delete_custom_role(
     role_id: str,
     _: str = Depends(require_permission("iam:manage")),
-) -> None:
+) -> Response:
     async with SessionLocal() as session:
         row = (await session.execute(
             select(CustomRole).where(CustomRole.id == role_id)
@@ -233,4 +239,5 @@ async def delete_custom_role(
             await session.delete(row)
             await session.commit()
 
-    logger.info("custom_role.deleted", extra={"role_id": role_id, "name": name})
+    logger.info("custom_role.deleted", extra={"role_id": role_id, "role_name": name})
+    return Response(status_code=204)

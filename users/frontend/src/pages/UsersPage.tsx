@@ -154,7 +154,7 @@ export default function UsersPage(): JSX.Element {
             <tr>
               <th>User</th>
               <th>Username</th>
-              <th>Role(s)</th>
+              <th>Role</th>
               <th>Status</th>
               <th style={{ width: 48 }}></th>
             </tr>
