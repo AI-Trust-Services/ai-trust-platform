@@ -1,7 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useToast } from "../App";
 import { api } from "../api/client";
-import type { InviteUserRequest, RoleSummary, UpdateUserRequest, UserDetail, UserSummary } from "../types";
+import { InviteModal } from "../components/InviteModal";
+import { UserDetailPanel } from "../components/UserDetailPanel";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import type { RoleSummary, UserDetail, UserSummary } from "../types";
 
 const ROLE_LABELS: Record<string, string> = {
   platform_administrator: "Platform Administrator",
@@ -14,363 +17,6 @@ const ROLE_LABELS: Record<string, string> = {
 
 const PAGE_SIZE = 10;
 
-// ── Invite modal ─────────────────────────────────────────────────────────────
-
-function InviteModal({ roles, onClose, onCreated }: {
-  roles: RoleSummary[];
-  onClose: () => void;
-  onCreated: (u: UserDetail) => void;
-}) {
-  const showToast = useToast();
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<InviteUserRequest>({
-    username: "", email: "", firstName: "", lastName: "",
-    department: "", businessUnit: "", jobTitle: "", phone: "",
-    preferredLanguage: "", temporaryPassword: "",
-  });
-  const [role, setRole] = useState("");
-
-  function set(key: keyof InviteUserRequest) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm(f => ({ ...f, [key]: e.target.value }));
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const user = await api.inviteUser(form);
-      if (role) await api.assignRole(user.id, role);
-      onCreated(user);
-      showToast("User created.");
-    } catch (err) {
-      showToast(String(err), true);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">Invite User</span>
-          <button className="panel-close" onClick={onClose}>×</button>
-        </div>
-        <form onSubmit={submit}>
-          <div className="modal-body">
-            <div className="field-row">
-              <div className="field">
-                <label>First name *</label>
-                <input required value={form.firstName} onChange={set("firstName")} />
-              </div>
-              <div className="field">
-                <label>Last name *</label>
-                <input required value={form.lastName} onChange={set("lastName")} />
-              </div>
-            </div>
-            <div className="field-row">
-              <div className="field">
-                <label>Username *</label>
-                <input required value={form.username} onChange={set("username")} />
-              </div>
-              <div className="field">
-                <label>Email *</label>
-                <input required type="email" value={form.email} onChange={set("email")} />
-              </div>
-            </div>
-            <div className="field-row">
-              <div className="field">
-                <label>Job title</label>
-                <input value={form.jobTitle} onChange={set("jobTitle")} />
-              </div>
-              <div className="field">
-                <label>Department</label>
-                <input value={form.department} onChange={set("department")} />
-              </div>
-            </div>
-            <div className="field-row">
-              <div className="field">
-                <label>Business unit</label>
-                <input value={form.businessUnit} onChange={set("businessUnit")} />
-              </div>
-              <div className="field">
-                <label>Phone</label>
-                <input value={form.phone} onChange={set("phone")} />
-              </div>
-            </div>
-            <div className="field-row">
-              <div className="field">
-                <label>Role</label>
-                <select value={role} onChange={e => setRole(e.target.value)}>
-                  <option value="">— none —</option>
-                  {roles.map(r => (
-                    <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] ?? r.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label>Temporary password *</label>
-                <input required type="password" value={form.temporaryPassword} onChange={set("temporaryPassword")} />
-              </div>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? "Creating…" : "Create user"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ── Edit modal ────────────────────────────────────────────────────────────────
-
-function EditModal({ user, onClose, onSaved }: {
-  user: UserDetail;
-  onClose: () => void;
-  onSaved: (u: UserDetail) => void;
-}) {
-  const showToast = useToast();
-  const [saving, setSaving] = useState(false);
-  const attr = (key: string) => user.attributes[key]?.[0] ?? "";
-  const [form, setForm] = useState<UpdateUserRequest>({
-    firstName: user.firstName,
-    lastName: user.lastName,
-    email: user.email,
-    jobTitle: attr("jobTitle"),
-    department: attr("department"),
-    businessUnit: attr("businessUnit"),
-    phone: attr("phone"),
-  });
-
-  function set(key: keyof UpdateUserRequest) {
-    return (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm(f => ({ ...f, [key]: e.target.value }));
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const updated = await api.updateUser(user.id, form);
-      onSaved(updated);
-      showToast("User updated.");
-    } catch (err) {
-      showToast(String(err), true);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">Edit User</span>
-          <button className="panel-close" onClick={onClose}>×</button>
-        </div>
-        <form onSubmit={submit}>
-          <div className="modal-body">
-            <div className="field-row">
-              <div className="field">
-                <label>First name</label>
-                <input value={form.firstName ?? ""} onChange={set("firstName")} />
-              </div>
-              <div className="field">
-                <label>Last name</label>
-                <input value={form.lastName ?? ""} onChange={set("lastName")} />
-              </div>
-            </div>
-            <div className="field">
-              <label>Email</label>
-              <input type="email" value={form.email ?? ""} onChange={set("email")} />
-            </div>
-            <div className="field-row">
-              <div className="field">
-                <label>Job title</label>
-                <input value={form.jobTitle ?? ""} onChange={set("jobTitle")} />
-              </div>
-              <div className="field">
-                <label>Department</label>
-                <input value={form.department ?? ""} onChange={set("department")} />
-              </div>
-            </div>
-            <div className="field-row">
-              <div className="field">
-                <label>Business unit</label>
-                <input value={form.businessUnit ?? ""} onChange={set("businessUnit")} />
-              </div>
-              <div className="field">
-                <label>Phone</label>
-                <input value={form.phone ?? ""} onChange={set("phone")} />
-              </div>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? "Saving…" : "Save changes"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ── Detail panel ──────────────────────────────────────────────────────────────
-
-function DetailPanel({ user, roles, onClose, onUpdated, onDeleted }: {
-  user: UserDetail;
-  roles: RoleSummary[];
-  onClose: () => void;
-  onUpdated: (u: UserDetail) => void;
-  onDeleted: (id: string) => void;
-}) {
-  const showToast = useToast();
-  const [working, setWorking] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [addRole, setAddRole] = useState("");
-  const attr = (key: string) => user.attributes[key]?.[0] ?? "—";
-
-  async function toggle() {
-    setWorking(true);
-    try {
-      const updated = user.enabled ? await api.deactivateUser(user.id) : await api.activateUser(user.id);
-      onUpdated(updated);
-      showToast(updated.enabled ? "User activated." : "User deactivated.");
-    } catch (err) {
-      showToast(String(err), true);
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function remove() {
-    if (!confirm(`Delete ${user.username}? This cannot be undone.`)) return;
-    setWorking(true);
-    try {
-      await api.deleteUser(user.id);
-      onDeleted(user.id);
-      showToast("User deleted.");
-    } catch (err) {
-      showToast(String(err), true);
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function handleAssignRole() {
-    if (!addRole) return;
-    setWorking(true);
-    try {
-      const updated = await api.assignRole(user.id, addRole);
-      onUpdated(updated);
-      setAddRole("");
-      showToast("Role assigned.");
-    } catch (err) {
-      showToast(String(err), true);
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function handleRemoveRole(roleName: string) {
-    setWorking(true);
-    try {
-      const updated = await api.removeRole(user.id, roleName);
-      onUpdated(updated);
-      showToast("Role removed.");
-    } catch (err) {
-      showToast(String(err), true);
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  const availableRoles = roles.filter(r => !user.roles.includes(r.name));
-
-  return (
-    <>
-      <div className="panel-overlay" onClick={onClose} />
-      <div className="panel">
-        <div className="panel-header">
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 16 }}>{user.firstName} {user.lastName}</div>
-            <div style={{ fontSize: 12, color: "#556b82", marginTop: 2 }}>{user.email}</div>
-          </div>
-          <button className="panel-close" onClick={onClose}>×</button>
-        </div>
-        <div className="panel-body">
-          <div className="panel-section">
-            <div className="panel-section-title">User Information</div>
-            <div className="panel-row"><span className="panel-label">Username</span><span className="panel-value">{user.username}</span></div>
-            <div className="panel-row"><span className="panel-label">Job title</span><span className="panel-value">{attr("jobTitle")}</span></div>
-            <div className="panel-row"><span className="panel-label">Department</span><span className="panel-value">{attr("department")}</span></div>
-            <div className="panel-row"><span className="panel-label">Business unit</span><span className="panel-value">{attr("businessUnit")}</span></div>
-            <div className="panel-row"><span className="panel-label">Phone</span><span className="panel-value">{attr("phone")}</span></div>
-          </div>
-          <div className="panel-section">
-            <div className="panel-section-title">Account Status</div>
-            <div className="panel-row">
-              <span className="panel-label">Status</span>
-              <span className="panel-value">
-                <span className={`badge ${user.enabled ? "badge-active" : "badge-inactive"}`}>
-                  {user.enabled ? "Active" : "Inactive"}
-                </span>
-              </span>
-            </div>
-            <div className="panel-row"><span className="panel-label">Email verified</span><span className="panel-value">{user.emailVerified ? "Yes" : "No"}</span></div>
-          </div>
-          <div className="panel-section">
-            <div className="panel-section-title">Roles</div>
-            {user.roles.length === 0 && <div style={{ color: "#556b82", fontSize: 13 }}>No roles assigned.</div>}
-            {user.roles.map(r => (
-              <div key={r} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <span className="badge badge-role">{ROLE_LABELS[r] ?? r}</span>
-                <button className="btn btn-sm btn-danger" onClick={() => handleRemoveRole(r)} disabled={working}>Remove</button>
-              </div>
-            ))}
-            {availableRoles.length > 0 && (
-              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                <select value={addRole} onChange={e => setAddRole(e.target.value)} style={{ flex: 1 }}>
-                  <option value="">Add role…</option>
-                  {availableRoles.map(r => (
-                    <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] ?? r.name}</option>
-                  ))}
-                </select>
-                <button className="btn btn-primary btn-sm" onClick={handleAssignRole} disabled={!addRole || working}>
-                  Assign
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="panel-footer">
-          <button className="btn btn-secondary" onClick={() => setEditOpen(true)} disabled={working}>Edit</button>
-          <button className="btn btn-secondary" onClick={toggle} disabled={working}>
-            {user.enabled ? "Deactivate" : "Activate"}
-          </button>
-          <button className="btn btn-danger" onClick={remove} disabled={working}>Delete</button>
-        </div>
-      </div>
-      {editOpen && (
-        <EditModal
-          user={user}
-          onClose={() => setEditOpen(false)}
-          onSaved={u => { onUpdated(u); setEditOpen(false); }}
-        />
-      )}
-    </>
-  );
-}
-
-// ── Main page ─────────────────────────────────────────────────────────────────
-
 export default function UsersPage(): JSX.Element {
   const showToast = useToast();
   const [users, setUsers] = useState<UserSummary[]>([]);
@@ -378,14 +24,16 @@ export default function UsersPage(): JSX.Element {
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"" | "true" | "false">("");
   const [page, setPage] = useState(0);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserSummary | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(async (q: string, p: number) => {
+  const load = useCallback(async (q: string, p: number, status: string) => {
     setLoading(true);
     try {
       const params: Record<string, string> = {
@@ -393,6 +41,7 @@ export default function UsersPage(): JSX.Element {
         offset: String(p * PAGE_SIZE),
       };
       if (q) params.search = q;
+      if (status) params.enabled = status;
       const res = await api.getUsers(params);
       setUsers(res.users);
       setTotal(res.total);
@@ -407,19 +56,30 @@ export default function UsersPage(): JSX.Element {
     api.getRoles().then(setRoles).catch(() => {});
   }, []);
 
+  // Debounce search; reset to page 0
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => { setPage(0); load(search, 0); }, 300);
+    searchTimer.current = setTimeout(() => {
+      setPage(0);
+      load(search, 0, statusFilter);
+    }, 300);
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
-  }, [search, load]);
+  }, [search, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { load(search, page); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(search, page, statusFilter); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = () => setOpenMenuId(null);
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [openMenuId]);
 
   async function openDetail(id: string) {
     setSelectedId(id);
     try {
-      const u = await api.getUser(id);
-      setSelectedUser(u);
+      setSelectedUser(await api.getUser(id));
     } catch (err) {
       showToast(String(err), true);
       setSelectedId(null);
@@ -428,18 +88,27 @@ export default function UsersPage(): JSX.Element {
 
   function handleUpdated(u: UserDetail) {
     setSelectedUser(u);
-    setUsers(prev => prev.map(x => x.id === u.id ? u : x));
+    setUsers(prev => prev.map((x: UserSummary) => x.id === u.id ? (u as UserSummary) : x));
   }
 
   function handleDeleted(id: string) {
     setSelectedUser(null);
     setSelectedId(null);
-    setUsers(prev => prev.filter(x => x.id !== id));
-    setTotal(t => t - 1);
+    setUsers(prev => prev.filter((x: UserSummary) => x.id !== id));
+    setTotal((t: number) => t - 1);
   }
 
-  const active = users.filter(u => u.enabled).length;
-  const inactive = users.filter(u => !u.enabled).length;
+  async function confirmDelete(user: UserSummary) {
+    setDeleteTarget(null);
+    try {
+      await api.deleteUser(user.id);
+      handleDeleted(user.id);
+      showToast("User deleted.");
+    } catch (err) {
+      showToast(String(err), true);
+    }
+  }
+
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
@@ -453,18 +122,36 @@ export default function UsersPage(): JSX.Element {
       </div>
 
       <div className="kpi-row">
-        <div className="kpi-card"><div className="kpi-label">Total Users</div><div className="kpi-value">{total}</div></div>
-        <div className="kpi-card"><div className="kpi-label">Active</div><div className="kpi-value">{active}</div></div>
-        <div className="kpi-card"><div className="kpi-label">Inactive</div><div className="kpi-value">{inactive}</div></div>
+        <div className="kpi-card">
+          <div className="kpi-label">Total Users</div>
+          <div className="kpi-value">{total}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Active (page)</div>
+          <div className="kpi-value">{users.filter(u => u.enabled).length}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Inactive (page)</div>
+          <div className="kpi-value">{users.filter(u => !u.enabled).length}</div>
+        </div>
       </div>
 
       <div className="toolbar">
         <input
           className="search-input"
-          placeholder="Search by name or email…"
+          placeholder="Search by name, username or email…"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
+        <select
+          className="filter-select"
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value as "" | "true" | "false")}
+        >
+          <option value="">All statuses</option>
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
       </div>
 
       <div className="table-wrap">
@@ -472,10 +159,10 @@ export default function UsersPage(): JSX.Element {
           <thead>
             <tr>
               <th>User</th>
-              <th>Email</th>
+              <th>Username</th>
               <th>Role(s)</th>
               <th>Status</th>
-              <th>Actions</th>
+              <th style={{ width: 48 }}></th>
             </tr>
           </thead>
           <tbody>
@@ -486,9 +173,12 @@ export default function UsersPage(): JSX.Element {
               <tr><td colSpan={5} className="empty">No users found.</td></tr>
             )}
             {!loading && users.map(u => (
-              <tr key={u.id} style={{ cursor: "pointer" }} onClick={() => openDetail(u.id)}>
-                <td style={{ fontWeight: 500 }}>{u.firstName} {u.lastName}</td>
-                <td style={{ color: "#556b82" }}>{u.email}</td>
+              <tr key={u.id} className="clickable-row" onClick={() => openDetail(u.id)}>
+                <td>
+                  <div style={{ fontWeight: 500 }}>{u.firstName} {u.lastName}</div>
+                  <div style={{ fontSize: 12, color: "#556b82" }}>{u.email}</div>
+                </td>
+                <td style={{ color: "#556b82" }}>{u.username}</td>
                 <td>
                   {u.roles.length === 0
                     ? <span style={{ color: "#aab4be" }}>—</span>
@@ -503,19 +193,24 @@ export default function UsersPage(): JSX.Element {
                   </span>
                 </td>
                 <td className="action-cell" onClick={e => e.stopPropagation()}>
-                  <button className="kebab-btn" onClick={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}>⋯</button>
+                  <button
+                    className="kebab-btn"
+                    aria-label="Actions"
+                    onClick={e => { e.stopPropagation(); setOpenMenuId(openMenuId === u.id ? null : u.id); }}
+                  >
+                    ⋯
+                  </button>
                   {openMenuId === u.id && (
                     <div className="dropdown">
-                      <button className="dropdown-item" onClick={() => { openDetail(u.id); setOpenMenuId(null); }}>View details</button>
-                      <button className="dropdown-item danger" onClick={async () => {
-                        setOpenMenuId(null);
-                        if (!confirm(`Delete ${u.username}?`)) return;
-                        try {
-                          await api.deleteUser(u.id);
-                          handleDeleted(u.id);
-                          showToast("User deleted.");
-                        } catch (err) { showToast(String(err), true); }
-                      }}>Delete</button>
+                      <button className="dropdown-item" onClick={() => { openDetail(u.id); setOpenMenuId(null); }}>
+                        View details
+                      </button>
+                      <button
+                        className="dropdown-item danger"
+                        onClick={() => { setOpenMenuId(null); setDeleteTarget(u); }}
+                      >
+                        Delete
+                      </button>
                     </div>
                   )}
                 </td>
@@ -539,19 +234,27 @@ export default function UsersPage(): JSX.Element {
           onClose={() => setInviteOpen(false)}
           onCreated={u => {
             setInviteOpen(false);
-            load(search, page);
+            load(search, page, statusFilter);
             openDetail(u.id);
           }}
         />
       )}
 
       {selectedId && selectedUser && (
-        <DetailPanel
+        <UserDetailPanel
           user={selectedUser}
           roles={roles}
           onClose={() => { setSelectedUser(null); setSelectedId(null); }}
           onUpdated={handleUpdated}
           onDeleted={handleDeleted}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          message={`Delete ${deleteTarget.username}? This cannot be undone.`}
+          onConfirm={() => confirmDelete(deleteTarget)}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </div>
