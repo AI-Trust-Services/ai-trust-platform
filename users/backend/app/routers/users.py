@@ -4,6 +4,7 @@ import json as _json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 
 from app.keycloak import admin_client
 from ai_trust_logging import get_logger
@@ -16,6 +17,8 @@ from app.schemas import (
 )
 from ai_trust_authorization import openfga_client, require_permission
 from ai_trust_authorization.constants import BUILT_IN_ROLES
+from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.models.custom_role import CustomRole
 
 router = APIRouter(prefix="/users", tags=["users"])
 logger = get_logger(__name__)
@@ -192,13 +195,22 @@ def delete_user(user_id: str, _: str = Depends(require_permission("iam:manage"))
 
 @router.post("/{user_id}/roles/{role_name}", response_model=UserDetail)
 async def assign_role(user_id: str, role_name: str, _: str = Depends(require_permission("iam:manage"))):
+    # Accept built-in roles and any existing custom role
     if role_name not in MANAGED_ROLES:
-        raise HTTPException(400, f"Unknown role '{role_name}'.")
+        async with SessionLocal() as session:
+            custom = (await session.execute(
+                select(CustomRole).where(CustomRole.name == role_name)
+            )).scalar_one_or_none()
+        if not custom:
+            raise HTTPException(400, f"Unknown role '{role_name}'.")
+
     with admin_client() as kc:
         role_resp = kc.get(f"/roles/{role_name}")
         if role_resp.status_code == 404:
             raise HTTPException(404, f"Role '{role_name}' not found in Keycloak.")
         role_resp.raise_for_status()
+
+        # Single-role invariant: remove all existing realm roles first
         user_resp = kc.get(f"/users/{user_id}")
         if user_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
@@ -207,17 +219,33 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
         if not username:
             raise HTTPException(500, "Keycloak returned a user without a username.")
 
+        existing_roles = kc.get(f"/users/{user_id}/role-mappings/realm").json()
+        managed = [r for r in existing_roles if r["name"] in MANAGED_ROLES]
+
     # Write OpenFGA first — if Keycloak fails after, user has no Keycloak role
     # so they get no access (safe failure mode). Reverse order would silently
     # break permissions: Keycloak role present but no OpenFGA tuple → 403 on all checks.
+    # Single-role invariant: remove existing FGA memberships before writing new one.
+    existing_fga_roles = await openfga_client.read_user_roles(f"user:{username}")
+    for role_obj in existing_fga_roles:
+        await openfga_client.delete_tuple(f"user:{username}", "member", role_obj)
     await openfga_client.write_tuple(f"user:{username}", "member", f"role:{role_name}")
+
     with admin_client() as kc:
+        if managed:
+            kc.request(
+                "DELETE",
+                f"/users/{user_id}/role-mappings/realm",
+                content=_json.dumps(managed),
+                headers={"Content-Type": "application/json"},
+            ).raise_for_status()
         kc.post(
             f"/users/{user_id}/role-mappings/realm",
             json=[role_resp.json()],
         ).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()
+
     logger.info("user.role_assigned", extra={"username": username, "role": role_name})
     return _to_detail(updated.json())
 
