@@ -7,8 +7,7 @@ Steps:
   1. Find (or create) the store named "ai-trust".
   2. Write the authorization model (flat RBAC against platform:global).
   3. Seed role→permission tuples for all built-in roles.
-  4. If PROVISION_DEV_USERS=true, assign user:admin the platform_administrator role.
-     Additionally, if INITIAL_ADMIN_USER is set, assign it platform_administrator.
+  4. If INITIAL_ADMIN_USER is set, assign it the platform_administrator role.
   5. Write the store ID to /config/store_id on the shared volume so backends
      can read it on startup.
 
@@ -18,8 +17,7 @@ Required env vars:
 Optional env vars:
   OPENFGA_STORE_NAME     store name (default "ai-trust")
   OPENFGA_STORE_ID_FILE  path to write store ID (default /config/store_id)
-  PROVISION_DEV_USERS    "true" to seed user:admin as platform_administrator (local only)
-  INITIAL_ADMIN_USER     username to seed as platform_administrator (production)
+  INITIAL_ADMIN_USER     username to seed as platform_administrator
 """
 import asyncio
 import os
@@ -41,7 +39,6 @@ from ai_trust_authorization.constants import (
 OPENFGA_URL = os.environ["OPENFGA_URL"]
 STORE_NAME = os.environ.get("OPENFGA_STORE_NAME", "ai-trust")
 STORE_ID_FILE = os.environ.get("OPENFGA_STORE_ID_FILE", "/config/store_id")
-PROVISION_DEV_USERS = os.environ.get("PROVISION_DEV_USERS", "false").lower() == "true"
 INITIAL_ADMIN_USER = os.environ.get("INITIAL_ADMIN_USER", "").strip()
 
 # platform:global split into (type, id) for tuple objects.
@@ -138,23 +135,16 @@ async def seed_role_tuples(client: OpenFgaClient) -> None:
 
 
 async def seed_admin_users(client: OpenFgaClient) -> None:
-    """Assign platform_administrator membership to bootstrap admin users."""
-    admins = []
-    if PROVISION_DEV_USERS:
-        admins.append("admin")
-    if INITIAL_ADMIN_USER:
-        admins.append(INITIAL_ADMIN_USER)
-
-    if not admins:
-        print("No bootstrap admin users to seed (set PROVISION_DEV_USERS or INITIAL_ADMIN_USER).")
+    """Assign platform_administrator membership to the bootstrap admin user."""
+    if not INITIAL_ADMIN_USER:
+        print("No bootstrap admin user to seed (INITIAL_ADMIN_USER not set).")
         return
 
     tuples = [
-        ClientTuple(user=f"user:{name}", relation="member", object="role:platform_administrator")
-        for name in admins
+        ClientTuple(user=f"user:{INITIAL_ADMIN_USER}", relation="member", object="role:platform_administrator")
     ]
     await _write_tuples_idempotent(client, tuples, label="admin assignment")
-    print(f"Seeded platform_administrator for: {', '.join(admins)}")
+    print(f"Seeded platform_administrator for: {INITIAL_ADMIN_USER}")
 
 
 async def _write_tuples_idempotent(

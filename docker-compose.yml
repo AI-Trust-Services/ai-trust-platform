@@ -114,7 +114,6 @@ services:
       dockerfile: infra/openfga-provision/Dockerfile
     environment:
       <<: *openfga-env
-      PROVISION_DEV_USERS: ${PROVISION_DEV_USERS:-false}
       INITIAL_ADMIN_USER: ${APP_ADMIN_USERNAME}
     volumes:
       - openfga-config:/config
