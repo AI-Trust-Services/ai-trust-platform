@@ -125,16 +125,12 @@ async def read_role_members(role_object: str) -> list[str]:
 async def read_user_roles(user: str) -> list[str]:
     """Return the role objects (e.g. 'role:auditor') a user is a member of.
 
-    Iterates over BUILT_IN_ROLES individually rather than using the type-prefix
-    syntax (`object="role:"`) which openfga_sdk 0.10.x may reject for objects
-    with an empty ID segment.
+    Uses list_objects (single round-trip) instead of iterating over every role
+    and calling read_role_members per role — O(1) vs O(roles).
     """
-    from ai_trust_authorization.constants import BUILT_IN_ROLES
+    from openfga_sdk.client.models import ClientListObjectsRequest
 
-    result = []
-    for role in BUILT_IN_ROLES:
-        role_object = f"role:{role}"
-        members = await read_role_members(role_object)
-        if user in members:
-            result.append(role_object)
-    return result
+    async with get_client() as client:
+        request = ClientListObjectsRequest(user=user, relation="member", type="role")
+        response = await client.list_objects(request)
+        return list(response.objects or [])

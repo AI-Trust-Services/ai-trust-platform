@@ -149,7 +149,7 @@ Authorization (what each user can do) is handled by **OpenFGA**, running as a de
 
 - **Model** — flat RBAC: users are members of roles, roles grant permissions on a single `platform:global` object. No per-object tuples in Phase 2 (BU scoping deferred to Phase 3).
 - **`libs/authorization`** — shared lib. `require_permission("evidence:approve")` is a FastAPI `Depends()` that reads `X-Forwarded-User` (set by oauth2-proxy), calls OpenFGA, and returns 403 on denial. **Fails closed** — any OpenFGA error denies. Permission strings + role definitions live in `ai_trust_authorization.constants` (single source of truth).
-- **`openfga` + `openfga-provision`** — OpenFGA uses its own Postgres DB (`openfga`, created by `infra/keycloak/init.sh`). `openfga-provision` (one-shot, like `keycloak-provision`) creates the store, uploads the model generated from `constants.py`, seeds role→permission tuples, seeds `user:admin` as Platform Admin when `PROVISION_DEV_USERS=true` (or `INITIAL_ADMIN_USER` in prod), and writes the store ID to the `openfga-config` volume. Backends read the store ID from `/config/store_id` on startup.
+- **`openfga` + `openfga-provision`** — OpenFGA uses its own Postgres DB (`openfga`, created by `infra/keycloak/init.sh`). `openfga-provision` (one-shot, like `keycloak-provision`) creates the store, uploads the model generated from `constants.py`, seeds role→permission tuples, seeds `user:admin` as Platform Admin when `PROVISION_DEV_USERS=true` (or `APP_ADMIN_USERNAME` in prod), and writes the store ID to the `openfga-config` volume. Backends read the store ID from `/config/store_id` on startup.
 - **IAM API** — `users` backend hosts `routers/iam.py`: `GET /iam/roles` (roles + permissions), and `GET /me/permissions` (used by the shell to gate the IAM nav node, and by MFEs to grey out unauthorized actions). User management endpoints (`GET/POST /users`, `PUT/DELETE /users/{id}/roles/{role}`) are also in the `users` backend.
 - **IAM UI** — separate `iam/` frontend MFE (Role Management), proxied at `/iam/`, shown in the Luigi nav only to users with `iam:manage`.
 - **Built-in roles** — `platform_admin`, `ai_engineer`, `compliance_officer`, `business_owner`, `auditor`, `executive`. Custom roles deferred to Phase 3.
@@ -426,7 +426,6 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `APP_PUBLIC_URL` | keycloak-provision | `http://localhost:8080` | Public app URL — used to set oauth2-proxy redirect URIs in Keycloak |
 | `APP_ADMIN_USERNAME` | keycloak-provision | `admin` | Bootstrap platform admin username |
 | `APP_ADMIN_PASSWORD` | keycloak-provision | `password` | Bootstrap platform admin password — change before any non-local deployment |
-| `INITIAL_ADMIN_USER` | openfga-provision | *(empty)* | Username to seed as Platform Administrator in production (bootstrap first admin) |
 | `VITE_USERS_API_BASE` | users frontend (build time) | `/api/users/v1` | Users API URL baked into bundle |
 | `OAUTH2_PROXY_COOKIE_SECRET` | oauth2-proxy | *(required)* | Cookie encryption key — must be exactly 16, 24, or 32 characters |
 | `MINIO_ENDPOINT` | compliance-backend | `minio:9000` | In-cluster MinIO host:port for uploads (used inside the container) |
