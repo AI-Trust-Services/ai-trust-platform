@@ -203,7 +203,9 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
         if user_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
         user_resp.raise_for_status()
-        username = user_resp.json().get("username", user_id)
+        username = user_resp.json().get("username")
+        if not username:
+            raise HTTPException(500, "Keycloak returned a user without a username.")
 
     # Write OpenFGA first — if Keycloak fails after, user has no Keycloak role
     # so they get no access (safe failure mode). Reverse order would silently
@@ -233,7 +235,9 @@ async def remove_role(user_id: str, role_name: str, _: str = Depends(require_per
         if user_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
         user_resp.raise_for_status()
-        username = user_resp.json().get("username", user_id)
+        username = user_resp.json().get("username")
+        if not username:
+            raise HTTPException(500, "Keycloak returned a user without a username.")
 
     # Delete OpenFGA tuple first — if Keycloak fails after, orphan tuple remains
     # but user still has no Keycloak role so sessions are unaffected. Reverse order
