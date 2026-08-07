@@ -8,6 +8,7 @@ Endpoints (all require iam:manage):
 """
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -104,7 +105,6 @@ def _delete_keycloak_role(name: str) -> None:
         role_id = resp.json()["id"]
         kc.delete(f"/roles-by-id/{role_id}").raise_for_status()
 
-
 async def _delete_all_member_tuples(role_name: str) -> None:
     """Remove all user:* member tuples for this role from OpenFGA."""
     members = await openfga_client.read_role_members(_role_object(role_name))
@@ -168,7 +168,7 @@ async def create_custom_role(
 
     # 3. Keycloak realm role
     try:
-        _ensure_keycloak_role(body.name)
+        await asyncio.to_thread(_ensure_keycloak_role, body.name)
     except Exception:
         await _set_role_permissions(body.name, [])
         async with SessionLocal() as session:
@@ -227,7 +227,7 @@ async def delete_custom_role(
         name = row.name
 
     # Safe deletion order: Keycloak → OpenFGA → Postgres
-    _delete_keycloak_role(name)
+    await asyncio.to_thread(_delete_keycloak_role, name)
     await _delete_all_member_tuples(name)
     await _set_role_permissions(name, [])
 

@@ -114,9 +114,9 @@ def invite_user(body: InviteUserRequest, _: str = Depends(require_permission("ia
         if resp.status_code == 409:
             raise HTTPException(409, "A user with that username or email already exists.")
         if resp.status_code == 400:
-            body = resp.json()
-            msg = body.get("errorMessage", "Invalid user data.")
-            logger.warning("user.create_failed", extra={"keycloak_response": body})
+            kc_error = resp.json()
+            msg = kc_error.get("errorMessage", "Invalid user data.")
+            logger.warning("user.create_failed", extra={"keycloak_response": kc_error})
             raise HTTPException(400, msg)
         resp.raise_for_status()
 
