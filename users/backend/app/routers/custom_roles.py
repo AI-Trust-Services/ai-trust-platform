@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
@@ -121,11 +121,23 @@ async def list_custom_roles(
             select(CustomRole).order_by(CustomRole.created_at)
         )).scalars().all()
 
+    # Fetch all platform:global tuples once and group by user to avoid N sequential reads.
+    from openfga_sdk.models.read_request_tuple_key import ReadRequestTupleKey
+    async with openfga_client.get_client() as client:
+        response = await client.read(ReadRequestTupleKey(object=PLATFORM_OBJECT))
+        all_tuples = response.tuples or []
+
+    relation_to_perm = {v: k for k, v in RELATION_BY_PERMISSION.items()}
+    perms_by_user: dict[str, list[str]] = {}
+    for t in all_tuples:
+        if t.key.relation in relation_to_perm:
+            perms_by_user.setdefault(t.key.user, []).append(relation_to_perm[t.key.relation])
+
     result = []
     for row in rows:
-        permissions = await _get_role_permissions(row.name)
+        role_user = f"{_role_object(row.name)}#member"
         r = CustomRoleResponse.model_validate(row)
-        r.permissions = permissions
+        r.permissions = perms_by_user.get(role_user, [])
         result.append(r)
     return result
 
@@ -146,6 +158,7 @@ async def create_custom_role(
         )).scalar_one_or_none()
         if existing:
             raise HTTPException(409, f"Role '{body.name}' already exists")
+        # new_id() lives in compliance/backend — not a shared lib, so uuid4 here is intentional
         row = CustomRole(
             id=f"ROLE-{uuid.uuid4().hex[:8].upper()}",
             name=body.name,
