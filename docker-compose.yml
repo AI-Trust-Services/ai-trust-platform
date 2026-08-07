@@ -289,8 +289,6 @@ services:
       ROOT_PATH: "/api/registry"
       OPENFGA_URL: http://openfga:8080
       KEYCLOAK_URL: http://keycloak:8080
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
     volumes:
       - openfga-config:/config:ro
     depends_on:
