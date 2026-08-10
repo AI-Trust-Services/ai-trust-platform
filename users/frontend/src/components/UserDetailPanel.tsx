@@ -6,16 +6,32 @@ import { EditModal } from "./EditModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ROLE_LABELS } from "../constants";
 
+const PERMISSION_LABELS: Record<string, string> = {
+  "systems:read": "View AI systems",
+  "systems:write": "Create & edit AI systems",
+  "assessments:read": "View assessments",
+  "assessments:write": "Create & edit assessments",
+  "assessments:approve": "Approve assessments",
+  "evidence:read": "View evidence",
+  "evidence:write": "Upload & edit evidence",
+  "evidence:approve": "Approve evidence",
+  "alerts:read": "View alerts",
+  "alerts:handle": "Handle & resolve alerts",
+  "alerts:manage_rules": "Manage alert rules",
+  "monitoring:read": "View monitoring data",
+  "iam:manage": "Manage users & roles",
+};
 
 interface Props {
   user: UserDetail;
   roles: RoleSummary[];
+  rolePermissions: Record<string, string[]>;
   onClose: () => void;
   onUpdated: (u: UserDetail) => void;
   onDeleted: (id: string) => void;
 }
 
-export function UserDetailPanel({ user, roles, onClose, onUpdated, onDeleted }: Props) {
+export function UserDetailPanel({ user, roles, rolePermissions, onClose, onUpdated, onDeleted }: Props) {
   const showToast = useToast();
   const [working, setWorking] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -146,6 +162,35 @@ export function UserDetailPanel({ user, roles, onClose, onUpdated, onDeleted }: 
                   Assign
                 </button>
               </div>
+            )}
+          </div>
+          <div className="panel-section">
+            <div className="panel-section-title">Permissions</div>
+            {user.roles.length === 0 ? (
+              <div className="panel-empty">No permissions (no roles assigned).</div>
+            ) : (
+              user.roles.map(r => {
+                const perms = rolePermissions[r] ?? [];
+                return (
+                  <div key={r} style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1d2d3e", marginBottom: 6 }}>
+                      {ROLE_LABELS[r] ?? r}
+                    </div>
+                    {perms.length === 0 ? (
+                      <div className="panel-empty" style={{ paddingLeft: 0 }}>No permissions</div>
+                    ) : (
+                      <ul className="perm-list" style={{ margin: 0 }}>
+                        {perms.map(p => (
+                          <li key={p} className="perm-item">
+                            <span className="perm-check">✓</span>
+                            {PERMISSION_LABELS[p] ?? p}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
