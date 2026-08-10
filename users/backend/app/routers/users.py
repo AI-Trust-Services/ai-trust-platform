@@ -37,22 +37,30 @@ async def _is_valid_role(role_name: str) -> bool:
     return custom is not None
 
 
+_OPENFGA_SEM = asyncio.Semaphore(10)
+
+
 async def _user_roles(username: str) -> list[str]:
-    role_objects = await read_user_roles(f"user:{username}")
+    async with _OPENFGA_SEM:
+        role_objects = await read_user_roles(f"user:{username}")
     return [r.removeprefix("role:") for r in role_objects]
 
 
 async def _to_summary(u: dict) -> UserSummary:
+    username = u.get("username")
+    if not username:
+        logger.warning("user.missing_username", extra={"user_id": u["id"]})
+    roles = await _user_roles(username or u["id"])
     return UserSummary(
         id=u["id"],
-        username=u.get("username", ""),
+        username=username or "",
         email=u.get("email", ""),
         firstName=u.get("firstName", ""),
         lastName=u.get("lastName", ""),
         enabled=u.get("enabled", False),
         emailVerified=u.get("emailVerified", False),
         createdTimestamp=u.get("createdTimestamp"),
-        roles=await _user_roles(u.get("username", u["id"])),
+        roles=roles,
     )
 
 
