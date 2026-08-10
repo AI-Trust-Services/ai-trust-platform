@@ -1,10 +1,11 @@
 interface Props {
   message: string;
+  confirmLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export function ConfirmDialog({ message, onConfirm, onCancel }: Props) {
+export function ConfirmDialog({ message, confirmLabel = "Delete", onConfirm, onCancel }: Props) {
   return (
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal confirm-dialog" onClick={e => e.stopPropagation()}>
@@ -13,7 +14,7 @@ export function ConfirmDialog({ message, onConfirm, onCancel }: Props) {
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-danger" onClick={onConfirm}>Delete</button>
+          <button className="btn btn-danger" onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>
     </div>
