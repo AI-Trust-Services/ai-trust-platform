@@ -1,16 +1,7 @@
 import { useState, useEffect } from "react";
-import { useToast } from "../App";
 import { api } from "../api/client";
 import type { RoleInfo } from "../types";
-
-const ROLE_LABELS: Record<string, string> = {
-  platform_administrator: "Platform Administrator",
-  ai_engineer: "AI Engineer",
-  business_owner: "Business Owner",
-  ai_compliance_officer: "AI Compliance Officer",
-  auditor: "Auditor",
-  executive: "Executive",
-};
+import { ROLE_LABELS } from "../constants";
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   platform_administrator: "Full access to all features and user management.",
@@ -38,7 +29,6 @@ const PERMISSION_LABELS: Record<string, string> = {
 };
 
 export default function RolesPage(): JSX.Element {
-  const showToast = useToast();
   const [roles, setRoles] = useState<RoleInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +38,7 @@ export default function RolesPage(): JSX.Element {
       .then(data => { setRoles(data); setError(null); })
       .catch(err => setError(String(err)))
       .finally(() => setLoading(false));
-  }, [showToast]);
+  }, []);
 
   return (
     <div className="page">
