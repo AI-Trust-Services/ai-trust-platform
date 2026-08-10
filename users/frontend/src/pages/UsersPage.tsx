@@ -5,15 +5,8 @@ import { InviteModal } from "../components/InviteModal";
 import { UserDetailPanel } from "../components/UserDetailPanel";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import type { RoleSummary, UserDetail, UserSummary } from "../types";
+import { ROLE_LABELS } from "../constants";
 
-const ROLE_LABELS: Record<string, string> = {
-  platform_administrator: "Platform Administrator",
-  ai_engineer: "AI Engineer",
-  business_owner: "Business Owner",
-  ai_compliance_officer: "AI Compliance Officer",
-  auditor: "Auditor",
-  executive: "Executive",
-};
 
 const PAGE_SIZE = 10;
 
