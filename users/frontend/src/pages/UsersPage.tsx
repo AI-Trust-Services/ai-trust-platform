@@ -26,6 +26,7 @@ export default function UsersPage(): JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<UserSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMounted = useRef(false);
 
   const load = useCallback(async (q: string, p: number, status: string) => {
     setLoading(true);
@@ -65,7 +66,10 @@ export default function UsersPage(): JSX.Element {
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
   }, [search, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- load is stable but listing it would trigger on every render
 
-  useEffect(() => { load(search, page, statusFilter); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps -- intentionally re-runs only on page change; search/status changes reset page via the effect above
+  useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return; }
+    load(search, page, statusFilter);
+  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps -- intentionally re-runs only on page change; search/status changes reset page via the effect above
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -160,13 +164,13 @@ export default function UsersPage(): JSX.Element {
             </tr>
           </thead>
           <tbody>
-            {loading && (
+            {loading && users.length === 0 && (
               <tr><td colSpan={5} className="empty">Loading…</td></tr>
             )}
             {!loading && users.length === 0 && (
               <tr><td colSpan={5} className="empty">No users found.</td></tr>
             )}
-            {!loading && users.map(u => (
+            {users.map((u: UserSummary) => (
               <tr key={u.id} className="clickable-row" onClick={() => openDetail(u.id)}>
                 <td>
                   <div style={{ fontWeight: 500 }}>{u.firstName} {u.lastName}</div>
