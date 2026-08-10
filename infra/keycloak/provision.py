@@ -174,7 +174,7 @@ def ensure_users_backend_client(client: httpx.Client) -> None:
         f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients/{rm_client_id}/roles"
     )
     rm_roles_resp.raise_for_status()
-    needed_roles = {r["name"]: r for r in rm_roles_resp.json() if r["name"] in ("manage-users", "view-realm")}
+    needed_roles = {r["name"]: r for r in rm_roles_resp.json() if r["name"] in ("manage-users", "view-realm", "manage-realm")}
 
     already_assigned = client.get(
         f"{KEYCLOAK_URL}/admin/realms/{REALM}/users/{sa_user_id}/role-mappings/clients/{rm_client_id}"

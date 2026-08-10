@@ -1,4 +1,7 @@
 import type {
+  CustomRole,
+  CustomRoleCreate,
+  CustomRoleUpdate,
   InviteUserRequest,
   RoleInfo,
   RoleSummary,
@@ -82,6 +85,18 @@ export const api = {
 
   getRoleDetails: (): Promise<RoleInfo[]> =>
     request<RoleInfo[]>("/iam/roles"),
+
+  getCustomRoles: (): Promise<CustomRole[]> =>
+    request<CustomRole[]>("/iam/custom-roles"),
+
+  createCustomRole: (data: CustomRoleCreate): Promise<CustomRole> =>
+    request<CustomRole>("/iam/custom-roles", json("POST", data)),
+
+  updateCustomRole: (id: string, data: CustomRoleUpdate): Promise<CustomRole> =>
+    request<CustomRole>(`/iam/custom-roles/${id}`, json("PUT", data)),
+
+  deleteCustomRole: (id: string): Promise<null> =>
+    request<null>(`/iam/custom-roles/${id}`, { method: "DELETE" }),
 
   myPermissions: () =>
     request<{ permissions: string[] }>("/me/permissions"),

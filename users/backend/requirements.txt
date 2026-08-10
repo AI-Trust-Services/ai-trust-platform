@@ -4,3 +4,4 @@ pydantic[email]==2.10.3
 httpx==0.27.2
 -e /app/libs/logging
 -e /app/libs/authorization
+-e /app/libs/persistence

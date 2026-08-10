@@ -202,13 +202,43 @@ input:focus, select:focus { border-color: #0a6ed1; }
 
 /* ── Roles grid ── */
 .roles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.roles-section-title {
+  font-size: 12px; font-weight: 600; color: #556b82; text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+}
+.roles-section-count {
+  background: #e8f0fb; color: #0a6ed1; font-size: 11px; font-weight: 600;
+  padding: 1px 7px; border-radius: 10px;
+}
 .role-card { background: #fff; border: 1px solid #e4e6e8; border-radius: 8px; overflow: hidden; }
+.role-card-custom { border-color: #c8d8f5; }
 .role-card-header { padding: 16px 20px 12px; border-bottom: 1px solid #f0f1f2; }
 .role-card-name { font-size: 15px; font-weight: 600; color: #1d2d3e; margin-bottom: 4px; }
 .role-card-desc { font-size: 12px; color: #556b82; line-height: 1.5; }
 .perm-list { list-style: none; padding: 12px 20px; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .perm-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1d2d3e; }
 .perm-check { color: #2e7d32; font-size: 12px; flex-shrink: 0; }
+
+/* ── Custom role modal ── */
+.custom-role-modal { width: 560px; max-height: 90vh; display: flex; flex-direction: column; }
+.custom-role-modal form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.custom-role-modal .modal-body { overflow-y: auto; flex: 1; min-height: 0; }
+.perm-groups { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.perm-group { border: 1px solid #e4e6e8; border-radius: 6px; overflow: hidden; }
+.perm-group-header {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  background: #f5f6f7; cursor: pointer; user-select: none;
+}
+.perm-group-header:hover { background: #edf0f2; }
+.perm-group-check { font-size: 14px; color: #0a6ed1; width: 16px; }
+.perm-group-label { font-size: 13px; font-weight: 600; color: #1d2d3e; }
+.perm-checkbox-row {
+  display: flex; align-items: center; gap: 8px; padding: 7px 12px 7px 36px;
+  font-size: 13px; color: #1d2d3e; cursor: pointer; border-top: 1px solid #f0f1f2;
+}
+.perm-checkbox-row:hover { background: #fafbfc; }
+.perm-checkbox-row input[type="checkbox"] { width: auto; margin: 0; cursor: pointer; }
+.field-hint { font-size: 11px; color: #556b82; margin-top: 4px; }
 
 /* ── Empty ── */
 .empty { text-align: center; padding: 48px 24px; color: #556b82; }

@@ -248,6 +248,7 @@ services:
       context: .
       dockerfile: users/backend/Dockerfile
     environment:
+      <<: *db-env
       ALLOWED_ORIGINS: "http://localhost:8080"
       ROOT_PATH: "/api/users"
       KEYCLOAK_URL: http://keycloak:8080
@@ -258,6 +259,8 @@ services:
     volumes:
       - openfga-config:/config:ro
     depends_on:
+      db-migrate:
+        condition: service_completed_successfully
       keycloak-provision:
         condition: service_completed_successfully
       openfga-provision:

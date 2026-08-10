@@ -24,12 +24,14 @@ async def test_assign_role_writes_openfga_tuple(client: httpx.AsyncClient):
         mock_ctx.return_value.__enter__ = MagicMock(return_value=kc)
         mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
         kc.get.side_effect = [
-            _make_kc_response(200, role_obj),              # GET /roles/auditor (block 1)
-            _make_kc_response(200, user),                  # GET /users/uid-1 for username (block 1)
-            _make_kc_response(200, user),                  # GET /users/uid-1 re-fetch (block 2)
-            _make_kc_response(200, [{"name": "auditor"}]), # GET role-mappings (_user_roles in _to_detail)
+            _make_kc_response(200, role_obj),                     # GET /roles/auditor
+            _make_kc_response(200, user),                         # GET /users/uid-1 (username)
+            _make_kc_response(200, []),                           # GET role-mappings (managed list)
+            _make_kc_response(200, user),                         # GET /users/uid-1 (re-fetch after POST)
+            _make_kc_response(200, [{"name": "auditor"}]),        # GET role-mappings (_user_roles in _to_detail)
         ]
         kc.post.return_value = _make_kc_response(204)
+        kc.request.return_value = _make_kc_response(204)
 
         r = await client.post("/v1/users/uid-1/roles/auditor")
 

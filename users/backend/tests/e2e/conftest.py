@@ -28,6 +28,7 @@ os.environ.setdefault("USERS_BACKEND_CLIENT_ID", "users-backend")
 os.environ.setdefault("USERS_BACKEND_CLIENT_SECRET", "test-secret")
 os.environ.setdefault("OPENFGA_URL", "http://openfga:8080")
 os.environ.setdefault("OPENFGA_STORE_ID", "test-store-id")
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +68,11 @@ def _make_kc_response(status_code: int = 200, json_body=None,
 @pytest.fixture(scope="session", autouse=True)
 def patch_openfga():
     """Replace OpenFGA check/write/delete/list_relations with no-ops for all tests."""
+    from ai_trust_authorization.constants import BUILT_IN_ROLES
+
+    async def _is_valid_role_stub(role_name: str) -> bool:
+        return role_name in BUILT_IN_ROLES
+
     with (
         patch("ai_trust_authorization.openfga_client.check", new=AsyncMock(return_value=True)),
         patch("ai_trust_authorization.openfga_client.write_tuple", new=AsyncMock()),
@@ -75,6 +81,7 @@ def patch_openfga():
               new=AsyncMock(return_value=[])),
         patch("ai_trust_authorization.openfga_client.read_user_roles",
               new=AsyncMock(return_value=[])),
+        patch("app.routers.users._is_valid_role", new=_is_valid_role_stub),
     ):
         # Override get_current_user so require_permission resolves without headers
         from app.main import app

@@ -47,7 +47,12 @@ export default function UsersPage(): JSX.Element {
   }, [showToast]);
 
   useEffect(() => {
-    api.getRoles().then(setRoles).catch(() => {});
+    Promise.all([api.getRoles(), api.getCustomRoles()])
+      .then(([builtins, custom]) => {
+        const customAsSummary: RoleSummary[] = custom.map(r => ({ id: r.id, name: r.name, description: r.description }));
+        setRoles([...builtins, ...customAsSummary]);
+      })
+      .catch(() => {});
   }, []);
 
   // Debounce search; reset to page 0
@@ -149,7 +154,7 @@ export default function UsersPage(): JSX.Element {
             <tr>
               <th>User</th>
               <th>Username</th>
-              <th>Role(s)</th>
+              <th>Role</th>
               <th>Status</th>
               <th style={{ width: 48 }}></th>
             </tr>
