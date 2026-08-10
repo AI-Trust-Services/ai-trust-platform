@@ -58,9 +58,9 @@ export default function UsersPage(): JSX.Element {
       load(search, 0, statusFilter);
     }, 300);
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
-  }, [search, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- load is stable but listing it would trigger on every render
 
-  useEffect(() => { load(search, page, statusFilter); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(search, page, statusFilter); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps -- intentionally re-runs only on page change; search/status changes reset page via the effect above
 
   // Close dropdown on outside click
   useEffect(() => {
