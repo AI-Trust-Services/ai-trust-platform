@@ -39,25 +39,27 @@ async def _is_valid_role(role_name: str) -> bool:
     return custom is not None
 
 
-async def _user_roles(username: str) -> list[str]:
+async def _build_slug_map() -> dict[str, str]:
+    async with SessionLocal() as session:
+        rows = (await session.execute(select(CustomRole))).scalars().all()
+    return {row.name.lower().replace(" ", "_"): row.name for row in rows}
+
+
+async def _user_roles(username: str, slug_map: dict[str, str] | None = None) -> list[str]:
     role_objects = await openfga_client.read_user_roles(f"user:{username}")
     slugs = [r.removeprefix("role:") for r in role_objects]
     custom_slugs = [s for s in slugs if s not in MANAGED_ROLES]
 
-    slug_to_name: dict[str, str] = {}
-    if custom_slugs:
-        async with SessionLocal() as session:
-            rows = (await session.execute(select(CustomRole))).scalars().all()
-        for row in rows:
-            slug_to_name[row.name.lower().replace(" ", "_")] = row.name
+    if custom_slugs and slug_map is None:
+        slug_map = await _build_slug_map()
 
     return [
-        slug if slug in MANAGED_ROLES else slug_to_name.get(slug, slug)
+        slug if slug in MANAGED_ROLES else (slug_map or {}).get(slug, slug)
         for slug in slugs
     ]
 
 
-async def _to_summary(u: dict) -> UserSummary:
+async def _to_summary(u: dict, slug_map: dict[str, str] | None = None) -> UserSummary:
     return UserSummary(
         id=u["id"],
         username=u.get("username", ""),
@@ -67,12 +69,12 @@ async def _to_summary(u: dict) -> UserSummary:
         enabled=u.get("enabled", False),
         emailVerified=u.get("emailVerified", False),
         createdTimestamp=u.get("createdTimestamp"),
-        roles=await _user_roles(u.get("username", "")),
+        roles=await _user_roles(u.get("username", ""), slug_map),
     )
 
 
-async def _to_detail(u: dict) -> UserDetail:
-    summary = await _to_summary(u)
+async def _to_detail(u: dict, slug_map: dict[str, str] | None = None) -> UserDetail:
+    summary = await _to_summary(u, slug_map)
     return UserDetail(**summary.model_dump(), attributes=u.get("attributes", {}))
 
 
@@ -102,11 +104,12 @@ async def list_users(
             1 for u in resp.json() if u.get("username", "").startswith("service-account-")
         )
 
+    slug_map = await _build_slug_map()
     sem = asyncio.Semaphore(10)
 
     async def _bounded(u: dict) -> UserSummary:
         async with sem:
-            return await _to_summary(u)
+            return await _to_summary(u, slug_map)
 
     summaries = await asyncio.gather(*[_bounded(u) for u in users])
     return UsersListResponse(total=total, users=list(summaries))
