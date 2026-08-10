@@ -88,8 +88,8 @@ export function UserDetailPanel({ user, roles, onClose, onUpdated, onDeleted }: 
       <div className="panel" role="dialog" aria-modal="true">
         <div className="panel-header">
           <div>
-            <div style={{ fontWeight: 600, fontSize: 16 }}>{user.firstName} {user.lastName}</div>
-            <div style={{ fontSize: 12, color: "#556b82", marginTop: 2 }}>{user.email}</div>
+            <div className="panel-user-name">{user.firstName} {user.lastName}</div>
+            <div className="panel-user-email">{user.email}</div>
           </div>
           <button className="panel-close" onClick={onClose} aria-label="Close panel">×</button>
         </div>
@@ -120,10 +120,10 @@ export function UserDetailPanel({ user, roles, onClose, onUpdated, onDeleted }: 
           <div className="panel-section">
             <div className="panel-section-title">Roles</div>
             {user.roles.length === 0 && (
-              <div style={{ color: "#556b82", fontSize: 13 }}>No roles assigned.</div>
+              <div className="panel-empty">No roles assigned.</div>
             )}
             {user.roles.map(r => (
-              <div key={r} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <div key={r} className="panel-role-row">
                 <span className="badge badge-role">{ROLE_LABELS[r] ?? r}</span>
                 <button className="btn btn-sm btn-danger" onClick={() => handleRemoveRole(r)} disabled={working}>
                   Remove
@@ -131,8 +131,8 @@ export function UserDetailPanel({ user, roles, onClose, onUpdated, onDeleted }: 
               </div>
             ))}
             {availableRoles.length > 0 && (
-              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                <select value={addRole} onChange={e => setAddRole(e.target.value)} style={{ flex: 1 }}>
+              <div className="panel-role-add">
+                <select value={addRole} onChange={e => setAddRole(e.target.value)}>
                   <option value="">Add role…</option>
                   {availableRoles.map(r => (
                     <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] ?? r.name}</option>
