@@ -30,10 +30,8 @@ async def test_list_users_returns_users(client: httpx.AsyncClient):
         mock_ctx.return_value.__enter__ = MagicMock(return_value=kc)
         mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
         kc.get.side_effect = [
-            _make_kc_response(200, users),            # /users
-            _make_kc_response(200, 2),                # /users/count
-            _make_kc_response(200, []),               # uid-1 role-mappings
-            _make_kc_response(200, []),               # uid-2 role-mappings
+            _make_kc_response(200, users),  # /users
+            _make_kc_response(200, 2),      # /users/count
         ]
         r = await client.get("/v1/users")
 
@@ -69,14 +67,10 @@ async def test_invite_user_created(client: httpx.AsyncClient):
         kc = MagicMock()
         mock_ctx.return_value.__enter__ = MagicMock(return_value=kc)
         mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
-        # POST /users → 201 with Location header
         post_resp = _make_kc_response(201, headers={"Location": "/users/uid-new"})
-        # GET /users/uid-new
         get_resp = _make_kc_response(200, new_user)
-        # GET /users/uid-new/role-mappings/realm (for _to_summary)
-        roles_resp = _make_kc_response(200, [])
         kc.post.return_value = post_resp
-        kc.get.side_effect = [get_resp, roles_resp]
+        kc.get.return_value = get_resp
 
         r = await client.post("/v1/users", json={
             "username": "carol", "email": "carol@example.com",
@@ -122,10 +116,7 @@ async def test_get_user_found(client: httpx.AsyncClient):
         kc = MagicMock()
         mock_ctx.return_value.__enter__ = MagicMock(return_value=kc)
         mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
-        kc.get.side_effect = [
-            _make_kc_response(200, _kc_user("uid-1", "alice")),
-            _make_kc_response(200, []),   # role-mappings
-        ]
+        kc.get.return_value = _make_kc_response(200, _kc_user("uid-1", "alice"))
         r = await client.get("/v1/users/uid-1")
 
     assert r.status_code == 200
@@ -155,9 +146,8 @@ async def test_update_user(client: httpx.AsyncClient):
         mock_ctx.return_value.__enter__ = MagicMock(return_value=kc)
         mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
         kc.get.side_effect = [
-            _make_kc_response(200, existing),   # fetch existing
-            _make_kc_response(200, updated),    # re-fetch after PUT
-            _make_kc_response(200, []),         # role-mappings
+            _make_kc_response(200, existing),  # fetch existing
+            _make_kc_response(200, updated),   # re-fetch after PUT
         ]
         kc.put.return_value = _make_kc_response(204)
         r = await client.put("/v1/users/uid-1", json={"firstName": "Alicia"})
@@ -191,7 +181,6 @@ async def test_deactivate_user(client: httpx.AsyncClient):
         kc.get.side_effect = [
             _make_kc_response(200, existing),
             _make_kc_response(200, deactivated),
-            _make_kc_response(200, []),
         ]
         kc.put.return_value = _make_kc_response(204)
         r = await client.post("/v1/users/uid-1/deactivate")
@@ -210,7 +199,6 @@ async def test_activate_user(client: httpx.AsyncClient):
         kc.get.side_effect = [
             _make_kc_response(200, existing),
             _make_kc_response(200, activated),
-            _make_kc_response(200, []),
         ]
         kc.put.return_value = _make_kc_response(204)
         r = await client.post("/v1/users/uid-1/activate")

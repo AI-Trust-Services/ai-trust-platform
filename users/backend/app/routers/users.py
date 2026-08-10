@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json as _json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -17,6 +16,7 @@ from app.schemas import (
 )
 from ai_trust_authorization import openfga_client, require_permission
 from ai_trust_authorization.constants import BUILT_IN_ROLES
+from ai_trust_authorization.openfga_client import read_user_roles
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.custom_role import CustomRole
 
@@ -24,7 +24,6 @@ router = APIRouter(prefix="/users", tags=["users"])
 logger = get_logger(__name__)
 
 MANAGED_ROLES = set(BUILT_IN_ROLES)
-_KEYCLOAK_DEFAULT_ROLE = "default-roles-ai-trust"
 
 
 async def _is_valid_role(role_name: str) -> bool:
@@ -37,15 +36,12 @@ async def _is_valid_role(role_name: str) -> bool:
     return custom is not None
 
 
-def _user_roles(user_id: str) -> list[str]:
-    with admin_client() as kc:
-        resp = kc.get(f"/users/{user_id}/role-mappings/realm")
-        if not resp.is_success:
-            return []
-        return [r["name"] for r in resp.json() if r["name"] != _KEYCLOAK_DEFAULT_ROLE]
+async def _user_roles(username: str) -> list[str]:
+    role_objects = await read_user_roles(f"user:{username}")
+    return [r.removeprefix("role:") for r in role_objects]
 
 
-def _to_summary(u: dict) -> UserSummary:
+async def _to_summary(u: dict) -> UserSummary:
     return UserSummary(
         id=u["id"],
         username=u.get("username", ""),
@@ -55,17 +51,17 @@ def _to_summary(u: dict) -> UserSummary:
         enabled=u.get("enabled", False),
         emailVerified=u.get("emailVerified", False),
         createdTimestamp=u.get("createdTimestamp"),
-        roles=_user_roles(u["id"]),
+        roles=await _user_roles(u.get("username", u["id"])),
     )
 
 
-def _to_detail(u: dict) -> UserDetail:
-    summary = _to_summary(u)
+async def _to_detail(u: dict) -> UserDetail:
+    summary = await _to_summary(u)
     return UserDetail(**summary.model_dump(), attributes=u.get("attributes", {}))
 
 
 @router.get("", response_model=UsersListResponse)
-def list_users(
+async def list_users(
     search: Optional[str] = Query(None),
     enabled: Optional[bool] = Query(None),
     limit: int = Query(50, ge=1, le=200),
@@ -88,11 +84,12 @@ def list_users(
         count_resp.raise_for_status()
         total = count_resp.json()
 
-    return UsersListResponse(total=total, users=[_to_summary(u) for u in users])
+    summaries = [await _to_summary(u) for u in users]
+    return UsersListResponse(total=total, users=summaries)
 
 
 @router.post("", response_model=UserDetail, status_code=201)
-def invite_user(body: InviteUserRequest, _: str = Depends(require_permission("iam:manage"))):
+async def invite_user(body: InviteUserRequest, _: str = Depends(require_permission("iam:manage"))):
     payload = {
         "username": body.username,
         "email": body.email,
@@ -124,21 +121,21 @@ def invite_user(body: InviteUserRequest, _: str = Depends(require_permission("ia
         user_id = location.rstrip("/").split("/")[-1]
         user_resp = kc.get(f"/users/{user_id}")
         user_resp.raise_for_status()
-        return _to_detail(user_resp.json())
+        return await _to_detail(user_resp.json())
 
 
 @router.get("/{user_id}", response_model=UserDetail)
-def get_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
+async def get_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
     with admin_client() as kc:
         resp = kc.get(f"/users/{user_id}")
         if resp.status_code == 404:
             raise HTTPException(404, "User not found.")
         resp.raise_for_status()
-        return _to_detail(resp.json())
+        return await _to_detail(resp.json())
 
 
 @router.put("/{user_id}", response_model=UserDetail)
-def update_user(user_id: str, body: UpdateUserRequest, _: str = Depends(require_permission("iam:manage"))):
+async def update_user(user_id: str, body: UpdateUserRequest, _: str = Depends(require_permission("iam:manage"))):
     with admin_client() as kc:
         existing_resp = kc.get(f"/users/{user_id}")
         if existing_resp.status_code == 404:
@@ -164,11 +161,11 @@ def update_user(user_id: str, body: UpdateUserRequest, _: str = Depends(require_
         kc.put(f"/users/{user_id}", json=payload).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()
-        return _to_detail(updated.json())
+        return await _to_detail(updated.json())
 
 
 @router.post("/{user_id}/deactivate", response_model=UserDetail)
-def deactivate_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
+async def deactivate_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
     with admin_client() as kc:
         existing_resp = kc.get(f"/users/{user_id}")
         if existing_resp.status_code == 404:
@@ -178,11 +175,11 @@ def deactivate_user(user_id: str, _: str = Depends(require_permission("iam:manag
         kc.put(f"/users/{user_id}", json={**existing, "enabled": False}).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()
-        return _to_detail(updated.json())
+        return await _to_detail(updated.json())
 
 
 @router.post("/{user_id}/activate", response_model=UserDetail)
-def activate_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
+async def activate_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
     with admin_client() as kc:
         existing_resp = kc.get(f"/users/{user_id}")
         if existing_resp.status_code == 404:
@@ -192,7 +189,7 @@ def activate_user(user_id: str, _: str = Depends(require_permission("iam:manage"
         kc.put(f"/users/{user_id}", json={**existing, "enabled": True}).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()
-        return _to_detail(updated.json())
+        return await _to_detail(updated.json())
 
 
 @router.delete("/{user_id}", status_code=204)
@@ -210,11 +207,6 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
         raise HTTPException(400, f"Unknown role '{role_name}'.")
 
     with admin_client() as kc:
-        role_resp = kc.get(f"/roles/{role_name}")
-        if role_resp.status_code == 404:
-            raise HTTPException(404, f"Role '{role_name}' not found in Keycloak.")
-        role_resp.raise_for_status()
-
         user_resp = kc.get(f"/users/{user_id}")
         if user_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
@@ -223,52 +215,32 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
         if not username:
             raise HTTPException(500, "Keycloak returned a user without a username.")
 
-        existing_roles = kc.get(f"/users/{user_id}/role-mappings/realm").json()
-        managed = [r for r in existing_roles if r["name"] != _KEYCLOAK_DEFAULT_ROLE]
+    # Guard: don't demote the last platform_administrator
+    if role_name != "platform_administrator":
+        pa_members = await openfga_client.read_role_members("role:platform_administrator")
+        if any(m == f"user:{username}" for m in pa_members) and len(pa_members) <= 1:
+            raise HTTPException(409, "Cannot reassign the last platform administrator.")
 
-        # Guard: don't demote the last platform_administrator
-        if any(r["name"] == "platform_administrator" for r in managed) and role_name != "platform_administrator":
-            pa_members = await openfga_client.read_role_members("role:platform_administrator")
-            if len(pa_members) <= 1:
-                raise HTTPException(409, "Cannot reassign the last platform administrator.")
-
-    # Write OpenFGA first — if Keycloak fails after, user has no Keycloak role
-    # so they get no access (safe failure mode). Reverse order would silently
-    # break permissions: Keycloak role present but no OpenFGA tuple → 403 on all checks.
     # Single-role invariant: remove existing FGA memberships before writing new one.
-    existing_fga_roles = await openfga_client.read_user_roles(f"user:{username}")
+    existing_fga_roles = await read_user_roles(f"user:{username}")
     for role_obj in existing_fga_roles:
         await openfga_client.delete_tuple(f"user:{username}", "member", role_obj)
     await openfga_client.write_tuple(f"user:{username}", "member", f"role:{role_name}")
 
     with admin_client() as kc:
-        if managed:
-            kc.request(
-                "DELETE",
-                f"/users/{user_id}/role-mappings/realm",
-                content=_json.dumps(managed),
-                headers={"Content-Type": "application/json"},
-            ).raise_for_status()
-        kc.post(
-            f"/users/{user_id}/role-mappings/realm",
-            json=[role_resp.json()],
-        ).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()
 
     logger.info("user.role_assigned", extra={"username": username, "role": role_name})
-    return _to_detail(updated.json())
+    return await _to_detail(updated.json())
 
 
 @router.delete("/{user_id}/roles/{role_name}", response_model=UserDetail)
 async def remove_role(user_id: str, role_name: str, _: str = Depends(require_permission("iam:manage"))):
     if not await _is_valid_role(role_name):
         raise HTTPException(400, f"Unknown role '{role_name}'.")
+
     with admin_client() as kc:
-        role_resp = kc.get(f"/roles/{role_name}")
-        if role_resp.status_code == 404:
-            raise HTTPException(404, f"Role '{role_name}' not found in Keycloak.")
-        role_resp.raise_for_status()
         user_resp = kc.get(f"/users/{user_id}")
         if user_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
@@ -277,18 +249,11 @@ async def remove_role(user_id: str, role_name: str, _: str = Depends(require_per
         if not username:
             raise HTTPException(500, "Keycloak returned a user without a username.")
 
-    # Delete OpenFGA tuple first — if Keycloak fails after, orphan tuple remains
-    # but user still has no Keycloak role so sessions are unaffected. Reverse order
-    # would leave OpenFGA tuple intact → user retains permissions after removal.
     await openfga_client.delete_tuple(f"user:{username}", "member", f"role:{role_name}")
+
     with admin_client() as kc:
-        kc.request(
-            "DELETE",
-            f"/users/{user_id}/role-mappings/realm",
-            content=_json.dumps([role_resp.json()]),
-            headers={"Content-Type": "application/json"},
-        ).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()
+
     logger.info("user.role_removed", extra={"username": username, "role": role_name})
-    return _to_detail(updated.json())
+    return await _to_detail(updated.json())

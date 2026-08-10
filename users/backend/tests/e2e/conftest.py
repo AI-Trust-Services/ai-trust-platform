@@ -81,6 +81,8 @@ def patch_openfga():
               new=AsyncMock(return_value=[])),
         patch("ai_trust_authorization.openfga_client.read_user_roles",
               new=AsyncMock(return_value=[])),
+        patch("ai_trust_authorization.openfga_client.read_role_members",
+              new=AsyncMock(return_value=[])),
         patch("app.routers.users._is_valid_role", new=_is_valid_role_stub),
     ):
         # Override get_current_user so require_permission resolves without headers
