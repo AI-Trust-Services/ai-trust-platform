@@ -5,7 +5,7 @@ import { CustomRoleModal } from "../components/CustomRoleModal";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import type { CustomRole, RoleInfo } from "../types";
 import { usePermissions } from "../hooks/usePermissions";
-import { ROLE_LABELS } from "../constants";
+import { ROLE_LABELS, PERMISSION_LABELS } from "../constants";
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   platform_administrator: "Full access to all features and user management.",
@@ -14,22 +14,6 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   ai_compliance_officer: "Manage compliance assessments, obligations, controls and evidence.",
   auditor: "Read-only access to systems, assessments, evidence and monitoring.",
   executive: "High-level read access to systems and monitoring dashboards.",
-};
-
-const PERMISSION_LABELS: Record<string, string> = {
-  "systems:read": "View AI systems",
-  "systems:write": "Create & edit AI systems",
-  "assessments:read": "View assessments",
-  "assessments:write": "Create & edit assessments",
-  "assessments:approve": "Approve assessments",
-  "evidence:read": "View evidence",
-  "evidence:write": "Upload & edit evidence",
-  "evidence:approve": "Approve evidence",
-  "alerts:read": "View alerts",
-  "alerts:handle": "Handle & resolve alerts",
-  "alerts:manage_rules": "Manage alert rules",
-  "monitoring:read": "View monitoring data",
-  "iam:manage": "Manage users & roles",
 };
 
 export default function RolesPage(): JSX.Element {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -84,8 +85,8 @@ async def list_users(
         count_resp.raise_for_status()
         total = count_resp.json()
 
-    summaries = [await _to_summary(u) for u in users]
-    return UsersListResponse(total=total, users=summaries)
+    summaries = await asyncio.gather(*[_to_summary(u) for u in users])
+    return UsersListResponse(total=total, users=list(summaries))
 
 
 @router.post("", response_model=UserDetail, status_code=201)
