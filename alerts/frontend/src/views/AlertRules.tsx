@@ -2,6 +2,7 @@ import React from "react";
 import type { AlertRule } from "../types";
 import { api } from "../api/client";
 import { useToast } from "../components/Toast";
+import { usePermissions } from "../hooks/usePermissions";
 
 interface Props {
   rules: AlertRule[];
@@ -12,6 +13,8 @@ const CATEGORIES = ["risk", "compliance", "observability", "registry"] as const;
 
 export function AlertRules({ rules, onRefresh }: Props) {
   const { showToast } = useToast();
+  const { can } = usePermissions();
+  const mayManage = can("alerts:manage_rules");
 
   async function toggleRule(ruleId: string) {
     try {
@@ -45,6 +48,8 @@ export function AlertRules({ rules, onRefresh }: Props) {
                   <button
                     className="btn-ghost btn-sm"
                     style={{ marginLeft: "auto" }}
+                    disabled={!mayManage}
+                    title={mayManage ? undefined : "Requires permission: alerts:manage_rules"}
                     onClick={() => toggleRule(r.id)}
                   >
                     {r.enabled ? "Disable" : "Enable"}

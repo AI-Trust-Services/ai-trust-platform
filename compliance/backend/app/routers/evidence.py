@@ -3,11 +3,13 @@ from __future__ import annotations
 import os
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_trust_authorization import require_permission
+from ai_trust_authorization.constants import EVIDENCE_APPROVE, EVIDENCE_READ, EVIDENCE_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import (
@@ -77,7 +79,7 @@ async def _linked_ids(session: AsyncSession, evidence_id: str) -> tuple[list[str
     return list(control_ids), list(obligation_ids)
 
 
-@router.get("/evidence", response_model=list[EvidenceResponse])
+@router.get("/evidence", response_model=list[EvidenceResponse], dependencies=[Depends(require_permission(EVIDENCE_READ))])
 async def list_evidence(
     control_id: str | None = Query(default=None),
     obligation_id: str | None = Query(default=None),
@@ -102,7 +104,7 @@ async def list_evidence(
         return [EvidenceResponse.model_validate(r) for r in result.scalars().all()]
 
 
-@router.post("/evidence", response_model=EvidenceDetailResponse, status_code=201)
+@router.post("/evidence", response_model=EvidenceDetailResponse, status_code=201, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
 async def create_evidence(
     title: str = Form(...),
     description: str = Form(default=""),
@@ -219,7 +221,7 @@ async def create_evidence(
     return detail
 
 
-@router.get("/evidence/{evidence_id}", response_model=EvidenceDetailResponse)
+@router.get("/evidence/{evidence_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_READ))])
 async def get_evidence(evidence_id: str) -> EvidenceDetailResponse:
     async with SessionLocal() as session:
         row = await _load(session, evidence_id)
@@ -230,7 +232,7 @@ async def get_evidence(evidence_id: str) -> EvidenceDetailResponse:
         return detail
 
 
-@router.get("/evidence/{evidence_id}/download-url", response_model=DownloadUrlResponse)
+@router.get("/evidence/{evidence_id}/download-url", response_model=DownloadUrlResponse, dependencies=[Depends(require_permission(EVIDENCE_READ))])
 async def get_download_url(evidence_id: str) -> DownloadUrlResponse:
     async with SessionLocal() as session:
         row = await _load(session, evidence_id)
@@ -241,7 +243,7 @@ async def get_download_url(evidence_id: str) -> DownloadUrlResponse:
     return DownloadUrlResponse(url=url, expires_hours=1)
 
 
-@router.put("/evidence/{evidence_id}", response_model=EvidenceResponse)
+@router.put("/evidence/{evidence_id}", response_model=EvidenceResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
 async def update_evidence(evidence_id: str, body: EvidenceUpdate) -> EvidenceResponse:
     updates = body.model_dump(exclude_none=True)
     async with SessionLocal() as session:
@@ -259,7 +261,7 @@ async def update_evidence(evidence_id: str, body: EvidenceUpdate) -> EvidenceRes
     return EvidenceResponse.model_validate(row)
 
 
-@router.delete("/evidence/{evidence_id}")
+@router.delete("/evidence/{evidence_id}", dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
 async def delete_evidence(evidence_id: str) -> dict:
     async with SessionLocal() as session:
         row = await _load(session, evidence_id)
@@ -278,12 +280,12 @@ async def delete_evidence(evidence_id: str) -> dict:
     return {"status": "deleted", "id": evidence_id}
 
 
-@router.post("/evidence/{evidence_id}/approve", response_model=EvidenceResponse)
+@router.post("/evidence/{evidence_id}/approve", response_model=EvidenceResponse, dependencies=[Depends(require_permission(EVIDENCE_APPROVE))])
 async def approve_evidence(evidence_id: str) -> EvidenceResponse:
     return await _set_status(evidence_id, "approved")
 
 
-@router.post("/evidence/{evidence_id}/reject", response_model=EvidenceResponse)
+@router.post("/evidence/{evidence_id}/reject", response_model=EvidenceResponse, dependencies=[Depends(require_permission(EVIDENCE_APPROVE))])
 async def reject_evidence(evidence_id: str) -> EvidenceResponse:
     return await _set_status(evidence_id, "rejected")
 
@@ -318,7 +320,7 @@ async def _cascade_from_evidence(session: AsyncSession, evidence_id: str) -> Non
         await refresh_obligation(session, oid)
 
 
-@router.get("/evidence/{evidence_id}/versions", response_model=list[EvidenceVersionResponse])
+@router.get("/evidence/{evidence_id}/versions", response_model=list[EvidenceVersionResponse], dependencies=[Depends(require_permission(EVIDENCE_READ))])
 async def get_evidence_versions(evidence_id: str) -> list[EvidenceVersionResponse]:
     async with SessionLocal() as session:
         await _load(session, evidence_id)
@@ -330,7 +332,7 @@ async def get_evidence_versions(evidence_id: str) -> list[EvidenceVersionRespons
     return [EvidenceVersionResponse.model_validate(r) for r in rows]
 
 
-@router.post("/evidence/{evidence_id}/upload-version", response_model=EvidenceDetailResponse)
+@router.post("/evidence/{evidence_id}/upload-version", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
 async def upload_evidence_version(
     evidence_id: str,
     version_label: str = Form(...),

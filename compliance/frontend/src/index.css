@@ -107,6 +107,9 @@ tbody td { padding: 7px 12px; vertical-align: middle; font-size: 13px; }
 .row-sub { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 .actions { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
 .empty-row td { text-align: center; padding: 48px; color: var(--text-secondary); cursor: default; }
+.empty-state { text-align: center; padding: 80px 24px; color: var(--text-secondary); }
+.empty-state h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.empty-icon { font-size: 36px; margin-bottom: 16px; }
 
 .badge {
   display: inline-flex; align-items: center; padding: 3px 10px;

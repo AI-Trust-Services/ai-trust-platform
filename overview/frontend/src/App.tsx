@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { Outlet } from "react-router-dom";
 import { useLuigiInit, navigateTo } from "./hooks/useLuigi";
+import { usePermissions } from "./hooks/usePermissions";
 import { api, HEALTH_URL, ALERTS_URL, REGISTRY_URL } from "./api/client";
-
 type ToastFn = (msg: string, isError?: boolean) => void;
 const ToastContext = createContext<ToastFn | null>(null);
 export const useToast = () => useContext(ToastContext)!;
@@ -20,6 +20,8 @@ export default function App() {
   const [backendOk, setBackendOk] = useState<boolean | null>(null);
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null);
   const [alertCount, setAlertCount] = useState(0);
+  const { can } = usePermissions();
+  const mayRegister = can("systems:write");
   const healthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -88,7 +90,8 @@ export default function App() {
                 {alertCount > 0 && <span className="alert-badge">{alertCount}</span>}
               </button>
             </a>
-            <button className="btn-primary" onClick={() => { navigateTo("/home/ai-system-registry", REGISTRY_URL); }}>
+            <button className="btn-primary" onClick={() => { navigateTo("/home/ai-system-registry", REGISTRY_URL); }}
+              disabled={!mayRegister} title={mayRegister ? undefined : "Requires permission: systems:write"}>
               + Register System
             </button>
           </div>

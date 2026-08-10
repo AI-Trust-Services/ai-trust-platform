@@ -8,6 +8,7 @@ import CreateControlModal from "../components/CreateControlModal";
 import LinkObligationModal from "../components/LinkObligationModal";
 import Pagination from "../components/Pagination";
 import { CONTROL_STATUS_META, OBLIGATION_STATUS_META, EVIDENCE_STATUS_META, fmtDate, humanize } from "../utils";
+import { usePermissions } from "../hooks/usePermissions";
 import type { AISystem, Control, ControlDetail, Evidence, Obligation } from "../types";
 
 const STATUS_OPTIONS = [
@@ -33,6 +34,9 @@ export default function ControlsPage(): JSX.Element {
   const [createOpen, setCreateOpen] = useState(false);
   const [linkControl, setLinkControl] = useState<Control | null>(null);
   const showToast = useToast();
+  const { can } = usePermissions();
+  const mayWrite = can("assessments:write");
+  const noWriteTitle = "Requires permission: assessments:write";
 
   const load = useCallback(async () => {
     try {
@@ -132,7 +136,8 @@ export default function ControlsPage(): JSX.Element {
         <h1>Controls</h1>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn-ghost" onClick={load}>↺ Refresh</button>
-          <button className="btn-primary" onClick={() => setCreateOpen(true)}>+ New Control</button>
+          <button className="btn-primary" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+            onClick={() => setCreateOpen(true)}>+ New Control</button>
         </div>
       </div>
 
@@ -198,11 +203,16 @@ export default function ControlsPage(): JSX.Element {
                   <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{fmtDate(c.due_date)}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div className="actions">
-                      <button className="btn-ghost btn-sm" data-tip="Link or unlink obligations" onClick={() => setLinkControl(c)}>Link Obligations</button>
-                      <select className="inline-select" value={c.status} onChange={(e) => changeStatus(c.id, e.target.value)}>
+                      <button className="btn-ghost btn-sm" data-tip="Link or unlink obligations"
+                        disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+                        onClick={() => setLinkControl(c)}>Link Obligations</button>
+                      <select className="inline-select" value={c.status} disabled={!mayWrite}
+                        title={mayWrite ? undefined : noWriteTitle}
+                        onChange={(e) => changeStatus(c.id, e.target.value)}>
                         {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{CONTROL_STATUS_META[s].label}</option>)}
                       </select>
                       <button className="btn-ghost btn-sm btn-danger" data-tip="Delete this control"
+                        disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
                         onClick={async () => {
                           if (!confirm(`Delete "${c.title}"?`)) return;
                           try { await api.deleteControl(c.id); showToast("Deleted"); load(); closePanel(); }
@@ -262,8 +272,10 @@ export default function ControlsPage(): JSX.Element {
             }
           </DetailSection>
           <div className="dp-actions">
-            <button className="btn-ghost btn-sm" onClick={() => setLinkControl(detail)}>Link Obligations</button>
-            <select className="form-select" value={detail.status}
+            <button className="btn-ghost btn-sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+              onClick={() => setLinkControl(detail)}>Link Obligations</button>
+            <select className="form-select" value={detail.status} disabled={!mayWrite}
+              title={mayWrite ? undefined : noWriteTitle}
               onChange={async (e) => {
                 await changeStatus(detail.id, e.target.value);
                 setDetail((d) => d ? { ...d, status: e.target.value } : d);

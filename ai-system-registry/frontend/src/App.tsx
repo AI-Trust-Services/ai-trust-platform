@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { useLuigiInit } from "./hooks/useLuigi";
+import { usePermissions } from "./hooks/usePermissions";
 import { HEALTH_URL } from "./api/client";
 
 type ToastFn = (msg: string, isError?: boolean) => void;
@@ -10,6 +11,7 @@ interface ModalControls {
   setWizardOpen: (open: boolean) => void;
   modelCreateOpen: boolean;
   setModelCreateOpen: (open: boolean) => void;
+  mayWrite: boolean;
 }
 
 const ToastContext = createContext<ToastFn | null>(null);
@@ -26,6 +28,9 @@ export default function App() {
   const healthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const { can } = usePermissions();
+  const mayWrite = can("systems:write");
+  const noWriteTitle = "Requires permission: systems:write";
 
   useLuigiInit(() => {});
 
@@ -55,16 +60,18 @@ export default function App() {
 
   return (
     <ToastContext.Provider value={showToast}>
-      <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen }}>
+      <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen, mayWrite }}>
         <div className="page-header">
           <h1>AI System Registry</h1>
           <div>
             {activeView === "systems" ? (
-              <button className="btn-primary" onClick={() => setWizardOpen(true)}>
+              <button className="btn-primary" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+                onClick={() => setWizardOpen(true)}>
                 + Register System
               </button>
             ) : (
-              <button className="btn-primary" onClick={() => setModelCreateOpen(true)}>
+              <button className="btn-primary" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+                onClick={() => setModelCreateOpen(true)}>
                 + Add Model
               </button>
             )}

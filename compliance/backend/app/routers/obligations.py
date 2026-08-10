@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_trust_authorization import require_permission
+from ai_trust_authorization.constants import ASSESSMENTS_READ, ASSESSMENTS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import Assessment, Obligation, control_obligations, evidence_obligations
@@ -29,7 +31,7 @@ async def _assessment_approved(session: AsyncSession, assessment_id: str) -> boo
     return status == "approved"
 
 
-@router.get("/obligations", response_model=list[ObligationResponse])
+@router.get("/obligations", response_model=list[ObligationResponse], dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
 async def list_obligations(
     assessment_id: str | None = Query(default=None),
     ai_system_id: str | None = Query(default=None),
@@ -60,7 +62,7 @@ async def list_obligations(
         return [ObligationResponse.model_validate(r) for r in result.scalars().all()]
 
 
-@router.post("/obligations", response_model=ObligationResponse, status_code=201)
+@router.post("/obligations", response_model=ObligationResponse, status_code=201, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def create_obligation(body: ObligationCreate) -> ObligationResponse:
     async with SessionLocal() as session:
         assessment = (await session.execute(
@@ -92,7 +94,7 @@ async def create_obligation(body: ObligationCreate) -> ObligationResponse:
     return ObligationResponse.model_validate(row)
 
 
-@router.get("/obligations/{obligation_id}", response_model=ObligationDetailResponse)
+@router.get("/obligations/{obligation_id}", response_model=ObligationDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
 async def get_obligation(obligation_id: str) -> ObligationDetailResponse:
     async with SessionLocal() as session:
         row = (await session.execute(
@@ -109,7 +111,7 @@ async def get_obligation(obligation_id: str) -> ObligationDetailResponse:
         return detail
 
 
-@router.put("/obligations/{obligation_id}", response_model=ObligationResponse)
+@router.put("/obligations/{obligation_id}", response_model=ObligationResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def update_obligation(obligation_id: str, body: ObligationUpdate) -> ObligationResponse:
     updates = body.model_dump(exclude_none=True)
     async with SessionLocal() as session:
@@ -134,7 +136,7 @@ async def update_obligation(obligation_id: str, body: ObligationUpdate) -> Oblig
     return ObligationResponse.model_validate(row)
 
 
-@router.delete("/obligations/{obligation_id}")
+@router.delete("/obligations/{obligation_id}", dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def delete_obligation(obligation_id: str) -> dict:
     async with SessionLocal() as session:
         row = (await session.execute(

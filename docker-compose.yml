@@ -14,6 +14,9 @@ x-minio-env: &minio-env
   MINIO_ROOT_USER: ${MINIO_ROOT_USER}
   MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
 
+x-openfga-env: &openfga-env
+  OPENFGA_URL: http://openfga:8080
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -66,10 +69,56 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      USERS_BACKEND_CLIENT_SECRET: ${USERS_BACKEND_CLIENT_SECRET}
       APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD}
     depends_on:
       keycloak:
+        condition: service_healthy
+    restart: on-failure
+
+  # ── OpenFGA (authorization) ──
+  openfga-migrate:
+    image: openfga/openfga:v1.18.1
+    command: migrate
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/openfga?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  openfga:
+    image: openfga/openfga:v1.18.1
+    command: run
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/openfga?sslmode=disable
+      OPENFGA_LOG_FORMAT: json
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # OpenFGA ships grpc_health_probe in the image; probe the gRPC port (8081).
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=localhost:8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: on-failure
+
+  openfga-provision:
+    build:
+      context: .
+      dockerfile: infra/openfga-provision/Dockerfile
+    environment:
+      <<: *openfga-env
+      INITIAL_ADMIN_USER: ${APP_ADMIN_USERNAME}
+    volumes:
+      - openfga-config:/config
+    depends_on:
+      openfga:
         condition: service_healthy
     restart: on-failure
 
@@ -100,7 +149,7 @@ services:
       - --cookie-secure=false
       - --email-domain=*
       - --pass-authorization-header=true
-      - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout
+      - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout?id_token_hint={id_token}
     depends_on:
       keycloak-provision:
         condition: service_completed_successfully
@@ -135,6 +184,10 @@ services:
         condition: service_started
       compliance-backend:
         condition: service_healthy
+      users-frontend:
+        condition: service_started
+      users-backend:
+        condition: service_healthy
     restart: on-failure
 
   ai-system-registry-frontend:
@@ -142,6 +195,7 @@ services:
       context: ./ai-system-registry/frontend
       args:
         VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE}
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
     restart: on-failure
 
   monitoring-frontend:
@@ -161,6 +215,7 @@ services:
         VITE_REGISTRY_URL: ${VITE_REGISTRY_URL}
         VITE_COMPLIANCE_URL: ${VITE_COMPLIANCE_URL}
         VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE}
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
     restart: on-failure
 
   alerts-frontend:
@@ -169,6 +224,7 @@ services:
       args:
         VITE_ALERTS_API_BASE: ${VITE_ALERTS_API_BASE}
         VITE_ALERTS_URL: ${VITE_ALERTS_URL}
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
     restart: on-failure
 
   compliance-frontend:
@@ -177,6 +233,41 @@ services:
       args:
         VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE:-/api/compliance/v1}
         VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/v1}
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
+    restart: on-failure
+
+  users-frontend:
+    build:
+      context: ./users/frontend
+      args:
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
+    restart: on-failure
+
+  users-backend:
+    build:
+      context: .
+      dockerfile: users/backend/Dockerfile
+    environment:
+      ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/users"
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ai-trust
+      USERS_BACKEND_CLIENT_ID: users-backend
+      USERS_BACKEND_CLIENT_SECRET: ${USERS_BACKEND_CLIENT_SECRET}
+      OPENFGA_URL: http://openfga:8080
+    volumes:
+      - openfga-config:/config:ro
+    depends_on:
+      keycloak-provision:
+        condition: service_completed_successfully
+      openfga-provision:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: on-failure
 
   db-migrate:
@@ -196,8 +287,14 @@ services:
       <<: *db-env
       ALLOWED_ORIGINS: "http://localhost:8080"
       ROOT_PATH: "/api/registry"
+      OPENFGA_URL: http://openfga:8080
+      KEYCLOAK_URL: http://keycloak:8080
+    volumes:
+      - openfga-config:/config:ro
     depends_on:
       db-migrate:
+        condition: service_completed_successfully
+      openfga-provision:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "healthcheck.py"]
@@ -219,11 +316,16 @@ services:
       CLICKHOUSE_PORT: "8123"
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      OPENFGA_URL: http://openfga:8080
+    volumes:
+      - openfga-config:/config:ro
     depends_on:
       db-migrate:
         condition: service_completed_successfully
       clickhouse:
         condition: service_healthy
+      openfga-provision:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "healthcheck.py"]
       interval: 10s
@@ -263,10 +365,15 @@ services:
       CLICKHOUSE_PORT: "8123"
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      OPENFGA_URL: http://openfga:8080
+    volumes:
+      - openfga-config:/config:ro
     depends_on:
       db-migrate:
         condition: service_completed_successfully
       clickhouse-migrate:
+        condition: service_completed_successfully
+      openfga-provision:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "healthcheck.py"]
@@ -290,11 +397,16 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_SECURE: ${MINIO_SECURE}
       MINIO_REGION: ${MINIO_REGION}
+      OPENFGA_URL: http://openfga:8080
+    volumes:
+      - openfga-config:/config:ro
     depends_on:
       db-migrate:
         condition: service_completed_successfully
       minio:
         condition: service_healthy
+      openfga-provision:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "healthcheck.py"]
       interval: 10s
@@ -480,3 +592,4 @@ volumes:
   postgres_data:
   clickhouse_data:
   minio_data:
+  openfga-config:

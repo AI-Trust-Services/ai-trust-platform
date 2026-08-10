@@ -1,16 +1,21 @@
-import type { AlertEvent, AlertRule, AlertCount } from "../types";
+import type { AlertEvent, AlertRule, AlertCount, PermissionsResponse } from "../types";
 
 const API_BASE = import.meta.env.VITE_ALERTS_API_BASE as string;
+const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE as string;
 export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 export const ALERTS_URL = (import.meta.env.VITE_ALERTS_URL as string) || "http://localhost:3004";
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, options);
+async function requestBase<T>(base: string, path: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${base}${path}`, options);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as any).detail || `HTTP ${res.status}`);
   }
   return res.status === 204 ? (null as T) : res.json();
+}
+
+function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return requestBase<T>(API_BASE, path, options);
 }
 
 export const api = {
@@ -30,4 +35,7 @@ export const api = {
 
   toggleRule: (ruleId: string) =>
     request<{ rule_id: string; enabled: boolean }>(`/rules/${ruleId}/toggle`, { method: "POST" }),
+
+  // Current user's effective permissions — served by the registry backend.
+  myPermissions: () => requestBase<PermissionsResponse>(USERS_API_BASE, "/me/permissions"),
 };

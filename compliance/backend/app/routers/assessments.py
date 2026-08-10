@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_trust_authorization import require_permission
+from ai_trust_authorization.constants import (
+    ASSESSMENTS_APPROVE,
+    ASSESSMENTS_READ,
+    ASSESSMENTS_WRITE,
+)
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import (
@@ -45,7 +51,7 @@ async def _load(session: AsyncSession, assessment_id: str) -> Assessment:
     return row
 
 
-@router.get("/assessments", response_model=list[AssessmentResponse])
+@router.get("/assessments", response_model=list[AssessmentResponse], dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
 async def list_assessments(
     ai_system_id: str | None = Query(default=None),
     updated_after: date | None = Query(
@@ -66,7 +72,7 @@ async def list_assessments(
         return [AssessmentResponse.model_validate(r) for r in result.scalars().all()]
 
 
-@router.post("/assessments", response_model=AssessmentResponse, status_code=201)
+@router.post("/assessments", response_model=AssessmentResponse, status_code=201, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
     async with SessionLocal() as session:
         system = (await session.execute(
@@ -246,7 +252,7 @@ async def _prior_owners_by_ref(
     return {ref: owner for ref, owner in rows}
 
 
-@router.get("/assessments/{assessment_id}", response_model=AssessmentDetailResponse)
+@router.get("/assessments/{assessment_id}", response_model=AssessmentDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
 async def get_assessment(assessment_id: str) -> AssessmentDetailResponse:
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
@@ -265,7 +271,7 @@ async def get_assessment(assessment_id: str) -> AssessmentDetailResponse:
         return detail
 
 
-@router.put("/assessments/{assessment_id}", response_model=AssessmentResponse)
+@router.put("/assessments/{assessment_id}", response_model=AssessmentResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def update_assessment(assessment_id: str, body: AssessmentUpdate) -> AssessmentResponse:
     updates = body.model_dump(exclude_none=True)
     async with SessionLocal() as session:
@@ -281,7 +287,7 @@ async def update_assessment(assessment_id: str, body: AssessmentUpdate) -> Asses
     return AssessmentResponse.model_validate(row)
 
 
-@router.delete("/assessments/{assessment_id}")
+@router.delete("/assessments/{assessment_id}", dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def delete_assessment(assessment_id: str) -> dict:
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
@@ -336,7 +342,7 @@ async def _delete_generated_controls(session: AsyncSession, assessment_id: str) 
     return len(to_delete)
 
 
-@router.post("/assessments/{assessment_id}/generate-obligations", response_model=GenerateObligationsResponse)
+@router.post("/assessments/{assessment_id}/generate-obligations", response_model=GenerateObligationsResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def generate_obligations(assessment_id: str) -> GenerateObligationsResponse:
     async with SessionLocal() as session:
         assessment = await _load(session, assessment_id)
@@ -377,7 +383,7 @@ async def generate_obligations(assessment_id: str) -> GenerateObligationsRespons
         )
 
 
-@router.post("/assessments/{assessment_id}/generate-controls", response_model=GenerateControlsResponse)
+@router.post("/assessments/{assessment_id}/generate-controls", response_model=GenerateControlsResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def generate_controls(assessment_id: str) -> GenerateControlsResponse:
     async with SessionLocal() as session:
         assessment = await _load(session, assessment_id)
@@ -427,7 +433,7 @@ async def generate_controls(assessment_id: str) -> GenerateControlsResponse:
         )
 
 
-@router.post("/assessments/{assessment_id}/submit", response_model=AssessmentResponse)
+@router.post("/assessments/{assessment_id}/submit", response_model=AssessmentResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def submit_assessment(assessment_id: str) -> AssessmentResponse:
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
@@ -447,7 +453,7 @@ async def submit_assessment(assessment_id: str) -> AssessmentResponse:
     return AssessmentResponse.model_validate(row)
 
 
-@router.post("/assessments/{assessment_id}/approve", response_model=AssessmentResponse)
+@router.post("/assessments/{assessment_id}/approve", response_model=AssessmentResponse, dependencies=[Depends(require_permission(ASSESSMENTS_APPROVE))])
 async def approve_assessment(assessment_id: str) -> AssessmentResponse:
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)

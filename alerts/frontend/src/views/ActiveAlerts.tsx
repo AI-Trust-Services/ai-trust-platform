@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import type { AlertEvent, AlertRule } from "../types";
 import { api } from "../api/client";
 import { useToast } from "../components/Toast";
+import { usePermissions } from "../hooks/usePermissions";
 import { fmtDateTime, fmtAge, fmtValue } from "../utils";
 
 interface Props {
@@ -12,6 +13,9 @@ interface Props {
 
 export function ActiveAlerts({ alerts, rules, onRefresh }: Props) {
   const { showToast } = useToast();
+  const { can } = usePermissions();
+  const mayHandle = can("alerts:handle");
+  const noHandleTitle = "Requires permission: alerts:handle";
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const ruleMap = Object.fromEntries(rules.map((r) => [r.id, r]));
@@ -97,15 +101,30 @@ export function ActiveAlerts({ alerts, rules, onRefresh }: Props) {
                 <div className="alert-actions">
                   {isModelDivergence ? (
                     <>
-                      <button className="btn-primary btn-sm" onClick={() => approveModel(a.id)}>
+                      <button
+                        className="btn-primary btn-sm"
+                        disabled={!mayHandle}
+                        title={mayHandle ? undefined : noHandleTitle}
+                        onClick={() => approveModel(a.id)}
+                      >
                         Approve new model
                       </button>
-                      <button className="btn-danger btn-sm" onClick={() => rejectModel(a.id)}>
+                      <button
+                        className="btn-danger btn-sm"
+                        disabled={!mayHandle}
+                        title={mayHandle ? undefined : noHandleTitle}
+                        onClick={() => rejectModel(a.id)}
+                      >
                         Reject
                       </button>
                     </>
                   ) : (
-                    <button className="btn-danger btn-sm" onClick={() => handleAlert(a.id)}>
+                    <button
+                      className="btn-danger btn-sm"
+                      disabled={!mayHandle}
+                      title={mayHandle ? undefined : noHandleTitle}
+                      onClick={() => handleAlert(a.id)}
+                    >
                       Mark as handled
                     </button>
                   )}

@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from ai_trust_authorization import require_permission
+from ai_trust_authorization.constants import SYSTEMS_WRITE
 from ai_trust_logging import get_logger
 from app.classifier import classify
 from ai_trust_persistence import SessionLocal
@@ -15,7 +17,7 @@ router = APIRouter(tags=["intake"])
 logger = get_logger(__name__)
 
 
-@router.post("/intake", response_model=IntakeResponse, status_code=201)
+@router.post("/intake", response_model=IntakeResponse, status_code=201, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
 async def intake_system(body: AISystemCreate) -> IntakeResponse:
     classification = classify(body)
 

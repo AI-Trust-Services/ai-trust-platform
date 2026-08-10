@@ -1,11 +1,12 @@
 import type {
   AISystem, Assessment, AssessmentDetail, Control, ControlDetail,
   Evidence, EvidenceDetail, EvidenceVersion, Framework, GenerateObligationsResponse,
-  DownloadUrlResponse, Obligation, ObligationDetail,
+  DownloadUrlResponse, Obligation, ObligationDetail, PermissionsResponse,
 } from "../types";
 
 const API_BASE = import.meta.env.VITE_COMPLIANCE_API_BASE as string;
 const REGISTRY_API_BASE = import.meta.env.VITE_REGISTRY_API_BASE as string;
+const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE as string;
 export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 
 function formatDetail(detail: unknown): string {
@@ -133,4 +134,8 @@ export const api = {
     request<EvidenceVersion[]>(API_BASE, `/evidence/${id}/versions`),
   uploadEvidenceVersion: (id: string, formData: FormData): Promise<EvidenceDetail> =>
     request<EvidenceDetail>(API_BASE, `/evidence/${id}/upload-version`, { method: "POST", body: formData }),
+
+  // Current user's effective permissions — served by the registry backend.
+  myPermissions: (): Promise<PermissionsResponse> =>
+    request<PermissionsResponse>(USERS_API_BASE, "/me/permissions"),
 };

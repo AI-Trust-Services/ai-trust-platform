@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text, select
 
+from ai_trust_authorization import require_permission
+from ai_trust_authorization.constants import ALERTS_READ, ALERTS_HANDLE, ALERTS_MANAGE_RULES
 from ai_trust_clickhouse import ch_command, ch_query
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
@@ -33,7 +35,7 @@ def _enrich(rows: list[dict], name_map: dict[str, str]) -> list[dict]:
     return rows
 
 
-@router.get("/active")
+@router.get("/active", dependencies=[Depends(require_permission(ALERTS_READ))])
 async def get_active_alerts() -> list[dict]:
     rows = await ch_query("""
         SELECT
@@ -52,7 +54,7 @@ async def get_active_alerts() -> list[dict]:
     return _enrich(rows, name_map)
 
 
-@router.get("/history")
+@router.get("/history", dependencies=[Depends(require_permission(ALERTS_READ))])
 async def get_alert_history() -> list[dict]:
     rows = await ch_query("""
         SELECT
@@ -73,7 +75,7 @@ async def get_alert_history() -> list[dict]:
     return _enrich(rows, name_map)
 
 
-@router.get("/rules")
+@router.get("/rules", dependencies=[Depends(require_permission(ALERTS_READ))])
 async def get_alert_rules() -> list[dict]:
     async with SessionLocal() as session:
         rules = (await session.execute(
@@ -98,7 +100,7 @@ async def get_alert_rules() -> list[dict]:
     ]
 
 
-@router.get("/count")
+@router.get("/count", dependencies=[Depends(require_permission(ALERTS_READ))])
 async def get_alert_count() -> dict:
     """Fast endpoint for bell badge — returns count of active unhandled alerts."""
     rows = await ch_query("""
@@ -111,7 +113,7 @@ async def get_alert_count() -> dict:
     return {"count": count}
 
 
-@router.post("/events/{event_id}/handle")
+@router.post("/events/{event_id}/handle", dependencies=[Depends(require_permission(ALERTS_HANDLE))])
 async def handle_alert_event(event_id: str) -> dict:
     """Mark an event-based alert as handled — moves to history permanently."""
     now = datetime.now(timezone.utc)
@@ -125,7 +127,7 @@ async def handle_alert_event(event_id: str) -> dict:
     return {"status": "handled", "event_id": event_id}
 
 
-@router.post("/rules/{rule_id}/toggle")
+@router.post("/rules/{rule_id}/toggle", dependencies=[Depends(require_permission(ALERTS_MANAGE_RULES))])
 async def toggle_alert_rule(rule_id: str) -> dict:
     """Enable or disable an alert rule."""
     async with SessionLocal() as session:
@@ -140,7 +142,7 @@ async def toggle_alert_rule(rule_id: str) -> dict:
     return {"rule_id": rule_id, "enabled": rule.enabled}
 
 
-@router.post("/events/{event_id}/approve-model")
+@router.post("/events/{event_id}/approve-model", dependencies=[Depends(require_permission(ALERTS_HANDLE))])
 async def approve_model_change(event_id: str) -> dict:
     """Approve a model change — marks event as handled and updates the service baseline."""
     rows = await ch_query(
@@ -179,7 +181,7 @@ async def approve_model_change(event_id: str) -> dict:
     return {"status": "approved", "event_id": event_id, "new_model": new_model}
 
 
-@router.post("/events/{event_id}/reject-model")
+@router.post("/events/{event_id}/reject-model", dependencies=[Depends(require_permission(ALERTS_HANDLE))])
 async def reject_model_change(event_id: str) -> dict:
     """Reject a model change — marks event as handled, baseline unchanged."""
     now = datetime.now(timezone.utc)

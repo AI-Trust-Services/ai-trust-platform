@@ -9,6 +9,7 @@ Required env vars:
   KEYCLOAK_ADMIN_PASSWORD     admin password
   APP_PUBLIC_URL              public app URL e.g. https://app.yourdomain.com
   KEYCLOAK_CLIENT_SECRET      secret for the oauth2-proxy client
+  USERS_BACKEND_CLIENT_SECRET secret for the users-backend service account client
   APP_ADMIN_USERNAME          bootstrap platform admin username
   APP_ADMIN_PASSWORD          bootstrap platform admin password
 """
@@ -16,15 +17,25 @@ import os
 import sys
 import httpx
 
-KEYCLOAK_URL         = os.environ["KEYCLOAK_URL"]
-ADMIN                = os.environ["KEYCLOAK_ADMIN"]
-ADMIN_PASSWORD       = os.environ["KEYCLOAK_ADMIN_PASSWORD"]
-APP_PUBLIC_URL       = os.environ["APP_PUBLIC_URL"]
-CLIENT_SECRET        = os.environ["KEYCLOAK_CLIENT_SECRET"]
-APP_ADMIN_USERNAME   = os.environ["APP_ADMIN_USERNAME"]
-APP_ADMIN_PASSWORD   = os.environ["APP_ADMIN_PASSWORD"]
+KEYCLOAK_URL                 = os.environ["KEYCLOAK_URL"]
+ADMIN                        = os.environ["KEYCLOAK_ADMIN"]
+ADMIN_PASSWORD               = os.environ["KEYCLOAK_ADMIN_PASSWORD"]
+APP_PUBLIC_URL               = os.environ["APP_PUBLIC_URL"]
+CLIENT_SECRET                = os.environ["KEYCLOAK_CLIENT_SECRET"]
+USERS_BACKEND_CLIENT_SECRET  = os.environ["USERS_BACKEND_CLIENT_SECRET"]
+APP_ADMIN_USERNAME           = os.environ["APP_ADMIN_USERNAME"]
+APP_ADMIN_PASSWORD           = os.environ["APP_ADMIN_PASSWORD"]
 
 REALM = "ai-trust"
+
+ROLES = [
+    "platform_administrator",
+    "ai_engineer",
+    "business_owner",
+    "ai_compliance_officer",
+    "auditor",
+    "executive",
+]
 
 
 def get_admin_token(client: httpx.Client) -> str:
@@ -91,6 +102,96 @@ def ensure_client(client: httpx.Client) -> None:
         client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients", json=config).raise_for_status()
 
 
+def ensure_roles(client: httpx.Client) -> None:
+    existing_resp = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}/roles")
+    existing_resp.raise_for_status()
+    existing_names = {r["name"] for r in existing_resp.json()}
+    for role in ROLES:
+        if role in existing_names:
+            print(f"Role '{role}' already exists, skipping.")
+        else:
+            print(f"Creating role '{role}'...")
+            client.post(
+                f"{KEYCLOAK_URL}/admin/realms/{REALM}/roles",
+                json={"name": role},
+            ).raise_for_status()
+
+
+def ensure_users_backend_client(client: httpx.Client) -> None:
+    existing = client.get(
+        f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients",
+        params={"clientId": "users-backend"},
+    ).json()
+
+    config = {
+        "clientId": "users-backend",
+        "enabled": True,
+        "protocol": "openid-connect",
+        "publicClient": False,
+        "secret": USERS_BACKEND_CLIENT_SECRET,
+        "standardFlowEnabled": False,
+        "directAccessGrantsEnabled": False,
+        "serviceAccountsEnabled": True,
+    }
+
+    if existing:
+        print("Updating users-backend client...")
+        client_id = existing[0]["id"]
+        client.put(
+            f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients/{client_id}",
+            json=config,
+        ).raise_for_status()
+    else:
+        print("Creating users-backend client...")
+        client.post(
+            f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients",
+            json=config,
+        ).raise_for_status()
+
+    # Grant the service account the realm-management 'manage-users' role so it
+    # can create/edit/delete users via the Admin API.
+    sa_resp = client.get(
+        f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients",
+        params={"clientId": "users-backend"},
+    )
+    sa_resp.raise_for_status()
+    ub_client_id = sa_resp.json()[0]["id"]
+
+    sa_user_resp = client.get(
+        f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients/{ub_client_id}/service-account-user"
+    )
+    sa_user_resp.raise_for_status()
+    sa_user_id = sa_user_resp.json()["id"]
+
+    rm_resp = client.get(
+        f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients",
+        params={"clientId": "realm-management"},
+    )
+    rm_resp.raise_for_status()
+    rm_client_id = rm_resp.json()[0]["id"]
+
+    rm_roles_resp = client.get(
+        f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients/{rm_client_id}/roles"
+    )
+    rm_roles_resp.raise_for_status()
+    needed_roles = {r["name"]: r for r in rm_roles_resp.json() if r["name"] in ("manage-users", "view-realm")}
+
+    already_assigned = client.get(
+        f"{KEYCLOAK_URL}/admin/realms/{REALM}/users/{sa_user_id}/role-mappings/clients/{rm_client_id}"
+    ).json()
+    already_names = {r["name"] for r in already_assigned}
+
+    to_assign = [r for name, r in needed_roles.items() if name not in already_names]
+    if to_assign:
+        print(f"Granting {[r['name'] for r in to_assign]} to users-backend service account...")
+        client.post(
+            f"{KEYCLOAK_URL}/admin/realms/{REALM}/users/{sa_user_id}/role-mappings/clients/{rm_client_id}",
+            json=to_assign,
+        ).raise_for_status()
+    else:
+        print("users-backend service account already has required roles.")
+
+
 def ensure_admin_user(client: httpx.Client) -> None:
     existing = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", params={"username": APP_ADMIN_USERNAME}).json()
     if existing:
@@ -115,6 +216,8 @@ def main() -> None:
 
         ensure_realm(client)
         ensure_client(client)
+        ensure_roles(client)
+        ensure_users_backend_client(client)
         ensure_admin_user(client)
 
     print("Keycloak provisioning complete.")

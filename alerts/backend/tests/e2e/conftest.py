@@ -156,8 +156,21 @@ def e2e_setup():
     _ensure_test_db()
     _run_migrations()
     os.environ["DATABASE_URL"] = _TEST_DATABASE_URL
+    os.environ.setdefault("OPENFGA_URL", "http://localhost:8080")
+    os.environ.setdefault("OPENFGA_STORE_ID", "test-store-id")
     _truncate_pg()  # clear seeded alert_rules from migrations before tests begin
     _truncate_ch()
+
+    # Bypass OpenFGA for e2e tests — no OpenFGA instance is available.
+    import ai_trust_authorization.openfga_client as _fga
+    from app.main import app
+    from ai_trust_authorization.permissions import get_current_user
+
+    async def _always_allowed(*_a, **_kw) -> bool:
+        return True
+
+    _fga.check = _always_allowed
+    app.dependency_overrides[get_current_user] = lambda: "test-user"
 
 
 @pytest.fixture(autouse=True)

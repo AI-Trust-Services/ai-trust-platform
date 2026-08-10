@@ -111,6 +111,9 @@ All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports 
 | Compliance frontend | http://localhost:8080/compliance/ |
 | Compliance backend API | http://localhost:8080/api/compliance/v1 |
 | Compliance health | http://localhost:8080/api/compliance/health |
+| Role Management (IAM) frontend | http://localhost:8080/iam/ |
+| IAM / roles API | http://localhost:8080/api/users/v1/iam |
+| Current user permissions | http://localhost:8080/api/users/v1/me/permissions |
 | PostgreSQL | localhost:5432 / db: `ai_trust` |
 | OTel Collector (gRPC) | localhost:4317 |
 | OTel Collector (HTTP) | localhost:4318 |
@@ -141,8 +144,15 @@ All traffic enters through **oauth2-proxy** at port 8080. No backend or frontend
 
 A single bootstrap admin user is always created on startup with credentials from `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` in `.env`.
 
-### Phase 2 (not yet implemented)
-Authorization (what each user can do) will be handled by OpenFGA. Keycloak roles are intentionally omitted until then.
+### Phase 2 (Authorization — RBAC via OpenFGA)
+Authorization (what each user can do) is handled by **OpenFGA**, running as a dedicated Docker service. See [docs/rbac-design.md](docs/rbac-design.md) for the full design.
+
+- **Model** — flat RBAC: users are members of roles, roles grant permissions on a single `platform:global` object. No per-object tuples in Phase 2 (BU scoping deferred to Phase 3).
+- **`libs/authorization`** — shared lib. `require_permission("evidence:approve")` is a FastAPI `Depends()` that reads `X-Forwarded-User` (set by oauth2-proxy), calls OpenFGA, and returns 403 on denial. **Fails closed** — any OpenFGA error denies. Permission strings + role definitions live in `ai_trust_authorization.constants` (single source of truth).
+- **`openfga` + `openfga-provision`** — OpenFGA uses its own Postgres DB (`openfga`, created by `infra/keycloak/init.sh`). `openfga-provision` (one-shot, like `keycloak-provision`) creates the store, uploads the model generated from `constants.py`, seeds role→permission tuples, seeds `APP_ADMIN_USERNAME` as Platform Admin, and writes the store ID to the `openfga-config` volume. Backends read the store ID from `/config/store_id` on startup.
+- **IAM API** — `users` backend hosts `routers/iam.py`: `GET /iam/roles` (roles + permissions), and `GET /me/permissions` (used by the shell to gate the IAM nav node, and by MFEs to grey out unauthorized actions). User management endpoints (`GET/POST /users`, `PUT/DELETE /users/{id}/roles/{role}`) are also in the `users` backend.
+- **IAM UI** — separate `iam/` frontend MFE (Role Management), proxied at `/iam/`, shown in the Luigi nav only to users with `iam:manage`.
+- **Built-in roles** — `platform_admin`, `ai_engineer`, `compliance_officer`, `business_owner`, `auditor`, `executive`. Custom roles deferred to Phase 3.
 
 ## Architecture
 
@@ -411,10 +421,12 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `KEYCLOAK_ADMIN` | keycloak, keycloak-provision | `admin` | Keycloak admin username |
 | `KEYCLOAK_ADMIN_PASSWORD` | keycloak, keycloak-provision | `admin` | Keycloak admin password |
 | `KEYCLOAK_CLIENT_SECRET` | keycloak-provision, oauth2-proxy | *(required)* | Shared secret for the oauth2-proxy OIDC client |
+| `USERS_BACKEND_CLIENT_SECRET` | keycloak-provision, users-backend | *(required)* | Secret for the users-backend service account client in Keycloak |
 | `KEYCLOAK_PUBLIC_URL` | oauth2-proxy | `http://localhost:8180` | Public Keycloak URL reachable by the browser (for login redirect) |
 | `APP_PUBLIC_URL` | keycloak-provision | `http://localhost:8080` | Public app URL — used to set oauth2-proxy redirect URIs in Keycloak |
 | `APP_ADMIN_USERNAME` | keycloak-provision | `admin` | Bootstrap platform admin username |
 | `APP_ADMIN_PASSWORD` | keycloak-provision | `password` | Bootstrap platform admin password — change before any non-local deployment |
+| `VITE_USERS_API_BASE` | users frontend (build time) | `/api/users/v1` | Users API URL baked into bundle |
 | `OAUTH2_PROXY_COOKIE_SECRET` | oauth2-proxy | *(required)* | Cookie encryption key — must be exactly 16, 24, or 32 characters |
 | `MINIO_ENDPOINT` | compliance-backend | `minio:9000` | In-cluster MinIO host:port for uploads (used inside the container) |
 | `MINIO_PUBLIC_ENDPOINT` | compliance-backend | `localhost:9000` | Public-facing MinIO host:port for presigning download URLs the browser can reach |

@@ -22,6 +22,11 @@ import pytest
 import pytest_asyncio
 import httpx
 
+# Must be set before any app import — openfga_client reads OPENFGA_URL lazily
+# but the module-level store-ID resolution would still fail without it.
+os.environ.setdefault("OPENFGA_URL", "http://localhost:8080")
+os.environ.setdefault("OPENFGA_STORE_ID", "test-store-id")
+
 _PG_USER = os.environ.get("POSTGRES_USER", "postgres")
 _PG_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "postgres")
 _PG_HOST = "localhost"
@@ -92,6 +97,17 @@ def e2e_setup():
     _run_migrations()
     os.environ["DATABASE_URL"] = _TEST_DATABASE_URL
     os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:3001")
+
+    # Bypass OpenFGA for e2e tests — no OpenFGA instance is available.
+    import ai_trust_authorization.openfga_client as _fga
+    from app.main import app
+    from ai_trust_authorization.permissions import get_current_user
+
+    async def _always_allowed(*_a, **_kw) -> bool:
+        return True
+
+    _fga.check = _always_allowed
+    app.dependency_overrides[get_current_user] = lambda: "test-user"
 
 
 @pytest.fixture(autouse=True)
