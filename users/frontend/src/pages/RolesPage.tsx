@@ -1,26 +1,42 @@
 import { useState, useEffect } from "react";
-import { useToast } from "../App";
 import { api } from "../api/client";
 import type { RoleInfo } from "../types";
+import { ROLE_LABELS } from "../constants";
 
-const ROLE_LABELS: Record<string, string> = {
-  platform_administrator: "Platform Administrator",
-  ai_engineer: "AI Engineer",
-  business_owner: "Business Owner",
-  ai_compliance_officer: "AI Compliance Officer",
-  auditor: "Auditor",
-  executive: "Executive",
+const ROLE_DESCRIPTIONS: Record<string, string> = {
+  platform_administrator: "Full access to all features and user management.",
+  ai_engineer: "Register and manage AI systems, view monitoring and alerts.",
+  business_owner: "Approve assessments and evidence, read-only access to systems.",
+  ai_compliance_officer: "Manage compliance assessments, obligations, controls and evidence.",
+  auditor: "Read-only access to systems, assessments, evidence and monitoring.",
+  executive: "High-level read access to systems and monitoring dashboards.",
+};
+
+const PERMISSION_LABELS: Record<string, string> = {
+  "systems:read":        "View AI systems",
+  "systems:write":       "Create & edit AI systems",
+  "assessments:read":    "View assessments",
+  "assessments:write":   "Create & edit assessments",
+  "assessments:approve": "Approve assessments",
+  "evidence:read":       "View evidence",
+  "evidence:write":      "Upload & edit evidence",
+  "evidence:approve":    "Approve evidence",
+  "alerts:read":         "View alerts",
+  "alerts:handle":       "Handle & resolve alerts",
+  "alerts:manage_rules": "Manage alert rules",
+  "monitoring:read":     "View monitoring data",
+  "iam:manage":          "Manage users & roles",
 };
 
 export default function RolesPage(): JSX.Element {
-  const showToast = useToast();
   const [roles, setRoles] = useState<RoleInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.getRoleDetails()
-      .then(setRoles)
-      .catch(err => showToast(String(err), true))
+      .then(data => { setRoles(data); setError(null); })
+      .catch(err => setError(String(err)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -35,18 +51,32 @@ export default function RolesPage(): JSX.Element {
 
       {loading && <div className="empty">Loading…</div>}
 
-      {!loading && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {!loading && error && (
+        <div className="error-banner">Failed to load roles: {error}</div>
+      )}
+
+      {!loading && !error && roles.length === 0 && (
+        <div className="empty">No roles found.</div>
+      )}
+
+      {!loading && !error && roles.length > 0 && (
+        <div className="roles-grid">
           {roles.map(role => (
-            <div key={role.name} className="table-wrap" style={{ padding: "16px 20px" }}>
-              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>
-                {ROLE_LABELS[role.name] ?? role.name}
+            <div key={role.name} className="role-card">
+              <div className="role-card-header">
+                <div className="role-card-name">{ROLE_LABELS[role.name] ?? role.name}</div>
+                {ROLE_DESCRIPTIONS[role.name] && (
+                  <div className="role-card-desc">{ROLE_DESCRIPTIONS[role.name]}</div>
+                )}
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              <ul className="perm-list">
                 {role.permissions.map(p => (
-                  <span key={p} className="badge badge-role" style={{ fontFamily: "monospace", fontSize: 11 }}>{p}</span>
+                  <li key={p} className="perm-item">
+                    <span className="perm-check">✓</span>
+                    {PERMISSION_LABELS[p] ?? p}
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           ))}
         </div>

@@ -31,6 +31,12 @@ body {
   font-size: 13px; width: 260px; outline: none;
 }
 .search-input:focus { border-color: #0a6ed1; }
+.filter-select {
+  padding: 7px 10px; border: 1px solid #c9cdd4; border-radius: 6px;
+  font-size: 13px; outline: none; background: #fff; color: #1d2d3e;
+  width: auto;
+}
+.filter-select:focus { border-color: #0a6ed1; }
 
 /* ── Table ── */
 .table-wrap { background: #fff; border: 1px solid #e4e6e8; border-radius: 8px; overflow: visible; }
@@ -43,6 +49,7 @@ thead th {
 tbody tr { border-bottom: 1px solid #f0f1f2; }
 tbody tr:last-child { border-bottom: none; }
 tbody tr:hover { background: #fafbfc; }
+tbody tr.clickable-row { cursor: pointer; }
 tbody td { padding: 10px 14px; font-size: 13px; vertical-align: middle; }
 
 /* ── Badges ── */
@@ -59,12 +66,13 @@ tbody td { padding: 10px 14px; font-size: 13px; vertical-align: middle; }
   padding: 7px 14px; border-radius: 6px; font-size: 13px; font-weight: 500;
   cursor: pointer; border: none; transition: background 0.12s;
 }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primary   { background: #0a6ed1; color: #fff; }
-.btn-primary:hover { background: #085caf; }
+.btn-primary:not(:disabled):hover { background: #085caf; }
 .btn-secondary { background: #fff; color: #1d2d3e; border: 1px solid #c9cdd4; }
-.btn-secondary:hover { background: #f5f6f7; }
+.btn-secondary:not(:disabled):hover { background: #f5f6f7; }
 .btn-danger    { background: #fff; color: #c62828; border: 1px solid #f5c6c6; }
-.btn-danger:hover { background: #fce4e4; }
+.btn-danger:not(:disabled):hover { background: #fce4e4; }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
 
 /* ── Action menu ── */
@@ -111,6 +119,12 @@ tbody td { padding: 10px 14px; font-size: 13px; vertical-align: middle; }
 .panel-row { display: flex; margin-bottom: 8px; }
 .panel-label { width: 130px; flex-shrink: 0; font-size: 12px; color: #556b82; padding-top: 1px; }
 .panel-value { font-size: 13px; color: #1d2d3e; flex: 1; }
+.panel-user-name { font-weight: 600; font-size: 16px; }
+.panel-user-email { font-size: 12px; color: #556b82; margin-top: 2px; }
+.panel-empty { color: #556b82; font-size: 13px; }
+.panel-role-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.panel-role-add { display: flex; gap: 8px; margin-top: 10px; }
+.panel-role-add select { flex: 1; }
 .panel-footer {
   padding: 16px 24px; border-top: 1px solid #e4e6e8;
   display: flex; gap: 8px;
@@ -125,6 +139,7 @@ tbody td { padding: 10px 14px; font-size: 13px; vertical-align: middle; }
   background: #fff; border-radius: 10px; width: 480px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.15); overflow: hidden;
 }
+.modal.confirm-dialog { width: 360px; }
 .modal-header {
   padding: 20px 24px 16px; border-bottom: 1px solid #e4e6e8;
   display: flex; align-items: center; justify-content: space-between;
@@ -151,7 +166,10 @@ input:focus, select:focus { border-color: #0a6ed1; }
   background: #fce4e4; color: #8b0000; padding: 8px 16px;
   font-size: 13px; display: flex; align-items: center; gap: 8px;
 }
-.health-banner a { color: #0a6ed1; cursor: pointer; text-decoration: underline; }
+.health-retry-btn {
+  background: none; border: none; padding: 0; color: #0a6ed1;
+  cursor: pointer; text-decoration: underline; font-size: 13px;
+}
 
 /* ── Toast ── */
 .toast {
@@ -175,6 +193,22 @@ input:focus, select:focus { border-color: #0a6ed1; }
 }
 .tab:hover { color: #0a6ed1; }
 .tab-active { color: #0a6ed1; border-bottom-color: #0a6ed1; }
+
+/* ── Error banner ── */
+.error-banner {
+  background: #fce4e4; color: #8b0000; padding: 12px 16px;
+  border-radius: 6px; font-size: 13px; margin-bottom: 16px;
+}
+
+/* ── Roles grid ── */
+.roles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.role-card { background: #fff; border: 1px solid #e4e6e8; border-radius: 8px; overflow: hidden; }
+.role-card-header { padding: 16px 20px 12px; border-bottom: 1px solid #f0f1f2; }
+.role-card-name { font-size: 15px; font-weight: 600; color: #1d2d3e; margin-bottom: 4px; }
+.role-card-desc { font-size: 12px; color: #556b82; line-height: 1.5; }
+.perm-list { list-style: none; padding: 12px 20px; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.perm-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1d2d3e; }
+.perm-check { color: #2e7d32; font-size: 12px; flex-shrink: 0; }
 
 /* ── Empty ── */
 .empty { text-align: center; padding: 48px 24px; color: #556b82; }

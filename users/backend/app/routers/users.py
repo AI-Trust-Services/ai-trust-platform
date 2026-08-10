@@ -199,14 +199,26 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
         if role_resp.status_code == 404:
             raise HTTPException(404, f"Role '{role_name}' not found in Keycloak.")
         role_resp.raise_for_status()
+        user_resp = kc.get(f"/users/{user_id}")
+        if user_resp.status_code == 404:
+            raise HTTPException(404, "User not found.")
+        user_resp.raise_for_status()
+        username = user_resp.json().get("username")
+        if not username:
+            raise HTTPException(500, "Keycloak returned a user without a username.")
+
+    # Write OpenFGA first — if Keycloak fails after, user has no Keycloak role
+    # so they get no access (safe failure mode). Reverse order would silently
+    # break permissions: Keycloak role present but no OpenFGA tuple → 403 on all checks.
+    await openfga_client.write_tuple(f"user:{username}", "member", f"role:{role_name}")
+    with admin_client() as kc:
         kc.post(
             f"/users/{user_id}/role-mappings/realm",
             json=[role_resp.json()],
         ).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()
-        username = updated.json().get("username", user_id)
-    await openfga_client.write_tuple(f"user:{username}", "member", f"role:{role_name}")
+    logger.info("user.role_assigned", extra={"username": username, "role": role_name})
     return _to_detail(updated.json())
 
 
@@ -219,6 +231,19 @@ async def remove_role(user_id: str, role_name: str, _: str = Depends(require_per
         if role_resp.status_code == 404:
             raise HTTPException(404, f"Role '{role_name}' not found in Keycloak.")
         role_resp.raise_for_status()
+        user_resp = kc.get(f"/users/{user_id}")
+        if user_resp.status_code == 404:
+            raise HTTPException(404, "User not found.")
+        user_resp.raise_for_status()
+        username = user_resp.json().get("username")
+        if not username:
+            raise HTTPException(500, "Keycloak returned a user without a username.")
+
+    # Delete OpenFGA tuple first — if Keycloak fails after, orphan tuple remains
+    # but user still has no Keycloak role so sessions are unaffected. Reverse order
+    # would leave OpenFGA tuple intact → user retains permissions after removal.
+    await openfga_client.delete_tuple(f"user:{username}", "member", f"role:{role_name}")
+    with admin_client() as kc:
         kc.request(
             "DELETE",
             f"/users/{user_id}/role-mappings/realm",
@@ -227,6 +252,5 @@ async def remove_role(user_id: str, role_name: str, _: str = Depends(require_per
         ).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()
-        username = updated.json().get("username", user_id)
-    await openfga_client.delete_tuple(f"user:{username}", "member", f"role:{role_name}")
+    logger.info("user.role_removed", extra={"username": username, "role": role_name})
     return _to_detail(updated.json())
