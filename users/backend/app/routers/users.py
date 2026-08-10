@@ -40,7 +40,13 @@ async def _is_valid_role(role_name: str) -> bool:
 
 async def _user_roles(username: str) -> list[str]:
     role_objects = await openfga_client.read_user_roles(f"user:{username}")
-    return [r.removeprefix("role:") for r in role_objects]
+    result = []
+    for r in role_objects:
+        name = r.removeprefix("role:")
+        # Built-in role names use underscores natively; custom role names are
+        # slugged (spaces → underscores) to satisfy OpenFGA's no-whitespace constraint.
+        result.append(name if name in MANAGED_ROLES else name.replace("_", " "))
+    return result
 
 
 async def _to_summary(u: dict) -> UserSummary:
@@ -240,7 +246,7 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
     existing_fga_roles = await openfga_client.read_user_roles(f"user:{username}")
     for role_obj in existing_fga_roles:
         await openfga_client.delete_tuple(f"user:{username}", "member", role_obj)
-    await openfga_client.write_tuple(f"user:{username}", "member", f"role:{role_name}")
+    await openfga_client.write_tuple(f"user:{username}", "member", f"role:{role_name.replace(' ', '_')}")
 
     with admin_client() as kc:
         if managed:
@@ -285,7 +291,7 @@ async def remove_role(user_id: str, role_name: str, _: str = Depends(require_per
     # Delete OpenFGA tuple first — if Keycloak fails after, orphan tuple remains
     # but user still has no Keycloak role so sessions are unaffected. Reverse order
     # would leave OpenFGA tuple intact → user retains permissions after removal.
-    await openfga_client.delete_tuple(f"user:{username}", "member", f"role:{role_name}")
+    await openfga_client.delete_tuple(f"user:{username}", "member", f"role:{role_name.replace(' ', '_')}")
     with admin_client() as kc:
         if is_builtin:
             kc.request(
