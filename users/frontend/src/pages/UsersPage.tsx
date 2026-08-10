@@ -24,6 +24,7 @@ export default function UsersPage(): JSX.Element {
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async (q: string, p: number, status: string) => {
@@ -93,12 +94,15 @@ export default function UsersPage(): JSX.Element {
 
   async function confirmDelete(user: UserSummary) {
     setDeleteTarget(null);
+    setDeleting(true);
     try {
       await api.deleteUser(user.id);
       handleDeleted(user.id);
       showToast("User deleted.");
     } catch (err) {
       showToast(String(err), true);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -189,6 +193,7 @@ export default function UsersPage(): JSX.Element {
                   <button
                     className="kebab-btn"
                     aria-label="Actions"
+                    disabled={deleting}
                     onClick={e => { e.stopPropagation(); setOpenMenuId(openMenuId === u.id ? null : u.id); }}
                   >
                     ⋯
