@@ -20,6 +20,7 @@ from ai_trust_authorization import openfga_client, require_permission
 from ai_trust_authorization.constants import BUILT_IN_ROLES
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.custom_role import CustomRole
+from app.routers.custom_roles import _role_object
 
 router = APIRouter(prefix="/users", tags=["users"])
 logger = get_logger(__name__)
@@ -40,13 +41,20 @@ async def _is_valid_role(role_name: str) -> bool:
 
 async def _user_roles(username: str) -> list[str]:
     role_objects = await openfga_client.read_user_roles(f"user:{username}")
-    result = []
-    for r in role_objects:
-        name = r.removeprefix("role:")
-        # Built-in role names use underscores natively; custom role names are
-        # slugged (spaces → underscores) to satisfy OpenFGA's no-whitespace constraint.
-        result.append(name if name in MANAGED_ROLES else name.replace("_", " "))
-    return result
+    slugs = [r.removeprefix("role:") for r in role_objects]
+    custom_slugs = [s for s in slugs if s not in MANAGED_ROLES]
+
+    slug_to_name: dict[str, str] = {}
+    if custom_slugs:
+        async with SessionLocal() as session:
+            rows = (await session.execute(select(CustomRole))).scalars().all()
+        for row in rows:
+            slug_to_name[row.name.lower().replace(" ", "_")] = row.name
+
+    return [
+        slug if slug in MANAGED_ROLES else slug_to_name.get(slug, slug)
+        for slug in slugs
+    ]
 
 
 async def _to_summary(u: dict) -> UserSummary:
@@ -92,7 +100,13 @@ async def list_users(
         count_resp.raise_for_status()
         total = count_resp.json()
 
-    summaries = await asyncio.gather(*[_to_summary(u) for u in users])
+    sem = asyncio.Semaphore(10)
+
+    async def _bounded(u: dict) -> UserSummary:
+        async with sem:
+            return await _to_summary(u)
+
+    summaries = await asyncio.gather(*[_bounded(u) for u in users])
     return UsersListResponse(total=total, users=list(summaries))
 
 
@@ -246,7 +260,7 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
     existing_fga_roles = await openfga_client.read_user_roles(f"user:{username}")
     for role_obj in existing_fga_roles:
         await openfga_client.delete_tuple(f"user:{username}", "member", role_obj)
-    await openfga_client.write_tuple(f"user:{username}", "member", f"role:{role_name.replace(' ', '_')}")
+    await openfga_client.write_tuple(f"user:{username}", "member", _role_object(role_name))
 
     with admin_client() as kc:
         if managed:
@@ -291,7 +305,7 @@ async def remove_role(user_id: str, role_name: str, _: str = Depends(require_per
     # Delete OpenFGA tuple first — if Keycloak fails after, orphan tuple remains
     # but user still has no Keycloak role so sessions are unaffected. Reverse order
     # would leave OpenFGA tuple intact → user retains permissions after removal.
-    await openfga_client.delete_tuple(f"user:{username}", "member", f"role:{role_name.replace(' ', '_')}")
+    await openfga_client.delete_tuple(f"user:{username}", "member", _role_object(role_name))
     with admin_client() as kc:
         if is_builtin:
             kc.request(

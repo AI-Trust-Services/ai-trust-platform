@@ -49,7 +49,7 @@ class CustomRoleResponse(BaseModel):
 
 
 def _role_object(name: str) -> str:
-    return f"role:{name.replace(' ', '_')}"
+    return f"role:{name.lower().replace(' ', '_')}"
 
 
 def _validate_permissions(permissions: list[str]) -> None:
