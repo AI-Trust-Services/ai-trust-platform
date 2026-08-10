@@ -84,7 +84,7 @@ export function UserDetailPanel({ user, roles, onClose, onUpdated, onDeleted }: 
 
   return (
     <>
-      <div className="panel-overlay" onClick={onClose} />
+      <div className="panel-overlay" onClick={onClose} aria-hidden="true" />
       <div className="panel" role="dialog" aria-modal="true">
         <div className="panel-header">
           <div>
