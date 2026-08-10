@@ -123,14 +123,6 @@ export default function UsersPage(): JSX.Element {
           <div className="kpi-label">Total Users</div>
           <div className="kpi-value">{total}</div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Active (page)</div>
-          <div className="kpi-value">{users.filter(u => u.enabled).length}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Inactive (page)</div>
-          <div className="kpi-value">{users.filter(u => !u.enabled).length}</div>
-        </div>
       </div>
 
       <div className="toolbar">
