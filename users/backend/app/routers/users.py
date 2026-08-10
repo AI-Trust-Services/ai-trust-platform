@@ -93,12 +93,14 @@ async def list_users(
     with admin_client() as kc:
         resp = kc.get("/users", params=params)
         resp.raise_for_status()
-        users = resp.json()
+        users = [u for u in resp.json() if not u.get("username", "").startswith("service-account-")]
 
         count_params = {"search": search} if search else {}
         count_resp = kc.get("/users/count", params=count_params)
         count_resp.raise_for_status()
-        total = count_resp.json()
+        total = count_resp.json() - sum(
+            1 for u in resp.json() if u.get("username", "").startswith("service-account-")
+        )
 
     sem = asyncio.Semaphore(10)
 
