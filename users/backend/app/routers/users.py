@@ -241,9 +241,11 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
         if user_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
         user_resp.raise_for_status()
-        username = user_resp.json().get("username")
-        if not username:
-            raise HTTPException(500, "Keycloak returned a user without a username.")
+        user = user_resp.json()
+
+    username = user.get("username")
+    if not username:
+        raise HTTPException(500, "Keycloak returned a user without a username.")
 
     # Single-role invariant + last-admin guard both need the current memberships.
     existing_fga_roles = await openfga_client.read_user_roles(f"user:{username}")
@@ -260,12 +262,10 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
         await openfga_client.delete_tuple(f"user:{username}", "member", role_obj)
     await openfga_client.write_tuple(f"user:{username}", "member", _role_object(role_name))
 
-    with admin_client() as kc:
-        updated = kc.get(f"/users/{user_id}")
-        updated.raise_for_status()
-
     logger.info("user.role_assigned", extra={"username": username, "role": role_name})
-    return await _to_detail(updated.json())
+    # Keycloak fields are unchanged by the role write; _to_detail re-reads roles
+    # from OpenFGA, so the response reflects the new assignment.
+    return await _to_detail(user)
 
 
 @router.delete("/{user_id}/roles/{role_name}", response_model=UserDetail)
@@ -278,15 +278,13 @@ async def remove_role(user_id: str, role_name: str, _: str = Depends(require_per
         if user_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
         user_resp.raise_for_status()
-        username = user_resp.json().get("username")
-        if not username:
-            raise HTTPException(500, "Keycloak returned a user without a username.")
+        user = user_resp.json()
+
+    username = user.get("username")
+    if not username:
+        raise HTTPException(500, "Keycloak returned a user without a username.")
 
     await openfga_client.delete_tuple(f"user:{username}", "member", _role_object(role_name))
 
-    with admin_client() as kc:
-        updated = kc.get(f"/users/{user_id}")
-        updated.raise_for_status()
-
     logger.info("user.role_removed", extra={"username": username, "role": role_name})
-    return await _to_detail(updated.json())
+    return await _to_detail(user)
