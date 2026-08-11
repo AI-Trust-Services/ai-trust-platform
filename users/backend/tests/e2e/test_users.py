@@ -32,6 +32,7 @@ async def test_list_users_returns_users(client: httpx.AsyncClient):
         kc.get.side_effect = [
             _make_kc_response(200, users),  # /users
             _make_kc_response(200, 2),      # /users/count
+            _make_kc_response(200, 0),      # /users/count?search=service-account-
         ]
         r = await client.get("/v1/users")
 
@@ -50,6 +51,7 @@ async def test_list_users_empty(client: httpx.AsyncClient):
         kc.get.side_effect = [
             _make_kc_response(200, []),
             _make_kc_response(200, 0),
+            _make_kc_response(200, 0),  # /users/count?search=service-account-
         ]
         r = await client.get("/v1/users")
 
