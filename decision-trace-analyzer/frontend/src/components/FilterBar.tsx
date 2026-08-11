@@ -82,7 +82,7 @@ export function FilterBar({ filters, services, models, onChange }: Props) {
       <ToggleButton
         icon="error"
         design={filters.errors_only ? "Negative" : "Default"}
-        pressed={filters.errors_only || undefined}
+        pressed={!!filters.errors_only}
         onClick={() =>
           onChange({ ...filters, errors_only: filters.errors_only ? undefined : true })
         }
