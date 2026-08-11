@@ -1,6 +1,8 @@
 # AI Trust Platform
 
-
+<p align="center">
+  <img alt="License" src="https://img.shields.io/github/license/naira-project/naira?style=flat-square"/>
+</p>
 
 ## About this project
 
