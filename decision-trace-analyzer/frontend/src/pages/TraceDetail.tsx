@@ -1,4 +1,4 @@
-import "@ui5/webcomponents/dist/Button.js";
+import { Button } from "@ui5/webcomponents-react";
 import { useState, useEffect, lazy, Suspense } from "react";
 import {
   fetchTraceDetail,
@@ -91,8 +91,7 @@ export function TraceDetail({ traceId, onClose }: Props) {
     <div style={styles.overlay}>
       <div style={styles.topBar}>
         <span style={styles.topTitle}>Trace</span>
-        {/* @ts-ignore */}
-        <ui5-button design="Transparent" onClick={onClose} title="Close (Esc)">✕</ui5-button>
+        <Button design="Transparent" onClick={onClose} title="Close (Esc)">✕</Button>
       </div>
 
       <ViewTabs active={view} onChange={setView} />

@@ -1,9 +1,9 @@
-import "@ui5/webcomponents/dist/Icon.js";
 import "@ui5/webcomponents-icons/dist/performance.js";
 import "@ui5/webcomponents-icons/dist/number-sign.js";
 import "@ui5/webcomponents-icons/dist/ai.js";
 import "@ui5/webcomponents-icons/dist/machine.js";
 import "@ui5/webcomponents-icons/dist/list.js";
+import { Icon } from "@ui5/webcomponents-react";
 import { type Span } from "../api/traces";
 import { CopyButton } from "./CopyButton";
 import { parseBackendDate } from "../lib/dates";
@@ -63,8 +63,7 @@ function Stat({ icon, label, value }: { icon: string; label: string; value: stri
   return (
     <div style={styles.stat}>
       <div style={styles.statHeader}>
-        {/* @ts-ignore */}
-        <ui5-icon name={icon} style={styles.statIcon} />
+        <Icon name={icon} style={styles.statIcon} />
         <span style={styles.statLabel}>{label}</span>
       </div>
       <div style={styles.statValue}>{value}</div>

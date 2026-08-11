@@ -1,9 +1,9 @@
-import "@ui5/webcomponents/dist/Icon.js";
 import "@ui5/webcomponents-icons/dist/performance.js";
 import "@ui5/webcomponents-icons/dist/number-sign.js";
 import "@ui5/webcomponents-icons/dist/ai.js";
 import "@ui5/webcomponents-icons/dist/machine.js";
 import "@ui5/webcomponents-icons/dist/error.js";
+import { Icon } from "@ui5/webcomponents-react";
 import { type Span } from "../api/traces";
 import { CopyButton } from "./CopyButton";
 import { ToolCalls } from "./ToolCalls";
@@ -53,8 +53,7 @@ function StatBar({ span }: { span: Span }) {
 function StatItem({ icon, value }: { icon: string; value: string }) {
   return (
     <div style={styles.statItem}>
-      {/* @ts-ignore */}
-      <ui5-icon name={icon} style={styles.statIcon} />
+      <Icon name={icon} style={styles.statIcon} />
       <span style={styles.statValue}>{value}</span>
     </div>
   );
@@ -96,8 +95,7 @@ function StatusBanner({ span }: { span: Span }) {
   if (span.status_code !== 2) return null;
   return (
     <div style={styles.errorBanner}>
-      {/* @ts-ignore */}
-      <ui5-icon name="error" style={{ width: 14, height: 14 } as React.CSSProperties} />
+      <Icon name="error" style={{ width: 14, height: 14 } as React.CSSProperties} />
       <span style={{ fontWeight: 600 }}>Error</span>
       {span.status_message && <span>· {span.status_message}</span>}
     </div>

@@ -1,6 +1,5 @@
-import "@ui5/webcomponents/dist/DateTimePicker.js";
-import "@ui5/webcomponents/dist/Button.js";
-import { useEffect, useRef, useState } from "react";
+import { Button, DateTimePicker } from "@ui5/webcomponents-react";
+import { useEffect, useState } from "react";
 
 export interface TimeframeValue {
   /** Backend format: "YYYY-MM-DD HH:mm:ss", interpreted as UTC by the API. */
@@ -21,7 +20,7 @@ const QUICK = [
 ];
 
 /**
- * Format pattern for `<ui5-datetime-picker>`. Uses 24-hour clock so users can
+ * Format pattern for `<DateTimePicker>`. Uses 24-hour clock so users can
  * type the value directly without an AM/PM ambiguity.
  */
 const PICKER_FORMAT = "yyyy-MM-dd HH:mm";
@@ -79,7 +78,7 @@ function activeQuick(value: TimeframeValue): string | null {
 
 /**
  * Combined timeframe filter: three quick buttons (24H / 7D / 1M) plus a Custom
- * range with two `<ui5-datetime-picker>` instances (date + 24h time).
+ * range with two `<DateTimePicker>` instances (date + 24h time).
  *
  * Picker UI is in the user's LOCAL timezone (intuitive: "I want traces from
  * today 14:00") but the API receives UTC, matching how the backend stores
@@ -176,17 +175,13 @@ export function TimeframePicker({ value, onChange }: Props) {
             placeholder="To"
             onChange={(v) => setDraft((d) => ({ ...d, to: v }))}
           />
-          {/* @ts-ignore */}
-          <ui5-button design="Emphasized" disabled={!canApply || undefined} onClick={applyCustom}>
+          <Button design="Emphasized" disabled={!canApply} onClick={applyCustom}>
             Apply
-          {/* @ts-ignore */}
-          </ui5-button>
+          </Button>
           {isCustomActive && (
-            // @ts-ignore
-            <ui5-button design="Transparent" onClick={() => onChange({})}>
+            <Button design="Transparent" onClick={() => onChange({})}>
               Clear
-            {/* @ts-ignore */}
-            </ui5-button>
+            </Button>
           )}
           <span style={styles.tzHint}>
             Times in your local timezone ({Intl.DateTimeFormat().resolvedOptions().timeZone})
@@ -198,7 +193,7 @@ export function TimeframePicker({ value, onChange }: Props) {
 }
 
 /**
- * React wrapper around `<ui5-datetime-picker>`. UI5 emits `change` with
+ * React wrapper around `<DateTimePicker>`. UI5 emits `change` with
  * `{ value, valid }`; we forward only valid values upstream.
  */
 function DateTimePickerField({
@@ -210,27 +205,16 @@ function DateTimePickerField({
   placeholder: string;
   onChange: (val: string) => void;
 }) {
-  const ref = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { value: string; valid: boolean };
-      if (detail.valid || detail.value === "") onChange(detail.value);
-    };
-    el.addEventListener("change", handler);
-    return () => el.removeEventListener("change", handler);
-  }, [onChange]);
-
   return (
-    // @ts-ignore — UI5 web component, no React typings
-    <ui5-datetime-picker
-      ref={ref}
+    <DateTimePicker
       value={value}
       placeholder={placeholder}
-      format-pattern={PICKER_FORMAT}
+      formatPattern={PICKER_FORMAT}
       style={{ minWidth: 200 }}
+      onChange={(e) => {
+        const { value: v, valid } = e.detail;
+        if (valid || v === "") onChange(v);
+      }}
     />
   );
 }
