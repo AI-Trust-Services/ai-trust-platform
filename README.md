@@ -1,14 +1,12 @@
 # AI Trust Platform
 
-## ⚠️ Warning
 
-This repository is currently under active development and is not intended for production use.
-
-The project is in an Alpha stage. APIs, interfaces, and underlying concepts are subject to change without prior notice. Such changes may include breaking changes, significant redesigns, or the deprecation and complete removal of APIs and functionality.
 
 ## About this project
 
 AI Trust Platform enables organizations to register AI assets once and maintain continuous, automated **EU AI Act** compliance — centralizing transparency, monitoring, and documentation in one place, with automatic requirements updates, gap analysis, and mitigation proposals.
+
+> ⚠️ **Status.** AI Trust Platform is currently under active development and is not intended for production use. The project is in an alpha stage. APIs, interfaces, and underlying concepts are subject to change without prior notice. Such changes may include breaking changes, significant redesigns, or the deprecation and complete removal of APIs and functionality.
 
 ## Value proposition
 
@@ -16,10 +14,6 @@ AI Trust Platform enables organizations to register AI assets once and maintain 
 - **Faster time-to-compliance** — No need for costly ex-post remediation; systems are compliant from day one.
 - **Scalability** — Consistent EU AI Act compliance across all AI systems without repeated implementation effort.
 - **Stakeholder accountability** — Responsible parties are automatically notified whenever the compliance status of an AI system changes.
-
-
-
-
 
 ## Requirements and Setup
 
