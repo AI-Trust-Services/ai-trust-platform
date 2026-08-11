@@ -8,7 +8,7 @@ interface DetailPanelProps {
   children: ReactNode;
 }
 
-export default function DetailPanel({ title, subtitle, badge, onClose, children }: DetailPanelProps): JSX.Element {
+export default function DetailPanel({ title, subtitle, badge, onClose, children }: DetailPanelProps) {
   return (
     <div className="detail-panel-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="detail-panel">
@@ -27,7 +27,7 @@ export default function DetailPanel({ title, subtitle, badge, onClose, children 
 }
 
 interface DetailFieldProps { label: string; children: ReactNode; }
-export function DetailField({ label, children }: DetailFieldProps): JSX.Element {
+export function DetailField({ label, children }: DetailFieldProps) {
   return (
     <div className="dp-field">
       <span className="dp-label">{label}</span>
@@ -37,7 +37,7 @@ export function DetailField({ label, children }: DetailFieldProps): JSX.Element 
 }
 
 interface DetailSectionProps { title: string; children: ReactNode; }
-export function DetailSection({ title, children }: DetailSectionProps): JSX.Element {
+export function DetailSection({ title, children }: DetailSectionProps) {
   return (
     <div className="dp-section">
       <div className="dp-section-title">{title}</div>

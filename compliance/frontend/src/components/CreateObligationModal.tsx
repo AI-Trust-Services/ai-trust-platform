@@ -20,7 +20,7 @@ interface FormState {
 
 const EMPTY: FormState = { assessment_id: "", title: "", article_ref: "", description: "", owner: "", due_date: "" };
 
-export default function CreateObligationModal({ open, onClose, onSuccess }: Props): JSX.Element | null {
+export default function CreateObligationModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(false);

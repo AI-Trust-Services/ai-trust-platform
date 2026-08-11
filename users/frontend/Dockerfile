@@ -1,7 +1,7 @@
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 COPY . .
 ARG VITE_USERS_API_BASE
 ARG VITE_REGISTRY_API_BASE

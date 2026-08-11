@@ -6,7 +6,7 @@ interface Props {
   detail: AssessmentDetail;
 }
 
-export default function ScoreDonut({ detail }: Props): JSX.Element {
+export default function ScoreDonut({ detail }: Props) {
   if (detail.score === null) {
     return (
       <div style={{ padding: "8px 0" }}>

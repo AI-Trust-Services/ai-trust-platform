@@ -32,7 +32,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   "iam:manage": "Manage users & roles",
 };
 
-export default function RolesPage(): JSX.Element {
+export default function RolesPage() {
   const showToast = useToast();
   const { can } = usePermissions();
   const isAdmin = can("iam:manage");

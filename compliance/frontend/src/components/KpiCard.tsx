@@ -4,7 +4,7 @@ interface KpiCardProps {
   sub?: string;
 }
 
-export default function KpiCard({ label, value, sub }: KpiCardProps): JSX.Element {
+export default function KpiCard({ label, value, sub }: KpiCardProps) {
   return (
     <div className="kpi-card">
       <div className="kpi-value">{value}</div>

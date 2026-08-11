@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { usePermissions } from "../hooks/usePermissions";
 import { NoAccess } from "./NoAccess";
 
@@ -6,7 +7,7 @@ export function RequirePermission({
   children,
 }: {
   anyOf: string[];
-  children: JSX.Element;
+  children: ReactNode;
 }) {
   const { can, loading } = usePermissions();
   if (loading) return null;

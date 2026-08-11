@@ -10,7 +10,7 @@ import { ROLE_LABELS } from "../constants";
 
 const PAGE_SIZE = 10;
 
-export default function UsersPage(): JSX.Element {
+export default function UsersPage() {
   const showToast = useToast();
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [total, setTotal] = useState(0);

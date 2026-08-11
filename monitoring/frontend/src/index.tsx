@@ -1,18 +1,21 @@
 import { createRoot } from "react-dom/client";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { createHashRouter, RouterProvider, Navigate } from "react-router";
 import "./index.css";
 import App from "./App";
 import LiveSignals from "./views/LiveSignals";
 
-const root = createRoot(document.getElementById("root")!);
-root.render(
-  <HashRouter>
-    <Routes>
-      <Route path="/" element={<App />}>
-        <Route path="signals" element={<LiveSignals />} />
-        <Route index element={<Navigate to="signals" replace />} />
-        <Route path="*" element={<Navigate to="signals" replace />} />
-      </Route>
-    </Routes>
-  </HashRouter>
+const router = createHashRouter([
+  {
+    path: "/",
+    element: <App />,
+    children: [
+      { path: "signals", element: <LiveSignals /> },
+      { index: true, element: <Navigate to="signals" replace /> },
+      { path: "*", element: <Navigate to="signals" replace /> },
+    ],
+  },
+]);
+
+createRoot(document.getElementById("root")!).render(
+  <RouterProvider router={router} />
 );

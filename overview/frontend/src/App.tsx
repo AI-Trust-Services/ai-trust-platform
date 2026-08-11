@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet } from "react-router";
 import { useLuigiInit, navigateTo } from "./hooks/useLuigi";
 import { usePermissions } from "./hooks/usePermissions";
 import { api, HEALTH_URL, ALERTS_URL, REGISTRY_URL } from "./api/client";

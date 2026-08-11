@@ -16,7 +16,7 @@ const STATUS_OPTIONS = [
   "under_review", "effective", "ineffective", "deactivated",
 ] as const;
 
-export default function ControlsPage(): JSX.Element {
+export default function ControlsPage() {
   const [controls, setControls] = useState<Control[]>([]);
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});

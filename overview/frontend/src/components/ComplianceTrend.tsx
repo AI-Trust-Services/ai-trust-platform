@@ -23,7 +23,7 @@ const LEGEND = [
   { color: "#e05c00", dash: true,  label: "50% — needs attention" },
 ];
 
-export default function ComplianceTrend({ assessments, windowDays, onClick }: Props): JSX.Element {
+export default function ComplianceTrend({ assessments, windowDays, onClick }: Props) {
   const trendData = useMemo(() => {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - windowDays);

@@ -10,7 +10,7 @@ interface Props {
   onSuccess: (updated: EvidenceDetail) => void;
 }
 
-export default function UploadVersionModal({ open, evidence, onClose, onSuccess }: Props): JSX.Element | null {
+export default function UploadVersionModal({ open, evidence, onClose, onSuccess }: Props) {
   const [versionLabel, setVersionLabel] = useState("");
   const [uploadedBy, setUploadedBy] = useState("");
   const [validityUntil, setValidityUntil] = useState("");

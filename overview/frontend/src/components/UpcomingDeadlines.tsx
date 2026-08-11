@@ -18,7 +18,7 @@ function pillStyle(days: number): { color: string; background: string } {
   return { color: "#e9a922", background: "#fffbf0" };
 }
 
-export default function UpcomingDeadlines({ deadlines, windowDays }: Props): JSX.Element {
+export default function UpcomingDeadlines({ deadlines, windowDays }: Props) {
   return (
     <div className="chart-card deadlines-card">
       <div className="chart-title">Evidence Expiring Soon</div>

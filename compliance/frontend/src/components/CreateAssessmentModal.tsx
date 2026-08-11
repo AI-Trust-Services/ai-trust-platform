@@ -20,7 +20,7 @@ interface FormState {
 
 const EMPTY: FormState = { ai_system_id: "", framework_id: "", title: "", type: "compliance", notes: "" };
 
-export default function CreateAssessmentModal({ open, onClose, onSuccess }: Props): JSX.Element | null {
+export default function CreateAssessmentModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [frameworks, setFrameworks] = useState<Framework[]>([]);

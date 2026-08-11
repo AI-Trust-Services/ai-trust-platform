@@ -12,7 +12,7 @@ interface Props {
   items: MenuItem[];
 }
 
-export default function KebabMenu({ items }: Props): JSX.Element {
+export default function KebabMenu({ items }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
