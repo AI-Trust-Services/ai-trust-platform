@@ -30,6 +30,7 @@
   --color-bg:       var(--sapBackgroundColor);              /* #f5f6f7 — page background */
   --color-surface:  var(--sapBaseColor);                    /* #fff    — cards, panels */
   --color-border:   var(--sapList_BorderColor, #e4e6e8);
+  --color-hover-bg: var(--sapList_Hover_Background, #eaecee);
   --color-code-bg:  var(--sapField_ReadOnly_Background, #eaecee); /* read-only fields, code/text boxes */
 
   /* Semantic — info (used for model badge) */

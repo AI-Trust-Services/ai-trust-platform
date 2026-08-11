@@ -34,6 +34,7 @@ export function TraceList() {
   const [error, setError] = useState<string | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [filters, setFilters] = useState<TraceFilters>({});
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   // Accumulate known services/models from loaded data for filter dropdowns
   const knownServices = useRef<Set<string>>(new Set());
@@ -152,7 +153,13 @@ export function TraceList() {
               </thead>
               <tbody>
                 {data.items.map((trace: Trace) => (
-                  <tr key={trace.trace_id} style={styles.tr} onClick={() => setSelectedTraceId(trace.trace_id)}>
+                  <tr
+                    key={trace.trace_id}
+                    style={{ ...styles.tr, background: hoveredId === trace.trace_id ? "var(--color-hover-bg)" : undefined }}
+                    onClick={() => setSelectedTraceId(trace.trace_id)}
+                    onMouseEnter={() => setHoveredId(trace.trace_id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                  >
                     <td style={styles.td}>
                       <span style={styles.idCell} title={trace.trace_id}>
                         {trace.has_error && (
@@ -215,6 +222,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid var(--color-border)",
     borderRadius: 6,
     overflow: "hidden",
+    background: "var(--color-surface)",
   },
   table: {
     width: "100%",
