@@ -104,6 +104,7 @@
         icon: "employee",
         viewUrl: "http://localhost:8080/users/",
         navigationContext: "users",
+        viewGroup: "users",
       },
   ].filter((node) => canSee(node.pathSegment));
 

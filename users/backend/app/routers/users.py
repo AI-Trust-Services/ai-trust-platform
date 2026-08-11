@@ -17,9 +17,9 @@ from app.schemas import (
 )
 from ai_trust_authorization import openfga_client, require_permission
 from ai_trust_authorization.constants import BUILT_IN_ROLES
-from ai_trust_authorization.openfga_client import read_user_roles
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.custom_role import CustomRole
+from app.routers.custom_roles import _role_object
 
 router = APIRouter(prefix="/users", tags=["users"])
 logger = get_logger(__name__)
@@ -37,20 +37,30 @@ async def _is_valid_role(role_name: str) -> bool:
     return custom is not None
 
 
-_OPENFGA_SEM = asyncio.Semaphore(10)
+async def _build_slug_map() -> dict[str, str]:
+    async with SessionLocal() as session:
+        rows = (await session.execute(select(CustomRole))).scalars().all()
+    return {row.name.lower().replace(" ", "_"): row.name for row in rows}
 
 
-async def _user_roles(username: str) -> list[str]:
-    async with _OPENFGA_SEM:
-        role_objects = await read_user_roles(f"user:{username}")
-    return [r.removeprefix("role:") for r in role_objects]
+async def _user_roles(username: str, slug_map: dict[str, str] | None = None) -> list[str]:
+    role_objects = await openfga_client.read_user_roles(f"user:{username}")
+    slugs = [r.removeprefix("role:") for r in role_objects]
+    custom_slugs = [s for s in slugs if s not in MANAGED_ROLES]
+
+    if custom_slugs and slug_map is None:
+        slug_map = await _build_slug_map()
+
+    return [
+        slug if slug in MANAGED_ROLES else (slug_map or {}).get(slug, slug)
+        for slug in slugs
+    ]
 
 
-async def _to_summary(u: dict) -> UserSummary:
+async def _to_summary(u: dict, slug_map: dict[str, str] | None = None) -> UserSummary:
     username = u.get("username")
     if not username:
         logger.warning("user.missing_username", extra={"user_id": u["id"]})
-    roles = await _user_roles(username or u["id"])
     return UserSummary(
         id=u["id"],
         username=username or "",
@@ -60,12 +70,12 @@ async def _to_summary(u: dict) -> UserSummary:
         enabled=u.get("enabled", False),
         emailVerified=u.get("emailVerified", False),
         createdTimestamp=u.get("createdTimestamp"),
-        roles=roles,
+        roles=await _user_roles(username or "", slug_map),
     )
 
 
-async def _to_detail(u: dict) -> UserDetail:
-    summary = await _to_summary(u)
+async def _to_detail(u: dict, slug_map: dict[str, str] | None = None) -> UserDetail:
+    summary = await _to_summary(u, slug_map)
     return UserDetail(**summary.model_dump(), attributes=u.get("attributes", {}))
 
 
@@ -86,14 +96,25 @@ async def list_users(
     with admin_client() as kc:
         resp = kc.get("/users", params=params)
         resp.raise_for_status()
-        users = resp.json()
+        users = [u for u in resp.json() if not u.get("username", "").startswith("service-account-")]
 
         count_params = {"search": search} if search else {}
         count_resp = kc.get("/users/count", params=count_params)
         count_resp.raise_for_status()
-        total = count_resp.json()
+        raw_total = count_resp.json()
 
-    summaries = await asyncio.gather(*[_to_summary(u) for u in users])
+        sa_count_resp = kc.get("/users/count", params={"search": "service-account-"})
+        sa_count_resp.raise_for_status()
+        total = raw_total - sa_count_resp.json()
+
+    slug_map = await _build_slug_map()
+    sem = asyncio.Semaphore(10)
+
+    async def _bounded(u: dict) -> UserSummary:
+        async with sem:
+            return await _to_summary(u, slug_map)
+
+    summaries = await asyncio.gather(*[_bounded(u) for u in users])
     return UsersListResponse(total=total, users=list(summaries))
 
 
@@ -231,10 +252,10 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
             raise HTTPException(409, "Cannot reassign the last platform administrator.")
 
     # Single-role invariant: remove existing FGA memberships before writing new one.
-    existing_fga_roles = await read_user_roles(f"user:{username}")
+    existing_fga_roles = await openfga_client.read_user_roles(f"user:{username}")
     for role_obj in existing_fga_roles:
         await openfga_client.delete_tuple(f"user:{username}", "member", role_obj)
-    await openfga_client.write_tuple(f"user:{username}", "member", f"role:{role_name}")
+    await openfga_client.write_tuple(f"user:{username}", "member", _role_object(role_name))
 
     with admin_client() as kc:
         updated = kc.get(f"/users/{user_id}")
@@ -258,7 +279,7 @@ async def remove_role(user_id: str, role_name: str, _: str = Depends(require_per
         if not username:
             raise HTTPException(500, "Keycloak returned a user without a username.")
 
-    await openfga_client.delete_tuple(f"user:{username}", "member", f"role:{role_name}")
+    await openfga_client.delete_tuple(f"user:{username}", "member", _role_object(role_name))
 
     with admin_client() as kc:
         updated = kc.get(f"/users/{user_id}")
