@@ -100,9 +100,11 @@ async def list_users(
         count_params = {"search": search} if search else {}
         count_resp = kc.get("/users/count", params=count_params)
         count_resp.raise_for_status()
-        total = count_resp.json() - sum(
-            1 for u in resp.json() if u.get("username", "").startswith("service-account-")
-        )
+        raw_total = count_resp.json()
+
+        sa_count_resp = kc.get("/users/count", params={"search": "service-account-"})
+        sa_count_resp.raise_for_status()
+        total = raw_total - sa_count_resp.json()
 
     slug_map = await _build_slug_map()
     sem = asyncio.Semaphore(10)
