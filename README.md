@@ -1,7 +1,8 @@
 # AI Trust Platform
 
 <p align="center">
-  <img alt="License" src="https://img.shields.io/github/license/naira-project/naira?style=flat-square"/>
+  <a href="https://api.reuse.software/info/github.com/AI-Trust-Services/ai-trust-platform"><img alt="REUSE status" src="https://api.reuse.software/badge/github.com/AI-Trust-Services/ai-trust-platform"/></a>
+  <img alt="License" src="https://img.shields.io/github/license/AI-Trust-Services/ai-trust-platform?style=flat-square"/>
 </p>
 
 ## About this project
@@ -71,6 +72,6 @@ We as members, contributors, and leaders pledge to make participation in our com
 
 ## Licensing
 
-Please see our [LICENSE](LICENSE) for copyright and license information.
+Copyright 2026 SAP SE or an SAP affiliate company and ai-trust-platform contributors. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/AI-Trust-Services/ai-trust-platform).
 
 <p align="center"><img alt="Bundesministerium für Wirtschaft und Klimaschutz (BMWK)-EU funding logo" src="https://apeirora.eu/assets/img/BMWK-EU.png" width="400"/></p>
