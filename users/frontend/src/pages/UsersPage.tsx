@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "../App";
 import { api } from "../api/client";
 import { InviteModal } from "../components/InviteModal";
@@ -25,8 +25,6 @@ export default function UsersPage(): JSX.Element {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isMounted = useRef(false);
 
   const load = useCallback(async (q: string, p: number, status: string) => {
     setLoading(true);
@@ -56,20 +54,12 @@ export default function UsersPage(): JSX.Element {
       .catch(() => {});
   }, []);
 
-  // Debounce search; reset to page 0
+  // Debounce search; immediate for page/status changes
   useEffect(() => {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => {
-      setPage(0);
-      load(search, 0, statusFilter);
-    }, 300);
-    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
-  }, [search, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- load is stable but listing it would trigger on every render
-
-  useEffect(() => {
-    if (!isMounted.current) { isMounted.current = true; return; }
-    load(search, page, statusFilter);
-  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps -- intentionally re-runs only on page change; search/status changes reset page via the effect above
+    const delay = search ? 300 : 0;
+    const timer = setTimeout(() => load(search, page, statusFilter), delay);
+    return () => clearTimeout(timer);
+  }, [search, page, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- load is stable
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -139,12 +129,12 @@ export default function UsersPage(): JSX.Element {
           className="search-input"
           placeholder="Search by name, username or email…"
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => { setPage(0); setSearch(e.target.value); }}
         />
         <select
           className="filter-select"
           value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value as "" | "true" | "false")}
+          onChange={e => { setPage(0); setStatusFilter(e.target.value as "" | "true" | "false"); }}
         >
           <option value="">All statuses</option>
           <option value="true">Active</option>
