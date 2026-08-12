@@ -361,7 +361,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
 
   useEffect(() => { setSystem(initialSystem); setTab("overview"); }, [initialSystem]);
 
-  if (!open || !system) return null;
+  if (!system) return null;
 
   function handleSystemUpdate(updated: AISystem) {
     setSystem(updated);
@@ -381,8 +381,9 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
   }
 
   return (
-    <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
+    <>
+      <div className={`detail-overlay${open ? " open" : ""}`} onClick={onClose} />
+      <div className={`detail-panel${open ? " open" : ""}`}>
         <div className="modal-header">
           <div>
             <h2>{system.name}</h2>
@@ -507,6 +508,6 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
           <button className="btn-ghost" onClick={onClose}>Close</button>
         </div>
       </div>
-    </div>
+    </>
   );
 }
