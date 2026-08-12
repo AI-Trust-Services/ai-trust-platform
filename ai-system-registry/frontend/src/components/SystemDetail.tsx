@@ -67,7 +67,7 @@ const WF_PHASES = [
 function workflowPhase(status: string): number {
   if (status === "approved" || status === "rejected") return 4;
   if (status === "pending_review") return 3;
-  return 2; // draft or rejected-back-to-engineer
+  return 2;
 }
 
 function WorkflowProgress({

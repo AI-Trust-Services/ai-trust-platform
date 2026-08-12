@@ -111,7 +111,6 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
         is_chatbot: system.is_chatbot,
         generates_synthetic_content: system.generates_synthetic_content,
       });
-      // Pre-populate compliance officer from what the owner pre-set
       setComplianceOfficerUsername(system.compliance_officer_username || "");
       api.getUsersByRole("ai_compliance_officer")
         .then(setComplianceOfficers)
