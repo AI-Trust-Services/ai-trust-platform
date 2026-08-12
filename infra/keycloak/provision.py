@@ -28,15 +28,6 @@ APP_ADMIN_PASSWORD           = os.environ["APP_ADMIN_PASSWORD"]
 
 REALM = "ai-trust"
 
-ROLES = [
-    "platform_administrator",
-    "ai_engineer",
-    "business_owner",
-    "ai_compliance_officer",
-    "auditor",
-    "executive",
-]
-
 
 def get_admin_token(client: httpx.Client) -> str:
     resp = client.post(
@@ -101,20 +92,6 @@ def ensure_client(client: httpx.Client) -> None:
         print("Creating oauth2-proxy client...")
         client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients", json=config).raise_for_status()
 
-
-def ensure_roles(client: httpx.Client) -> None:
-    existing_resp = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}/roles")
-    existing_resp.raise_for_status()
-    existing_names = {r["name"] for r in existing_resp.json()}
-    for role in ROLES:
-        if role in existing_names:
-            print(f"Role '{role}' already exists, skipping.")
-        else:
-            print(f"Creating role '{role}'...")
-            client.post(
-                f"{KEYCLOAK_URL}/admin/realms/{REALM}/roles",
-                json={"name": role},
-            ).raise_for_status()
 
 
 def ensure_users_backend_client(client: httpx.Client) -> None:
@@ -216,7 +193,6 @@ def main() -> None:
 
         ensure_realm(client)
         ensure_client(client)
-        ensure_roles(client)
         ensure_users_backend_client(client)
         ensure_admin_user(client)
 

@@ -15,6 +15,7 @@ export default function UsersPage(): JSX.Element {
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
+  const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "true" | "false">("");
@@ -46,10 +47,14 @@ export default function UsersPage(): JSX.Element {
   }, [showToast]);
 
   useEffect(() => {
-    Promise.all([api.getRoles(), api.getCustomRoles()])
-      .then(([builtins, custom]) => {
+    Promise.all([api.getRoles(), api.getCustomRoles(), api.getRoleDetails()])
+      .then(([builtins, custom, roleDetails]) => {
         const customAsSummary: RoleSummary[] = custom.map(r => ({ id: r.id, name: r.name, description: r.description }));
         setRoles([...builtins, ...customAsSummary]);
+        const map: Record<string, string[]> = {};
+        for (const r of roleDetails) map[r.name] = r.permissions;
+        for (const r of custom) map[r.name] = r.permissions;
+        setRolePermissions(map);
       })
       .catch(() => {});
   }, []);
@@ -233,6 +238,7 @@ export default function UsersPage(): JSX.Element {
         <UserDetailPanel
           user={selectedUser}
           roles={roles}
+          rolePermissions={rolePermissions}
           onClose={() => { setSelectedUser(null); setSelectedId(null); }}
           onUpdated={handleUpdated}
           onDeleted={handleDeleted}
