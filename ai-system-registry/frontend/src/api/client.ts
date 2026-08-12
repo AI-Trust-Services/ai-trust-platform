@@ -1,4 +1,4 @@
-import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse } from "../types";
+import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary } from "../types";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
@@ -50,4 +50,31 @@ export const api = {
   deleteModel: (id: string) => request<null>(`/model-cards/${id}`, { method: "DELETE" }),
 
   myPermissions: () => request<PermissionsResponse>("/me/permissions", {}, USERS_API_BASE),
+
+  getUsersByRole: (role: string) =>
+    request<UserSummary[]>(`/v1/users/by-role?role=${encodeURIComponent(role)}`, {}, USERS_API_BASE),
+
+  getWorkflow: (systemId: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow`),
+
+  submitForReview: (systemId: string, assigneeUsername: string, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignee_username: assigneeUsername, note: note ?? null }),
+    }),
+
+  approveSystem: (systemId: string, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note ?? null }),
+    }),
+
+  rejectSystem: (systemId: string, note: string, assigneeUsername: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note, assignee_username: assigneeUsername }),
+    }),
 };

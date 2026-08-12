@@ -282,3 +282,32 @@ input:disabled { background: #f0f0f0; }
   .check-grid { grid-template-columns: 1fr; }
   .modal { max-width: 100vw; border-radius: 0; max-height: 100vh; }
 }
+
+/* Workflow timeline */
+.workflow-timeline { padding: 8px 0; }
+.wf-step { display: flex; gap: 14px; position: relative; padding-bottom: 20px; }
+.wf-step:not(.wf-step-last)::before {
+  content: ""; position: absolute; left: 9px; top: 20px;
+  width: 2px; bottom: 0; background: var(--border);
+}
+.wf-dot {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  background: var(--brand); margin-top: 2px; border: 2px solid var(--surface);
+  box-shadow: 0 0 0 2px var(--brand);
+}
+.wf-dot-approved { background: #27ae60; box-shadow: 0 0 0 2px #27ae60; }
+.wf-dot-rejected { background: #c0392b; box-shadow: 0 0 0 2px #c0392b; }
+.wf-content { flex: 1; min-width: 0; }
+.wf-label { font-weight: 600; font-size: 13px; color: var(--text); }
+.wf-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.wf-note {
+  margin-top: 6px; font-size: 12px; color: var(--text-secondary);
+  background: var(--bg); border-left: 3px solid var(--border);
+  padding: 6px 10px; border-radius: 0 4px 4px 0; font-style: italic;
+}
+.btn-danger {
+  background: #c0392b; color: #fff; border: none; border-radius: var(--radius);
+  padding: 7px 16px; font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.btn-danger:hover:not(:disabled) { background: #a93226; }
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }

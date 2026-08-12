@@ -4,7 +4,9 @@ Waterfall: Art. 5 (prohibited) → GPAI → Annex III (high-risk) → Art. 50 (l
 """
 from __future__ import annotations
 
-from app.schemas import AISystemCreate, ClassificationResult
+from typing import Any
+
+from app.schemas import ClassificationResult
 
 _GPAI_SYSTEMIC_FLOPS_THRESHOLD = 10**25  # EU AI Act Art. 51(1)(a)
 
@@ -48,7 +50,7 @@ _ANNEX_III_AREAS = {
 }
 
 
-def classify(body: AISystemCreate) -> ClassificationResult:
+def classify(body: Any) -> ClassificationResult:
     # Art. 5 — prohibited practices
     prohibited_flags = [
         ("subliminal_manipulation", "Art. 5(1)(a) subliminal manipulation"),

@@ -26,6 +26,8 @@ export interface AISystem {
   model_id: string | null;
   created_at: string;
   updated_at: string;
+  workflow_status: string;
+  assignee_username: string | null;
   is_gpai: boolean;
   training_compute_flops: number;
   is_chatbot: boolean;
@@ -47,6 +49,21 @@ export interface AISystem {
   is_law_enforcement: boolean;
   is_migration: boolean;
   is_judicial_admin: boolean;
+}
+
+export interface WorkflowStep {
+  id: string;
+  step: string;
+  actor_username: string;
+  assignee_username: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface UserSummary {
+  username: string;
+  firstName: string;
+  lastName: string;
 }
 
 export interface ModelCard {
