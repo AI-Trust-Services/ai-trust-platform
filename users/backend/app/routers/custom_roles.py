@@ -8,7 +8,6 @@ Endpoints (all require iam:manage):
 """
 from __future__ import annotations
 
-import asyncio
 import uuid
 from datetime import datetime
 
@@ -21,7 +20,6 @@ from ai_trust_authorization.constants import ALL_PERMISSIONS, PLATFORM_OBJECT, R
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.custom_role import CustomRole
-from app.keycloak import admin_client
 
 router = APIRouter(prefix="/iam", tags=["custom-roles"])
 logger = get_logger(__name__)
@@ -89,21 +87,6 @@ async def _set_role_permissions(role_name: str, permissions: list[str]) -> None:
             role_user, RELATION_BY_PERMISSION[p], PLATFORM_OBJECT
         )
 
-
-def _ensure_keycloak_role(name: str) -> None:
-    with admin_client() as kc:
-        resp = kc.get(f"/roles/{name}")
-        if resp.status_code == 404:
-            kc.post("/roles", json={"name": name}).raise_for_status()
-
-
-def _delete_keycloak_role(name: str) -> None:
-    with admin_client() as kc:
-        resp = kc.get(f"/roles/{name}")
-        if resp.status_code == 404:
-            return
-        role_id = resp.json()["id"]
-        kc.delete(f"/roles-by-id/{role_id}").raise_for_status()
 
 async def _delete_all_member_tuples(role_name: str) -> None:
     """Remove all user:* member tuples for this role from OpenFGA."""
@@ -179,18 +162,6 @@ async def create_custom_role(
                 await session.commit()
         raise
 
-    # 3. Keycloak realm role
-    try:
-        await asyncio.to_thread(_ensure_keycloak_role, body.name)
-    except Exception:
-        await _set_role_permissions(body.name, [])
-        async with SessionLocal() as session:
-            r = (await session.execute(select(CustomRole).where(CustomRole.id == row.id))).scalar_one_or_none()
-            if r:
-                await session.delete(r)
-                await session.commit()
-        raise
-
     logger.info("custom_role.created", extra={"role_id": row.id, "role_name": body.name})
     result = CustomRoleResponse.model_validate(row)
     result.permissions = body.permissions
@@ -239,8 +210,7 @@ async def delete_custom_role(
             raise HTTPException(404, f"Custom role {role_id} not found")
         name = row.name
 
-    # Safe deletion order: Keycloak → OpenFGA → Postgres
-    await asyncio.to_thread(_delete_keycloak_role, name)
+    # Safe deletion order: OpenFGA → Postgres
     await _delete_all_member_tuples(name)
     await _set_role_permissions(name, [])
 
