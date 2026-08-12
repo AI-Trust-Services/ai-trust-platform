@@ -16,7 +16,8 @@ cd "$REPO_ROOT"
 if [[ -f .env ]]; then
   set -a
   # shellcheck disable=SC1091
-  source .env
+  # tr -d '\r' tolerates a CRLF .env (common when it's been edited on Windows)
+  source <(tr -d '\r' < .env)
   set +a
 fi
 

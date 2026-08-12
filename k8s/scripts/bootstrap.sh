@@ -28,14 +28,15 @@ echo "==> secret/ai-trust-env (from .env, plus computed connection strings)"
 # so every .env line is passed through as its own --from-literal instead.)
 set -a
 # shellcheck disable=SC1091
-source "$REPO_ROOT/.env"
+# tr -d '\r' tolerates a CRLF .env (common when it's been edited on Windows)
+source <(tr -d '\r' < "$REPO_ROOT/.env")
 set +a
 
 literal_args=()
 while IFS='=' read -r key value; do
   [[ -z "$key" || "$key" == \#* ]] && continue
   literal_args+=(--from-literal="${key}=${value}")
-done < <(grep -v '^\s*#' "$REPO_ROOT/.env" | grep -v '^\s*$')
+done < <(tr -d '\r' < "$REPO_ROOT/.env" | grep -v '^\s*#' | grep -v '^\s*$')
 
 kubectl create secret generic ai-trust-env \
   "${literal_args[@]}" \
