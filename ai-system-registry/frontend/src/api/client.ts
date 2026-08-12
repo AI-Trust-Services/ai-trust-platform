@@ -52,7 +52,7 @@ export const api = {
   myPermissions: () => request<PermissionsResponse>("/me/permissions", {}, USERS_API_BASE),
 
   getUsersByRole: (role: string) =>
-    request<UserSummary[]>(`/v1/users/by-role?role=${encodeURIComponent(role)}`, {}, USERS_API_BASE),
+    request<UserSummary[]>(`/users/by-role?role=${encodeURIComponent(role)}`, {}, USERS_API_BASE),
 
   getWorkflow: (systemId: string) =>
     request<WorkflowStep[]>(`/systems/${systemId}/workflow`),
