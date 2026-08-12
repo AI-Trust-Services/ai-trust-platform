@@ -1,0 +1,153 @@
+# Local kind deployment. Service names are intentionally NOT prefixed with the
+# release name - shell/nginx.conf and every backend's env vars hardcode plain
+# docker-compose service names (e.g. "postgres", "ai-system-registry-backend")
+# and are baked into images at build time. Only ever install one release of
+# this chart per cluster.
+
+image:
+  repository: ai-trust # images are tagged ai-trust/<service>:<tag>, see k8s/scripts/build-and-load-images.sh
+  tag: local
+  pullPolicy: IfNotPresent # required for images loaded via `kind load docker-image` (not in any registry)
+
+# Public URLs oauth2-proxy needs as literal CLI args (not secrets - safe to keep here).
+# Keep in sync with APP_PUBLIC_URL / KEYCLOAK_PUBLIC_URL in .env if you change the defaults.
+appPublicUrl: http://localhost:8080
+keycloakPublicUrl: http://localhost:8180
+
+waitImages:
+  busybox: busybox:1.36 # TCP/HTTP "wait for dependency" initContainers
+  kubectl: bitnami/kubectl:1.31 # "wait for job completion" initContainers
+
+serviceAccount:
+  jobWaiter: job-waiter # created by k8s/scripts/bootstrap.sh
+
+secretName: ai-trust-env # created by k8s/scripts/bootstrap.sh (from .env)
+
+# ── backing stores ──
+postgres:
+  image: postgres:16-alpine
+  storageSize: 2Gi
+  nodePort: 30432
+
+rabbitmq:
+  image: rabbitmq:3.13-management-alpine
+  nodePort: 30672
+
+clickhouse:
+  image: clickhouse/clickhouse-server:24.5-alpine
+  storageSize: 5Gi
+  nodePort: 30123
+
+minio:
+  image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+  mcImage: minio/mc:RELEASE.2025-08-13T08-35-41Z
+  storageSize: 5Gi
+  apiNodePort: 30900
+  consoleNodePort: 30901
+
+keycloak:
+  image: quay.io/keycloak/keycloak:25.0
+  nodePort: 30180
+
+openfga:
+  image: openfga/openfga:v1.18.1
+  storageSize: 64Mi # openfga-config volume: just the provisioned store_id file
+
+oauthProxy:
+  image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+  nodePort: 30080
+
+otel:
+  collectorImage: otel/opentelemetry-collector-contrib:0.102.0
+  collectorGrpcNodePort: 30317
+  collectorHttpNodePort: 30318
+  rmqBridgeNodePort: 30802
+
+policyChecker:
+  pollInterval: "10"
+
+# ── the 7 near-identical backend+frontend MFE pairs ──
+# dependsOnJobs: Job names that must Complete before this backend starts
+#   (mirrors compose `depends_on: condition: service_completed_successfully`)
+# dependsOnServices: Services that must be reachable before this backend starts
+#   (mirrors compose `depends_on: condition: service_healthy`)
+# extraEnv: plain (non-secret) env vars specific to this backend - every backend
+#   also gets `envFrom: secretRef: ai-trust-env` for credentials (see components.yaml)
+# openfgaConfig: mount the openfga-config PVC read-only at /config
+components:
+  - name: ai-system-registry
+    backendPort: 8001
+    rootPath: /api/registry
+    extraEnv:
+      OPENFGA_URL: http://openfga:8080
+      KEYCLOAK_URL: http://keycloak:8080
+    dependsOnJobs: [db-migrate, openfga-provision]
+    dependsOnServices: []
+    openfgaConfig: true
+
+  - name: monitoring
+    backendPort: 8003
+    rootPath: /api/monitoring
+    extraEnv:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      OPENFGA_URL: http://openfga:8080
+    dependsOnJobs: [db-migrate, openfga-provision]
+    dependsOnServices:
+      - name: clickhouse
+        port: 8123
+        httpPath: /ping
+    openfgaConfig: true
+
+  - name: overview
+    backendPort: 8004
+    rootPath: /api/overview
+    extraEnv: {}
+    dependsOnJobs: [db-migrate]
+    dependsOnServices: []
+    openfgaConfig: false
+
+  - name: alerts
+    backendPort: 8005
+    rootPath: /api/alerts
+    extraEnv:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      OPENFGA_URL: http://openfga:8080
+    dependsOnJobs: [db-migrate, clickhouse-migrate, openfga-provision]
+    dependsOnServices: []
+    openfgaConfig: true
+
+  - name: compliance
+    backendPort: 8007
+    rootPath: /api/compliance
+    extraEnv:
+      OPENFGA_URL: http://openfga:8080
+    dependsOnJobs: [db-migrate, openfga-provision]
+    dependsOnServices:
+      - name: minio
+        port: 9000
+        httpPath: /minio/health/live
+    openfgaConfig: true
+
+  - name: decision-trace-analyzer
+    backendPort: 8006
+    rootPath: /api/dta
+    extraEnv:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+    dependsOnJobs: [clickhouse-migrate]
+    dependsOnServices: []
+    openfgaConfig: false
+
+  - name: users
+    backendPort: 8008
+    rootPath: /api/users
+    extraEnv:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ai-trust
+      USERS_BACKEND_CLIENT_ID: users-backend
+      OPENFGA_URL: http://openfga:8080
+    dependsOnJobs: [db-migrate, keycloak-provision, openfga-provision]
+    dependsOnServices: []
+    openfgaConfig: true

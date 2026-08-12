@@ -1,0 +1,33 @@
+{{/* Background job, no HTTP port - evaluates alert rules every ALERT_POLL_INTERVAL seconds. */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-checker-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "policy-checker-worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "policy-checker-worker") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      initContainers:
+        # mirrors compose: depends_on db-migrate + clickhouse-migrate (both completed)
+        {{- include "ai-trust.waitForJob" (dict "job" "db-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "clickhouse-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
+      containers:
+        - name: policy-checker-worker
+          image: {{ .Values.image.repository }}/policy-checker-worker:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # DATABASE_URL, CLICKHOUSE_USER/PASSWORD
+          env:
+            - name: CLICKHOUSE_HOST
+              value: clickhouse
+            - name: CLICKHOUSE_PORT
+              value: "8123"
+            - name: ALERT_POLL_INTERVAL
+              value: {{ .Values.policyChecker.pollInterval | quote }}

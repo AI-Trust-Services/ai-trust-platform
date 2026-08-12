@@ -1,0 +1,68 @@
+{{/* Single entry point (mirrors compose's oauth2-proxy block, same flags/comments). */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "oauth2-proxy") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "oauth2-proxy") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      initContainers:
+        # mirrors compose: oauth2-proxy depends_on keycloak-provision (completed) + shell (started)
+        {{- include "ai-trust.waitForJob" (dict "job" "keycloak-provision" "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForTcp" (dict "name" "shell" "port" 80 "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: oauth2-proxy
+          image: {{ .Values.oauthProxy.image }}
+          env:
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: KEYCLOAK_CLIENT_SECRET } }
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: OAUTH2_PROXY_COOKIE_SECRET } }
+          args:
+            - --provider=oidc
+            - --client-id=oauth2-proxy
+            - --oidc-issuer-url=http://keycloak:8080/realms/ai-trust
+            - --login-url={{ .Values.keycloakPublicUrl }}/realms/ai-trust/protocol/openid-connect/auth
+            - --redeem-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/token
+            - --oidc-jwks-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/certs
+            # skip-oidc-discovery + insecure-oidc-skip-issuer-verification: needed because
+            # Keycloak's internal issuer (http://keycloak:8080) differs from the public browser
+            # URL (keycloakPublicUrl). See docker-compose.yml for the full rationale - unchanged here.
+            - --skip-oidc-discovery=true
+            - --insecure-oidc-skip-issuer-verification=true
+            - --redirect-url={{ .Values.appPublicUrl }}/oauth2/callback
+            - --upstream=http://shell:80
+            - --http-address=0.0.0.0:4180
+            - --cookie-secure=false
+            - --email-domain=*
+            - --pass-authorization-header=true
+            - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout?id_token_hint={id_token}
+          ports:
+            - containerPort: 4180
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+spec:
+  type: NodePort
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "oauth2-proxy") | nindent 4 }}
+  ports:
+    - port: 4180
+      targetPort: 4180
+      nodePort: {{ .Values.oauthProxy.nodePort }}

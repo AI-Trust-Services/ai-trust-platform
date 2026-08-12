@@ -10,6 +10,23 @@ docker compose up --build -d
 docker compose down --remove-orphans
 ```
 
+### Run the full platform on local Kubernetes (kind)
+
+Alternative deployment path to docker-compose — both are supported, share the same `.env`, and use
+identical host ports, so don't run them at the same time. See [k8s/README.md](k8s/README.md) for
+full details.
+
+```bash
+cd k8s
+make up      # kind create cluster + bootstrap (namespace/Secret/ConfigMaps) + build&load images + helm install
+make down    # helm uninstall + kind delete cluster
+```
+
+Manifests live in `k8s/helm/ai-trust-platform/` (a Helm chart). Every k8s Service name is fixed to
+the literal docker-compose service name (`postgres`, `ai-system-registry-backend`, etc.) so
+`shell/nginx.conf` and every backend's env vars work unmodified — no image or app code changes were
+needed for this deployment path.
+
 ### Run tests (any backend)
 ```bash
 cd <component>/backend   # e.g. cd compliance/backend
