@@ -187,7 +187,7 @@ export default function Systems() {
                       </span>
                     ) : "—"}
                   </td>
-                  <td><TierBadge tier={s.tier} /></td>
+                  <td><TierBadge tier={s.tier} workflowStatus={s.workflow_status} /></td>
                   <td><LifecycleBadge lc={s.lifecycle} /></td>
                   <td><ComplianceBar pct={s.compliance} /></td>
                   <td style={{ color: "var(--text-secondary)", fontSize: 13 }}><FormattedDate iso={s.created_at} /></td>
@@ -222,7 +222,7 @@ export default function Systems() {
         open={wizardOpen}
         system={fillInSystem}
         onClose={() => { setWizardOpen(false); setFillInSystem(undefined); }}
-        onSuccess={() => { loadSystems(); loadModels(); setFillInSystem(undefined); }}
+        onSuccess={() => { loadSystems(); loadModels(); }}
       />
 
       <SystemDetail

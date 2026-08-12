@@ -12,6 +12,7 @@ interface ModalControls {
   modelCreateOpen: boolean;
   setModelCreateOpen: (open: boolean) => void;
   mayWrite: boolean;
+  mayRegister: boolean;
   username: string;
 }
 
@@ -31,6 +32,7 @@ export default function App() {
   const location = useLocation();
   const { can, username } = usePermissions();
   const mayWrite = can("systems:write");
+  const mayRegister = can("systems:approve");
   const noWriteTitle = "Requires permission: systems:write";
 
   useLuigiInit(() => {});
@@ -61,12 +63,13 @@ export default function App() {
 
   return (
     <ToastContext.Provider value={showToast}>
-      <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen, mayWrite, username }}>
+      <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen, mayWrite, mayRegister, username }}>
         <div className="page-header">
           <h1>AI System Registry</h1>
           <div>
             {activeView === "systems" ? (
-              <button className="btn-primary" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+              <button className="btn-primary" disabled={!mayRegister}
+                title={mayRegister ? undefined : "Requires role: business owner or administrator"}
                 onClick={() => setWizardOpen(true)}>
                 + Register System
               </button>

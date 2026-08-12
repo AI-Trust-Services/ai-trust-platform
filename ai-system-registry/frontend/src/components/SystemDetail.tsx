@@ -389,7 +389,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
             <h2>{system.name}</h2>
             <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
               {system.id} · v{system.version} &nbsp;
-              <TierBadge tier={system.tier} /> <LifecycleBadge lc={system.lifecycle} />
+              <TierBadge tier={system.tier} workflowStatus={system.workflow_status} /> <LifecycleBadge lc={system.lifecycle} />
             </div>
           </div>
           <button className="btn-close" onClick={onClose}>×</button>
@@ -442,7 +442,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
               <div className="detail-section">
                 <h3>Classification</h3>
                 <DetailGrid rows={[
-                  ["Risk Tier", <TierBadge key="tier" tier={system.tier} />],
+                  ["Risk Tier", <TierBadge key="tier" tier={system.tier} workflowStatus={system.workflow_status} />],
                   ["Classification Basis", <span key="basis" style={{ fontSize: 13 }}>{system.basis}</span>],
                   system.annex_iii_area != null && ["Annex III Area", `Area ${system.annex_iii_area}`],
                   ["GPAI", system.is_gpai ? <span key="gpai" style={{ color: "var(--brand)" }}>Yes</span> : "No"],

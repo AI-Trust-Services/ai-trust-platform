@@ -292,7 +292,7 @@ services:
       ROOT_PATH: "/api/registry"
       OPENFGA_URL: http://openfga:8080
       KEYCLOAK_URL: http://keycloak:8080
-      USERS_BACKEND_URL: http://users-backend:8001
+      USERS_BACKEND_URL: http://users-backend:8008
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       SMTP_USER: ""

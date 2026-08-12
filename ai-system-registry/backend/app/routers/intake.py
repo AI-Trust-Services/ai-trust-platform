@@ -29,7 +29,7 @@ async def intake_system(body: AISystemCreate, request: Request) -> IntakeRespons
         id=system_id,
         name=body.name,
         description=body.description,
-        tier="pending",
+        tier="minimal",
         basis="pending",
         annex_iii_area=None,
         compliance=0.0,
