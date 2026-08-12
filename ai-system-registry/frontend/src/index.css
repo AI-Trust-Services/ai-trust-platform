@@ -105,6 +105,7 @@ tbody td { padding: 12px 16px; vertical-align: middle; font-size: 14px; }
 .badge-gpai-standard { background: #eed5fd; color: #4a0070; }
 .badge-limited     { background: #fff3c4; color: #7a5900; }
 .badge-minimal     { background: #d5f5e3; color: #1a5c35; }
+.badge-pending     { background: #eaecee; color: #556b82; }
 .badge-llm         { background: #e8f0fb; color: #0a4a9e; }
 .badge-embedding   { background: #e8fbf0; color: #0a4a2e; }
 .badge-multimodal  { background: #fbe8fb; color: #4a0a4a; }
@@ -125,6 +126,34 @@ tbody td { padding: 12px 16px; vertical-align: middle; font-size: 14px; }
 .progress-bar { width: 90px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
 .progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
 .progress-text { font-size: 12px; color: var(--text-secondary); min-width: 34px; }
+
+/* Detail side panel (slide in from right) */
+.detail-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.25); z-index: 900;
+}
+.detail-overlay.open { display: block; }
+.detail-panel {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: 680px; max-width: 100vw;
+  background: var(--surface);
+  box-shadow: -4px 0 24px rgba(0,0,0,0.14);
+  display: flex; flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.22s cubic-bezier(0.4,0,0.2,1);
+  z-index: 901;
+}
+.detail-panel.open { transform: translateX(0); }
+.detail-panel .modal-header {
+  padding: 18px 24px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; justify-content: space-between; flex-shrink: 0;
+}
+.detail-panel .modal-header h2 { font-size: 16px; font-weight: 600; }
+.detail-panel .modal-body { padding: 0; overflow-y: auto; flex: 1; }
+.detail-panel .modal-footer {
+  padding: 14px 24px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0;
+}
 
 .modal-overlay {
   display: none; position: fixed; inset: 0;
