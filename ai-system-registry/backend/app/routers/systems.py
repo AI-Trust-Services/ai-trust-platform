@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 
 from ai_trust_authorization import require_permission
@@ -12,7 +12,6 @@ from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.model_card import ModelCard
 from app.schemas import (
-    AISystemCreate,
     AISystemResponse,
     AISystemUpdate,
     IntakeResponse,
@@ -24,6 +23,15 @@ router = APIRouter(tags=["systems"])
 logger = get_logger(__name__)
 
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
+_FLAG_FIELDS = frozenset({
+    "subliminal_manipulation", "exploits_vulnerability", "social_scoring_public",
+    "real_time_biometric_public", "emotion_recognition_workplace", "untargeted_facial_scraping",
+    "predictive_policing", "biometric_categorisation_sensitive",
+    "is_biometric_identification", "is_critical_infrastructure", "is_education_related",
+    "is_employment_related", "is_credit_scoring", "is_public_service", "is_law_enforcement",
+    "is_migration", "is_judicial_admin", "is_gpai", "training_compute_flops",
+    "is_chatbot", "generates_synthetic_content",
+})
 
 
 @router.get("/systems", response_model=list[AISystemResponse], dependencies=[Depends(require_permission(SYSTEMS_READ))])
@@ -49,7 +57,8 @@ async def get_system(system_id: str) -> AISystemResponse:
 
 
 @router.put("/systems/{system_id}", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
-async def update_system(system_id: str, body: AISystemUpdate) -> AISystemResponse:
+async def update_system(system_id: str, body: AISystemUpdate, request: Request) -> AISystemResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     updates = body.model_dump(exclude_none=True)
 
     immutable_attempted = _IMMUTABLE_FIELDS & updates.keys()
@@ -67,9 +76,22 @@ async def update_system(system_id: str, body: AISystemUpdate) -> AISystemRespons
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
 
+        if row.assignee_username and current_user != row.assignee_username:
+            raise HTTPException(403, "Only the assigned user may update this system")
+
+        flag_updates = _FLAG_FIELDS & updates.keys()
+        if flag_updates and row.workflow_status not in ("draft", "rejected"):
+            raise HTTPException(422, "Risk flags can only be changed while the system is in draft or rejected state")
+
         for field, value in updates.items():
             setattr(row, field, value)
         row.updated_at = datetime.now(timezone.utc)
+
+        if flag_updates:
+            classification = classify(row)
+            row.tier = classification.tier
+            row.basis = classification.basis
+            row.annex_iii_area = classification.annex_iii_area
 
         await session.commit()
         await session.refresh(row)
@@ -101,8 +123,7 @@ async def reclassify_system(system_id: str) -> IntakeResponse:
             raise HTTPException(404, f"System {system_id} not found")
 
         old_tier = row.tier
-        body = AISystemCreate.model_validate(row, from_attributes=True)
-        classification = classify(body)
+        classification = classify(row)
 
         row.tier = classification.tier
         row.basis = classification.basis

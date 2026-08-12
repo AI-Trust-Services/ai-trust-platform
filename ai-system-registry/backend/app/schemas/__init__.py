@@ -13,6 +13,12 @@ from app.schemas.model_card import (
     ModelCardUpdate,
     ModelCardResponse,
 )
+from app.schemas.workflow import (
+    WorkflowStepResponse,
+    WorkflowSubmitRequest,
+    WorkflowApproveRequest,
+    WorkflowRejectRequest,
+)
 
 __all__ = [
     "AISystemCreate",
@@ -25,4 +31,8 @@ __all__ = [
     "ModelCardCreate",
     "ModelCardUpdate",
     "ModelCardResponse",
+    "WorkflowStepResponse",
+    "WorkflowSubmitRequest",
+    "WorkflowApproveRequest",
+    "WorkflowRejectRequest",
 ]

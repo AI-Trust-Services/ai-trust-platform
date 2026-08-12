@@ -12,6 +12,7 @@ interface ModalControls {
   modelCreateOpen: boolean;
   setModelCreateOpen: (open: boolean) => void;
   mayWrite: boolean;
+  username: string;
 }
 
 const ToastContext = createContext<ToastFn | null>(null);
@@ -28,7 +29,7 @@ export default function App() {
   const healthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { can } = usePermissions();
+  const { can, username } = usePermissions();
   const mayWrite = can("systems:write");
   const noWriteTitle = "Requires permission: systems:write";
 
@@ -60,7 +61,7 @@ export default function App() {
 
   return (
     <ToastContext.Provider value={showToast}>
-      <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen, mayWrite }}>
+      <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen, mayWrite, username }}>
         <div className="page-header">
           <h1>AI System Registry</h1>
           <div>

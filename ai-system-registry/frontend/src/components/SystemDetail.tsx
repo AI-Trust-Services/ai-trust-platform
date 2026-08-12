@@ -3,7 +3,7 @@ import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard } from "../utils";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, ModelCard } from "../types";
+import type { AISystem, ModelCard, WorkflowStep, UserSummary } from "../types";
 
 const NO_WRITE_TITLE = "Requires permission: systems:write";
 
@@ -36,6 +36,142 @@ function FlagPanel({ title, flags }: { title: string; flags: [unknown, string][]
                 <span style={{ color: val ? "var(--text)" : "var(--text-secondary)" }}>{label}</span>
               </label>
             ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const STEP_LABELS: Record<string, string> = {
+  registered: "System Registered",
+  assigned_engineer: "Engineer Assigned",
+  details_submitted: "Submitted for Review",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+
+function WorkflowTab({ system, onSystemUpdate }: { system: AISystem; onSystemUpdate: (updated: AISystem) => void }) {
+  const [steps, setSteps] = useState<WorkflowStep[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [engineers, setEngineers] = useState<UserSummary[]>([]);
+  const [rejectNote, setRejectNote] = useState("");
+  const [rejectAssignee, setRejectAssignee] = useState("");
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [acting, setActing] = useState(false);
+  const { username } = useModalControls();
+  const showToast = useToast();
+
+  const canAct =
+    system.workflow_status === "pending_review" &&
+    system.assignee_username === username;
+
+  useEffect(() => {
+    setLoading(true);
+    api.getWorkflow(system.id)
+      .then(setSteps)
+      .catch(() => showToast("Failed to load workflow history", true))
+      .finally(() => setLoading(false));
+    if (canAct) {
+      api.getUsersByRole("ai_engineer").then(setEngineers).catch(() => {});
+    }
+  }, [system.id, system.workflow_status]);
+
+  async function handleApprove() {
+    setActing(true);
+    try {
+      await api.approveSystem(system.id);
+      const updated = await api.getSystem(system.id);
+      onSystemUpdate(updated);
+      setSteps(await api.getWorkflow(system.id));
+      showToast("System approved");
+    } catch (e) {
+      showToast(`Approve failed: ${(e as Error).message}`, true);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function handleReject() {
+    if (!rejectNote.trim()) { showToast("Rejection note is required", true); return; }
+    if (!rejectAssignee) { showToast("Please reassign to an engineer", true); return; }
+    setActing(true);
+    try {
+      await api.rejectSystem(system.id, rejectNote, rejectAssignee);
+      const updated = await api.getSystem(system.id);
+      onSystemUpdate(updated);
+      setSteps(await api.getWorkflow(system.id));
+      setRejectOpen(false);
+      setRejectNote("");
+      setRejectAssignee("");
+      showToast("System rejected and engineer notified");
+    } catch (e) {
+      showToast(`Reject failed: ${(e as Error).message}`, true);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  if (loading) return <div className="tab-panel active" style={{ padding: 24, color: "var(--text-secondary)" }}>Loading…</div>;
+
+  return (
+    <div className="tab-panel active">
+      <div className="workflow-timeline">
+        {steps.map((s, i) => (
+          <div key={s.id} className={`wf-step${i === steps.length - 1 ? " wf-step-last" : ""}`}>
+            <div className={`wf-dot wf-dot-done${s.step === "rejected" ? " wf-dot-rejected" : s.step === "approved" ? " wf-dot-approved" : ""}`} />
+            <div className="wf-content">
+              <div className="wf-label">{STEP_LABELS[s.step] || s.step}</div>
+              <div className="wf-meta">
+                by <strong>{s.actor_username}</strong>
+                {s.assignee_username && <> → assigned to <strong>{s.assignee_username}</strong></>}
+                <span style={{ marginLeft: 8, color: "var(--text-secondary)", fontSize: 12 }}>{fmtDateTime(s.created_at)}</span>
+              </div>
+              {s.note && <div className="wf-note">"{s.note}"</div>}
+            </div>
+          </div>
+        ))}
+        {steps.length === 0 && (
+          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>No workflow history yet.</div>
+        )}
+      </div>
+
+      {canAct && !rejectOpen && (
+        <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+          <button className="btn-primary" onClick={handleApprove} disabled={acting}>
+            {acting && <span className="spinner" />} Approve
+          </button>
+          <button className="btn-ghost" style={{ color: "var(--danger, #c0392b)" }} onClick={() => setRejectOpen(true)} disabled={acting}>
+            Reject…
+          </button>
+        </div>
+      )}
+
+      {canAct && rejectOpen && (
+        <div className="panel" style={{ marginTop: 20 }}>
+          <div className="panel-header">Reject System</div>
+          <div className="panel-body">
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label className="required" htmlFor="reject_note">Rejection Note</label>
+              <textarea id="reject_note" rows={3} value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} placeholder="Explain what needs to be changed…" />
+            </div>
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label className="required" htmlFor="reject_engineer">Reassign to AI Engineer</label>
+              <select className="form-select" id="reject_engineer" value={rejectAssignee} onChange={(e) => setRejectAssignee(e.target.value)}>
+                <option value="">— select an engineer —</option>
+                {engineers.map((u) => (
+                  <option key={u.username} value={u.username}>
+                    {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username} ({u.username})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn-ghost" onClick={() => { setRejectOpen(false); setRejectNote(""); setRejectAssignee(""); }}>Cancel</button>
+              <button className="btn-danger" onClick={handleReject} disabled={acting}>
+                {acting && <span className="spinner" />} Confirm Rejection
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -259,7 +395,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
         </div>
 
         <div className="tab-bar">
-          {["overview", "model", "edit"].map((t) => (
+          {["overview", "workflow", "model", "edit"].map((t) => (
             <div key={t} className={`tab${tab === t ? " active" : ""}`} onClick={() => setTab(t)}>
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </div>
@@ -349,6 +485,10 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                 ]} />
               </div>
             </div>
+          )}
+
+          {tab === "workflow" && (
+            <WorkflowTab system={system} onSystemUpdate={handleSystemUpdate} />
           )}
 
           {tab === "model" && (
