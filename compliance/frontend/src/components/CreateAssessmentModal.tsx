@@ -33,7 +33,7 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess }: Prop
     (async () => {
       try {
         const [sys, fw] = await Promise.all([api.getSystems(), api.getFrameworks()]);
-        setSystems(sys.filter((s) => s.lifecycle !== "decommissioned"));
+        setSystems(sys.filter((s) => s.lifecycle !== "decommissioned" && s.workflow_status === "approved"));
         setFrameworks(fw.filter((f) => f.enabled));
       } catch (e) {
         showToast(`Failed to load options: ${(e as Error).message}`, true);
