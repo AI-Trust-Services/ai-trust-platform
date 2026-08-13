@@ -35,6 +35,7 @@ async def intake_system(body: AISystemCreate, request: Request) -> IntakeRespons
         compliance=0.0,
         workflow_status="draft",
         assignee_username=body.assignee_username,
+        compliance_officer_username=body.compliance_officer_username,
     )
 
     step = SystemWorkflowStep(

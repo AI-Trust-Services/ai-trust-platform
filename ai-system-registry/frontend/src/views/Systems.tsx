@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { TierBadge, LifecycleBadge, ComplianceBar, FormattedDate } from "../components/Badges";
 import SystemDetail from "../components/SystemDetail";
+import type { UserMap } from "../components/SystemDetail";
 import RegisterWizard from "../components/RegisterWizard";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
@@ -16,6 +17,7 @@ const WORKFLOW_STATUS_LABELS: Record<string, string> = {
 export default function Systems() {
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [models, setModels] = useState<ModelCard[]>([]);
+  const [userMap, setUserMap] = useState<UserMap>({});
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("");
   const [lifecycleFilter, setLifecycleFilter] = useState("");
@@ -43,6 +45,19 @@ export default function Systems() {
       showToast(`Failed to load model catalog: ${(e as Error).message}`, true);
     }
   }, [showToast]);
+
+  useEffect(() => {
+    Promise.all([
+      api.getUsersByRole("ai_engineer").catch(() => []),
+      api.getUsersByRole("ai_compliance_officer").catch(() => []),
+    ]).then(([engineers, cos]) => {
+      const map: UserMap = {};
+      for (const u of [...engineers, ...cos]) {
+        map[u.username] = { firstName: u.firstName, lastName: u.lastName };
+      }
+      setUserMap(map);
+    });
+  }, []);
 
   useEffect(() => { loadSystems(); loadModels(); }, [loadSystems, loadModels]);
 
@@ -180,9 +195,18 @@ export default function Systems() {
                           width: 24, height: 24, borderRadius: "50%", background: "var(--brand)",
                           color: "#fff", fontSize: 10, fontWeight: 700, flexShrink: 0,
                         }}>
-                          {s.assignee_username.slice(0, 2).toUpperCase()}
+                          {(() => {
+                            const u = userMap[s.assignee_username];
+                            if (u?.firstName && u?.lastName) return (u.firstName[0] + u.lastName[0]).toUpperCase();
+                            if (u?.firstName) return u.firstName.slice(0, 2).toUpperCase();
+                            return s.assignee_username.slice(0, 2).toUpperCase();
+                          })()}
                         </span>
-                        {s.assignee_username}
+                        {(() => {
+                          const u = userMap[s.assignee_username];
+                          const full = [u?.firstName, u?.lastName].filter(Boolean).join(" ");
+                          return full || s.assignee_username;
+                        })()}
                       </span>
                     ) : "—"}
                   </td>
@@ -228,6 +252,7 @@ export default function Systems() {
         open={detailOpen}
         system={selectedSystem}
         models={models}
+        userMap={userMap}
         onClose={() => setDetailOpen(false)}
         onDelete={() => { setDetailOpen(false); loadSystems(); }}
         onUpdate={(updated) => {

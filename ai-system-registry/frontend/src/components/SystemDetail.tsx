@@ -5,7 +5,13 @@ import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import type { AISystem, ModelCard, WorkflowStep, UserSummary } from "../types";
 
-const NO_WRITE_TITLE = "Requires permission: systems:write";
+export type UserMap = Record<string, { firstName: string; lastName: string }>;
+
+function userName(username: string, userMap?: UserMap): string {
+  const u = userMap?.[username];
+  const full = [u?.firstName, u?.lastName].filter(Boolean).join(" ");
+  return full || username;
+}
 
 function DetailGrid({ rows }: { rows: ([string, React.ReactNode] | false | null | undefined)[] }) {
   return (
@@ -51,10 +57,30 @@ const STEP_LABELS: Record<string, string> = {
   rejected: "Rejected",
 };
 
-function WorkflowTab({ system, onSystemUpdate }: { system: AISystem; onSystemUpdate: (updated: AISystem) => void }) {
-  const [steps, setSteps] = useState<WorkflowStep[]>([]);
-  const [loading, setLoading] = useState(true);
+const WF_PHASES = [
+  { key: "registered",  label: "Registered" },
+  { key: "in_progress", label: "Engineer Review" },
+  { key: "review",      label: "Compliance Review" },
+  { key: "outcome",     label: "Outcome" },
+];
+
+function workflowPhase(status: string): number {
+  if (status === "approved" || status === "rejected") return 4;
+  if (status === "pending_review") return 3;
+  return 2; // draft or rejected-back-to-engineer
+}
+
+function WorkflowProgress({
+  system,
+  onSystemUpdate,
+  userMap,
+}: {
+  system: AISystem;
+  onSystemUpdate: (updated: AISystem) => void;
+  userMap?: UserMap;
+}) {
   const [engineers, setEngineers] = useState<UserSummary[]>([]);
+  const [lastSubmitter, setLastSubmitter] = useState("");
   const [rejectNote, setRejectNote] = useState("");
   const [rejectAssignee, setRejectAssignee] = useState("");
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -62,18 +88,15 @@ function WorkflowTab({ system, onSystemUpdate }: { system: AISystem; onSystemUpd
   const { username } = useModalControls();
   const showToast = useToast();
 
-  const canAct =
-    system.workflow_status === "pending_review" &&
-    system.assignee_username === username;
+  const canAct = system.workflow_status === "pending_review" && system.assignee_username === username;
 
   useEffect(() => {
-    setLoading(true);
-    api.getWorkflow(system.id)
-      .then(setSteps)
-      .catch(() => showToast("Failed to load workflow history", true))
-      .finally(() => setLoading(false));
     if (canAct) {
       api.getUsersByRole("ai_engineer").then(setEngineers).catch(() => {});
+      api.getWorkflow(system.id).then((steps) => {
+        const submitted = [...steps].reverse().find((s) => s.step === "details_submitted");
+        if (submitted) setLastSubmitter(submitted.actor_username);
+      }).catch(() => {});
     }
   }, [system.id, system.workflow_status]);
 
@@ -81,15 +104,11 @@ function WorkflowTab({ system, onSystemUpdate }: { system: AISystem; onSystemUpd
     setActing(true);
     try {
       await api.approveSystem(system.id);
-      const updated = await api.getSystem(system.id);
-      onSystemUpdate(updated);
-      setSteps(await api.getWorkflow(system.id));
+      onSystemUpdate(await api.getSystem(system.id));
       showToast("System approved");
     } catch (e) {
       showToast(`Approve failed: ${(e as Error).message}`, true);
-    } finally {
-      setActing(false);
-    }
+    } finally { setActing(false); }
   }
 
   async function handleReject() {
@@ -98,57 +117,74 @@ function WorkflowTab({ system, onSystemUpdate }: { system: AISystem; onSystemUpd
     setActing(true);
     try {
       await api.rejectSystem(system.id, rejectNote, rejectAssignee);
-      const updated = await api.getSystem(system.id);
-      onSystemUpdate(updated);
-      setSteps(await api.getWorkflow(system.id));
-      setRejectOpen(false);
-      setRejectNote("");
-      setRejectAssignee("");
+      onSystemUpdate(await api.getSystem(system.id));
+      setRejectOpen(false); setRejectNote(""); setRejectAssignee("");
       showToast("System rejected and engineer notified");
     } catch (e) {
       showToast(`Reject failed: ${(e as Error).message}`, true);
-    } finally {
-      setActing(false);
-    }
+    } finally { setActing(false); }
   }
 
-  if (loading) return <div className="tab-panel active" style={{ padding: 24, color: "var(--text-secondary)" }}>Loading…</div>;
+  const phase = workflowPhase(system.workflow_status);
 
   return (
-    <div className="tab-panel active">
-      <div className="workflow-timeline">
-        {steps.map((s, i) => (
-          <div key={s.id} className={`wf-step${i === steps.length - 1 ? " wf-step-last" : ""}`}>
-            <div className={`wf-dot wf-dot-done${s.step === "rejected" ? " wf-dot-rejected" : s.step === "approved" ? " wf-dot-approved" : ""}`} />
-            <div className="wf-content">
-              <div className="wf-label">{STEP_LABELS[s.step] || s.step}</div>
-              <div className="wf-meta">
-                by <strong>{s.actor_username}</strong>
-                {s.assignee_username && <> → assigned to <strong>{s.assignee_username}</strong></>}
-                <span style={{ marginLeft: 8, color: "var(--text-secondary)", fontSize: 12 }}>{fmtDateTime(s.created_at)}</span>
+    <div className="wf-progress-wrap">
+      <div className="wf-progress">
+        {WF_PHASES.map((p, i) => {
+          const phaseNum = i + 1;
+          const isDone = phase > phaseNum;
+          const isActive = phase === phaseNum || (phaseNum === 4 && phase === 4);
+          const isOutcome = p.key === "outcome";
+          const outcomeLabel = system.workflow_status === "approved" ? "Approved" : system.workflow_status === "rejected" ? "Rejected" : "Outcome";
+          const outcomeClass = system.workflow_status === "approved" ? " wf-phase-approved" : system.workflow_status === "rejected" ? " wf-phase-rejected" : "";
+          return (
+            <Fragment key={p.key}>
+              <div className={`wf-phase${isDone ? " wf-phase-done" : isActive ? " wf-phase-active" + (isOutcome ? outcomeClass : "") : ""}`}>
+                <div className="wf-phase-dot">
+                  {isDone ? "✓" : phaseNum}
+                </div>
+                <div className="wf-phase-label">{isOutcome ? outcomeLabel : p.label}</div>
               </div>
-              {s.note && <div className="wf-note">"{s.note}"</div>}
-            </div>
-          </div>
-        ))}
-        {steps.length === 0 && (
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>No workflow history yet.</div>
-        )}
+              {i < WF_PHASES.length - 1 && (
+                <div className={`wf-phase-line${isDone || (isActive && !isOutcome) ? " wf-phase-line-done" : ""}`} />
+              )}
+            </Fragment>
+          );
+        })}
       </div>
 
+      {(system.assignee_username || system.compliance_officer_username) && (
+        <div style={{ display: "flex", gap: 24, marginTop: 12, fontSize: 13, color: "var(--text-secondary)" }}>
+          {system.workflow_status !== "approved" && system.assignee_username && (
+            <span>
+              <span style={{ fontWeight: 600 }}>Assigned to: </span>
+              {userName(system.assignee_username, userMap)}
+            </span>
+          )}
+          {system.compliance_officer_username && system.workflow_status !== "approved" && (
+            <span>
+              <span style={{ fontWeight: 600 }}>Compliance officer: </span>
+              {userName(system.compliance_officer_username, userMap)}
+            </span>
+          )}
+        </div>
+      )}
+
       {canAct && !rejectOpen && (
-        <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           <button className="btn-primary" onClick={handleApprove} disabled={acting}>
             {acting && <span className="spinner" />} Approve
           </button>
-          <button className="btn-ghost" style={{ color: "var(--danger, #c0392b)" }} onClick={() => setRejectOpen(true)} disabled={acting}>
+          <button className="btn-ghost" style={{ color: "var(--danger, #c0392b)" }}
+            onClick={() => { setRejectOpen(true); setRejectAssignee(lastSubmitter || ""); }}
+            disabled={acting}>
             Reject…
           </button>
         </div>
       )}
 
       {canAct && rejectOpen && (
-        <div className="panel" style={{ marginTop: 20 }}>
+        <div className="panel" style={{ marginTop: 16 }}>
           <div className="panel-header">Reject System</div>
           <div className="panel-body">
             <div className="form-group" style={{ marginBottom: 12 }}>
@@ -179,6 +215,46 @@ function WorkflowTab({ system, onSystemUpdate }: { system: AISystem; onSystemUpd
   );
 }
 
+function WorkflowTab({ system, userMap }: { system: AISystem; userMap?: UserMap }) {
+  const [steps, setSteps] = useState<WorkflowStep[]>([]);
+  const [loading, setLoading] = useState(true);
+  const showToast = useToast();
+
+  useEffect(() => {
+    setLoading(true);
+    api.getWorkflow(system.id)
+      .then(setSteps)
+      .catch(() => showToast("Failed to load workflow history", true))
+      .finally(() => setLoading(false));
+  }, [system.id, system.workflow_status]);
+
+  if (loading) return <div className="tab-panel active" style={{ padding: 24, color: "var(--text-secondary)" }}>Loading…</div>;
+
+  return (
+    <div className="tab-panel active">
+      <div className="workflow-timeline">
+        {steps.map((s, i) => (
+          <div key={s.id} className={`wf-step${i === steps.length - 1 ? " wf-step-last" : ""}`}>
+            <div className={`wf-dot wf-dot-done${s.step === "rejected" ? " wf-dot-rejected" : s.step === "approved" ? " wf-dot-approved" : ""}`} />
+            <div className="wf-content">
+              <div className="wf-label">{STEP_LABELS[s.step] || s.step}</div>
+              <div className="wf-meta">
+                by <strong>{userName(s.actor_username, userMap)}</strong>
+                {s.assignee_username && <> → assigned to <strong>{userName(s.assignee_username, userMap)}</strong></>}
+                <span style={{ marginLeft: 8, color: "var(--text-secondary)", fontSize: 12 }}>{fmtDateTime(s.created_at)}</span>
+              </div>
+              {s.note && <div className="wf-note">"{s.note}"</div>}
+            </div>
+          </div>
+        ))}
+        {steps.length === 0 && (
+          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>No workflow history yet.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function EditForm({ system, models: _models, onSave, onClose }: { system: AISystem; models: ModelCard[]; onSave: (updated: AISystem) => void; onClose: () => void }) {
   const [form, setForm] = useState({
     name: system.name || "",
@@ -197,6 +273,7 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
   const [saving, setSaving] = useState(false);
   const showToast = useToast();
   const { mayWrite } = useModalControls();
+  const NO_WRITE_TITLE = "Requires permission: systems:write";
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -209,9 +286,7 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
       onSave(updated);
     } catch (e) {
       showToast(`Update failed: ${(e as Error).message}`, true);
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   return (
@@ -262,8 +337,7 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, gap: 8 }}>
         <button className="btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={handleSave} disabled={saving || !mayWrite}
-          title={mayWrite ? undefined : NO_WRITE_TITLE}>
+        <button className="btn-primary" onClick={handleSave} disabled={saving || !mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE}>
           {saving && <span className="spinner" />} Save Changes
         </button>
       </div>
@@ -276,6 +350,7 @@ function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models
   const [linking, setLinking] = useState(false);
   const showToast = useToast();
   const { mayWrite } = useModalControls();
+  const NO_WRITE_TITLE = "Requires permission: systems:write";
   const linkedModel = models.find((m) => m.id === system.model_id);
 
   async function handleLink() {
@@ -287,9 +362,7 @@ function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models
       onSystemUpdate(updated);
     } catch (e) {
       showToast(`Link failed: ${(e as Error).message}`, true);
-    } finally {
-      setLinking(false);
-    }
+    } finally { setLinking(false); }
   }
 
   async function handleUnlink() {
@@ -317,8 +390,7 @@ function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models
             </div>
             {linkedModel?.description && <div style={{ marginTop: 6, fontSize: 13, color: "var(--text-secondary)" }}>{linkedModel.description}</div>}
           </div>
-          <button className="btn-ghost" style={{ marginTop: 4 }} disabled={!mayWrite}
-            title={mayWrite ? undefined : NO_WRITE_TITLE} onClick={handleUnlink}>Unlink Model</button>
+          <button className="btn-ghost" style={{ marginTop: 4 }} disabled={!mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE} onClick={handleUnlink}>Unlink Model</button>
         </div>
       ) : (
         <div className="msg-strip info" style={{ marginBottom: 16 }}>No model card is linked to this system yet.</div>
@@ -335,8 +407,7 @@ function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models
               ))}
             </select>
           </div>
-          <button className="btn-primary" onClick={handleLink} disabled={linking || !mayWrite}
-            title={mayWrite ? undefined : NO_WRITE_TITLE}>Link</button>
+          <button className="btn-primary" onClick={handleLink} disabled={linking || !mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE}>Link</button>
         </div>
         <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
           Linking a model records which LLM or AI model powers this system. One system can have at most one linked model.
@@ -346,18 +417,19 @@ function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models
   );
 }
 
-export default function SystemDetail({ system: initialSystem, models, open, onClose, onDelete, onUpdate }: {
+export default function SystemDetail({ system: initialSystem, models, open, onClose, onDelete, onUpdate, userMap }: {
   system: AISystem | null;
   models: ModelCard[];
   open: boolean;
   onClose: () => void;
   onDelete: () => void;
   onUpdate: (updated: AISystem) => void;
+  userMap?: UserMap;
 }) {
   const [tab, setTab] = useState("overview");
   const [system, setSystem] = useState<AISystem | null>(initialSystem);
   const showToast = useToast();
-  const { mayWrite } = useModalControls();
+  const { mayRegister } = useModalControls();
 
   useEffect(() => { setSystem(initialSystem); setTab("overview"); }, [initialSystem]);
 
@@ -406,6 +478,9 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
         <div className="modal-body">
           {tab === "overview" && (
             <div className="tab-panel active">
+              <div className="detail-section">
+                <WorkflowProgress system={system} onSystemUpdate={handleSystemUpdate} userMap={userMap} />
+              </div>
               <div className="detail-section">
                 <h3>Identity</h3>
                 <DetailGrid rows={[
@@ -489,7 +564,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
           )}
 
           {tab === "workflow" && (
-            <WorkflowTab system={system} onSystemUpdate={handleSystemUpdate} />
+            <WorkflowTab system={system} userMap={userMap} />
           )}
 
           {tab === "model" && (
@@ -502,8 +577,8 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
         </div>
 
         <div className="modal-footer">
-          <button className="btn-danger" onClick={handleDelete} disabled={!mayWrite}
-            title={mayWrite ? undefined : NO_WRITE_TITLE}>Delete System</button>
+          <button className="btn-danger" onClick={handleDelete} disabled={!mayRegister}
+            title={mayRegister ? undefined : "Requires role: business owner or administrator"}>Delete System</button>
           <div className="toolbar-spacer" />
           <button className="btn-ghost" onClick={onClose}>Close</button>
         </div>

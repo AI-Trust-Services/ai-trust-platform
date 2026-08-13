@@ -15,6 +15,7 @@ class AISystemCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: str = Field(default="")
     assignee_username: str = Field(..., min_length=1, max_length=200)
+    compliance_officer_username: str | None = Field(default=None, max_length=200)
 
     @field_validator("name")
     @classmethod
@@ -121,6 +122,7 @@ class AISystemResponse(BaseModel):
     updated_at: datetime
     workflow_status: str
     assignee_username: str | None
+    compliance_officer_username: str | None
 
     model_config = {"from_attributes": True}
 

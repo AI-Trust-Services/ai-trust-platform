@@ -67,6 +67,7 @@ async def submit_for_review(
         )
         row.workflow_status = "pending_review"
         row.assignee_username = body.assignee_username
+        row.compliance_officer_username = body.assignee_username
         session.add(step)
         await session.commit()
 

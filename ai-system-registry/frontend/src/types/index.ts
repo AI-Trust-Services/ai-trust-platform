@@ -28,6 +28,7 @@ export interface AISystem {
   updated_at: string;
   workflow_status: string;
   assignee_username: string | null;
+  compliance_officer_username: string | null;
   is_gpai: boolean;
   training_compute_flops: number;
   is_chatbot: boolean;

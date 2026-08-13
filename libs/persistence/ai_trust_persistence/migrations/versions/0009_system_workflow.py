@@ -1,4 +1,4 @@
-"""Add workflow_status, assignee_username to ai_systems and create system_workflow_steps
+"""Add workflow_status, assignee_username, compliance_officer_username to ai_systems and create system_workflow_steps
 
 Revision ID: 0009
 Revises: 0008
@@ -16,6 +16,7 @@ depends_on = None
 def upgrade() -> None:
     op.add_column("ai_systems", sa.Column("workflow_status", sa.String(30), nullable=False, server_default="draft"))
     op.add_column("ai_systems", sa.Column("assignee_username", sa.String(200), nullable=True))
+    op.add_column("ai_systems", sa.Column("compliance_officer_username", sa.String(200), nullable=True))
 
     op.create_table(
         "system_workflow_steps",
@@ -37,5 +38,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("system_workflow_steps")
+    op.drop_column("ai_systems", "compliance_officer_username")
     op.drop_column("ai_systems", "assignee_username")
     op.drop_column("ai_systems", "workflow_status")

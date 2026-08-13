@@ -57,6 +57,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<AISystemFormData>(EMPTY_FORM);
   const [assigneeUsername, setAssigneeUsername] = useState("");
+  const [complianceOfficerUsername, setComplianceOfficerUsername] = useState("");
   const [engineers, setEngineers] = useState<UserSummary[]>([]);
   const [complianceOfficers, setComplianceOfficers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -105,15 +106,19 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
         is_chatbot: system.is_chatbot,
         generates_synthetic_content: system.generates_synthetic_content,
       });
+      // Pre-populate compliance officer from what the owner pre-set
+      setAssigneeUsername(system.compliance_officer_username || "");
       api.getUsersByRole("ai_compliance_officer")
         .then(setComplianceOfficers)
         .catch(() => {});
     } else {
       setForm(EMPTY_FORM);
       setAssigneeUsername("");
-      api.getUsersByRole("ai_engineer")
-        .then(setEngineers)
-        .catch(() => {});
+      setComplianceOfficerUsername("");
+      Promise.all([
+        api.getUsersByRole("ai_engineer"),
+        api.getUsersByRole("ai_compliance_officer"),
+      ]).then(([eng, co]) => { setEngineers(eng); setComplianceOfficers(co); }).catch(() => {});
     }
   }, [open, isEngineerMode, system]);
 
@@ -139,7 +144,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
     submitting.current = true;
     setLoading(true);
     try {
-      const result = await api.intake({ name: form.name, description: form.description, assignee_username: assigneeUsername } as never);
+      const result = await api.intake({ name: form.name, description: form.description, assignee_username: assigneeUsername, compliance_officer_username: complianceOfficerUsername || null } as never);
       setDoneId(result.id);
       showToast("AI system registered and engineer notified");
       onSuccess();
@@ -249,6 +254,15 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                       <select className="form-select" id="reg_engineer" value={assigneeUsername} onChange={(e) => setAssigneeUsername(e.target.value)}>
                         <option value="">— select an engineer —</option>
                         {engineers.map((u) => (
+                          <option key={u.username} value={u.username}>{displayName(u)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="reg_co">Pre-assign Compliance Officer (optional)</label>
+                      <select className="form-select" id="reg_co" value={complianceOfficerUsername} onChange={(e) => setComplianceOfficerUsername(e.target.value)}>
+                        <option value="">— let the engineer choose —</option>
+                        {complianceOfficers.map((u) => (
                           <option key={u.username} value={u.username}>{displayName(u)}</option>
                         ))}
                       </select>
