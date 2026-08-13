@@ -298,8 +298,8 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-noreply@ai-trust.local}
-      SMTP_SSL: ${SMTP_SSL:-false}
-      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+      SMTP_SSL: ${SMTP_SSL}
+      SMTP_STARTTLS: ${SMTP_STARTTLS}
     volumes:
       - openfga-config:/config:ro
     depends_on:

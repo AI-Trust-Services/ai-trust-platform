@@ -17,8 +17,8 @@ _SMTP_USER = os.environ.get("SMTP_USER", "")
 _SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 _SMTP_FROM = os.environ["SMTP_FROM"]
 _SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME")
-_SMTP_SSL = os.environ.get("SMTP_SSL").lower()
-_SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS").lower()
+_SMTP_SSL = os.environ["SMTP_SSL"].lower() == "true"
+_SMTP_STARTTLS = os.environ["SMTP_STARTTLS"].lower() == "true"
 _USERS_BACKEND_URL = os.environ["USERS_BACKEND_URL"]
 
 
