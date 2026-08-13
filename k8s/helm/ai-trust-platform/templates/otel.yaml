@@ -1,0 +1,135 @@
+{{/* GenAI observability pipeline: otel-collector -> otel-rmq-bridge -> rabbitmq -> otel-clickhouse-consumer -> clickhouse */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-rmq-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "otel-rmq-bridge") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "otel-rmq-bridge") | nindent 8 }}
+    spec:
+      initContainers:
+        # mirrors compose: otel-rmq-bridge depends_on rabbitmq (service_healthy)
+        {{- include "ai-trust.waitForTcp" (dict "name" "rabbitmq" "port" 5672 "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: otel-rmq-bridge
+          image: {{ .Values.image.repository }}/otel-rmq-bridge:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # RABBITMQ_URL
+          env:
+            - name: RMQ_CONNECT_RETRIES
+              value: "10"
+            - name: RMQ_CONNECT_DELAY
+              value: "3.0"
+          ports:
+            - containerPort: 8002
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-rmq-bridge
+spec:
+  type: NodePort
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "otel-rmq-bridge") | nindent 4 }}
+  ports:
+    - port: 8002
+      targetPort: 8002
+      nodePort: {{ .Values.otel.rmqBridgeNodePort }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "otel-collector") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "otel-collector") | nindent 8 }}
+    spec:
+      initContainers:
+        # mirrors compose: otel-collector depends_on otel-rmq-bridge (service_healthy)
+        {{- include "ai-trust.waitForHttp" (dict "name" "otel-rmq-bridge" "port" 8002 "path" "/health" "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: otel-collector
+          image: {{ .Values.otel.collectorImage }}
+          ports:
+            - containerPort: 4317
+            - containerPort: 4318
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol-contrib/config.yaml
+              subPath: otel-collector-config.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+spec:
+  type: NodePort
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "otel-collector") | nindent 4 }}
+  ports:
+    - name: grpc
+      port: 4317
+      targetPort: 4317
+      nodePort: {{ .Values.otel.collectorGrpcNodePort }}
+    - name: http
+      port: 4318
+      targetPort: 4318
+      nodePort: {{ .Values.otel.collectorHttpNodePort }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-clickhouse-consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "otel-clickhouse-consumer") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "otel-clickhouse-consumer") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      initContainers:
+        # mirrors compose: depends_on rabbitmq (service_healthy) + clickhouse-migrate (completed)
+        {{- include "ai-trust.waitForTcp" (dict "name" "rabbitmq" "port" 5672 "image" .Values.waitImages.busybox) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "clickhouse-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
+      containers:
+        - name: otel-clickhouse-consumer
+          image: {{ .Values.image.repository }}/otel-clickhouse-consumer:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # RABBITMQ_URL, CLICKHOUSE_USER/PASSWORD
+          env:
+            - name: CLICKHOUSE_HOST
+              value: clickhouse
+            - name: CLICKHOUSE_PORT
+              value: "8123"
+            - name: BATCH_SIZE
+              value: "100"
+            - name: BATCH_TIMEOUT
+              value: "5"

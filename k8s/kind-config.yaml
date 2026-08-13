@@ -1,0 +1,27 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ai-trust
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # host port (unchanged from docker-compose / CLAUDE.md) -> NodePort on this node
+      - containerPort: 30080
+        hostPort: 8080 # oauth2-proxy - single entry point
+      - containerPort: 30180
+        hostPort: 8180 # keycloak (browser login)
+      - containerPort: 30432
+        hostPort: 5432 # postgres
+      - containerPort: 30672
+        hostPort: 15672 # rabbitmq management UI
+      - containerPort: 30123
+        hostPort: 8123 # clickhouse HTTP API
+      - containerPort: 30900
+        hostPort: 19000 # minio API (9000 avoided - commonly held by corporate VPN/proxy agents e.g. Zscaler on managed laptops)
+      - containerPort: 30901
+        hostPort: 9001 # minio console
+      - containerPort: 30317
+        hostPort: 4317 # otel collector gRPC
+      - containerPort: 30318
+        hostPort: 4318 # otel collector HTTP
+      - containerPort: 30802
+        hostPort: 8002 # otel-rmq-bridge health

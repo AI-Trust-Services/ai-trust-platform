@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openfga-config
+spec:
+  accessModes: ["ReadWriteOnce"] # mounted read-only by several backend Deployments; fine as long as
+  resources:                     # the cluster is single-node (kind default) so all pods land there
+    requests:
+      storage: {{ .Values.openfga.storageSize }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openfga
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "openfga") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "openfga") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      initContainers:
+        # mirrors compose: openfga depends_on openfga-migrate (service_completed_successfully)
+        {{- include "ai-trust.waitForJob" (dict "job" "openfga-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
+      containers:
+        - name: openfga
+          image: {{ .Values.openfga.image }}
+          args: ["run"]
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # OPENFGA_DATASTORE_URI
+          env:
+            - name: OPENFGA_DATASTORE_ENGINE
+              value: postgres
+            - name: OPENFGA_LOG_FORMAT
+              value: json
+          ports:
+            - containerPort: 8080
+            - containerPort: 8081
+          readinessProbe:
+            exec:
+              command: ["/usr/local/bin/grpc_health_probe", "-addr=localhost:8081"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["/usr/local/bin/grpc_health_probe", "-addr=localhost:8081"]
+            initialDelaySeconds: 20
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openfga
+spec:
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "openfga") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: grpc
+      port: 8081
+      targetPort: 8081

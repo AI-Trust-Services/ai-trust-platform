@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ai-trust-platform
+description: AI Trust Platform - local kind deployment (alternative to docker-compose)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

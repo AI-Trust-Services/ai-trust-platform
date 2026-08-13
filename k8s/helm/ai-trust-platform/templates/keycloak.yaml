@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "keycloak") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "keycloak") | nindent 8 }}
+    spec:
+      initContainers:
+        # mirrors compose: keycloak depends_on postgres (service_healthy)
+        {{- include "ai-trust.waitForTcp" (dict "name" "postgres" "port" 5432 "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: keycloak
+          image: {{ .Values.keycloak.image }}
+          args: ["start-dev"]
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # KEYCLOAK_ADMIN/KEYCLOAK_ADMIN_PASSWORD
+          env:
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://postgres:5432/keycloak
+            - name: KC_DB_USERNAME
+              valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: POSTGRES_USER } }
+            - name: KC_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: POSTGRES_PASSWORD } }
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /realms/master
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /realms/master
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+spec:
+  type: NodePort
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "keycloak") | nindent 4 }}
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: {{ .Values.keycloak.nodePort }}
