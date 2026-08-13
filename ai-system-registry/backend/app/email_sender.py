@@ -16,6 +16,10 @@ _SMTP_PORT = int(os.environ.get("SMTP_PORT", "1025"))
 _SMTP_USER = os.environ.get("SMTP_USER", "")
 _SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 _SMTP_FROM = os.environ.get("SMTP_FROM", "noreply@ai-trust.local")
+# mail.smtp.ssl.enable=true  → implicit TLS from the start (port 465)
+# mail.smtp.starttls.enable=true → STARTTLS upgrade after plain connect (port 587)
+_SMTP_SSL = os.environ.get("SMTP_SSL", "false").lower() == "true"
+_SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "false").lower() == "true"
 _USERS_BACKEND_URL = os.environ.get("USERS_BACKEND_URL", "http://users-backend:8001")
 
 
@@ -51,7 +55,8 @@ async def notify(to_username: str, subject: str, body: str) -> None:
             port=_SMTP_PORT,
             username=_SMTP_USER or None,
             password=_SMTP_PASSWORD or None,
-            start_tls=False,
+            use_tls=_SMTP_SSL,
+            start_tls=_SMTP_STARTTLS,
         )
         logger.info("notification.sent", extra={"to": email, "subject": subject})
     except Exception as exc:
