@@ -603,11 +603,14 @@ async def create_event(
 
 async def resolve_event(event_id: str, rule_name: str) -> None:
     now = datetime.now(timezone.utc)
+    # tenant-scope the mutation (SEC-C3): the worker sets tenant_id_var per pass, so this only
+    # ever resolves events belonging to the current tenant. Fail-closed (1=0) if no tenant.
+    where, params = tenant_clause("id = {id:String}")
     await ch_command(
         "ALTER TABLE otel.alert_events UPDATE resolved_at = {ts:DateTime} "
-        "WHERE id = {id:String} "
+        f"WHERE {where} "
         "SETTINGS mutations_sync = 1",
-        {"ts": now, "id": event_id},
+        {**params, "ts": now, "id": event_id},
     )
     log.info("alert.resolved", extra={"rule": rule_name, "event_id": event_id})
 

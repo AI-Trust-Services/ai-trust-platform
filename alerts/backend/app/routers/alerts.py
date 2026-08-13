@@ -120,11 +120,12 @@ async def get_alert_count() -> dict:
 async def handle_alert_event(event_id: str) -> dict:
     """Mark an event-based alert as handled — moves to history permanently."""
     now = datetime.now(timezone.utc)
+    where, params = tenant_clause("id = {id:String}", "handled_at IS NULL")
     await ch_command(
         "ALTER TABLE otel.alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
-        "WHERE id = {id:String} AND handled_at IS NULL "
+        f"WHERE {where} "
         "SETTINGS mutations_sync = 1",
-        params={"ts": now, "id": event_id},
+        params={**params, "ts": now, "id": event_id},
     )
     logger.info("alerts.event_handled", extra={"event_id": event_id})
     return {"status": "handled", "event_id": event_id}
@@ -163,11 +164,12 @@ async def approve_model_change(event_id: str) -> dict:
         raise HTTPException(422, "Event has no entity_model — cannot approve")
 
     now = datetime.now(timezone.utc)
+    upd_where, upd_params = tenant_clause("id = {id:String}", "handled_at IS NULL")
     await ch_command(
         "ALTER TABLE otel.alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
-        "WHERE id = {id:String} AND handled_at IS NULL "
+        f"WHERE {upd_where} "
         "SETTINGS mutations_sync = 1",
-        params={"ts": now, "id": event_id},
+        params={**upd_params, "ts": now, "id": event_id},
     )
     async with SessionLocal() as session:
         result = await session.execute(
@@ -189,11 +191,12 @@ async def approve_model_change(event_id: str) -> dict:
 async def reject_model_change(event_id: str) -> dict:
     """Reject a model change — marks event as handled, baseline unchanged."""
     now = datetime.now(timezone.utc)
+    where, params = tenant_clause("id = {id:String}", "handled_at IS NULL")
     await ch_command(
         "ALTER TABLE otel.alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
-        "WHERE id = {id:String} AND handled_at IS NULL "
+        f"WHERE {where} "
         "SETTINGS mutations_sync = 1",
-        params={"ts": now, "id": event_id},
+        params={**params, "ts": now, "id": event_id},
     )
     logger.info("alerts.model_rejected", extra={"event_id": event_id})
     return {"status": "rejected", "event_id": event_id}

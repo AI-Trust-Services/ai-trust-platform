@@ -55,6 +55,25 @@ Isolation is **fail-closed**: in `jwt` mode an unresolved/forged/unverified toke
   nested tenants. Acceptable for the current provider-consumer shape; revisit if hierarchical
   sub-tenant isolation is required.
 
+## MANDATORY runtime requirement — the non-superuser DB role (RLS enforcement)
+
+**Postgres RLS is the backbone of tenant DATA isolation, and RLS is BYPASSED by superusers and
+by the table owner.** Therefore, for multi-tenant deployments:
+
+- Runtime backends + worker MUST connect via `DATABASE_URL` using the **non-superuser role
+  `ai_trust_app`** (`NOSUPERUSER NOBYPASSRLS`). If the app connects as `postgres` (superuser), RLS
+  does nothing and there is NO tenant isolation — the well-formed policies are silently inert.
+- Migrations/seeders run as the owner/superuser (they must, to seed shared catalog rows with
+  `tenant_id IS NULL`); expected and safe.
+- Migration `0011` adds `FORCE ROW LEVEL SECURITY` as defense-in-depth (RLS applies to the table
+  owner too), but a superuser/BYPASSRLS connection still bypasses it — FORCE is NOT a substitute
+  for connecting as `ai_trust_app`.
+- The `ai_trust_app` role + `DATABASE_URL` wiring live in the deployment bundle
+  (`Standard_AiTrust_MT_MSP`), NOT this repo. Verify on every deploy:
+  `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname='ai_trust_app'` → both false, and the
+  backends' `DATABASE_URL` points at `ai_trust_app`. (Confirmed live on ai-trust-1: rolsuper=false,
+  rolbypassrls=false, and a cross-tenant/NULL write returns "new row violates row-level security".)
+
 ## Known follow-ups / explicitly out of scope of this app-repo change
 
 These are **Platform-Mesh / deployment** concerns, tracked separately (not in the app repo):
@@ -69,3 +88,10 @@ These are **Platform-Mesh / deployment** concerns, tracked separately (not in th
 - **JWT verification reachability:** `jwt` mode verifies against the issuer's JWKS. In the mesh
   deploy the token `iss` is the public host; confirm the backends can reach that JWKS (or point
   `TENANCY_JWKS_ISSUER_BASE` + JWKS at the in-cluster mesh Keycloak) — validated per deployment.
+- **Postgres owner credential (SEC-M4 follow-up):** `POSTGRES_PASSWORD` is still the default
+  `postgres` in the current deploy. It is the DB owner cred, internal-only (Postgres is not exposed
+  outside the cluster) and NOT caught by the `check_no_default_secrets()` guard because backends
+  connect via `DATABASE_URL` (the RLS `ai_trust_app` role), not `POSTGRES_PASSWORD`. Rotating it is
+  high-risk (baked into the running DB + every DATABASE_URL/APP_DATABASE_URL + the worker's
+  OWNER_DATABASE_URL) and should be a planned maintenance step in the deploy bundle, not an app-repo
+  change. The MinIO root password WAS rotated (2026-08-13). Tracked as a deploy follow-up.
