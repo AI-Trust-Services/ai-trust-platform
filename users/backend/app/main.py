@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ai_trust_logging import correlation_id_var, get_logger
+from ai_trust_tenancy import install_tenant_middleware
 from app.routers import roles, users, permissions, iam, custom_roles
 
 logger = get_logger(__name__)
@@ -31,6 +32,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Multi-tenancy: resolve the tenant per request (no-op when TENANCY_MODE=single).
+install_tenant_middleware(app)
 
 
 @app.middleware("http")

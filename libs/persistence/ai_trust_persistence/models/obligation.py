@@ -6,9 +6,10 @@ from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
+from ai_trust_persistence.models._tenant import TenantMixin
 
 
-class Obligation(Base):
+class Obligation(TenantMixin, Base):
     """A specific compliance requirement derived from a framework.
 
     Defines *what* must be achieved (e.g. "Enable human oversight" / Art. 14).

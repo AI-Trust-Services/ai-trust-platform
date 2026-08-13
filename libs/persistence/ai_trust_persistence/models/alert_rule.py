@@ -6,9 +6,10 @@ from sqlalchemy import Boolean, DateTime, Float, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
+from ai_trust_persistence.models._tenant import TenantMixin
 
 
-class AlertRule(Base):
+class AlertRule(TenantMixin, Base):
     __tablename__ = "alert_rules"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

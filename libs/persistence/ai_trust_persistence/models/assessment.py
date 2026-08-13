@@ -6,9 +6,10 @@ from sqlalchemy import DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
+from ai_trust_persistence.models._tenant import TenantMixin
 
 
-class Assessment(Base):
+class Assessment(TenantMixin, Base):
     """A structured evaluation of an AI system against a framework.
 
     Assessments are the entry point into the governance lifecycle: they

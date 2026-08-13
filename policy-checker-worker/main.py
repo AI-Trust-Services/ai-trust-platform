@@ -35,9 +35,41 @@ log = get_logger(__name__)
 
 DATABASE_URL   = os.environ["DATABASE_URL"]
 POLL_INTERVAL  = int(os.environ.get("ALERT_POLL_INTERVAL", "60"))
+# Multi-tenancy: the worker connects as the RLS-bound app role, so each poll must run
+# once per tenant with app.current_tenant set (data — systems, evidence — is tenant-scoped).
+# OWNER_DATABASE_URL (an RLS-bypassing owner role) is used ONLY to enumerate the distinct
+# tenants; when unset the worker does a single unscoped pass (single-tenant / local dev).
+OWNER_DATABASE_URL = os.environ.get("OWNER_DATABASE_URL", "")
 
 engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+# Turn on the per-transaction `SET app.current_tenant` hook for this worker's engine
+# (no-op when TENANCY_MODE=single). Mirrors what database.py does for the HTTP backends.
+try:
+    from ai_trust_tenancy import install_tenant_scoping, tenant_id_var
+
+    install_tenant_scoping(engine)
+except ImportError:
+    tenant_id_var = None
+
+_owner_engine = create_async_engine(OWNER_DATABASE_URL, pool_pre_ping=True) if OWNER_DATABASE_URL else None
+
+
+async def _distinct_tenants() -> list[str]:
+    """Enumerate the tenants that own data, via the RLS-bypassing owner connection.
+
+    Returns [] when no owner URL is configured or tenancy is off → the caller then does
+    a single unscoped pass (legacy single-tenant behaviour).
+    """
+    if _owner_engine is None or tenant_id_var is None:
+        return []
+    async with _owner_engine.connect() as conn:
+        rows = (await conn.execute(
+            text("SELECT DISTINCT tenant_id FROM ai_systems WHERE tenant_id IS NOT NULL")
+        )).all()
+    return [r[0] for r in rows]
+
 
 WINDOW_MAP = {"15m": "15 MINUTE", "1h": "1 HOUR", "6h": "6 HOUR", "24h": "24 HOUR"}
 
@@ -622,11 +654,34 @@ async def evaluate_once() -> None:
             await _process_single(rule, triggered, value)
 
 
+async def evaluate_all_tenants() -> None:
+    """Run one evaluation pass per tenant (multi-tenant) or a single pass (single-tenant).
+
+    In multi-tenant mode the worker's engine is RLS-bound, so we set the tenant ContextVar
+    before each pass — install_tenant_scoping then issues SET app.current_tenant so every
+    query in evaluate_once() sees only that tenant's rows. The trailing None pass evaluates
+    shared/catalog (tenant_id IS NULL) data. When no tenants are enumerable (single-tenant
+    or no OWNER_DATABASE_URL), we fall back to one unscoped pass.
+    """
+    tenants = await _distinct_tenants()
+    if not tenants:
+        await evaluate_once()
+        return
+    for t in tenants:
+        if tenant_id_var is not None:
+            tenant_id_var.set(t)
+        log.info("policy_checker_worker.tenant_pass", extra={"tenant_id": t})
+        await evaluate_once()
+    # shared/catalog rows
+    if tenant_id_var is not None:
+        tenant_id_var.set(None)
+
+
 async def main() -> None:
     log.info("policy_checker_worker.started", extra={"poll_interval": POLL_INTERVAL})
     while True:
         try:
-            await evaluate_once()
+            await evaluate_all_tenants()
         except Exception:
             log.exception("policy_checker_worker.cycle_failed")
         await asyncio.sleep(POLL_INTERVAL)

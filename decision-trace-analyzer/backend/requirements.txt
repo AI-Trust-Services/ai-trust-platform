@@ -3,4 +3,5 @@ uvicorn[standard]==0.32.1
 pydantic==2.10.3
 clickhouse-connect==0.8.17
 -e /app/libs/clickhouse
+-e /app/libs/tenancy
 -e /app/libs/logging

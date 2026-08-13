@@ -6,9 +6,10 @@ from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Te
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
+from ai_trust_persistence.models._tenant import TenantMixin
 
 
-class AISystem(Base):
+class AISystem(TenantMixin, Base):
     __tablename__ = "ai_systems"
 
     id: Mapped[str] = mapped_column(String(20), primary_key=True)
