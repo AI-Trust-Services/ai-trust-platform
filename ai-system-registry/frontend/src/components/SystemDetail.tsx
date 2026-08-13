@@ -98,7 +98,7 @@ function WorkflowProgress({
         if (submitted) setLastSubmitter(submitted.actor_username);
       }).catch(() => {});
     }
-  }, [system.id, system.workflow_status]);
+  }, [system.id, system.workflow_status, username]);
 
   async function handleApprove() {
     setActing(true);
@@ -133,7 +133,7 @@ function WorkflowProgress({
         {WF_PHASES.map((p, i) => {
           const phaseNum = i + 1;
           const isDone = phase > phaseNum;
-          const isActive = phase === phaseNum || (phaseNum === 4 && phase === 4);
+          const isActive = phase === phaseNum;
           const isOutcome = p.key === "outcome";
           const outcomeLabel = system.workflow_status === "approved" ? "Approved" : system.workflow_status === "rejected" ? "Rejected" : "Outcome";
           const outcomeClass = system.workflow_status === "approved" ? " wf-phase-approved" : system.workflow_status === "rejected" ? " wf-phase-rejected" : "";

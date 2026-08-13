@@ -494,6 +494,15 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `MINIO_SECURE` | compliance-backend | `false` | Set to `true` if MinIO is behind TLS |
 | `MINIO_REGION` | compliance-backend | `us-east-1` | Region used when presigning — avoids a GetBucketLocation network call from inside the container |
 | `ALERT_POLL_INTERVAL` | policy-checker-worker | `10` | Rule evaluation interval in seconds (use `60`+ in production) |
+| `SMTP_HOST` | ai-system-registry-backend | *(required)* | SMTP server hostname |
+| `SMTP_PORT` | ai-system-registry-backend | *(required)* | SMTP server port |
+| `SMTP_USER` | ai-system-registry-backend | *(optional)* | SMTP username — omit if the server requires no auth |
+| `SMTP_PASSWORD` | ai-system-registry-backend | *(optional)* | SMTP password — omit if the server requires no auth |
+| `SMTP_FROM` | ai-system-registry-backend | *(required)* | Envelope / From address for outgoing notifications |
+| `SMTP_FROM_NAME` | ai-system-registry-backend | `AI Trust Platform` | Display name in the From header |
+| `SMTP_SSL` | ai-system-registry-backend | *(required)* | `true` to use implicit TLS, `false` otherwise |
+| `SMTP_STARTTLS` | ai-system-registry-backend | *(required)* | `true` to upgrade with STARTTLS, `false` otherwise |
+| `USERS_BACKEND_URL` | ai-system-registry-backend | `http://users-backend:8008` | Internal URL of the users backend — used for email address lookups |
 
 All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code.
 

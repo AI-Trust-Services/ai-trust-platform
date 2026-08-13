@@ -96,10 +96,10 @@ async def find_or_create_store(client: OpenFgaClient) -> str:
 
 
 async def write_model_if_needed(client: OpenFgaClient) -> None:
-    existing = await client.read_authorization_models()
-    if existing.authorization_models:
-        print("Authorization model already exists, skipping write.")
-        return
+    # Always write a new model version so that permission additions (new
+    # relations) take effect without requiring a volume wipe.  OpenFGA is
+    # versioned — each write creates a new version and the latest is used
+    # automatically; existing tuples remain valid across versions.
     await write_model(client)
 
 
