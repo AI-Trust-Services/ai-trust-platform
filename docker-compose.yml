@@ -293,11 +293,11 @@ services:
       OPENFGA_URL: http://openfga:8080
       KEYCLOAK_URL: http://keycloak:8080
       USERS_BACKEND_URL: http://users-backend:8008
-      SMTP_HOST: ${SMTP_HOST:-mailpit}
-      SMTP_PORT: ${SMTP_PORT:-1025}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-noreply@ai-trust.local}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
       SMTP_SSL: ${SMTP_SSL}
       SMTP_STARTTLS: ${SMTP_STARTTLS}
     volumes:
