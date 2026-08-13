@@ -45,9 +45,9 @@ kubectl create secret generic ai-trust-env \
   --from-literal=OPENFGA_DATASTORE_URI="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/openfga?sslmode=disable" \
   -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-echo "==> configmap/postgres-init (from infra/keycloak/init.sh)"
+echo "==> configmap/postgres-init (from infra/postgres/init.sh)"
 kubectl create configmap postgres-init \
-  --from-file=init.sh="$REPO_ROOT/infra/keycloak/init.sh" \
+  --from-file=init.sh="$REPO_ROOT/infra/postgres/init.sh" \
   -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> configmap/otel-collector-config (from otel-pipeline/collector/otel-collector-config.yaml)"

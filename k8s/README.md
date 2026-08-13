@@ -36,7 +36,7 @@ Then open http://localhost:8080 and log in via Keycloak, same as with docker-com
 2. `make bootstrap` - runs `scripts/bootstrap.sh`, which creates (idempotently) the `ai-trust`
    namespace, a `Secret` called `ai-trust-env` from `.env` (plus a couple of computed connection
    strings, e.g. `DATABASE_URL`, that docker-compose builds via YAML anchors), `ConfigMap`s from the
-   existing `infra/keycloak/init.sh` and `otel-pipeline/**/config` files, and the small RBAC role
+   existing `infra/postgres/init.sh` and `otel-pipeline/**/config` files, and the small RBAC role
    used by the "wait for job" pattern below.
 3. `make build` - runs `scripts/build-and-load-images.sh`, which `docker build`s all ~22
    locally-built images (same context/Dockerfile/build-args as the matching docker-compose
