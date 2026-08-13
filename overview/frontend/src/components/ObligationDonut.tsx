@@ -31,7 +31,7 @@ function CenterLabel({ viewBox, total }: { viewBox?: { cx: number; cy: number };
   );
 }
 
-export default function ObligationDonut({ data, onClick }: Props): JSX.Element {
+export default function ObligationDonut({ data, onClick }: Props) {
   const chartData = useMemo(() =>
     SLICES.map((s) => ({ name: s.label, value: data[s.key] ?? 0, color: s.color }))
       .filter((d) => d.value > 0),

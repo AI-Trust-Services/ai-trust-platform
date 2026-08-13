@@ -87,5 +87,5 @@ async def delete_model_card(model_id: str) -> dict:
         name = row.name
         await session.delete(row)
         await session.commit()
-    logger.info("model_card.deleted", extra={"model_id": model_id, "name": name})
+    logger.info("model_card.deleted", extra={"model_id": model_id, "model_name": name})
     return {"status": "deleted", "id": model_id, "name": name}

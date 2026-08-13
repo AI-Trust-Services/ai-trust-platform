@@ -17,7 +17,7 @@ interface PaginationProps {
 export default function Pagination({
   page, pageSize, total, onPageChange, onPageSizeChange,
   pageSizeOptions = [10, 25, 50, 100],
-}: PaginationProps): JSX.Element | null {
+}: PaginationProps) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const clamped = Math.min(page, pageCount);
   const from = total === 0 ? 0 : (clamped - 1) * pageSize + 1;

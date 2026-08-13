@@ -12,7 +12,7 @@ const ROWS = [
   { key: "missing",      label: "Missing approved evidence",   color: "#e9a922", bg: "#fffbf0" },
 ] as const;
 
-export default function EvidenceGapCard({ data, windowDays, onClick }: Props): JSX.Element {
+export default function EvidenceGapCard({ data, windowDays, onClick }: Props) {
   const rows = ROWS.map((r) => ({ ...r, count: data[r.key] ?? 0 }));
   const label = (r: typeof rows[number]) =>
     r.key === "expiring_soon" ? `${r.label} (${windowDays}d)` : r.label;

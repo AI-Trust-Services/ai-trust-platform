@@ -27,7 +27,7 @@ const EMPTY: FormState = {
   validity_from: "", validity_until: "", uploaded_by: "",
 };
 
-export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props): JSX.Element | null {
+export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [file, setFile] = useState<File | null>(null);
   const [systems, setSystems] = useState<AISystem[]>([]);

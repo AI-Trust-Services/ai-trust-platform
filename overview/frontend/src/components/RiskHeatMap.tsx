@@ -38,7 +38,7 @@ function severityColor(tierX: number, residualY: number): string {
   return "#bb0000";                       // red
 }
 
-export default function RiskHeatMap({ data, onClick }: Props): JSX.Element {
+export default function RiskHeatMap({ data, onClick }: Props) {
   const lookup = useMemo(() => {
     const m: Record<string, RiskHeatCell> = {};
     for (const d of data) m[`${d.tier_x}:${d.residual_risk_y}`] = d;

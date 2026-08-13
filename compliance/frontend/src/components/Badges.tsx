@@ -1,13 +1,13 @@
 import type { BadgeMeta } from "../types";
 
 interface StatusBadgeProps { meta: Record<string, BadgeMeta>; value: string; }
-export function StatusBadge({ meta, value }: StatusBadgeProps): JSX.Element {
+export function StatusBadge({ meta, value }: StatusBadgeProps) {
   const m = meta[value] ?? { label: value, cls: "st-draft" };
   return <span className={`st-badge ${m.cls}`}>{m.label}</span>;
 }
 
 interface TierBadgeProps { tier: string; }
-export function TierBadge({ tier }: TierBadgeProps): JSX.Element {
+export function TierBadge({ tier }: TierBadgeProps) {
   const labels: Record<string, string> = {
     prohibited: "Prohibited", high: "High-Risk",
     "gpai-systemic": "GPAI Systemic", "gpai-standard": "GPAI Standard",
@@ -17,7 +17,7 @@ export function TierBadge({ tier }: TierBadgeProps): JSX.Element {
 }
 
 interface ScoreBarProps { score: number | null | undefined; }
-export function ScoreBar({ score }: ScoreBarProps): JSX.Element {
+export function ScoreBar({ score }: ScoreBarProps) {
   if (score === null || score === undefined) {
     return <span className="chip">N/A</span>;
   }

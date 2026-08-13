@@ -1,4 +1,3 @@
-import "@ui5/webcomponents/dist/Icon.js";
 import "@ui5/webcomponents-icons/dist/sys-enter-2.js";
 import "@ui5/webcomponents-icons/dist/decline.js";
 import "@ui5/webcomponents-icons/dist/warning.js";
@@ -8,6 +7,7 @@ import "@ui5/webcomponents-icons/dist/navigation-down-arrow.js";
 import "@ui5/webcomponents-icons/dist/navigation-right-arrow.js";
 import "@ui5/webcomponents-icons/dist/information.js";
 import "@ui5/webcomponents-icons/dist/alert.js";
+import { Icon } from "@ui5/webcomponents-react";
 import { useEffect, useState } from "react";
 import {
   type DecisionFlag,
@@ -121,8 +121,7 @@ export function TraceSummary({ summary, loading, error }: Props) {
         aria-expanded={!collapsed}
         title={collapsed ? "Expand decision summary" : "Collapse decision summary"}
       >
-        {/* @ts-ignore */}
-        <ui5-icon
+        <Icon
           name={collapsed ? "navigation-right-arrow" : "navigation-down-arrow"}
           style={styles.caret}
         />
@@ -135,8 +134,7 @@ export function TraceSummary({ summary, loading, error }: Props) {
 
         {summary && (
           <span style={{ ...styles.badge, background: badge.bg, color: badge.fg }}>
-            {/* @ts-ignore */}
-            <ui5-icon name={badge.icon} style={styles.badgeIcon} />
+            <Icon name={badge.icon} style={styles.badgeIcon} />
             {badge.label}
           </span>
         )}
@@ -242,8 +240,7 @@ function AnomalyRow({
   if (!detected) {
     return (
       <div style={styles.flagRowQuiet}>
-        {/* @ts-ignore */}
-        <ui5-icon name="sys-enter-2" style={styles.flagIconQuiet} />
+        <Icon name="sys-enter-2" style={styles.flagIconQuiet} />
         <span style={styles.flagLabelQuiet}>{label}</span>
         <span style={styles.flagDetailQuiet}>{detail}</span>
       </div>
@@ -265,8 +262,7 @@ function AnomalyRow({
         borderLeft: `3px solid ${accent}`,
       }}
     >
-      {/* @ts-ignore */}
-      <ui5-icon
+      <Icon
         name={isWarn ? "alert" : "information"}
         style={{ ...styles.flagIcon, color: accent }}
       />

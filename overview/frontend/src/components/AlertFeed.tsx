@@ -24,7 +24,7 @@ function relativeTime(iso: string): string {
   return fmtDate(iso);
 }
 
-export default function AlertFeed({ alerts, loading }: Props): JSX.Element {
+export default function AlertFeed({ alerts, loading }: Props) {
   return (
     <div className="chart-card alert-feed-card">
       <div className="chart-title">Active Alerts</div>

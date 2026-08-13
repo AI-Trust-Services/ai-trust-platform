@@ -1,5 +1,5 @@
-import "@ui5/webcomponents/dist/Icon.js";
 import "@ui5/webcomponents-icons/dist/document.js";
+import { Icon } from "@ui5/webcomponents-react";
 
 interface Props {
   title: string;
@@ -7,13 +7,11 @@ interface Props {
   action?: { label: string; onClick: () => void };
 }
 
-/** Lightweight empty/zero-state — pure HTML, no UI5 wrappers, so it can never
- *  trip a UI5 web-component attribute validation error. */
+/** Lightweight empty/zero-state. */
 export function EmptyState({ title, description, action }: Props) {
   return (
     <div style={styles.root}>
-      {/* @ts-ignore */}
-      <ui5-icon name="document" style={styles.icon} />
+      <Icon name="document" style={styles.icon} />
       <div style={styles.title}>{title}</div>
       {description && <div style={styles.description}>{description}</div>}
       {action && (

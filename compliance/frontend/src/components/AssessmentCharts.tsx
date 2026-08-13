@@ -29,7 +29,7 @@ interface Props {
   assessments: Assessment[];
 }
 
-export default function AssessmentCharts({ assessments }: Props): JSX.Element | null {
+export default function AssessmentCharts({ assessments }: Props) {
   const statusData = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const a of assessments) counts[a.status] = (counts[a.status] ?? 0) + 1;

@@ -2,6 +2,7 @@ import "@ui5/webcomponents-icons/dist/tree.js";
 import "@ui5/webcomponents-icons/dist/timesheet.js";
 import "@ui5/webcomponents-icons/dist/org-chart.js";
 import "@ui5/webcomponents-icons/dist/discussion.js";
+import { Icon } from "@ui5/webcomponents-react";
 
 export type TraceView = "tree" | "timeline" | "graph" | "conversation";
 
@@ -38,8 +39,7 @@ export function ViewTabs({ active, onChange }: Props) {
             }}
             type="button"
           >
-            {/* @ts-ignore */}
-            <ui5-icon name={tab.icon} style={{ width: 14, height: 14 } as React.CSSProperties} />
+            <Icon name={tab.icon} style={{ width: 14, height: 14 } as React.CSSProperties} />
             <span>{tab.label}</span>
           </button>
         );

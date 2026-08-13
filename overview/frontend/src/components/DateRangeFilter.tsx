@@ -11,7 +11,7 @@ const PRESETS: { preset: DateRange["preset"]; days: number; label: string }[] = 
   { preset: "90d", days: 90, label: "90 days" },
 ];
 
-export default function DateRangeFilter({ value, onChange }: Props): JSX.Element {
+export default function DateRangeFilter({ value, onChange }: Props) {
   return (
     <div className="date-range-filter">
       {PRESETS.map((p) => (

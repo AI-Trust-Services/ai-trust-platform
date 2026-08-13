@@ -1,11 +1,7 @@
-import "@ui5/webcomponents/dist/Select.js";
-import "@ui5/webcomponents/dist/Option.js";
-import "@ui5/webcomponents/dist/Button.js";
-import "@ui5/webcomponents/dist/ToggleButton.js";
 import "@ui5/webcomponents-icons/dist/filter.js";
 import "@ui5/webcomponents-icons/dist/reset.js";
 import "@ui5/webcomponents-icons/dist/error.js";
-import { useEffect, useRef } from "react";
+import { Button, Icon, Option, Select, ToggleButton } from "@ui5/webcomponents-react";
 import { type TraceFilters } from "../api/traces";
 import { TimeframePicker } from "./TimeframePicker";
 import { TraceIdSearch } from "./TraceIdSearch";
@@ -28,30 +24,16 @@ function Ui5Select({
   placeholder: string;
   onChange: (val: string) => void;
 }) {
-  const ref = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { selectedOption: { value: string } };
-      onChange(detail.selectedOption.value);
-    };
-    el.addEventListener("change", handler);
-    return () => el.removeEventListener("change", handler);
-  }, [onChange]);
-
   return (
-    // @ts-ignore
-    <ui5-select ref={ref} style={{ minWidth: 140 }}>
-      {/* @ts-ignore */}
-      <ui5-option value="">{placeholder}</ui5-option>
+    <Select
+      style={{ minWidth: 140 }}
+      onChange={(e) => onChange(e.detail.selectedOption.value ?? "")}
+    >
+      <Option value="" selected={!value}>{placeholder}</Option>
       {options.map((o) => (
-        // @ts-ignore
-        <ui5-option key={o} value={o} selected={value === o || undefined}>{o}</ui5-option>
+        <Option key={o} value={o} selected={value === o}>{o}</Option>
       ))}
-    {/* @ts-ignore */}
-    </ui5-select>
+    </Select>
   );
 }
 
@@ -67,8 +49,7 @@ export function FilterBar({ filters, services, models, onChange }: Props) {
 
   return (
     <div style={styles.bar}>
-      {/* @ts-ignore */}
-      <ui5-icon name="filter" style={styles.icon} />
+      <Icon name="filter" style={styles.icon} />
 
       <TraceIdSearch
         value={filters.trace_id}
@@ -98,26 +79,22 @@ export function FilterBar({ filters, services, models, onChange }: Props) {
         onChange={(val) => onChange({ ...filters, model: val || undefined })}
       />
 
-      {/* @ts-ignore */}
-      <ui5-toggle-button
+      <ToggleButton
         icon="error"
         design={filters.errors_only ? "Negative" : "Default"}
-        pressed={filters.errors_only || undefined}
+        pressed={!!filters.errors_only}
         onClick={() =>
           onChange({ ...filters, errors_only: filters.errors_only ? undefined : true })
         }
         title="Show only traces with at least one errored span"
       >
         Errors only
-      {/* @ts-ignore */}
-      </ui5-toggle-button>
+      </ToggleButton>
 
       {hasFilters && (
-        // @ts-ignore
-        <ui5-button design="Transparent" icon="reset" onClick={() => onChange({})}>
+        <Button design="Transparent" icon="reset" onClick={() => onChange({})}>
           Reset
-        {/* @ts-ignore */}
-        </ui5-button>
+        </Button>
       )}
     </div>
   );

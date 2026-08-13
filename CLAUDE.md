@@ -181,14 +181,15 @@ See [docs/architecture.md](docs/architecture.md) for repo layout, GenAI observab
 ## Frontend stacks
 
 All React frontends (AI System Registry, Alerts, Decision Trace Analyzer, Compliance) share the same pattern:
-- **Build tool:** Vite 6 (`npm run build → dist/`), multi-stage Dockerfile (`node:20-alpine` build → `nginx:alpine` serve)
+- **Stack versions:** React 19, React Router 8, TypeScript 5.8 — use React 19 APIs (no `forwardRef`, no `React.FC` needed, use `use()` hook where applicable); React Router 8 route/loader APIs
+- **Build tool:** Vite 6 (`npm run build → dist/`), multi-stage Dockerfile (`node:24-alpine` build → `nginx:alpine` serve)
 - **Base path:** `base` set in `vite.config.ts` (e.g. `/registry/`) so assets resolve correctly when served under a sub-path via the shell proxy
 - **Routing:** `HashRouter` (compatible with Luigi's `useHashRouting: true`)
 - **Luigi integration:** `@luigi-project/client` npm package; `addInitListener` handshake in `useLuigi.js`
 - **API base URL:** read from `import.meta.env.VITE_*_API_BASE` at build time — all relative paths (e.g. `/api/registry/v1`)
 - **Backend health polling:** shows a red banner with auto-retry if backend is unavailable
 - **nginx headers:** `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding)
-- **UI5 Web Components** — `<ui5-button>` etc. for SAP Fiori look. Import once per file: `import "@ui5/webcomponents/dist/Button.js"` then use as `<ui5-button>` JSX tags
+- **UI5 Web Components** — `@ui5/webcomponents-react` 2.25 for SAP Fiori look. Import named components: `import { Button, ToggleButton } from "@ui5/webcomponents-react"` and use as JSX (`<Button>`, `<ToggleButton pressed={bool}>`). Raw `<ui5-button>` custom elements are not used — always go through the React bindings
 
 **Exceptions:**
 - **Overview** — static HTML served directly by nginx, no build step

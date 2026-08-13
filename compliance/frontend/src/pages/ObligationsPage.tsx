@@ -11,7 +11,7 @@ import type { AISystem, Assessment, Control, Evidence, Obligation, ObligationDet
 
 const STATUS_OPTIONS = ["applicable", "in_progress", "fulfilled", "not_applicable", "overdue"] as const;
 
-export default function ObligationsPage(): JSX.Element {
+export default function ObligationsPage() {
   const [obligations, setObligations] = useState<Obligation[]>([]);
   const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
   const [assessments, setAssessments] = useState<Assessment[]>([]);

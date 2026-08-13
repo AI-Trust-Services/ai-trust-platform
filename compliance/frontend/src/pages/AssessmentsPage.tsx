@@ -12,7 +12,7 @@ import { ASSESSMENT_STATUS_META, fmtDate, humanize } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import type { Assessment, AssessmentDetail, AISystem, Framework } from "../types";
 
-export default function AssessmentsPage(): JSX.Element {
+export default function AssessmentsPage() {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
   const [frameworksById, setFrameworksById] = useState<Record<string, Framework>>({});

@@ -10,7 +10,7 @@ import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, OBLIGATION_S
 import { usePermissions } from "../hooks/usePermissions";
 import type { AISystem, Control, Evidence, EvidenceDetail, EvidenceVersion, Obligation } from "../types";
 
-export default function EvidencePage(): JSX.Element {
+export default function EvidencePage() {
   const [evidence, setEvidence] = useState<Evidence[]>([]);
   const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
   const [statusFilter, setStatusFilter] = useState("");

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
-import { Outlet, NavLink } from "react-router-dom";
+import { Outlet, NavLink } from "react-router";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { HEALTH_URL } from "./api/client";
 
@@ -12,7 +12,7 @@ export function useToast(): ShowToast {
   return ctx;
 }
 
-export default function App(): JSX.Element {
+export default function App() {
   const [backendOk, setBackendOk] = useState<boolean | null>(null);
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null);
   const healthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

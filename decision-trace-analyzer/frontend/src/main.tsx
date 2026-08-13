@@ -14,11 +14,14 @@ import { createRoot } from "react-dom/client";
 import "@ui5/webcomponents/dist/Assets.js";
 import "@ui5/webcomponents-icons/dist/Assets.js";
 
+import { ThemeProvider } from "@ui5/webcomponents-react";
 import "./styles/tokens.css";
 import App from "./App";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
   </StrictMode>
 );

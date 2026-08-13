@@ -21,7 +21,7 @@ interface FormState {
 
 const EMPTY: FormState = { ai_system_id: "", title: "", description: "", category: "general", owner: "", due_date: "" };
 
-export default function CreateControlModal({ open, onClose, onSuccess }: Props): JSX.Element | null {
+export default function CreateControlModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [loading, setLoading] = useState(false);

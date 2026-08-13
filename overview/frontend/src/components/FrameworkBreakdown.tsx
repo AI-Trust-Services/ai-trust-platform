@@ -20,7 +20,7 @@ const COLOR_LEGEND = [
   { color: "#bb0000", label: "< 50% — At risk" },
 ];
 
-export default function FrameworkBreakdown({ data, onClick }: Props): JSX.Element {
+export default function FrameworkBreakdown({ data, onClick }: Props) {
   const chartData = useMemo(() =>
     data.map((f) => ({
       name: f.framework_name.length > 18 ? f.framework_name.slice(0, 17) + "…" : f.framework_name,

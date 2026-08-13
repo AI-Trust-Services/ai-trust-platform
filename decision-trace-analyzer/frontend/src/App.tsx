@@ -1,4 +1,3 @@
-import "@ui5/webcomponents/dist/Button.js";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { TraceList } from "./pages/TraceList";
 
