@@ -3,9 +3,10 @@ from __future__ import annotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from ai_trust_tenancy.config import MODE
+from ai_trust_tenancy.config import MODE, validate
 from ai_trust_tenancy.context import tenant_id_var
 from ai_trust_tenancy.resolver import resolve_tenant
+from ai_trust_tenancy.security_preflight import check_no_default_secrets
 
 # Paths that must work without a resolved tenant (liveness/readiness probes, docs).
 _EXEMPT_SUFFIXES = ("/health", "/docs", "/openapi.json", "/redoc")
@@ -19,7 +20,13 @@ def install_tenant_middleware(app) -> None:
     session hook can read it). In `jwt` mode a request that resolves no tenant is
     rejected 401 (fail-closed), except for infra paths. In `single`/`header` modes an
     unresolved tenant is allowed (None → RLS shows only shared rows).
+
+    Fail-fast: validate() raises at install time (app startup) if TENANCY_MODE is invalid
+    or jwt mode is missing its issuer anchor — so a misconfigured backend refuses to start
+    rather than silently accepting any issuer.
     """
+    validate()
+    check_no_default_secrets()
     if MODE == "single":
         return  # no-op: preserve single-tenant behaviour exactly
 

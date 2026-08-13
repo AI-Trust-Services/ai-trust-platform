@@ -23,7 +23,7 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from ai_trust_clickhouse import ch_command, ch_query, get_client
+from ai_trust_clickhouse import ch_command, ch_query, get_client, tenant_clause
 from ai_trust_logging import get_logger
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.alert_rule import AlertRule
@@ -153,11 +153,13 @@ async def eval_no_signals(rule: AlertRule, ch) -> list[EvalResult]:
     if not systems:
         return []
 
+    tenant_where, tenant_params = tenant_clause()
     rows = await ch_query(
         "SELECT service_name, count() AS n FROM otel.gen_ai_spans "
         "WHERE received_at >= now() - INTERVAL {minutes:UInt32} MINUTE "
+        f"AND {tenant_where} "
         "GROUP BY service_name",
-        {"minutes": int(rule.threshold)},
+        {"minutes": int(rule.threshold), **tenant_params},
     )
     counts = {r["service_name"]: int(r["n"]) for r in rows}
 
@@ -181,11 +183,14 @@ async def eval_no_signals(rule: AlertRule, ch) -> list[EvalResult]:
 async def eval_high_latency(rule: AlertRule, ch) -> list[EvalResult]:
     # Per-system average latency over the last hour. Only registered systems
     # are considered; spans from unregistered service names are ignored.
+    tenant_where, tenant_params = tenant_clause()
     rows = await ch_query(
         "SELECT service_name, round(avg(duration_ms), 2) AS avg_ms "
         "FROM otel.gen_ai_spans "
         "WHERE received_at >= now() - INTERVAL 1 HOUR "
-        "GROUP BY service_name"
+        f"AND {tenant_where} "
+        "GROUP BY service_name",
+        tenant_params,
     )
     if not rows:
         return []
@@ -274,6 +279,7 @@ async def eval_model_diverged(rule: AlertRule, ch) -> list[EvalResult]:
     interval = WINDOW_MAP.get(params.get("window", "1h"), "1 HOUR")
     service_filter = params.get("service", "")
 
+    tenant_where, tenant_params = tenant_clause()
     if service_filter:
         rows = await ch_query(
             f"SELECT service_name, argMax(request_model, received_at) AS current_model "
@@ -281,8 +287,9 @@ async def eval_model_diverged(rule: AlertRule, ch) -> list[EvalResult]:
             f"WHERE received_at >= now() - INTERVAL {interval} "
             f"AND service_name = {{svc:String}} "
             f"AND request_model != '' "
+            f"AND {tenant_where} "
             f"GROUP BY service_name",
-            {"svc": service_filter},
+            {"svc": service_filter, **tenant_params},
         )
     else:
         rows = await ch_query(
@@ -290,7 +297,9 @@ async def eval_model_diverged(rule: AlertRule, ch) -> list[EvalResult]:
             f"FROM otel.gen_ai_spans "
             f"WHERE received_at >= now() - INTERVAL {interval} "
             f"AND request_model != '' "
-            f"GROUP BY service_name"
+            f"AND {tenant_where} "
+            f"GROUP BY service_name",
+            tenant_params,
         )
 
     if not rows:
@@ -529,13 +538,15 @@ EVALUATORS = {
 # ── ClickHouse helpers ────────────────────────────────────────────────────────
 
 async def get_active_event(rule_id: str, entity_id: str = "") -> dict | None:
+    tenant_where, tenant_params = tenant_clause()
     rows = await ch_query(
         "SELECT id, rule_id FROM otel.alert_events "
         "WHERE rule_id = {rule_id:String} "
         "AND entity_id = {entity_id:String} "
         "AND resolved_at IS NULL AND handled_at IS NULL "
+        f"AND {tenant_where} "
         "ORDER BY triggered_at DESC LIMIT 1",
-        {"rule_id": rule_id, "entity_id": entity_id},
+        {"rule_id": rule_id, "entity_id": entity_id, **tenant_params},
     )
     if rows:
         return {"id": rows[0]["id"], "rule_id": rows[0]["rule_id"]}
@@ -544,13 +555,15 @@ async def get_active_event(rule_id: str, entity_id: str = "") -> dict | None:
 
 async def was_handled_recently(rule_id: str, entity_id: str = "") -> bool:
     """Returns True if this rule+entity was handled within the last 24 hours."""
+    tenant_where, tenant_params = tenant_clause()
     rows = await ch_query(
         "SELECT count() AS n FROM otel.alert_events "
         "WHERE rule_id = {rule_id:String} "
         "AND entity_id = {entity_id:String} "
         "AND handled_at IS NOT NULL "
-        "AND handled_at >= now() - INTERVAL 24 HOUR",
-        {"rule_id": rule_id, "entity_id": entity_id},
+        "AND handled_at >= now() - INTERVAL 24 HOUR "
+        f"AND {tenant_where}",
+        {"rule_id": rule_id, "entity_id": entity_id, **tenant_params},
     )
     return bool(rows and rows[0]["n"] > 0)
 
@@ -565,6 +578,7 @@ async def create_event(
 ) -> None:
     now = datetime.now(timezone.utc)
     event_description = description or rule.description
+    tenant_id = (tenant_id_var.get() if tenant_id_var else None) or ""
 
     def _insert():
         client = get_client()
@@ -575,11 +589,13 @@ async def create_event(
                 rule.id, rule.name, rule.category, rule.severity,
                 rule.alert_type, event_description, value, now, None, None,
                 entity_id, entity_type, entity_model,
+                tenant_id,
             ]],
             column_names=["id", "rule_id", "rule_name", "category", "severity",
                           "alert_type", "description", "value_at_trigger",
                           "triggered_at", "resolved_at", "handled_at",
-                          "entity_id", "entity_type", "entity_model"],
+                          "entity_id", "entity_type", "entity_model",
+                          "tenant_id"],
         )
     await asyncio.get_running_loop().run_in_executor(None, _insert)
     log.info("alert.created", extra={"rule": rule.name, "value": value, "entity_id": entity_id})

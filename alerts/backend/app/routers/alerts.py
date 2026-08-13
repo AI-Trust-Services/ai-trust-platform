@@ -7,7 +7,7 @@ from sqlalchemy import text, select
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import ALERTS_READ, ALERTS_HANDLE, ALERTS_MANAGE_RULES
-from ai_trust_clickhouse import ch_command, ch_query
+from ai_trust_clickhouse import ch_command, ch_query, tenant_clause
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
@@ -37,17 +37,18 @@ def _enrich(rows: list[dict], name_map: dict[str, str]) -> list[dict]:
 
 @router.get("/active", dependencies=[Depends(require_permission(ALERTS_READ))])
 async def get_active_alerts() -> list[dict]:
-    rows = await ch_query("""
+    where, params = tenant_clause("resolved_at IS NULL", "handled_at IS NULL")
+    rows = await ch_query(f"""
         SELECT
             id, rule_id, rule_name, category, severity, alert_type, description,
             value_at_trigger, toString(triggered_at) AS triggered_at,
             handled_at, entity_id, entity_type, entity_model
         FROM otel.alert_events
-        WHERE resolved_at IS NULL AND handled_at IS NULL
+        WHERE {where}
         ORDER BY
             multiIf(severity='error', 0, severity='warning', 1, 2) ASC,
             triggered_at DESC
-    """)
+    """, params)
     entity_ids = [r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"]
     name_map = await _resolve_display_names(entity_ids)
     logger.info("alerts.active_fetched", extra={"count": len(rows)})
@@ -56,7 +57,8 @@ async def get_active_alerts() -> list[dict]:
 
 @router.get("/history", dependencies=[Depends(require_permission(ALERTS_READ))])
 async def get_alert_history() -> list[dict]:
-    rows = await ch_query("""
+    where, params = tenant_clause("(resolved_at IS NOT NULL OR handled_at IS NOT NULL)")
+    rows = await ch_query(f"""
         SELECT
             id, rule_id, rule_name, category, severity, alert_type, description,
             value_at_trigger,
@@ -65,10 +67,10 @@ async def get_alert_history() -> list[dict]:
             toString(handled_at)   AS handled_at,
             entity_id, entity_type, entity_model
         FROM otel.alert_events
-        WHERE resolved_at IS NOT NULL OR handled_at IS NOT NULL
+        WHERE {where}
         ORDER BY triggered_at DESC
         LIMIT 100
-    """)
+    """, params)
     entity_ids = [r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"]
     name_map = await _resolve_display_names(entity_ids)
     logger.info("alerts.history_fetched", extra={"count": len(rows)})
@@ -103,11 +105,12 @@ async def get_alert_rules() -> list[dict]:
 @router.get("/count", dependencies=[Depends(require_permission(ALERTS_READ))])
 async def get_alert_count() -> dict:
     """Fast endpoint for bell badge — returns count of active unhandled alerts."""
-    rows = await ch_query("""
+    where, params = tenant_clause("resolved_at IS NULL", "handled_at IS NULL")
+    rows = await ch_query(f"""
         SELECT count() AS n
         FROM otel.alert_events
-        WHERE resolved_at IS NULL AND handled_at IS NULL
-    """)
+        WHERE {where}
+    """, params)
     count = int(rows[0]["n"]) if rows else 0
     logger.info("alerts.count_fetched", extra={"count": count})
     return {"count": count}
@@ -145,9 +148,10 @@ async def toggle_alert_rule(rule_id: str) -> dict:
 @router.post("/events/{event_id}/approve-model", dependencies=[Depends(require_permission(ALERTS_HANDLE))])
 async def approve_model_change(event_id: str) -> dict:
     """Approve a model change — marks event as handled and updates the service baseline."""
+    where, params = tenant_clause("id = {id:String}")
     rows = await ch_query(
-        "SELECT entity_id, entity_model FROM otel.alert_events WHERE id = {id:String}",
-        {"id": event_id},
+        f"SELECT entity_id, entity_model FROM otel.alert_events WHERE {where}",
+        {**params, "id": event_id},
     )
     if not rows:
         raise HTTPException(404, "Event not found")

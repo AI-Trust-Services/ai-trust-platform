@@ -15,6 +15,13 @@ from minio import Minio
 
 from ai_trust_logging import get_logger
 
+# Tenant scoping (SEC-C3): new evidence object keys are prefixed with the tenant so a
+# tenant's files live under its own path. Guarded import keeps single-tenant/local working.
+try:
+    from ai_trust_tenancy import tenant_id_var
+except ImportError:  # libs/tenancy not installed
+    tenant_id_var = None
+
 logger = get_logger(__name__)
 
 EVIDENCE_BUCKET = "evidence-files"
@@ -64,9 +71,18 @@ async def ensure_bucket() -> None:
 
 
 def object_key(evidence_id: str, filename: str) -> str:
-    """Deterministic, path-traversal-safe object key for an evidence file."""
+    """Deterministic, path-traversal-safe object key for an evidence file.
+
+    New uploads are tenant-prefixed (`t/{tenant_id}/evidence/{id}/{file}`) so each tenant's
+    files live under its own path (defense-in-depth atop the RLS-scoped evidence rows).
+    When no tenant is resolved (single-tenant / local), the legacy `evidence/...` layout is
+    kept. Downloads use the key stored on the evidence row, so pre-existing (unprefixed)
+    objects continue to resolve unchanged.
+    """
     safe_name = os.path.basename(filename).replace("..", "").strip() or "file"
-    return f"evidence/{evidence_id}/{safe_name}"
+    base = f"evidence/{evidence_id}/{safe_name}"
+    tenant = tenant_id_var.get() if tenant_id_var is not None else None
+    return f"t/{tenant}/{base}" if tenant else base
 
 
 def _upload_sync(key: str, data: bytes, content_type: str) -> None:

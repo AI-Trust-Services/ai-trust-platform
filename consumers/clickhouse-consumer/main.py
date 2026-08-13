@@ -135,6 +135,10 @@ def _process_payload(body: bytes) -> list[dict]:
     for resource_span in payload.get("resourceSpans", []):
         resource_attrs = _attrs_dict(resource_span.get("resource", {}).get("attributes", []))
         service_name = _extract_attr(resource_attrs, "service.name") or ""
+        # Multi-tenancy (SEC-C3): the instrumented app emits its tenant as an OTLP resource
+        # attribute `ai_trust.tenant_id`. Empty when absent → the span is "unscoped/legacy"
+        # and (in jwt mode) invisible to every tenant's reads. Documented contract.
+        resource_tenant = _extract_attr(resource_attrs, "ai_trust.tenant_id") or ""
         for scope_span in resource_span.get("scopeSpans", []):
             for span in scope_span.get("spans", []):
                 attrs = _attrs_dict(span.get("attributes", []))
@@ -189,6 +193,8 @@ def _process_payload(body: bytes) -> list[dict]:
                     "status_code": int(status.get("code", 0)),
                     "status_message": status.get("message", "") or "",
                     "attributes": _attrs_as_map(attrs),
+                    # added in 0003 — tenant scoping; span attr overrides resource attr if present
+                    "tenant_id": _extract_attr(attrs, "ai_trust.tenant_id") or resource_tenant,
                 })
     return rows
 
