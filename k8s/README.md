@@ -72,10 +72,15 @@ no direct Kubernetes equivalent, and none of the app images were changed to add 
 Both patterns are defined once in `helm/ai-trust-platform/templates/_helpers.tpl` and reused
 everywhere docker-compose had a `depends_on`.
 
-## Known limitations (local-dev scope, same as docker-compose today)
+## Known limitations / gaps as of local-dev scope (same as docker-compose today)
 
 - Single-node only: `openfga-config`, `postgres-data`, `clickhouse-data`, and `minio-data` are all
   `ReadWriteOnce` PVCs on kind's default local-path-provisioner - fine on a single schedulable node
   (kind's default), but won't work if you add worker nodes to `kind-config.yaml`.
 - No resource `requests`/`limits` (docker-compose doesn't set any either).
 - No HTTPS / `cookie-secure=true` - same as docker-compose's local-dev oauth2-proxy config.
+- mino scaling: handling multiple volumes - based on that decide how to makr those PVC.
+- scaling postgres - define the configuration of volumes.
+- ReadWriteOnce access mode:can not scale the deployment that mounts such volume.
+- horizontal pod autoscalers.
+- NodePort to replace by ClusterIP.
