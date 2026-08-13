@@ -82,6 +82,8 @@ async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
             raise HTTPException(404, f"AI system {body.ai_system_id} not found")
         if system.lifecycle == "decommissioned":
             raise HTTPException(422, "Cannot assess a decommissioned AI system")
+        if system.workflow_status != "approved":
+            raise HTTPException(422, "Cannot assess a system that has not been approved")
 
         framework = (await session.execute(
             select(Framework).where(Framework.id == body.framework_id)
