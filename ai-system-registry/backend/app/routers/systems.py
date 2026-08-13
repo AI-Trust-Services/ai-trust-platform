@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 
 from ai_trust_authorization import require_permission
-from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
+from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE, SYSTEMS_APPROVE
 from ai_trust_logging import get_logger
 from app.classifier import classify
 from ai_trust_persistence import SessionLocal
@@ -100,7 +100,7 @@ async def update_system(system_id: str, body: AISystemUpdate, request: Request) 
     return AISystemResponse.model_validate(row)
 
 
-@router.delete("/systems/{system_id}", dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+@router.delete("/systems/{system_id}", dependencies=[Depends(require_permission(SYSTEMS_APPROVE))])
 async def delete_system(system_id: str) -> dict:
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
