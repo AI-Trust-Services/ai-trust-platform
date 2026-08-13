@@ -47,8 +47,14 @@ Usage: {{ include "ai-trust.waitForJob" (dict "job" "db-migrate" "image" .Values
       valueFrom:
         fieldRef:
           fieldPath: metadata.namespace
-  command:
-    - sh
-    - -c
-    - kubectl wait --for=condition=complete --timeout=600s job/{{ .job }} -n $POD_NAMESPACE
+  # rancher/kubectl is a `FROM scratch` image (just the static kubectl binary at
+  # /bin/kubectl, no shell) - rely on its ENTRYPOINT + Kubernetes' native $(VAR)
+  # arg substitution instead of `sh -c` (there's no sh to invoke).
+  args:
+    - wait
+    - --for=condition=complete
+    - --timeout=600s
+    - job/{{ .job }}
+    - -n
+    - $(POD_NAMESPACE)
 {{- end -}}
