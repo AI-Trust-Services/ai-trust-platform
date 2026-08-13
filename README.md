@@ -6,7 +6,7 @@
 
 ## About this project
 
-AI Trust Platform enables organizations to register AI assets once and maintain continuous, automated **EU AI Act** compliance — centralizing transparency, monitoring, and documentation in one place, with automatic requirements updates, gap analysis, and mitigation proposals.
+AI Trust Platform enables  organizations to register AI assets once and maintain continuous, automated **EU AI Act** compliance — centralizing transparency, monitoring, and documentation  in one place, with automatic requirements updates, gap analysis, and mitigation proposals.
 
 > ⚠️ **Status.** AI Trust Platform is currently under active development and is not intended for production use. The project is in an alpha stage. APIs, interfaces, and underlying concepts are subject to change without prior notice. Such changes may include breaking changes, significant redesigns, or the deprecation and complete removal of APIs and functionality.
 
