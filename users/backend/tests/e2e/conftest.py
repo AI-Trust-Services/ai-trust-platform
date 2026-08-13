@@ -81,7 +81,12 @@ def patch_openfga():
               new=AsyncMock(return_value=[])),
         patch("ai_trust_authorization.openfga_client.read_user_roles",
               new=AsyncMock(return_value=[])),
+        patch("ai_trust_authorization.openfga_client.read_role_members",
+              new=AsyncMock(return_value=[])),
         patch("app.routers.users._is_valid_role", new=_is_valid_role_stub),
+        # _build_slug_map reads custom roles from Postgres; stub it so the list
+        # endpoint needs no DB (custom-role slug resolution is covered elsewhere).
+        patch("app.routers.users._build_slug_map", new=AsyncMock(return_value={})),
     ):
         # Override get_current_user so require_permission resolves without headers
         from app.main import app

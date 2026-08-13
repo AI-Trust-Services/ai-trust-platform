@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "../App";
 import { api } from "../api/client";
 import { InviteModal } from "../components/InviteModal";
@@ -15,6 +15,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
+  const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "true" | "false">("");
@@ -25,7 +26,6 @@ export default function UsersPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async (q: string, p: number, status: string) => {
     setLoading(true);
@@ -47,25 +47,24 @@ export default function UsersPage() {
   }, [showToast]);
 
   useEffect(() => {
-    Promise.all([api.getRoles(), api.getCustomRoles()])
-      .then(([builtins, custom]) => {
+    Promise.all([api.getRoles(), api.getCustomRoles(), api.getRoleDetails()])
+      .then(([builtins, custom, roleDetails]) => {
         const customAsSummary: RoleSummary[] = custom.map(r => ({ id: r.id, name: r.name, description: r.description }));
         setRoles([...builtins, ...customAsSummary]);
+        const map: Record<string, string[]> = {};
+        for (const r of roleDetails) map[r.name] = r.permissions;
+        for (const r of custom) map[r.name] = r.permissions;
+        setRolePermissions(map);
       })
       .catch(() => {});
   }, []);
 
-  // Debounce search; reset to page 0
+  // Debounce search; immediate for page/status changes
   useEffect(() => {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => {
-      setPage(0);
-      load(search, 0, statusFilter);
-    }, 300);
-    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
-  }, [search, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- load is stable but listing it would trigger on every render
-
-  useEffect(() => { load(search, page, statusFilter); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps -- intentionally re-runs only on page change; search/status changes reset page via the effect above
+    const delay = search ? 300 : 0;
+    const timer = setTimeout(() => load(search, page, statusFilter), delay);
+    return () => clearTimeout(timer);
+  }, [search, page, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- load is stable
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -135,12 +134,12 @@ export default function UsersPage() {
           className="search-input"
           placeholder="Search by name, username or email…"
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => { setPage(0); setSearch(e.target.value); }}
         />
         <select
           className="filter-select"
           value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value as "" | "true" | "false")}
+          onChange={e => { setPage(0); setStatusFilter(e.target.value as "" | "true" | "false"); }}
         >
           <option value="">All statuses</option>
           <option value="true">Active</option>
@@ -160,13 +159,13 @@ export default function UsersPage() {
             </tr>
           </thead>
           <tbody>
-            {loading && (
+            {loading && users.length === 0 && (
               <tr><td colSpan={5} className="empty">Loading…</td></tr>
             )}
             {!loading && users.length === 0 && (
               <tr><td colSpan={5} className="empty">No users found.</td></tr>
             )}
-            {!loading && users.map(u => (
+            {users.map((u: UserSummary) => (
               <tr key={u.id} className="clickable-row" onClick={() => openDetail(u.id)}>
                 <td>
                   <div style={{ fontWeight: 500 }}>{u.firstName} {u.lastName}</div>
@@ -239,6 +238,7 @@ export default function UsersPage() {
         <UserDetailPanel
           user={selectedUser}
           roles={roles}
+          rolePermissions={rolePermissions}
           onClose={() => { setSelectedUser(null); setSelectedId(null); }}
           onUpdated={handleUpdated}
           onDeleted={handleDeleted}

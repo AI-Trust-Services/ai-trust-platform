@@ -5,7 +5,7 @@ import { CustomRoleModal } from "../components/CustomRoleModal";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import type { CustomRole, RoleInfo } from "../types";
 import { usePermissions } from "../hooks/usePermissions";
-import { ROLE_LABELS } from "../constants";
+import { ROLE_LABELS, PERMISSION_LABELS } from "../constants";
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   platform_administrator: "Full access to all features and user management.",

@@ -124,11 +124,21 @@ All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports 
 | MinIO API | http://localhost:9000 |
 | MinIO console | http://localhost:9001 (credentials from `.env`) |
 
-## Authentication
+## Authentication and Authorization
+
+**Hard separation of concerns:**
+- **Keycloak** — authentication only: who you are (identity, login, logout, JWT issuance)
+- **OpenFGA** — authorization only: what you can do (roles, permissions, access decisions)
+
+Keycloak has no knowledge of application roles or permissions. OpenFGA has no knowledge of passwords or sessions. The two systems are independent — never use Keycloak realm roles to gate application features.
+
+See [docs/auth-flow.md](docs/auth-flow.md) for sequence diagrams of the login, API request, and sign-out flows.
+
+### Authentication (Keycloak + oauth2-proxy)
 
 All traffic enters through **oauth2-proxy** at port 8080. No backend or frontend is reachable directly from the browser — all ports are internal to Docker.
 
-### Flow
+#### Flow
 1. Browser hits `http://localhost:8080` → oauth2-proxy checks session cookie
 2. No session → redirects browser to Keycloak login at `KEYCLOAK_PUBLIC_URL` (port 8180)
 3. User logs in → Keycloak redirects back to `/oauth2/callback` with auth code
@@ -136,23 +146,33 @@ All traffic enters through **oauth2-proxy** at port 8080. No backend or frontend
 5. All subsequent requests: oauth2-proxy validates cookie, forwards to shell with `Authorization: Bearer <JWT>` added server-side
 6. Browser only ever sees the encrypted session cookie — JWT never exposed
 
-### Components
-- **Keycloak 25** (`infra/keycloak/`) — identity provider, realm `ai-trust`, port 8180
-- **keycloak-provision** — one-shot container that configures realm/client/users via Admin API on startup. Idempotent. Config driven by `APP_PUBLIC_URL` — no hardcoded URLs
-- **oauth2-proxy v7.6.0** — gateway at port 8080, enforces authentication on all paths
-- **Sign out** — shell bar button links to `/oauth2/sign_out`, which clears the session and calls Keycloak's logout endpoint server-side (`--backend-logout-url`)
+#### Components
+- **Keycloak 25** (`infra/keycloak/`) — identity provider, realm `ai-trust`, port 8180. Owns user accounts, credentials, and sessions only.
+- **keycloak-provision** — one-shot container that creates the realm, OIDC client, and bootstrap admin user via Admin API on startup. Idempotent. Config driven by `APP_PUBLIC_URL` — no hardcoded URLs.
+- **oauth2-proxy v7.6.0** — gateway at port 8080, enforces authentication on all paths. Forwards `X-Forwarded-Preferred-Username` (the human-readable username, used by backends) and `X-Forwarded-User` (the OIDC `sub` UUID, fallback only) to backends.
+- **Sign out** — shell bar button links to `/oauth2/sign_out`, which clears the session and calls Keycloak's logout endpoint server-side (`--backend-logout-url`).
 
 A single bootstrap admin user is always created on startup with credentials from `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` in `.env`.
 
-### Phase 2 (Authorization — RBAC via OpenFGA)
-Authorization (what each user can do) is handled by **OpenFGA**, running as a dedicated Docker service. See [docs/rbac-design.md](docs/rbac-design.md) for the full design.
+### Authorization — RBAC via OpenFGA
 
-- **Model** — flat RBAC: users are members of roles, roles grant permissions on a single `platform:global` object. No per-object tuples in Phase 2 (BU scoping deferred to Phase 3).
-- **`libs/authorization`** — shared lib. `require_permission("evidence:approve")` is a FastAPI `Depends()` that reads `X-Forwarded-User` (set by oauth2-proxy), calls OpenFGA, and returns 403 on denial. **Fails closed** — any OpenFGA error denies. Permission strings + role definitions live in `ai_trust_authorization.constants` (single source of truth).
-- **`openfga` + `openfga-provision`** — OpenFGA uses its own Postgres DB (`openfga`, created by `infra/keycloak/init.sh`). `openfga-provision` (one-shot, like `keycloak-provision`) creates the store, uploads the model generated from `constants.py`, seeds role→permission tuples, seeds `APP_ADMIN_USERNAME` as Platform Admin, and writes the store ID to the `openfga-config` volume. Backends read the store ID from `/config/store_id` on startup.
-- **IAM API** — `users` backend hosts `routers/iam.py`: `GET /iam/roles` (roles + permissions), and `GET /me/permissions` (used by the shell to gate the IAM nav node, and by MFEs to grey out unauthorized actions). User management endpoints (`GET/POST /users`, `PUT/DELETE /users/{id}/roles/{role}`) are also in the `users` backend.
+**OpenFGA is the sole source of truth for roles and permissions.** Backends never check Keycloak realm roles to make access decisions. See [docs/rbac-design.md](docs/rbac-design.md) for the full design.
+
+- **Model** — flat RBAC: users are members of roles, roles grant permissions on a single `platform:global` object.
+- **`libs/authorization`** — shared lib. `require_permission("evidence:approve")` is a FastAPI `Depends()` that reads `X-Forwarded-Preferred-Username` (set by oauth2-proxy), calls OpenFGA, and returns 403 on denial. **Fails closed** — any OpenFGA error denies. Permission strings + role definitions live in `ai_trust_authorization.constants` (single source of truth).
+- **`openfga` + `openfga-provision`** — OpenFGA uses its own Postgres DB (`openfga`, created by `infra/postgres/init.sh`). `openfga-provision` (one-shot, like `keycloak-provision`) creates the store, uploads the model generated from `constants.py`, seeds role→permission tuples, seeds `APP_ADMIN_USERNAME` as Platform Admin, and writes the store ID to the `openfga-config` volume. Backends read the store ID from `/config/store_id` on startup.
+- **IAM API** — `users` backend exposes four role/permission routers (all mounted at `/v1`):
+  - `routers/roles.py` — `GET /roles` → `[{id, name, description}]` (built-in roles list, used by the role assignment dropdown in the UI)
+  - `routers/iam.py` — `GET /iam/roles` → `[{name, permissions[]}]` (built-in roles with their full permission list, used by the IAM roles page)
+  - `routers/permissions.py` — `GET /me/permissions` → current user's effective permissions (used by the shell to gate the IAM nav node, and by MFEs to grey out unauthorized actions)
+  - `routers/custom_roles.py` — `GET/POST/PUT/DELETE /iam/custom-roles` (see Custom roles below)
+  - User management endpoints (`GET/POST /users`, `PUT/DELETE /users/{id}/roles/{role}`) live in `routers/users.py`
 - **IAM UI** — separate `iam/` frontend MFE (Role Management), proxied at `/iam/`, shown in the Luigi nav only to users with `iam:manage`.
-- **Built-in roles** — `platform_admin`, `ai_engineer`, `compliance_officer`, `business_owner`, `auditor`, `executive`. Custom roles deferred to Phase 3.
+- **Built-in roles** — `platform_administrator`, `ai_engineer`, `ai_compliance_officer`, `business_owner`, `auditor`, `executive`. Each user holds exactly one role at a time (single-role invariant enforced in `assign_role`). Role assignment writes directly to OpenFGA.
+- **Custom roles** — `routers/custom_roles.py` (all endpoints require `iam:manage`): `GET /iam/custom-roles`, `POST /iam/custom-roles`, `PUT /iam/custom-roles/{role_id}`, `DELETE /iam/custom-roles/{role_id}`. Custom roles are stored in Postgres (`custom_roles` table, IDs prefixed `ROLE-`) and their permission tuples live in OpenFGA. Deletion removes OpenFGA member tuples → OpenFGA permission tuples → Postgres row in that order.
+- **Permission naming convention** — permission strings use `resource:action` format (e.g. `systems:read`, `evidence:approve`). The OpenFGA relation name is derived by prefixing `can_` and replacing `:` with `_` — e.g. `systems:read` → `can_read_systems`. The full mapping lives in `RELATION_BY_PERMISSION` in `ai_trust_authorization.constants`. **To add a new permission: add it to `constants.py` only** — `openfga-provision` auto-generates the authorization model from that file at startup. Never hand-edit an FGA schema file.
+- **Authorization model** — generated programmatically by `infra/openfga-provision/provision.py` from `constants.py` each time `openfga-provision` runs. There is no hand-authored DSL file. The model is re-uploaded only if no model exists in the store (idempotent).
+- **Store ID** — `openfga-provision` writes the store ID to `/config/store_id` on the shared `openfga-config` volume. Backends read it at startup via `libs/authorization`. For tests or production deployments that don't use the volume, set `OPENFGA_STORE_ID` env var directly — it takes precedence over the file.
 
 ## Architecture
 
