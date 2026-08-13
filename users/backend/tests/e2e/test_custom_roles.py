@@ -98,7 +98,6 @@ async def test_create_custom_role_success(client: httpx.AsyncClient):
         patch("app.routers.custom_roles.openfga_client.delete_tuple", new=AsyncMock()),
         patch("app.routers.custom_roles._get_role_permissions", new=AsyncMock(return_value=[])),
         patch("app.routers.custom_roles._set_role_permissions", new=AsyncMock()),
-        patch("app.routers.custom_roles.asyncio.to_thread", new=AsyncMock()),
     ):
         r = await client.post(
             "/v1/iam/custom-roles",
@@ -184,6 +183,76 @@ async def test_update_custom_role_not_found(client: httpx.AsyncClient):
 # DELETE /v1/iam/custom-roles/{role_id}
 # ---------------------------------------------------------------------------
 
+async def test_list_custom_roles_permissions_mapped_from_openfga(client: httpx.AsyncClient):
+    """Permissions from OpenFGA tuples are correctly mapped onto each role in the response."""
+    from unittest.mock import MagicMock as TupleMock
+    row = _db_row(name="Reviewer")
+
+    # Build a fake tuple: role:reviewer#member has can_read_systems on platform:global
+    t = TupleMock()
+    t.key.user = "role:reviewer#member"
+    t.key.relation = "can_read_systems"
+
+    db_patch, _ = _patch_db([row])
+    fga_patch, _ = _patch_openfga_client(tuples=[t])
+    with db_patch, fga_patch:
+        r = await client.get("/v1/iam/custom-roles")
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data[0]["permissions"] == ["systems:read"]
+
+
+async def test_create_custom_role_rolls_back_postgres_on_openfga_failure(client: httpx.AsyncClient):
+    """If OpenFGA write fails after Postgres insert, the Postgres row is deleted."""
+    import pytest
+    db_patch, session = _patch_db([])
+
+    async def _refresh(row):
+        row.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+    session.refresh.side_effect = _refresh
+    # First execute() = duplicate check (returns None), second = rollback lookup
+    result_no_existing = MagicMock()
+    result_no_existing.scalar_one_or_none.return_value = None
+    result_find_row = MagicMock()
+    result_find_row.scalar_one_or_none.return_value = _db_row()
+    session.execute = AsyncMock(side_effect=[result_no_existing, result_find_row])
+
+    with (
+        db_patch,
+        patch("app.routers.custom_roles._set_role_permissions",
+              new=AsyncMock(side_effect=RuntimeError("OpenFGA down"))),
+        pytest.raises(Exception),
+    ):
+        await client.post(
+            "/v1/iam/custom-roles",
+            json={"name": "Reviewer", "description": "", "permissions": ["systems:read"]},
+        )
+
+    session.delete.assert_awaited_once()
+    session.commit.assert_awaited()
+
+
+async def test_delete_custom_role_strips_all_members(client: httpx.AsyncClient):
+    """Deleting a role calls _delete_all_member_tuples to strip users from OpenFGA."""
+    row = _db_row()
+    db_patch, session = _patch_db([])
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none.return_value = row
+    session.execute = AsyncMock(return_value=result_mock)
+
+    with (
+        db_patch,
+        patch("app.routers.custom_roles._delete_all_member_tuples", new=AsyncMock()) as del_members,
+        patch("app.routers.custom_roles._set_role_permissions", new=AsyncMock()),
+    ):
+        r = await client.delete("/v1/iam/custom-roles/ROLE-ABCD1234")
+
+    assert r.status_code == 204
+    del_members.assert_awaited_once_with("My Role")
+
+
 async def test_delete_custom_role_success(client: httpx.AsyncClient):
     row = _db_row()
     db_patch, session = _patch_db([])
@@ -193,7 +262,6 @@ async def test_delete_custom_role_success(client: httpx.AsyncClient):
 
     with (
         db_patch,
-        patch("app.routers.custom_roles.asyncio.to_thread", new=AsyncMock()),
         patch("app.routers.custom_roles._delete_all_member_tuples", new=AsyncMock()),
         patch("app.routers.custom_roles._set_role_permissions", new=AsyncMock()),
     ):
