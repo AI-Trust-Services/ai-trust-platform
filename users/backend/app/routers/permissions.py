@@ -1,4 +1,4 @@
-"""GET /me/permissions — returns the current user's effective permissions."""
+"""GET /me/permissions and GET /me — current user endpoints."""
 from fastapi import APIRouter, Depends
 
 from ai_trust_authorization import get_current_user, openfga_client
@@ -7,6 +7,7 @@ from ai_trust_authorization.constants import (
     PLATFORM_OBJECT,
     RELATION_BY_PERMISSION,
 )
+from app.keycloak import admin_client
 from app.schemas import PermissionsResponse
 
 router = APIRouter(tags=["permissions"])
@@ -23,3 +24,19 @@ async def my_permissions(
     allowed = set(allowed_relations)
     permissions = [p for p in ALL_PERMISSIONS if RELATION_BY_PERMISSION[p] in allowed]
     return PermissionsResponse(username=user, permissions=permissions)
+
+
+@router.get("/me")
+async def me(user: str = Depends(get_current_user)) -> dict:
+    import asyncio
+    def _fetch():
+        kc = admin_client()
+        results = kc.get(f"users?username={user}&exact=true").json()
+        return results[0] if results else {}
+    u = await asyncio.to_thread(_fetch)
+    return {
+        "username": user,
+        "firstName": u.get("firstName", ""),
+        "lastName": u.get("lastName", ""),
+        "email": u.get("email", ""),
+    }
