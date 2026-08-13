@@ -1,7 +1,15 @@
 from __future__ import annotations
 
+import re
+
 from ai_trust_tenancy.config import MODE
 from ai_trust_tenancy.context import tenant_id_var
+
+# A tenant id is a Platform Mesh account / realm name — restrict to a safe charset so it can be
+# inlined into the SET as a literal without any driver-specific paramstyle (the raw DBAPI conn in
+# the `begin` event is asyncpg, which uses $1 not %s). Anything outside this is rejected (no SET),
+# so RLS then shows only shared/NULL rows — fail-closed.
+_SAFE_TENANT = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 
 
 def install_tenant_scoping(engine) -> None:
@@ -33,9 +41,11 @@ def install_tenant_scoping(engine) -> None:
     sync_engine = getattr(engine, "sync_engine", engine)
 
     @event.listens_for(sync_engine, "begin")
-    def _set_tenant_on_begin(conn):  # conn: a raw DBAPI-level connection wrapper
+    def _set_tenant_on_begin(conn):  # conn: a raw DBAPI-level connection wrapper (asyncpg)
         tenant = tenant_id_var.get()
-        if tenant:
+        if tenant and _SAFE_TENANT.match(tenant):
+            # Inlined as a literal (validated charset above) — avoids driver paramstyle
+            # mismatches (%s vs $1). set_config(..., true) is transaction-local like SET LOCAL.
             conn.exec_driver_sql(
-                "SELECT set_config('app.current_tenant', %s, true)", (tenant,)
+                f"SELECT set_config('app.current_tenant', '{tenant}', true)"
             )
