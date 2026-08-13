@@ -284,6 +284,25 @@ If a container restarts and nginx returns 502, run `docker compose restart shell
 
 Each component has `frontend/` (nginx, internal only) and `backend/` (FastAPI, internal only). All traffic is routed through port 8080 via the shell nginx reverse proxy.
 
+### Dual deployment paths — docker-compose and k8s (kind)
+
+This platform has **two independent, fully-supported local deployment paths**: `docker-compose.yml`
+and the Helm chart under `k8s/helm/ai-trust-platform/` (see [k8s/README.md](k8s/README.md)). Only
+one is usually running in a given session, but **develop and change both together** — don't treat
+the k8s path as a one-off snapshot. Whenever you touch anything that affects how a service runs:
+
+- New service in `docker-compose.yml`? Add the matching Deployment+Service (or Job, for a one-shot
+  task) to the Helm chart, and add its image to `k8s/scripts/build-and-load-images.sh`.
+- New/changed env var or secret? Add it to `.env.example` for docker-compose — it flows through to
+  k8s automatically via `k8s/scripts/bootstrap.sh`'s Secret (sourced from that same `.env`; there is
+  no separate k8s-specific env file by design).
+- New `depends_on: condition:` in compose? Add the matching `waitForTcp`/`waitForHttp`/`waitForJob`
+  initContainer in the Helm chart (helpers defined once in `_helpers.tpl`).
+- Renamed or moved a file that's mounted as a volume/ConfigMap in either path (e.g. `infra/*/init.sh`,
+  `otel-pipeline/**/config`)? Update both `docker-compose.yml`'s `volumes:` **and**
+  `k8s/scripts/bootstrap.sh`'s `--from-file` references — nothing enforces this in CI, a rename on
+  one side silently breaks the other.
+
 ### Adding a new component
 1. Create `new-component/frontend/` and `new-component/backend/`
 2. Create `libs/persistence/ai_trust_persistence/models/your_model.py` and import it in `models/__init__.py`
@@ -295,6 +314,10 @@ Each component has `frontend/` (nginx, internal only) and `backend/` (FastAPI, i
 8. Add proxy routes to `shell/nginx.conf` for the frontend (`/new-component/`) and backend API (`/api/new-component/`)
 9. Add `base: "/new-component/"` to the frontend's `vite.config.ts`
 10. Add nav node to `shell/luigi-config.js` with `viewUrl: "http://localhost:8080/new-component/"`
+11. Add the matching Deployment+Service pair to the k8s Helm chart — if it fits the generic
+    backend+frontend pattern, add an entry to the `components` list in
+    `k8s/helm/ai-trust-platform/values.yaml` (templated once in `templates/components.yaml`); if not,
+    add a new template file. Add the component's image(s) to `k8s/scripts/build-and-load-images.sh`.
 
 ### ai-system-registry/ (internal port 8001, accessed via /api/registry/)
 

@@ -14,6 +14,9 @@ Create a new RabbitMQ consumer under `consumers/` that subscribes to the `otel.t
 
 1. Creates `consumers/<name>/` with all required files
 2. Adds the service to `docker-compose.yml`
+3. Adds the matching Deployment to the k8s Helm chart (this app has two independent, fully-supported
+   deployment paths — docker-compose and k8s/kind — that must be kept in sync; see CLAUDE.md's
+   "Dual deployment paths" section)
 
 ---
 
@@ -88,10 +91,47 @@ If the consumer exposes an HTTP port, add a `ports:` entry and a `healthcheck:`.
 
 **YAML merge key note**: YAML does not allow two `<<:` merge keys in the same mapping. If this service needs both `*rmq-env` and another anchor (e.g. `*ch-env`), expand the variables inline instead of using `<<:`.
 
-### Step 7 — Report back
+### Step 7 — Add the matching Deployment to the k8s Helm chart
+
+Read `k8s/helm/ai-trust-platform/templates/otel.yaml` (the `otel-clickhouse-consumer` Deployment)
+as the reference pattern, then add a new Deployment for `<consumer-name>` to the same file (or a
+new template file if it doesn't fit thematically):
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <consumer-name>
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "<consumer-name>") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "<consumer-name>") | nindent 8 }}
+    spec:
+      initContainers:
+        # mirrors compose: <consumer-name> depends_on rabbitmq (service_healthy)
+        {{- include "ai-trust.waitForTcp" (dict "name" "rabbitmq" "port" 5672 "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: <consumer-name>
+          image: {{ .Values.image.repository }}/<consumer-name>:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # RABBITMQ_URL
+```
+
+Add an HTTP `readinessProbe`/`Service` too if the consumer exposes a port (same as
+`otel-rmq-bridge` in that file). Then add `<consumer-name>` to the image list in
+`k8s/scripts/build-and-load-images.sh`.
+
+### Step 8 — Report back
 
 Tell the user:
 - Files created
 - The `QUEUE_NAME` used (important — must be unique)
 - Any TODOs left in `main.py` for them to fill in
-- How to test: `docker compose up --build -d <consumer-name>` then watch logs
+- How to test: `docker compose up --build -d <consumer-name>` then watch logs (docker-compose path),
+  and `cd k8s && make build && make upgrade` (k8s path)
