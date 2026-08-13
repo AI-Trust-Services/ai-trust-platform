@@ -23,9 +23,8 @@ export default function Systems() {
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [fillInSystem, setFillInSystem] = useState<AISystem | undefined>(undefined);
-  const { wizardOpen, setWizardOpen, mayWrite, username } = useModalControls();
+  const { wizardOpen, setWizardOpen, mayRegister, username } = useModalControls();
   const showToast = useToast();
-  const noWriteTitle = "Requires permission: systems:write";
 
   const loadSystems = useCallback(async () => {
     try {
@@ -196,8 +195,8 @@ export default function Systems() {
                       <button className="btn-icon" title="Details" onClick={() => openSystem(s)}>⊙</button>
                       <button
                         className="btn-icon btn-danger"
-                        title={mayWrite ? "Delete" : noWriteTitle}
-                        disabled={!mayWrite}
+                        title={mayRegister ? "Delete" : "Requires role: business owner or administrator"}
+                        disabled={!mayRegister}
                         onClick={async () => {
                           if (!confirm(`Delete "${s.name}"?\n\nThis action cannot be undone.`)) return;
                           try {
