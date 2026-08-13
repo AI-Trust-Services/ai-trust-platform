@@ -11,16 +11,15 @@ from ai_trust_logging import get_logger
 
 logger = get_logger(__name__)
 
-_SMTP_HOST = os.environ.get("SMTP_HOST", "mailpit")
-_SMTP_PORT = int(os.environ.get("SMTP_PORT", "1025"))
+_SMTP_HOST = os.environ["SMTP_HOST"]
+_SMTP_PORT = int(os.environ["SMTP_PORT"])
 _SMTP_USER = os.environ.get("SMTP_USER", "")
 _SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
-_SMTP_FROM = os.environ.get("SMTP_FROM", "noreply@ai-trust.local")
-# mail.smtp.ssl.enable=true  → implicit TLS from the start (port 465)
-# mail.smtp.starttls.enable=true → STARTTLS upgrade after plain connect (port 587)
-_SMTP_SSL = os.environ.get("SMTP_SSL", "false").lower() == "true"
-_SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "false").lower() == "true"
-_USERS_BACKEND_URL = os.environ.get("USERS_BACKEND_URL", "http://users-backend:8001")
+_SMTP_FROM = os.environ["SMTP_FROM"]
+_SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME")
+_SMTP_SSL = os.environ.get("SMTP_SSL").lower()
+_SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS").lower()
+_USERS_BACKEND_URL = os.environ["USERS_BACKEND_URL"]
 
 
 async def _get_email(username: str) -> str | None:
@@ -45,7 +44,7 @@ async def notify(to_username: str, subject: str, body: str) -> None:
 
     msg = MIMEText(body, "plain")
     msg["Subject"] = subject
-    msg["From"] = _SMTP_FROM
+    msg["From"] = f"{_SMTP_FROM_NAME} <{_SMTP_FROM}>" if _SMTP_FROM_NAME else _SMTP_FROM
     msg["To"] = email
 
     try:
