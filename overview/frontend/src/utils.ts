@@ -6,6 +6,11 @@ export function fmtDate(iso: string | null | undefined): string {
   catch { return iso; }
 }
 
+/** Single source for value-based chart/bar/progress coloring (governed status ramp). */
+export function statusColor(pct: number): string {
+  return pct >= 80 ? "var(--success)" : pct >= 50 ? "var(--warning)" : "var(--destructive)";
+}
+
 export const TIER_COLORS: Record<TierKey, string> = {
   prohibited:       "#8b0000",
   high:             "#e05c00",

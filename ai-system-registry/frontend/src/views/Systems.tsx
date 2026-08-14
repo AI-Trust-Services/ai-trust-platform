@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { Eye, Trash2, RefreshCw } from "lucide-react";
 import { TierBadge, LifecycleBadge, ComplianceBar, FormattedDate } from "../components/Badges";
 import SystemDetail from "../components/SystemDetail";
 import type { UserMap } from "../components/SystemDetail";
@@ -8,7 +9,14 @@ import AssistedRegistration from "../components/AssistedRegistration";
 import EngineerAssistedRegistration from "../components/EngineerAssistedRegistration";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
+import { SELECT_CLASS } from "../utils";
 import type { AISystem, ModelCard } from "../types";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 const WORKFLOW_STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -119,34 +127,28 @@ export default function Systems() {
     }
   }
 
+  // Workflow-state pill. The four states encode workflow meaning (like the tier
+  // and lifecycle identity maps), so they keep their existing hues rather than
+  // moving onto the governed status ramp.
   function workflowStatusBadge(status: string) {
     const colors: Record<string, string> = {
-      draft: "#8a9bb0",
-      pending_review: "#e67e22",
-      approved: "#27ae60",
-      rejected: "#c0392b",
+      draft: "bg-[#8a9bb0]",
+      pending_review: "bg-[#e67e22]",
+      approved: "bg-[#27ae60]",
+      rejected: "bg-[#c0392b]",
     };
     return (
-      <span style={{
-        display: "inline-block",
-        padding: "2px 8px",
-        borderRadius: 10,
-        fontSize: 11,
-        fontWeight: 600,
-        color: "#fff",
-        background: colors[status] || "#8a9bb0",
-        letterSpacing: "0.3px",
-      }}>
+      <Badge className={cn("rounded-full text-white", colors[status] || "bg-[#8a9bb0]")}>
         {WORKFLOW_STATUS_LABELS[status] || status}
-      </span>
+      </Badge>
     );
   }
 
   return (
     <>
-      <div className="toolbar">
-        <input type="text" className="search-input" placeholder="Search systems…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="filter-select" value={tierFilter} onChange={(e) => setTierFilter(e.target.value)}>
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-6 py-3">
+        <Input type="text" className="w-56" placeholder="Search systems…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select className={cn(SELECT_CLASS, "w-auto")} value={tierFilter} onChange={(e) => setTierFilter(e.target.value)}>
           <option value="">All Risk Tiers</option>
           <option value="prohibited">Prohibited</option>
           <option value="high">High-Risk</option>
@@ -155,7 +157,7 @@ export default function Systems() {
           <option value="limited">Limited</option>
           <option value="minimal">Minimal</option>
         </select>
-        <select className="filter-select" value={lifecycleFilter} onChange={(e) => setLifecycleFilter(e.target.value)}>
+        <select className={cn(SELECT_CLASS, "w-auto")} value={lifecycleFilter} onChange={(e) => setLifecycleFilter(e.target.value)}>
           <option value="">All Lifecycle States</option>
           <option value="development">Development</option>
           <option value="testing">Testing</option>
@@ -164,55 +166,53 @@ export default function Systems() {
           <option value="post-market">Post-Market</option>
           <option value="decommissioned">Decommissioned</option>
         </select>
-        <select className="filter-select" value={workflowFilter} onChange={(e) => setWorkflowFilter(e.target.value)}>
+        <select className={cn(SELECT_CLASS, "w-auto")} value={workflowFilter} onChange={(e) => setWorkflowFilter(e.target.value)}>
           <option value="">All Workflow States</option>
           <option value="draft">Draft</option>
           <option value="pending_review">Pending Review</option>
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </select>
-        <div className="toolbar-spacer" />
-        <button className="btn-ghost" onClick={loadSystems}>↺ Refresh</button>
+        <div className="flex-1" />
+        <Button variant="ghost" onClick={loadSystems}><RefreshCw /> Refresh</Button>
       </div>
 
-      <div className="content">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>System</th>
-                <th>Workflow</th>
-                <th>Assignee</th>
-                <th>Risk Tier</th>
-                <th>Lifecycle</th>
-                <th>Compliance</th>
-                <th>Registered</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+      <div className="px-6 py-5">
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>System</TableHead>
+                <TableHead>Workflow</TableHead>
+                <TableHead>Assignee</TableHead>
+                <TableHead>Risk Tier</TableHead>
+                <TableHead>Lifecycle</TableHead>
+                <TableHead>Compliance</TableHead>
+                <TableHead>Registered</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filtered.length === 0 ? (
-                <tr className="empty-row">
-                  <td colSpan={8}>{systems.length === 0 ? 'No systems registered yet. Click "Register System" to add one.' : "No systems match the current filters."}</td>
-                </tr>
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                    {systems.length === 0 ? 'No systems registered yet. Click "Register System" to add one.' : "No systems match the current filters."}
+                  </TableCell>
+                </TableRow>
               ) : filtered.map((s) => (
-                <tr key={s.id} onClick={() => openSystem(s)} style={{ cursor: "pointer" }}>
-                  <td>
-                    <div className="system-name">{s.name}</div>
-                    <div className="system-sub">
+                <TableRow key={s.id} onClick={() => openSystem(s)} className="cursor-pointer">
+                  <TableCell>
+                    <div className="font-medium">{s.name}</div>
+                    <div className="text-xs text-muted-foreground">
                       {s.id} · v{s.version || "1.0.0"}
-                      {s.model_id && <> · <span style={{ color: "var(--brand)" }}>{modelName(s.model_id)}</span></>}
+                      {s.model_id && <> · <span className="text-[var(--brand)]">{modelName(s.model_id)}</span></>}
                     </div>
-                  </td>
-                  <td>{workflowStatusBadge(s.workflow_status)}</td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+                  </TableCell>
+                  <TableCell>{workflowStatusBadge(s.workflow_status)}</TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">
                     {s.assignee_username ? (
-                      <span title={s.assignee_username} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{
-                          display: "inline-flex", alignItems: "center", justifyContent: "center",
-                          width: 24, height: 24, borderRadius: "50%", background: "var(--brand)",
-                          color: "#fff", fontSize: 10, fontWeight: 700, flexShrink: 0,
-                        }}>
+                      <span title={s.assignee_username} className="flex items-center gap-1.5">
+                        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-[10px] font-bold text-white">
                           {(() => {
                             const u = userMap[s.assignee_username];
                             if (u?.firstName && u?.lastName) return (u.firstName[0] + u.lastName[0]).toUpperCase();
@@ -227,16 +227,20 @@ export default function Systems() {
                         })()}
                       </span>
                     ) : "—"}
-                  </td>
-                  <td><TierBadge tier={s.tier} workflowStatus={s.workflow_status} /></td>
-                  <td><LifecycleBadge lc={s.lifecycle} /></td>
-                  <td><ComplianceBar pct={s.compliance} /></td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}><FormattedDate iso={s.created_at} /></td>
-                  <td>
-                    <div className="actions" onClick={(e) => e.stopPropagation()}>
-                      <button className="btn-icon" title="Details" onClick={() => openSystem(s)}>⊙</button>
-                      <button
-                        className="btn-icon btn-danger"
+                  </TableCell>
+                  <TableCell><TierBadge tier={s.tier} workflowStatus={s.workflow_status} /></TableCell>
+                  <TableCell><LifecycleBadge lc={s.lifecycle} /></TableCell>
+                  <TableCell><ComplianceBar pct={s.compliance} /></TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground"><FormattedDate iso={s.created_at} /></TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                      <Button variant="ghost" size="icon" className="size-8" title="Details" onClick={() => openSystem(s)}>
+                        <Eye />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-muted-foreground hover:text-[var(--danger-fg)]"
                         title={mayRegister ? "Delete" : "Requires role: business owner or administrator"}
                         disabled={!mayRegister}
                         onClick={async () => {
@@ -249,14 +253,14 @@ export default function Systems() {
                             showToast(`Delete failed: ${(e as Error).message}`, true);
                           }
                         }}
-                      >✕</button>
+                      ><Trash2 /></Button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       </div>
 
       {/* Engineer: choose AI-assisted vs manual */}

@@ -1,140 +1,104 @@
-/* Registry design system — same CSS variables and base styles */
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * shadcn/ui design tokens, seeded with the platform's SAP-Fiori palette so the
+ * migrated Alerts MFE keeps the exact brand-blue look. Colors are plain hex to
+ * match the existing values 1:1 (Tailwind v4 accepts any CSS color format).
+ */
 :root {
-  --brand: #0a6ed1;
+  --radius: 0.625rem; /* 10px — softer but still crisp; sm/md/lg/xl derive via calc() */
+
+  /* Monochrome Signal: zinc-neutral chrome, one blue accent, charts carry color. */
+  --background: #fafafa;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --primary: #0a6ed1;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #eef5fc;
+  --accent-foreground: #084fa3;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #0a6ed1;
+
+  /* ── Legacy design tokens ──
+     Still referenced by a few inline styles / re-themed markup in this MFE.
+     MUST move in lockstep with the shadcn neutrals above. */
+  --brand: #0a6ed1;      /* KEEP — platform SAP blue, shared across MFEs */
   --brand-hover: #084fa3;
-  --bg: #f5f6f7;
+  --bg: #fafafa;
   --surface: #ffffff;
-  --border: #e4e6e8;
-  --text: #1d2d3e;
-  --text-secondary: #556b82;
-  --radius: 8px;
-  --shadow: 0 0 0 1px rgba(34,54,73,.04), 0 2px 8px rgba(34,54,73,.06);
-  font-family: "72", "72full", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --text: #18181b;
+  --text-secondary: #71717a;
+  --danger: #dc2626;
+
+  /* Elevation: near-flat at rest (border carries separation), lifts on hover. */
+  --shadow-xs: 0 1px 2px 0 rgba(16, 24, 40, 0.05);
+  --shadow-md: 0 4px 12px -2px rgba(16, 24, 40, 0.08), 0 2px 6px -2px rgba(16, 24, 40, 0.05);
+  --shadow: var(--shadow-xs); /* safety alias for any stray consumer */
+
+  /* ── Governed semantic ramp ──
+     Single source for the ~10 ad-hoc status hexes across the widgets. */
+  --success: #16a34a;
+  --success-fg: #15803d;
+  --success-bg: #f0fdf4;
+  --warning: #d97706;
+  --warning-fg: #b45309;
+  --warning-bg: #fffbeb;
+  --danger-fg: #b91c1c;
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+
+  /* Faint chart-grid hairline (grid diet). */
+  --grid: color-mix(in srgb, var(--foreground) 8%, transparent);
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-size: 14px; }
 
-.page-header {
-  background: var(--surface); border-bottom: 1px solid var(--border);
-  padding: 0 24px; height: 56px;
-  display: flex; align-items: center; justify-content: space-between;
-  box-shadow: var(--shadow);
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 }
-.page-header h1 { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.mfe-badge {
-  background: var(--brand); color: #fff; font-size: 10px;
-  padding: 2px 8px; border-radius: 10px; font-weight: 500; letter-spacing: 0.5px;
-}
 
-.nav-tabs { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; }
-.nav-tab {
-  padding: 14px 20px; font-size: 14px; cursor: pointer;
-  color: var(--text-secondary); border-bottom: 3px solid transparent;
-  margin-bottom: -1px; font-weight: 500; user-select: none;
-}
-.nav-tab.active { color: var(--brand); border-bottom-color: var(--brand); }
-.nav-tab:hover:not(.active) { color: var(--text); }
-
-button {
-  border: none; border-radius: var(--radius); padding: 7px 16px; font-size: 14px;
-  cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background 0.12s;
-}
-button.btn-primary { background: var(--brand); color: #fff; font-weight: 500; }
-button.btn-primary:hover { background: var(--brand-hover); }
-button.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
-button.btn-ghost:hover { background: var(--bg); }
-button.btn-sm { padding: 4px 12px; font-size: 12px; }
-button.btn-danger { background: #bb0000; color: #fff; }
-button.btn-danger:hover { background: #9e0000; }
-button:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.health-banner {
-  display: none; background: #fde8e8; border-bottom: 2px solid #f5b8b8;
-  padding: 10px 24px; font-size: 13px; color: #8b0000; align-items: center; gap: 12px;
-}
-.health-banner.show { display: flex; }
-.health-banner a { cursor: pointer; text-decoration: underline; }
-
-.content { padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; }
-
-/* Alert cards */
-.alert-card {
-  background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
-  border-left: 4px solid var(--border); overflow: hidden;
-}
-.alert-card.error   { border-left-color: #bb0000; }
-.alert-card.warning { border-left-color: #e9a922; }
-
-.alert-card-header {
-  display: flex; align-items: center; gap: 12px;
-  padding: 14px 16px; cursor: pointer; user-select: none;
-}
-.alert-card-header:hover { background: #fafbfc; }
-
-.alert-severity-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.alert-card.error   .alert-severity-dot { background: #bb0000; }
-.alert-card.warning .alert-severity-dot { background: #e9a922; }
-
-.alert-category-badge {
-  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
-  text-transform: uppercase; letter-spacing: 0.4px; flex-shrink: 0;
-}
-.cat-risk         { background: #fde8e8; color: #8b0000; }
-.cat-compliance   { background: #fde8d0; color: #8b3a00; }
-.cat-observability{ background: #e8f0fb; color: #0a4a9e; }
-.cat-registry     { background: #d5f5e3; color: #1a5c35; }
-
-.alert-title { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; }
-.alert-entity-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #f0e8fb; color: #5a0a9e; flex-shrink: 0; }
-.alert-time  { font-size: 12px; color: var(--text-secondary); flex-shrink: 0; white-space: nowrap; }
-.alert-chevron { color: var(--text-secondary); font-size: 11px; transition: transform 0.15s; }
-.alert-card.expanded .alert-chevron { transform: rotate(90deg); }
-
-.alert-card-body { display: none; padding: 0 16px 14px; border-top: 1px solid var(--border); }
-.alert-card.expanded .alert-card-body { display: block; }
-.alert-description { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-top: 10px; }
-.alert-meta { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
-.alert-actions { margin-top: 12px; }
-
-.sev-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
-.sev-error   { background: #fde8e8; color: #8b0000; }
-.sev-warning { background: #fff3c4; color: #7a5900; }
-
-/* Rules */
-.rules-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; }
-.rule-card {
-  background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
-  padding: 16px; display: flex; flex-direction: column; gap: 8px;
-  transition: opacity 0.2s;
-}
-.rule-card.disabled { opacity: 0.6; }
-.rule-card-header { display: flex; align-items: center; gap: 8px; }
-.rule-name { font-size: 14px; font-weight: 600; flex: 1; }
-.rule-enabled-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
-.rule-enabled-badge.on  { background: #d5f5e3; color: #1a5c35; }
-.rule-enabled-badge.off { background: #eeeeee; color: #666; }
-.rule-description { font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
-.rule-meta { font-size: 11px; color: var(--text-secondary); }
-
-/* Empty state */
-.empty-state { text-align: center; padding: 80px 24px; color: var(--text-secondary); }
-.empty-state h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
-.empty-icon { font-size: 36px; margin-bottom: 16px; }
-
-/* Toast */
-.toast-container {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-  z-index: 9999; display: flex; flex-direction: column; gap: 8px; align-items: center;
-}
-.toast {
-  background: #1d2d3e; color: #fff; padding: 10px 20px; border-radius: var(--radius);
-  font-size: 13px; animation: fadeIn 0.2s ease;
-}
-.toast.error { background: #bb0000; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-
-.category-group-header {
-  font-size: 11px; font-weight: 600; color: var(--text-secondary);
-  text-transform: uppercase; letter-spacing: 0.4px;
-  padding: 8px 0 4px; margin-top: 4px;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "72", "72full", -apple-system, BlinkMacSystemFont, "Segoe UI",
+      Arial, sans-serif;
+    font-size: 14px;
+  }
 }

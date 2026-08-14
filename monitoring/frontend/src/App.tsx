@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { Outlet } from "react-router";
+import { Activity, Loader2 } from "lucide-react";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { HEALTH_URL } from "./api/client";
 
@@ -39,22 +40,46 @@ export default function App() {
 
   return (
     <ToastContext.Provider value={showToast}>
-      <div className="page-header">
-        <h1>Monitoring <span className="mfe-badge">Live</span></h1>
-      </div>
+      <header className="flex h-14 items-center justify-between border-b border-border bg-card px-6">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+            <Activity className="size-5" />
+          </span>
+          <div className="flex flex-col justify-center">
+            <h1 className="flex items-center gap-2.5 text-lg font-semibold tracking-[-0.01em]">
+              Monitoring
+              <span className="rounded-full bg-[var(--brand)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white">
+                Live
+              </span>
+            </h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">Live observability signals</p>
+          </div>
+        </div>
+      </header>
 
       {backendOk === false && (
-        <div className="health-banner show">
-          <span className="spinner" style={{ borderTopColor: "#8b0000", borderColor: "#f5b8b8", width: 14, height: 14 }} />
-          <span>Backend is unavailable. Retrying in 5 s…</span>
-          <button className="btn-link" onClick={checkHealth}>Retry now</button>
+        <div className="flex items-center gap-3 border-b border-[var(--danger-border)] bg-[var(--danger-bg)] px-6 py-2.5 text-[13px] text-[var(--danger-fg)]">
+          <Loader2 className="size-3.5 animate-spin" />
+          <span>Backend is unavailable. Retrying in 5&nbsp;s…</span>
+          <button
+            className="cursor-pointer border-none bg-transparent p-0 font-semibold text-[var(--danger-fg)] underline"
+            onClick={checkHealth}
+          >
+            Retry now
+          </button>
         </div>
       )}
 
       <Outlet />
 
       {toast && (
-        <div className={`toast show${toast.isError ? " error" : ""}`}>{toast.msg}</div>
+        <div className="fixed bottom-6 right-6 z-[2000] flex items-center gap-2.5 rounded-xl bg-foreground px-5 py-3 text-sm text-background shadow-[var(--shadow-md)]">
+          <span
+            className="size-1.5 shrink-0 rounded-full"
+            style={{ background: toast.isError ? "var(--destructive)" : "var(--success)" }}
+          />
+          {toast.msg}
+        </div>
       )}
     </ToastContext.Provider>
   );

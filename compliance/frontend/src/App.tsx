@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { Outlet } from "react-router";
+import { Loader2 } from "lucide-react";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { HEALTH_URL } from "./api/client";
+import { cn } from "@/lib/utils";
 
 type ShowToast = (msg: string, isError?: boolean) => void;
 
@@ -45,15 +47,22 @@ export default function App() {
   return (
     <ToastContext.Provider value={showToast}>
       {backendOk === false && (
-        <div className="health-banner show">
-          <span className="spinner" style={{ borderTopColor: "#8b0000", borderColor: "#f5b8b8", width: 14, height: 14 }} />
+        <div className="flex items-center gap-2 border-b border-[var(--danger-border,var(--destructive))] bg-[var(--danger-bg,#fef2f2)] px-4 py-2 text-[13px] text-[var(--danger-fg,var(--destructive))]">
+          <Loader2 className="size-3.5 animate-spin" />
           <span>Backend is unavailable. Retrying in 5 s…</span>
-          <a onClick={checkHealth}>Retry now</a>
+          <a className="cursor-pointer font-medium underline" onClick={checkHealth}>Retry now</a>
         </div>
       )}
       <Outlet />
       {toast && (
-        <div className={`toast show${toast.isError ? " error" : ""}`}>{toast.msg}</div>
+        <div
+          className={cn(
+            "fixed bottom-5 right-5 z-50 rounded-md px-4 py-2.5 text-[13px] font-medium text-white shadow-lg",
+            toast.isError ? "bg-[var(--destructive)]" : "bg-foreground",
+          )}
+        >
+          {toast.msg}
+        </div>
       )}
     </ToastContext.Provider>
   );

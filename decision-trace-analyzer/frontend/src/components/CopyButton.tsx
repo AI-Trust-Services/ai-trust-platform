@@ -1,6 +1,4 @@
-import "@ui5/webcomponents-icons/dist/copy.js";
-import "@ui5/webcomponents-icons/dist/accept.js";
-import { Icon } from "@ui5/webcomponents-react";
+import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 
 interface Props {
@@ -30,7 +28,7 @@ export function CopyButton({ value, title = "Copy" }: Props) {
       title={copied ? "Copied!" : title}
       style={styles.btn}
     >
-      <Icon name={copied ? "accept" : "copy"} style={styles.icon} />
+      {copied ? <Check style={styles.icon} /> : <Copy style={styles.icon} />}
     </button>
   );
 }

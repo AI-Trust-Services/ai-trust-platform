@@ -1,4 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { MoreVertical } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
 export interface MenuItem {
   id?: string;
@@ -13,41 +20,31 @@ interface Props {
 }
 
 export default function KebabMenu({ items }: Props) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [open]);
-
   return (
-    <div className="kebab-wrap" ref={ref}>
-      <button
-        className="btn-icon kebab-btn"
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
-        aria-label="More actions"
-      >
-        ⋮
-      </button>
-      {open && (
-        <div className="kebab-menu">
-          {items.map((item, idx) => (
-            <button
-              key={item.id ?? idx}
-              className={`kebab-item${item.danger ? " kebab-item--danger" : ""}`}
-              disabled={item.disabled}
-              onClick={(e) => { e.stopPropagation(); setOpen(false); item.onClick(); }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 text-muted-foreground"
+          aria-label="More actions"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreVertical />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {items.map((item, idx) => (
+          <DropdownMenuItem
+            key={item.id ?? idx}
+            variant={item.danger ? "destructive" : "default"}
+            disabled={item.disabled}
+            onClick={(e) => { e.stopPropagation(); item.onClick(); }}
+          >
+            {item.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

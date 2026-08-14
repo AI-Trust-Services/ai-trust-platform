@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Check, Plus } from "lucide-react";
 import { useToast } from "../App";
 import { api } from "../api/client";
 import { CustomRoleModal } from "../components/CustomRoleModal";
@@ -6,6 +7,10 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import type { CustomRole, RoleInfo } from "../types";
 import { usePermissions } from "../hooks/usePermissions";
 import { ROLE_LABELS, PERMISSION_LABELS } from "../constants";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   platform_administrator: "Full access to all features and user management.",
@@ -16,21 +21,21 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   executive: "High-level read access to systems and monitoring dashboards.",
 };
 
-const PERMISSION_LABELS: Record<string, string> = {
-  "systems:read": "View AI systems",
-  "systems:write": "Create & edit AI systems",
-  "assessments:read": "View assessments",
-  "assessments:write": "Create & edit assessments",
-  "assessments:approve": "Approve assessments",
-  "evidence:read": "View evidence",
-  "evidence:write": "Upload & edit evidence",
-  "evidence:approve": "Approve evidence",
-  "alerts:read": "View alerts",
-  "alerts:handle": "Handle & resolve alerts",
-  "alerts:manage_rules": "Manage alert rules",
-  "monitoring:read": "View monitoring data",
-  "iam:manage": "Manage users & roles",
-};
+function PermList({ permissions }: { permissions: string[] }) {
+  if (permissions.length === 0) {
+    return <div className="text-sm text-muted-foreground">No permissions assigned</div>;
+  }
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {permissions.map((p) => (
+        <li key={p} className="flex items-center gap-2 text-sm text-foreground">
+          <Check className="size-3.5 shrink-0 text-[var(--success-fg)]" />
+          {PERMISSION_LABELS[p] ?? p}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default function RolesPage() {
   const showToast = useToast();
@@ -84,92 +89,78 @@ export default function RolesPage() {
   }
 
   return (
-    <div className="page">
-      <div className="page-header">
+    <div className="mx-auto max-w-[1200px] px-6 py-6">
+      <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <div className="page-title">Roles &amp; Permissions</div>
-          <div className="page-subtitle">Built-in roles and custom roles for this platform</div>
+          <h1 className="text-xl font-semibold text-foreground">Roles &amp; Permissions</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Built-in roles and custom roles for this platform</p>
         </div>
         {isAdmin && (
-          <button className="btn btn-primary" onClick={() => { setEditTarget(null); setModalOpen(true); }}>
-            + Create Role
-          </button>
+          <Button onClick={() => { setEditTarget(null); setModalOpen(true); }}>
+            <Plus className="size-4" /> Create Role
+          </Button>
         )}
       </div>
 
-      {loading && <div className="empty">Loading…</div>}
+      {loading && <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>}
 
       {!loading && error && (
-        <div className="error-banner">Failed to load roles: {error}</div>
+        <Alert variant="destructive">
+          <AlertDescription>Failed to load roles: {error}</AlertDescription>
+        </Alert>
       )}
 
       {!loading && !error && (
         <>
-          <div className="roles-section-title">Built-in Roles</div>
-          <div className="roles-grid" style={{ marginBottom: 32 }}>
+          <div className="mb-3 text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Built-in Roles
+          </div>
+          <div className="mb-8 grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
             {builtins.map(role => (
-              <div key={role.name} className="role-card">
-                <div className="role-card-header">
-                  <div className="role-card-name">{ROLE_LABELS[role.name] ?? role.name}</div>
+              <Card key={role.name} className="flex flex-col gap-3 p-5">
+                <div>
+                  <div className="text-[15px] font-semibold text-foreground">{ROLE_LABELS[role.name] ?? role.name}</div>
                   {ROLE_DESCRIPTIONS[role.name] && (
-                    <div className="role-card-desc">{ROLE_DESCRIPTIONS[role.name]}</div>
+                    <div className="mt-1 text-[13px] text-muted-foreground">{ROLE_DESCRIPTIONS[role.name]}</div>
                   )}
                 </div>
-                <ul className="perm-list">
-                  {role.permissions.map(p => (
-                    <li key={p} className="perm-item">
-                      <span className="perm-check">✓</span>
-                      {PERMISSION_LABELS[p] ?? p}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                <PermList permissions={role.permissions} />
+              </Card>
             ))}
           </div>
 
-          <div className="roles-section-title">
+          <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">
             Custom Roles
-            <span className="roles-section-count">{customRoles.length}</span>
+            <Badge variant="secondary">{customRoles.length}</Badge>
           </div>
           {customRoles.length === 0 ? (
-            <div className="empty" style={{ padding: "32px 0" }}>
-              No custom roles yet.{isAdmin && " Click \"+ Create Role\" to add one."}
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              No custom roles yet.{isAdmin && " Click \"Create Role\" to add one."}
             </div>
           ) : (
-            <div className="roles-grid">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
               {customRoles.map(role => (
-                <div key={role.id} className="role-card role-card-custom">
-                  <div className="role-card-header">
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                      <div>
-                        <div className="role-card-name">{role.name}</div>
-                        {role.description && (
-                          <div className="role-card-desc">{role.description}</div>
-                        )}
-                      </div>
-                      {isAdmin && (
-                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                          <button className="btn btn-sm btn-secondary" onClick={() => { setEditTarget(role); setModalOpen(true); }}>
-                            Edit
-                          </button>
-                          <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(role)}>
-                            Delete
-                          </button>
-                        </div>
+                <Card key={role.id} className="flex flex-col gap-3 border-l-2 border-l-primary p-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-[15px] font-semibold text-foreground">{role.name}</div>
+                      {role.description && (
+                        <div className="mt-1 text-[13px] text-muted-foreground">{role.description}</div>
                       )}
                     </div>
+                    {isAdmin && (
+                      <div className="flex shrink-0 gap-1.5">
+                        <Button variant="secondary" size="sm" onClick={() => { setEditTarget(role); setModalOpen(true); }}>
+                          Edit
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(role)}>
+                          Delete
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                  <ul className="perm-list">
-                    {role.permissions.length === 0 ? (
-                      <li className="perm-item" style={{ color: "#aab4be" }}>No permissions assigned</li>
-                    ) : role.permissions.map(p => (
-                      <li key={p} className="perm-item">
-                        <span className="perm-check">✓</span>
-                        {PERMISSION_LABELS[p] ?? p}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                  <PermList permissions={role.permissions} />
+                </Card>
               ))}
             </div>
           )}

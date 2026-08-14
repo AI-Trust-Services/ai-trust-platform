@@ -1,9 +1,20 @@
 import { useState, useEffect, Fragment } from "react";
+import { Loader2, ChevronDown, ChevronRight, Copy } from "lucide-react";
 import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
-import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard } from "../utils";
+import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS } from "../utils";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import type { AISystem, ModelCard, WorkflowStep, UserSummary } from "../types";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 
 export type UserMap = Record<string, { firstName: string; lastName: string }>;
 
@@ -13,13 +24,22 @@ function userName(username: string, userMap?: UserMap): string {
   return full || username;
 }
 
+function Section({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-6 last:mb-0">
+      {title && <h3 className="mb-3 text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>}
+      {children}
+    </div>
+  );
+}
+
 function DetailGrid({ rows }: { rows: ([string, React.ReactNode] | false | null | undefined)[] }) {
   return (
-    <div className="detail-grid">
+    <div className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2 text-[13px]">
       {rows.filter((r): r is [string, React.ReactNode] => Array.isArray(r)).map(([label, value]) => (
         <Fragment key={label}>
-          <span className="detail-label">{label}</span>
-          <span className="detail-value">{value}</span>
+          <span className="font-medium text-muted-foreground">{label}</span>
+          <span className="text-foreground">{value}</span>
         </Fragment>
       ))}
     </div>
@@ -29,23 +49,21 @@ function DetailGrid({ rows }: { rows: ([string, React.ReactNode] | false | null 
 function FlagPanel({ title, flags }: { title: string; flags: [unknown, string][] }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="panel" style={{ marginBottom: 10 }}>
-      <div className="panel-header" onClick={() => setOpen((o) => !o)} style={{ cursor: "pointer" }}>
-        {title} <span>{open ? "▼" : "▶"}</span>
-      </div>
-      {open && (
-        <div className="panel-body">
-          <div className="check-grid">
-            {flags.map(([val, label]) => (
-              <label key={label} className="check-item">
-                <input type="checkbox" checked={!!val} disabled readOnly />
-                <span style={{ color: val ? "var(--text)" : "var(--text-secondary)" }}>{label}</span>
-              </label>
-            ))}
-          </div>
+    <Collapsible open={open} onOpenChange={setOpen} className="mb-2.5 overflow-hidden rounded-md border border-border">
+      <CollapsibleTrigger className="flex w-full items-center justify-between bg-muted/40 px-4 py-2.5 text-sm font-medium">
+        {title} {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="p-4">
+        <div className="grid grid-cols-2 gap-2">
+          {flags.map(([val, label]) => (
+            <label key={label} className="flex items-start gap-2 text-sm">
+              <Checkbox checked={!!val} disabled className="mt-0.5" />
+              <span className={val ? "text-foreground" : "text-muted-foreground"}>{label}</span>
+            </label>
+          ))}
         </div>
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -127,26 +145,39 @@ function WorkflowProgress({
 
   const phase = workflowPhase(system.workflow_status);
 
+  // WORKFLOW STEPPER — no shadcn primitive maps to this; kept as styled markup
+  // re-themed onto the new tokens. Logic and data unchanged.
   return (
-    <div className="wf-progress-wrap">
-      <div className="wf-progress">
+    <div>
+      <div className="flex items-center">
         {WF_PHASES.map((p, i) => {
           const phaseNum = i + 1;
           const isDone = phase > phaseNum;
           const isActive = phase === phaseNum;
           const isOutcome = p.key === "outcome";
           const outcomeLabel = system.workflow_status === "approved" ? "Approved" : system.workflow_status === "rejected" ? "Rejected" : "Outcome";
-          const outcomeClass = system.workflow_status === "approved" ? " wf-phase-approved" : system.workflow_status === "rejected" ? " wf-phase-rejected" : "";
+          const dotClass = isDone
+            ? "bg-[var(--success)] text-white"
+            : isActive
+              ? isOutcome && system.workflow_status === "approved"
+                ? "bg-[var(--success)] text-white"
+                : isOutcome && system.workflow_status === "rejected"
+                  ? "bg-[var(--danger-fg)] text-white"
+                  : "bg-[var(--brand)] text-white"
+              : "border border-border bg-card text-muted-foreground";
+          const lineDone = isDone || (isActive && !isOutcome);
           return (
             <Fragment key={p.key}>
-              <div className={`wf-phase${isDone ? " wf-phase-done" : isActive ? " wf-phase-active" + (isOutcome ? outcomeClass : "") : ""}`}>
-                <div className="wf-phase-dot">
+              <div className="flex flex-col items-center gap-1.5">
+                <div className={cn("flex size-7 items-center justify-center rounded-full text-xs font-semibold", dotClass)}>
                   {isDone ? "✓" : phaseNum}
                 </div>
-                <div className="wf-phase-label">{isOutcome ? outcomeLabel : p.label}</div>
+                <div className={cn("whitespace-nowrap text-[11px]", isDone || isActive ? "font-medium text-foreground" : "text-muted-foreground")}>
+                  {isOutcome ? outcomeLabel : p.label}
+                </div>
               </div>
               {i < WF_PHASES.length - 1 && (
-                <div className={`wf-phase-line${isDone || (isActive && !isOutcome) ? " wf-phase-line-done" : ""}`} />
+                <div className={cn("mx-1 mb-5 h-0.5 flex-1", lineDone ? "bg-[var(--brand)]" : "bg-border")} />
               )}
             </Fragment>
           );
@@ -154,16 +185,16 @@ function WorkflowProgress({
       </div>
 
       {(system.assignee_username || system.compliance_officer_username) && (
-        <div style={{ display: "flex", gap: 24, marginTop: 12, fontSize: 13, color: "var(--text-secondary)" }}>
+        <div className="mt-3 flex gap-6 text-[13px] text-muted-foreground">
           {system.workflow_status !== "approved" && system.assignee_username && (
             <span>
-              <span style={{ fontWeight: 600 }}>Assigned to: </span>
+              <span className="font-semibold">Assigned to: </span>
               {userName(system.assignee_username, userMap)}
             </span>
           )}
           {system.compliance_officer_username && system.workflow_status !== "approved" && (
             <span>
-              <span style={{ fontWeight: 600 }}>Compliance officer: </span>
+              <span className="font-semibold">Compliance officer: </span>
               {userName(system.compliance_officer_username, userMap)}
             </span>
           )}
@@ -171,30 +202,30 @@ function WorkflowProgress({
       )}
 
       {canAct && !rejectOpen && (
-        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-          <button className="btn-primary" onClick={handleApprove} disabled={acting}>
-            {acting && <span className="spinner" />} Approve
-          </button>
-          <button className="btn-ghost" style={{ color: "var(--danger, #c0392b)" }}
+        <div className="mt-4 flex gap-2">
+          <Button onClick={handleApprove} disabled={acting}>
+            {acting && <Loader2 className="animate-spin" />} Approve
+          </Button>
+          <Button variant="ghost" className="text-[var(--danger-fg)] hover:text-[var(--danger-fg)]"
             onClick={() => { setRejectOpen(true); setRejectAssignee(lastSubmitter || ""); }}
             disabled={acting}>
             Reject…
-          </button>
+          </Button>
         </div>
       )}
 
       {canAct && rejectOpen && (
-        <div className="panel" style={{ marginTop: 16 }}>
-          <div className="panel-header">Reject System</div>
-          <div className="panel-body">
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label className="required" htmlFor="reject_note">Rejection Note</label>
-              <textarea id="reject_note" rows={3} value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} placeholder="Explain what needs to be changed…" />
+        <div className="mt-4 overflow-hidden rounded-md border border-border">
+          <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Reject System</div>
+          <div className="p-4">
+            <div className="mb-3 flex flex-col gap-1.5">
+              <Label htmlFor="reject_note">Rejection Note <span className="text-[var(--danger-fg)]">*</span></Label>
+              <Textarea id="reject_note" rows={3} value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} placeholder="Explain what needs to be changed…" />
             </div>
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label className="required" htmlFor="reject_engineer">Reassign to AI Engineer</label>
-              <select className="form-select" id="reject_engineer" value={rejectAssignee} onChange={(e) => setRejectAssignee(e.target.value)}>
-                <option value="">Choose AI Engineer</option>
+            <div className="mb-3 flex flex-col gap-1.5">
+              <Label htmlFor="reject_engineer">Reassign to AI Engineer <span className="text-[var(--danger-fg)]">*</span></Label>
+              <select className={SELECT_CLASS} id="reject_engineer" value={rejectAssignee} onChange={(e) => setRejectAssignee(e.target.value)}>
+                <option value="">— select an engineer —</option>
                 {engineers.map((u) => (
                   <option key={u.username} value={u.username}>
                     {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username} ({u.username})
@@ -202,11 +233,11 @@ function WorkflowProgress({
                 ))}
               </select>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-ghost" onClick={() => { setRejectOpen(false); setRejectNote(""); setRejectAssignee(""); }}>Cancel</button>
-              <button className="btn-danger" onClick={handleReject} disabled={acting}>
-                {acting && <span className="spinner" />} Confirm Rejection
-              </button>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => { setRejectOpen(false); setRejectNote(""); setRejectAssignee(""); }}>Cancel</Button>
+              <Button variant="destructive" onClick={handleReject} disabled={acting}>
+                {acting && <Loader2 className="animate-spin" />} Confirm Rejection
+              </Button>
             </div>
           </div>
         </div>
@@ -228,29 +259,32 @@ function WorkflowTab({ system, userMap }: { system: AISystem; userMap?: UserMap 
       .finally(() => setLoading(false));
   }, [system.id, system.workflow_status]);
 
-  if (loading) return <div className="tab-panel active" style={{ padding: 24, color: "var(--text-secondary)" }}>Loading…</div>;
+  if (loading) return <div className="py-6 text-muted-foreground">Loading…</div>;
 
+  // VERTICAL TIMELINE — kept as styled markup re-themed onto the new tokens.
   return (
-    <div className="tab-panel active">
-      <div className="workflow-timeline">
-        {steps.map((s, i) => (
-          <div key={s.id} className={`wf-step${i === steps.length - 1 ? " wf-step-last" : ""}`}>
-            <div className={`wf-dot wf-dot-done${s.step === "rejected" ? " wf-dot-rejected" : s.step === "approved" ? " wf-dot-approved" : ""}`} />
-            <div className="wf-content">
-              <div className="wf-label">{STEP_LABELS[s.step] || s.step}</div>
-              <div className="wf-meta">
-                by <strong>{userName(s.actor_username, userMap)}</strong>
-                {s.assignee_username && <> → assigned to <strong>{userName(s.assignee_username, userMap)}</strong></>}
-                <span style={{ marginLeft: 8, color: "var(--text-secondary)", fontSize: 12 }}>{fmtDateTime(s.created_at)}</span>
+    <div className="flex flex-col">
+      {steps.map((s, i) => {
+        const dotColor = s.step === "rejected" ? "bg-[var(--danger-fg)]" : s.step === "approved" ? "bg-[var(--success)]" : "bg-[var(--brand)]";
+        return (
+          <div key={s.id} className="relative flex gap-3 pb-5 last:pb-0">
+            {i < steps.length - 1 && <span className="absolute left-[5px] top-3 h-full w-px bg-border" />}
+            <span className={cn("relative z-10 mt-1 size-2.5 shrink-0 rounded-full", dotColor)} />
+            <div className="-mt-0.5">
+              <div className="text-sm font-medium">{STEP_LABELS[s.step] || s.step}</div>
+              <div className="text-xs text-muted-foreground">
+                by <strong className="text-foreground">{userName(s.actor_username, userMap)}</strong>
+                {s.assignee_username && <> → assigned to <strong className="text-foreground">{userName(s.assignee_username, userMap)}</strong></>}
+                <span className="ml-2 text-muted-foreground">{fmtDateTime(s.created_at)}</span>
               </div>
-              {s.note && <div className="wf-note">"{s.note}"</div>}
+              {s.note && <div className="mt-1 rounded-md bg-muted px-2.5 py-1.5 text-[13px] italic">"{s.note}"</div>}
             </div>
           </div>
-        ))}
-        {steps.length === 0 && (
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>No workflow history yet.</div>
-        )}
-      </div>
+        );
+      })}
+      {steps.length === 0 && (
+        <div className="text-[13px] text-muted-foreground">No workflow history yet.</div>
+      )}
     </div>
   );
 }
@@ -274,6 +308,7 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
   const showToast = useToast();
   const { mayWrite } = useModalControls();
   const NO_WRITE_TITLE = "Requires permission: systems:write";
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   async function handleSave() {
     setSaving(true);
@@ -287,82 +322,56 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
   }
 
   return (
-    <div className="tab-panel active">
-      <div className="msg-strip info" style={{ marginBottom: 16 }}>Changes to identity and purpose fields only. Classification flags are immutable after registration.</div>
-
-      <div className="form-grid">
-        <div className="form-group">
-          <label className="required" htmlFor="edit_name">System Name</label>
-          <input id="edit_name" type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-        </div>
-        <div className="form-group">
-          <label htmlFor="edit_version">Version</label>
-          <input id="edit_version" type="text" value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} />
-        </div>
-        <div className="form-group">
-          <label htmlFor="edit_provider">Provider</label>
-          <input id="edit_provider" type="text" value={form.provider} onChange={e => setForm(f => ({ ...f, provider: e.target.value }))} />
-        </div>
-        <div className="form-group">
-          <label htmlFor="edit_org_name">Organisation</label>
-          <input id="edit_org_name" type="text" value={form.org_name} onChange={e => setForm(f => ({ ...f, org_name: e.target.value }))} />
-        </div>
-        <div className="form-group">
-          <label htmlFor="edit_org_role">Role</label>
-          <select id="edit_org_role" className="form-select" value={form.org_role} onChange={e => setForm(f => ({ ...f, org_role: e.target.value }))}>
+    <div>
+      <Alert variant="info" className="mb-4">Changes to identity and purpose fields only. Classification flags are immutable after registration.</Alert>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-1.5"><Label htmlFor="edit_name">System Name <span className="text-[var(--danger-fg)]">*</span></Label><Input type="text" id="edit_name" value={form.name} onChange={set("name")} /></div>
+        <div className="flex flex-col gap-1.5"><Label htmlFor="edit_version">Version</Label><Input type="text" id="edit_version" value={form.version} onChange={set("version")} /></div>
+        <div className="flex flex-col gap-1.5"><Label htmlFor="edit_provider">Provider</Label><Input type="text" id="edit_provider" value={form.provider} onChange={set("provider")} /></div>
+        <div className="flex flex-col gap-1.5"><Label htmlFor="edit_org_name">Organisation</Label><Input type="text" id="edit_org_name" value={form.org_name} onChange={set("org_name")} /></div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="edit_org_role">Role</Label>
+          <select className={SELECT_CLASS} id="edit_org_role" value={form.org_role} onChange={set("org_role")}>
             <option value="provider">Provider</option>
             <option value="deployer">Deployer</option>
             <option value="importer">Importer</option>
             <option value="distributor">Distributor</option>
           </select>
         </div>
-        <div className="form-group">
-          <label htmlFor="edit_country">Country</label>
-          <input id="edit_country" type="text" maxLength={2} value={form.provider_country} onChange={e => setForm(f => ({ ...f, provider_country: e.target.value }))} />
-        </div>
-        <div className="form-group">
-          <label htmlFor="edit_system_type">System Type</label>
-          <select id="edit_system_type" className="form-select" value={form.system_type} onChange={e => setForm(f => ({ ...f, system_type: e.target.value }))}>
+        <div className="flex flex-col gap-1.5"><Label htmlFor="edit_country">Country</Label><Input type="text" id="edit_country" value={form.provider_country} onChange={set("provider_country")} maxLength={2} /></div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="edit_system_type">System Type</Label>
+          <select className={SELECT_CLASS} id="edit_system_type" value={form.system_type} onChange={set("system_type")}>
             <option value="application">Application</option>
             <option value="model">Model</option>
             <option value="component">Component</option>
             <option value="service">Service</option>
           </select>
         </div>
-        <div className="form-group">
-          <label htmlFor="edit_autonomy">Autonomy Level</label>
-          <select id="edit_autonomy" className="form-select" value={form.autonomy_level} onChange={e => setForm(f => ({ ...f, autonomy_level: e.target.value }))}>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="edit_autonomy">Autonomy Level</Label>
+          <select className={SELECT_CLASS} id="edit_autonomy" value={form.autonomy_level} onChange={set("autonomy_level")}>
             <option value="decision_support">Decision support</option>
             <option value="human_in_the_loop">Human in the loop</option>
             <option value="human_on_the_loop">Human on the loop</option>
             <option value="fully_automated">Fully automated</option>
           </select>
         </div>
-        <div className="form-group">
-          <label htmlFor="edit_lifecycle">Lifecycle State</label>
-          <select id="edit_lifecycle" className="form-select" value={form.lifecycle} onChange={e => setForm(f => ({ ...f, lifecycle: e.target.value }))}>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="edit_lifecycle">Lifecycle State</Label>
+          <select className={SELECT_CLASS} id="edit_lifecycle" value={form.lifecycle} onChange={set("lifecycle")}>
             {Object.entries(LIFECYCLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
-        <div className="form-group">
-          <label htmlFor="edit_app_url">Application URL</label>
-          <input id="edit_app_url" type="url" value={form.application_url} onChange={e => setForm(f => ({ ...f, application_url: e.target.value }))} />
-        </div>
-        <div className="form-group form-group-wide">
-          <label htmlFor="edit_description">Description</label>
-          <textarea id="edit_description" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-        </div>
-        <div className="form-group form-group-wide">
-          <label htmlFor="edit_purpose">Intended Purpose</label>
-          <textarea id="edit_purpose" rows={3} value={form.intended_purpose} onChange={e => setForm(f => ({ ...f, intended_purpose: e.target.value }))} />
-        </div>
+        <div className="flex flex-col gap-1.5"><Label htmlFor="edit_app_url">Application URL</Label><Input type="url" id="edit_app_url" value={form.application_url} onChange={set("application_url")} /></div>
+        <div className="col-span-2 flex flex-col gap-1.5"><Label htmlFor="edit_description">Description</Label><Textarea id="edit_description" rows={3} value={form.description} onChange={set("description")} /></div>
+        <div className="col-span-2 flex flex-col gap-1.5"><Label htmlFor="edit_purpose">Intended Purpose</Label><Textarea id="edit_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} /></div>
       </div>
-
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, gap: 8 }}>
-        <button className="btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={handleSave} disabled={saving || !mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE}>
-          {saving && <span className="spinner" />} Save Changes
-        </button>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSave} disabled={saving || !mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE}>
+          {saving && <Loader2 className="animate-spin" />} Save Changes
+        </Button>
       </div>
     </div>
   );
@@ -399,43 +408,41 @@ function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models
   }
 
   return (
-    <div className="tab-panel active">
+    <div>
       {system.model_id ? (
-        <div className="detail-section">
-          <h3>Currently Linked Model</h3>
-          <div className="model-link-box linked">
-            <div className="model-link-name">{linkedModel ? linkedModel.name : system.model_id}</div>
-            <div className="model-link-meta">
+        <Section title="Currently Linked Model">
+          <div className="rounded-md border border-border bg-muted/30 p-4">
+            <div className="font-medium">{linkedModel ? linkedModel.name : system.model_id}</div>
+            <div className="mt-0.5 text-[13px] text-muted-foreground">
               {linkedModel ? `${linkedModel.provider} · ${linkedModel.model_type} · v${linkedModel.version}` : system.model_id}
               {linkedModel?.inference_url && (
-                <> · <a href={linkedModel.inference_url} target="_blank" rel="noreferrer" style={{ color: "var(--brand)" }}>{linkedModel.inference_url}</a></>
+                <> · <a href={linkedModel.inference_url} target="_blank" rel="noreferrer" className="text-[var(--brand)]">{linkedModel.inference_url}</a></>
               )}
             </div>
-            {linkedModel?.description && <div style={{ marginTop: 6, fontSize: 13, color: "var(--text-secondary)" }}>{linkedModel.description}</div>}
+            {linkedModel?.description && <div className="mt-1.5 text-[13px] text-muted-foreground">{linkedModel.description}</div>}
           </div>
-          <button className="btn-ghost" style={{ marginTop: 4 }} disabled={!mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE} onClick={handleUnlink}>Unlink Model</button>
-        </div>
+          <Button variant="ghost" className="mt-2" disabled={!mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE} onClick={handleUnlink}>Unlink Model</Button>
+        </Section>
       ) : (
-        <div className="msg-strip info" style={{ marginBottom: 16 }}>No model card is linked to this system yet.</div>
+        <Alert variant="info" className="mb-4">No model card is linked to this system yet.</Alert>
       )}
-      <div className="detail-section">
-        <h3>Link a Model Card</h3>
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 12 }}>
-          <div className="form-group" style={{ flex: 1 }}>
-            <label htmlFor="modelLinkSelect">Select model from catalog</label>
-            <select className="form-select" id="modelLinkSelect" value={selectedModelId} onChange={(e) => setSelectedModelId(e.target.value)}>
+      <Section title="Link a Model Card">
+        <div className="mb-3 flex items-end gap-2">
+          <div className="flex flex-1 flex-col gap-1.5">
+            <Label htmlFor="modelLinkSelect">Select model from catalog</Label>
+            <select className={SELECT_CLASS} id="modelLinkSelect" value={selectedModelId} onChange={(e) => setSelectedModelId(e.target.value)}>
               <option value="">— choose a model —</option>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>{m.name} ({m.provider} · {m.model_type})</option>
               ))}
             </select>
           </div>
-          <button className="btn-primary" onClick={handleLink} disabled={linking || !mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE}>Link</button>
+          <Button onClick={handleLink} disabled={linking || !mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE}>Link</Button>
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+        <div className="text-xs text-muted-foreground">
           Linking a model records which LLM or AI model powers this system. One system can have at most one linked model.
         </div>
-      </div>
+      </Section>
     </div>
   );
 }
@@ -456,17 +463,16 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
 
   useEffect(() => { setSystem(initialSystem); setTab("overview"); }, [initialSystem]);
 
-  if (!system) return null;
-
   function handleSystemUpdate(updated: AISystem) {
     setSystem(updated);
     onUpdate(updated);
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete "${system!.name}"?\n\nThis action cannot be undone.`)) return;
+    if (!system) return;
+    if (!confirm(`Delete "${system.name}"?\n\nThis action cannot be undone.`)) return;
     try {
-      await api.deleteSystem(system!.id);
+      await api.deleteSystem(system.id);
       onClose();
       showToast("System deleted");
       onDelete();
@@ -476,136 +482,132 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
   }
 
   return (
-    <>
-      <div className={`detail-overlay${open ? " open" : ""}`} onClick={onClose} />
-      <div className={`detail-panel${open ? " open" : ""}`}>
-        <div className="modal-header">
-          <div>
-            <h2>{system.name}</h2>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
-              {system.id} · v{system.version} &nbsp;
-              <TierBadge tier={system.tier} workflowStatus={system.workflow_status} /> <LifecycleBadge lc={system.lifecycle} />
-            </div>
-          </div>
-          <button className="btn-close" onClick={onClose}>×</button>
-        </div>
-
-        <div className="tab-bar">
-          {["overview", "workflow", "model", "edit"].map((t) => (
-            <div key={t} className={`tab${tab === t ? " active" : ""}`} onClick={() => setTab(t)}>
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </div>
-          ))}
-        </div>
-
-        <div className="modal-body">
-          {tab === "overview" && (
-            <div className="tab-panel active">
-              <div className="detail-section">
-                <WorkflowProgress system={system} onSystemUpdate={handleSystemUpdate} userMap={userMap} />
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl">
+        {system && (
+          <>
+            <SheetHeader>
+              <SheetTitle>{system.name}</SheetTitle>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>{system.id} · v{system.version}</span>
+                <TierBadge tier={system.tier} workflowStatus={system.workflow_status} />
+                <LifecycleBadge lc={system.lifecycle} />
               </div>
-              <div className="detail-section">
-                <h3>Identity</h3>
-                <DetailGrid rows={[
-                  ["Name", system.name],
-                  ["Version", system.version],
-                  ["Provider", system.provider || "—"],
-                  ["Organisation", system.org_name || "—"],
-                  ["Role", system.org_role],
-                  ["Country", system.provider_country],
-                  ["System Type", system.system_type],
-                  ["Autonomy Level", (system.autonomy_level || "").replace(/_/g, " ")],
-                  !!system.application_url && ["Application URL", <a key="url" href={system.application_url} target="_blank" rel="noreferrer" style={{ color: "var(--brand)" }}>{system.application_url}</a>],
-                ]} />
-                <div style={{ marginTop: 16, padding: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius)" }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 8 }}>Telemetry Configuration</div>
-                  <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>Use this system ID as the telemetry service name (e.g. <code style={{ fontFamily: "monospace" }}>OTEL_SERVICE_NAME</code>) to link telemetry to this system:</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <code style={{ fontSize: 12, fontFamily: "monospace", flex: 1 }}>{system.id}</code>
-                    <button className="btn-ghost" style={{ fontSize: 11, padding: "3px 10px" }} onClick={() => {
-                      copyToClipboard(system.id)
-                        .then(() => showToast("System ID copied"))
-                        .catch(() => showToast("Copy failed", true));
-                    }}>⎘ Copy ID</button>
-                  </div>
-                </div>
-              </div>
-              <div className="detail-section">
-                <h3>Purpose</h3>
-                <DetailGrid rows={[
-                  ["Description", system.description || "—"],
-                  ["Intended Purpose", system.intended_purpose || "—"],
-                ]} />
-              </div>
-              <div className="detail-section">
-                <h3>Classification</h3>
-                <DetailGrid rows={[
-                  ["Risk Tier", <TierBadge key="tier" tier={system.tier} workflowStatus={system.workflow_status} />],
-                  ["Classification Basis", <span key="basis" style={{ fontSize: 13 }}>{system.basis}</span>],
-                  system.annex_iii_area != null && ["Annex III Area", `Area ${system.annex_iii_area}`],
-                  ["GPAI", system.is_gpai ? <span key="gpai" style={{ color: "var(--brand)" }}>Yes</span> : "No"],
-                ]} />
-              </div>
-              <div className="detail-section">
-                <h3>Risk Flags</h3>
-                <FlagPanel title="Art. 5 — Prohibited Practice Flags" flags={[
-                  [system.subliminal_manipulation, "Subliminal manipulation"],
-                  [system.exploits_vulnerability, "Exploits vulnerability"],
-                  [system.social_scoring_public, "Social scoring (public authority)"],
-                  [system.real_time_biometric_public, "Real-time biometric ID in public"],
-                  [system.emotion_recognition_workplace, "Emotion recognition (workplace/education)"],
-                  [system.untargeted_facial_scraping, "Untargeted facial image scraping"],
-                  [system.predictive_policing, "Predictive policing"],
-                  [system.biometric_categorisation_sensitive, "Biometric categorisation (sensitive attrs.)"],
-                ]} />
-                <FlagPanel title="Annex III — High-Risk Flags" flags={[
-                  [system.is_biometric_identification, "Biometric identification"],
-                  [system.is_critical_infrastructure, "Critical infrastructure"],
-                  [system.is_education_related, "Education & vocational training"],
-                  [system.is_employment_related, "Employment & worker management"],
-                  [system.is_credit_scoring, "Credit scoring"],
-                  [system.is_public_service, "Public services"],
-                  [system.is_law_enforcement, "Law enforcement"],
-                  [system.is_migration, "Migration & border control"],
-                  [system.is_judicial_admin, "Justice & democratic processes"],
-                ]} />
-                <FlagPanel title="Art. 50 — Limited Risk" flags={[
-                  [system.is_chatbot, "Chatbot / direct user interaction"],
-                  [system.generates_synthetic_content, "Generates synthetic content"],
-                ]} />
-              </div>
-              <div className="detail-section">
-                <h3>Lifecycle</h3>
-                <DetailGrid rows={[
-                  ["State", <LifecycleBadge key="lc" lc={system.lifecycle} />],
-                  ["Compliance", <ComplianceBar key="comp" pct={system.compliance} />],
-                  ["Registered", fmtDateTime(system.created_at)],
-                  ["Last Updated", fmtDateTime(system.updated_at)],
-                ]} />
-              </div>
-            </div>
-          )}
+            </SheetHeader>
 
-          {tab === "workflow" && (
-            <WorkflowTab system={system} userMap={userMap} />
-          )}
+            <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
+              <div className="border-b border-border px-6 py-2.5">
+                <TabsList>
+                  {["overview", "workflow", "model", "edit"].map((t) => (
+                    <TabsTrigger key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
 
-          {tab === "model" && (
-            <ModelTab system={system} models={models} onSystemUpdate={handleSystemUpdate} />
-          )}
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                <TabsContent value="overview">
+                  <Section>
+                    <WorkflowProgress system={system} onSystemUpdate={handleSystemUpdate} userMap={userMap} />
+                  </Section>
+                  <Section title="Identity">
+                    <DetailGrid rows={[
+                      ["Name", system.name],
+                      ["Version", system.version],
+                      ["Provider", system.provider || "—"],
+                      ["Organisation", system.org_name || "—"],
+                      ["Role", system.org_role],
+                      ["Country", system.provider_country],
+                      ["System Type", system.system_type],
+                      ["Autonomy Level", (system.autonomy_level || "").replace(/_/g, " ")],
+                      !!system.application_url && ["Application URL", <a key="url" href={system.application_url} target="_blank" rel="noreferrer" className="text-[var(--brand)]">{system.application_url}</a>],
+                    ]} />
+                    <div className="mt-4 rounded-md border border-border bg-background p-3">
+                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Telemetry Configuration</div>
+                      <div className="mb-2 text-xs text-muted-foreground">Use this system ID as the telemetry service name (e.g. <code className="font-mono">OTEL_SERVICE_NAME</code>) to link telemetry to this system:</div>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 font-mono text-xs">{system.id}</code>
+                        <Button variant="ghost" size="sm" onClick={() => {
+                          copyToClipboard(system.id)
+                            .then(() => showToast("System ID copied"))
+                            .catch(() => showToast("Copy failed", true));
+                        }}><Copy /> Copy ID</Button>
+                      </div>
+                    </div>
+                  </Section>
+                  <Section title="Purpose">
+                    <DetailGrid rows={[
+                      ["Description", system.description || "—"],
+                      ["Intended Purpose", system.intended_purpose || "—"],
+                    ]} />
+                  </Section>
+                  <Section title="Classification">
+                    <DetailGrid rows={[
+                      ["Risk Tier", <TierBadge key="tier" tier={system.tier} workflowStatus={system.workflow_status} />],
+                      ["Classification Basis", <span key="basis" className="text-[13px]">{system.basis}</span>],
+                      system.annex_iii_area != null && ["Annex III Area", `Area ${system.annex_iii_area}`],
+                      ["GPAI", system.is_gpai ? <span key="gpai" className="text-[var(--brand)]">Yes</span> : "No"],
+                    ]} />
+                  </Section>
+                  <Section title="Risk Flags">
+                    <FlagPanel title="Art. 5 — Prohibited Practice Flags" flags={[
+                      [system.subliminal_manipulation, "Subliminal manipulation"],
+                      [system.exploits_vulnerability, "Exploits vulnerability"],
+                      [system.social_scoring_public, "Social scoring (public authority)"],
+                      [system.real_time_biometric_public, "Real-time biometric ID in public"],
+                      [system.emotion_recognition_workplace, "Emotion recognition (workplace/education)"],
+                      [system.untargeted_facial_scraping, "Untargeted facial image scraping"],
+                      [system.predictive_policing, "Predictive policing"],
+                      [system.biometric_categorisation_sensitive, "Biometric categorisation (sensitive attrs.)"],
+                    ]} />
+                    <FlagPanel title="Annex III — High-Risk Flags" flags={[
+                      [system.is_biometric_identification, "Biometric identification"],
+                      [system.is_critical_infrastructure, "Critical infrastructure"],
+                      [system.is_education_related, "Education & vocational training"],
+                      [system.is_employment_related, "Employment & worker management"],
+                      [system.is_credit_scoring, "Credit scoring"],
+                      [system.is_public_service, "Public services"],
+                      [system.is_law_enforcement, "Law enforcement"],
+                      [system.is_migration, "Migration & border control"],
+                      [system.is_judicial_admin, "Justice & democratic processes"],
+                    ]} />
+                    <FlagPanel title="Art. 50 — Limited Risk" flags={[
+                      [system.is_chatbot, "Chatbot / direct user interaction"],
+                      [system.generates_synthetic_content, "Generates synthetic content"],
+                    ]} />
+                  </Section>
+                  <Section title="Lifecycle">
+                    <DetailGrid rows={[
+                      ["State", <LifecycleBadge key="lc" lc={system.lifecycle} />],
+                      ["Compliance", <ComplianceBar key="comp" pct={system.compliance} />],
+                      ["Registered", fmtDateTime(system.created_at)],
+                      ["Last Updated", fmtDateTime(system.updated_at)],
+                    ]} />
+                  </Section>
+                </TabsContent>
 
-          {tab === "edit" && (
-            <EditForm system={system} models={models} onSave={handleSystemUpdate} onClose={onClose} />
-          )}
-        </div>
+                <TabsContent value="workflow">
+                  <WorkflowTab system={system} userMap={userMap} />
+                </TabsContent>
 
-        <div className="modal-footer">
-          <button className="btn-danger" onClick={handleDelete} disabled={!mayRegister}
-            title={mayRegister ? undefined : "Requires role: business owner or administrator"}>Delete System</button>
-          <div className="toolbar-spacer" />
-          <button className="btn-ghost" onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </>
+                <TabsContent value="model">
+                  <ModelTab system={system} models={models} onSystemUpdate={handleSystemUpdate} />
+                </TabsContent>
+
+                <TabsContent value="edit">
+                  <EditForm system={system} models={models} onSave={handleSystemUpdate} onClose={onClose} />
+                </TabsContent>
+              </div>
+            </Tabs>
+
+            <SheetFooter className="flex-row items-center">
+              <Button variant="destructive" onClick={handleDelete} disabled={!mayRegister}
+                title={mayRegister ? undefined : "Requires role: business owner or administrator"}>Delete System</Button>
+              <div className="flex-1" />
+              <Button variant="ghost" onClick={onClose}>Close</Button>
+            </SheetFooter>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

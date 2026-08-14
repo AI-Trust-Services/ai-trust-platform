@@ -1,44 +1,57 @@
 /*
- * Design tokens for Decision Trace Analyzer
+ * Design tokens for Decision Trace Analyzer — "Monochrome Signal".
  *
- * We use UI5 Web Components with the "Morning Horizon" (sap_horizon) default theme.
- * Theme preview:  https://ui5.github.io/webcomponents/play/  (theme switcher top-right)
- * Theming docs:   https://ui5.github.io/webcomponents/docs/advanced/theming/
- * Token source:   node_modules/@ui5/webcomponents-theming/dist/css/themes/sap_horizon/parameters-bundle.css
- *                 (authoritative list of all --sap* variables and their values)
- *
- * The --sap* prefix is SAP's naming convention. We alias them here under neutral
- * names so the rest of the codebase stays independent of the design system.
+ * These are the LEGACY token bridge: every inline style and graph node/edge
+ * style in this MFE references these color and font custom-property names
+ * directly, so they
+ * are defined here with CONCRETE Monochrome values (no sap references — UI5
+ * has been removed). The shadcn/Tailwind foundation lives in index.css; these
+ * plain custom properties sit alongside it purely so surviving var() references
+ * keep resolving. Token names are kept byte-for-byte identical to the old UI5
+ * aliases so no component code has to change.
  */
 
 :root {
   /* Typography */
-  --font-family:    var(--sapFontFamily);
-  --font-size:      var(--sapFontSize);        /* 0.875rem / 14px */
-  --font-size-sm:   var(--sapFontSmallSize,  0.75rem);
-  --font-size-lg:   var(--sapFontLargeSize,  1rem);
+  --font-family:      "72", "72full", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-size:        0.875rem;   /* 14px — primary */
+  --font-size-sm:     0.75rem;    /* 12px */
+  --font-size-lg:     1rem;       /* 16px */
 
   /* Text colors */
-  --color-text:           var(--sapTextColor);       /* #131e29 — primary */
-  --color-text-secondary: var(--sapNeutralColor);    /* #788fa6 — secondary */
-  --color-link:           var(--sapLinkColor);       /* #0064d9 */
+  --color-text:           #18181b;   /* foreground — primary */
+  --color-text-secondary: #71717a;   /* muted-foreground */
+  --color-link:           #0a6ed1;   /* brand blue */
 
   /* Brand */
-  --color-brand:    var(--sapBrandColor);            /* #0070f2 */
+  --color-brand:    #0a6ed1;         /* platform SAP blue — the one accent */
 
   /* Backgrounds */
-  --color-bg:       var(--sapBackgroundColor);              /* #f5f6f7 — page background */
-  --color-surface:  var(--sapBaseColor);                    /* #fff    — cards, panels */
-  --color-border:   var(--sapList_BorderColor, #e4e6e8);
-  --color-hover-bg: var(--sapList_Hover_Background, #eaecee);
-  --color-code-bg:  var(--sapField_ReadOnly_Background, #eaecee); /* read-only fields, code/text boxes */
+  --color-bg:       #fafafa;         /* page background */
+  --color-surface:  #ffffff;         /* cards, panels */
+  --color-surface-alt: #f4f4f5;      /* subtle alt surface (skeletons, quiet badges) */
+  --color-border:   #e4e4e7;
+  --color-hover-bg: #f4f4f5;
+  --color-code-bg:  #f4f4f5;         /* read-only fields, code/text boxes, step pills */
 
-  /* Semantic — info (used for model badge) */
-  --color-info-bg:  var(--sapInformationBackground); /* #e1f4ff */
-  --color-info-text: var(--sapInformativeTextColor); /* #0064d9 */
+  /* List row selection highlight (was --sapList_SelectionBackgroundColor). */
+  --sapList_SelectionBackgroundColor: #eef5fc;
 
-  /* Semantic — error (used for error banner) */
-  --color-error-bg:     var(--sapErrorBackground);    /* #ffeaf4 */
-  --color-error-text:   var(--sapNegativeTextColor);  /* #aa0808 */
-  --color-error-border: var(--sapErrorBorderColor);   /* #e90b0b */
+  /* Semantic — info (model badge, info banners) */
+  --color-info-bg:   #eef5fc;
+  --color-info-text: #084fa3;
+
+  /* Semantic — success */
+  --color-success-bg:   #f0fdf4;
+  --color-success-text: #15803d;
+
+  /* Semantic — warning */
+  --color-warning-bg:   #fffbeb;
+  --color-warning-text: #b45309;
+
+  /* Semantic — error (error banners, error dots) */
+  --color-error-bg:     #fef2f2;
+  --color-error-text:   #b91c1c;
+  --color-error-border: #fecaca;
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { Plus, RotateCw } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { StatusBadge, ScoreBar } from "../components/Badges";
@@ -11,6 +12,18 @@ import ScoreDonut from "../components/ScoreDonut";
 import { ASSESSMENT_STATUS_META, fmtDate, humanize } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import type { Assessment, AssessmentDetail, AISystem, Framework } from "../types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+
+// Radix Select disallows an empty-string item value — sentinel for "All".
+const ALL = "__all__";
 
 export default function AssessmentsPage() {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
@@ -87,65 +100,69 @@ export default function AssessmentsPage() {
 
   return (
     <>
-      <div className="page-header">
-        <h1>Assessments</h1>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn-ghost" onClick={load}>↺ Refresh</button>
-          <button
-            className="btn-primary"
+      <div className="flex items-center justify-between border-b border-border px-5 py-2.5">
+        <h1 className="text-lg font-semibold text-foreground">Assessments</h1>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={load}><RotateCw /> Refresh</Button>
+          <Button
+            size="sm"
             disabled={!mayWrite}
             title={mayWrite ? undefined : noWriteTitle}
             onClick={() => setCreateOpen(true)}
-          >+ New Assessment</button>
+          ><Plus /> New Assessment</Button>
         </div>
       </div>
 
-      <div className="kpi-row">
+      <div className="flex flex-wrap gap-3 px-5 pt-4">
         <KpiCard label="Total" value={kpis.total} />
         <KpiCard label="Approved" value={kpis.approved} sub={`${kpis.total ? Math.round(kpis.approved / kpis.total * 100) : 0}% of total`} />
         <KpiCard label="In Review" value={kpis.submitted} />
         <KpiCard label="Draft" value={kpis.draft} />
       </div>
 
-      <AssessmentCharts assessments={assessments} />
-
-      <div className="toolbar" style={{ marginTop: 12 }}>
-        <input className="search-input" placeholder="Search assessments…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">All Statuses</option>
-          {Object.entries(ASSESSMENT_STATUS_META).map(([v, m]) => <option key={v} value={v}>{m.label}</option>)}
-        </select>
-        <div className="toolbar-spacer" />
+      <div className="px-5 pt-4">
+        <AssessmentCharts assessments={assessments} />
       </div>
 
-      <div className="content">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Assessment</th>
-                <th>AI System</th>
-                <th>Framework</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Score</th>
-                <th>Created</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+      <div className="flex items-center gap-2 px-5 pt-3">
+        <Input className="max-w-xs" placeholder="Search assessments…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Select value={statusFilter || ALL} onValueChange={(v) => setStatusFilter(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Statuses</SelectItem>
+            {Object.entries(ASSESSMENT_STATUS_META).map(([v, m]) => <SelectItem key={v} value={v}>{m.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="px-5 py-4">
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Assessment</TableHead>
+                <TableHead>AI System</TableHead>
+                <TableHead>Framework</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Score</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filtered.length === 0 ? (
-                <tr className="empty-row"><td colSpan={8}>No assessments yet. Click "New Assessment" to begin.</td></tr>
+                <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No assessments yet. Click "New Assessment" to begin.</TableCell></TableRow>
               ) : filtered.map((a) => (
-                <tr key={a.id} className={`clickable${selected === a.id ? " selected" : ""}`} onClick={() => openDetail(a)}>
-                  <td><div className="row-name">{a.title}</div><div className="row-sub">{a.id}</div></td>
-                  <td>{systemsById[a.ai_system_id]?.name ?? a.ai_system_id}</td>
-                  <td>{frameworksById[a.framework_id]?.name ?? a.framework_id}</td>
-                  <td>{humanize(a.type)}</td>
-                  <td><StatusBadge meta={ASSESSMENT_STATUS_META} value={a.status} /></td>
-                  <td><ScoreBar score={a.score} /></td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{fmtDate(a.created_at)}</td>
-                  <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+                <TableRow key={a.id} data-state={selected === a.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(a)}>
+                  <TableCell><div className="font-medium text-foreground">{a.title}</div><div className="text-xs text-muted-foreground">{a.id}</div></TableCell>
+                  <TableCell>{systemsById[a.ai_system_id]?.name ?? a.ai_system_id}</TableCell>
+                  <TableCell>{frameworksById[a.framework_id]?.name ?? a.framework_id}</TableCell>
+                  <TableCell>{humanize(a.type)}</TableCell>
+                  <TableCell><StatusBadge meta={ASSESSMENT_STATUS_META} value={a.status} /></TableCell>
+                  <TableCell><ScoreBar score={a.score} /></TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{fmtDate(a.created_at)}</TableCell>
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                     <KebabMenu items={[
                       ...(a.status === "draft" ? [{
                         label: "Submit for Review",
@@ -170,12 +187,12 @@ export default function AssessmentsPage() {
                         },
                       },
                     ]} />
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       </div>
 
       {selectedDetail && (
@@ -198,19 +215,19 @@ export default function AssessmentsPage() {
           </DetailSection>
           {selectedDetail.notes && (
             <DetailSection title="Notes">
-              <p className="dp-description">{selectedDetail.notes}</p>
+              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{selectedDetail.notes}</p>
             </DetailSection>
           )}
-          <div className="dp-actions">
+          <div className="flex gap-2 px-5 pt-4">
             {selectedDetail.status === "draft" && (
-              <button className="btn-ghost btn-sm" disabled={busy === selectedDetail.id || !mayWrite}
+              <Button variant="outline" size="sm" disabled={busy === selectedDetail.id || !mayWrite}
                 title={mayWrite ? undefined : noWriteTitle}
-                onClick={() => act(api.submitAssessment, selectedDetail.id, "Submitted")}>Submit</button>
+                onClick={() => act(api.submitAssessment, selectedDetail.id, "Submitted")}>Submit</Button>
             )}
             {selectedDetail.status !== "approved" && (
-              <button className="btn-ghost btn-sm" disabled={busy === selectedDetail.id || !mayApprove}
+              <Button variant="outline" size="sm" disabled={busy === selectedDetail.id || !mayApprove}
                 title={mayApprove ? undefined : noApproveTitle}
-                onClick={() => act(api.approveAssessment, selectedDetail.id, (r) => `Approved — score ${r.score ?? "N/A"}%`)}>Approve</button>
+                onClick={() => act(api.approveAssessment, selectedDetail.id, (r) => `Approved — score ${r.score ?? "N/A"}%`)}>Approve</Button>
             )}
           </div>
         </DetailPanel>

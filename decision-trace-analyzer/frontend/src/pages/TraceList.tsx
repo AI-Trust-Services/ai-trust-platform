@@ -1,7 +1,4 @@
-import "@ui5/webcomponents-icons/dist/navigation-left-arrow.js";
-import "@ui5/webcomponents-icons/dist/navigation-right-arrow.js";
-import "@ui5/webcomponents-icons/dist/refresh.js";
-import { Button } from "@ui5/webcomponents-react";
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchTraces, type Trace, type TracesResponse, type TraceFilters } from "../api/traces";
 import { TraceDetail } from "./TraceDetail";
@@ -9,6 +6,7 @@ import { FilterBar } from "../components/FilterBar";
 import { EmptyState } from "../components/EmptyState";
 import { TableSkeleton } from "../components/TableSkeleton";
 import { parseBackendDate } from "../lib/dates";
+import { Button } from "@/components/ui/button";
 
 const PAGE_SIZE = 50;
 
@@ -92,20 +90,26 @@ export function TraceList() {
               </span>
             )}
             <Button
-              icon="navigation-left-arrow"
-              tooltip="Previous page"
-              design="Transparent"
+              variant="ghost"
+              size="icon"
+              title="Previous page"
               disabled={offset === 0 || loading}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-            />
+            >
+              <ChevronLeft />
+            </Button>
             <Button
-              icon="navigation-right-arrow"
-              tooltip="Next page"
-              design="Transparent"
+              variant="ghost"
+              size="icon"
+              title="Next page"
               disabled={!data || offset + PAGE_SIZE >= data.total || loading}
               onClick={() => setOffset(offset + PAGE_SIZE)}
-            />
-            <Button icon="refresh" tooltip="Refresh" design="Transparent" onClick={() => load(offset, filters)} />
+            >
+              <ChevronRight />
+            </Button>
+            <Button variant="ghost" size="icon" title="Refresh" onClick={() => load(offset, filters)}>
+              <RefreshCw />
+            </Button>
           </div>
         </div>
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { Plus, RotateCw } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { StatusBadge } from "../components/Badges";
@@ -8,8 +9,20 @@ import CreateObligationModal from "../components/CreateObligationModal";
 import { OBLIGATION_STATUS_META, CONTROL_STATUS_META, EVIDENCE_STATUS_META, fmtDate } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import type { AISystem, Assessment, Control, Evidence, Obligation, ObligationDetail } from "../types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 const STATUS_OPTIONS = ["applicable", "in_progress", "fulfilled", "not_applicable", "overdue"] as const;
+// Radix Select disallows an empty-string item value — sentinel for "All".
+const ALL = "__all__";
 
 export default function ObligationsPage() {
   const [obligations, setObligations] = useState<Obligation[]>([]);
@@ -100,85 +113,94 @@ export default function ObligationsPage() {
 
   return (
     <>
-      <div className="page-header">
-        <h1>Obligations</h1>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn-ghost" onClick={load}>↺ Refresh</button>
-          <button className="btn-primary" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-            onClick={() => setCreateOpen(true)}>+ New Obligation</button>
+      <div className="flex items-center justify-between border-b border-border px-5 py-2.5">
+        <h1 className="text-lg font-semibold text-foreground">Obligations</h1>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={load}><RotateCw /> Refresh</Button>
+          <Button size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+            onClick={() => setCreateOpen(true)}><Plus /> New Obligation</Button>
         </div>
       </div>
 
-      <div className="kpi-row">
+      <div className="flex flex-wrap gap-3 px-5 pt-4">
         <KpiCard label="Total" value={kpis.total} />
         <KpiCard label="Fulfilled" value={kpis.fulfilled} sub={`${kpis.total ? Math.round(kpis.fulfilled / kpis.total * 100) : 0}% of total`} />
         <KpiCard label="In Progress" value={kpis.inProgress} />
         <KpiCard label="Overdue" value={kpis.overdue} />
       </div>
 
-      <div className="toolbar" style={{ marginTop: 12 }}>
-        <input className="search-input" placeholder="Search obligations…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="filter-select" value={systemFilter} onChange={(e) => { setSystemFilter(e.target.value); setAssessmentFilter(""); }}>
-          <option value="">All Systems</option>
-          {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <select className="filter-select" value={assessmentFilter} onChange={(e) => setAssessmentFilter(e.target.value)}>
-          <option value="">All Assessments</option>
-          {filteredAssessments.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
-        </select>
-        <select className="filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">All Statuses</option>
-          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{OBLIGATION_STATUS_META[s].label}</option>)}
-        </select>
-        <div className="toolbar-spacer" />
+      <div className="flex flex-wrap items-center gap-2 px-5 pt-3">
+        <Input className="max-w-xs" placeholder="Search obligations…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Select value={systemFilter || ALL} onValueChange={(v) => { setSystemFilter(v === ALL ? "" : v); setAssessmentFilter(""); }}>
+          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Systems</SelectItem>
+            {systems.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={assessmentFilter || ALL} onValueChange={(v) => setAssessmentFilter(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Assessments</SelectItem>
+            {filteredAssessments.map((a) => <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter || ALL} onValueChange={(v) => setStatusFilter(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Statuses</SelectItem>
+            {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{OBLIGATION_STATUS_META[s].label}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="content">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Obligation</th>
-                <th>Article</th>
-                <th>AI System</th>
-                <th>Owner</th>
-                <th>Status</th>
-                <th>Due</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+      <div className="px-5 py-4">
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Obligation</TableHead>
+                <TableHead>Article</TableHead>
+                <TableHead>AI System</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Due</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filtered.length === 0 ? (
-                <tr className="empty-row"><td colSpan={7}>No obligations found.</td></tr>
+                <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No obligations found.</TableCell></TableRow>
               ) : filtered.map((o) => (
-                <tr key={o.id} className={`clickable${selected === o.id ? " selected" : ""}`} onClick={() => openDetail(o)}>
-                  <td><div className="row-name">{o.title}</div><div className="row-sub">{o.id}</div></td>
-                  <td style={{ fontSize: 12 }}>{o.article_ref || "—"}</td>
-                  <td>{systemsById[o.ai_system_id]?.name ?? o.ai_system_id}</td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{o.owner || "—"}</td>
-                  <td><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></td>
-                  <td style={{ color: o.status === "overdue" ? "#bb0000" : "var(--text-secondary)", fontSize: 13 }}>{fmtDate(o.due_date)}</td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div className="actions">
-                      <select className="inline-select" value={o.status} disabled={!mayWrite}
-                        title={mayWrite ? undefined : noWriteTitle}
-                        onChange={(e) => changeStatus(o.id, e.target.value)}>
-                        {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{OBLIGATION_STATUS_META[s].label}</option>)}
-                      </select>
-                      <button className="btn-ghost btn-sm btn-danger" data-tip="Delete this obligation"
-                        disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+                <TableRow key={o.id} data-state={selected === o.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(o)}>
+                  <TableCell><div className="font-medium text-foreground">{o.title}</div><div className="text-xs text-muted-foreground">{o.id}</div></TableCell>
+                  <TableCell className="text-xs">{o.article_ref || "—"}</TableCell>
+                  <TableCell>{systemsById[o.ai_system_id]?.name ?? o.ai_system_id}</TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{o.owner || "—"}</TableCell>
+                  <TableCell><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></TableCell>
+                  <TableCell className={cn("text-[13px]", o.status === "overdue" ? "text-[var(--danger-fg)]" : "text-muted-foreground")}>{fmtDate(o.due_date)}</TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-2">
+                      <Select value={o.status} disabled={!mayWrite} onValueChange={(v) => changeStatus(o.id, v)}>
+                        <SelectTrigger className="h-8 w-[150px]" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{OBLIGATION_STATUS_META[s].label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"
+                        disabled={!mayWrite} title={mayWrite ? "Delete this obligation" : noWriteTitle}
                         onClick={async () => {
                           if (!confirm(`Delete "${o.title}"?`)) return;
                           try { await api.deleteObligation(o.id); showToast("Deleted"); load(); closePanel(); }
                           catch (e) { showToast((e as Error).message, true); }
-                        }}>Delete</button>
+                        }}>Delete</Button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       </div>
 
       {detail && (
@@ -198,34 +220,36 @@ export default function ObligationsPage() {
           </DetailSection>
           {detail.description && (
             <DetailSection title="Description">
-              <p className="dp-description">{detail.description}</p>
+              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
             </DetailSection>
           )}
           <DetailSection title={`Related Controls (${detailControls.length})`}>
             {detailControls.length === 0
-              ? <p className="dp-description" style={{ color: "var(--text-secondary)" }}>No controls linked.</p>
-              : <ul className="dp-list">{detailControls.map((c) => (
-                  <li key={c.id}><span className="dp-list-name">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
+              ? <p className="text-[13px] text-muted-foreground">No controls linked.</p>
+              : <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
                 ))}</ul>
             }
           </DetailSection>
           <DetailSection title={`Evidence (${detailEvidence.length})`}>
             {detailEvidence.length === 0
-              ? <p className="dp-description" style={{ color: "var(--text-secondary)" }}>No evidence linked.</p>
-              : <ul className="dp-list">{detailEvidence.map((e) => (
-                  <li key={e.id}><span className="dp-list-name">{e.title}</span><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></li>
+              ? <p className="text-[13px] text-muted-foreground">No evidence linked.</p>
+              : <ul className="flex flex-col gap-1.5">{detailEvidence.map((e) => (
+                  <li key={e.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{e.title}</span><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></li>
                 ))}</ul>
             }
           </DetailSection>
-          <div className="dp-actions">
-            <select className="form-select" value={detail.status} disabled={!mayWrite}
-              title={mayWrite ? undefined : noWriteTitle}
-              onChange={async (e) => {
-                await changeStatus(detail.id, e.target.value);
-                setDetail((d) => d ? { ...d, status: e.target.value } : d);
+          <div className="px-5 pt-4">
+            <Select value={detail.status} disabled={!mayWrite}
+              onValueChange={async (v) => {
+                await changeStatus(detail.id, v);
+                setDetail((d) => d ? { ...d, status: v } : d);
               }}>
-              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{OBLIGATION_STATUS_META[s].label}</option>)}
-            </select>
+              <SelectTrigger className="w-full" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{OBLIGATION_STATUS_META[s].label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </DetailPanel>
       )}

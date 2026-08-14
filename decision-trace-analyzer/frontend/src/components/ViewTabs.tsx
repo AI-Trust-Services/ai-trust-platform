@@ -1,8 +1,4 @@
-import "@ui5/webcomponents-icons/dist/tree.js";
-import "@ui5/webcomponents-icons/dist/timesheet.js";
-import "@ui5/webcomponents-icons/dist/org-chart.js";
-import "@ui5/webcomponents-icons/dist/discussion.js";
-import { Icon } from "@ui5/webcomponents-react";
+import { MessageSquare, ListTree, AlignLeft, Network, type LucideIcon } from "lucide-react";
 
 export type TraceView = "tree" | "timeline" | "graph" | "conversation";
 
@@ -11,11 +7,11 @@ interface Props {
   onChange: (view: TraceView) => void;
 }
 
-const TABS: { id: TraceView; label: string; icon: string }[] = [
-  { id: "conversation", label: "Conversation", icon: "discussion" },
-  { id: "tree",         label: "Tree",         icon: "tree"      },
-  { id: "timeline",     label: "Timeline",     icon: "timesheet" },
-  { id: "graph",        label: "Graph",        icon: "org-chart" },
+const TABS: { id: TraceView; label: string; icon: LucideIcon }[] = [
+  { id: "conversation", label: "Conversation", icon: MessageSquare },
+  { id: "tree",         label: "Tree",         icon: ListTree     },
+  { id: "timeline",     label: "Timeline",     icon: AlignLeft    },
+  { id: "graph",        label: "Graph",        icon: Network      },
 ];
 
 /**
@@ -29,6 +25,7 @@ export function ViewTabs({ active, onChange }: Props) {
     <div style={styles.bar}>
       {TABS.map((tab) => {
         const isActive = active === tab.id;
+        const TabIcon = tab.icon;
         return (
           <button
             key={tab.id}
@@ -39,7 +36,7 @@ export function ViewTabs({ active, onChange }: Props) {
             }}
             type="button"
           >
-            <Icon name={tab.icon} style={{ width: 14, height: 14 } as React.CSSProperties} />
+            <TabIcon style={{ width: 14, height: 14 } as React.CSSProperties} />
             <span>{tab.label}</span>
           </button>
         );
@@ -73,11 +70,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "inherit",
   },
   tabActive: {
-    background: "var(--color-brand, #ff6a00)",
+    background: "var(--color-brand)",
     color: "white",
     // Use the full `border` shorthand here too — `styles.tab` sets `border`,
     // so toggling between the two states must not mix shorthand (border) and
     // longhand (borderColor) for the same property, or React warns.
-    border: "1px solid var(--color-brand, #ff6a00)",
+    border: "1px solid var(--color-brand)",
   },
 };
