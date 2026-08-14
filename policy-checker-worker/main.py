@@ -155,7 +155,7 @@ async def eval_no_signals(rule: AlertRule, ch) -> list[EvalResult]:
 
     tenant_where, tenant_params = tenant_clause()
     rows = await ch_query(
-        "SELECT service_name, count() AS n FROM otel.gen_ai_spans "
+        "SELECT service_name, count() AS n FROM gen_ai_spans "
         "WHERE received_at >= now() - INTERVAL {minutes:UInt32} MINUTE "
         f"AND {tenant_where} "
         "GROUP BY service_name",
@@ -186,7 +186,7 @@ async def eval_high_latency(rule: AlertRule, ch) -> list[EvalResult]:
     tenant_where, tenant_params = tenant_clause()
     rows = await ch_query(
         "SELECT service_name, round(avg(duration_ms), 2) AS avg_ms "
-        "FROM otel.gen_ai_spans "
+        "FROM gen_ai_spans "
         "WHERE received_at >= now() - INTERVAL 1 HOUR "
         f"AND {tenant_where} "
         "GROUP BY service_name",
@@ -283,7 +283,7 @@ async def eval_model_diverged(rule: AlertRule, ch) -> list[EvalResult]:
     if service_filter:
         rows = await ch_query(
             f"SELECT service_name, argMax(request_model, received_at) AS current_model "
-            f"FROM otel.gen_ai_spans "
+            f"FROM gen_ai_spans "
             f"WHERE received_at >= now() - INTERVAL {interval} "
             f"AND service_name = {{svc:String}} "
             f"AND request_model != '' "
@@ -294,7 +294,7 @@ async def eval_model_diverged(rule: AlertRule, ch) -> list[EvalResult]:
     else:
         rows = await ch_query(
             f"SELECT service_name, argMax(request_model, received_at) AS current_model "
-            f"FROM otel.gen_ai_spans "
+            f"FROM gen_ai_spans "
             f"WHERE received_at >= now() - INTERVAL {interval} "
             f"AND request_model != '' "
             f"AND {tenant_where} "
@@ -540,7 +540,7 @@ EVALUATORS = {
 async def get_active_event(rule_id: str, entity_id: str = "") -> dict | None:
     tenant_where, tenant_params = tenant_clause()
     rows = await ch_query(
-        "SELECT id, rule_id FROM otel.alert_events "
+        "SELECT id, rule_id FROM alert_events "
         "WHERE rule_id = {rule_id:String} "
         "AND entity_id = {entity_id:String} "
         "AND resolved_at IS NULL AND handled_at IS NULL "
@@ -557,7 +557,7 @@ async def was_handled_recently(rule_id: str, entity_id: str = "") -> bool:
     """Returns True if this rule+entity was handled within the last 24 hours."""
     tenant_where, tenant_params = tenant_clause()
     rows = await ch_query(
-        "SELECT count() AS n FROM otel.alert_events "
+        "SELECT count() AS n FROM alert_events "
         "WHERE rule_id = {rule_id:String} "
         "AND entity_id = {entity_id:String} "
         "AND handled_at IS NOT NULL "
@@ -583,7 +583,7 @@ async def create_event(
     def _insert():
         client = get_client()
         client.insert(
-            "otel.alert_events",
+            "alert_events",
             [[
                 str(uuid.uuid4()),
                 rule.id, rule.name, rule.category, rule.severity,
@@ -607,7 +607,7 @@ async def resolve_event(event_id: str, rule_name: str) -> None:
     # ever resolves events belonging to the current tenant. Fail-closed (1=0) if no tenant.
     where, params = tenant_clause("id = {id:String}")
     await ch_command(
-        "ALTER TABLE otel.alert_events UPDATE resolved_at = {ts:DateTime} "
+        "ALTER TABLE alert_events UPDATE resolved_at = {ts:DateTime} "
         f"WHERE {where} "
         "SETTINGS mutations_sync = 1",
         {**params, "ts": now, "id": event_id},

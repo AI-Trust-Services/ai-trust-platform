@@ -25,7 +25,7 @@ async def get_services() -> list[dict]:
             service_name,
             count() AS total_spans,
             toString(max(received_at)) AS last_seen
-        FROM otel.gen_ai_spans
+        FROM gen_ai_spans
         WHERE {where}
         GROUP BY service_name
         ORDER BY total_spans DESC
@@ -120,7 +120,7 @@ async def get_signals(
                 round(avg(duration_ms), 2)       AS avg_latency_ms,
                 sum(input_tokens)                AS input_tokens,
                 sum(output_tokens)               AS output_tokens
-            FROM otel.gen_ai_spans
+            FROM gen_ai_spans
             WHERE received_at >= now() - INTERVAL {interval}
             AND {tenant_where}
             {service_filter}
@@ -133,7 +133,7 @@ async def get_signals(
                 round(avg(duration_ms), 2) AS avg_latency_ms,
                 sum(input_tokens)          AS total_input_tokens,
                 sum(output_tokens)         AS total_output_tokens
-            FROM otel.gen_ai_spans
+            FROM gen_ai_spans
             WHERE received_at >= now() - INTERVAL {interval}
             AND {tenant_where}
             {service_filter}

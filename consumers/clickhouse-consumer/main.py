@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 import aio_pika
-from ai_trust_clickhouse import COLUMNS, GEN_AI_SPANS, get_client
+from ai_trust_clickhouse import COLUMNS, GEN_AI_SPANS, get_client, get_client_for_tenant
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -225,13 +225,36 @@ async def main() -> None:
     rabbitmq_url = os.environ["RABBITMQ_URL"]
     batch_size = int(os.environ.get("BATCH_SIZE", "100"))
     batch_timeout = float(os.environ.get("BATCH_TIMEOUT", "5"))
-    ch = get_client()
+
+    # Database-per-tenant write routing: group each batch by the span's tenant_id (extracted from the
+    # OTLP `ai_trust.tenant_id` resource/span attribute) and insert each group into that tenant's OWN
+    # ClickHouse database (tenant_<org>). Spans with no tenant ('') go to the legacy 'otel' db — kept
+    # for backward compatibility, not dropped. Per-tenant clients are cached. The tenant_id column is
+    # still written (backup/defense-in-depth, mirrors the Postgres RLS-column choice).
+    _clients: dict[str, object] = {}
+
+    def _client_for(tenant: str):
+        key = tenant or ""
+        c = _clients.get(key)
+        if c is None:
+            c = get_client_for_tenant(tenant or None)  # None → legacy 'otel' db
+            _clients[key] = c
+        return c
+
+    def insert_routed(rows: list[dict]) -> None:
+        if not rows:
+            return
+        by_tenant: dict[str, list[dict]] = {}
+        for r in rows:
+            by_tenant.setdefault(r.get("tenant_id", "") or "", []).append(r)
+        for tenant, trows in by_tenant.items():
+            _client_for(tenant).insert(
+                GEN_AI_SPANS, [list(r.values()) for r in trows], column_names=COLUMNS
+            )
 
     batcher = Batcher(
         batch_size=batch_size,
-        flush_fn=make_flush_fn(
-            lambda rows: ch.insert(GEN_AI_SPANS, [list(r.values()) for r in rows], column_names=COLUMNS)
-        ),
+        flush_fn=make_flush_fn(insert_routed),
     )
 
     log.info("Connecting to RabbitMQ (credentials masked)")
