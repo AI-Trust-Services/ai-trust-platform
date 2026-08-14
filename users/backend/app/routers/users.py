@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 
-from app.keycloak import admin_client
+from app.keycloak import admin_client, current_realm
 from ai_trust_logging import get_logger
 from app.schemas import (
     InviteUserRequest,
@@ -93,7 +93,7 @@ async def list_users(
     if enabled is not None:
         params["enabled"] = str(enabled).lower()
 
-    with admin_client() as kc:
+    with admin_client(current_realm()) as kc:
         resp = kc.get("/users", params=params)
         resp.raise_for_status()
         users = [u for u in resp.json() if not u.get("username", "").startswith("service-account-")]
@@ -136,7 +136,7 @@ async def invite_user(body: InviteUserRequest, _: str = Depends(require_permissi
             "preferredLanguage": [body.preferredLanguage],
         },
     }
-    with admin_client() as kc:
+    with admin_client(current_realm()) as kc:
         resp = kc.post("/users", json=payload)
         if resp.status_code == 409:
             raise HTTPException(409, "A user with that username or email already exists.")
@@ -156,7 +156,7 @@ async def invite_user(body: InviteUserRequest, _: str = Depends(require_permissi
 
 @router.get("/{user_id}", response_model=UserDetail)
 async def get_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
-    with admin_client() as kc:
+    with admin_client(current_realm()) as kc:
         resp = kc.get(f"/users/{user_id}")
         if resp.status_code == 404:
             raise HTTPException(404, "User not found.")
@@ -166,7 +166,7 @@ async def get_user(user_id: str, _: str = Depends(require_permission("iam:manage
 
 @router.put("/{user_id}", response_model=UserDetail)
 async def update_user(user_id: str, body: UpdateUserRequest, _: str = Depends(require_permission("iam:manage"))):
-    with admin_client() as kc:
+    with admin_client(current_realm()) as kc:
         existing_resp = kc.get(f"/users/{user_id}")
         if existing_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
@@ -196,7 +196,7 @@ async def update_user(user_id: str, body: UpdateUserRequest, _: str = Depends(re
 
 @router.post("/{user_id}/deactivate", response_model=UserDetail)
 async def deactivate_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
-    with admin_client() as kc:
+    with admin_client(current_realm()) as kc:
         existing_resp = kc.get(f"/users/{user_id}")
         if existing_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
@@ -210,7 +210,7 @@ async def deactivate_user(user_id: str, _: str = Depends(require_permission("iam
 
 @router.post("/{user_id}/activate", response_model=UserDetail)
 async def activate_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
-    with admin_client() as kc:
+    with admin_client(current_realm()) as kc:
         existing_resp = kc.get(f"/users/{user_id}")
         if existing_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
@@ -224,7 +224,7 @@ async def activate_user(user_id: str, _: str = Depends(require_permission("iam:m
 
 @router.delete("/{user_id}", status_code=204)
 def delete_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
-    with admin_client() as kc:
+    with admin_client(current_realm()) as kc:
         resp = kc.delete(f"/users/{user_id}")
         if resp.status_code == 404:
             raise HTTPException(404, "User not found.")
@@ -236,7 +236,7 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
     if not await _is_valid_role(role_name):
         raise HTTPException(400, f"Unknown role '{role_name}'.")
 
-    with admin_client() as kc:
+    with admin_client(current_realm()) as kc:
         user_resp = kc.get(f"/users/{user_id}")
         if user_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
@@ -273,7 +273,7 @@ async def remove_role(user_id: str, role_name: str, _: str = Depends(require_per
     if not await _is_valid_role(role_name):
         raise HTTPException(400, f"Unknown role '{role_name}'.")
 
-    with admin_client() as kc:
+    with admin_client(current_realm()) as kc:
         user_resp = kc.get(f"/users/{user_id}")
         if user_resp.status_code == 404:
             raise HTTPException(404, "User not found.")

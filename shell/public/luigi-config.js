@@ -384,7 +384,37 @@
         if (shellbar) {
           clearInterval(waitForShellbar);
           const btn = document.createElement("a");
-          btn.href = "/oauth2/sign_out";
+          // Front-channel logout: clear the oauth2-proxy session AND end the Keycloak SSO session in the
+          // browser (a backchannel --backend-logout-url alone leaves the KEYCLOAK_SESSION cookie alive, so
+          // the proxy silently re-authenticates on the next request). We route the browser through the
+          // tenant realm's Keycloak end-session endpoint via oauth2-proxy's rd= param.
+          //
+          // The shell is SHARED across tenants, so derive the realm from the current host at runtime:
+          // per-tenant host = ai-trust-mt-<org>.<suffix>  →  realm = <org>, kc base = https://<suffix>/keycloak.
+          // For any other host (e.g. the shared ai-trust-mt.<suffix> or the single-tenant deploy) fall back
+          // to the plain proxy sign_out.
+          (function () {
+            let href = "/oauth2/sign_out";
+            try {
+              const host = window.location.hostname;                 // ai-trust-mt-<org>.<suffix>
+              const m = host.match(/^ai-trust-mt-([^.]+)\.(.+)$/);   // [1]=org, [2]=suffix
+              if (m) {
+                const org = m[1], suffix = m[2];
+                const origin = window.location.origin;               // https://ai-trust-mt-<org>.<suffix>
+                // Land the browser on /oauth2/start AFTER Keycloak logout, so a logged-out user is taken
+                // straight to a fresh login instead of a blank/403 page (luigi-config.js is protected, so
+                // the bare origin 403s once the session is gone). /oauth2/start re-initiates OIDC login.
+                const postLogout = origin + "/oauth2/start";
+                const kcLogout =
+                  "https://" + suffix + "/keycloak/realms/" + org +
+                  "/protocol/openid-connect/logout" +
+                  "?post_logout_redirect_uri=" + encodeURIComponent(postLogout) +
+                  "&client_id=aitrust-mt-app";
+                href = "/oauth2/sign_out?rd=" + encodeURIComponent(kcLogout);
+              }
+            } catch (e) { /* fall back to plain sign_out */ }
+            btn.href = href;
+          })();
           btn.title = "Sign out";
           btn.style.cssText = `
             display: inline-flex; align-items: center; gap: 6px;
