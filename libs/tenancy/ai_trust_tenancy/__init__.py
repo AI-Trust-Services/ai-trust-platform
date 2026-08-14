@@ -1,6 +1,6 @@
 from ai_trust_tenancy.context import tenant_id_var
 from ai_trust_tenancy.middleware import install_tenant_middleware
-from ai_trust_tenancy.resolver import resolve_tenant
+from ai_trust_tenancy.resolver import resolve_tenant, register_resolver
 from ai_trust_tenancy.session import install_tenant_scoping
 from ai_trust_tenancy.security_preflight import check_no_default_secrets
 
@@ -9,5 +9,6 @@ __all__ = [
     "install_tenant_middleware",
     "install_tenant_scoping",
     "resolve_tenant",
+    "register_resolver",
     "check_no_default_secrets",
 ]

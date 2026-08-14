@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import importlib
+import os
 import threading
+from typing import Callable, Optional
 
 from starlette.requests import Request
 
@@ -18,20 +21,61 @@ from ai_trust_tenancy.config import (
 _jwks_clients: dict[str, object] = {}
 _jwks_lock = threading.Lock()
 
+# --- Extensibility hook (issue #16 AC4: replaceable/adaptable tenancy module) ---------
+# An enterprise can supply its OWN tenant resolution (a different IdP, a bespoke claim
+# scheme, a lookup service) WITHOUT forking this package, in two ways:
+#   1. Programmatic: call register_resolver(fn) at startup, fn(request) -> str | None.
+#   2. Config: set TENANCY_RESOLVER="my_pkg.my_module:my_resolver" — it is imported and
+#      registered automatically on first use.
+# A registered custom resolver takes precedence over the built-in single/jwt/header modes;
+# returning None from it falls through to the built-in resolution (so it can augment, not
+# only replace). This keeps the three built-ins as sensible defaults.
+ResolverFn = Callable[[Request], Optional[str]]
+_custom_resolver: ResolverFn | None = None
+_custom_loaded = False
+
+
+def register_resolver(fn: ResolverFn | None) -> None:
+    """Register (or clear, with None) a custom tenant resolver. Takes precedence over
+    the built-in modes; return None from it to fall through to the built-in logic."""
+    global _custom_resolver, _custom_loaded
+    _custom_resolver = fn
+    _custom_loaded = True
+
+
+def _load_custom_from_env() -> None:
+    """Load TENANCY_RESOLVER="module.path:callable" once, if set."""
+    global _custom_loaded
+    _custom_loaded = True
+    spec = os.environ.get("TENANCY_RESOLVER", "").strip()
+    if not spec:
+        return
+    mod, _, attr = spec.partition(":")
+    fn = getattr(importlib.import_module(mod), attr)
+    register_resolver(fn)
+
 
 def resolve_tenant(request: Request) -> str | None:
-    """Resolve the tenant id for an incoming request, per TENANCY_MODE. Fail-closed.
+    """Resolve the tenant id for an incoming request. Fail-closed.
 
+    Order: a registered CUSTOM resolver (if any) first — enterprises plug in here (AC4);
+    then the built-in TENANCY_MODE logic:
     - single: no tenancy (returns None).
-    - header: trust an upstream-injected TENANT_HEADER (X-Tenant-Id). This mode is ONLY
-      for deployments behind a proxy that itself sets the header AND strips any inbound
-      client value. The client header is NOT trusted in any other mode.
+    - header: trust an upstream-injected TENANT_HEADER (X-Tenant-Id). ONLY for deployments
+      behind a proxy that itself sets the header AND strips any inbound client value.
     - jwt: the tenant comes SOLELY from the cryptographically VERIFIED OIDC token
       (signature + expiry + allowlisted issuer). A client-supplied X-Tenant-Id is IGNORED.
 
     SEC-C1: in jwt mode a forged X-Tenant-Id can no longer override the token.
     SEC-C2: the token is verified against the issuer's JWKS, not blindly decoded.
     """
+    if not _custom_loaded:
+        _load_custom_from_env()
+    if _custom_resolver is not None:
+        t = _custom_resolver(request)
+        if t:
+            return t  # custom wins; None falls through to built-ins
+
     if MODE == "single":
         return None
 

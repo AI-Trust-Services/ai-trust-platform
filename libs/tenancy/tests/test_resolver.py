@@ -149,3 +149,27 @@ def test_config_allows_insecure_jwt_with_explicit_optin(monkeypatch):
     monkeypatch.setenv("TENANCY_ALLOW_INSECURE_JWT", "true")
     importlib.reload(config)
     config.validate()  # must not raise
+
+
+# ---- AC4: custom resolver hook (replaceable/adaptable tenancy) --------------------
+
+def test_custom_resolver_takes_precedence(monkeypatch):
+    r = _reload_tenancy(monkeypatch, TENANCY_MODE="jwt", TENANCY_JWKS_ISSUER_BASE=BASE,
+                        TENANCY_JWT_VERIFY="false")
+    r.register_resolver(lambda req: "custom-tenant")
+    try:
+        # even with no token, the custom resolver wins
+        assert r.resolve_tenant(_Req({})) == "custom-tenant"
+    finally:
+        r.register_resolver(None)
+
+
+def test_custom_resolver_none_falls_through_to_builtin(monkeypatch):
+    r = _reload_tenancy(monkeypatch, TENANCY_MODE="jwt", TENANCY_JWKS_ISSUER_BASE=BASE,
+                        TENANCY_JWT_VERIFY="false")
+    r.register_resolver(lambda req: None)  # augment, don't replace
+    try:
+        tok = _unsigned_jwt({"iss": ISS, "tenant_id": "tenantA", "exp": int(time.time()) + 3600})
+        assert r.resolve_tenant(_Req({"Authorization": f"Bearer {tok}"})) == "tenantA"
+    finally:
+        r.register_resolver(None)

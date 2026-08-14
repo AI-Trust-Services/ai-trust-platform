@@ -55,6 +55,17 @@ Isolation is **fail-closed**: in `jwt` mode an unresolved/forged/unverified toke
   nested tenants. Acceptable for the current provider-consumer shape; revisit if hierarchical
   sub-tenant isolation is required.
 
+## Modularity (issue #16 AC4)
+
+The tenancy layer is a self-contained package (`libs/tenancy`) with two levels of adaptability:
+- **Config-level:** `TENANCY_MODE = single | jwt | header` selects the built-in strategy; `single`
+  (default) is a full no-op for the single-tenant deploy.
+- **Extension-level (replaceable):** an enterprise can plug in its OWN tenant resolution WITHOUT
+  forking — either programmatically via `register_resolver(fn)` (fn: `Request -> str | None`), or by
+  config via `TENANCY_RESOLVER="my_pkg.my_module:my_resolver"`. A registered resolver takes
+  precedence over the built-ins; returning `None` falls through to them (augment, not only replace).
+  This satisfies AC4's "modular / replaceable / adaptable to enterprise-specific requirements."
+
 ## MANDATORY runtime requirement — the non-superuser DB role (RLS enforcement)
 
 **Postgres RLS is the backbone of tenant DATA isolation, and RLS is BYPASSED by superusers and
@@ -106,6 +117,6 @@ These are **Platform-Mesh / deployment** concerns, tracked separately (not in th
   with NULL. If single-tenant data is ever migrated into the shared instance, it must be backfilled
   with a real `tenant_id` first (else it leaks to all tenants). Tenant deprovisioning/backfill
   lifecycle is a deploy/ops decision, deferred.
-- **JWT insecure-mode opt-in (SEC-L1 — CLOSED in `<this-commit>`):** `TENANCY_JWT_VERIFY=false` in
+- **JWT insecure-mode opt-in (SEC-L1 — CLOSED):** `TENANCY_JWT_VERIFY=false` in
   jwt mode now REQUIRES an explicit `TENANCY_ALLOW_INSECURE_JWT=true`; otherwise `validate()` refuses
   to start. Prevents accidentally shipping with signature verification off.
