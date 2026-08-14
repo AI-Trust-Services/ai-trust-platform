@@ -678,9 +678,11 @@ async def evaluate_all_tenants() -> None:
 
     In multi-tenant mode the worker's engine is RLS-bound, so we set the tenant ContextVar
     before each pass — install_tenant_scoping then issues SET app.current_tenant so every
-    query in evaluate_once() sees only that tenant's rows. The trailing None pass evaluates
-    shared/catalog (tenant_id IS NULL) data. When no tenants are enumerable (single-tenant
-    or no OWNER_DATABASE_URL), we fall back to one unscoped pass.
+    query in evaluate_once() sees only that tenant's rows. Shared/catalog rows (tenant_id
+    IS NULL, e.g. seeded alert rules) are visible during EVERY tenant pass because the RLS
+    USING clause allows NULL — so they need no separate pass (a separate pass would also
+    double-fire shared-rule alerts). When no tenants are enumerable (single-tenant or no
+    OWNER_DATABASE_URL), we fall back to one unscoped pass.
     """
     tenants = await _distinct_tenants()
     if not tenants:
@@ -691,9 +693,6 @@ async def evaluate_all_tenants() -> None:
             tenant_id_var.set(t)
         log.info("policy_checker_worker.tenant_pass", extra={"tenant_id": t})
         await evaluate_once()
-    # shared/catalog rows
-    if tenant_id_var is not None:
-        tenant_id_var.set(None)
 
 
 async def main() -> None:

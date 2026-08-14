@@ -14,15 +14,23 @@ Behaviour by TENANCY_MODE (read from libs/tenancy, guarded import):
   - jwt/header, tenant NOT resolved: "1=0" (fail-closed — return nothing rather than all
     tenants' rows). The HTTP middleware already 401s unresolved jwt requests, so this is a
     defense-in-depth backstop for non-request contexts.
+  - libs/tenancy NOT importable: fail-CLOSED ("1=0") UNLESS the env explicitly declares
+    TENANCY_MODE=single. A multi-tenant service that lost the dependency must NOT silently
+    return every tenant's rows.
 """
 from __future__ import annotations
+
+import os
 
 try:
     from ai_trust_tenancy import tenant_id_var  # ContextVar[str | None]
     from ai_trust_tenancy.config import MODE as _TENANCY_MODE
-except ImportError:  # libs/tenancy not installed (e.g. single-tenant tooling)
+    _TENANCY_AVAILABLE = True
+except ImportError:  # libs/tenancy not installed
     tenant_id_var = None
-    _TENANCY_MODE = "single"
+    # Only trust "single" if the env explicitly says so; otherwise fail-closed below.
+    _TENANCY_MODE = os.environ.get("TENANCY_MODE", "").strip().lower()
+    _TENANCY_AVAILABLE = False
 
 
 def current_tenant() -> str | None:
@@ -39,6 +47,9 @@ def tenant_clause(*extra: str, param: str = "tenant") -> tuple[str, dict]:
     params: dict = {}
     if _TENANCY_MODE == "single":
         conds.append("1=1")
+    elif not _TENANCY_AVAILABLE:
+        # tenancy lib missing AND not explicitly single → refuse to return anything.
+        conds.append("1=0")
     else:
         tenant = current_tenant()
         if tenant:
