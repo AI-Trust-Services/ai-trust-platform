@@ -13,7 +13,7 @@ from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from app.schemas import AISystemCreate, AISystemResponse, IntakeResponse, ClassificationResult
-from app import email_sender
+from app import email_sender, slack_notifier
 
 router = APIRouter(tags=["intake"])
 logger = get_logger(__name__)
@@ -62,6 +62,12 @@ async def intake_system(body: AISystemCreate, request: Request) -> IntakeRespons
             f"Please log in to the AI Trust Platform and open the system to fill in the required information.\n\n"
             f"AI Trust Platform: http://localhost:8080/registry/"
         ),
+    ))
+    asyncio.create_task(slack_notifier.notify_assigned(
+        system_name=row.name,
+        system_id=row.id,
+        tier=row.tier,
+        assignee=body.assignee_username or "unknown",
     ))
 
     classification = ClassificationResult(tier="minimal", basis="pending", obligations=[], annex_iii_area=None)

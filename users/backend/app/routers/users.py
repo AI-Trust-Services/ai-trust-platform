@@ -337,5 +337,9 @@ async def email_lookup(username: str = Body(..., embed=True)) -> dict:
         resp.raise_for_status()
         users = resp.json()
     if not users:
-        return {"email": None}
-    return {"email": users[0].get("email") or None}
+        return {"email": None, "display_name": None}
+    user = users[0]
+    first = user.get("firstName", "")
+    last = user.get("lastName", "")
+    display_name = f"{first} {last}".strip() or username
+    return {"email": user.get("email") or None, "display_name": display_name}

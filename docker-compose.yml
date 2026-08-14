@@ -298,6 +298,7 @@ services:
       SMTP_USER: ""
       SMTP_PASSWORD: ""
       SMTP_FROM: noreply@ai-trust.local
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
     volumes:
       - openfga-config:/config:ro
     depends_on:

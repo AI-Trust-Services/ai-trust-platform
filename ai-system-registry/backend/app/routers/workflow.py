@@ -14,7 +14,7 @@ from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from app.schemas import WorkflowStepResponse, WorkflowSubmitRequest, WorkflowApproveRequest, WorkflowRejectRequest
-from app import email_sender
+from app import email_sender, slack_notifier
 
 router = APIRouter(tags=["workflow"])
 logger = get_logger(__name__)
@@ -71,6 +71,7 @@ async def submit_for_review(
         await session.commit()
 
         system_name = row.name
+        system_tier = row.tier
         steps = await session.execute(
             select(SystemWorkflowStep)
             .where(SystemWorkflowStep.system_id == system_id)
@@ -89,6 +90,12 @@ async def submit_for_review(
             f"and is waiting for your approval.\n\n"
             f"AI Trust Platform: http://localhost:8080/registry/"
         ),
+    ))
+    asyncio.create_task(slack_notifier.notify_submitted(
+        system_name=system_name,
+        system_id=system_id,
+        tier=system_tier,
+        assignee=body.assignee_username or "unknown",
     ))
 
     return result_steps
@@ -193,6 +200,7 @@ async def reject_system(
         await session.commit()
 
         system_name = row.name
+        system_tier = row.tier
         steps = await session.execute(
             select(SystemWorkflowStep)
             .where(SystemWorkflowStep.system_id == system_id)
@@ -212,6 +220,13 @@ async def reject_system(
             f"Please review the feedback, make the necessary changes, and resubmit.\n\n"
             f"AI Trust Platform: http://localhost:8080/registry/"
         ),
+    ))
+    asyncio.create_task(slack_notifier.notify_rejected(
+        system_name=system_name,
+        system_id=system_id,
+        tier=system_tier,
+        assignee=body.assignee_username or "unknown",
+        note=body.note or "",
     ))
 
     return result_steps
