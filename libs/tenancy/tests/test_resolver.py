@@ -127,3 +127,25 @@ def test_config_jwt_requires_issuer_base(monkeypatch):
     importlib.reload(config)
     with pytest.raises(RuntimeError):
         config.validate()
+
+
+def test_config_refuses_insecure_jwt_without_optin(monkeypatch):
+    # SEC-L1: JWT_VERIFY=false in jwt mode must be an explicit opt-in.
+    import ai_trust_tenancy.config as config
+    monkeypatch.setenv("TENANCY_MODE", "jwt")
+    monkeypatch.setenv("TENANCY_JWKS_ISSUER_BASE", "https://x/realms")
+    monkeypatch.setenv("TENANCY_JWT_VERIFY", "false")
+    monkeypatch.delenv("TENANCY_ALLOW_INSECURE_JWT", raising=False)
+    importlib.reload(config)
+    with pytest.raises(RuntimeError):
+        config.validate()
+
+
+def test_config_allows_insecure_jwt_with_explicit_optin(monkeypatch):
+    import ai_trust_tenancy.config as config
+    monkeypatch.setenv("TENANCY_MODE", "jwt")
+    monkeypatch.setenv("TENANCY_JWKS_ISSUER_BASE", "https://x/realms")
+    monkeypatch.setenv("TENANCY_JWT_VERIFY", "false")
+    monkeypatch.setenv("TENANCY_ALLOW_INSECURE_JWT", "true")
+    importlib.reload(config)
+    config.validate()  # must not raise

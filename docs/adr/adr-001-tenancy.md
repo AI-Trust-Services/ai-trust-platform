@@ -95,3 +95,17 @@ These are **Platform-Mesh / deployment** concerns, tracked separately (not in th
   high-risk (baked into the running DB + every DATABASE_URL/APP_DATABASE_URL + the worker's
   OWNER_DATABASE_URL) and should be a planned maintenance step in the deploy bundle, not an app-repo
   change. The MinIO root password WAS rotated (2026-08-13). Tracked as a deploy follow-up.
+- **Worker owner connection (SEC-M2 follow-up):** `policy-checker-worker` uses `OWNER_DATABASE_URL`
+  (an RLS-bypassing superuser connection) SOLELY to `SELECT DISTINCT tenant_id` for its per-tenant
+  evaluation loop; all actual rule evaluation runs on the RLS-bound `ai_trust_app` engine with the
+  tenant set. Least-privilege hardening = give the worker a dedicated role granted only `SELECT
+  (tenant_id)` (or a narrow view) instead of the owner — deploy-bundle work, deferred.
+- **Legacy `tenant_id IS NULL` rows (SEC-L2 follow-up):** the RLS `USING` clause makes NULL-tenant
+  rows readable by every tenant. This is INTENTIONAL for shared catalog data (frameworks,
+  model_cards, alert_rules seeded by migrations). There are currently no stray tenant-business rows
+  with NULL. If single-tenant data is ever migrated into the shared instance, it must be backfilled
+  with a real `tenant_id` first (else it leaks to all tenants). Tenant deprovisioning/backfill
+  lifecycle is a deploy/ops decision, deferred.
+- **JWT insecure-mode opt-in (SEC-L1 — CLOSED in `<this-commit>`):** `TENANCY_JWT_VERIFY=false` in
+  jwt mode now REQUIRES an explicit `TENANCY_ALLOW_INSECURE_JWT=true`; otherwise `validate()` refuses
+  to start. Prevents accidentally shipping with signature verification off.

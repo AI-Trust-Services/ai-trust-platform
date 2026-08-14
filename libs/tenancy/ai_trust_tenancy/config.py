@@ -27,8 +27,10 @@ JWKS_ISSUER_BASE = os.environ.get("TENANCY_JWKS_ISSUER_BASE", "").strip().rstrip
 # Optional audience check (Keycloak client id). Empty = skip aud verification.
 JWT_AUDIENCE = os.environ.get("TENANCY_JWT_AUDIENCE", "").strip()
 # Verify the signature (default true). Set false ONLY in a controlled test/dev where the
-# token is unsigned — the allowlisted-issuer prefix is still enforced.
+# token is unsigned — the allowlisted-issuer prefix is still enforced. Turning it off in a real
+# deployment is refused by validate() unless TENANCY_ALLOW_INSECURE_JWT=true is ALSO set (SEC-L1).
 JWT_VERIFY = os.environ.get("TENANCY_JWT_VERIFY", "true").strip().lower() not in ("0", "false", "no")
+ALLOW_INSECURE_JWT = os.environ.get("TENANCY_ALLOW_INSECURE_JWT", "").strip().lower() in ("1", "true", "yes")
 
 
 def validate() -> None:
@@ -44,4 +46,11 @@ def validate() -> None:
         raise RuntimeError(
             "TENANCY_MODE=jwt requires TENANCY_JWKS_ISSUER_BASE (the trusted issuer prefix) "
             "so tokens are verified against a known JWKS. Refusing to start."
+        )
+    # SEC-L1: disabling signature verification in jwt mode must be an explicit, deliberate opt-in.
+    if MODE == "jwt" and not JWT_VERIFY and not ALLOW_INSECURE_JWT:
+        raise RuntimeError(
+            "TENANCY_JWT_VERIFY=false in jwt mode accepts UNSIGNED tokens (tenant spoofing risk). "
+            "Refusing to start. Set TENANCY_ALLOW_INSECURE_JWT=true to explicitly allow this "
+            "(test/dev only)."
         )
