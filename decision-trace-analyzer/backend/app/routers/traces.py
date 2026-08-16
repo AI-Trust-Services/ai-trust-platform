@@ -3,7 +3,12 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from ai_trust_clickhouse import GEN_AI_SPANS, get_client, tenant_clause
+from ai_trust_clickhouse import (
+    GEN_AI_SPANS,
+    current_tenant,
+    get_client_for_tenant,
+    tenant_clause,
+)
 from ai_trust_logging import get_logger
 from app.summary import build_summary
 
@@ -105,7 +110,7 @@ def list_traces(
         )
     """
 
-    ch = get_client()
+    ch = get_client_for_tenant(current_tenant())
     try:
         rows = ch.query(query, parameters=list_params)
         total_result = ch.query(count_query, parameters=params)
@@ -195,7 +200,7 @@ def _load_spans(trace_id: str) -> list[dict[str, Any]]:
         ORDER BY started_at ASC
     """
 
-    ch = get_client()
+    ch = get_client_for_tenant(current_tenant())
     try:
         rows = ch.query(query, parameters={"trace_id": trace_id, **tenant_params})
     except Exception:
