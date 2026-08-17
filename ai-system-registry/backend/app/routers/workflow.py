@@ -1,8 +1,6 @@
 """Workflow endpoints — submit, approve, reject, history."""
 from __future__ import annotations
 
-import uuid
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import select
 
@@ -12,6 +10,7 @@ from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
+from app.ids import new_id
 from app.schemas import WorkflowStepResponse, WorkflowSubmitRequest, WorkflowApproveRequest, WorkflowRejectRequest
 from app import email_sender
 
@@ -58,7 +57,7 @@ async def submit_for_review(
             raise HTTPException(422, f"Cannot submit from status '{row.workflow_status}'")
 
         step = SystemWorkflowStep(
-            id=f"SWS-{str(uuid.uuid4())[:8].upper()}",
+            id=new_id("SWS"),
             system_id=system_id,
             step="details_submitted",
             actor_username=current_user,
@@ -127,7 +126,7 @@ async def approve_system(
         owner_username = owner_step.actor_username if owner_step else None
 
         step = SystemWorkflowStep(
-            id=f"SWS-{str(uuid.uuid4())[:8].upper()}",
+            id=new_id("SWS"),
             system_id=system_id,
             step="approved",
             actor_username=current_user,
@@ -185,7 +184,7 @@ async def reject_system(
             raise HTTPException(422, f"Cannot reject from status '{row.workflow_status}'")
 
         step = SystemWorkflowStep(
-            id=f"SWS-{str(uuid.uuid4())[:8].upper()}",
+            id=new_id("SWS"),
             system_id=system_id,
             step="rejected",
             actor_username=current_user,

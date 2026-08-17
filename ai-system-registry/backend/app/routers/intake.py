@@ -1,8 +1,6 @@
 """POST /api/v1/intake — register an AI system stub (owner step)."""
 from __future__ import annotations
 
-import uuid
-
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
 from ai_trust_authorization import require_permission
@@ -11,6 +9,7 @@ from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
+from app.ids import new_id
 from app.schemas import AISystemCreate, AISystemResponse, IntakeResponse, ClassificationResult
 from app import email_sender
 
@@ -21,8 +20,8 @@ logger = get_logger(__name__)
 @router.post("/intake", response_model=IntakeResponse, status_code=201, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
 async def intake_system(body: AISystemCreate, request: Request, background_tasks: BackgroundTasks) -> IntakeResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
-    system_id = f"SYS-{str(uuid.uuid4())[:8].upper()}"
-    step_id = f"SWS-{str(uuid.uuid4())[:8].upper()}"
+    system_id = new_id("SYS")
+    step_id = new_id("SWS")
 
     row = AISystem(
         id=system_id,
