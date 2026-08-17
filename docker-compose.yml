@@ -293,6 +293,7 @@ services:
       OPENFGA_URL: http://openfga:8080
       KEYCLOAK_URL: http://keycloak:8080
       USERS_BACKEND_URL: http://users-backend:8008
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USER: ${SMTP_USER}

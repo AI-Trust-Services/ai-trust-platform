@@ -21,6 +21,11 @@ _SMTP_SSL = os.environ["SMTP_SSL"].lower() == "true"
 _SMTP_STARTTLS = os.environ["SMTP_STARTTLS"].lower() == "true"
 _USERS_BACKEND_URL = os.environ["USERS_BACKEND_URL"]
 
+# Public link to the registry MFE, used in notification bodies. Derived from
+# APP_PUBLIC_URL (the platform's public base URL) so mails point at the real
+# deployment rather than a hardcoded localhost.
+REGISTRY_URL = os.environ.get("APP_PUBLIC_URL", "http://localhost:8080").rstrip("/") + "/registry/"
+
 
 async def _get_email(username: str) -> str | None:
     try:

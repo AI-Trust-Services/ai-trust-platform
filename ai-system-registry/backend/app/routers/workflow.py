@@ -88,7 +88,7 @@ async def submit_for_review(
             f"Hi,\n\n"
             f"The AI system '{system_name}' ({system_id}) has been submitted for compliance review "
             f"and is waiting for your approval.\n\n"
-            f"AI Trust Platform: http://localhost:8080/registry/"
+            f"AI Trust Platform: {email_sender.REGISTRY_URL}"
         ),
     )
 
@@ -156,7 +156,7 @@ async def approve_system(
                 f"Hi,\n\n"
                 f"The AI system '{system_name}' ({system_id}) you registered has been approved "
                 f"by the compliance team.\n\n"
-                f"AI Trust Platform: http://localhost:8080/registry/"
+                f"AI Trust Platform: {email_sender.REGISTRY_URL}"
             ),
         )
 
@@ -215,7 +215,7 @@ async def reject_system(
             f"The AI system '{system_name}' ({system_id}) has been rejected by the compliance team.\n\n"
             f"Rejection note: {body.note}\n\n"
             f"Please review the feedback, make the necessary changes, and resubmit.\n\n"
-            f"AI Trust Platform: http://localhost:8080/registry/"
+            f"AI Trust Platform: {email_sender.REGISTRY_URL}"
         ),
     )
 

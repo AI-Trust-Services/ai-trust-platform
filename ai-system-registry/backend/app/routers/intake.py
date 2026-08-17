@@ -60,7 +60,7 @@ async def intake_system(body: AISystemCreate, request: Request, background_tasks
             f"Hi,\n\n"
             f"You have been assigned to complete the technical details for the AI system '{row.name}' ({row.id}).\n\n"
             f"Please log in to the AI Trust Platform and open the system to fill in the required information.\n\n"
-            f"AI Trust Platform: http://localhost:8080/registry/"
+            f"AI Trust Platform: {email_sender.REGISTRY_URL}"
         ),
     )
 
