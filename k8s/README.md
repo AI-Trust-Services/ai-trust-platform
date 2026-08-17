@@ -86,17 +86,54 @@ values overlay (`values-gardener.yaml`) that swaps NodePort services for a real 
   and `latest`. Frontend Vite build-args come from repo **variables** (`VITE_REGISTRY_API_BASE`,
   etc.) with the same defaults as `.env.example`, so it works out of the box even if unset.
 - **`deploy-gardener.yml`** - manual (`workflow_dispatch`) only, takes the image tag to roll out as
-  input. Writes the kubeconfig and a `.env` from secrets, re-runs the existing
+  input. Authenticates to the shoot cluster via Gardener's **Structured Authentication** + GitHub
+  OIDC (no kubeconfig secret - see below), writes a `.env` from a secret, re-runs the existing
   `k8s/scripts/bootstrap.sh` unchanged (namespace/Secret/ConfigMaps/RBAC - same script as the kind
   path), then `helm upgrade --install` with `values-gardener.yaml` layered on top of `values.yaml`.
 
-Required GitHub repo **secrets**:
+### Cluster authentication - Structured Authentication + GitHub OIDC
+
+Follows Gardener's official guide,
+[Kubernetes Application CI/CD using Structured Authentication](https://gardener.cloud/docs/guides/applications/app-ci-cd/#configure-github-actions):
+GitHub's OIDC token is exchanged directly for cluster access via the shoot's kube-apiserver - no
+kubeconfig ever leaves GitHub, nothing long-lived to leak or rotate. This replaced an earlier,
+simpler design (a static `ServiceAccount` token bound to `cluster-admin`, stored as a
+`GARDENER_KUBECONFIG` secret) once the official guide surfaced this as the supported approach.
+
+One-time setup, checked into `k8s/gardener/`:
+
+1. **`structured-auth-configmap.yaml`** - applied to the **Garden** cluster (not the shoot), in
+   your project's `garden-<project>` namespace. Trusts `https://token.actions.githubusercontent.com`
+   as an OIDC issuer and maps any GitHub Actions run in `AI-Trust-Services/ai-trust-platform` (any
+   branch/ref - see the comment in the file for why) to a stable Kubernetes username. Edit
+   `metadata.namespace` before applying, then patch the shoot to use it:
+   ```bash
+   export KUBECONFIG=/path/to/kubeconfig-garden-<landscape>.yaml   # Garden cluster kubeconfig
+   kubectl apply -f k8s/gardener/structured-auth-configmap.yaml
+   kubectl patch shoot $MY_SHOOT_NAME --type merge --namespace garden-<project> \
+     -p '{"spec":{"kubernetes":{"kubeAPIServer":{"structuredAuthentication":{"configMapName":"ai-trust-platform-github-actions-auth"}}}}}'
+   kubectl get shoot $MY_SHOOT_NAME --watch   # wait for reconciliation to finish
+   ```
+2. **`rbac.yaml`** - applied to the **shoot** cluster, once reconciliation above completes. Creates
+   the `ai-trust` namespace and grants the mapped GitHub identity exactly what `bootstrap.sh` +
+   the Helm chart need (namespace get/patch, and full CRUD within `ai-trust` on the resource kinds
+   the chart creates) - not `cluster-admin`:
+   ```bash
+   export KUBECONFIG=/path/to/kubeconfig-gardenlogin--<project>--<shoot>.yaml   # shoot kubeconfig
+   kubectl apply -f k8s/gardener/rbac.yaml
+   ```
+
+Required GitHub repo **secret**:
 
 | Secret | Purpose |
 |---|---|
-| `GARDENER_KUBECONFIG` | kubeconfig for the target shoot cluster (from the Gardener dashboard or `gardenctl target`) |
 | `AI_TRUST_ENV` | full contents of a `.env` file - same keys as `.env.example`, becomes the `ai-trust-env` Secret |
-| `GHCR_PULL_TOKEN` *(optional)* | a PAT with `read:packages`, only needed if this repo's `ghcr.io` packages are private (a `GITHUB_TOKEN` cannot be used here - it's ephemeral and can't authenticate future image pulls from the cluster; making the packages public avoids needing this entirely) |
+
+Optional GitHub repo **secret**:
+
+| Secret | Purpose |
+|---|---|
+| `GHCR_PULL_TOKEN` | a PAT with `read:packages`, only needed if this repo's `ghcr.io` packages are private (a `GITHUB_TOKEN` cannot be used here - it's ephemeral and can't authenticate future image pulls from the cluster; making the packages public avoids needing this entirely) |
 
 Required GitHub repo **variables**:
 
@@ -104,8 +141,16 @@ Required GitHub repo **variables**:
 |---|---|
 | `APP_PUBLIC_URL` | public https URL for the app, e.g. `https://ai-trust.example.com` - also used as an Ingress host |
 | `KEYCLOAK_PUBLIC_URL` | public https URL for Keycloak, e.g. `https://auth.example.com` - also used as an Ingress host |
-| `K8S_NAMESPACE` *(optional)* | defaults to `ai-trust` |
-| `VITE_*` *(optional)* | overrides for the frontend build-time API bases/URLs baked into images by `build-push.yml`, same keys as `.env.example`'s `VITE_*` vars |
+| `GARDENER_SHOOT_API_SERVER` | the shoot's kube-apiserver URL, e.g. `https://api.<shoot>.<project>.shoot.<landscape>` |
+| `GARDENER_CA_DISCOVERY_URL` | Gardener Discovery Server URL for this shoot's CA - `https://discovery.ingress.garden.<landscape>/projects/<project>/shoots/<shoot-uid>/cluster-ca`; get the shoot UID via `kubectl get shoot $MY_SHOOT_NAME -o jsonpath='{.metadata.uid}'` against the Garden cluster |
+| `GARDENER_OIDC_AUDIENCE` | must match the `audiences` entry in `structured-auth-configmap.yaml` (`ai-trust-platform-ci`) |
+
+Optional GitHub repo **variable**:
+
+| Variable | Purpose |
+|---|---|
+| `K8S_NAMESPACE` | defaults to `ai-trust` |
+| `VITE_*` | overrides for the frontend build-time API bases/URLs baked into images by `build-push.yml`, same keys as `.env.example`'s `VITE_*` vars |
 
 The chart assumes an nginx-class Ingress controller and cert-manager are already installed on the
 shoot (`values-gardener.yaml` sets `ingress.className: nginx` and a
@@ -114,6 +159,12 @@ something else. `oauth2-proxy` and `keycloak` switch from NodePort to ClusterIP 
 are reached through the Ingress instead; every other backing store (postgres, rabbitmq, clickhouse,
 minio) keeps the same NodePort services the kind path uses (see the last bullet under "Known
 limitations" below).
+
+**Do not point the workflow at the kubeconfig from the Gardener dashboard / `gardenctl target`** -
+that one authenticates via an `exec:` credential plugin (`kubectl-gardenlogin`) that does an
+interactive OIDC login and has no way to run non-interactively on a GitHub Actions runner (it fails
+with `executable kubectl-gardenlogin not found`). The Structured Authentication setup above avoids
+needing any kubeconfig in CI at all.
 
 ## Known limitations / gaps as of local-dev scope (same as docker-compose today)
 

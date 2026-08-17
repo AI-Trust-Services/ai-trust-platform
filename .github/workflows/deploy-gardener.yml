@@ -5,19 +5,27 @@ name: Deploy to Gardener
 # pick the image tag to roll out (the short SHA or version tag printed by that
 # workflow's run, or "latest").
 #
-# Required repo secrets:
-#   GARDENER_KUBECONFIG - kubeconfig for the target shoot cluster
-#   AI_TRUST_ENV        - full contents of a .env file (same keys as .env.example;
-#                         this becomes the ai-trust-env Secret, same as local kind/compose)
+# Authenticates via Gardener's Structured Authentication + GitHub OIDC, per
+# https://gardener.cloud/docs/guides/applications/app-ci-cd/#configure-github-actions -
+# no kubeconfig secret. One-time cluster setup: k8s/gardener/ (see k8s/README.md).
+#
+# Required repo secret:
+#   AI_TRUST_ENV             - full contents of a .env file (same keys as .env.example;
+#                              this becomes the ai-trust-env Secret, same as local kind/compose)
 # Optional repo secret:
-#   GHCR_PULL_TOKEN     - a PAT with read:packages, only needed if this repo's
-#                         ghcr.io packages are private (make them public to skip)
+#   GHCR_PULL_TOKEN          - a PAT with read:packages, only needed if this repo's
+#                              ghcr.io packages are private (make them public to skip)
 #
 # Required repo variables:
-#   APP_PUBLIC_URL      - public https URL for the app, e.g. https://ai-trust.example.com
-#   KEYCLOAK_PUBLIC_URL - public https URL for Keycloak, e.g. https://auth.example.com
+#   APP_PUBLIC_URL           - public https URL for the app, e.g. https://ai-trust.example.com
+#   KEYCLOAK_PUBLIC_URL      - public https URL for Keycloak, e.g. https://auth.example.com
+#   GARDENER_SHOOT_API_SERVER - the shoot's kube-apiserver URL, e.g.
+#                              https://api.<shoot>.<project>.shoot.<landscape>
+#   GARDENER_CA_DISCOVERY_URL - Gardener Discovery Server URL for this shoot's CA, e.g.
+#                              https://discovery.ingress.garden.<landscape>/projects/<project>/shoots/<shoot-uid>/cluster-ca
+#   GARDENER_OIDC_AUDIENCE   - must match the `audiences` list in k8s/gardener/structured-auth-configmap.yaml
 # Optional repo variable:
-#   K8S_NAMESPACE       - defaults to "ai-trust"
+#   K8S_NAMESPACE            - defaults to "ai-trust"
 on:
   workflow_dispatch:
     inputs:
@@ -32,6 +40,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write # required for the OIDC token exchange with the Gardener shoot's kube-apiserver
 
 jobs:
   deploy:
@@ -49,13 +58,16 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
-      - name: Write kubeconfig
-        env:
-          KUBECONFIG_CONTENT: ${{ secrets.GARDENER_KUBECONFIG }}
-        run: |
-          umask 077
-          printf '%s' "$KUBECONFIG_CONTENT" > "$RUNNER_TEMP/kubeconfig"
-          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+      - name: Authenticate to Gardener cluster via OIDC
+        uses: gardener/cc-utils/.github/actions/kubernetes-auth@1e70b044f4d3305267a559e7ae74b4de57e1fdee
+        with:
+          server: ${{ vars.GARDENER_SHOOT_API_SERVER }}
+          server-ca-discovery-url: ${{ vars.GARDENER_CA_DISCOVERY_URL }}
+          audience: ${{ vars.GARDENER_OIDC_AUDIENCE }}
+          # writes ./kubeconfig.yaml (default kubeconfig-path) using the short-lived OIDC token
+
+      - name: Point KUBECONFIG at the authenticated kubeconfig
+        run: echo "KUBECONFIG=$GITHUB_WORKSPACE/kubeconfig.yaml" >> "$GITHUB_ENV"
 
       - name: Verify cluster connectivity
         run: kubectl cluster-info

@@ -1,0 +1,75 @@
+# One-time setup, applied to the SHOOT cluster (not the garden cluster) - see k8s/README.md.
+# Grants the OIDC identity mapped by structured-auth-configmap.yaml (any GitHub Actions run in
+# AI-Trust-Services/ai-trust-platform, any branch/ref) exactly the permissions
+# deploy-gardener.yml needs: bootstrap.sh's namespace/Secret/ConfigMap/RBAC setup, plus
+# `helm upgrade --install` of the whole chart. Deliberately not cluster-admin.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-trust
+---
+# Cluster-scoped because Namespace is a cluster-scoped resource. Only get+patch, not create:
+# the Namespace above is created once, out-of-band, by whoever applies this file - bootstrap.sh's
+# `kubectl create namespace ai-trust --dry-run=client -o yaml | kubectl apply -f -` always issues
+# a GET then a PATCH even when the namespace already exists and nothing changes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ai-trust-ci-namespace-reader
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-trust-ci-namespace-reader
+subjects:
+  - kind: User
+    name: "github.com:284992593:1285188431" # AI-Trust-Services/ai-trust-platform - see structured-auth-configmap.yaml
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: ai-trust-ci-namespace-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# Everything else the Helm chart + bootstrap.sh manage, scoped to the ai-trust namespace only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ai-trust-ci-deployer
+  namespace: ai-trust
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets", "serviceaccounts", "services", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ai-trust-ci-deployer
+  namespace: ai-trust
+subjects:
+  - kind: User
+    name: "github.com:284992593:1285188431"
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: ai-trust-ci-deployer
+  apiGroup: rbac.authorization.k8s.io
