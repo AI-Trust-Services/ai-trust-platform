@@ -48,6 +48,9 @@ jobs:
     environment: gardener
     env:
       NAMESPACE: ${{ vars.K8S_NAMESPACE || 'ai-trust' }}
+      GARDENER_SHOOT_API_SERVER: ${{ vars.GARDENER_SHOOT_API_SERVER }}
+      GARDENER_CA_DISCOVERY_URL: ${{ vars.GARDENER_CA_DISCOVERY_URL }}
+      GARDENER_OIDC_AUDIENCE: ${{ vars.GARDENER_OIDC_AUDIENCE }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -58,12 +61,18 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
+      - name: Print Gardener OIDC vars
+        run: |
+          echo "server: ${GARDENER_SHOOT_API_SERVER:-<unset>}"
+          echo "server-ca-discovery-url: ${GARDENER_CA_DISCOVERY_URL:-<unset>}"
+          echo "audience: ${GARDENER_OIDC_AUDIENCE:-<unset>}"
+
       - name: Authenticate to Gardener cluster via OIDC
         uses: gardener/cc-utils/.github/actions/kubernetes-auth@1e70b044f4d3305267a559e7ae74b4de57e1fdee
         with:
-          server: ${{ vars.GARDENER_SHOOT_API_SERVER }}
-          server-ca-discovery-url: ${{ vars.GARDENER_CA_DISCOVERY_URL }}
-          audience: ${{ vars.GARDENER_OIDC_AUDIENCE }}
+          server: ${{ env.GARDENER_SHOOT_API_SERVER }}
+          server-ca-discovery-url: ${{ env.GARDENER_CA_DISCOVERY_URL }}
+          audience: ${{ env.GARDENER_OIDC_AUDIENCE }}
           # writes ./kubeconfig.yaml (default kubeconfig-path) using the short-lived OIDC token
 
       - name: Point KUBECONFIG at the authenticated kubeconfig
