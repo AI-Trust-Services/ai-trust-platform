@@ -68,9 +68,9 @@ async def submit_for_review(
         row.assignee_username = body.assignee_username
         row.compliance_officer_username = body.assignee_username
         session.add(step)
+        system_name = row.name  # capture before commit expires ORM attributes
         await session.commit()
 
-        system_name = row.name
         steps = await session.execute(
             select(SystemWorkflowStep)
             .where(SystemWorkflowStep.system_id == system_id)
@@ -135,9 +135,9 @@ async def approve_system(
         row.workflow_status = "approved"
         row.assignee_username = None
         session.add(step)
+        system_name = row.name  # capture before commit expires ORM attributes
         await session.commit()
 
-        system_name = row.name
         steps = await session.execute(
             select(SystemWorkflowStep)
             .where(SystemWorkflowStep.system_id == system_id)
@@ -194,9 +194,9 @@ async def reject_system(
         row.workflow_status = "rejected"
         row.assignee_username = body.assignee_username
         session.add(step)
+        system_name = row.name  # capture before commit expires ORM attributes
         await session.commit()
 
-        system_name = row.name
         steps = await session.execute(
             select(SystemWorkflowStep)
             .where(SystemWorkflowStep.system_id == system_id)
