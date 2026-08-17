@@ -71,10 +71,13 @@ jobs:
         run: bash k8s/scripts/bootstrap.sh
 
       - name: Create ghcr.io pull secret
-        if: ${{ secrets.GHCR_PULL_TOKEN != '' }}
         env:
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         run: |
+          if [[ -z "$GHCR_PULL_TOKEN" ]]; then
+            echo "GHCR_PULL_TOKEN not set - skipping (packages must be public)"
+            exit 0
+          fi
           kubectl create secret docker-registry ghcr-pull-secret \
             --docker-server=ghcr.io \
             --docker-username="${{ github.actor }}" \
