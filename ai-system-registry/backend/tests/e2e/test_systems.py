@@ -8,12 +8,20 @@ import httpx
 # Helpers
 # ---------------------------------------------------------------------------
 
+_ASSIGNEE = "engineer1"
+# The workflow router and PUT /systems read the acting user from this header
+# (set by oauth2-proxy in production). Only the assigned user may mutate a system.
+_HEADERS = {"x-forwarded-preferred-username": _ASSIGNEE}
+
+
 def _minimal_system() -> dict:
-    return {"name": "E2E Test System"}
+    return {"name": "E2E Test System", "assignee_username": _ASSIGNEE}
 
 
 async def _create_system(client: httpx.AsyncClient, payload: dict | None = None) -> dict:
-    r = await client.post("/v1/intake", json=payload or _minimal_system())
+    payload = payload or _minimal_system()
+    payload.setdefault("assignee_username", _ASSIGNEE)
+    r = await client.post("/v1/intake", json=payload, headers=_HEADERS)
     assert r.status_code == 201
     return r.json()
 
@@ -39,35 +47,52 @@ async def test_health_returns_ok(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_intake_registers_system_and_returns_classification(client: httpx.AsyncClient):
-    r = await client.post("/v1/intake", json=_minimal_system())
+    r = await client.post("/v1/intake", json=_minimal_system(), headers=_HEADERS)
     assert r.status_code == 201
     body = r.json()
     assert body["system"]["id"].startswith("SYS-")
     assert body["system"]["name"] == "E2E Test System"
+    # Intake creates a draft stub — classification is deferred until risk flags
+    # are filled in (via PUT) or /reclassify is called.
     assert body["classification"]["tier"] == "minimal"
+    assert body["system"]["workflow_status"] == "draft"
 
 
-async def test_intake_classifies_prohibited_system(client: httpx.AsyncClient):
-    r = await client.post("/v1/intake", json={**_minimal_system(), "subliminal_manipulation": True})
-    assert r.status_code == 201
-    assert r.json()["classification"]["tier"] == "prohibited"
+async def test_update_flag_classifies_prohibited_system(client: httpx.AsyncClient):
+    # Intake no longer classifies — setting a risk flag via PUT triggers reclassification.
+    system_id = (await _create_system(client))["system"]["id"]
+    r = await client.put(
+        f"/v1/systems/{system_id}", json={"subliminal_manipulation": True}, headers=_HEADERS
+    )
+    assert r.status_code == 200
+    assert r.json()["tier"] == "prohibited"
 
 
-async def test_intake_classifies_high_risk_system(client: httpx.AsyncClient):
-    r = await client.post("/v1/intake", json={**_minimal_system(), "is_biometric_identification": True})
-    assert r.status_code == 201
-    assert r.json()["classification"]["tier"] == "high"
+async def test_update_flag_classifies_high_risk_system(client: httpx.AsyncClient):
+    system_id = (await _create_system(client))["system"]["id"]
+    r = await client.put(
+        f"/v1/systems/{system_id}", json={"is_biometric_identification": True}, headers=_HEADERS
+    )
+    assert r.status_code == 200
+    assert r.json()["tier"] == "high"
 
 
 async def test_intake_rejects_missing_name(client: httpx.AsyncClient):
-    r = await client.post("/v1/intake", json={})
+    r = await client.post("/v1/intake", json={"assignee_username": _ASSIGNEE}, headers=_HEADERS)
     assert r.status_code == 422
 
 
-async def test_intake_respects_lifecycle(client: httpx.AsyncClient):
-    r = await client.post("/v1/intake", json={**_minimal_system(), "lifecycle": "market"})
-    assert r.status_code == 201
-    assert r.json()["system"]["lifecycle"] == "market"
+async def test_intake_rejects_missing_assignee(client: httpx.AsyncClient):
+    r = await client.post("/v1/intake", json={"name": "No Assignee"}, headers=_HEADERS)
+    assert r.status_code == 422
+
+
+async def test_update_system_lifecycle(client: httpx.AsyncClient):
+    # lifecycle is not an intake field — it is set later via PUT.
+    system_id = (await _create_system(client))["system"]["id"]
+    r = await client.put(f"/v1/systems/{system_id}", json={"lifecycle": "market"}, headers=_HEADERS)
+    assert r.status_code == 200
+    assert r.json()["lifecycle"] == "market"
 
 
 # ---------------------------------------------------------------------------
@@ -113,9 +138,20 @@ async def test_get_system_404_on_missing(client: httpx.AsyncClient):
 
 async def test_update_system_mutable_field(client: httpx.AsyncClient):
     system_id = (await _create_system(client))["system"]["id"]
-    r = await client.put(f"/v1/systems/{system_id}", json={"name": "Updated Name"})
+    r = await client.put(f"/v1/systems/{system_id}", json={"name": "Updated Name"}, headers=_HEADERS)
     assert r.status_code == 200
     assert r.json()["name"] == "Updated Name"
+
+
+async def test_update_system_rejected_for_non_assignee(client: httpx.AsyncClient):
+    # Only the assigned user may mutate the system.
+    system_id = (await _create_system(client))["system"]["id"]
+    r = await client.put(
+        f"/v1/systems/{system_id}",
+        json={"name": "Hijacked"},
+        headers={"x-forwarded-preferred-username": "someone-else"},
+    )
+    assert r.status_code == 403
 
 
 async def test_update_system_rejects_immutable_basis(client: httpx.AsyncClient):
