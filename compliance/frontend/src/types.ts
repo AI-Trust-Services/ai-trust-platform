@@ -108,6 +108,7 @@ export interface AISystem {
   tier: string;
   lifecycle: string;
   compliance: number;
+  workflow_status: string;
 }
 
 export interface GenerateObligationsResponse {

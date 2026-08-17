@@ -5,15 +5,20 @@
 // The check is UX-only; every backend enforces permissions independently.
 (async function initShell() {
   let permissions = [];
+  let currentUser = { username: "", firstName: "", lastName: "" };
   try {
-    const res = await fetch("/api/users/v1/me/permissions", { cache: "no-store" });
-    if (res.ok) {
-      const data = await res.json();
+    const [permRes, meRes] = await Promise.all([
+      fetch("/api/users/v1/me/permissions", { cache: "no-store" }),
+      fetch("/api/users/v1/me", { cache: "no-store" }),
+    ]);
+    if (permRes.ok) {
+      const data = await permRes.json();
       permissions = data.permissions || [];
     }
+    if (meRes.ok) {
+      currentUser = await meRes.json();
+    }
   } catch (e) {
-    // If the permissions endpoint is unreachable, fail closed: only nodes
-    // without a permission requirement (Overview) remain visible.
     permissions = [];
   }
 
@@ -378,25 +383,74 @@
         }
       }, 200);
 
-      // Inject sign-out button into shell bar
+      // Inject account menu into shell bar
       const waitForShellbar = setInterval(() => {
         const shellbar = document.querySelector(".fd-shellbar__group--actions, .fd-shellbar__actions");
         if (shellbar) {
           clearInterval(waitForShellbar);
-          const btn = document.createElement("a");
-          btn.href = "/oauth2/sign_out";
-          btn.title = "Sign out";
-          btn.style.cssText = `
-            display: inline-flex; align-items: center; gap: 6px;
-            color: #ffffff; text-decoration: none; font-size: 13px;
-            font-weight: 500; padding: 6px 12px; border-radius: 4px;
-            border: 1px solid rgba(255,255,255,0.4);
-            margin-right: 8px; cursor: pointer;
+
+          const displayName = [currentUser.firstName, currentUser.lastName].filter(Boolean).join(" ") || currentUser.username;
+          const initials = currentUser.firstName && currentUser.lastName
+            ? (currentUser.firstName[0] + currentUser.lastName[0]).toUpperCase()
+            : (currentUser.username || "?").slice(0, 2).toUpperCase();
+
+          const wrapper = document.createElement("div");
+          wrapper.style.cssText = "position:relative; display:inline-flex; align-items:center; margin-right:8px;";
+
+          const trigger = document.createElement("button");
+          trigger.style.cssText = `
+            display:inline-flex; align-items:center; gap:8px;
+            background:transparent; border:1px solid rgba(255,255,255,0.4);
+            border-radius:4px; padding:4px 10px 4px 4px;
+            color:#fff; font-size:13px; font-weight:500;
+            cursor:pointer; height:32px;
           `;
-          btn.innerHTML = `<span class="sap-icon sap-icon--log" style="font-size:16px;color:#fff"></span> Sign out`;
-          btn.addEventListener("mouseenter", () => btn.style.background = "rgba(255,255,255,0.15)");
-          btn.addEventListener("mouseleave", () => btn.style.background = "transparent");
-          shellbar.prepend(btn);
+          trigger.innerHTML = `
+            <span style="
+              width:24px; height:24px; border-radius:50%;
+              background:rgba(255,255,255,0.25); display:inline-flex;
+              align-items:center; justify-content:center;
+              font-size:11px; font-weight:700; flex-shrink:0;
+            ">${initials}</span>
+            <span>${displayName}</span>
+            <span style="font-size:10px; opacity:0.7;">▾</span>
+          `;
+
+          const dropdown = document.createElement("div");
+          dropdown.style.cssText = `
+            display:none; position:absolute; top:calc(100% + 4px); right:0;
+            background:#fff; border:1px solid #e4e6e8; border-radius:6px;
+            box-shadow:0 4px 12px rgba(0,0,0,0.12); min-width:160px; z-index:9999;
+            overflow:hidden;
+          `;
+          dropdown.innerHTML = `
+            <div style="padding:10px 14px 8px; border-bottom:1px solid #e4e6e8;">
+              <div style="font-size:13px; font-weight:600; color:#1d2d3e;">${displayName}</div>
+              <div style="font-size:11px; color:#8a9bb0; margin-top:2px;">${currentUser.username}</div>
+            </div>
+            <a href="/oauth2/sign_out" style="
+              display:flex; align-items:center; gap:8px;
+              padding:10px 14px; color:#1d2d3e; text-decoration:none;
+              font-size:13px; transition:background 0.1s;
+            "
+            onmouseover="this.style.background='#f5f6f7'"
+            onmouseout="this.style.background='transparent'">
+              <span class="sap-icon sap-icon--log" style="font-size:15px; color:#556b82;"></span>
+              Sign out
+            </a>
+          `;
+
+          trigger.addEventListener("click", (e) => {
+            e.stopPropagation();
+            dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
+          });
+          document.addEventListener("click", () => { dropdown.style.display = "none"; });
+          trigger.addEventListener("mouseenter", () => { trigger.style.background = "rgba(255,255,255,0.15)"; });
+          trigger.addEventListener("mouseleave", () => { trigger.style.background = "transparent"; });
+
+          wrapper.appendChild(trigger);
+          wrapper.appendChild(dropdown);
+          shellbar.prepend(wrapper);
         }
       }, 200);
     },

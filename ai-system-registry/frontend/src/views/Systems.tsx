@@ -1,22 +1,32 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { TierBadge, LifecycleBadge, ComplianceBar, FormattedDate } from "../components/Badges";
 import SystemDetail from "../components/SystemDetail";
+import type { UserMap } from "../components/SystemDetail";
 import RegisterWizard from "../components/RegisterWizard";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import type { AISystem, ModelCard } from "../types";
 
+const WORKFLOW_STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  pending_review: "Pending Review",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+
 export default function Systems() {
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [models, setModels] = useState<ModelCard[]>([]);
+  const [userMap, setUserMap] = useState<UserMap>({});
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("");
   const [lifecycleFilter, setLifecycleFilter] = useState("");
+  const [workflowFilter, setWorkflowFilter] = useState("");
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const { wizardOpen, setWizardOpen, mayWrite } = useModalControls();
+  const [fillInSystem, setFillInSystem] = useState<AISystem | undefined>(undefined);
+  const { wizardOpen, setWizardOpen, mayRegister, username } = useModalControls();
   const showToast = useToast();
-  const noWriteTitle = "Requires permission: systems:write";
 
   const loadSystems = useCallback(async () => {
     try {
@@ -36,6 +46,19 @@ export default function Systems() {
     }
   }, [showToast]);
 
+  useEffect(() => {
+    Promise.all([
+      api.getUsersByRole("ai_engineer").catch(() => []),
+      api.getUsersByRole("ai_compliance_officer").catch(() => []),
+    ]).then(([engineers, cos]) => {
+      const map: UserMap = {};
+      for (const u of [...engineers, ...cos]) {
+        map[u.username] = { firstName: u.firstName, lastName: u.lastName };
+      }
+      setUserMap(map);
+    });
+  }, []);
+
   useEffect(() => { loadSystems(); loadModels(); }, [loadSystems, loadModels]);
 
   const filtered = useMemo(() => {
@@ -45,23 +68,60 @@ export default function Systems() {
         sys.id.toLowerCase().includes(s) || (sys.provider || "").toLowerCase().includes(s);
       const matchTier = !tierFilter || sys.tier === tierFilter;
       const matchLc = !lifecycleFilter || sys.lifecycle === lifecycleFilter;
-      return matchSearch && matchTier && matchLc;
+      const matchWf = !workflowFilter || sys.workflow_status === workflowFilter;
+      return matchSearch && matchTier && matchLc && matchWf;
     });
-  }, [systems, search, tierFilter, lifecycleFilter]);
+  }, [systems, search, tierFilter, lifecycleFilter, workflowFilter]);
 
   function modelName(modelId: string | null) {
     const m = models.find((x) => x.id === modelId);
     return m ? m.name : modelId;
   }
 
-  async function openDetail(id: string) {
+  async function openSystem(s: AISystem) {
+    // Engineer mode: assigned user + editable status → open wizard to fill in
+    const isAssignee = username && s.assignee_username === username;
+    if (isAssignee && (s.workflow_status === "draft" || s.workflow_status === "rejected")) {
+      try {
+        const fresh = await api.getSystem(s.id);
+        setFillInSystem(fresh);
+        setWizardOpen(true);
+      } catch (e) {
+        showToast(`Failed to load system: ${(e as Error).message}`, true);
+      }
+      return;
+    }
+    // Otherwise open the detail panel
     try {
-      const s = await api.getSystem(id);
-      setSelectedSystem(s);
+      const fresh = await api.getSystem(s.id);
+      setSelectedSystem(fresh);
       setDetailOpen(true);
     } catch (e) {
       showToast(`Failed to load system: ${(e as Error).message}`, true);
     }
+  }
+
+  function workflowStatusBadge(status: string) {
+    const colors: Record<string, string> = {
+      draft: "#8a9bb0",
+      pending_review: "#e67e22",
+      approved: "#27ae60",
+      rejected: "#c0392b",
+    };
+    return (
+      <span style={{
+        display: "inline-block",
+        padding: "2px 8px",
+        borderRadius: 10,
+        fontSize: 11,
+        fontWeight: 600,
+        color: "#fff",
+        background: colors[status] || "#8a9bb0",
+        letterSpacing: "0.3px",
+      }}>
+        {WORKFLOW_STATUS_LABELS[status] || status}
+      </span>
+    );
   }
 
   return (
@@ -86,6 +146,13 @@ export default function Systems() {
           <option value="post-market">Post-Market</option>
           <option value="decommissioned">Decommissioned</option>
         </select>
+        <select className="filter-select" value={workflowFilter} onChange={(e) => setWorkflowFilter(e.target.value)}>
+          <option value="">All Workflow States</option>
+          <option value="draft">Draft</option>
+          <option value="pending_review">Pending Review</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
         <div className="toolbar-spacer" />
         <button className="btn-ghost" onClick={loadSystems}>↺ Refresh</button>
       </div>
@@ -96,6 +163,8 @@ export default function Systems() {
             <thead>
               <tr>
                 <th>System</th>
+                <th>Workflow</th>
+                <th>Assignee</th>
                 <th>Risk Tier</th>
                 <th>Lifecycle</th>
                 <th>Compliance</th>
@@ -106,10 +175,10 @@ export default function Systems() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr className="empty-row">
-                  <td colSpan={6}>{systems.length === 0 ? 'No systems registered yet. Click "Register System" to add one.' : "No systems match the current filters."}</td>
+                  <td colSpan={8}>{systems.length === 0 ? 'No systems registered yet. Click "Register System" to add one.' : "No systems match the current filters."}</td>
                 </tr>
               ) : filtered.map((s) => (
-                <tr key={s.id} onClick={() => openDetail(s.id)}>
+                <tr key={s.id} onClick={() => openSystem(s)} style={{ cursor: "pointer" }}>
                   <td>
                     <div className="system-name">{s.name}</div>
                     <div className="system-sub">
@@ -117,17 +186,41 @@ export default function Systems() {
                       {s.model_id && <> · <span style={{ color: "var(--brand)" }}>{modelName(s.model_id)}</span></>}
                     </div>
                   </td>
-                  <td><TierBadge tier={s.tier} /></td>
+                  <td>{workflowStatusBadge(s.workflow_status)}</td>
+                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+                    {s.assignee_username ? (
+                      <span title={s.assignee_username} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          width: 24, height: 24, borderRadius: "50%", background: "var(--brand)",
+                          color: "#fff", fontSize: 10, fontWeight: 700, flexShrink: 0,
+                        }}>
+                          {(() => {
+                            const u = userMap[s.assignee_username];
+                            if (u?.firstName && u?.lastName) return (u.firstName[0] + u.lastName[0]).toUpperCase();
+                            if (u?.firstName) return u.firstName.slice(0, 2).toUpperCase();
+                            return s.assignee_username.slice(0, 2).toUpperCase();
+                          })()}
+                        </span>
+                        {(() => {
+                          const u = userMap[s.assignee_username];
+                          const full = [u?.firstName, u?.lastName].filter(Boolean).join(" ");
+                          return full || s.assignee_username;
+                        })()}
+                      </span>
+                    ) : "—"}
+                  </td>
+                  <td><TierBadge tier={s.tier} workflowStatus={s.workflow_status} /></td>
                   <td><LifecycleBadge lc={s.lifecycle} /></td>
                   <td><ComplianceBar pct={s.compliance} /></td>
                   <td style={{ color: "var(--text-secondary)", fontSize: 13 }}><FormattedDate iso={s.created_at} /></td>
                   <td>
                     <div className="actions" onClick={(e) => e.stopPropagation()}>
-                      <button className="btn-icon" title="Details" onClick={() => openDetail(s.id)}>⊙</button>
+                      <button className="btn-icon" title="Details" onClick={() => openSystem(s)}>⊙</button>
                       <button
                         className="btn-icon btn-danger"
-                        title={mayWrite ? "Delete" : noWriteTitle}
-                        disabled={!mayWrite}
+                        title={mayRegister ? "Delete" : "Requires role: business owner or administrator"}
+                        disabled={!mayRegister}
                         onClick={async () => {
                           if (!confirm(`Delete "${s.name}"?\n\nThis action cannot be undone.`)) return;
                           try {
@@ -150,7 +243,8 @@ export default function Systems() {
 
       <RegisterWizard
         open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
+        system={fillInSystem}
+        onClose={() => { setWizardOpen(false); setFillInSystem(undefined); }}
         onSuccess={() => { loadSystems(); loadModels(); }}
       />
 
@@ -158,6 +252,7 @@ export default function Systems() {
         open={detailOpen}
         system={selectedSystem}
         models={models}
+        userMap={userMap}
         onClose={() => setDetailOpen(false)}
         onDelete={() => { setDetailOpen(false); loadSystems(); }}
         onUpdate={(updated) => {

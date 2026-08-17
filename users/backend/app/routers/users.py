@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import select
 
 from app.keycloak import admin_client
@@ -154,6 +154,45 @@ async def invite_user(body: InviteUserRequest, _: str = Depends(require_permissi
         return await _to_detail(user_resp.json())
 
 
+@router.get("/by-role", response_model=list[dict])
+async def users_by_role(
+    role: str = Query(...),
+    _: str = Depends(require_permission("systems:read")),
+):
+    members = await openfga_client.read_role_members(f"role:{role}")
+    usernames = [m.removeprefix("user:") for m in members]
+    if not usernames:
+        return []
+
+    results: list[dict] = []
+    sem = asyncio.Semaphore(10)
+
+    async def _fetch(username: str) -> dict | None:
+        async with sem:
+            def _sync():
+                with admin_client() as kc:
+                    resp = kc.get("/users", params={"username": username, "exact": "true"})
+                    resp.raise_for_status()
+                    users = resp.json()
+                if not users:
+                    return None
+                u = users[0]
+                return {
+                    "username": u.get("username", ""),
+                    "firstName": u.get("firstName", ""),
+                    "lastName": u.get("lastName", ""),
+                }
+            try:
+                return await asyncio.to_thread(_sync)
+            except Exception:
+                logger.warning("user.by_role_fetch_failed", extra={"username": username})
+                return None
+
+    fetched = await asyncio.gather(*[_fetch(u) for u in usernames])
+    results = [r for r in fetched if r is not None]
+    return results
+
+
 @router.get("/{user_id}", response_model=UserDetail)
 async def get_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
     with admin_client() as kc:
@@ -288,3 +327,17 @@ async def remove_role(user_id: str, role_name: str, _: str = Depends(require_per
 
     logger.info("user.role_removed", extra={"username": username, "role": role_name})
     return await _to_detail(user)
+
+
+internal_router = APIRouter(prefix="/internal", tags=["internal"])
+
+
+@internal_router.post("/users/email-lookup")
+async def email_lookup(username: str = Body(..., embed=True)) -> dict:
+    with admin_client() as kc:
+        resp = kc.get("/users", params={"username": username, "exact": "true"})
+        resp.raise_for_status()
+        users = resp.json()
+    if not users:
+        return {"email": None}
+    return {"email": users[0].get("email") or None}

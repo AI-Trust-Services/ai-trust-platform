@@ -292,6 +292,16 @@ services:
       ROOT_PATH: "/api/registry"
       OPENFGA_URL: http://openfga:8080
       KEYCLOAK_URL: http://keycloak:8080
+      USERS_BACKEND_URL: http://users-backend:8008
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-AI Trust Platform}
+      SMTP_SSL: ${SMTP_SSL}
+      SMTP_STARTTLS: ${SMTP_STARTTLS}
     volumes:
       - openfga-config:/config:ro
     depends_on:
@@ -589,6 +599,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    restart: on-failure
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
+      - "1025:1025"
     restart: on-failure
 
 volumes:

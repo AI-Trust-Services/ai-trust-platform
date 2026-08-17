@@ -82,6 +82,20 @@ async def test_create_assessment_rejects_decommissioned_system(client: httpx.Asy
     assert r.status_code == 422
 
 
+async def test_create_assessment_rejects_unapproved_system(client: httpx.AsyncClient):
+    # A system must complete the registration workflow (workflow_status == "approved")
+    # before it can be assessed.
+    for status in ("draft", "pending_review", "rejected"):
+        system = await create_system(workflow_status=status)
+        r = await client.post("/v1/assessments", json={
+            "ai_system_id": system["id"],
+            "framework_id": "FRM-EU-AI-ACT",
+            "title": "X",
+            "type": "compliance",
+        })
+        assert r.status_code == 422, f"status={status} should be rejected"
+
+
 async def test_create_assessment_unknown_tier_yields_no_obligations(client: httpx.AsyncClient):
     # obligations_for() returns [] for unknown tiers — assessment is created successfully
     # but with zero obligations. Zero obligations is a valid state (logged as a warning).

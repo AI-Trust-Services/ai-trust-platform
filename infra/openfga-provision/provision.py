@@ -20,6 +20,7 @@ Optional env vars:
   INITIAL_ADMIN_USER     username to seed as platform_administrator
 """
 import asyncio
+import json
 import os
 import sys
 
@@ -95,10 +96,45 @@ async def find_or_create_store(client: OpenFgaClient) -> str:
     return created.id
 
 
+def _canonical_model(model: dict) -> str:
+    """Return a canonical JSON string for comparing two authorization models.
+
+    Drops the server-assigned ``id`` and any null / empty fields so a freshly
+    built model compares equal to the stored one when they are semantically
+    identical. Stripping is symmetric (applied to both sides), so it only ever
+    hides differences that are equally absent on both — a real change (e.g. a
+    new relation for a new permission) always survives normalization.
+    """
+    def strip(value):
+        if isinstance(value, dict):
+            return {
+                k: strip(v)
+                for k, v in value.items()
+                if k != "id" and v not in (None, {}, [])
+            }
+        if isinstance(value, list):
+            return [strip(v) for v in value]
+        return value
+
+    return json.dumps(strip(model), sort_keys=True)
+
+
 async def write_model_if_needed(client: OpenFgaClient) -> None:
+    """Write the authorization model only when it differs from the latest stored one.
+
+    OpenFGA models are append-only versioned — every write creates a new
+    version that is never garbage-collected. Writing unconditionally on every
+    startup (deploy, crash, scaling) would accumulate identical versions and
+    slowly bloat OpenFGA's database. We therefore compare the freshly built
+    model against the latest stored version and write only on a real change
+    (e.g. a permission was added to constants.py). New relations still take
+    effect on restart without a volume wipe; an unchanged restart is a no-op.
+    """
+    built = build_model()
     existing = await client.read_authorization_models()
-    if existing.authorization_models:
-        print("Authorization model already exists, skipping write.")
+    models = existing.authorization_models or []
+    if models and _canonical_model(models[0].to_dict()) == _canonical_model(built):
+        print("Authorization model unchanged, skipping write.")
         return
     await write_model(client)
 
