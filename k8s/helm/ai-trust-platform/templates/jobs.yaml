@@ -11,6 +11,7 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         {{- include "ai-trust.waitForTcp" (dict "name" "postgres" "port" 5432 "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:
@@ -29,6 +30,7 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         {{- include "ai-trust.waitForHttp" (dict "name" "clickhouse" "port" 8123 "path" "/ping" "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:
@@ -76,6 +78,7 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         {{- include "ai-trust.waitForHttp" (dict "name" "keycloak" "port" 8080 "path" "/realms/master" "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:
@@ -120,6 +123,7 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         {{- include "ai-trust.waitForTcp" (dict "name" "openfga" "port" 8081 "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:

@@ -6,6 +6,19 @@ app: {{ .name }}
 {{- end -}}
 
 {{/*
+imagePullSecrets for pods that pull locally-built images from a real registry
+(e.g. ghcr.io on Gardener). Empty/omitted for kind, where images are loaded
+directly via `kind load docker-image` and no registry auth is needed.
+Usage: {{- include "ai-trust.imagePullSecrets" $ | nindent 6 }}
+*/}}
+{{- define "ai-trust.imagePullSecrets" -}}
+{{- if .Values.imagePullSecrets }}
+imagePullSecrets:
+  {{- toYaml .Values.imagePullSecrets | nindent 2 }}
+{{- end }}
+{{- end -}}
+
+{{/*
 initContainer that blocks until a TCP port is accepting connections.
 Mirrors docker-compose's `depends_on: condition: service_healthy` for
 services whose healthcheck is a plain port check.

@@ -55,10 +55,12 @@ kind: Service
 metadata:
   name: keycloak
 spec:
-  type: NodePort
+  type: {{ .Values.keycloak.serviceType }}
   selector:
     {{- include "ai-trust.labels" (dict "name" "keycloak") | nindent 4 }}
   ports:
     - port: 8080
       targetPort: 8080
+      {{- if eq .Values.keycloak.serviceType "NodePort" }}
       nodePort: {{ .Values.keycloak.nodePort }}
+      {{- end }}

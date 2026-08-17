@@ -1,0 +1,124 @@
+name: Deploy to Gardener
+
+# Deploys the Helm chart under k8s/helm/ai-trust-platform to a real Gardener
+# shoot cluster, using the images published by build-push.yml. Manual only -
+# pick the image tag to roll out (the short SHA or version tag printed by that
+# workflow's run, or "latest").
+#
+# Required repo secrets:
+#   GARDENER_KUBECONFIG - kubeconfig for the target shoot cluster
+#   AI_TRUST_ENV        - full contents of a .env file (same keys as .env.example;
+#                         this becomes the ai-trust-env Secret, same as local kind/compose)
+# Optional repo secret:
+#   GHCR_PULL_TOKEN     - a PAT with read:packages, only needed if this repo's
+#                         ghcr.io packages are private (make them public to skip)
+#
+# Required repo variables:
+#   APP_PUBLIC_URL      - public https URL for the app, e.g. https://ai-trust.example.com
+#   KEYCLOAK_PUBLIC_URL - public https URL for Keycloak, e.g. https://auth.example.com
+# Optional repo variable:
+#   K8S_NAMESPACE       - defaults to "ai-trust"
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (short SHA or version tag from Build and Push Images, or 'latest')"
+        required: true
+        default: latest
+
+concurrency:
+  group: deploy-gardener
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: gardener
+    env:
+      NAMESPACE: ${{ vars.K8S_NAMESPACE || 'ai-trust' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Write kubeconfig
+        env:
+          KUBECONFIG_CONTENT: ${{ secrets.GARDENER_KUBECONFIG }}
+        run: |
+          umask 077
+          printf '%s' "$KUBECONFIG_CONTENT" > "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Verify cluster connectivity
+        run: kubectl cluster-info
+
+      - name: Write .env for bootstrap.sh
+        env:
+          ENV_CONTENT: ${{ secrets.AI_TRUST_ENV }}
+        run: |
+          umask 077
+          printf '%s' "$ENV_CONTENT" > .env
+
+      - name: Bootstrap namespace/secrets/configmaps
+        run: bash k8s/scripts/bootstrap.sh
+
+      - name: Create ghcr.io pull secret
+        if: ${{ secrets.GHCR_PULL_TOKEN != '' }}
+        env:
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          kubectl create secret docker-registry ghcr-pull-secret \
+            --docker-server=ghcr.io \
+            --docker-username="${{ github.actor }}" \
+            --docker-password="$GHCR_PULL_TOKEN" \
+            -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Derive ingress hostnames
+        id: hosts
+        env:
+          APP_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
+          KEYCLOAK_PUBLIC_URL: ${{ vars.KEYCLOAK_PUBLIC_URL }}
+        run: |
+          app_host=$(echo "$APP_PUBLIC_URL" | sed -E 's#^[a-zA-Z]+://##')
+          keycloak_host=$(echo "$KEYCLOAK_PUBLIC_URL" | sed -E 's#^[a-zA-Z]+://##')
+          echo "app_host=${app_host}" >> "$GITHUB_OUTPUT"
+          echo "keycloak_host=${keycloak_host}" >> "$GITHUB_OUTPUT"
+
+      - name: Helm upgrade --install
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          APP_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
+          KEYCLOAK_PUBLIC_URL: ${{ vars.KEYCLOAK_PUBLIC_URL }}
+          APP_HOST: ${{ steps.hosts.outputs.app_host }}
+          KEYCLOAK_HOST: ${{ steps.hosts.outputs.keycloak_host }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          set_args=(
+            --set "image.repository=ghcr.io/${owner}/ai-trust-platform"
+            --set "image.tag=${IMAGE_TAG}"
+            --set "appPublicUrl=${APP_PUBLIC_URL}"
+            --set "keycloakPublicUrl=${KEYCLOAK_PUBLIC_URL}"
+            --set "ingress.host=${APP_HOST}"
+            --set "ingress.keycloakHost=${KEYCLOAK_HOST}"
+          )
+          if [[ -n "$GHCR_PULL_TOKEN" ]]; then
+            set_args+=(--set "imagePullSecrets[0].name=ghcr-pull-secret")
+          fi
+          helm upgrade --install ai-trust k8s/helm/ai-trust-platform \
+            -n "$NAMESPACE" \
+            -f k8s/helm/ai-trust-platform/values-gardener.yaml \
+            "${set_args[@]}" \
+            --wait --timeout 15m
+
+      - name: Show rollout status
+        if: always()
+        run: kubectl get pods -n "$NAMESPACE"

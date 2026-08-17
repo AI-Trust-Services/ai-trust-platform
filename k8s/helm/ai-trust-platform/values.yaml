@@ -9,10 +9,30 @@ image:
   tag: local
   pullPolicy: IfNotPresent # required for images loaded via `kind load docker-image` (not in any registry)
 
+# Only needed against a real registry (e.g. ghcr.io on Gardener) when the
+# repository's packages are private. Empty for kind - see values-gardener.yaml
+# and .github/workflows/deploy-gardener.yml.
+imagePullSecrets: []
+
 # Public URLs oauth2-proxy needs as literal CLI args (not secrets - safe to keep here).
 # Keep in sync with APP_PUBLIC_URL / KEYCLOAK_PUBLIC_URL in .env if you change the defaults.
 appPublicUrl: http://localhost:8080
 keycloakPublicUrl: http://localhost:8180
+
+# Ingress is off by default (kind has no ingress controller - NodePorts +
+# kind-config.yaml extraPortMappings handle local routing instead, see
+# oauthProxy.serviceType / keycloak.serviceType below). Turned on for Gardener
+# via values-gardener.yaml, with host/keycloakHost supplied at deploy time
+# (they depend on the target environment's DNS).
+ingress:
+  enabled: false
+  className: nginx
+  host: "" # e.g. ai-trust.example.com -> oauth2-proxy (the same single entry point as :8080 locally)
+  keycloakHost: "" # e.g. auth.example.com -> keycloak (browser login, same as :8180 locally)
+  tls:
+    enabled: false
+    secretName: ""
+  annotations: {}
 
 waitImages:
   busybox: busybox:1.36 # TCP/HTTP "wait for dependency" initContainers
@@ -48,6 +68,7 @@ minio:
 keycloak:
   image: quay.io/keycloak/keycloak:25.0
   nodePort: 30180
+  serviceType: NodePort # ClusterIP on Gardener - reached via Ingress (ingress.keycloakHost) instead
 
 openfga:
   image: openfga/openfga:v1.18.1
@@ -56,6 +77,8 @@ openfga:
 oauthProxy:
   image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
   nodePort: 30080
+  serviceType: NodePort # ClusterIP on Gardener - reached via Ingress (ingress.host) instead
+  cookieSecure: false # true on Gardener - Ingress terminates TLS in front of it
 
 otel:
   collectorImage: otel/opentelemetry-collector-contrib:0.102.0

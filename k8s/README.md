@@ -72,6 +72,49 @@ no direct Kubernetes equivalent, and none of the app images were changed to add 
 Both patterns are defined once in `helm/ai-trust-platform/templates/_helpers.tpl` and reused
 everywhere docker-compose had a `depends_on`.
 
+## Deploying to a real cluster (Gardener) via GitHub Actions
+
+A third path, alongside docker-compose and local `kind`: two workflows under `.github/workflows/`
+build/push images to `ghcr.io` and deploy this same Helm chart to a real Gardener shoot cluster.
+Unlike the kind path (images loaded directly, no registry), this path needs a registry and a
+values overlay (`values-gardener.yaml`) that swaps NodePort services for a real Ingress.
+
+- **`build-push.yml`** - runs on every push to `main` and on version tags (`v*.*.*`), or manually.
+  Builds all ~22 locally-built images (same context/Dockerfile/build-args as
+  `k8s/scripts/build-and-load-images.sh`) and pushes each to
+  `ghcr.io/<owner>/ai-trust-platform/<name>`, tagged with the short commit SHA (or the tag name)
+  and `latest`. Frontend Vite build-args come from repo **variables** (`VITE_REGISTRY_API_BASE`,
+  etc.) with the same defaults as `.env.example`, so it works out of the box even if unset.
+- **`deploy-gardener.yml`** - manual (`workflow_dispatch`) only, takes the image tag to roll out as
+  input. Writes the kubeconfig and a `.env` from secrets, re-runs the existing
+  `k8s/scripts/bootstrap.sh` unchanged (namespace/Secret/ConfigMaps/RBAC - same script as the kind
+  path), then `helm upgrade --install` with `values-gardener.yaml` layered on top of `values.yaml`.
+
+Required GitHub repo **secrets**:
+
+| Secret | Purpose |
+|---|---|
+| `GARDENER_KUBECONFIG` | kubeconfig for the target shoot cluster (from the Gardener dashboard or `gardenctl target`) |
+| `AI_TRUST_ENV` | full contents of a `.env` file - same keys as `.env.example`, becomes the `ai-trust-env` Secret |
+| `GHCR_PULL_TOKEN` *(optional)* | a PAT with `read:packages`, only needed if this repo's `ghcr.io` packages are private (a `GITHUB_TOKEN` cannot be used here - it's ephemeral and can't authenticate future image pulls from the cluster; making the packages public avoids needing this entirely) |
+
+Required GitHub repo **variables**:
+
+| Variable | Purpose |
+|---|---|
+| `APP_PUBLIC_URL` | public https URL for the app, e.g. `https://ai-trust.example.com` - also used as an Ingress host |
+| `KEYCLOAK_PUBLIC_URL` | public https URL for Keycloak, e.g. `https://auth.example.com` - also used as an Ingress host |
+| `K8S_NAMESPACE` *(optional)* | defaults to `ai-trust` |
+| `VITE_*` *(optional)* | overrides for the frontend build-time API bases/URLs baked into images by `build-push.yml`, same keys as `.env.example`'s `VITE_*` vars |
+
+The chart assumes an nginx-class Ingress controller and cert-manager are already installed on the
+shoot (`values-gardener.yaml` sets `ingress.className: nginx` and a
+`cert-manager.io/cluster-issuer: letsencrypt-prod` annotation) - adjust both if your cluster uses
+something else. `oauth2-proxy` and `keycloak` switch from NodePort to ClusterIP in this overlay and
+are reached through the Ingress instead; every other backing store (postgres, rabbitmq, clickhouse,
+minio) keeps the same NodePort services the kind path uses (see the last bullet under "Known
+limitations" below).
+
 ## Known limitations / gaps as of local-dev scope (same as docker-compose today)
 
 - Single-node only: `openfga-config`, `postgres-data`, `clickhouse-data`, and `minio-data` are all
@@ -84,3 +127,7 @@ everywhere docker-compose had a `depends_on`.
 - ReadWriteOnce access mode:can not scale the deployment that mounts such volume.
 - horizontal pod autoscalers.
 - NodePort to replace by ClusterIP.
+- On the Gardener path, postgres/rabbitmq/clickhouse/minio are still exposed via NodePort (same as
+  kind) rather than ClusterIP-only - fine if the shoot's nodes aren't publicly routable/firewalled,
+  otherwise these backing stores are reachable from outside the cluster. Only `oauth2-proxy` and
+  `keycloak` (the two endpoints that need to be public) were switched to Ingress+ClusterIP.

@@ -1,0 +1,45 @@
+{{/* Off by default (kind has no ingress controller - see oauthProxy.serviceType /
+     keycloak.serviceType in values.yaml). Enabled on Gardener via
+     values-gardener.yaml, fronting the same two public entry points that
+     kind exposes via NodePort: oauth2-proxy (single app entry point, was
+     :8080) and keycloak (browser login, was :8180). */}}
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-trust
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+        - {{ .Values.ingress.keycloakHost }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: oauth2-proxy
+                port:
+                  number: 4180
+    - host: {{ .Values.ingress.keycloakHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080
+{{- end }}

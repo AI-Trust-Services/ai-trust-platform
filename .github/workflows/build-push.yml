@@ -1,0 +1,184 @@
+name: Build and Push Images
+
+# Builds every locally-built image (mirrors k8s/scripts/build-and-load-images.sh)
+# and pushes it to ghcr.io. Third-party images (postgres, keycloak, openfga,
+# oauth2-proxy, rabbitmq, clickhouse-server, minio, otel-collector-contrib) are
+# not built here - the Helm chart pulls them straight from their upstream
+# registries, same as docker-compose.
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      owner: ${{ steps.vars.outputs.owner }}
+      tag: ${{ steps.vars.outputs.tag }}
+    steps:
+      - name: Compute image owner/tag
+        id: vars
+        run: |
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-push:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── backends built from repo root (context .) ──
+          - name: users-backend
+            context: .
+            dockerfile: users/backend/Dockerfile
+          - name: ai-system-registry-backend
+            context: .
+            dockerfile: ai-system-registry/backend/Dockerfile
+          - name: monitoring-backend
+            context: .
+            dockerfile: monitoring/backend/Dockerfile
+          - name: overview-backend
+            context: .
+            dockerfile: overview/backend/Dockerfile
+          - name: alerts-backend
+            context: .
+            dockerfile: alerts/backend/Dockerfile
+          - name: compliance-backend
+            context: .
+            dockerfile: compliance/backend/Dockerfile
+          - name: decision-trace-analyzer-backend
+            context: .
+            dockerfile: decision-trace-analyzer/backend/Dockerfile
+          - name: policy-checker-worker
+            context: .
+            dockerfile: policy-checker-worker/Dockerfile
+          - name: otel-clickhouse-consumer
+            context: .
+            dockerfile: consumers/clickhouse-consumer/Dockerfile
+          - name: openfga-provision
+            context: .
+            dockerfile: infra/openfga-provision/Dockerfile
+
+          # ── one-shot migration images (own context) ──
+          - name: db-migrate
+            context: ./libs/persistence
+            dockerfile: ./libs/persistence/Dockerfile
+          - name: clickhouse-migrate
+            context: ./libs/clickhouse
+            dockerfile: ./libs/clickhouse/Dockerfile
+
+          # ── other own-context images ──
+          - name: keycloak-provision
+            context: ./infra/keycloak
+            dockerfile: ./infra/keycloak/Dockerfile
+          - name: shell
+            context: ./shell
+            dockerfile: ./shell/Dockerfile
+          - name: otel-rmq-bridge
+            context: ./otel-pipeline/rmq-bridge
+            dockerfile: ./otel-pipeline/rmq-bridge/Dockerfile
+
+          # ── frontends (Vite build args baked in, same as docker-compose args:) ──
+          - name: ai-system-registry-frontend
+            context: ./ai-system-registry/frontend
+            dockerfile: ./ai-system-registry/frontend/Dockerfile
+            build_args: |
+              VITE_REGISTRY_API_BASE=${{ vars.VITE_REGISTRY_API_BASE || '/api/registry/v1' }}
+              VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
+          - name: monitoring-frontend
+            context: ./monitoring/frontend
+            dockerfile: ./monitoring/frontend/Dockerfile
+            build_args: |
+              VITE_MONITORING_API_BASE=${{ vars.VITE_MONITORING_API_BASE || '/api/monitoring/v1' }}
+          - name: overview-frontend
+            context: ./overview/frontend
+            dockerfile: ./overview/frontend/Dockerfile
+            build_args: |
+              VITE_OVERVIEW_API_BASE=${{ vars.VITE_OVERVIEW_API_BASE || '/api/overview/v1' }}
+              VITE_ALERTS_API_BASE=${{ vars.VITE_ALERTS_API_BASE || '/api/alerts/v1' }}
+              VITE_ALERTS_URL=${{ vars.VITE_ALERTS_URL || 'http://localhost:8080/alerts' }}
+              VITE_REGISTRY_URL=${{ vars.VITE_REGISTRY_URL || 'http://localhost:8080/registry' }}
+              VITE_COMPLIANCE_URL=${{ vars.VITE_COMPLIANCE_URL || 'http://localhost:8080/compliance' }}
+              VITE_COMPLIANCE_API_BASE=${{ vars.VITE_COMPLIANCE_API_BASE || '/api/compliance/v1' }}
+              VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
+          - name: alerts-frontend
+            context: ./alerts/frontend
+            dockerfile: ./alerts/frontend/Dockerfile
+            build_args: |
+              VITE_ALERTS_API_BASE=${{ vars.VITE_ALERTS_API_BASE || '/api/alerts/v1' }}
+              VITE_ALERTS_URL=${{ vars.VITE_ALERTS_URL || 'http://localhost:8080/alerts' }}
+              VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
+          - name: compliance-frontend
+            context: ./compliance/frontend
+            dockerfile: ./compliance/frontend/Dockerfile
+            build_args: |
+              VITE_COMPLIANCE_API_BASE=${{ vars.VITE_COMPLIANCE_API_BASE || '/api/compliance/v1' }}
+              VITE_REGISTRY_API_BASE=${{ vars.VITE_REGISTRY_API_BASE || '/api/registry/v1' }}
+              VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
+          - name: users-frontend
+            context: ./users/frontend
+            dockerfile: ./users/frontend/Dockerfile
+            build_args: |
+              VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
+          - name: decision-trace-analyzer-frontend
+            context: ./decision-trace-analyzer/frontend
+            dockerfile: ./decision-trace-analyzer/frontend/Dockerfile
+            build_args: |
+              VITE_DTA_API_BASE=${{ vars.VITE_DTA_API_BASE || '/api/dta/v1' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          build-args: ${{ matrix.build_args }}
+          tags: |
+            ghcr.io/${{ needs.prepare.outputs.owner }}/ai-trust-platform/${{ matrix.name }}:${{ needs.prepare.outputs.tag }}
+            ghcr.io/${{ needs.prepare.outputs.owner }}/ai-trust-platform/${{ matrix.name }}:latest
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  images-published:
+    name: All Images Published
+    needs: build-push
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check result
+        run: |
+          if [[ "${{ needs.build-push.result }}" != "success" ]]; then
+            echo "::error::One or more image builds did not succeed"
+            exit 1
+          fi
+          echo "All images published successfully."
