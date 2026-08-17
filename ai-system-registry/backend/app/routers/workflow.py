@@ -1,10 +1,9 @@
 """Workflow endpoints — submit, approve, reject, history."""
 from __future__ import annotations
 
-import asyncio
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import select
 
 from ai_trust_authorization import require_permission
@@ -43,6 +42,7 @@ async def submit_for_review(
     system_id: str,
     body: WorkflowSubmitRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     _: str = Depends(require_permission(SYSTEMS_WRITE)),
 ):
     current_user = _current_user(request)
@@ -81,7 +81,8 @@ async def submit_for_review(
 
     logger.info("system.submitted_for_review", extra={"system_id": system_id, "assignee": body.assignee_username})
 
-    asyncio.create_task(email_sender.notify(
+    background_tasks.add_task(
+        email_sender.notify,
         to_username=body.assignee_username,
         subject=f"[AI Trust] System '{system_name}' ready for your review",
         body=(
@@ -90,7 +91,7 @@ async def submit_for_review(
             f"and is waiting for your approval.\n\n"
             f"AI Trust Platform: http://localhost:8080/registry/"
         ),
-    ))
+    )
 
     return result_steps
 
@@ -100,6 +101,7 @@ async def approve_system(
     system_id: str,
     body: WorkflowApproveRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     _: str = Depends(require_permission(SYSTEMS_APPROVE)),
 ):
     current_user = _current_user(request)
@@ -147,7 +149,8 @@ async def approve_system(
     logger.info("system.approved", extra={"system_id": system_id, "approved_by": current_user})
 
     if owner_username:
-        asyncio.create_task(email_sender.notify(
+        background_tasks.add_task(
+            email_sender.notify,
             to_username=owner_username,
             subject=f"[AI Trust] System '{system_name}' has been approved",
             body=(
@@ -156,7 +159,7 @@ async def approve_system(
                 f"by the compliance team.\n\n"
                 f"AI Trust Platform: http://localhost:8080/registry/"
             ),
-        ))
+        )
 
     return result_steps
 
@@ -166,6 +169,7 @@ async def reject_system(
     system_id: str,
     body: WorkflowRejectRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     _: str = Depends(require_permission(SYSTEMS_APPROVE)),
 ):
     current_user = _current_user(request)
@@ -203,7 +207,8 @@ async def reject_system(
 
     logger.info("system.rejected", extra={"system_id": system_id, "rejected_by": current_user, "reassigned_to": body.assignee_username})
 
-    asyncio.create_task(email_sender.notify(
+    background_tasks.add_task(
+        email_sender.notify,
         to_username=body.assignee_username,
         subject=f"[AI Trust] System '{system_name}' rejected — action required",
         body=(
@@ -213,6 +218,6 @@ async def reject_system(
             f"Please review the feedback, make the necessary changes, and resubmit.\n\n"
             f"AI Trust Platform: http://localhost:8080/registry/"
         ),
-    ))
+    )
 
     return result_steps

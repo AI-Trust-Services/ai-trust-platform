@@ -1,10 +1,9 @@
 """POST /api/v1/intake — register an AI system stub (owner step)."""
 from __future__ import annotations
 
-import asyncio
 import uuid
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_WRITE
@@ -20,7 +19,7 @@ logger = get_logger(__name__)
 
 
 @router.post("/intake", response_model=IntakeResponse, status_code=201, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
-async def intake_system(body: AISystemCreate, request: Request) -> IntakeResponse:
+async def intake_system(body: AISystemCreate, request: Request, background_tasks: BackgroundTasks) -> IntakeResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     system_id = f"SYS-{str(uuid.uuid4())[:8].upper()}"
     step_id = f"SWS-{str(uuid.uuid4())[:8].upper()}"
@@ -54,7 +53,8 @@ async def intake_system(body: AISystemCreate, request: Request) -> IntakeRespons
 
     logger.info("system.registered", extra={"system_id": row.id, "system_name": row.name, "assignee": body.assignee_username})
 
-    asyncio.create_task(email_sender.notify(
+    background_tasks.add_task(
+        email_sender.notify,
         to_username=body.assignee_username,
         subject=f"[AI Trust] System '{row.name}' assigned to you for details",
         body=(
@@ -63,7 +63,7 @@ async def intake_system(body: AISystemCreate, request: Request) -> IntakeRespons
             f"Please log in to the AI Trust Platform and open the system to fill in the required information.\n\n"
             f"AI Trust Platform: http://localhost:8080/registry/"
         ),
-    ))
+    )
 
     classification = ClassificationResult(tier="minimal", basis="pending", obligations=[], annex_iii_area=None)
     return IntakeResponse(system=AISystemResponse.model_validate(row), classification=classification)
