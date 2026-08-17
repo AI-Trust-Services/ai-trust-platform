@@ -49,20 +49,32 @@ _ANNEX_III_AREAS = {
     "is_judicial_admin": (8, "Administration of justice & democratic processes"),
 }
 
+# Art. 5 — prohibited practices. Module-level so CLASSIFIER_INPUTS can derive
+# from it and stay in sync with classify().
+_PROHIBITED_FLAGS = [
+    ("subliminal_manipulation", "Art. 5(1)(a) subliminal manipulation"),
+    ("exploits_vulnerability", "Art. 5(1)(b) exploits vulnerability"),
+    ("social_scoring_public", "Art. 5(1)(c) social scoring by public authority"),
+    ("real_time_biometric_public", "Art. 5(1)(d) real-time remote biometric ID in public"),
+    ("emotion_recognition_workplace", "Art. 5(1)(f) emotion recognition in workplace/education"),
+    ("untargeted_facial_scraping", "Art. 5(1)(e) untargeted facial image scraping"),
+    ("predictive_policing", "Art. 5(1)(d) predictive policing"),
+    ("biometric_categorisation_sensitive", "Art. 5(1)(g) biometric categorisation (sensitive)"),
+]
+
+# Single source of truth for the fields the classifier reads. Importers (e.g.
+# systems.py) use this to decide when an update must trigger reclassification —
+# keep it derived from the structures above so it can't drift out of sync.
+CLASSIFIER_INPUTS = frozenset(
+    {attr for attr, _ in _PROHIBITED_FLAGS}
+    | set(_ANNEX_III_AREAS)
+    | {"is_gpai", "training_compute_flops", "is_chatbot", "generates_synthetic_content"}
+)
+
 
 def classify(body: Any) -> ClassificationResult:
     # Art. 5 — prohibited practices
-    prohibited_flags = [
-        ("subliminal_manipulation", "Art. 5(1)(a) subliminal manipulation"),
-        ("exploits_vulnerability", "Art. 5(1)(b) exploits vulnerability"),
-        ("social_scoring_public", "Art. 5(1)(c) social scoring by public authority"),
-        ("real_time_biometric_public", "Art. 5(1)(d) real-time remote biometric ID in public"),
-        ("emotion_recognition_workplace", "Art. 5(1)(f) emotion recognition in workplace/education"),
-        ("untargeted_facial_scraping", "Art. 5(1)(e) untargeted facial image scraping"),
-        ("predictive_policing", "Art. 5(1)(d) predictive policing"),
-        ("biometric_categorisation_sensitive", "Art. 5(1)(g) biometric categorisation (sensitive)"),
-    ]
-    triggered = [label for attr, label in prohibited_flags if getattr(body, attr, False)]
+    triggered = [label for attr, label in _PROHIBITED_FLAGS if getattr(body, attr, False)]
     if triggered:
         return ClassificationResult(
             tier="prohibited",

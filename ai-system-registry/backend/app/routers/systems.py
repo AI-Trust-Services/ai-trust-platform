@@ -7,7 +7,7 @@ from sqlalchemy import select
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE, SYSTEMS_APPROVE
 from ai_trust_logging import get_logger
-from app.classifier import classify
+from app.classifier import classify, CLASSIFIER_INPUTS
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.model_card import ModelCard
@@ -23,15 +23,6 @@ router = APIRouter(tags=["systems"])
 logger = get_logger(__name__)
 
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
-_FLAG_FIELDS = frozenset({
-    "subliminal_manipulation", "exploits_vulnerability", "social_scoring_public",
-    "real_time_biometric_public", "emotion_recognition_workplace", "untargeted_facial_scraping",
-    "predictive_policing", "biometric_categorisation_sensitive",
-    "is_biometric_identification", "is_critical_infrastructure", "is_education_related",
-    "is_employment_related", "is_credit_scoring", "is_public_service", "is_law_enforcement",
-    "is_migration", "is_judicial_admin", "is_gpai", "training_compute_flops",
-    "is_chatbot", "generates_synthetic_content",
-})
 
 
 @router.get("/systems", response_model=list[AISystemResponse], dependencies=[Depends(require_permission(SYSTEMS_READ))])
@@ -79,7 +70,7 @@ async def update_system(system_id: str, body: AISystemUpdate, request: Request) 
         if row.assignee_username and current_user != row.assignee_username:
             raise HTTPException(403, "Only the assigned user may update this system")
 
-        flag_updates = _FLAG_FIELDS & updates.keys()
+        flag_updates = CLASSIFIER_INPUTS & updates.keys()
         if flag_updates and row.workflow_status not in ("draft", "rejected"):
             raise HTTPException(422, "Risk flags can only be changed while the system is in draft or rejected state")
 
