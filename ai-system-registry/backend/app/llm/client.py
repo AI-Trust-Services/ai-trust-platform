@@ -118,6 +118,15 @@ async def _chat_external(messages: list[dict], model: str, max_tokens: int) -> d
     url = f"{AI_API_URL}/v2/inference/deployments/{AI_DEPLOYMENT_ID}/invoke"
     system_parts = [m["content"] for m in messages if m["role"] == "system"]
     convo = [m for m in messages if m["role"] != "system"]
+    # Anthropic API requires messages to start and end with a user turn.
+    # Strip leading assistant messages (e.g. initial bot greeting) and trailing
+    # assistant messages (e.g. extraction summary added before the next turn).
+    while convo and convo[0]["role"] != "user":
+        convo = convo[1:]
+    while convo and convo[-1]["role"] != "user":
+        convo = convo[:-1]
+    if not convo:
+        convo = [{"role": "user", "content": "(start)"}]
     body: dict[str, Any] = {
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": max_tokens,
