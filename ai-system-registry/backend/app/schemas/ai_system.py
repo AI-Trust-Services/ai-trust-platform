@@ -90,7 +90,6 @@ class AISystemUpdate(BaseModel):
     application_url: str | None = Field(default=None, max_length=500)
     provider_country: str | None = Field(default=None, max_length=5)
     lifecycle: str | None = None
-    model_id: str | None = None
 
     @field_validator("name")
     @classmethod
@@ -146,7 +145,6 @@ class AISystemResponse(BaseModel):
     training_compute_flops: float
     is_chatbot: bool
     generates_synthetic_content: bool
-    model_id: str | None
     created_at: datetime
     updated_at: datetime
 
