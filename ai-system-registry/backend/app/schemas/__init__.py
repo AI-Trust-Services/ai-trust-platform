@@ -13,6 +13,7 @@ from app.schemas.model_card import (
     ModelCardUpdate,
     ModelCardResponse,
 )
+from app.schemas.system_model import SystemModelLinkBody, SystemModelResponse
 
 __all__ = [
     "AISystemCreate",
@@ -25,4 +26,6 @@ __all__ = [
     "ModelCardCreate",
     "ModelCardUpdate",
     "ModelCardResponse",
+    "SystemModelLinkBody",
+    "SystemModelResponse",
 ]

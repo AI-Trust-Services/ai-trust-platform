@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import select, delete
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
@@ -10,11 +11,15 @@ from ai_trust_logging import get_logger
 from app.classifier import classify
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
+from ai_trust_persistence.models.model_card import ModelCard
+from ai_trust_persistence.models.ai_system_model_card import ai_system_model_cards
 from app.schemas import (
     AISystemCreate,
     AISystemResponse,
     AISystemUpdate,
     IntakeResponse,
+    SystemModelLinkBody,
+    SystemModelResponse,
     VALID_LIFECYCLES,
     VALID_ROLES,
 )
@@ -122,3 +127,65 @@ async def reclassify_system(system_id: str) -> IntakeResponse:
         system=AISystemResponse.model_validate(row),
         classification=classification,
     )
+
+
+@router.get("/systems/{system_id}/models", response_model=list[SystemModelResponse], dependencies=[Depends(require_permission(SYSTEMS_READ))])
+async def list_system_models(system_id: str) -> list[SystemModelResponse]:
+    async with SessionLocal() as session:
+        sys_result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        if not sys_result.scalar_one_or_none():
+            raise HTTPException(404, f"System {system_id} not found")
+
+        result = await session.execute(
+            select(ModelCard, ai_system_model_cards.c.role)
+            .join(ai_system_model_cards, ModelCard.id == ai_system_model_cards.c.model_card_id)
+            .where(ai_system_model_cards.c.system_id == system_id)
+            .order_by(ModelCard.name)
+        )
+        return [
+            SystemModelResponse.from_card(card, role)
+            for card, role in result.all()
+        ]
+
+
+@router.post("/systems/{system_id}/models", response_model=SystemModelResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+async def add_system_model(system_id: str, body: SystemModelLinkBody) -> SystemModelResponse:
+    async with SessionLocal() as session:
+        sys_result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        if not sys_result.scalar_one_or_none():
+            raise HTTPException(404, f"System {system_id} not found")
+
+        mdl_result = await session.execute(select(ModelCard).where(ModelCard.id == body.model_card_id))
+        card = mdl_result.scalar_one_or_none()
+        if not card:
+            raise HTTPException(404, f"Model card {body.model_card_id} not found")
+
+        await session.execute(
+            pg_insert(ai_system_model_cards)
+            .values(system_id=system_id, model_card_id=body.model_card_id, role=body.role)
+            .on_conflict_do_update(
+                index_elements=["system_id", "model_card_id"],
+                set_={"role": body.role},
+            )
+        )
+        await session.commit()
+
+    logger.info("system.model_linked", extra={"system_id": system_id, "model_card_id": body.model_card_id, "role": body.role})
+    return SystemModelResponse.from_card(card, body.role)
+
+
+@router.delete("/systems/{system_id}/models/{model_card_id}", dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+async def remove_system_model(system_id: str, model_card_id: str) -> dict:
+    async with SessionLocal() as session:
+        result = await session.execute(
+            delete(ai_system_model_cards)
+            .where(ai_system_model_cards.c.system_id == system_id)
+            .where(ai_system_model_cards.c.model_card_id == model_card_id)
+            .returning(ai_system_model_cards.c.model_card_id)
+        )
+        if not result.fetchone():
+            raise HTTPException(404, f"Link between {system_id} and {model_card_id} not found")
+        await session.commit()
+
+    logger.info("system.model_unlinked", extra={"system_id": system_id, "model_card_id": model_card_id})
+    return {"status": "unlinked", "system_id": system_id, "model_card_id": model_card_id}
