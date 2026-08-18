@@ -1,11 +1,29 @@
 # ADR-001: Tenancy model = the Platform Mesh account id
 
-- **Status:** Accepted (2026-08-13)
+- **Status:** Accepted (2026-08-13); **AMENDED 2026-08-17 — RLS removed (see "AMENDMENT" below).**
 - **Context:** GitHub issue #16 — "Adopt Platform Mesh account and tenancy model" (acceptance
   criteria AC1 "documented + maps to the account hierarchy" and AC5 "decision documented").
 - **Deciders:** AI Trust Platform team.
 - **Related:** ApeiroRA ADR-004; Platform Mesh account model
   (https://documentation.apeirora.eu/docs/best-practices/platform-mesh/account-model).
+
+## AMENDMENT (2026-08-17) — Row-Level Security removed; schema-per-tenant + per-tenant role is the model
+
+The multi-tenant deploy evolved to **schema-per-tenant**: each tenant's tables live in its own
+Postgres schema `tenant_<org>`, reached via `search_path`, and access is gated by a **per-tenant role
+`t_<org>`** that has `USAGE` on ONLY that schema. The shared login role holds `t_<org>` `WITH INHERIT
+FALSE` (must `SET ROLE` explicitly) and has **no direct grant** on any tenant schema — so Postgres
+denies cross-tenant access at the **privilege level** (`permission denied for schema tenant_<other>`),
+a hard deny, not an RLS row-filter. That schema+role wall is the SOLE, sufficient isolation.
+
+**Decision:** RLS was redundant defense-in-depth on top of that wall, so it is **removed** —
+migration **`0012_drop_rls.py`** disables + drops the policies/FORCE/`app.current_tenant` default
+(the `tenant_id` column + index are KEPT, harmless), and `libs/tenancy/session.py` no longer sets
+`app.current_tenant`. New tenants get RLS-free schemas automatically (the operator runs `alembic
+upgrade head`, which now includes 0012). Isolation test: `libs/tenancy/tests/test_rls_isolation.py`
+now asserts the schema+role privilege wall (not RLS). **Reversible:** `0012 downgrade()` + re-adding
+the `set_config` line restores RLS. The sections below are retained for history; where they say "RLS
+is the backbone", read "the schema-per-tenant + `t_<org>` role wall is the backbone" as of this amendment.
 
 ## Decision
 

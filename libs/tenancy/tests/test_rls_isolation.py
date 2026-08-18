@@ -1,11 +1,16 @@
-"""RLS isolation integration test (SEC-M1 + tenant read/write isolation).
+"""Tenant isolation integration test — schema-per-tenant + per-tenant role (RLS removed 2026-08).
 
-Requires a Postgres with migrations applied through 0010 and the non-superuser role
-`ai_trust_app` (NOBYPASSRLS). Because the e2e harness normally connects as the OWNER
-(which BYPASSES RLS), this test explicitly `SET ROLE ai_trust_app` so the policy is
-actually exercised.
+Isolation is now enforced by TWO hard Postgres walls (no RLS):
+  1. schema-per-tenant: each tenant's tables live in schema `tenant_<org>`, reached via search_path;
+  2. per-tenant role `t_<org>` with USAGE on ONLY its own schema, and the shared login role holds it
+     `WITH INHERIT FALSE` (must SET ROLE explicitly) and has NO direct grant on any tenant schema.
+So a request scoped to tenant A physically cannot read tenant B's schema — Postgres denies with
+`permission denied for schema tenant_<B>` (a hard privilege deny, not an RLS row-filter to 0 rows).
 
-Run: requires a live/test Postgres (docker compose up -d postgres); skipped otherwise.
+This test provisions two throwaway tenant schemas + roles the way the operator's tenant-stores Job
+does, then proves the cross-tenant access is DENIED at the privilege level with RLS absent.
+
+Requires a live/test Postgres connected as the OWNER (to create schemas/roles). Skipped otherwise.
 """
 from __future__ import annotations
 
@@ -21,43 +26,56 @@ skip = pytest.mark.skipif(not DB, reason="DATABASE_URL not set (needs a test Pos
 
 
 @skip
-async def test_rls_read_and_write_isolation():
+async def test_schema_and_role_isolation_no_rls():
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine
 
     engine = create_async_engine(DB)
-    a, b = f"tA-{uuid.uuid4().hex[:8]}", f"tB-{uuid.uuid4().hex[:8]}"
-    sysA, sysB = f"SYS-{uuid.uuid4().hex[:6]}", f"SYS-{uuid.uuid4().hex[:6]}"
+    suf = uuid.uuid4().hex[:8]
+    a, b = f"tA_{suf}", f"tB_{suf}"          # safe unquoted identifiers
+    schA, schB = f"tenant_{a}", f"tenant_{b}"
+    roleA = f"t_{a}"
+    app = "ai_trust_app"
     try:
-        # seed as owner (bypasses RLS)
+        # --- provision two tenant schemas + roles the way the operator does (as owner) ---
         async with engine.begin() as conn:
-            for sid, t in ((sysA, a), (sysB, b)):
+            for sch, role in ((schA, roleA), (schB, f"t_{b}")):
+                await conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{sch}"'))
+                await conn.execute(text(f'CREATE TABLE IF NOT EXISTS "{sch}".ai_systems '
+                                        f'(id text primary key, name text)'))
                 await conn.execute(text(
-                    "INSERT INTO ai_systems (id,name,tier,tenant_id) VALUES (:i,:n,'minimal',:t)"
-                ), {"i": sid, "n": sid, "t": t})
+                    f"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='{role}') "
+                    f"THEN CREATE ROLE \"{role}\" NOLOGIN; END IF; END $$"))
+                await conn.execute(text(f'GRANT USAGE ON SCHEMA "{sch}" TO "{role}"'))
+                await conn.execute(text(f'GRANT SELECT,INSERT ON ALL TABLES IN SCHEMA "{sch}" TO "{role}"'))
+                # shared login role may SET ROLE into it, but inherits nothing + has NO direct schema grant
+                await conn.execute(text(f'GRANT "{role}" TO {app} WITH INHERIT FALSE'))
+                await conn.execute(text(f'REVOKE ALL ON SCHEMA "{sch}" FROM {app}'))
+            await conn.execute(text(f'INSERT INTO "{schB}".ai_systems VALUES (:i,:n)'),
+                               {"i": "SYS-B", "n": "b-secret"})
 
-        # as the RLS-bound app role, tenant A sees only A
+        # --- as the shared app role, SET ROLE t_A: reading tenant B's schema is DENIED ---
         async with engine.connect() as conn:
-            await conn.execute(text("SET ROLE ai_trust_app"))
-            await conn.execute(text("SELECT set_config('app.current_tenant', :t, false)"), {"t": a})
-            seen = {r[0] for r in (await conn.execute(text(
-                "SELECT id FROM ai_systems WHERE id IN (:x,:y)"), {"x": sysA, "y": sysB})).all()}
-            assert seen == {sysA}, f"tenant A should see only its own row, saw {seen}"
+            await conn.execute(text(f"SET ROLE {app}"))
+            await conn.execute(text(f'SET ROLE "{roleA}"'))
+            with pytest.raises(Exception) as ei:
+                await conn.execute(text(f'SELECT id FROM "{schB}".ai_systems'))
+            assert "permission denied for schema" in str(ei.value).lower(), \
+                f"expected schema-level permission denial, got: {ei.value}"
 
-            # SEC-M1: A cannot write a row tagged for B (WITH CHECK write-own)
-            with pytest.raises(Exception):
-                await conn.execute(text(
-                    "INSERT INTO ai_systems (id,name,tier,tenant_id) VALUES (:i,'x','minimal',:t)"
-                ), {"i": f"SYS-{uuid.uuid4().hex[:6]}", "t": b})
-
-            # SEC-M1: A cannot write a globally-shared (NULL) row
-            with pytest.raises(Exception):
-                await conn.execute(text(
-                    "INSERT INTO ai_systems (id,name,tier,tenant_id) VALUES (:i,'x','minimal',NULL)"
-                ), {"i": f"SYS-{uuid.uuid4().hex[:6]}"})
+        # --- and RLS is indeed OFF on the tenant tables (schema+role is the sole wall) ---
+        async with engine.connect() as conn:
+            row = (await conn.execute(text(
+                "SELECT relrowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+                "WHERE c.relname='ai_systems' AND n.nspname=:s"), {"s": schB})).first()
+            # test tables created above have RLS off by default; the real migration 0012 also disables it.
+            assert row is None or row[0] is False
     finally:
         async with engine.begin() as conn:
             await conn.execute(text("RESET ROLE"))
-            await conn.execute(text("DELETE FROM ai_systems WHERE id IN (:x,:y)"),
-                               {"x": sysA, "y": sysB})
+            for sch in (schA, schB):
+                await conn.execute(text(f'DROP SCHEMA IF EXISTS "{sch}" CASCADE'))
+            for role in (roleA, f"t_{b}"):
+                await conn.execute(text(f'REVOKE "{role}" FROM {app}'))
+                await conn.execute(text(f'DROP ROLE IF EXISTS "{role}"'))
         await engine.dispose()

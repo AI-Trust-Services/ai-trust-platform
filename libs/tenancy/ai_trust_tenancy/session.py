@@ -44,24 +44,27 @@ def install_tenant_scoping(engine) -> None:
     def _set_tenant_on_begin(conn):  # conn: a raw DBAPI-level connection wrapper (asyncpg)
         tenant = tenant_id_var.get()
         if tenant and _SAFE_TENANT.match(tenant):
-            # Schema-per-tenant with a HARD, DB-enforced wall:
+            # Schema-per-tenant with a HARD, DB-enforced wall (RLS removed 2026-08 — see ADR-001):
             #  - search_path routes queries into the tenant's own schema,
             #  - SET LOCAL ROLE t_<org> switches to a per-tenant role that has USAGE on ONLY that schema,
-            #    so Postgres itself denies any cross-tenant access (not just RLS filtering it to 0 rows),
-            #  - app.current_tenant keeps the in-schema RLS policies active too (defense-in-depth).
+            #    so Postgres itself denies any cross-tenant access at the PRIVILEGE level (not RLS filtering
+            #    to 0 rows) — this is now the SOLE isolation wall, and it is a hard deny, not a filter.
             # All transaction-local (SET LOCAL / set_config(...,true)) so nothing leaks across the pool.
             # Schema + role names replace '-' with '_' to be valid unquoted identifiers; SAME derivation
             # is used by the operator's provisioning Job (create role/schema) and the data-migration.
+            # NOTE: we no longer set `app.current_tenant` — the RLS policies it drove were dropped
+            # (migration 0012). Isolation is now schema-per-tenant + the per-tenant role's schema-scoped
+            # USAGE grant. If RLS defense-in-depth is ever wanted back, re-add the set_config below and
+            # run migration 0012 downgrade.
             safe = tenant.replace("-", "_")
             schema = "tenant_" + safe
             role = "t_" + safe
             conn.exec_driver_sql(
-                f"SELECT set_config('search_path', '\"{schema}\",public', true), "
-                f"set_config('app.current_tenant', '{tenant}', true)"
+                f"SELECT set_config('search_path', '\"{schema}\",public', true)"
             )
             # SET LOCAL ROLE cannot be parameterized; the role name is charset-validated above.
             conn.exec_driver_sql(f'SET LOCAL ROLE "{role}"')
         else:
             # Fail-closed: no valid tenant → do NOT switch role (stay as the shared login role with NO
-            # direct schema access) and stay on public (no tenant tables) with app.current_tenant unset.
+            # direct schema access) and stay on public (no tenant tables).
             conn.exec_driver_sql("SELECT set_config('search_path', 'public', true)")
