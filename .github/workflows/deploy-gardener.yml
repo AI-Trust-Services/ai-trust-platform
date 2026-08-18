@@ -1,4 +1,4 @@
-name: Deploy to Gardener
+name: Gardener Deploy (Structured Authentication)
 
 # Deploys the Helm chart under k8s/helm/ai-trust-platform to a real Gardener
 # shoot cluster, using the images published by build-push.yml. Manual only -
