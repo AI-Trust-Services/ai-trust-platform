@@ -26,6 +26,15 @@ name: Deploy to Gardener
 #   GARDENER_OIDC_AUDIENCE   - must match the `audiences` list in k8s/gardener/structured-auth-configmap.yaml
 # Optional repo variable:
 #   K8S_NAMESPACE            - defaults to "ai-trust"
+
+# Test vars for sr-test:
+# GARDENER_CA_DISCOVERY_URL
+# https://discovery.ingress.garden.landscape-apeirora-one/projects/ai-trust/shoots/6ffce6ae-34d2-4e76-8211-b3e3a7e093bb/cluster-ca
+# GARDENER_OIDC_AUDIENCE
+# ai-trust-platform-ci
+# GARDENER_SHOOT_API_SERVER
+# https://api.sr-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu
+
 on:
   workflow_dispatch:
     inputs:
