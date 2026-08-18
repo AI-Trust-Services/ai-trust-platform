@@ -1,0 +1,68 @@
+{{- if .Values.ollama.enabled }}
+{{/* Optional local LLM backend for AI-assisted registration. Gated by
+     .Values.ollama.enabled — mirrors the compose `ollama` profile. The registry
+     backend reaches it at http://ollama:11434/v1 (LLM_BASE_URL in the Secret). */}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.ollama.storageSize }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # required for a ReadWriteOnce PVC
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "ollama") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "ollama") | nindent 8 }}
+    spec:
+      containers:
+        - name: ollama
+          image: {{ .Values.ollama.image }}
+          ports:
+            - containerPort: 11434
+          volumeMounts:
+            - name: data
+              mountPath: /root/.ollama
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 11434
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 11434
+            initialDelaySeconds: 20
+            periodSeconds: 15
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: ollama-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+spec:
+  type: NodePort
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "ollama") | nindent 4 }}
+  ports:
+    - port: 11434
+      targetPort: 11434
+      nodePort: {{ .Values.ollama.nodePort }}
+{{- end }}
