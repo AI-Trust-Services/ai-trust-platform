@@ -277,6 +277,7 @@ async def test_attention_includes_prohibited(client: httpx.AsyncClient):
     assert item["name"] == "Bad Bot"
     assert item["reason"] == "Prohibited system"
     assert {"id", "tier", "lifecycle", "compliance", "model_id"} <= item.keys()
+    # TODO: Needs Discussion. remove model_id from key assertion after N:M migration is complete
 
 
 async def test_attention_includes_high_risk_low_compliance_on_market(client: httpx.AsyncClient):
@@ -284,6 +285,7 @@ async def test_attention_includes_high_risk_low_compliance_on_market(client: htt
         mc = _model()
         session.add(mc)
         await session.flush()
+        # TODO: Needs discussion. replace model_id= kwargs with pg_insert(ai_system_model_cards) after N:M migration
         session.add(_sys(tier="high", lifecycle="market", compliance=30.0, model_id=mc.id))
         # high on market but compliance >= 50 → not in attention
         session.add(_sys(tier="high", lifecycle="market", compliance=60.0, model_id=mc.id))
@@ -298,6 +300,7 @@ async def test_attention_includes_high_risk_low_compliance_on_market(client: htt
 async def test_attention_includes_on_market_without_model_card(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         # System on market with no model card → should appear in attention.
+        # TODO: Needs Discussion. replace model_id= kwargs with pg_insert(ai_system_model_cards) after N:M migration
         session.add(_sys(tier="minimal", lifecycle="market", model_id=None))
         # Same lifecycle but with a linked model card → should NOT appear.
         mc = _model()
@@ -325,6 +328,7 @@ async def test_attention_capped_at_20(client: httpx.AsyncClient):
 async def test_attention_excludes_clean_systems(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         # minimal, development, no model card — should NOT appear in attention
+        # TODO: remove model_id=None after N:M migration is complete
         session.add(_sys(tier="minimal", lifecycle="development", model_id=None))
         await session.commit()
 

@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Query
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import aliased
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
+from ai_trust_persistence.models.ai_system_model_card import ai_system_model_cards
 from ai_trust_persistence.models.evidence import Evidence, evidence_obligations
 from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
@@ -115,7 +116,11 @@ async def get_overview_stats() -> dict:
                     ),
                     and_(
                         AISystem.lifecycle.in_(["market", "post-market"]),
-                        AISystem.model_id.is_(None),
+                        # checks if there is one model registered
+                        ~exists(
+                            select(ai_system_model_cards.c.system_id)
+                            .where(ai_system_model_cards.c.system_id == AISystem.id)
+                        ).correlate(AISystem),
                     ),
                 )
             ).order_by(AISystem.compliance.asc()).limit(20)
@@ -127,7 +132,7 @@ async def get_overview_stats() -> dict:
                 "tier": r.tier,
                 "lifecycle": r.lifecycle,
                 "compliance": r.compliance,
-                "model_id": r.model_id,
+                # TODO: team discussion — should attention items expose linked models (N:M)?
                 "reason": (
                     "Prohibited system" if r.tier == "prohibited"
                     else "High-risk on market with low compliance" if r.tier == "high" and r.compliance < 50
