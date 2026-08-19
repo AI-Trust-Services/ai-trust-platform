@@ -19,6 +19,9 @@ spec:
     - hosts:
         - {{ .Values.ingress.host }}
         - {{ .Values.ingress.keycloakHost }}
+        {{- if .Values.ingress.minioHost }}
+        - {{ .Values.ingress.minioHost }}
+        {{- end }}
       secretName: {{ .Values.ingress.tls.secretName }}
   {{- end }}
   rules:
@@ -42,4 +45,16 @@ spec:
                 name: keycloak
                 port:
                   number: 8080
+    {{- if .Values.ingress.minioHost }}
+    - host: {{ .Values.ingress.minioHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio
+                port:
+                  number: 9000
+    {{- end }}
 {{- end }}

@@ -29,9 +29,10 @@ ingress:
   className: nginx
   host: "" # e.g. ai-trust.example.com -> oauth2-proxy (the same single entry point as :8080 locally)
   keycloakHost: "" # e.g. auth.example.com -> keycloak (browser login, same as :8180 locally)
+  minioHost: "" # e.g. minio.example.com -> minio API (presigned URL downloads from the browser)
   tls:
     enabled: false
-    secretName: ""
+    secretName: "ai-trust-tls"  # cert-manager stores the provisioned cert here
   annotations: {}
 
 waitImages:

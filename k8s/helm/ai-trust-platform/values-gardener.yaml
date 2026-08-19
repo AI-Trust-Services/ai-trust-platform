@@ -20,11 +20,10 @@ keycloak:
 
 ingress:
   enabled: true
-  className: nginx
+  className: traefik
   tls:
     enabled: true
-    # secretName left unset - either point it at a pre-existing TLS secret via
-    # --set ingress.tls.secretName=..., or set annotations below to have
-    # cert-manager create one.
+    # cert-manager provisions the cert via HTTP01 challenge (ClusterIssuer letsencrypt-prod
+    # must be created once on the cluster - see k8s/README.md gardener setup section)
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod

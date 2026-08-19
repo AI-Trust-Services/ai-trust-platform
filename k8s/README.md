@@ -122,6 +122,12 @@ One-time setup, checked into `k8s/gardener/`:
    export KUBECONFIG=/path/to/kubeconfig-gardenlogin--<project>--<shoot>.yaml   # shoot kubeconfig
    kubectl apply -f k8s/gardener/rbac.yaml
    ```
+3. **`cert-manager-issuer.yaml`** - applied once to the **shoot** cluster. Creates the
+   `letsencrypt-prod` ClusterIssuer used by the Helm chart's Ingress to auto-provision
+   TLS certificates via HTTP01 challenge. Edit the `email` field before applying:
+   ```bash
+   kubectl apply -f k8s/gardener/cert-manager-issuer.yaml
+   ```
 
 Required GitHub repo **secret**:
 
@@ -145,11 +151,12 @@ Required GitHub repo **variables**:
 | `GARDENER_CA_DISCOVERY_URL` | Gardener Discovery Server URL for this shoot's CA - `https://discovery.ingress.garden.<landscape>/projects/<project>/shoots/<shoot-uid>/cluster-ca`; get the shoot UID via `kubectl get shoot $MY_SHOOT_NAME -o jsonpath='{.metadata.uid}'` against the Garden cluster |
 | `GARDENER_OIDC_AUDIENCE` | must match the `audiences` entry in `structured-auth-configmap.yaml` (`ai-trust-platform-ci`) |
 
-Optional GitHub repo **variable**:
+Optional GitHub repo **variables**:
 
 | Variable | Purpose |
 |---|---|
 | `K8S_NAMESPACE` | defaults to `ai-trust` |
+| `MINIO_PUBLIC_URL` | public https URL for MinIO, e.g. `https://minio.example.com` - creates a MinIO Ingress entry so presigned evidence download URLs work from the browser. Omit to skip the MinIO Ingress (downloads won't work) |
 | `VITE_*` | overrides for the frontend build-time API bases/URLs baked into images by `build-push.yml`, same keys as `.env.example`'s `VITE_*` vars |
 
 The chart assumes an nginx-class Ingress controller and cert-manager are already installed on the
