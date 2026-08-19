@@ -28,8 +28,7 @@ echo "==> secret/ai-trust-env (from .env, plus computed connection strings)"
 # so every .env line is passed through as its own --from-literal instead.)
 set -a
 # shellcheck disable=SC1091
-# tr -d '\r' tolerates a CRLF .env (common when it's been edited on Windows)
-source <(tr -d '\r' < "$REPO_ROOT/.env")
+source "$REPO_ROOT/.env"
 set +a
 
 literal_args=()
