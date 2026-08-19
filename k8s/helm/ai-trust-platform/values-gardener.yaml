@@ -13,7 +13,7 @@ image:
 
 oauthProxy:
   serviceType: ClusterIP # reached via the Ingress below instead of a NodePort
-  cookieSecure: true # Ingress terminates TLS in front of it
+  cookieSecure: false # no TLS termination in front of it
 
 keycloak:
   serviceType: ClusterIP # reached via the Ingress below instead of a NodePort
@@ -22,10 +22,6 @@ ingress:
   enabled: true
   className: traefik
   tls:
-    enabled: true
-    selfSigned: true  # uses cert-manager self-signed issuer (no port 80 needed)
-    # Switch to letsencrypt-prod once port 80 is open on the shoot firewall:
-    # selfSigned: false
-    # annotations:
-    #   cert-manager.io/cluster-issuer: letsencrypt-prod
+    enabled: false
+    selfSigned: false
   annotations: {}
