@@ -117,6 +117,26 @@ jobs:
           echo "app_public_url=${APP_PUBLIC_URL}" >> "$GITHUB_OUTPUT"
           echo "keycloak_public_url=${KEYCLOAK_PUBLIC_URL}" >> "$GITHUB_OUTPUT"
 
+      - name: Clear any pending Helm state
+        run: |
+          status=$(helm status ai-trust -n "$NAMESPACE" -o json 2>/dev/null | jq -r '.info.status' || echo "not-found")
+          if [[ "$status" == "pending-install" || "$status" == "pending-upgrade" || "$status" == "pending-rollback" ]]; then
+            echo "Clearing stuck Helm release (status: $status)"
+            revision=$(helm status ai-trust -n "$NAMESPACE" -o json | jq -r '.version')
+            kubectl delete secret "sh.helm.release.v1.ai-trust.v${revision}" -n "$NAMESPACE" || true
+          else
+            echo "Helm release status: ${status} — no cleanup needed"
+          fi
+
+      - name: Delete immutable Jobs before upgrade
+        run: |
+          for job in db-migrate clickhouse-migrate keycloak-provision openfga-provision minio-init; do
+            if kubectl get job "$job" -n "$NAMESPACE" &>/dev/null; then
+              echo "Deleting job/$job"
+              kubectl delete job "$job" -n "$NAMESPACE" --wait=false
+            fi
+          done
+
       - name: Helm upgrade --install
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
