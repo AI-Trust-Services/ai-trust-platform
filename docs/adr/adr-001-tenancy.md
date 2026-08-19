@@ -97,11 +97,11 @@ by the table owner.** Therefore, for multi-tenant deployments:
 - Migration `0011` adds `FORCE ROW LEVEL SECURITY` as defense-in-depth (RLS applies to the table
   owner too), but a superuser/BYPASSRLS connection still bypasses it — FORCE is NOT a substitute
   for connecting as `ai_trust_app`.
-- The `ai_trust_app` role + `DATABASE_URL` wiring live in the deployment bundle
-  (`Standard_AiTrust_MT_MSP`), NOT this repo. Verify on every deploy:
-  `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname='ai_trust_app'` → both false, and the
-  backends' `DATABASE_URL` points at `ai_trust_app`. (Confirmed live on ai-trust-1: rolsuper=false,
-  rolbypassrls=false, and a cross-tenant/NULL write returns "new row violates row-level security".)
+- The `ai_trust_app` role + `DATABASE_URL` wiring live in the deployment layer, NOT this repo. Verify on
+  every deploy: `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname='ai_trust_app'` → both false,
+  and the backends' `DATABASE_URL` points at `ai_trust_app`. (Verified in a live multi-tenant deployment:
+  rolsuper=false, rolbypassrls=false, and a cross-tenant/NULL write returns "new row violates row-level
+  security".)
 
 ## Known follow-ups / explicitly out of scope of this app-repo change
 
@@ -110,7 +110,7 @@ These are **Platform-Mesh / deployment** concerns, tracked separately (not in th
   tenant-scoped ClickHouse/MinIO) inside one shared namespace. Per-namespace / NetworkPolicy /
   ResourceQuota isolation is a deploy-bundle decision, not an app-repo change.
 - **Platform Mesh CRD adoption** (APIExport/APIBinding/api-syncagent/ProviderMetadata): handled
-  by the external `Standard_AiTrust_MT_MSP` bundle, not this repo.
+  by the external deployment layer, not this repo.
 - **OpenFGA per-tenant store:** authorization currently checks a single shared store on
   `platform:global` (role→permission graph is identical per tenant); tenant DATA isolation is via
   RLS. Per-tenant OpenFGA stores are a mesh-authz architecture decision, deferred.
