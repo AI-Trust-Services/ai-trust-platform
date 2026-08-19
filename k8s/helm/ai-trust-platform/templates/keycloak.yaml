@@ -34,6 +34,8 @@ spec:
               value: "true"
             - name: KC_HOSTNAME_STRICT
               value: "false"
+            - name: KC_SPI_ADMIN_REALM_SSL_REQUIRED
+              value: NONE
           ports:
             - containerPort: 8080
           readinessProbe:
