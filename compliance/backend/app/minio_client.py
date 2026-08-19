@@ -19,7 +19,7 @@ from ai_trust_logging import get_logger
 
 # Bucket-per-tenant (physical isolation): each tenant's evidence lives in its OWN bucket
 # `tenant-<org>`, resolved per-request from the tenant context. Guarded import keeps
-# single-tenant/local working (legacy shared bucket). TENANCY_MODE decides which path applies.
+# single-tenant/local working (the single shared bucket). TENANCY_MODE decides which path applies.
 try:
     from ai_trust_tenancy import tenant_id_var
     from ai_trust_tenancy.config import MODE as _TENANCY_MODE
@@ -29,7 +29,7 @@ except ImportError:  # libs/tenancy not installed
 
 logger = get_logger(__name__)
 
-LEGACY_BUCKET = "evidence-files"
+SINGLE_TENANT_BUCKET = "evidence-files"  # used only in TENANCY_MODE=single (and local dev)
 # MinIO/S3 bucket names: lowercase, 3-63 chars, DNS-safe. tenant-<org> with '_'→'-'.
 _SAFE_BUCKET = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
 
@@ -46,10 +46,10 @@ def bucket_name() -> str:
 
     jwt/header mode: `tenant-<org>` (physical per-tenant bucket). Fail-closed — if no tenant is
     resolved we REFUSE (raise) rather than fall back to a shared bucket, so evidence can never
-    land in or be read from the wrong place. single mode: the legacy shared `evidence-files`.
+    land in or be read from the wrong place. single mode: the shared `evidence-files` bucket.
     """
     if _TENANCY_MODE == "single":
-        return LEGACY_BUCKET
+        return SINGLE_TENANT_BUCKET
     tenant = _current_tenant()
     if not tenant:
         raise HTTPException(status_code=400, detail="No tenant in request context — cannot resolve evidence bucket.")
