@@ -137,6 +137,38 @@ jobs:
             fi
           done
 
+      - name: Delete unowned cert-manager resources before upgrade
+        run: |
+          # cert-manager Certificate/Issuer objects created outside Helm (e.g. from a
+          # previous letsencrypt attempt) block helm upgrade with "cannot be imported".
+          # Delete them so Helm recreates them with proper ownership annotations.
+          for res in certificate issuer; do
+            if kubectl get "${res}" ai-trust-tls -n "$NAMESPACE" &>/dev/null; then
+              owner=$(kubectl get "${res}" ai-trust-tls -n "$NAMESPACE" \
+                -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null)
+              if [[ "$owner" != "ai-trust" ]]; then
+                echo "Deleting unowned ${res}/ai-trust-tls"
+                kubectl delete "${res}" ai-trust-tls -n "$NAMESPACE" || true
+              fi
+            fi
+          done
+          if kubectl get certificate ai-trust-selfsigned -n "$NAMESPACE" &>/dev/null; then
+            owner=$(kubectl get certificate ai-trust-selfsigned -n "$NAMESPACE" \
+              -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null)
+            if [[ "$owner" != "ai-trust" ]]; then
+              echo "Deleting unowned certificate/ai-trust-selfsigned"
+              kubectl delete certificate ai-trust-selfsigned -n "$NAMESPACE" || true
+            fi
+          fi
+          if kubectl get issuer ai-trust-selfsigned -n "$NAMESPACE" &>/dev/null; then
+            owner=$(kubectl get issuer ai-trust-selfsigned -n "$NAMESPACE" \
+              -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null)
+            if [[ "$owner" != "ai-trust" ]]; then
+              echo "Deleting unowned issuer/ai-trust-selfsigned"
+              kubectl delete issuer ai-trust-selfsigned -n "$NAMESPACE" || true
+            fi
+          fi
+
       - name: Helm upgrade --install
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
@@ -165,8 +197,7 @@ jobs:
           helm upgrade --install ai-trust k8s/helm/ai-trust-platform \
             -n "$NAMESPACE" \
             -f k8s/helm/ai-trust-platform/values-gardener.yaml \
-            "${set_args[@]}" \
-            --atomic=false --timeout 5m
+            "${set_args[@]}"
 
       - name: Show pod status
         if: always()
