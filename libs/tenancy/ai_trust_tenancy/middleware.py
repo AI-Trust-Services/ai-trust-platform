@@ -37,5 +37,8 @@ def install_tenant_middleware(app) -> None:
             path = request.url.path.rstrip("/")
             if not any(path.endswith(s.rstrip("/")) for s in _EXEMPT_SUFFIXES):
                 return JSONResponse({"detail": "tenant unresolved"}, status_code=401)
-        tenant_id_var.set(tenant)
-        return await call_next(request)
+        token = tenant_id_var.set(tenant)
+        try:
+            return await call_next(request)
+        finally:
+            tenant_id_var.reset(token)
