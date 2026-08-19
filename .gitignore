@@ -196,6 +196,3 @@ dist/
 docs/infrastructure_mt.md
 updategit.md
 
-# local agent / dev scratch — not for the public repo
-.claude/
-.hyperspace/
