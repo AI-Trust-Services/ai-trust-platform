@@ -13,6 +13,7 @@ from ai_trust_persistence.models.assessment import Assessment
 from ai_trust_persistence.models.evidence import Evidence, evidence_obligations
 from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
+from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.obligation import Obligation
 
 
@@ -276,7 +277,7 @@ async def test_attention_includes_prohibited(client: httpx.AsyncClient):
     item = attention[0]
     assert item["name"] == "Bad Bot"
     assert item["reason"] == "Prohibited system"
-    assert {"id", "tier", "lifecycle", "compliance", "model_id"} <= item.keys()
+    assert {"id", "tier", "lifecycle", "compliance"} <= item.keys()
 
 
 async def test_attention_includes_high_risk_low_compliance_on_market(client: httpx.AsyncClient):
@@ -284,9 +285,9 @@ async def test_attention_includes_high_risk_low_compliance_on_market(client: htt
         mc = _model()
         session.add(mc)
         await session.flush()
-        session.add(_sys(tier="high", lifecycle="market", compliance=30.0, model_id=mc.id))
+        session.add(_sys(tier="high", lifecycle="market", compliance=30.0))
         # high on market but compliance >= 50 → not in attention
-        session.add(_sys(tier="high", lifecycle="market", compliance=60.0, model_id=mc.id))
+        session.add(_sys(tier="high", lifecycle="market", compliance=60.0))
         await session.commit()
 
     r = await client.get("/v1/stats")
@@ -298,12 +299,18 @@ async def test_attention_includes_high_risk_low_compliance_on_market(client: htt
 async def test_attention_includes_on_market_without_model_card(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         # System on market with no model card → should appear in attention.
-        session.add(_sys(tier="minimal", lifecycle="market", model_id=None))
+        session.add(_sys(tier="minimal", lifecycle="market"))
         # Same lifecycle but with a linked model card → should NOT appear.
         mc = _model()
+        linked = _sys(tier="minimal", lifecycle="market")
         session.add(mc)
+        session.add(linked)
         await session.flush()
-        session.add(_sys(tier="minimal", lifecycle="market", model_id=mc.id))
+        await session.execute(
+            pg_insert(AISystemModelCard.__table__)
+            .values(system_id=linked.id, model_card_id=mc.id)
+            .on_conflict_do_nothing()
+        )
         await session.commit()
 
     r = await client.get("/v1/stats")
@@ -325,7 +332,7 @@ async def test_attention_capped_at_20(client: httpx.AsyncClient):
 async def test_attention_excludes_clean_systems(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         # minimal, development, no model card — should NOT appear in attention
-        session.add(_sys(tier="minimal", lifecycle="development", model_id=None))
+        session.add(_sys(tier="minimal", lifecycle="development"))
         await session.commit()
 
     r = await client.get("/v1/stats")
