@@ -19,7 +19,7 @@ def install_tenant_middleware(app) -> None:
     ContextVar per request, which then propagates through every `await` (so the DB
     session hook can read it). In `jwt` mode a request that resolves no tenant is
     rejected 401 (fail-closed), except for infra paths. In `single`/`header` modes an
-    unresolved tenant is allowed (None → RLS shows only shared rows).
+    unresolved tenant is allowed (None → session hook stays on the shared login role).
 
     Fail-fast: validate() raises at install time (app startup) if TENANCY_MODE is invalid
     or jwt mode is missing its issuer anchor — so a misconfigured backend refuses to start

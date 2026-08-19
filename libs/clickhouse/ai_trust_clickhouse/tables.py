@@ -32,6 +32,4 @@ COLUMNS = [
     "status_code",
     "status_message",
     "attributes",
-    # added in 0003 (multi-tenancy)
-    "tenant_id",
 ]

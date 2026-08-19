@@ -7,19 +7,19 @@ from ai_trust_tenancy.context import tenant_id_var
 
 # A tenant id is a Platform Mesh account / realm name — restrict to a safe charset so it can be
 # inlined into the SET as a literal without any driver-specific paramstyle (the raw DBAPI conn in
-# the `begin` event is asyncpg, which uses $1 not %s). Anything outside this is rejected (no SET),
-# so RLS then shows only shared/NULL rows — fail-closed.
+# the `begin` event is asyncpg, which uses $1 not %s). Anything outside this is rejected (no role
+# switch), so the connection stays on the shared login role with no tenant-schema access — fail-closed.
 _SAFE_TENANT = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 
 
 def install_tenant_scoping(engine) -> None:
-    """Make every DB transaction set Postgres' `app.current_tenant` from the ContextVar.
+    """Route every DB transaction into the current tenant's schema, from the ContextVar.
 
-    This is what turns the row-level-security policies (migration 0009) on: the policy
-    filters on `current_setting('app.current_tenant', true)`, and this hook sets that
-    value at the start of each transaction to whatever tenant the request middleware
-    resolved. Because it fires on the engine's `begin` event, it covers EVERY
-    `async with SessionLocal() as session:` block without editing any call site.
+    This is what enforces schema-per-tenant isolation: at the start of each transaction the
+    hook points `search_path` at the tenant's own schema and `SET LOCAL ROLE`s to the
+    per-tenant role, using whatever tenant the request middleware resolved. Because it fires
+    on the engine's `begin` event, it covers EVERY `async with SessionLocal() as session:`
+    block without editing any call site.
 
     Implementation notes:
       - `SELECT set_config(name, value, is_local=true)` is used instead of `SET LOCAL`
@@ -44,18 +44,14 @@ def install_tenant_scoping(engine) -> None:
     def _set_tenant_on_begin(conn):  # conn: a raw DBAPI-level connection wrapper (asyncpg)
         tenant = tenant_id_var.get()
         if tenant and _SAFE_TENANT.match(tenant):
-            # Schema-per-tenant with a HARD, DB-enforced wall (RLS removed 2026-08 — see ADR-001):
+            # Schema-per-tenant with a HARD, DB-enforced wall:
             #  - search_path routes queries into the tenant's own schema,
             #  - SET LOCAL ROLE t_<org> switches to a per-tenant role that has USAGE on ONLY that schema,
-            #    so Postgres itself denies any cross-tenant access at the PRIVILEGE level (not RLS filtering
-            #    to 0 rows) — this is now the SOLE isolation wall, and it is a hard deny, not a filter.
+            #    so Postgres itself denies any cross-tenant access at the PRIVILEGE level — this is the
+            #    SOLE isolation wall, and it is a hard deny, not a filter.
             # All transaction-local (SET LOCAL / set_config(...,true)) so nothing leaks across the pool.
             # Schema + role names replace '-' with '_' to be valid unquoted identifiers; SAME derivation
             # is used by the operator's provisioning Job (create role/schema) and the data-migration.
-            # NOTE: we no longer set `app.current_tenant` — the RLS policies it drove were dropped
-            # (migration 0012). Isolation is now schema-per-tenant + the per-tenant role's schema-scoped
-            # USAGE grant. If RLS defense-in-depth is ever wanted back, re-add the set_config below and
-            # run migration 0012 downgrade.
             safe = tenant.replace("-", "_")
             schema = "tenant_" + safe
             role = "t_" + safe

@@ -6,7 +6,6 @@ from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Tabl
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
-from ai_trust_persistence.models._tenant import TenantMixin
 
 # Evidence links (many-to-many) — one evidence item can prove multiple controls
 # and multiple obligations (spec EVD-FR-02). Direct ai_system_id / assessment_id
@@ -26,7 +25,7 @@ evidence_obligations = Table(
 )
 
 
-class Evidence(TenantMixin, Base):
+class Evidence(Base):
     """An artifact proving a control is implemented / an obligation fulfilled.
 
     Links to controls and obligations via the association tables above, and may
@@ -64,7 +63,7 @@ class Evidence(TenantMixin, Base):
     )
 
 
-class EvidenceVersion(TenantMixin, Base):
+class EvidenceVersion(Base):
     """A snapshot of a previous version of an evidence item.
 
     When a new file is uploaded for an existing evidence item, the current

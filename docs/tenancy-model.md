@@ -4,6 +4,11 @@ How the AI Trust Platform isolates tenants when run as a shared multi-tenant ins
 Platform Mesh. The decision record is [ADR-001](adr/adr-001-tenancy.md); this document is the
 operational reference.
 
+Isolation is **physical, per store** — each tenant gets its own Postgres schema (reached through
+a per-tenant Postgres role), its own ClickHouse database, and its own MinIO bucket prefix. There
+is no in-row tenant discriminator: a request is *routed* to the tenant's own store and Postgres
+denies cross-tenant access at the privilege level.
+
 ## Modes (`TENANCY_MODE`)
 
 | Mode | Tenant source | Use |
@@ -17,11 +22,14 @@ operational reference.
 
 ## The tenant id
 
-`tenant_id` = the Platform Mesh **account** (kcp logical-cluster id). See ADR-001 for the
-`root:orgs:<org>:<account>` → cluster-id → `tenant_id` mapping. One account ⇄ one cluster id ⇄
-one tenant. The org's Keycloak realm mints `tenant_id` into the token; realm name == org account.
+The tenant id = the Platform Mesh **account** (kcp logical-cluster id). See ADR-001 for the
+`root:orgs:<org>:<account>` → cluster-id → tenant mapping. One account ⇄ one cluster id ⇄
+one tenant. The org's Keycloak realm mints the tenant into the token (in the `tenant_id` claim);
+realm name == org account. The tenant string is used to derive the tenant's store names:
+`tenant_<org>` Postgres schema, `t_<org>` Postgres role, `tenant_<org>` ClickHouse database, and
+the `t/<tenant>/…` MinIO object-key prefix (`-`→`_` where an identifier is required).
 
-## Request → row flow (jwt mode)
+## Request → store flow (jwt mode)
 
 1. **Edge:** per-org oauth2-proxy authenticates against the org's mesh Keycloak realm and forwards
    `Authorization: Bearer <JWT>`. The shell nginx **strips** any client-supplied `X-Tenant-Id`
@@ -30,36 +38,38 @@ one tenant. The org's Keycloak realm mints `tenant_id` into the token; realm nam
    The JWT is **verified** (RS256 signature via the issuer's JWKS, `exp`, and `iss` must start
    with `TENANCY_JWKS_ISSUER_BASE`) — SEC-C2. A client `X-Tenant-Id` is ignored in jwt mode.
 3. **Propagate (`context.py`):** the resolved tenant is stored in `tenant_id_var` (a ContextVar),
-   which flows through every `await` in the request — no explicit passing.
-4. **Postgres (`session.py`):** a SQLAlchemy `begin` hook issues
-   `SELECT set_config('app.current_tenant', <tenant>, true)` per transaction. Row-Level Security
-   (migrations 0009 + 0010) then enforces:
-   - **read:** `tenant_id = current_setting('app.current_tenant', true) OR tenant_id IS NULL`
-     (own rows + shared/catalog rows).
-   - **write:** `tenant_id = current_setting('app.current_tenant', true)` (own tenant ONLY — a
-     tenant cannot write another tenant's rows nor globally-shared NULL rows). SEC-M1.
-   Runtime connects as the non-superuser `ai_trust_app` role (NOBYPASSRLS); migrations/seeders
-   run as the owner (bypass, to seed shared catalog rows).
-5. **ClickHouse:** no RLS, so `ai_trust_clickhouse.tenant_clause()` adds `AND tenant_id = {tenant}`
-   to every read (monitoring, alerts, DTA, worker) and `tenant_id` is stamped on every write.
-   Fail-closed: jwt mode with no tenant → `AND 1=0` (no rows). The instrumented app emits its
-   tenant as the OTLP resource attribute `ai_trust.tenant_id`. SEC-C3.
-6. **MinIO:** new evidence object keys are prefixed `t/<tenant_id>/evidence/...`; downloads use the
-   key stored on the RLS-scoped evidence row, so cross-tenant download is blocked at the DB. SEC-C3.
+   which flows through every `await` in the request — no explicit passing. This ContextVar is the
+   single routing signal every store reads.
+4. **Postgres (`session.py`):** a SQLAlchemy `begin` hook, per transaction, points `search_path`
+   at the tenant's own schema (`tenant_<org>`) and `SET LOCAL ROLE`s to the per-tenant role
+   (`t_<org>`). That role has `USAGE` on ONLY its own schema, so Postgres itself **denies** any
+   cross-tenant access at the privilege level — a hard deny, not a filter (SEC-M1). Fail-closed:
+   no valid tenant → no role switch and `search_path=public` (no tenant tables reachable).
+5. **ClickHouse:** each tenant's spans/alerts live in that tenant's OWN database (`tenant_<org>`).
+   Reads and writes go through a per-tenant client (`get_client_for_tenant(current_tenant())`),
+   so queries use UNQUALIFIED table names that resolve against the tenant's database — no in-row
+   filter. The instrumented app emits its tenant as the OTLP resource attribute
+   `ai_trust.tenant_id`; the consumer routes each span to that tenant's database (SEC-C3).
+   Fail-closed: no tenant → the legacy `otel` database, which holds no real tenant rows.
+6. **MinIO:** new evidence object keys are prefixed `t/<tenant>/evidence/...`; downloads use the
+   key stored on the tenant-scoped evidence row, so cross-tenant download is blocked at the DB
+   (that row is only reachable inside the tenant's own schema). SEC-C3.
 
 ## Fail-closed guarantees
 
-- Unresolved tenant in jwt mode → HTTP 401 (middleware), `AND 1=0` (ClickHouse).
+- Unresolved tenant in jwt mode → HTTP 401 (middleware).
 - Forged / unsigned / wrong-issuer token → tenant unresolved (verification fails).
-- A tenant can never write another tenant's or a shared (NULL) row (RLS WITH CHECK).
+- A tenant can never reach another tenant's rows: the per-tenant Postgres role has no privilege
+  on any other schema, and ClickHouse/MinIO are physically separate databases/buckets.
 - `TENANCY_MODE=single` → all of the above is a no-op.
 
 ## Non-request contexts
 
-`policy-checker-worker` has no HTTP request: it enumerates distinct tenants via an owner
-connection (`OWNER_DATABASE_URL`) and sets `tenant_id_var` per pass, so RLS + `tenant_clause()`
-scope each tenant's evaluation. It fails to a single unscoped pass only when no owner URL is set
-(single-tenant / local).
+`policy-checker-worker` has no HTTP request: it enumerates the tenants from the per-tenant
+Postgres schemas via an owner connection (`OWNER_DATABASE_URL`) and sets `tenant_id_var` per
+pass, so the schema/role routing hook and the per-tenant ClickHouse client scope each tenant's
+evaluation to that tenant's own stores. It falls back to a single unscoped pass only when no
+owner URL is set (single-tenant / local).
 
 ## Configuration (jwt mode)
 
@@ -70,11 +80,12 @@ scope each tenant's evaluation. It fails to a single unscoped pass only when no 
 | `TENANCY_JWKS_ISSUER_BASE` | trusted issuer prefix; `iss` must start with it (JWKS derived from verified iss) |
 | `TENANCY_JWT_AUDIENCE` | optional `aud` check |
 | `TENANCY_JWT_VERIFY` | default `true`; `false` only for controlled test/dev |
-| `DATABASE_URL` | runtime = the RLS-bound `ai_trust_app` role |
-| `OWNER_DATABASE_URL` | worker only — owner role for tenant enumeration |
+| `DATABASE_URL` | runtime = the shared login role that `SET LOCAL ROLE`s into the per-tenant role |
+| `OWNER_DATABASE_URL` | worker only — owner role that can list the tenant schemas |
 
 ## Tests
 
 `libs/tenancy/tests/test_resolver.py` (unit: X-Tenant-Id ignored in jwt mode; unsigned/wrong-iss
-→ None; iss fallback; config fail-fast) and `test_rls_isolation.py` (integration: 2-tenant read
-isolation + write-own enforcement, `SET ROLE ai_trust_app`).
+→ None; iss fallback; config fail-fast) covers tenant resolution. Physical store isolation
+(per-tenant schema/role, database, bucket) is exercised by the deploy/provisioning integration
+suites.

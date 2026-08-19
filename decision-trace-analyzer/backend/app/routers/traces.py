@@ -7,7 +7,6 @@ from ai_trust_clickhouse import (
     GEN_AI_SPANS,
     current_tenant,
     get_client_for_tenant,
-    tenant_clause,
 )
 from ai_trust_logging import get_logger
 from app.summary import build_summary
@@ -51,12 +50,9 @@ def list_traces(
         conditions.append("started_at <= parseDateTimeBestEffort({to_ts:String})")
         params["to_ts"] = to_ts
 
-    # Tenant scoping — always ANDed in (fail-closed when unresolved).
-    tenant_where, tenant_params = tenant_clause()
-    params.update(tenant_params)
-    conditions.append(tenant_where)
-
-    where = "WHERE " + " AND ".join(conditions)
+    # Isolation is by per-tenant database: get_client_for_tenant(current_tenant()) below
+    # points this query at the tenant's own database, so no in-row tenant filter is needed.
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     # `errors_only` is applied at the aggregation level via HAVING, not as a
     # subquery — keeps the time filter and other conditions on the spans being
@@ -77,7 +73,7 @@ def list_traces(
             -- first span's start. Computed against millisecond precision so
             -- sub-second traces don't round to 0 under DateTime64 started_at.
             -- duration_ms stays Float64 here — wrapping it in toInt64 would
-            -- truncate sub-millisecond spans to 0 and defeat migration 0003.
+            -- truncate sub-millisecond spans to 0.
             round(
                 (max(toUnixTimestamp64Milli(started_at) + duration_ms)
                  - min(toUnixTimestamp64Milli(started_at))) / 1000.0,
@@ -172,7 +168,6 @@ def _load_spans(trace_id: str) -> list[dict[str, Any]]:
     Manual quote-doubling is not safe — ClickHouse also honours backslash
     escapes (`\\'`), so `'\\'' OR 1=1 --` would break out of the literal.
     """
-    tenant_where, tenant_params = tenant_clause()
     query = f"""
         SELECT
             span_id,
@@ -196,13 +191,12 @@ def _load_spans(trace_id: str) -> list[dict[str, Any]]:
             attributes
         FROM {GEN_AI_SPANS}
         WHERE trace_id = {{trace_id:String}}
-        AND {tenant_where}
         ORDER BY started_at ASC
     """
 
     ch = get_client_for_tenant(current_tenant())
     try:
-        rows = ch.query(query, parameters={"trace_id": trace_id, **tenant_params})
+        rows = ch.query(query, parameters={"trace_id": trace_id})
     except Exception:
         logger.exception("traces.load_spans_query_failed", extra={"trace_id": trace_id})
         raise HTTPException(status_code=503, detail="Data store unavailable")

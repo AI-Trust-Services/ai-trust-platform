@@ -135,9 +135,9 @@ def _process_payload(body: bytes) -> list[dict]:
     for resource_span in payload.get("resourceSpans", []):
         resource_attrs = _attrs_dict(resource_span.get("resource", {}).get("attributes", []))
         service_name = _extract_attr(resource_attrs, "service.name") or ""
-        # Multi-tenancy (SEC-C3): the instrumented app emits its tenant as an OTLP resource
-        # attribute `ai_trust.tenant_id`. Empty when absent → the span is "unscoped/legacy"
-        # and (in jwt mode) invisible to every tenant's reads. Documented contract.
+        # Database-per-tenant routing: the instrumented app emits its tenant as an OTLP resource
+        # attribute `ai_trust.tenant_id`. This selects which tenant database the span is written
+        # to (see insert_routed). Empty when absent → the span goes to the legacy 'otel' database.
         resource_tenant = _extract_attr(resource_attrs, "ai_trust.tenant_id") or ""
         for scope_span in resource_span.get("scopeSpans", []):
             for span in scope_span.get("spans", []):
@@ -193,8 +193,10 @@ def _process_payload(body: bytes) -> list[dict]:
                     "status_code": int(status.get("code", 0)),
                     "status_message": status.get("message", "") or "",
                     "attributes": _attrs_as_map(attrs),
-                    # added in 0003 — tenant scoping; span attr overrides resource attr if present
-                    "tenant_id": _extract_attr(attrs, "ai_trust.tenant_id") or resource_tenant,
+                    # Routing key only — NOT a table column. Resolves the tenant whose ClickHouse
+                    # database this span is written to (span attr overrides resource attr). Popped
+                    # out in insert_routed before the row is turned into column values.
+                    "_route_tenant": _extract_attr(attrs, "ai_trust.tenant_id") or resource_tenant,
                 })
     return rows
 
@@ -226,11 +228,12 @@ async def main() -> None:
     batch_size = int(os.environ.get("BATCH_SIZE", "100"))
     batch_timeout = float(os.environ.get("BATCH_TIMEOUT", "5"))
 
-    # Database-per-tenant write routing: group each batch by the span's tenant_id (extracted from the
-    # OTLP `ai_trust.tenant_id` resource/span attribute) and insert each group into that tenant's OWN
-    # ClickHouse database (tenant_<org>). Spans with no tenant ('') go to the legacy 'otel' db — kept
-    # for backward compatibility, not dropped. Per-tenant clients are cached. The tenant_id column is
-    # still written (backup/defense-in-depth, mirrors the Postgres RLS-column choice).
+    # Database-per-tenant write routing: group each batch by the span's tenant (extracted from the
+    # OTLP `ai_trust.tenant_id` resource/span attribute into the private `_route_tenant` key) and
+    # insert each group into that tenant's OWN ClickHouse database (tenant_<org>). Spans with no
+    # tenant ('') go to the legacy 'otel' db — kept for backward compatibility, not dropped.
+    # Per-tenant clients are cached. `_route_tenant` is a routing key only, never a table column,
+    # so it is stripped from each row before the values are built.
     _clients: dict[str, object] = {}
 
     def _client_for(tenant: str):
@@ -246,7 +249,7 @@ async def main() -> None:
             return
         by_tenant: dict[str, list[dict]] = {}
         for r in rows:
-            by_tenant.setdefault(r.get("tenant_id", "") or "", []).append(r)
+            by_tenant.setdefault(r.pop("_route_tenant", "") or "", []).append(r)
         for tenant, trows in by_tenant.items():
             _client_for(tenant).insert(
                 GEN_AI_SPANS, [list(r.values()) for r in trows], column_names=COLUMNS

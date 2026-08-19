@@ -6,7 +6,6 @@ from sqlalchemy import Column, Date, DateTime, ForeignKey, String, Table, Text, 
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
-from ai_trust_persistence.models._tenant import TenantMixin
 
 # Many-to-many: one control can satisfy obligations across multiple assessments
 # and frameworks; one obligation can be satisfied by multiple controls.
@@ -18,7 +17,7 @@ control_obligations = Table(
 )
 
 
-class Control(TenantMixin, Base):
+class Control(Base):
     """A technical or organisational measure that satisfies obligations.
 
     Defines *how* an obligation is met. ai_system_id is nullable: a null value

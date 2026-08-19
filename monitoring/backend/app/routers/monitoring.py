@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import MONITORING_READ
-from ai_trust_clickhouse import ch_query, tenant_clause
+from ai_trust_clickhouse import ch_query
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
@@ -18,18 +18,18 @@ logger = get_logger(__name__)
 
 @router.get("/services", dependencies=[Depends(require_permission(MONITORING_READ))])
 async def get_services() -> list[dict]:
-    # Step 1: get distinct service names + stats from ClickHouse
-    where, params = tenant_clause()
-    ch_rows = await ch_query(f"""
+    # Step 1: get distinct service names + stats from ClickHouse. Isolation is by
+    # per-tenant database (the connection already points at tenant_<org>), so no in-row
+    # tenant filter is needed.
+    ch_rows = await ch_query("""
         SELECT
             service_name,
             count() AS total_spans,
             toString(max(received_at)) AS last_seen
         FROM gen_ai_spans
-        WHERE {where}
         GROUP BY service_name
         ORDER BY total_spans DESC
-    """, params)
+    """)
 
     if not ch_rows:
         return []
@@ -108,10 +108,8 @@ async def get_signals(
         service_filter = "AND service_name IN {ids:Array(String)}"
         params = {"ids": list(registered_ids)}
 
-    # Tenant scoping — AND the tenant predicate into both queries below.
-    tenant_where, tenant_params = tenant_clause()
-    params = {**params, **tenant_params}
-
+    # Isolation is by per-tenant database (the ch_query connection points at tenant_<org>),
+    # so no in-row tenant filter is added here.
     timeseries, totals = await asyncio.gather(
         ch_query(f"""
             SELECT
@@ -122,7 +120,6 @@ async def get_signals(
                 sum(output_tokens)               AS output_tokens
             FROM gen_ai_spans
             WHERE received_at >= now() - INTERVAL {interval}
-            AND {tenant_where}
             {service_filter}
             GROUP BY time
             ORDER BY time ASC
@@ -135,7 +132,6 @@ async def get_signals(
                 sum(output_tokens)         AS total_output_tokens
             FROM gen_ai_spans
             WHERE received_at >= now() - INTERVAL {interval}
-            AND {tenant_where}
             {service_filter}
         """, params),
     )
