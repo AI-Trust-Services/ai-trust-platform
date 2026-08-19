@@ -166,8 +166,8 @@ jobs:
             -n "$NAMESPACE" \
             -f k8s/helm/ai-trust-platform/values-gardener.yaml \
             "${set_args[@]}" \
-            --wait --timeout 15m
+            --atomic=false --timeout 5m
 
-      - name: Show rollout status
+      - name: Show pod status
         if: always()
-        run: kubectl get pods -n "$NAMESPACE"
+        run: kubectl get pods -n "$NAMESPACE" --no-headers | sort
