@@ -680,10 +680,13 @@ async def evaluate_all_tenants() -> None:
         await evaluate_once()
         return
     for t in tenants:
-        if tenant_id_var is not None:
-            tenant_id_var.set(t)
-        log.info("policy_checker_worker.tenant_pass", extra={"tenant_id": t})
-        await evaluate_once()
+        tok = tenant_id_var.set(t) if tenant_id_var is not None else None
+        try:
+            log.info("policy_checker_worker.tenant_pass", extra={"tenant_id": t})
+            await evaluate_once()
+        finally:
+            if tenant_id_var is not None and tok is not None:
+                tenant_id_var.reset(tok)
 
 
 async def main() -> None:
