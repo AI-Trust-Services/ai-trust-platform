@@ -29,7 +29,7 @@ name: Gardener Deploy (Structured Authentication)
 
 # Test vars for sr-test:
 # GARDENER_CA_DISCOVERY_URL
-# https://discovery.ingress.garden.landscape-apeirora-one/projects/ai-trust/shoots/6ffce6ae-34d2-4e76-8211-b3e3a7e093bb/cluster-ca
+# https://discovery.ingress.garden.gardener.cc-one.showroom.apeirora.eu/projects/ai-trust/shoots/6ffce6ae-34d2-4e76-8211-b3e3a7e093bb/cluster-ca
 # GARDENER_OIDC_AUDIENCE
 # ai-trust-platform-ci
 # GARDENER_SHOOT_API_SERVER
