@@ -32,6 +32,7 @@ ingress:
   minioHost: "" # e.g. minio.example.com -> minio API (presigned URL downloads from the browser)
   tls:
     enabled: false
+    selfSigned: false  # true = cert-manager self-signed issuer; false = external issuer (e.g. letsencrypt)
     secretName: "ai-trust-tls"  # cert-manager stores the provisioned cert here
   annotations: {}
 

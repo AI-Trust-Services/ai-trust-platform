@@ -3,6 +3,31 @@
      values-gardener.yaml, fronting the same two public entry points that
      kind exposes via NodePort: oauth2-proxy (single app entry point, was
      :8080) and keycloak (browser login, was :8180). */}}
+{{- if and .Values.ingress.enabled .Values.ingress.tls.selfSigned }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: ai-trust-selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ai-trust-tls
+spec:
+  secretName: {{ .Values.ingress.tls.secretName }}
+  issuerRef:
+    name: ai-trust-selfsigned
+    kind: Issuer
+  dnsNames:
+    - {{ .Values.ingress.host }}
+    - {{ .Values.ingress.keycloakHost }}
+    {{- if .Values.ingress.minioHost }}
+    - {{ .Values.ingress.minioHost }}
+    {{- end }}
+---
+{{- end }}
 {{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress

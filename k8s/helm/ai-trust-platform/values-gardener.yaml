@@ -23,7 +23,9 @@ ingress:
   className: traefik
   tls:
     enabled: true
-    # cert-manager provisions the cert via HTTP01 challenge (ClusterIssuer letsencrypt-prod
-    # must be created once on the cluster - see k8s/README.md gardener setup section)
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    selfSigned: true  # uses cert-manager self-signed issuer (no port 80 needed)
+    # Switch to letsencrypt-prod once port 80 is open on the shoot firewall:
+    # selfSigned: false
+    # annotations:
+    #   cert-manager.io/cluster-issuer: letsencrypt-prod
+  annotations: {}
