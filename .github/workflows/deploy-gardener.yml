@@ -141,33 +141,10 @@ jobs:
         run: |
           # cert-manager Certificate/Issuer objects created outside Helm (e.g. from a
           # previous letsencrypt attempt) block helm upgrade with "cannot be imported".
-          # Delete them so Helm recreates them with proper ownership annotations.
-          for res in certificate issuer; do
-            if kubectl get "${res}" ai-trust-tls -n "$NAMESPACE" &>/dev/null; then
-              owner=$(kubectl get "${res}" ai-trust-tls -n "$NAMESPACE" \
-                -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null)
-              if [[ "$owner" != "ai-trust" ]]; then
-                echo "Deleting unowned ${res}/ai-trust-tls"
-                kubectl delete "${res}" ai-trust-tls -n "$NAMESPACE" || true
-              fi
-            fi
-          done
-          if kubectl get certificate ai-trust-selfsigned -n "$NAMESPACE" &>/dev/null; then
-            owner=$(kubectl get certificate ai-trust-selfsigned -n "$NAMESPACE" \
-              -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null)
-            if [[ "$owner" != "ai-trust" ]]; then
-              echo "Deleting unowned certificate/ai-trust-selfsigned"
-              kubectl delete certificate ai-trust-selfsigned -n "$NAMESPACE" || true
-            fi
-          fi
-          if kubectl get issuer ai-trust-selfsigned -n "$NAMESPACE" &>/dev/null; then
-            owner=$(kubectl get issuer ai-trust-selfsigned -n "$NAMESPACE" \
-              -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null)
-            if [[ "$owner" != "ai-trust" ]]; then
-              echo "Deleting unowned issuer/ai-trust-selfsigned"
-              kubectl delete issuer ai-trust-selfsigned -n "$NAMESPACE" || true
-            fi
-          fi
+          # Always delete them so Helm recreates them with proper ownership annotations.
+          kubectl delete certificate --all -n "$NAMESPACE" --ignore-not-found || true
+          kubectl delete issuer --all -n "$NAMESPACE" --ignore-not-found || true
+          kubectl delete secret ai-trust-tls -n "$NAMESPACE" --ignore-not-found || true
 
       - name: Helm upgrade --install
         env:
