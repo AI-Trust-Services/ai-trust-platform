@@ -35,7 +35,9 @@ export interface AttentionSystem {
   tier: TierKey;
   lifecycle: LifecycleKey;
   compliance: number;
-  model_id: string | null;
+  // TODO: needs discussion — with N:M, a system can have multiple models.
+  // Should this expose has_model: boolean, a list of model names, or nothing?
+  // model_id: string | null;
   reason: string;
 }
 
