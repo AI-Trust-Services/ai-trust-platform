@@ -10,7 +10,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: ai-trust-platform-github-actions-auth
-  namespace: garden-CHANGE-ME
+  namespace: garden-ai-trust
 data:
   config.yaml: |
     apiVersion: apiserver.config.k8s.io/v1beta1
