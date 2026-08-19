@@ -49,10 +49,11 @@ export default function Systems() {
     });
   }, [systems, search, tierFilter, lifecycleFilter]);
 
-  function modelName(modelId: string | null) {
-    const m = models.find((x) => x.id === modelId);
-    return m ? m.name : modelId;
-  }
+  // TODO: needs discussion — should the system list show linked model names or a count? (N:M)
+  // function modelName(modelId: string | null) {
+  //   const m = models.find((x) => x.id === modelId);
+  //   return m ? m.name : modelId;
+  // }
 
   async function openDetail(id: string) {
     try {
@@ -114,7 +115,8 @@ export default function Systems() {
                     <div className="system-name">{s.name}</div>
                     <div className="system-sub">
                       {s.id} · v{s.version || "1.0.0"}
-                      {s.model_id && <> · <span style={{ color: "var(--brand)" }}>{modelName(s.model_id)}</span></>}
+                      {/* TODO: needs discussion — What to do? show linked model names or count? (N:M) */}
+                      {/* {s.model_id && <> · <span style={{ color: "var(--brand)" }}>{modelName(s.model_id)}</span></>} */}
                     </div>
                   </td>
                   <td><TierBadge tier={s.tier} /></td>
