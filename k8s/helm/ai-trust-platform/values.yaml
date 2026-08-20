@@ -39,6 +39,7 @@ ingress:
 waitImages:
   busybox: busybox:1.36 # TCP/HTTP "wait for dependency" initContainers
   kubectl: rancher/kubectl:v1.31.0 # "wait for job completion" initContainers
+  postgres: postgres:16-alpine # psql one-off queries
 
 serviceAccount:
   jobWaiter: job-waiter # created by k8s/scripts/bootstrap.sh
