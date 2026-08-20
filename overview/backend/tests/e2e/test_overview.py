@@ -288,6 +288,7 @@ async def test_attention_includes_high_risk_low_compliance_on_market(client: htt
         # TODO: Needs discussion. replace model_id= kwargs with pg_insert(ai_system_model_cards) after N:M migration
         session.add(_sys(tier="high", lifecycle="market", compliance=30.0, model_id=mc.id))
         # high on market but compliance >= 50 → not in attention
+        # TODO: Needs discussion with mc.id
         session.add(_sys(tier="high", lifecycle="market", compliance=60.0, model_id=mc.id))
         await session.commit()
 
@@ -306,6 +307,7 @@ async def test_attention_includes_on_market_without_model_card(client: httpx.Asy
         mc = _model()
         session.add(mc)
         await session.flush()
+        # TODO: Needs discussion if we need model id. 
         session.add(_sys(tier="minimal", lifecycle="market", model_id=mc.id))
         await session.commit()
 
