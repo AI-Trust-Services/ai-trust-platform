@@ -13,7 +13,7 @@ image:
 
 oauthProxy:
   serviceType: ClusterIP # reached via the Ingress below instead of a NodePort
-  cookieSecure: false # no TLS termination in front of it
+  cookieSecure: true # TLS terminated by Traefik Ingress in front of it
 
 keycloak:
   serviceType: ClusterIP # reached via the Ingress below instead of a NodePort
