@@ -20,11 +20,11 @@ on:
       cluster:
         description: "Target cluster"
         required: true
-        default: sr-test
+        default: ai-trust-main
         type: choice
         options:
-          - sr-test
           - ai-trust-main
+          - sr-test
       image_tag:
         description: "Image tag to deploy (short SHA or version tag from Build and Push Images, or 'latest')"
         required: true
