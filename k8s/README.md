@@ -105,11 +105,11 @@ One-time setup per cluster, checked into `k8s/gardener_init/`. Two scripts, run 
 ```bash
 # Step 1 — Garden cluster: enable Traefik ingress extension + structured auth
 export KUBECONFIG=/path/to/kubeconfig-garden-<landscape>.yaml
-bash k8s/gardener_init/cluster-init.sh <cluster-name>
+bash k8s/gardener_init/garden-cluster-init.sh <cluster-name>
 
-# Step 2 — Shoot cluster: apply RBAC + cert-manager issuer
+# Step 2 — Shoot cluster: install Traefik, apply RBAC + cert-manager issuer
 export KUBECONFIG=/path/to/kubeconfig-<shoot>.yaml
-bash k8s/gardener_init/shoot-init.sh <cluster-name>
+bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>
 ```
 
 Or apply manually:
@@ -154,8 +154,8 @@ Structured Authentication setup above avoids needing any kubeconfig in CI at all
 
 ### Adding a new cluster
 
-1. Run `bash k8s/gardener_init/cluster-init.sh <cluster-name>` (Garden cluster — enables Traefik, structured auth)
-2. Run `bash k8s/gardener_init/shoot-init.sh <cluster-name>` (shoot cluster — RBAC, cert-manager issuer)
+1. Run `bash k8s/gardener_init/garden-cluster-init.sh <cluster-name>` (Garden cluster — structured auth)
+2. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>` (shoot cluster — Traefik, RBAC, cert-manager issuer)
 3. Get the Traefik LoadBalancer IP: `KUBECONFIG=<shoot-kubeconfig> kubectl get svc -A | grep LoadBalancer`
 4. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/sr-test/.env`, fill in LB IP and Gardener vars)
 5. Add `<cluster-name>` to the `options` list in `.github/workflows/deploy-gardener.yml`
