@@ -1,26 +1,21 @@
 #!/usr/bin/env bash
-# One-time setup for a new Gardener shoot cluster.
+# One-time setup on the GARDEN cluster for a new shoot.
 #
 # Usage:
 #   bash k8s/gardener_init/cluster-init.sh <cluster-name>
 #
-# What it does (two separate kubeconfigs required):
-#   1. Enables the nginx-ingress shoot extension on the shoot (via GARDEN cluster API),
-#      then patches cert-services and waits for Traefik/nginx to be ready.
-#      NOTE: Gardener shoots in the cc-one landscape come with Traefik pre-installed
-#      via the nginx-ingress extension — enable it here if not already on.
-#   2. Applies structured-auth-configmap.yaml to the GARDEN cluster so GitHub Actions
-#      can authenticate to the shoot without a kubeconfig secret.
-#   3. Applies rbac.yaml and cert-manager-issuer.yaml to the SHOOT cluster.
+# What it does:
+#   1. Enables the shoot-nginx-ingress extension on the shoot so Traefik
+#      is installed as the ingress controller (cc-one landscape).
+#   2. Waits for shoot reconciliation to complete.
+#   3. Applies structured-auth-configmap.yaml so GitHub Actions can authenticate
+#      to the shoot without a kubeconfig secret (Structured Authentication + OIDC).
 #
-#   Set GARDEN_KUBECONFIG / SHOOT_KUBECONFIG env vars, or defaults are used:
-#     GARDEN_KUBECONFIG: ~/.kube/garden-config
-#     SHOOT_KUBECONFIG:  ~/.kube/<cluster-name>-config
+# Requires:
+#   GARDEN_KUBECONFIG — kubeconfig for the Gardener garden cluster
+#                       (default: ~/.kube/garden-config)
 #
-# After running this script:
-#   - Create/fill k8s/env/<cluster-name>/.env
-#   - Run deploy-gardener.yml workflow with cluster=<cluster-name>
-#
+# Run shoot-init.sh next to configure the shoot cluster itself.
 # See k8s/README.md "Adding a new cluster" for the full walkthrough.
 set -euo pipefail
 
@@ -35,49 +30,38 @@ if [[ -z "$CLUSTER_NAME" ]]; then
 fi
 
 GARDEN_KUBECONFIG="${GARDEN_KUBECONFIG:-$HOME/.kube/garden-config}"
-SHOOT_KUBECONFIG="${SHOOT_KUBECONFIG:-$HOME/.kube/${CLUSTER_NAME}-config}"
+echo "Garden kubeconfig: $GARDEN_KUBECONFIG"
+echo "Shoot: $CLUSTER_NAME (namespace: $GARDENER_NAMESPACE)"
+echo ""
 
-echo "==> [1/4] Enabling nginx-ingress extension on shoot '$CLUSTER_NAME' (via GARDEN cluster)"
-echo "    kubeconfig: $GARDEN_KUBECONFIG"
-# Gardener shoots in cc-one use the nginx-ingress extension for Traefik/ingress.
-# This patch adds the extension if not already present; idempotent on re-run.
-KUBECONFIG="$GARDEN_KUBECONFIG" kubectl patch shoot "$CLUSTER_NAME" \
-  -n "$GARDENER_NAMESPACE" \
-  --type=json \
-  -p='[{
-    "op": "add",
-    "path": "/spec/extensions/-",
-    "value": {"type": "shoot-nginx-ingress", "disabled": false}
-  }]' 2>/dev/null || \
-KUBECONFIG="$GARDEN_KUBECONFIG" kubectl get shoot "$CLUSTER_NAME" \
-  -n "$GARDENER_NAMESPACE" \
-  -o jsonpath='{.spec.extensions}' | grep -q "shoot-nginx-ingress" && \
-  echo "    nginx-ingress extension already present, skipping patch"
+echo "==> [1/3] Enabling shoot-nginx-ingress extension on '$CLUSTER_NAME'"
+# Idempotent — skips the patch if the extension is already present.
+if KUBECONFIG="$GARDEN_KUBECONFIG" kubectl get shoot "$CLUSTER_NAME" \
+    -n "$GARDENER_NAMESPACE" \
+    -o jsonpath='{.spec.extensions[*].type}' 2>/dev/null | grep -q "shoot-nginx-ingress"; then
+  echo "    shoot-nginx-ingress already present, skipping patch"
+else
+  KUBECONFIG="$GARDEN_KUBECONFIG" kubectl patch shoot "$CLUSTER_NAME" \
+    -n "$GARDENER_NAMESPACE" \
+    --type=json \
+    -p='[{"op":"add","path":"/spec/extensions/-","value":{"type":"shoot-nginx-ingress","disabled":false}}]'
+  echo "    Extension added"
+fi
 
-echo "    Waiting for shoot reconciliation to complete (this may take ~2-5 min)..."
+echo ""
+echo "==> [2/3] Waiting for shoot reconciliation (may take ~2-5 min)..."
 KUBECONFIG="$GARDEN_KUBECONFIG" kubectl wait shoot "$CLUSTER_NAME" \
   -n "$GARDENER_NAMESPACE" \
   --for=jsonpath='{.status.lastOperation.state}'=Succeeded \
-  --timeout=600s || echo "    Warning: timed out waiting for shoot reconciliation — check Gardener dashboard"
+  --timeout=600s || echo "    Warning: timed out — check Gardener dashboard before continuing"
 
 echo ""
-echo "==> [2/4] Applying structured-auth-configmap.yaml to GARDEN cluster"
+echo "==> [3/3] Applying structured-auth-configmap.yaml to GARDEN cluster"
 KUBECONFIG="$GARDEN_KUBECONFIG" kubectl apply -f "$SCRIPT_DIR/structured-auth-configmap.yaml"
 
 echo ""
-echo "==> [3/4] Applying rbac.yaml to SHOOT cluster ($CLUSTER_NAME)"
-echo "    kubeconfig: $SHOOT_KUBECONFIG"
-KUBECONFIG="$SHOOT_KUBECONFIG" kubectl apply -f "$SCRIPT_DIR/rbac.yaml"
-
+echo "==> cluster-init complete for '$CLUSTER_NAME'."
 echo ""
-echo "==> [4/4] Applying cert-manager-issuer.yaml to SHOOT cluster ($CLUSTER_NAME)"
-KUBECONFIG="$SHOOT_KUBECONFIG" kubectl apply -f "$SCRIPT_DIR/cert-manager-issuer.yaml"
-
-echo ""
-echo "==> Cluster init complete for '$CLUSTER_NAME'."
-echo ""
-echo "    Get the Traefik LoadBalancer IP:"
-echo "      KUBECONFIG=$SHOOT_KUBECONFIG kubectl get svc -A | grep LoadBalancer"
-echo ""
-echo "    Then fill in k8s/env/$CLUSTER_NAME/.env with the LB IP and trigger:"
-echo "      gh workflow run deploy-gardener.yml --field cluster=$CLUSTER_NAME --field image_tag=latest"
+echo "    Next: run shoot-init.sh to configure the shoot cluster:"
+echo "      SHOOT_KUBECONFIG=/path/to/shoot-kubeconfig.yaml \\"
+echo "        bash k8s/gardener_init/shoot-init.sh $CLUSTER_NAME"

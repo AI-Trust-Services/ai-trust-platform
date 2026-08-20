@@ -100,13 +100,16 @@ kubeconfig ever leaves GitHub, nothing long-lived to leak or rotate. This replac
 simpler design (a static `ServiceAccount` token bound to `cluster-admin`, stored as a
 `GARDENER_KUBECONFIG` secret) once the official guide surfaced this as the supported approach.
 
-One-time setup per cluster, checked into `k8s/gardener_init/`. Run the helper script:
+One-time setup per cluster, checked into `k8s/gardener_init/`. Two scripts, run in order:
 
 ```bash
-# Set kubeconfigs for your garden and shoot clusters
+# Step 1 — Garden cluster: enable Traefik ingress extension + structured auth
 export GARDEN_KUBECONFIG=/path/to/kubeconfig-garden-<landscape>.yaml
-export SHOOT_KUBECONFIG=/path/to/kubeconfig-gardenlogin--<project>--<shoot>.yaml
 bash k8s/gardener_init/cluster-init.sh <cluster-name>
+
+# Step 2 — Shoot cluster: apply RBAC + cert-manager issuer
+export SHOOT_KUBECONFIG=/path/to/kubeconfig-<shoot>.yaml
+bash k8s/gardener_init/shoot-init.sh <cluster-name>
 ```
 
 Or apply manually:
@@ -151,13 +154,14 @@ Structured Authentication setup above avoids needing any kubeconfig in CI at all
 
 ### Adding a new cluster
 
-1. Run `bash k8s/gardener_init/cluster-init.sh <cluster-name>` (one-time per cluster)
-2. Copy `k8s/env/sr-test/.env.example` to `k8s/env/<cluster-name>/.env`, fill in all values
-3. Add GitHub secret `AI_TRUST_ENV_<CLUSTER_UPPER>` (paste the filled-in `.env` contents)
-4. Add GitHub variables `GARDENER_SHOOT_API_SERVER_<CLUSTER_UPPER>`, `GARDENER_CA_DISCOVERY_URL_<CLUSTER_UPPER>`, `GARDENER_OIDC_AUDIENCE_<CLUSTER_UPPER>`
-5. Trigger `deploy-gardener.yml` with `cluster=<cluster-name>`
+1. Run `bash k8s/gardener_init/cluster-init.sh <cluster-name>` (Garden cluster — enables Traefik, structured auth)
+2. Run `bash k8s/gardener_init/shoot-init.sh <cluster-name>` (shoot cluster — RBAC, cert-manager issuer)
+3. Get the Traefik LoadBalancer IP: `KUBECONFIG=<shoot-kubeconfig> kubectl get svc -A | grep LoadBalancer`
+4. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/sr-test/.env`, fill in LB IP and Gardener vars)
+5. Add `<cluster-name>` to the `options` list in `.github/workflows/deploy-gardener.yml`
+6. Trigger `deploy-gardener.yml` with `cluster=<cluster-name>`
 
-The `ai-trust-main` cluster has a placeholder at `k8s/env/ai-trust-main/.env.example` — fill it in and follow steps 1–5 when ready to deploy.
+The `ai-trust-main` cluster has its env at `k8s/env/ai-trust-main/.env` — fill in the `<LB_IP>` placeholders once Traefik is installed.
 
 ## Known limitations / gaps as of local-dev scope (same as docker-compose today)
 
