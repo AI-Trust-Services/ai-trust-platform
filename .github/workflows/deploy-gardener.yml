@@ -99,11 +99,6 @@ jobs:
           umask 077
           cp "k8s/env/${{ inputs.cluster }}/.env" .env
 
-      - name: Create namespace and apply shoot RBAC
-        run: |
-          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-          kubectl apply -f k8s/gardener_init/rbac.yaml
-
       - name: Bootstrap namespace/secrets/configmaps
         run: bash k8s/scripts/bootstrap.sh
 
