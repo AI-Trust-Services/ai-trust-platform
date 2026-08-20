@@ -18,7 +18,7 @@ spec:
       containers:
         - name: keycloak
           image: {{ .Values.keycloak.image }}
-          args: ["start-dev"]
+          args: ["start-dev", "--spi-realm-default-ssl-required=NONE"]
           envFrom:
             - secretRef: { name: {{ .Values.secretName }} } # KEYCLOAK_ADMIN/KEYCLOAK_ADMIN_PASSWORD
           env:
@@ -34,6 +34,10 @@ spec:
               value: "true"
             - name: KC_PROXY_HEADERS
               value: xforwarded
+            - name: KC_HOSTNAME_URL
+              value: {{ .Values.keycloakPublicUrl }}
+            - name: KC_HOSTNAME_ADMIN_URL
+              value: {{ .Values.keycloakPublicUrl }}
             - name: KC_HOSTNAME_STRICT
               value: "false"
             - name: KC_SPI_ADMIN_REALM_SSL_REQUIRED

@@ -80,21 +80,7 @@ spec:
       restartPolicy: OnFailure
       {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
-        # Wait until Keycloak's admin token endpoint responds with 200 or 401
-        # (both mean the admin account is fully bootstrapped and accepting requests).
-        # 403 means Keycloak is up but admin not yet ready — keep waiting.
-        - name: wait-for-keycloak
-          image: {{ .Values.waitImages.busybox }}
-          command:
-            - sh
-            - -c
-            - |
-              until wget -q -O /tmp/kc_resp \
-                --post-data="grant_type=password&client_id=admin-cli&username=dummy&password=dummy" \
-                http://keycloak:8080/realms/master/protocol/openid-connect/token 2>/dev/null \
-                || grep -q "error\|access_token" /tmp/kc_resp 2>/dev/null; do
-                echo "waiting for keycloak admin endpoint..."; sleep 3
-              done
+        {{- include "ai-trust.waitForHttp" (dict "name" "keycloak" "port" 8080 "path" "/realms/master" "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:
         - name: keycloak-provision
           image: {{ .Values.image.repository }}/keycloak-provision:{{ .Values.image.tag }}
