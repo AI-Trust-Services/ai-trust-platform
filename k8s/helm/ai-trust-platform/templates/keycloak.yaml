@@ -32,6 +32,8 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: POSTGRES_PASSWORD } }
             - name: KC_HTTP_ENABLED
               value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
             - name: KC_HOSTNAME_URL
               value: {{ .Values.keycloakPublicUrl }}
             - name: KC_HOSTNAME_ADMIN_URL
