@@ -16,9 +16,12 @@ cd "$REPO_ROOT"
 if [[ -f .env ]]; then
   set -a
   # shellcheck disable=SC1091
-  # tr -d '\r' tolerates a CRLF .env (common when it's been edited on Windows)
-  # tr -d '\r' tolerates a CRLF .env (common when it's been edited on Windows)
-  source <(tr -d '\r' < .env)
+  set +u  # .env may contain ${VAR} references not defined in all environments
+  _env_tmp=$(mktemp)
+  tr -d '\r' < .env > "$_env_tmp"
+  source "$_env_tmp"
+  rm -f "$_env_tmp"
+  set -u
   set +a
 fi
 
