@@ -3,7 +3,7 @@ import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard } from "../utils";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, ModelCard, WorkflowStep, UserSummary } from "../types";
+import type { AISystem, ModelCard, WorkflowStep, UserSummary, SystemModelResponse } from "../types";
 
 export type UserMap = Record<string, { firstName: string; lastName: string }>;
 
@@ -345,31 +345,43 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
   );
 }
 
-function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models: ModelCard[]; onSystemUpdate: (updated: AISystem) => void }) {
-  const [selectedModelId, setSelectedModelId] = useState(system.model_id || "");
+function ModelTab({ system, models }: { system: AISystem; models: ModelCard[] }) {
+  const [linkedModels, setLinkedModels] = useState<SystemModelResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedModelId, setSelectedModelId] = useState("");
+  const [role, setRole] = useState("");
   const [linking, setLinking] = useState(false);
   const showToast = useToast();
   const { mayWrite } = useModalControls();
-  const NO_WRITE_TITLE = "Requires permission: systems:write";
-  const linkedModel = models.find((m) => m.id === system.model_id);
 
-  async function handleLink() {
+  useEffect(() => {
+    api.getSystemModels(system.id)
+      .then(setLinkedModels)
+      .finally(() => setLoading(false));
+  }, [system.id]);
+
+  const linkedIds = new Set(linkedModels.map((m) => m.id));
+  const availableModels = models.filter((m) => !linkedIds.has(m.id));
+
+  async function handleAddModel() {
     if (!selectedModelId) { showToast("Please select a model first", true); return; }
     setLinking(true);
     try {
-      const updated = await api.linkModel(system.id, selectedModelId);
-      showToast("Model linked successfully");
-      onSystemUpdate(updated);
+      const added = await api.addSystemModel(system.id, selectedModelId, role || undefined);
+      setLinkedModels((prev) => [...prev, added]);
+      setSelectedModelId("");
+      setRole("");
+      showToast("Model linked");
     } catch (e) {
       showToast(`Link failed: ${(e as Error).message}`, true);
     } finally { setLinking(false); }
   }
 
-  async function handleUnlink() {
+  async function handleRemoveModel(modelCardId: string) {
     try {
-      const updated = await api.unlinkModel(system.id);
+      await api.removeSystemModel(system.id, modelCardId);
+      setLinkedModels((prev) => prev.filter((m) => m.id !== modelCardId));
       showToast("Model unlinked");
-      onSystemUpdate(updated);
     } catch (e) {
       showToast(`Unlink failed: ${(e as Error).message}`, true);
     }
@@ -377,42 +389,57 @@ function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models
 
   return (
     <div className="tab-panel active">
-      {system.model_id ? (
-        <div className="detail-section">
-          <h3>Currently Linked Model</h3>
-          <div className="model-link-box linked">
-            <div className="model-link-name">{linkedModel ? linkedModel.name : system.model_id}</div>
-            <div className="model-link-meta">
-              {linkedModel ? `${linkedModel.provider} · ${linkedModel.model_type} · v${linkedModel.version}` : system.model_id}
-              {linkedModel?.inference_url && (
-                <> · <a href={linkedModel.inference_url} target="_blank" rel="noreferrer" style={{ color: "var(--brand)" }}>{linkedModel.inference_url}</a></>
-              )}
-            </div>
-            {linkedModel?.description && <div style={{ marginTop: 6, fontSize: 13, color: "var(--text-secondary)" }}>{linkedModel.description}</div>}
-          </div>
-          <button className="btn-ghost" style={{ marginTop: 4 }} disabled={!mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE} onClick={handleUnlink}>Unlink Model</button>
-        </div>
-      ) : (
-        <div className="msg-strip info" style={{ marginBottom: 16 }}>No model card is linked to this system yet.</div>
-      )}
       <div className="detail-section">
-        <h3>Link a Model Card</h3>
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 12 }}>
-          <div className="form-group" style={{ flex: 1 }}>
-            <label htmlFor="modelLinkSelect">Select model from catalog</label>
-            <select className="form-select" id="modelLinkSelect" value={selectedModelId} onChange={(e) => setSelectedModelId(e.target.value)}>
-              <option value="">— choose a model —</option>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>{m.name} ({m.provider} · {m.model_type})</option>
-              ))}
-            </select>
-          </div>
-          <button className="btn-primary" onClick={handleLink} disabled={linking || !mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE}>Link</button>
-        </div>
-        <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-          Linking a model records which LLM or AI model powers this system. One system can have at most one linked model.
-        </div>
+        <h3>Linked Models</h3>
+        {loading ? (
+          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>Loading…</div>
+        ) : linkedModels.length === 0 ? (
+          <div className="msg-strip info">No model cards linked to this system yet.</div>
+        ) : (
+          linkedModels.map((m) => (
+            <div key={m.id} className="model-link-box linked" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+              <div>
+                <div className="model-link-name">{m.name}</div>
+                <div className="model-link-meta">
+                  {m.provider} · {m.model_type} · v{m.version}
+                  {m.role && <> · <span style={{ color: "var(--brand)" }}>{m.role}</span></>}
+                  {m.inference_url && (
+                    <> · <a href={m.inference_url} target="_blank" rel="noreferrer" style={{ color: "var(--brand)" }}>{m.inference_url}</a></>
+                  )}
+                </div>
+                {m.description && <div style={{ marginTop: 4, fontSize: 13, color: "var(--text-secondary)" }}>{m.description}</div>}
+              </div>
+              <button className="btn-ghost" style={{ flexShrink: 0 }} disabled={!mayWrite}
+                title={mayWrite ? undefined : NO_WRITE_TITLE}
+                onClick={() => handleRemoveModel(m.id)}>Unlink</button>
+            </div>
+          ))
+        )}
       </div>
+      {availableModels.length > 0 && (
+        <div className="detail-section">
+          <h3>Link a Model Card</h3>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 12 }}>
+            <div className="form-group" style={{ flex: 2 }}>
+              <label htmlFor="modelLinkSelect">Model</label>
+              <select className="form-select" id="modelLinkSelect" value={selectedModelId} onChange={(e) => setSelectedModelId(e.target.value)}>
+                <option value="">— choose a model —</option>
+                {availableModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.provider} · {m.model_type})</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label htmlFor="modelRoleInput">Role (optional)</label>
+              <input type="text" id="modelRoleInput" className="form-select" placeholder="e.g. primary" value={role} onChange={(e) => setRole(e.target.value)} />
+            </div>
+            <button className="btn-primary" onClick={handleAddModel} disabled={linking || !mayWrite}
+              title={mayWrite ? undefined : NO_WRITE_TITLE}>
+              {linking && <span className="spinner" />} Link
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -568,7 +595,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
           )}
 
           {tab === "model" && (
-            <ModelTab system={system} models={models} onSystemUpdate={handleSystemUpdate} />
+            <ModelTab system={system} models={models} />
           )}
 
           {tab === "edit" && (
