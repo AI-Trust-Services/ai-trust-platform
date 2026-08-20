@@ -32,6 +32,10 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: POSTGRES_PASSWORD } }
             - name: KC_HTTP_ENABLED
               value: "true"
+            - name: KC_HOSTNAME_URL
+              value: {{ .Values.keycloakPublicUrl }}
+            - name: KC_HOSTNAME_ADMIN_URL
+              value: {{ .Values.keycloakPublicUrl }}
             - name: KC_HOSTNAME_STRICT
               value: "false"
             - name: KC_SPI_ADMIN_REALM_SSL_REQUIRED
