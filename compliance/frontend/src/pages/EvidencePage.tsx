@@ -214,7 +214,7 @@ export default function EvidencePage() {
                 <TableHead>Status</TableHead>
                 <TableHead>File</TableHead>
                 <TableHead>Valid Until</TableHead>
-                <TableHead>Uploaded</TableHead>
+                <TableHead>Uploaded by</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -230,7 +230,21 @@ export default function EvidencePage() {
                   <TableCell><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></TableCell>
                   <TableCell>{e.file_name ? <Badge variant="secondary" className="max-w-[160px] truncate rounded-full font-medium">{e.file_name}</Badge> : "—"}</TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{fmtDate(e.validity_until)}</TableCell>
-                  <TableCell className="text-[13px] text-muted-foreground">{fmtDate(e.created_at)}</TableCell>
+                  <TableCell>
+                    {e.uploaded_by ? (
+                      <div className="flex items-center gap-2">
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+                          {e.uploaded_by.slice(0, 2).toUpperCase()}
+                        </span>
+                        <div>
+                          <div className="text-[13px] text-foreground">{e.uploaded_by}</div>
+                          <div className="text-xs text-muted-foreground">{fmtDate(e.created_at)}</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-[13px] text-muted-foreground">{fmtDate(e.created_at)}</span>
+                    )}
+                  </TableCell>
                   <TableCell onClick={(ev) => ev.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
                       {e.status !== "approved" && (
