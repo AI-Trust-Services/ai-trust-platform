@@ -1,24 +1,34 @@
 """AI-assisted registration — stateless bounded-agentic turn + document extraction.
 
-Both routes are gated SYSTEMS_WRITE. Nothing is persisted here: the frontend holds
+All routes are gated SYSTEMS_WRITE. Nothing is persisted here: the frontend holds
 the transcript + field state and resends it each turn (design Q7). Persistence
 happens at the extended POST /v1/intake once the user confirms.
+
+Two role variants share the same internal helpers:
+  - owner  : /intake/assist/turn, /intake/assist/extract
+  - engineer: /intake/assist/engineer/{system_id}/turn, /intake/assist/engineer/{system_id}/extract
 """
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy import select
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_WRITE
 from ai_trust_logging import get_logger
+from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.models.ai_system import AISystem
 from app.classifier import CLASSIFIER_INPUTS, classify
 from app.documents import DocumentParseError, is_supported, parse_document
 from app.llm import (
     LLM_VISION_MODEL,
     LLMParseError,
     build_doc_extract_messages,
+    build_engineer_doc_extract_messages,
+    build_engineer_turn_messages,
     build_infer_flags_messages,
     build_turn_messages,
     chat,
@@ -35,15 +45,14 @@ from app.schemas import (
 router = APIRouter(tags=["intake-assist"])
 logger = get_logger(__name__)
 
-# Bounded-agentic guardrail (design Q12): after this many user turns without
-# `complete`, degrade to manual completion of whatever was collected.
+# Bounded-agentic guardrail: after this many user turns without `complete`,
+# degrade to manual completion of whatever was collected.
 TURN_CAP = 12
 
 _AI_UNAVAILABLE = "AI assistant is unavailable. Please switch to the manual form."
 
 
 def _classify_from_flags(flags: list[InferredFlag]) -> ClassificationResult:
-    """Build a transient object exposing the inferred flags and run classify()."""
     obj = SimpleNamespace(**{name: False for name in CLASSIFIER_INPUTS})
     obj.training_compute_flops = 0.0
     for f in flags:
@@ -52,19 +61,23 @@ def _classify_from_flags(flags: list[InferredFlag]) -> ClassificationResult:
     return classify(obj)
 
 
-@router.post(
-    "/intake/assist/turn",
-    response_model=AssistTurnResponse,
-    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
-)
-async def assist_turn(body: AssistTurnRequest) -> AssistTurnResponse:
-    transcript = [{"role": m.role, "content": m.content} for m in body.transcript]
-    fields = dict(body.fields)
+async def _run_assist_turn(
+    transcript: list[dict],
+    fields: dict[str, Any],
+    build_messages_fn: Any,
+    infer_fields: dict[str, Any] | None = None,
+) -> AssistTurnResponse:
+    """Shared turn logic for owner and engineer flows.
 
+    ``build_messages_fn`` — role-specific prompt builder (build_turn_messages or
+    build_engineer_turn_messages).
+    ``infer_fields`` — extra fields merged into the flag-inference prompt at completion
+    (engineer flow passes owner fields from DB; owner flow passes None).
+    """
     try:
-        result = await chat(build_turn_messages(transcript, fields), json_mode=True, task="turn")
+        result = await chat(build_messages_fn(transcript, fields), json_mode=True, task="turn")
         parsed = await parse_json_response(result["text"], task="turn")
-    except (LLMParseError, Exception) as exc:  # noqa: BLE001 — any provider error → escape hatch
+    except (LLMParseError, Exception) as exc:  # noqa: BLE001
         logger.error("intake_assist.turn_failed", extra={"error": str(exc)})
         raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
 
@@ -89,8 +102,9 @@ async def assist_turn(body: AssistTurnRequest) -> AssistTurnResponse:
     )
 
     if complete and not degraded:
+        inference_fields = {**(infer_fields or {}), **fields}
         try:
-            flags_result = await chat(build_infer_flags_messages(fields), json_mode=True, task="infer_flags")
+            flags_result = await chat(build_infer_flags_messages(inference_fields), json_mode=True, task="infer_flags")
             flags_parsed = await parse_json_response(flags_result["text"], task="infer_flags")
             inferred = [InferredFlag(**f) for f in flags_parsed.get("inferred_flags", [])]
         except (LLMParseError, Exception) as exc:  # noqa: BLE001
@@ -107,12 +121,11 @@ async def assist_turn(body: AssistTurnRequest) -> AssistTurnResponse:
     return response
 
 
-@router.post(
-    "/intake/assist/extract",
-    response_model=AssistExtractResponse,
-    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
-)
-async def assist_extract(file: UploadFile = File(...)) -> AssistExtractResponse:
+async def _run_assist_extract(
+    file: UploadFile,
+    build_messages_fn: Any,
+) -> AssistExtractResponse:
+    """Shared document extraction logic for owner and engineer flows."""
     if not file.filename or not is_supported(file.filename):
         raise HTTPException(status_code=400, detail="Unsupported or missing file.")
 
@@ -123,10 +136,10 @@ async def assist_extract(file: UploadFile = File(...)) -> AssistExtractResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if doc.is_image:
-        messages = build_doc_extract_messages(image_b64=doc.image_b64, media_type=doc.media_type)
+        messages = build_messages_fn(image_b64=doc.image_b64, media_type=doc.media_type)
         model = LLM_VISION_MODEL
     else:
-        messages = build_doc_extract_messages(parsed_text=doc.text)
+        messages = build_messages_fn(parsed_text=doc.text)
         model = None
 
     try:
@@ -142,3 +155,75 @@ async def assist_extract(file: UploadFile = File(...)) -> AssistExtractResponse:
         extra={"file_name": file.filename, "is_image": doc.is_image, "field_count": len(extracted)},
     )
     return AssistExtractResponse(extracted_fields=extracted, notes=parsed.get("notes"))
+
+
+# ---------------------------------------------------------------------------
+# Owner endpoints
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/intake/assist/turn",
+    response_model=AssistTurnResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
+async def assist_turn(body: AssistTurnRequest) -> AssistTurnResponse:
+    transcript = [{"role": m.role, "content": m.content} for m in body.transcript]
+    fields = dict(body.fields)
+    return await _run_assist_turn(transcript, fields, build_turn_messages)
+
+
+@router.post(
+    "/intake/assist/extract",
+    response_model=AssistExtractResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
+async def assist_extract(file: UploadFile = File(...)) -> AssistExtractResponse:
+    return await _run_assist_extract(file, build_doc_extract_messages)
+
+
+# ---------------------------------------------------------------------------
+# Engineer endpoints
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/intake/assist/engineer/{system_id}/turn",
+    response_model=AssistTurnResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
+async def engineer_assist_turn(system_id: str, body: AssistTurnRequest) -> AssistTurnResponse:
+    transcript = [{"role": m.role, "content": m.content} for m in body.transcript]
+    fields = dict(body.fields)
+
+    # Fetch owner descriptive fields from DB to enrich flag inference at completion.
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, f"System {system_id} not found")
+
+    owner_fields = {
+        "system_name": row.name,
+        "purpose": row.intended_purpose,
+        "department": row.department,
+        "use_case": row.use_case,
+        "people_affected": row.people_affected,
+        "decision_context": row.decision_context,
+        "human_involvement": row.autonomy_level,
+    }
+
+    return await _run_assist_turn(transcript, fields, build_engineer_turn_messages, infer_fields=owner_fields)
+
+
+@router.post(
+    "/intake/assist/engineer/{system_id}/extract",
+    response_model=AssistExtractResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
+async def engineer_assist_extract(system_id: str, file: UploadFile = File(...)) -> AssistExtractResponse:
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, f"System {system_id} not found")
+
+    return await _run_assist_extract(file, build_engineer_doc_extract_messages)

@@ -52,6 +52,7 @@ function IconSparkle() {
 export default function AssistedRegistration({ open, onClose, onSuccess }: Props) {
   const [transcript, setTranscript] = useState<ChatMessage[]>([]);
   const [fields, setFields] = useState<Record<string, unknown>>({});
+  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [complete, setComplete] = useState(false);
@@ -76,6 +77,7 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
     if (!open) return;
     setTranscript([{ role: "assistant", content: GREETING }]);
     setFields({});
+    setConfirmed({});
     setInput("");
     setBusy(false);
     setComplete(false);
@@ -100,13 +102,24 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
 
   if (!open) return null;
 
-  const filledCount = Object.keys(FIELD_LABELS).filter(k => {
+  const FIELD_KEYS = Object.keys(FIELD_LABELS);
+  const confirmedCount = FIELD_KEYS.filter(k => confirmed[k] === true).length;
+  const unconfirmedFilledKeys = FIELD_KEYS.filter(k => {
     const v = fields[k];
-    return v !== undefined && v !== null && v !== "";
-  }).length;
+    return (v !== undefined && v !== null && v !== "") && confirmed[k] !== true;
+  });
+  const requiredEmptyKeys = ["system_name"].filter(k => !fields[k]);
+  const canProceed = requiredEmptyKeys.length === 0 && unconfirmedFilledKeys.length === 0;
+
+  const REQUIRED_KEYS = ["system_name"];
 
   function handleFieldChange(key: string, value: string) {
     setFields(f => ({ ...f, [key]: value }));
+    if (confirmed[key]) setConfirmed(c => ({ ...c, [key]: false }));
+  }
+
+  function handleConfirm(key: string) {
+    setConfirmed(c => ({ ...c, [key]: true }));
   }
 
   async function runTurn(nextTranscript: ChatMessage[], overrideFields?: Record<string, unknown>) {
@@ -195,6 +208,7 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
       autonomy_level: fields.human_involvement ?? null,
       assignee_username: assigneeUsername,
       compliance_officer_username: complianceOfficerUsername || null,
+      field_confirmations: confirmed,
     };
     for (const f of inferredFlags) payload[f.flag] = f.value;
     if (inferredFlags.length) payload.classification_rationale = inferredFlags;
@@ -241,13 +255,13 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
               <div
                 className="assist-progress-fill"
                 style={{
-                  width: `${(filledCount / TOTAL_FIELDS) * 100}%`,
-                  background: complete ? "#27ae60" : "var(--brand)",
+                  width: `${(confirmedCount / TOTAL_FIELDS) * 100}%`,
+                  background: confirmedCount === TOTAL_FIELDS ? "#27ae60" : "var(--brand)",
                 }}
               />
             </div>
             <span className="assist-progress-label">
-              {complete ? "✓ " : ""}{filledCount} / {TOTAL_FIELDS} fields
+              {confirmedCount === TOTAL_FIELDS ? "✓ " : ""}{confirmedCount} / {TOTAL_FIELDS} confirmed
             </span>
           </div>
         )}
@@ -321,34 +335,56 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
                 )}
               </div>
 
-              {/* RIGHT: collected fields only */}
+              {/* RIGHT: collected fields with inline confirm */}
               <div className="assist-fields-col">
-                <div className="assist-section-label">Collected Details — review and adjust</div>
+                <div className="assist-section-label">Collected Details — confirm each field</div>
                 <div className="assist-fields-grid">
                   {Object.entries(FIELD_LABELS).map(([key, label]) => {
                     const v = fields[key];
                     const strVal = (v !== undefined && v !== null && v !== "") ? String(v) : "";
+                    const isEmpty = strVal === "";
+                    const isRequired = REQUIRED_KEYS.includes(key);
+                    const isConfirmed = confirmed[key] === true;
                     const isWide = key === "purpose" || key === "decision_context";
-                    const isTextarea = key === "purpose" || key === "decision_context";
+
+                    const borderColor = isConfirmed ? "#27ae60" : isEmpty ? (isRequired ? "#e74c3c" : "var(--border)") : "#e67e22";
+                    const bgColor = isConfirmed ? "#f0faf4" : isEmpty ? (isRequired ? "#fff8f8" : "var(--surface)") : "#fffaf5";
+
                     return (
-                      <div key={key} className={`assist-field-row${isWide ? " assist-field-wide" : ""}`}>
-                        <label htmlFor={`assist_field_${key}`} className={key === "system_name" ? "required" : ""}>{label}</label>
-                        {isTextarea ? (
-                          <textarea
-                            id={`assist_field_${key}`}
-                            value={strVal}
-                            onChange={(e) => handleFieldChange(key, e.target.value)}
+                      <div key={key} className={`assist-field-row${isWide ? " assist-field-wide" : ""}`}
+                        style={{ border: `1px solid ${borderColor}`, borderRadius: 6, padding: "8px 10px", background: bgColor }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <label htmlFor={`assist_field_${key}`} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", margin: 0 }}>
+                            {label}{isRequired && <span style={{ color: "#e74c3c", marginLeft: 2 }}>*</span>}
+                          </label>
+                          {!isEmpty && (
+                            isConfirmed ? (
+                              <span style={{ fontSize: 11, color: "#27ae60", fontWeight: 600, flexShrink: 0 }}>✓ Confirmed</span>
+                            ) : (
+                              <button
+                                onClick={() => handleConfirm(key)}
+                                style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "none", background: "#27ae60", color: "#fff", cursor: "pointer", flexShrink: 0 }}
+                              >
+                                ✓ Confirm
+                              </button>
+                            )
+                          )}
+                        </div>
+                        {isWide ? (
+                          <textarea id={`assist_field_${key}`} value={strVal} rows={2}
+                            onChange={e => handleFieldChange(key, e.target.value)}
                             placeholder={`Enter ${label.toLowerCase()}…`}
-                            rows={2}
+                            style={{ fontSize: 13, width: "100%" }}
                           />
                         ) : (
-                          <input
-                            type="text"
-                            id={`assist_field_${key}`}
-                            value={strVal}
-                            onChange={(e) => handleFieldChange(key, e.target.value)}
+                          <input type="text" id={`assist_field_${key}`} value={strVal}
+                            onChange={e => handleFieldChange(key, e.target.value)}
                             placeholder={`Enter ${label.toLowerCase()}…`}
+                            style={{ fontSize: 13, width: "100%" }}
                           />
+                        )}
+                        {isEmpty && isRequired && (
+                          <div style={{ fontSize: 11, color: "#e74c3c", marginTop: 3 }}>Required — please fill in</div>
                         )}
                       </div>
                     );
@@ -409,11 +445,19 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
               <div className="form-group">
                 <label htmlFor="assist_co">Pre-assign Compliance Officer (optional)</label>
                 <select className="form-select" id="assist_co" value={complianceOfficerUsername} onChange={(e) => setComplianceOfficerUsername(e.target.value)}>
-                  <option value="">— let the engineer choose —</option>
+                  <option value="">— Let the AI Engineer choose —</option>
                   {complianceOfficers.map((u) => <option key={u.username} value={u.username}>{displayName(u)}</option>)}
                 </select>
               </div>
             </div>
+          </div>
+        )}
+
+        {!doneId && wizardStep === 0 && !canProceed && (requiredEmptyKeys.length > 0 || unconfirmedFilledKeys.length > 0) && (
+          <div className="msg-strip warn" style={{ margin: "0 24px" }}>
+            {requiredEmptyKeys.length > 0 && <span>{requiredEmptyKeys.length} required field{requiredEmptyKeys.length > 1 ? "s" : ""} not filled. </span>}
+            {unconfirmedFilledKeys.length > 0 && <span>{unconfirmedFilledKeys.length} field{unconfirmedFilledKeys.length > 1 ? "s" : ""} filled but not confirmed. </span>}
+            Confirm all filled fields to proceed.
           </div>
         )}
 
@@ -423,7 +467,10 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
           ) : wizardStep === 0 ? (
             <>
               <button className="btn-ghost" onClick={onClose}>Cancel</button>
-              <button className="btn-primary" onClick={() => setWizardStep(1)} disabled={!fields.system_name}>Next →</button>
+              <button className="btn-primary" onClick={() => setWizardStep(1)} disabled={!canProceed}
+                title={!canProceed ? (requiredEmptyKeys.length > 0 ? "Fill required fields first" : "Confirm all filled fields before proceeding") : undefined}>
+                Next →
+              </button>
             </>
           ) : (
             <>

@@ -109,7 +109,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
         generates_synthetic_content: system.generates_synthetic_content,
       });
       // Pre-populate compliance officer from what the owner pre-set
-      setAssigneeUsername(system.compliance_officer_username || "");
+      setComplianceOfficerUsername(system.compliance_officer_username || "");
       api.getUsersByRole("ai_compliance_officer")
         .then(setComplianceOfficers)
         .catch(() => {});
@@ -312,7 +312,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     <div className="form-group">
                       <label htmlFor="reg_co">Pre-assign Compliance Officer (optional)</label>
                       <select className="form-select" id="reg_co" value={complianceOfficerUsername} onChange={(e) => setComplianceOfficerUsername(e.target.value)}>
-                        <option value="">— let the engineer choose —</option>
+                        <option value="">— Let the AI Engineer choose —</option>
                         {complianceOfficers.map((u) => (
                           <option key={u.username} value={u.username}>{displayName(u)}</option>
                         ))}

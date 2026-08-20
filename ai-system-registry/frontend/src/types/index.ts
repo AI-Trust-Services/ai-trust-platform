@@ -50,6 +50,7 @@ export interface AISystem {
   is_law_enforcement: boolean;
   is_migration: boolean;
   is_judicial_admin: boolean;
+  field_confirmations: Record<string, boolean> | null;
 }
 
 export interface WorkflowStep {

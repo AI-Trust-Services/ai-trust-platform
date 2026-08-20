@@ -3,6 +3,9 @@ interface Props {
   onClose: () => void;
   onManual: () => void;
   onAssisted: () => void;
+  title?: string;
+  assistedDescription?: string;
+  manualDescription?: string;
 }
 
 function IconSparkle() {
@@ -23,34 +26,32 @@ function IconForm() {
   );
 }
 
-export default function RegisterModeChooser({ open, onClose, onManual, onAssisted }: Props) {
+export default function RegisterModeChooser({ open, onClose, onManual, onAssisted, title = "Register AI System", assistedDescription, manualDescription }: Props) {
   if (!open) return null;
   return (
     <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" style={{ maxWidth: 560 }}>
         <div className="modal-header">
-          <h2>Register AI System</h2>
+          <h2>{title}</h2>
           <button className="btn-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body" style={{ padding: 24 }}>
           <p style={{ marginBottom: 20, fontSize: 14, fontWeight: 500, color: "var(--text)" }}>
-            How would you like to register this system?
+            How would you like to proceed?
           </p>
           <div className="mode-choice-grid">
             <button className="mode-choice" onClick={onAssisted}>
               <div className="mode-choice-icon mode-choice-icon-ai"><IconSparkle /></div>
               <div className="mode-choice-title">AI-Assisted</div>
               <div className="mode-choice-desc">
-                Describe your system in plain language. The assistant asks a few questions,
-                infers the EU AI Act classification, and fills in the details for you.
+                {assistedDescription ?? "Describe your system in plain language. The assistant asks a few questions, infers the EU AI Act classification, and fills in the details for you."}
               </div>
             </button>
             <button className="mode-choice" onClick={onManual}>
               <div className="mode-choice-icon mode-choice-icon-manual"><IconForm /></div>
               <div className="mode-choice-title">Manual</div>
               <div className="mode-choice-desc">
-                Enter a name and description, then assign an AI Engineer to complete the
-                technical details and risk flags.
+                {manualDescription ?? "Enter a name and description, then assign an AI Engineer to complete the technical details and risk flags."}
               </div>
             </button>
           </div>

@@ -52,6 +52,29 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     }),
+  // Engineer AI-assisted registration — one stateless turn, fetches owner fields from DB via system_id.
+  engineerAssistTurn: (systemId: string, transcript: ChatMessage[], fields: Record<string, unknown>) =>
+    request<AssistTurnResponse>(`/intake/assist/engineer/${encodeURIComponent(systemId)}/turn`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript, fields }),
+    }),
+
+  // Engineer AI-assisted registration — extract technical fields from an uploaded document/image.
+  engineerAssistExtract: (systemId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<AssistExtractResponse>(`/intake/assist/engineer/${encodeURIComponent(systemId)}/extract`, { method: "POST", body: fd });
+  },
+
+  // Merge field confirmation state — only the keys sent are merged, never replaced wholesale.
+  patchFieldConfirmations: (systemId: string, confirmations: Record<string, boolean>) =>
+    request<AISystem>(`/systems/${encodeURIComponent(systemId)}/field-confirmations`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmations }),
+    }),
+
   linkModel: (systemId: string, modelId: string) =>
     request<AISystem>(`/systems/${systemId}/model?model_id=${encodeURIComponent(modelId)}`, { method: "PUT" }),
   unlinkModel: (systemId: string) =>

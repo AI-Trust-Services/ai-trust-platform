@@ -14,6 +14,7 @@ from ai_trust_persistence.models.model_card import ModelCard
 from app.schemas import (
     AISystemResponse,
     AISystemUpdate,
+    FieldConfirmationPatch,
     IntakeResponse,
     VALID_LIFECYCLES,
     VALID_ROLES,
@@ -172,4 +173,23 @@ async def unlink_model(system_id: str) -> AISystemResponse:
         await session.refresh(row)
 
     logger.info("system.model_unlinked", extra={"system_id": system_id})
+    return AISystemResponse.model_validate(row)
+
+
+@router.patch("/systems/{system_id}/field-confirmations", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+async def patch_field_confirmations(system_id: str, body: FieldConfirmationPatch) -> AISystemResponse:
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+
+        existing = dict(row.field_confirmations or {})
+        existing.update(body.confirmations)
+        row.field_confirmations = existing
+        row.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+        await session.refresh(row)
+
+    logger.info("system.field_confirmations_updated", extra={"system_id": system_id, "fields": sorted(body.confirmations.keys())})
     return AISystemResponse.model_validate(row)
