@@ -22,7 +22,7 @@ GARDENER_PROJECT="${GARDENER_PROJECT:-ai-trust}"
 GARDENER_NAMESPACE="garden-${GARDENER_PROJECT}"
 
 if [[ -z "$CLUSTER_NAME" ]]; then
-  echo "usage: export KUBECONFIG=/path/to/garden-kubeconfig.yaml && bash k8s/gardener_init/garden-garden-cluster-init.sh <cluster-name>" >&2
+  echo "usage: export KUBECONFIG=/path/to/garden-kubeconfig.yaml && bash k8s/gardener_init/garden-cluster-init.sh <cluster-name>" >&2
   exit 1
 fi
 

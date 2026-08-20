@@ -9,7 +9,7 @@ on:
   push:
     # TODO: remove "20-set-up-cicd-pipeline-for-ai-trust-platform" before merging to main -
     # temporary so this workflow can be test-run on GitHub from the branch itself.
-    branches: [main, 20-set-up-cicd-pipeline-for-ai-trust-platform]
+    branches: [main]
     tags: ["v*.*.*"]
   workflow_dispatch:
 

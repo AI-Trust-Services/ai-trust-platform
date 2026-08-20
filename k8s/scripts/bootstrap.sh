@@ -28,7 +28,7 @@ echo "==> secret/ai-trust-env (from .env, plus computed connection strings)"
 # so every .env line is passed through as its own --from-literal instead.)
 set -a
 # shellcheck disable=SC1091
-source "$REPO_ROOT/.env"
+source <(tr -d '\r' < "$REPO_ROOT/.env")
 set +a
 
 # Build --from-literal args from the *expanded* environment (post-source),
