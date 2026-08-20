@@ -31,9 +31,14 @@ set -a
 source "$REPO_ROOT/.env"
 set +a
 
+# Build --from-literal args from the *expanded* environment (post-source),
+# so variable references like APP_PUBLIC_URL=https://${LB_IP}.nip.io work.
+# Only export keys that were defined in the .env file (skip LB_IP itself and
+# shell builtins) by reading key names from the file, then resolving via printenv.
 literal_args=()
-while IFS='=' read -r key value; do
+while IFS='=' read -r key _; do
   [[ -z "$key" || "$key" == \#* ]] && continue
+  value=$(printenv "$key" 2>/dev/null || true)
   literal_args+=(--from-literal="${key}=${value}")
 done < <(tr -d '\r' < "$REPO_ROOT/.env" | grep -v '^\s*#' | grep -v '^\s*$')
 

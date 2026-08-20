@@ -53,14 +53,15 @@ jobs:
             echo "error: $ENV_FILE not found — create it from k8s/env/ai-trust-main/.env.example" >&2
             exit 1
           fi
-          # Export all vars from the cluster .env into the workflow environment
+          # Source first so variable references (e.g. APP_PUBLIC_URL=https://${LB_IP}.nip.io) expand
           set -a
           # shellcheck disable=SC1090
           source "$ENV_FILE"
           set +a
-          # Write each variable to GITHUB_ENV so subsequent steps can use them
-          while IFS='=' read -r key value; do
+          # Write expanded values to GITHUB_ENV using key names from the file
+          while IFS='=' read -r key _; do
             [[ -z "$key" || "$key" == \#* ]] && continue
+            value=$(printenv "$key" 2>/dev/null || true)
             echo "${key}=${value}" >> "$GITHUB_ENV"
           done < <(tr -d '\r' < "$ENV_FILE" | grep -v '^\s*#' | grep -v '^\s*$')
           echo "Loaded env from $ENV_FILE"
