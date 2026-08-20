@@ -131,19 +131,14 @@ Or apply manually:
    KUBECONFIG=$SHOOT_KUBECONFIG kubectl apply -f k8s/gardener_init/cert-manager-issuer.yaml
    ```
 
-Required GitHub secrets/variables in the `gardener` environment — one set per cluster, suffixed with `_<CLUSTER_UPPER>` (e.g. `_SR_TEST`, `_AI_TRUST_MAIN`):
+Required GitHub secrets in the `gardener` environment:
 
 | Secret | Purpose |
 |---|---|
-| `AI_TRUST_ENV_<CLUSTER_UPPER>` | full contents of `k8s/env/<cluster-name>/.env` — becomes the `ai-trust-env` k8s Secret |
-| `GHCR_PULL_TOKEN` | (optional, shared) PAT with `read:packages` — only needed if `ghcr.io` packages are private |
+| `GHCR_PULL_TOKEN` | (optional) PAT with `read:packages` — only needed if `ghcr.io` packages are private |
 
-| Variable | Purpose |
-|---|---|
-| `GARDENER_SHOOT_API_SERVER_<CLUSTER_UPPER>` | shoot kube-apiserver URL, e.g. `https://api.<shoot>.<project>.shoot.<landscape>` |
-| `GARDENER_CA_DISCOVERY_URL_<CLUSTER_UPPER>` | Gardener Discovery Server URL for the shoot CA |
-| `GARDENER_OIDC_AUDIENCE_<CLUSTER_UPPER>` | must match `audiences` in `structured-auth-configmap.yaml` (e.g. `ai-trust-platform-ci`) |
-| `K8S_NAMESPACE` | (optional, shared) defaults to `ai-trust` |
+All other cluster config (Gardener connection vars, app env) lives in `k8s/env/<cluster>/.env`,
+committed to the repo. No per-cluster GitHub secrets or variables needed.
 
 The chart assumes Traefik Ingress controller and cert-manager are already installed on the shoot
 (`values-gardener.yaml` sets `ingress.className: traefik`). `oauth2-proxy` and `keycloak` switch
