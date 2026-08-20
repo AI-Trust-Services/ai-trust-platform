@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { Outlet, NavLink } from "react-router";
+import { Users } from "lucide-react";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { HEALTH_URL } from "./api/client";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,14 @@ export default function App() {
           </button>
         </div>
       )}
+      <header className="flex h-14 items-center border-b border-border bg-card px-6">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+            <Users className="size-5" />
+          </span>
+          <h1 className="text-lg font-semibold tracking-[-0.01em]">Users &amp; Roles</h1>
+        </div>
+      </header>
       <div className="flex gap-0 border-b border-border bg-card px-6">
         <NavLink
           to="users"

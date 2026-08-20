@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, Network } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchTraces, type Trace, type TracesResponse, type TraceFilters } from "../api/traces";
 import { TraceDetail } from "./TraceDetail";
@@ -82,7 +82,12 @@ export function TraceList() {
       <div style={{ padding: "16px 24px", fontFamily: "var(--font-family)", fontSize: "var(--font-size)" }}>
         {/* Toolbar */}
         <div style={styles.toolbar}>
-          <span style={styles.title}>Trace Explorer</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+              <Network className="size-5" />
+            </span>
+            <span style={styles.title}>Trace Explorer</span>
+          </div>
           <div style={styles.toolbarRight}>
             {data && data.items.length > 0 && (
               <span style={styles.meta}>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, RotateCw } from "lucide-react";
+import { Plus, RotateCw, ListChecks } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { StatusBadge } from "../components/Badges";
@@ -114,7 +114,12 @@ export default function ObligationsPage() {
   return (
     <>
       <div className="flex items-center justify-between border-b border-border px-5 py-2.5">
-        <h1 className="text-lg font-semibold text-foreground">Obligations</h1>
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+            <ListChecks className="size-5" />
+          </span>
+          <h1 className="text-lg font-semibold text-foreground">Obligations</h1>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load}><RotateCw /> Refresh</Button>
           <Button size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}

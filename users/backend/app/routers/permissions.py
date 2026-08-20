@@ -33,10 +33,15 @@ async def me(user: str = Depends(get_current_user)) -> dict:
         kc = admin_client()
         results = kc.get(f"users?username={user}&exact=true").json()
         return results[0] if results else {}
-    u = await asyncio.to_thread(_fetch)
+    u, role_objects = await asyncio.gather(
+        asyncio.to_thread(_fetch),
+        openfga_client.read_user_roles(f"user:{user}"),
+    )
+    roles = [r.removeprefix("role:") for r in role_objects]
     return {
         "username": user,
         "firstName": u.get("firstName", ""),
         "lastName": u.get("lastName", ""),
         "email": u.get("email", ""),
+        "roles": roles,
     }

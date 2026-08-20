@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { BellRing, Loader2, RefreshCw } from "lucide-react";
 import { api, HEALTH_URL, ALERTS_URL } from "./api/client";
 import { useLuigiInit, navigateTo } from "./hooks/useLuigi";
 import { usePermissions } from "./hooks/usePermissions";
@@ -90,10 +90,15 @@ export default function App() {
   return (
     <ToastProvider>
       <header className="flex h-14 items-center justify-between border-b border-border bg-card px-6">
-        <h1 className="flex items-center gap-2.5 text-lg font-semibold tracking-[-0.01em]">
-          Alerts
-          <Badge className="uppercase tracking-wide">Live</Badge>
-        </h1>
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+            <BellRing className="size-5" />
+          </span>
+          <h1 className="flex items-center gap-2.5 text-lg font-semibold tracking-[-0.01em]">
+            Alerts
+            <Badge className="uppercase tracking-wide">Live</Badge>
+          </h1>
+        </div>
         <Button variant="outline" onClick={loadActive}>
           <RefreshCw />
           Refresh

@@ -138,6 +138,9 @@
     sideNavigation: {
       collapsed: true,
     },
+    splitView: {
+      enabled: false,
+    },
     theme: "sap_horizon",
     iframeCreationInterceptor: (iframe) => {
       // Grant clipboard *write* to embedded MFEs — without this, the Permissions
@@ -147,6 +150,9 @@
       // read access would let an MFE silently exfiltrate whatever the user copied.
       iframe.setAttribute("allow", "downloads; clipboard-write");
       iframe.sandbox.add("allow-downloads");
+      // Luigi sets iframe.title = "MFE" synchronously after this interceptor returns.
+      // One tick deferred so the removal happens after Luigi finishes setting properties.
+      setTimeout(() => { iframe.removeAttribute("title"); }, 0);
     },
   },
 
@@ -160,39 +166,43 @@
 
         /* ── Shell bar ── */
         .fd-shellbar {
-          background: #0a6ed1 !important;
+          background: #ffffff !important;
           border-bottom: none !important;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+          box-shadow: none !important;
           height: 48px !important;
           padding-left: 0 !important;
         }
         .fd-shellbar__title,
         .lui-shellbar__title,
         .shellbar-title {
-          color: #ffffff !important;
-          font-family: "72", "72full", Arial, Helvetica, sans-serif !important;
+          color: #111827 !important;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
           font-weight: 600 !important;
-          font-size: 15px !important;
+          font-size: 14px !important;
+          letter-spacing: 0 !important;
           line-height: 1 !important;
           display: inline-flex !important;
           align-items: center !important;
           height: auto !important;
           margin: 0 !important;
           padding: 0 !important;
-          letter-spacing: 0 !important;
         }
-        /* Hide the empty logo placeholder so the title isn't visually offset */
         .fd-shellbar__logo:empty,
         .fd-shellbar__logo--image-replaced {
           display: none !important;
         }
-        /* Pull the left group (hamburger + home button) flush to the left edge */
         .fd-shellbar__group--product {
-          padding-left: 0 !important;
-          margin-left: 0 !important;
+          flex: 0 0 256px !important;
+          flex-grow: 0 !important;
+          display: flex !important;
+          justify-content: center !important;
+          overflow: hidden !important;
+          padding: 0 !important;
+          margin: 0 !important;
         }
-
-        /* Shrink the home button to tightly wrap the title text */
+        body.semiCollapsed .fd-shellbar__group--product {
+          flex: 0 0 48px !important;
+        }
         .fd-shellbar__branding {
           display: inline-flex !important;
           align-items: center !important;
@@ -204,50 +214,52 @@
           outline: none !important;
           border-radius: 4px !important;
         }
-        .fd-shellbar__branding:hover {
-          background: rgba(255,255,255,0.10) !important;
-        }
-        .fd-shellbar__branding:focus {
-          outline: none !important;
-          box-shadow: none !important;
-        }
+        .fd-shellbar__branding:hover { background: #f3f4f6 !important; }
+        .fd-shellbar__branding:focus { outline: none !important; box-shadow: none !important; }
         .fd-shellbar__branding:focus-visible {
-          outline: 2px solid rgba(255, 255, 255, 0.8) !important;
+          outline: 2px solid #0a6ed1 !important;
           outline-offset: 2px !important;
           box-shadow: none !important;
         }
 
-        /* ── Hamburger — white icon on the dark blue shellbar ── */
+        .fd-shellbar__group--actions,
+        .fd-shellbar__actions {
+          display: flex !important;
+          align-items: center !important;
+          gap: 0 !important;
+        }
         .lui-burger,
         .fd-shellbar__button.lui-burger,
         button.fd-button--transparent.lui-burger {
-          color: #ffffff !important;
-          background: transparent !important;
-          border: none !important;
-          width: 36px !important;
-          height: 36px !important;
-          display: inline-flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          cursor: pointer !important;
-          margin: 0 4px !important;
-        }
-        .lui-burger:hover {
-          background: rgba(255,255,255,0.15) !important;
-        }
-        .lui-burger .sap-icon {
-          color: #ffffff !important;
+          display: none !important;
         }
 
         /* ── Sidebar ── */
+        .fd-app__sidebar,
+        .fd-app__split-view,
         .fd-side-nav,
         .lui-side-nav,
+        .lui-nav-container,
+        .lui-nav,
+        .lui-nav__list-wrapper,
         [class*="side-nav"],
-        nav.fd-navigation,
-        .lui-nav-container {
+        [class*="lui-nav"],
+        nav.fd-navigation {
           background: #ffffff !important;
-          border-right: 1px solid #e4e6e8 !important;
+          background-color: #ffffff !important;
+          border-right: none !important;
           box-shadow: none !important;
+          overflow: hidden !important;
+        }
+        .lui-side-nav--collapsed,
+        .lui-side-nav {
+          background: #ffffff !important;
+          background-color: #ffffff !important;
+        }
+        .fd-app__sidebar,
+        .lui-nav-container {
+          --fdSideNavBackground: #ffffff !important;
+          --fdShellbarBackground: #ffffff !important;
         }
 
         /* ── Nav items ── */
@@ -255,31 +267,33 @@
         .lui-nav__item a,
         .lui-navigation-list-item a,
         li.fd-navigation__list-item a {
-          color: #1d2d3e !important;
+          color: #374151 !important;
           font-weight: 400 !important;
-          font-size: 14px !important;
+          font-size: 13px !important;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
           border-radius: 6px !important;
           margin: 1px 8px !important;
-          padding: 8px 10px !important;
+          padding: 7px 10px !important;
           background: transparent !important;
           border: none !important;
-          transition: background 0.12s !important;
+          transition: background 0.1s, color 0.1s !important;
           display: flex !important;
           align-items: center !important;
           gap: 10px !important;
         }
         .fd-navigation__list-item a:hover,
         .lui-nav__item a:hover {
-          background: #f5f6f7 !important;
-          color: #0a6ed1 !important;
+          background: #f3f4f6 !important;
+          color: #111827 !important;
         }
         .fd-navigation__list-item--selected a,
         .lui-nav__item--selected a,
         .is-selected a,
         .lui-navigation-list-item.is-selected a {
-          background: #e8f0fb !important;
+          background: transparent !important;
           color: #0a6ed1 !important;
           font-weight: 500 !important;
+          box-shadow: inset 2px 0 0 #0a6ed1 !important;
         }
         .fd-navigation__list-item--selected::before,
         .lui-nav__item--selected::before,
@@ -289,26 +303,73 @@
         .fd-navigation__icon,
         .lui-nav__icon,
         .sap-icon {
-          color: #556b82 !important;
-          font-size: 16px !important;
+          color: #9ca3af !important;
+          font-size: 15px !important;
+        }
+        .fd-navigation__list-item a:hover .sap-icon,
+        .lui-nav__item a:hover .sap-icon {
+          color: #6b7280 !important;
         }
         .is-selected .sap-icon,
         .fd-navigation__list-item--selected .sap-icon {
           color: #0a6ed1 !important;
         }
 
+        .fd-navigation__list-item a:focus,
+        .lui-nav__item a:focus,
+        .lui-navigation-list-item a:focus,
+        .fd-nested-list__link:focus,
+        .fd-nested-list__link:focus-within {
+          outline: none !important;
+          box-shadow: none !important;
+        }
+        .fd-navigation__list-item--selected a:focus,
+        .lui-nav__item--selected a:focus,
+        .is-selected a:focus {
+          outline: none !important;
+          box-shadow: inset 2px 0 0 #0a6ed1 !important;
+        }
+
+        /* ── Hide Luigi overlay badges (split-view btn, breadcrumbs, view labels) ── */
+        .lui-split-view-btn,
+        .lui-split-view__start-btn,
+        [class*="split-view"][class*="btn"],
+        .lui-breadcrumb,
+        .fd-breadcrumb,
+        .fd-dynamic-page__summarized-title-area,
+        [data-testid*="split"],
+        .lui-view-group-badge,
+        .lui-icon-btn[title*="split" i],
+        .fd-shellbar__button[title*="split" i] {
+          display: none !important;
+        }
+
         /* ── App / iframe ── */
+        html {
+          background: #ffffff !important;
+        }
+        :root {
+          --sapBackgroundColor: #ffffff;
+          --sapShellColor: #ffffff;
+          --sapBaseColor: #ffffff;
+          --sapContent_ForegroundBackgroundColor: #ffffff;
+          --sapPageHeader_Background: #ffffff;
+        }
         .lui-main-app-frame,
         iframe#app-iframe,
-        .fd-app__main {
-          background: #f5f6f7 !important;
+        .fd-app__main,
+        .fd-app__main-container,
+        .fd-shell,
+        .fd-shell__content,
+        .fd-shell__body,
+        [class*="app__main"],
+        [class*="main-container"],
+        [class*="main-frame"] {
+          background: #ffffff !important;
+          background-color: #ffffff !important;
           border: none !important;
         }
-        body, .fd-app, .lui-app {
-          background: #f5f6f7 !important;
-        }
-        .lui-side-nav--collapsed,
-        .lui-side-nav {
+        body, .fd-app, .lui-app, #app {
           background: #ffffff !important;
         }
 
@@ -326,27 +387,83 @@
         }
         .lui-side-nav--collapsed .sap-icon,
         .lui-side-nav--collapsed .fd-navigation__icon {
-          font-size: 18px !important;
+          font-size: 17px !important;
           margin: 0 !important;
+        }
+
+        /* ── Brand icon (shown only when collapsed) ── */
+        .luigi-brand-icon {
+          display: none !important;
+          font-size: 17px !important;
+          color: #374151 !important;
+          line-height: 1 !important;
+        }
+        body.semiCollapsed .luigi-brand-icon {
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+        body.semiCollapsed .fd-shellbar__title,
+        body.semiCollapsed .lui-shellbar__title,
+        body.semiCollapsed .shellbar-title {
+          display: none !important;
         }
 
         /* ── Sidebar tooltip ── */
         #luigi-nav-tooltip {
           position: fixed;
-          background: #1d2d3e;
-          color: #ffffff;
-          padding: 6px 10px;
+          background: #111827;
+          color: rgba(255,255,255,0.9);
+          padding: 5px 10px;
           border-radius: 4px;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 500;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           white-space: nowrap;
           pointer-events: none;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.25);
           z-index: 9999;
+          display: none;
+        }
+
+        /* ── Collapse button ── */
+        #luigi-collapse-btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-top: auto;
+          flex-shrink: 0;
+          padding: 10px 16px;
+          background: transparent;
+          border: none;
+          border-top: none;
+          color: #9ca3af;
+          font-size: 13px;
+          font-weight: 400;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          cursor: pointer;
+          width: 100%;
+          box-sizing: border-box;
+          text-align: left;
+          transition: color 0.1s, background 0.1s;
+        }
+        #luigi-collapse-btn:hover {
+          color: #374151;
+          background: #f9fafb;
+        }
+        body.semiCollapsed #luigi-collapse-btn {
+          justify-content: center;
+          padding: 10px;
+        }
+        body.semiCollapsed #luigi-collapse-btn .collapse-label {
           display: none;
         }
       `;
       document.head.appendChild(style);
+
+      // Remove "MFE" title attribute from any iframes already in the DOM at init time
+      // (the first iframe is created before luigiAfterInit fires).
+      document.querySelectorAll("iframe[title='MFE']").forEach(f => f.removeAttribute("title"));
 
       // JS tooltip for collapsed sidebar icons
       const tooltip = document.createElement("div");
@@ -383,7 +500,58 @@
         }
       }, 200);
 
-      // Inject account menu into shell bar
+      // Inject brand icon shown in place of the title when collapsed
+      const waitForBranding = setInterval(() => {
+        const branding = document.querySelector(".fd-shellbar__branding");
+        if (!branding) return;
+        clearInterval(waitForBranding);
+        const icon = document.createElement("span");
+        icon.className = "sap-icon sap-icon--grid luigi-brand-icon";
+        branding.appendChild(icon);
+      }, 200);
+
+      // Inject collapse button at the bottom of the sidebar
+      const waitForCollapse = setInterval(() => {
+        if (document.getElementById("luigi-collapse-btn")) { clearInterval(waitForCollapse); return; }
+        const sidebar = document.querySelector(".lui-side-nav") ||
+                        document.querySelector(".fd-side-nav") ||
+                        document.querySelector(".lui-nav-container");
+        if (!sidebar) return;
+        clearInterval(waitForCollapse);
+
+        // Make sidebar a flex column so margin-top:auto pushes the button down
+        sidebar.style.display = "flex";
+        sidebar.style.flexDirection = "column";
+
+        const btn = document.createElement("button");
+        btn.id = "luigi-collapse-btn";
+
+        const arrow = document.createElement("span");
+        const label = document.createElement("span");
+        label.className = "collapse-label";
+        label.textContent = "Collapse";
+        btn.appendChild(arrow);
+        btn.appendChild(label);
+
+        function updateState() {
+          const collapsed = document.body.classList.contains("semiCollapsed");
+          arrow.textContent = collapsed ? "›" : "‹";
+        }
+        updateState();
+
+        btn.addEventListener("click", () => {
+          const burger = document.querySelector(".lui-burger");
+          if (burger) burger.click();
+        });
+
+        new MutationObserver(updateState).observe(document.body, {
+          attributes: true, attributeFilter: ["class"],
+        });
+
+        sidebar.appendChild(btn);
+      }, 300);
+
+      // Inject alerts bell + account chip into shell bar
       const waitForShellbar = setInterval(() => {
         const shellbar = document.querySelector(".fd-shellbar__group--actions, .fd-shellbar__actions");
         if (shellbar) {
@@ -393,51 +561,110 @@
           const initials = currentUser.firstName && currentUser.lastName
             ? (currentUser.firstName[0] + currentUser.lastName[0]).toUpperCase()
             : (currentUser.username || "?").slice(0, 2).toUpperCase();
+          const rawRole = (currentUser.roles || [])[0] || "";
+          const roleLabel = rawRole.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
+          // ── Alerts bell ──
+          const bell = document.createElement("button");
+          bell.id = "luigi-alerts-bell";
+          bell.style.cssText = `
+            position:relative; display:inline-flex; align-items:center; justify-content:center;
+            width:32px; height:36px; background:transparent; border:none;
+            border-radius:6px; cursor:pointer; color:#374151; margin-right:12px; margin-top:3px;
+            flex-shrink:0; align-self:center;
+          `;
+          bell.innerHTML = `
+            <span class="sap-icon sap-icon--bell" style="font-size:20px; pointer-events:none;"></span>
+            <span id="luigi-alerts-count" style="
+              display:none; position:absolute; top:1px; right:1px;
+              min-width:15px; height:15px; background:#dc2626; color:#fff;
+              font-size:9px; font-weight:700; line-height:1; border-radius:8px;
+              padding:0 3px; align-items:center; justify-content:center;
+            "></span>
+          `;
+          bell.addEventListener("click", () => { window.location.hash = "#/home/alerts"; });
+          bell.addEventListener("mouseenter", () => { bell.style.background = "#f3f4f6"; });
+          bell.addEventListener("mouseleave", () => { bell.style.background = "transparent"; });
+
+          async function fetchAlertCount() {
+            try {
+              const res = await fetch("/api/alerts/v1/count", { cache: "no-store" });
+              if (res.ok) {
+                const data = await res.json();
+                const count = data.count ?? 0;
+                const badge = document.getElementById("luigi-alerts-count");
+                if (badge) {
+                  badge.textContent = count > 99 ? "99+" : String(count);
+                  badge.style.display = count > 0 ? "inline-flex" : "none";
+                }
+              }
+            } catch {}
+          }
+          fetchAlertCount();
+          setInterval(fetchAlertCount, 30000);
+
+          // ── User account chip ──
           const wrapper = document.createElement("div");
-          wrapper.style.cssText = "position:relative; display:inline-flex; align-items:center; margin-right:8px;";
+          wrapper.style.cssText = "position:relative; display:inline-flex; align-items:center; height:36px; align-self:center; margin-right:8px;";
 
           const trigger = document.createElement("button");
           trigger.style.cssText = `
             display:inline-flex; align-items:center; gap:8px;
-            background:transparent; border:1px solid rgba(255,255,255,0.4);
-            border-radius:4px; padding:4px 10px 4px 4px;
-            color:#fff; font-size:13px; font-weight:500;
-            cursor:pointer; height:32px;
+            background:transparent; border:1px solid transparent;
+            border-radius:8px; padding:2px 8px 2px 2px;
+            color:#374151; font-size:13px; font-weight:500;
+            font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+            cursor:pointer; height:36px; transition:background 0.15s, border-color 0.15s;
           `;
           trigger.innerHTML = `
             <span style="
-              width:24px; height:24px; border-radius:50%;
-              background:rgba(255,255,255,0.25); display:inline-flex;
+              width:28px; height:28px; border-radius:50%;
+              background:#18181b; display:inline-flex;
               align-items:center; justify-content:center;
-              font-size:11px; font-weight:700; flex-shrink:0;
+              font-size:10px; font-weight:700; flex-shrink:0; color:#ffffff;
+              letter-spacing:0.04em;
             ">${initials}</span>
-            <span>${displayName}</span>
-            <span style="font-size:10px; opacity:0.7;">▾</span>
+            <span style="display:flex; flex-direction:column; align-items:flex-start; min-width:0;">
+              <span style="max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.2;">${displayName}</span>
+              ${roleLabel ? `<span style="font-size:11px; font-weight:400; color:#9ca3af; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.2;">${roleLabel}</span>` : ""}
+            </span>
+            <span class="sap-icon sap-icon--slim-arrow-down" style="font-size:10px; color:#9ca3af; margin-left:-2px; flex-shrink:0;"></span>
           `;
 
           const dropdown = document.createElement("div");
           dropdown.style.cssText = `
-            display:none; position:absolute; top:calc(100% + 4px); right:0;
-            background:#fff; border:1px solid #e4e6e8; border-radius:6px;
-            box-shadow:0 4px 12px rgba(0,0,0,0.12); min-width:160px; z-index:9999;
-            overflow:hidden;
+            display:none; position:absolute; top:calc(100% + 8px); right:0;
+            background:#ffffff; border:1px solid #e4e4e7; border-radius:10px;
+            box-shadow:0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
+            min-width:200px; z-index:9999; overflow:hidden;
           `;
           dropdown.innerHTML = `
-            <div style="padding:10px 14px 8px; border-bottom:1px solid #e4e6e8;">
-              <div style="font-size:13px; font-weight:600; color:#1d2d3e;">${displayName}</div>
-              <div style="font-size:11px; color:#8a9bb0; margin-top:2px;">${currentUser.username}</div>
+            <div style="padding:12px 14px 10px; display:flex; align-items:center; gap:10px;">
+              <span style="
+                width:34px; height:34px; border-radius:50%; flex-shrink:0;
+                background:#18181b; display:inline-flex;
+                align-items:center; justify-content:center;
+                font-size:12px; font-weight:700; color:#ffffff; letter-spacing:0.04em;
+              ">${initials}</span>
+              <div style="min-width:0;">
+                <div style="font-size:13px; font-weight:600; color:#111827; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${displayName}</div>
+                <div style="font-size:11px; color:#9ca3af; margin-top:1px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${currentUser.username}</div>
+              </div>
             </div>
-            <a href="/oauth2/sign_out" style="
-              display:flex; align-items:center; gap:8px;
-              padding:10px 14px; color:#1d2d3e; text-decoration:none;
-              font-size:13px; transition:background 0.1s;
-            "
-            onmouseover="this.style.background='#f5f6f7'"
-            onmouseout="this.style.background='transparent'">
-              <span class="sap-icon sap-icon--log" style="font-size:15px; color:#556b82;"></span>
-              Sign out
-            </a>
+            <div style="height:1px; background:#f3f4f6; margin:0 4px;"></div>
+            <div style="padding:4px;">
+              <a href="/oauth2/sign_out" style="
+                display:flex; align-items:center; gap:8px;
+                padding:8px 10px; color:#374151; text-decoration:none;
+                font-size:13px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+                border-radius:6px; transition:background 0.1s;
+              "
+              onmouseover="this.style.background='#f4f4f5'"
+              onmouseout="this.style.background='transparent'">
+                <span class="sap-icon sap-icon--log" style="font-size:14px; color:#9ca3af;"></span>
+                Sign out
+              </a>
+            </div>
           `;
 
           trigger.addEventListener("click", (e) => {
@@ -445,12 +672,13 @@
             dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
           });
           document.addEventListener("click", () => { dropdown.style.display = "none"; });
-          trigger.addEventListener("mouseenter", () => { trigger.style.background = "rgba(255,255,255,0.15)"; });
-          trigger.addEventListener("mouseleave", () => { trigger.style.background = "transparent"; });
+          trigger.addEventListener("mouseenter", () => { trigger.style.background = "#f4f4f5"; trigger.style.borderColor = "#e4e4e7"; });
+          trigger.addEventListener("mouseleave", () => { trigger.style.background = "transparent"; trigger.style.borderColor = "transparent"; });
 
           wrapper.appendChild(trigger);
           wrapper.appendChild(dropdown);
           shellbar.prepend(wrapper);
+          shellbar.prepend(bell);
         }
       }, 200);
     },

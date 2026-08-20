@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { Outlet } from "react-router";
-import { Bell, Loader2, Plus, LayoutDashboard } from "lucide-react";
+import { Loader2, Plus, LayoutDashboard } from "lucide-react";
 import { useLuigiInit, navigateTo } from "./hooks/useLuigi";
 import { usePermissions } from "./hooks/usePermissions";
-import { api, HEALTH_URL, ALERTS_URL, REGISTRY_URL } from "./api/client";
+import { api, HEALTH_URL, REGISTRY_URL } from "./api/client";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 type ToastFn = (msg: string, isError?: boolean) => void;
 const ToastContext = createContext<ToastFn | null>(null);
@@ -14,8 +13,6 @@ export const useToast = () => useContext(ToastContext)!;
 interface HeaderControls {
   alertCount: number;
   registryUrl: string;
-  alertsUrl: string;
-  onNavigateAlerts: (e: React.MouseEvent) => void;
 }
 export const HeaderContext = createContext<HeaderControls | null>(null);
 export const useHeader = () => useContext(HeaderContext)!;
@@ -69,19 +66,13 @@ export default function App() {
 
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
-  function handleNavigateAlerts(e: React.MouseEvent) {
-    e.preventDefault();
-    navigateTo("/home/alerts", ALERTS_URL);
+  function handleNavigateRegistry() {
+    navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
 
   return (
     <ToastContext.Provider value={showToast}>
-      <HeaderContext.Provider value={{
-        alertCount,
-        registryUrl: REGISTRY_URL,
-        alertsUrl: ALERTS_URL,
-        onNavigateAlerts: handleNavigateAlerts,
-      }}>
+      <HeaderContext.Provider value={{ alertCount, registryUrl: REGISTRY_URL }}>
         <header className="flex h-14 items-center justify-between border-b border-border bg-card px-6 print:hidden">
           <div className="flex items-center gap-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
@@ -92,32 +83,14 @@ export default function App() {
               <p className="mt-0.5 text-xs text-muted-foreground">Organisation compliance posture at a glance</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={handleNavigateAlerts}
-              className={cn(
-                "relative",
-                alertCount > 0 && "border-[var(--danger-border)] text-[var(--danger-fg)] hover:bg-[var(--danger-bg)]",
-              )}
-            >
-              <Bell />
-              Alerts
-              {alertCount > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--destructive)] px-1 text-[10px] font-bold text-white">
-                  {alertCount}
-                </span>
-              )}
-            </Button>
-            <Button
-              onClick={() => { navigateTo("/home/ai-system-registry", REGISTRY_URL); }}
-              disabled={!mayRegister}
-              title={mayRegister ? undefined : "Requires permission: systems:write"}
-            >
-              <Plus />
-              Register System
-            </Button>
-          </div>
+          <Button
+            onClick={handleNavigateRegistry}
+            disabled={!mayRegister}
+            title={mayRegister ? undefined : "Requires permission: systems:write"}
+          >
+            <Plus />
+            Register System
+          </Button>
         </header>
 
         {backendOk === false && (

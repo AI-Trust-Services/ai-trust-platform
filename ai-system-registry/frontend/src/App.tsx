@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router";
-import { Loader2 } from "lucide-react";
+import { Loader2, Database } from "lucide-react";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { usePermissions } from "./hooks/usePermissions";
 import { HEALTH_URL } from "./api/client";
@@ -68,7 +68,12 @@ export default function App() {
     <ToastContext.Provider value={showToast}>
       <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen, mayWrite, mayRegister, username }}>
         <div className="flex h-14 items-center justify-between border-b border-border bg-card px-6 shadow-[var(--shadow-xs)]">
-          <h1 className="text-lg font-semibold">AI System Registry</h1>
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+              <Database className="size-5" />
+            </span>
+            <h1 className="text-lg font-semibold">AI System Registry</h1>
+          </div>
           <div>
             {activeView === "systems" ? (
               <Button disabled={!mayRegister}
