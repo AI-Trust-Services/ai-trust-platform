@@ -29,7 +29,12 @@ echo "==> secret/ai-trust-env (from .env, plus computed connection strings)"
 set -a
 # shellcheck disable=SC1091
 set +u  # .env may contain ${VAR} references (e.g. ${LB_IP}) not defined in all environments
-source <(tr -d '\r' < "$REPO_ROOT/.env")
+# Use a temp file so tr -d '\r' (Windows line endings) works AND variables
+# propagate into the current shell (source <(...) does not export in all bash versions)
+_env_tmp=$(mktemp)
+tr -d '\r' < "$REPO_ROOT/.env" > "$_env_tmp"
+source "$_env_tmp"
+rm -f "$_env_tmp"
 set -u
 set +a
 
