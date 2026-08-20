@@ -80,20 +80,21 @@ spec:
       restartPolicy: OnFailure
       {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
-        # Wait until Keycloak's admin account is fully bootstrapped — not just until
-        # /realms/master returns 200 (which happens before admin init is complete).
-        # Polling the token endpoint until it returns something other than 4xx/5xx
-        # (a successful token grant returns 200, bad credentials return 401 — both
-        # mean the admin endpoint is up and accepting requests).
+        # Wait until Keycloak's admin token endpoint responds with 200 or 401
+        # (both mean the admin account is fully bootstrapped and accepting requests).
+        # 403 means Keycloak is up but admin not yet ready — keep waiting.
         - name: wait-for-keycloak
           image: {{ .Values.waitImages.busybox }}
           command:
             - sh
             - -c
             - |
-              until wget -q -O- --post-data="grant_type=password&client_id=admin-cli&username=dummy&password=dummy" \
-                http://keycloak:8080/realms/master/protocol/openid-connect/token 2>&1 | grep -q "error\|access_token"; do
-                echo "waiting for keycloak admin endpoint..."; sleep 3
+              until status=$(wget -S -O /dev/null \
+                --post-data="grant_type=password&client_id=admin-cli&username=dummy&password=dummy" \
+                http://keycloak:8080/realms/master/protocol/openid-connect/token 2>&1 | \
+                grep "HTTP/" | tail -1 | awk '{print $2}') && \
+                [ "$status" = "200" ] || [ "$status" = "401" ]; do
+                echo "waiting for keycloak admin endpoint (got: ${status:-none})..."; sleep 3
               done
       containers:
         - name: keycloak-provision
