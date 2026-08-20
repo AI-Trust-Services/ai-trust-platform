@@ -24,6 +24,4 @@ ingress:
   tls:
     enabled: false
     selfSigned: false
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
-    traefik.ingress.kubernetes.io/router.tls: "false"
+  annotations: {}
