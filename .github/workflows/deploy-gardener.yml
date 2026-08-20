@@ -92,7 +92,7 @@ jobs:
         run: echo "KUBECONFIG=$GITHUB_WORKSPACE/kubeconfig.yaml" >> "$GITHUB_ENV"
 
       - name: Verify cluster connectivity
-        run: kubectl get namespace "$NAMESPACE"
+        run: kubectl get namespace default
 
       - name: Write .env for bootstrap.sh
         run: |
