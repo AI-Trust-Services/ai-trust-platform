@@ -102,6 +102,9 @@ jobs:
       - name: Bootstrap namespace/secrets/configmaps
         run: bash k8s/scripts/bootstrap.sh
 
+      - name: Apply shoot RBAC (namespace-scoped role/rolebinding)
+        run: kubectl apply -f k8s/gardener_init/rbac.yaml
+
       - name: Create ghcr.io pull secret
         env:
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}

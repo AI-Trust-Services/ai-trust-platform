@@ -3,15 +3,11 @@
 # AI-Trust-Services/ai-trust-platform, any branch/ref) exactly the permissions
 # deploy-gardener.yml needs: bootstrap.sh's namespace/Secret/ConfigMap/RBAC setup, plus
 # `helm upgrade --install` of the whole chart. Deliberately not cluster-admin.
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: ai-trust
+#
+# NOTE: the ai-trust namespace is NOT created here — bootstrap.sh creates it idempotently
+# on every deploy. The ClusterRole grants create+patch so bootstrap can run from scratch.
 ---
-# Cluster-scoped because Namespace is a cluster-scoped resource. Only get+patch, not create:
-# the Namespace above is created once, out-of-band, by whoever applies this file - bootstrap.sh's
-# `kubectl create namespace ai-trust --dry-run=client -o yaml | kubectl apply -f -` always issues
-# a GET then a PATCH even when the namespace already exists and nothing changes.
+# Cluster-scoped because Namespace is a cluster-scoped resource.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -19,7 +15,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["namespaces"]
-    verbs: ["get", "patch"]
+    verbs: ["get", "list", "create", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
