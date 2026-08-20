@@ -89,12 +89,11 @@ spec:
             - sh
             - -c
             - |
-              until status=$(wget -S -O /dev/null \
+              until wget -q -O /tmp/kc_resp \
                 --post-data="grant_type=password&client_id=admin-cli&username=dummy&password=dummy" \
-                http://keycloak:8080/realms/master/protocol/openid-connect/token 2>&1 | \
-                grep "HTTP/" | tail -1 | awk '{print $2}') && \
-                [ "$status" = "200" ] || [ "$status" = "401" ]; do
-                echo "waiting for keycloak admin endpoint (got: ${status:-none})..."; sleep 3
+                http://keycloak:8080/realms/master/protocol/openid-connect/token 2>/dev/null \
+                || grep -q "error\|access_token" /tmp/kc_resp 2>/dev/null; do
+                echo "waiting for keycloak admin endpoint..."; sleep 3
               done
       containers:
         - name: keycloak-provision
