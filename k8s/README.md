@@ -104,11 +104,11 @@ One-time setup per cluster, checked into `k8s/gardener_init/`. Two scripts, run 
 
 ```bash
 # Step 1 — Garden cluster: enable Traefik ingress extension + structured auth
-export GARDEN_KUBECONFIG=/path/to/kubeconfig-garden-<landscape>.yaml
+export KUBECONFIG=/path/to/kubeconfig-garden-<landscape>.yaml
 bash k8s/gardener_init/cluster-init.sh <cluster-name>
 
 # Step 2 — Shoot cluster: apply RBAC + cert-manager issuer
-export SHOOT_KUBECONFIG=/path/to/kubeconfig-<shoot>.yaml
+export KUBECONFIG=/path/to/kubeconfig-<shoot>.yaml
 bash k8s/gardener_init/shoot-init.sh <cluster-name>
 ```
 
