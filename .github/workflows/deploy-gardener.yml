@@ -8,22 +8,11 @@ name: Gardener Deploy (Structured Authentication)
 # https://gardener.cloud/docs/guides/applications/app-ci-cd/#configure-github-actions -
 # no kubeconfig secret. One-time cluster setup: k8s/gardener_init/ (see k8s/README.md).
 #
-# Per-cluster GitHub secrets/variables in the 'gardener' environment
-# (suffix: _<CLUSTER_UPPER>, e.g. _SR_TEST or _AI_TRUST_MAIN):
+# All cluster config (Gardener connection vars + app env) lives in:
+#   k8s/env/<cluster>/.env   (committed to the repo)
 #
-# Required secrets:
-#   AI_TRUST_ENV_<CLUSTER_UPPER>          - full contents of k8s/env/<cluster>/.env
-#
-# Optional secrets:
-#   GHCR_PULL_TOKEN                       - shared PAT with read:packages (skip if packages are public)
-#
-# Required variables:
-#   GARDENER_SHOOT_API_SERVER_<CLUSTER_UPPER>  - https://api.<shoot>.<project>.shoot.<landscape>
-#   GARDENER_CA_DISCOVERY_URL_<CLUSTER_UPPER>  - Gardener Discovery Server URL for the shoot CA
-#   GARDENER_OIDC_AUDIENCE_<CLUSTER_UPPER>     - must match audiences in structured-auth-configmap.yaml
-#
-# Optional variables:
-#   K8S_NAMESPACE                         - defaults to "ai-trust" (shared across clusters)
+# Required GitHub secret (gardener environment):
+#   GHCR_PULL_TOKEN   - PAT with read:packages (only if ghcr.io packages are private)
 
 on:
   workflow_dispatch:
@@ -53,19 +42,29 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: gardener
-    env:
-      NAMESPACE: ${{ vars.K8S_NAMESPACE || 'ai-trust' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Derive cluster env suffix
-        id: cluster
+      - name: Load cluster env
         run: |
-          # sr-test → SR_TEST, ai-trust-main → AI_TRUST_MAIN
-          suffix=$(echo "${{ inputs.cluster }}" | tr '[:lower:]-' '[:upper:]_')
-          echo "suffix=${suffix}" >> "$GITHUB_OUTPUT"
-          echo "Cluster: ${{ inputs.cluster }} → suffix: ${suffix}"
+          ENV_FILE="k8s/env/${{ inputs.cluster }}/.env"
+          if [[ ! -f "$ENV_FILE" ]]; then
+            echo "error: $ENV_FILE not found — create it from k8s/env/ai-trust-main/.env.example" >&2
+            exit 1
+          fi
+          # Export all vars from the cluster .env into the workflow environment
+          set -a
+          # shellcheck disable=SC1090
+          source "$ENV_FILE"
+          set +a
+          # Write each variable to GITHUB_ENV so subsequent steps can use them
+          while IFS='=' read -r key value; do
+            [[ -z "$key" || "$key" == \#* ]] && continue
+            echo "${key}=${value}" >> "$GITHUB_ENV"
+          done < <(tr -d '\r' < "$ENV_FILE" | grep -v '^\s*#' | grep -v '^\s*$')
+          echo "Loaded env from $ENV_FILE"
+          echo "NAMESPACE=${K8S_NAMESPACE:-ai-trust}" >> "$GITHUB_ENV"
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
@@ -74,10 +73,6 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Print Gardener OIDC vars
-        env:
-          GARDENER_SHOOT_API_SERVER: ${{ vars[format('GARDENER_SHOOT_API_SERVER_{0}', steps.cluster.outputs.suffix)] }}
-          GARDENER_CA_DISCOVERY_URL: ${{ vars[format('GARDENER_CA_DISCOVERY_URL_{0}', steps.cluster.outputs.suffix)] }}
-          GARDENER_OIDC_AUDIENCE: ${{ vars[format('GARDENER_OIDC_AUDIENCE_{0}', steps.cluster.outputs.suffix)] }}
         run: |
           echo "cluster: ${{ inputs.cluster }}"
           echo "server: ${GARDENER_SHOOT_API_SERVER:-<unset>}"
@@ -87,9 +82,9 @@ jobs:
       - name: Authenticate to Gardener cluster via OIDC
         uses: gardener/cc-utils/.github/actions/kubernetes-auth@1e70b044f4d3305267a559e7ae74b4de57e1fdee
         with:
-          server: ${{ vars[format('GARDENER_SHOOT_API_SERVER_{0}', steps.cluster.outputs.suffix)] }}
-          server-ca-discovery-url: ${{ vars[format('GARDENER_CA_DISCOVERY_URL_{0}', steps.cluster.outputs.suffix)] }}
-          audience: ${{ vars[format('GARDENER_OIDC_AUDIENCE_{0}', steps.cluster.outputs.suffix)] }}
+          server: ${{ env.GARDENER_SHOOT_API_SERVER }}
+          server-ca-discovery-url: ${{ env.GARDENER_CA_DISCOVERY_URL }}
+          audience: ${{ env.GARDENER_OIDC_AUDIENCE }}
           # writes ./kubeconfig.yaml (default kubeconfig-path) using the short-lived OIDC token
 
       - name: Point KUBECONFIG at the authenticated kubeconfig
@@ -99,11 +94,9 @@ jobs:
         run: kubectl get namespace "$NAMESPACE"
 
       - name: Write .env for bootstrap.sh
-        env:
-          ENV_CONTENT: ${{ secrets[format('AI_TRUST_ENV_{0}', steps.cluster.outputs.suffix)] }}
         run: |
           umask 077
-          printf '%s' "$ENV_CONTENT" > .env
+          cp "k8s/env/${{ inputs.cluster }}/.env" .env
 
       - name: Bootstrap namespace/secrets/configmaps
         run: bash k8s/scripts/bootstrap.sh
@@ -125,15 +118,12 @@ jobs:
       - name: Derive ingress hostnames
         id: hosts
         run: |
-          set -a; source .env; set +a
           app_host=$(echo "$APP_PUBLIC_URL" | sed -E 's#^[a-zA-Z]+://##')
           keycloak_host=$(echo "$KEYCLOAK_PUBLIC_URL" | sed -E 's#^[a-zA-Z]+://##')
           minio_host=$(echo "${MINIO_PUBLIC_URL:-}" | sed -E 's#^[a-zA-Z]+://##')
           echo "app_host=${app_host}" >> "$GITHUB_OUTPUT"
           echo "keycloak_host=${keycloak_host}" >> "$GITHUB_OUTPUT"
           echo "minio_host=${minio_host}" >> "$GITHUB_OUTPUT"
-          echo "app_public_url=${APP_PUBLIC_URL}" >> "$GITHUB_OUTPUT"
-          echo "keycloak_public_url=${KEYCLOAK_PUBLIC_URL}" >> "$GITHUB_OUTPUT"
 
       - name: Clear any pending Helm state
         run: |
@@ -167,11 +157,6 @@ jobs:
       - name: Helm upgrade --install
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
-          APP_PUBLIC_URL: ${{ steps.hosts.outputs.app_public_url }}
-          KEYCLOAK_PUBLIC_URL: ${{ steps.hosts.outputs.keycloak_public_url }}
-          APP_HOST: ${{ steps.hosts.outputs.app_host }}
-          KEYCLOAK_HOST: ${{ steps.hosts.outputs.keycloak_host }}
-          MINIO_HOST: ${{ steps.hosts.outputs.minio_host }}
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         run: |
           owner="${GITHUB_REPOSITORY_OWNER,,}"
@@ -180,11 +165,11 @@ jobs:
             --set "image.tag=${IMAGE_TAG}"
             --set "appPublicUrl=${APP_PUBLIC_URL}"
             --set "keycloakPublicUrl=${KEYCLOAK_PUBLIC_URL}"
-            --set "ingress.host=${APP_HOST}"
-            --set "ingress.keycloakHost=${KEYCLOAK_HOST}"
+            --set "ingress.host=${{ steps.hosts.outputs.app_host }}"
+            --set "ingress.keycloakHost=${{ steps.hosts.outputs.keycloak_host }}"
           )
-          if [[ -n "$MINIO_HOST" ]]; then
-            set_args+=(--set "ingress.minioHost=${MINIO_HOST}")
+          if [[ -n "${{ steps.hosts.outputs.minio_host }}" ]]; then
+            set_args+=(--set "ingress.minioHost=${{ steps.hosts.outputs.minio_host }}")
           fi
           if [[ -n "$GHCR_PULL_TOKEN" ]]; then
             set_args+=(--set "imagePullSecrets[0].name=ghcr-pull-secret")
