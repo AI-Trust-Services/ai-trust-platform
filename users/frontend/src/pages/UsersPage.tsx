@@ -125,19 +125,14 @@ export default function UsersPage() {
     <div className="mx-auto max-w-[1200px] px-6 py-6">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Users &amp; Roles</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Manage platform users and role assignments</p>
+          <p className="text-sm text-muted-foreground">
+            Manage platform users and role assignments
+            {total > 0 && <span className="ml-1 text-foreground font-medium">· {total} total</span>}
+          </p>
         </div>
         <Button onClick={() => setInviteOpen(true)}>
           <Plus className="size-4" /> Invite User
         </Button>
-      </div>
-
-      <div className="mb-4 flex flex-wrap gap-4">
-        <Card className="min-w-[160px] p-4">
-          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total Users</div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{total}</div>
-        </Card>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -184,59 +179,71 @@ export default function UsersPage() {
                 <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">No users found.</TableCell>
               </TableRow>
             )}
-            {users.map((u: UserSummary) => (
-              <TableRow key={u.id} className="cursor-pointer" onClick={() => openDetail(u.id)}>
-                <TableCell>
-                  <div className="font-medium">{u.firstName} {u.lastName}</div>
-                  <div className="text-xs text-muted-foreground">{u.email}</div>
-                </TableCell>
-                <TableCell className="text-muted-foreground">{u.username}</TableCell>
-                <TableCell>
-                  {u.roles.length === 0
-                    ? <span className="text-muted-foreground">—</span>
-                    : (
-                      <div className="flex flex-wrap gap-1">
-                        {u.roles.map(r => (
-                          <Badge key={r} variant="secondary">{ROLE_LABELS[r] ?? r}</Badge>
-                        ))}
+            {users.map((u: UserSummary) => {
+              const initials = u.firstName && u.lastName
+                ? (u.firstName[0] + u.lastName[0]).toUpperCase()
+                : (u.username || "?").slice(0, 2).toUpperCase();
+              return (
+                <TableRow key={u.id} className="cursor-pointer" onClick={() => openDetail(u.id)}>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">
+                        {initials}
+                      </span>
+                      <div>
+                        <div className="font-medium text-foreground">{u.firstName} {u.lastName}</div>
+                        <div className="text-xs text-muted-foreground">{u.email}</div>
                       </div>
-                    )
-                  }
-                </TableCell>
-                <TableCell>
-                  <span
-                    className={cn(
-                      "inline-block rounded-md px-2 py-0.5 text-xs font-medium",
-                      u.enabled
-                        ? "bg-[var(--success-bg)] text-[var(--success-fg)]"
-                        : "bg-muted text-muted-foreground",
-                    )}
-                  >
-                    {u.enabled ? "Active" : "Inactive"}
-                  </span>
-                </TableCell>
-                <TableCell onClick={e => e.stopPropagation()}>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="size-8" aria-label="Actions" disabled={deleting}>
-                        <MoreHorizontal className="size-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => openDetail(u.id)}>
-                        View details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={() => setDeleteTarget(u)}
-                      >
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{u.username}</TableCell>
+                  <TableCell>
+                    {u.roles.length === 0
+                      ? <span className="text-muted-foreground">—</span>
+                      : (
+                        <div className="flex flex-wrap gap-1">
+                          {u.roles.map(r => (
+                            <Badge key={r} variant="secondary">{ROLE_LABELS[r] ?? r}</Badge>
+                          ))}
+                        </div>
+                      )
+                    }
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={cn(
+                        "inline-block rounded-md px-2 py-0.5 text-xs font-medium",
+                        u.enabled
+                          ? "bg-[var(--success-bg)] text-[var(--success-fg)]"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {u.enabled ? "Active" : "Inactive"}
+                    </span>
+                  </TableCell>
+                  <TableCell onClick={e => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="size-8" aria-label="Actions" disabled={deleting}>
+                          <MoreHorizontal className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => openDetail(u.id)}>
+                          View details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() => setDeleteTarget(u)}
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </Card>
