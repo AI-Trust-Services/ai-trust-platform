@@ -6,6 +6,7 @@ from app.schemas.ai_system import (
     ClassificationResult,
     RationaleItem,
     IntakeResponse,
+    FieldConfirmationPatch,
     VALID_LIFECYCLES,
     VALID_ROLES,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "ClassificationResult",
     "RationaleItem",
     "IntakeResponse",
+    "FieldConfirmationPatch",
     "VALID_LIFECYCLES",
     "VALID_ROLES",
     "ChatMessage",
