@@ -1,8 +1,9 @@
 import type { TierKey, LifecycleKey, ModelType } from "../types";
 import { TIER_META, LIFECYCLE_LABELS, fmtDate } from "../utils";
 
-export function TierBadge({ tier }: { tier: TierKey }) {
-  const meta = TIER_META[tier] || { label: tier, cls: "badge-minimal" };
+export function TierBadge({ tier, workflowStatus }: { tier: TierKey; workflowStatus?: string }) {
+  const effectiveTier = workflowStatus === "draft" ? "pending" : tier;
+  const meta = TIER_META[effectiveTier] || { label: tier, cls: "badge-minimal" };
   return <span className={`badge ${meta.cls}`}>{meta.label}</span>;
 }
 

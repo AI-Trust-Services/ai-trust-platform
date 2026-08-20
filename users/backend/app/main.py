@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from ai_trust_logging import correlation_id_var, get_logger
 from app.routers import roles, users, permissions, iam, custom_roles
+from app.routers.users import internal_router
 
 logger = get_logger(__name__)
 
@@ -65,6 +66,7 @@ app.include_router(roles.router, prefix="/v1")
 app.include_router(permissions.router, prefix="/v1")
 app.include_router(iam.router, prefix="/v1")
 app.include_router(custom_roles.router, prefix="/v1")
+app.include_router(internal_router)
 
 
 @app.get("/health")

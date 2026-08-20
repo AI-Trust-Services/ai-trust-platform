@@ -1,4 +1,4 @@
-export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal";
+export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal" | "pending";
 export type LifecycleKey = "development" | "testing" | "conformity" | "market" | "post-market" | "decommissioned";
 export type OrgRole = "provider" | "deployer" | "importer" | "distributor";
 export type SystemType = "application" | "model" | "component" | "service";
@@ -26,6 +26,9 @@ export interface AISystem {
   model_id: string | null;
   created_at: string;
   updated_at: string;
+  workflow_status: string;
+  assignee_username: string | null;
+  compliance_officer_username: string | null;
   is_gpai: boolean;
   training_compute_flops: number;
   is_chatbot: boolean;
@@ -47,6 +50,21 @@ export interface AISystem {
   is_law_enforcement: boolean;
   is_migration: boolean;
   is_judicial_admin: boolean;
+}
+
+export interface WorkflowStep {
+  id: string;
+  step: string;
+  actor_username: string;
+  assignee_username: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface UserSummary {
+  username: string;
+  firstName: string;
+  lastName: string;
 }
 
 export interface ModelCard {

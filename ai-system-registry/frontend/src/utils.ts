@@ -19,6 +19,7 @@ export const TIER_META: Record<TierKey, { label: string; cls: string }> = {
   "gpai-standard": { label: "GPAI Standard", cls: "badge-gpai-standard" },
   "limited":       { label: "Limited",       cls: "badge-limited" },
   "minimal":       { label: "Minimal",       cls: "badge-minimal" },
+  "pending":       { label: "Not classified", cls: "badge-pending" },
 };
 
 export const LIFECYCLE_LABELS: Record<LifecycleKey, string> = {

@@ -27,6 +27,15 @@ import httpx
 os.environ.setdefault("OPENFGA_URL", "http://localhost:8080")
 os.environ.setdefault("OPENFGA_STORE_ID", "test-store-id")
 
+# email_sender reads these fail-fast at import time. Notifications themselves are
+# stubbed out in e2e_setup, so the values only need to be present, not valid.
+os.environ.setdefault("SMTP_HOST", "localhost")
+os.environ.setdefault("SMTP_PORT", "25")
+os.environ.setdefault("SMTP_FROM", "noreply@example.com")
+os.environ.setdefault("SMTP_SSL", "false")
+os.environ.setdefault("SMTP_STARTTLS", "false")
+os.environ.setdefault("USERS_BACKEND_URL", "http://users-backend:8008")
+
 _PG_USER = os.environ.get("POSTGRES_USER", "postgres")
 _PG_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "postgres")
 _PG_HOST = "localhost"
@@ -108,6 +117,14 @@ def e2e_setup():
 
     _fga.check = _always_allowed
     app.dependency_overrides[get_current_user] = lambda: "test-user"
+
+    # Stub out email notifications — no SMTP server or users-backend in e2e.
+    from app import email_sender
+
+    async def _noop_notify(*_a, **_kw) -> None:
+        return None
+
+    email_sender.notify = _noop_notify
 
 
 @pytest.fixture(autouse=True)

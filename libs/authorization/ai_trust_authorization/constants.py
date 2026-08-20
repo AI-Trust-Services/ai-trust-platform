@@ -9,6 +9,7 @@ See RELATION_BY_PERMISSION below for the exact mapping.
 # Systems
 SYSTEMS_READ = "systems:read"
 SYSTEMS_WRITE = "systems:write"
+SYSTEMS_APPROVE = "systems:approve"
 
 # Assessments
 ASSESSMENTS_READ = "assessments:read"
@@ -35,6 +36,7 @@ IAM_MANAGE = "iam:manage"
 ALL_PERMISSIONS = [
     SYSTEMS_READ,
     SYSTEMS_WRITE,
+    SYSTEMS_APPROVE,
     ASSESSMENTS_READ,
     ASSESSMENTS_WRITE,
     ASSESSMENTS_APPROVE,
@@ -52,6 +54,7 @@ ALL_PERMISSIONS = [
 RELATION_BY_PERMISSION = {
     SYSTEMS_READ: "can_read_systems",
     SYSTEMS_WRITE: "can_write_systems",
+    SYSTEMS_APPROVE: "can_approve_systems",
     ASSESSMENTS_READ: "can_read_assessments",
     ASSESSMENTS_WRITE: "can_write_assessments",
     ASSESSMENTS_APPROVE: "can_approve_assessments",
@@ -80,12 +83,15 @@ ROLE_PERMISSIONS = {
     ],
     "ai_compliance_officer": [
         SYSTEMS_READ,
+        SYSTEMS_APPROVE,
         ASSESSMENTS_READ, ASSESSMENTS_WRITE,
         EVIDENCE_READ, EVIDENCE_WRITE, EVIDENCE_APPROVE,
         ALERTS_READ, ALERTS_HANDLE,
     ],
     "business_owner": [
         SYSTEMS_READ,
+        SYSTEMS_WRITE,
+        SYSTEMS_APPROVE,
         ASSESSMENTS_READ, ASSESSMENTS_APPROVE,
         EVIDENCE_READ, EVIDENCE_APPROVE,
         ALERTS_READ,

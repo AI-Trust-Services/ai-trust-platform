@@ -212,11 +212,16 @@ async def db_session():
 # ---------------------------------------------------------------------------
 
 async def create_system(name: str = "Test System", tier: str = "minimal", **kwargs) -> dict:
-    """Insert an AI system directly into the DB (compliance app has no intake endpoint)."""
+    """Insert an AI system directly into the DB (compliance app has no intake endpoint).
+
+    Defaults ``workflow_status`` to ``approved`` because assessments can only be created
+    for approved systems — pass ``workflow_status=`` explicitly to test the guard.
+    """
     from ai_trust_persistence.models import AISystem
     from sqlalchemy.ext.asyncio import AsyncSession
     from app.ids import new_id
 
+    kwargs.setdefault("workflow_status", "approved")
     async with AsyncSession(_test_engine) as session:
         row = AISystem(id=new_id("SYS"), name=name, tier=tier, **kwargs)
         session.add(row)
