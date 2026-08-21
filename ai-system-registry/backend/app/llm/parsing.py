@@ -62,9 +62,14 @@ async def parse_json_response(text: str, *, task: str = "parse") -> dict[str, An
             "content": f"Convert the following into a single valid JSON object and return ONLY that object:\n\n{text}",
         },
     ]
+    repaired: dict | None = None
     try:
         repaired = await chat(repair_messages, json_mode=True, task=f"{task}_repair", max_tokens=1024)
         return _extract_json(repaired["text"])
     except Exception as exc:
-        logger.error("llm.parse_failed", extra={"task": task, "error": str(exc)})
+        logger.error("llm.parse_failed", extra={
+            "task": task,
+            "error": str(exc),
+            "repaired_snippet": repaired["text"][:200] if repaired else "(no response)",
+        })
         raise LLMParseError(f"Could not parse LLM response for task '{task}'") from exc
