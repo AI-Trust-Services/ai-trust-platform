@@ -181,7 +181,9 @@ async def _chat_external(messages: list[dict], model: str, max_tokens: int) -> d
                     extra={"attempt": attempt + 1, "wait_s": wait, "error": str(exc)},
                 )
                 await asyncio.sleep(wait)
-    raise last_exc
+            else:
+                raise
+    raise last_exc  # unreachable, satisfies type checkers
 
 
 # ---------------------------------------------------------------------------
