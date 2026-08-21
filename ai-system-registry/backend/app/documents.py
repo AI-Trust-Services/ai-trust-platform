@@ -26,6 +26,7 @@ ALL_SUPPORTED = TEXT_EXTENSIONS | PDF_EXTENSIONS | WORD_EXTENSIONS | PPTX_EXTENS
 
 MAX_TEXT_LENGTH = 15000
 MAX_IMAGE_SIDE = 1568  # vision-model recommended long side
+MAX_FILE_BYTES = 20 * 1024 * 1024  # 20 MB application-level cap (nginx allows 50 MB)
 
 _MEDIA_TYPES = {
     ".png": "image/png",
@@ -115,6 +116,11 @@ def _parse_image(content: bytes, ext: str) -> tuple[str, str]:
 
 def parse_document(filename: str, content: bytes) -> ParsedDoc:
     """Parse ``content`` by extension. Raises DocumentParseError on unsupported/failed parse."""
+    if len(content) > MAX_FILE_BYTES:
+        raise DocumentParseError(
+            f"File too large: {len(content) / (1024 * 1024):.1f} MB (max {MAX_FILE_BYTES // (1024 * 1024)} MB)"
+        )
+
     ext = _ext(filename)
     if ext not in ALL_SUPPORTED:
         raise DocumentParseError(
