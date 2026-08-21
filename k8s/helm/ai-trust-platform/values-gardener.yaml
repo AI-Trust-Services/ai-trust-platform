@@ -13,7 +13,12 @@ image:
 
 oauthProxy:
   serviceType: ClusterIP # reached via the Ingress below instead of a NodePort
-  cookieSecure: true # TLS terminated by Traefik Ingress in front of it
+  # cookieSecure is intentionally false: TLS termination is not yet configured.
+  # This deployment carries no sensitive production data — it is a dev/demo
+  # environment. TLS via cert-manager + letsencrypt-prod (ClusterIssuer in
+  # k8s/gardener_init/cert-manager-issuer.yaml) is the intended end-state;
+  # set cookieSecure: true and enable ingress.tls once DNS and certs are in place.
+  cookieSecure: false
 
 keycloak:
   serviceType: ClusterIP # reached via the Ingress below instead of a NodePort
@@ -22,6 +27,11 @@ ingress:
   enabled: true
   className: traefik
   tls:
+    # TLS disabled — plain HTTP only. No sensitive production data is in transit.
+    # To enable: set enabled: true, ensure ingress.tls.secretName is set in
+    # values.yaml (currently "ai-trust-tls"), and add the annotation:
+    #   cert-manager.io/cluster-issuer: letsencrypt-prod
+    # cert-manager + ClusterIssuer are already provisioned via k8s/gardener_init/.
     enabled: false
     selfSigned: false
   annotations: {}
