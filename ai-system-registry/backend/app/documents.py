@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 TEXT_EXTENSIONS = {".txt", ".md", ".markdown"}
 PDF_EXTENSIONS = {".pdf"}
-WORD_EXTENSIONS = {".doc", ".docx"}
+WORD_EXTENSIONS = {".docx"}  # python-docx only supports OOXML (.docx); legacy .doc is not supported
 PPTX_EXTENSIONS = {".ppt", ".pptx"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 ALL_SUPPORTED = TEXT_EXTENSIONS | PDF_EXTENSIONS | WORD_EXTENSIONS | PPTX_EXTENSIONS | IMAGE_EXTENSIONS

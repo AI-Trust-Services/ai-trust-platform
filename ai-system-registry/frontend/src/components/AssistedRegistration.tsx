@@ -292,7 +292,7 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
                     ref={fileRef}
                     type="file"
                     style={{ display: "none" }}
-                    accept=".txt,.md,.pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp"
+                    accept=".txt,.md,.pdf,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp"
                     onChange={handleUpload}
                   />
                   <button
