@@ -3,11 +3,12 @@
 Public surface:
   - ``chat`` — provider-dispatched LLM call with a uniform return shape.
   - ``parse_json_response`` / ``LLMParseError`` — JSON parsing with repair retry.
+  - ``LLMResponseError`` — raised when the external provider returns an unexpected shape.
   - prompt builders — owner: ``build_turn_messages``, ``build_doc_extract_messages``,
     ``build_infer_flags_messages``; engineer: ``build_engineer_turn_messages``,
     ``build_engineer_doc_extract_messages``.
 """
-from app.llm.client import LLM_EMBED_MODEL, LLM_MODEL, LLM_VISION_MODEL, chat
+from app.llm.client import LLM_EMBED_MODEL, LLM_MODEL, LLM_VISION_MODEL, LLMResponseError, chat
 from app.llm.parsing import LLMParseError, parse_json_response
 from app.llm.prompts import (
     REQUIRED_FIELD_KEYS,
@@ -28,6 +29,7 @@ __all__ = [
     "LLM_VISION_MODEL",
     "parse_json_response",
     "LLMParseError",
+    "LLMResponseError",
     "build_turn_messages",
     "build_doc_extract_messages",
     "build_infer_flags_messages",

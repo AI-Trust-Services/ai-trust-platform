@@ -24,6 +24,10 @@ from ai_trust_logging import get_logger
 
 logger = get_logger(__name__)
 
+
+class LLMResponseError(Exception):
+    """Raised when the external provider returns an unexpected response shape."""
+
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "stub")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://ollama:11434/v1")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "ollama")
@@ -150,8 +154,13 @@ async def _chat_external(messages: list[dict], model: str, max_tokens: int) -> d
                 )
             resp.raise_for_status()
             data = resp.json()
+            content = data.get("content")
+            if not isinstance(content, list) or not content:
+                raise LLMResponseError(
+                    f"External provider returned unexpected shape — keys: {list(data.keys())}"
+                )
             return {
-                "text": data["content"][0]["text"] if data.get("content") else "",
+                "text": content[0].get("text", ""),
                 "input_tokens": data.get("usage", {}).get("input_tokens", 0),
                 "output_tokens": data.get("usage", {}).get("output_tokens", 0),
                 "finish_reason": data.get("stop_reason") or "end_turn",
