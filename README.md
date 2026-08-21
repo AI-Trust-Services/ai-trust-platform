@@ -87,6 +87,23 @@ On every push to `main`, deployment to the `ai-trust-main` Gardener cluster is *
 
 **Manual dispatch** is also available — trigger the **Build and Push Images** workflow from the Actions tab with optional `branch` (default: `main`) and `gardener_cluster` (default: `ai-trust-main`, or `sr-test`, or `none` to skip deploy) inputs. This is useful for deploying feature branches to a specific cluster before merging.
 
+```bash
+# Deploy main branch to ai-trust-main (default)
+gh workflow run build-push.yml --repo AI-Trust-Services/ai-trust-platform --ref main
+
+# Deploy a feature branch to ai-trust-main
+gh workflow run build-push.yml --repo AI-Trust-Services/ai-trust-platform \
+  --ref <branch> -f branch=<branch> -f gardener_cluster=ai-trust-main
+
+# Deploy a feature branch to sr-test
+gh workflow run build-push.yml --repo AI-Trust-Services/ai-trust-platform \
+  --ref <branch> -f branch=<branch> -f gardener_cluster=sr-test
+
+# Build only, skip deploy
+gh workflow run build-push.yml --repo AI-Trust-Services/ai-trust-platform \
+  --ref <branch> -f gardener_cluster=none
+```
+
 ## Support, Feedback, Contributing
 
 This project is open to feature requests/suggestions, bug reports etc. via [GitHub issues](https://github.com/AI-Trust-Services/ai-trust-platform/issues). Contribution and feedback are encouraged and always welcome. For more information about how to contribute, the project structure, as well as additional contribution information, see our [Contribution Guidelines](CONTRIBUTING.md).
