@@ -1,4 +1,19 @@
--r requirements.txt
+# PyPI deps only — the editable libs (persistence/logging/authorization) are
+# installed from their real relative paths by `make setup`, not from here.
+# (The service requirements.txt pins them at Docker paths `/app/libs/...`,
+# which are not valid locally.)
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+httpx==0.28.1
+aiosmtplib==3.0.2
+python-multipart==0.0.20
+openai==1.51.0
+pypdf==5.1.0
+python-docx==1.1.2
+python-pptx==1.0.2
+Pillow==11.0.0
+asyncpg
 pytest==9.0.3
 pytest-asyncio==1.4.0
 httpx==0.28.1
