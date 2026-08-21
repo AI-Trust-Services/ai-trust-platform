@@ -8,7 +8,7 @@ Public surface:
     ``build_infer_flags_messages``; engineer: ``build_engineer_turn_messages``,
     ``build_engineer_doc_extract_messages``.
 """
-from app.llm.client import LLM_EMBED_MODEL, LLM_MODEL, LLM_VISION_MODEL, LLMResponseError, chat
+from app.llm.client import LLM_MODEL, LLM_VISION_MODEL, LLMResponseError, chat
 from app.llm.parsing import LLMParseError, parse_json_response
 from app.llm.prompts import (
     REQUIRED_FIELD_KEYS,
@@ -25,7 +25,6 @@ from app.llm.prompts import (
 __all__ = [
     "chat",
     "LLM_MODEL",
-    "LLM_EMBED_MODEL",
     "LLM_VISION_MODEL",
     "parse_json_response",
     "LLMParseError",

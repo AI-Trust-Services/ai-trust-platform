@@ -630,7 +630,7 @@ services:
   # Only starts under the `ollama` profile so stub/CI users aren't forced to
   # download multi-GB models. To use, set LLM_PROVIDER=ollama in .env and run:
   #   docker compose --profile ollama up -d
-  # The model is swappable via OLLAMA_CHAT_MODEL / OLLAMA_EMBED_MODEL / LLM_VISION_MODEL in .env — the puller
+  # The model is swappable via LLM_MODEL / LLM_VISION_MODEL in .env — the puller
   # and the registry backend read the same vars (single source of truth). The
   # registry backend reaches it at http://ollama:11434/v1 (its LLM_BASE_URL default).
   # ---------------------------------------------------------------------------
@@ -659,8 +659,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        ollama pull ${OLLAMA_CHAT_MODEL:-llama3.2} &&
-        ollama pull ${OLLAMA_EMBED_MODEL:-nomic-embed-text} &&
+        ollama pull ${LLM_MODEL:-llama3.2} &&
         ollama pull ${LLM_VISION_MODEL:-llama3.2-vision}
     restart: "no"
 

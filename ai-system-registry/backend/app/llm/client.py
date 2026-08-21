@@ -32,7 +32,6 @@ LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "stub")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://ollama:11434/v1")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "ollama")
 LLM_MODEL = os.environ.get("LLM_MODEL", "llama3.2")
-LLM_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 LLM_VISION_MODEL = os.environ.get("LLM_VISION_MODEL", "llama3.2-vision")
 
 AI_CLIENT_ID = os.environ.get("AI_CLIENT_ID")
