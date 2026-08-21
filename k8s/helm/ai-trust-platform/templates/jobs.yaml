@@ -165,6 +165,6 @@ spec:
             - /bin/sh
             - -c
             - |
-              ollama pull "${LLM_MODEL:-qwen2.5:7b}" &&
+              ollama pull "${LLM_MODEL:-llama3.2}" &&
               ollama pull "${LLM_VISION_MODEL:-llama3.2-vision}"
 {{- end }}
