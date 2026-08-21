@@ -1,0 +1,25 @@
+{
+  "name": "HireFilter",
+  "version": "1.4",
+  "description": "AI-powered CV screening and candidate ranking system for high-volume recruitment. Extracts structured data from CVs via NLP and ranks candidates against job descriptions.",
+  "developer_org": "TalentStream Software GmbH",
+  "annex_iii_category": "employment",
+  "annex_iii_point": "4a",
+  "intended_purpose": "CV screening and candidate ranking for high-volume recruitment shortlisting",
+  "intended_users": ["HR managers", "talent acquisition specialists", "hiring managers"],
+  "deployment_context": "SaaS multi-tenant, EU corporate clients, GDPR lawful basis: legitimate interest, DPIA completed",
+  "data_inputs": [
+    "CV text (unstructured)",
+    "cover letter text",
+    "job description text",
+    "ATS profile data",
+    "historical hiring decisions (training only)"
+  ],
+  "ai_techniques": [
+    "NLP",
+    "named entity recognition",
+    "transformer-based NER (spaCy)",
+    "gradient boosting (LightGBM)",
+    "sentence embeddings (sentence-transformers)"
+  ]
+}

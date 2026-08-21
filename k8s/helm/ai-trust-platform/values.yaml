@@ -151,3 +151,13 @@ components:
     dependsOnJobs: [db-migrate, keycloak-provision, openfga-provision]
     dependsOnServices: []
     openfgaConfig: true
+
+  - name: risk-management
+    backendPort: 8009
+    rootPath: /api/risk-management
+    extraEnv:
+      OLLAMA_BASE_URL: http://host-gateway:11434
+      OLLAMA_MODEL: llama3.2
+    dependsOnJobs: []
+    dependsOnServices: []
+    openfgaConfig: false

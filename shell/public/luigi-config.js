@@ -35,6 +35,7 @@
     "controls": ["assessments:read", "assessments:write", "assessments:approve"],
     "evidence": ["evidence:read", "evidence:write", "evidence:approve"],
     "users": ["iam:manage"],
+    "risk-management": ["systems:read", "systems:write", "assessments:read", "assessments:write"],
   };
   const canSee = (seg) =>
     !PAGE_PERMISSIONS[seg] || PAGE_PERMISSIONS[seg].some((p) => permissions.includes(p));
@@ -110,6 +111,13 @@
         viewUrl: "http://localhost:8080/users/",
         navigationContext: "users",
         viewGroup: "users",
+      },
+      {
+        pathSegment: "risk-management",
+        label: "Risk Management",
+        icon: "risk",
+        viewUrl: "http://localhost:8080/risk-management/",
+        navigationContext: "risk-management",
       },
   ].filter((node) => canSee(node.pathSegment));
 

@@ -1,0 +1,321 @@
+{
+  "version": "0.1.0",
+  "last_updated": "2025-01-01",
+  "mitigations": [
+    {
+      "id": "MIT-001",
+      "title": "Bias audit and fairness evaluation pre-deployment",
+      "description": "Conduct a structured bias audit before deployment, evaluating model performance disaggregated by protected groups using fairness metrics such as demographic parity, equalized odds, and calibration.",
+      "hierarchy_level": "reduce",
+      "applicable_risk_categories": ["bias"],
+      "implementation_guidance": "Split evaluation dataset by protected group proxies. Compute demographic parity gap, equalized odds gap, and calibration by subgroup. Set and document acceptable thresholds. Fail deployment if thresholds are exceeded.",
+      "source": "NIST AI RMF MAP 1.5 / ISO 42001 §8.4"
+    },
+    {
+      "id": "MIT-002",
+      "title": "Remove or suppress proxy variables correlated with protected attributes",
+      "description": "Identify and remove or suppress features that are highly correlated with protected attributes (e.g. postal code, surname, school name) to reduce indirect discrimination.",
+      "hierarchy_level": "eliminate",
+      "applicable_risk_categories": ["bias"],
+      "implementation_guidance": "Compute pairwise correlation between each feature and protected attribute proxies. Set a correlation threshold (e.g. Cramér's V > 0.3). Features exceeding threshold are either removed or transformed. Document the decision for each feature in the model card.",
+      "source": "EU AI Act Art. 10(2)(f) / NIST AI RMF GOVERN 6.1"
+    },
+    {
+      "id": "MIT-003",
+      "title": "Fairness-aware training with re-weighting or adversarial debiasing",
+      "description": "Apply in-training fairness techniques such as re-weighting underrepresented subgroups or adversarial debiasing to reduce bias at the model level.",
+      "hierarchy_level": "reduce",
+      "applicable_risk_categories": ["bias"],
+      "implementation_guidance": "Apply sample re-weighting inversely proportional to subgroup representation. Alternatively use adversarial training with a fairness adversary. Evaluate on held-out fairness benchmark after each approach. Document trade-offs with accuracy.",
+      "source": "NIST AI RMF MAP 1.5"
+    },
+    {
+      "id": "MIT-004",
+      "title": "Transparency notice to affected individuals",
+      "description": "Provide clear, plain-language explanations to individuals subject to automated decisions, including what data was used, what the system's output means, and how to contest the decision.",
+      "hierarchy_level": "inform",
+      "applicable_risk_categories": ["bias", "transparency"],
+      "implementation_guidance": "Draft a decision notice template. Include: what system was used, key factors, confidence level, right to request human review, complaint contact. Test comprehension with representative users.",
+      "source": "EU AI Act Art. 13 / GDPR Art. 22(3)"
+    },
+    {
+      "id": "MIT-005",
+      "title": "Implement SHAP or LIME explanations for individual decisions",
+      "description": "Integrate post-hoc explanation methods (SHAP values, LIME) into the inference pipeline to provide per-decision explanations to human operators.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["transparency"],
+      "implementation_guidance": "Compute SHAP values at inference time. Surface top-5 contributing features to the operator UI. Validate that explanations are faithful (not just plausible) using explanation faithfulness tests.",
+      "source": "EU AI Act Art. 13 / NIST AI RMF EXPLAIN"
+    },
+    {
+      "id": "MIT-006",
+      "title": "Mandatory human review for high-stakes or borderline decisions",
+      "description": "Require human review for all decisions meeting defined criteria: high-stakes individuals, borderline model scores, or cases flagged by the system as uncertain.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["transparency", "human_oversight"],
+      "implementation_guidance": "Define review triggers: score within X% of decision threshold, applicant belongs to flagged subgroup, system confidence below threshold. Route triggered cases to a review queue. Log all review outcomes.",
+      "source": "EU AI Act Art. 14 / GDPR Art. 22"
+    },
+    {
+      "id": "MIT-007",
+      "title": "Override mechanism with audit log",
+      "description": "Implement a structured override mechanism allowing human operators to reverse or modify automated decisions, with all overrides logged including the operator's stated reason.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["human_oversight"],
+      "implementation_guidance": "Build an override UI with mandatory reason field (free text or structured categories). Log: timestamp, operator ID, original decision, override decision, reason. Review override patterns monthly for systemic issues.",
+      "source": "EU AI Act Art. 14(4)"
+    },
+    {
+      "id": "MIT-008",
+      "title": "Human oversight training and procedure documentation",
+      "description": "Develop and deliver mandatory training for all operators on the system's capabilities, limitations, known biases, and the circumstances requiring human intervention.",
+      "hierarchy_level": "inform",
+      "applicable_risk_categories": ["human_oversight", "governance"],
+      "implementation_guidance": "Develop training module covering: what the system does and doesn't do, known failure modes, how to trigger manual review, override procedure, escalation path. Require sign-off. Refresh annually or after major model updates.",
+      "source": "EU AI Act Art. 13(3)(b) / NIST AI RMF GOVERN 5.2"
+    },
+    {
+      "id": "MIT-009",
+      "title": "Data Protection Impact Assessment (DPIA)",
+      "description": "Conduct a DPIA before deployment to identify and address privacy risks associated with the AI system's data processing activities.",
+      "hierarchy_level": "reduce",
+      "applicable_risk_categories": ["privacy"],
+      "implementation_guidance": "Engage DPO. Cover: data flows, legal basis, data minimisation, retention periods, sharing with third parties, data subject rights implementation. Document residual risks and mitigating controls. Review annually.",
+      "source": "GDPR Art. 35 / EU AI Act Art. 10"
+    },
+    {
+      "id": "MIT-010",
+      "title": "Data minimisation and feature selection review",
+      "description": "Review all input features and remove those not strictly necessary for the system's stated purpose, reducing exposure of personal data.",
+      "hierarchy_level": "eliminate",
+      "applicable_risk_categories": ["privacy", "data_quality"],
+      "implementation_guidance": "For each feature: document the purpose justification. Run ablation study to confirm feature contributes meaningfully to performance. Remove features that are not necessary and not contributing. Document decisions in model card.",
+      "source": "GDPR Art. 5(1)(c) / EU AI Act Art. 10(5)"
+    },
+    {
+      "id": "MIT-011",
+      "title": "Data subject rights implementation (access, erasure, portability)",
+      "description": "Implement technical mechanisms to support GDPR data subject rights: the right to access training data usage, right to erasure (including model re-training if necessary), and right to portability.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["privacy"],
+      "implementation_guidance": "Build a data subject request workflow. For access: log all uses of an individual's data. For erasure: implement machine unlearning or retrain with data removed. For portability: export decision history in machine-readable format.",
+      "source": "GDPR Art. 15-20 / EU AI Act Art. 10"
+    },
+    {
+      "id": "MIT-012",
+      "title": "Automated rights notice to data subjects",
+      "description": "Proactively inform individuals when their data is processed by an AI system making or informing significant decisions about them.",
+      "hierarchy_level": "inform",
+      "applicable_risk_categories": ["privacy"],
+      "implementation_guidance": "Add AI processing disclosure to privacy notice. For automated decisions under GDPR Art. 22: send individual notification at decision time. Include right to object and human review request process.",
+      "source": "GDPR Art. 13-14 / GDPR Art. 22"
+    },
+    {
+      "id": "MIT-013",
+      "title": "Training dataset bias audit and rebalancing",
+      "description": "Audit training data for representation gaps and historical biases, then apply rebalancing techniques (oversampling, undersampling, synthetic data generation) to improve coverage of underrepresented groups.",
+      "hierarchy_level": "reduce",
+      "applicable_risk_categories": ["data_quality", "bias"],
+      "implementation_guidance": "Profile dataset by available demographic signals. Identify groups with <5% representation. Apply SMOTE or similar for oversampling, or targeted data collection. Re-evaluate fairness metrics after rebalancing.",
+      "source": "EU AI Act Art. 10(2) / NIST AI RMF MAP 1.1"
+    },
+    {
+      "id": "MIT-014",
+      "title": "Data validation pipeline at inference time",
+      "description": "Implement automated validation of all input data at inference time to detect missing values, out-of-range inputs, and data format errors, with defined fallback behaviour when validation fails.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["data_quality"],
+      "implementation_guidance": "Define schema and value ranges for all inputs. Build validation layer that runs before model inference. For missing critical fields: reject with explanation. For non-critical: impute with documented strategy. Log all validation failures.",
+      "source": "EU AI Act Art. 15(1) / NIST AI RMF MEASURE 2.6"
+    },
+    {
+      "id": "MIT-015",
+      "title": "Data quality documentation and lineage tracking",
+      "description": "Document the provenance, collection methodology, and known limitations of all training and evaluation datasets to support conformity assessment and future audits.",
+      "hierarchy_level": "inform",
+      "applicable_risk_categories": ["data_quality"],
+      "implementation_guidance": "Create a dataset card for each training and evaluation dataset. Cover: source, collection date, collection method, known biases, preprocessing steps, version. Store in technical documentation file. Reference in model card.",
+      "source": "EU AI Act Art. 10(2) / Annex IV §2"
+    },
+    {
+      "id": "MIT-016",
+      "title": "Continuous performance monitoring with drift detection",
+      "description": "Deploy automated monitoring of model performance metrics in production to detect distribution shift and performance degradation, with alerting and defined response procedures.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["reliability"],
+      "implementation_guidance": "Monitor: prediction score distribution, input feature distributions, output label rates, error rates where ground truth is available. Set statistical thresholds for drift alerts. Define escalation: alert → human review → model retrain. Review monthly.",
+      "source": "EU AI Act Art. 9(2)(c) / NIST AI RMF MANAGE 4.1"
+    },
+    {
+      "id": "MIT-017",
+      "title": "Pre-defined performance metrics and minimum thresholds",
+      "description": "Define and document minimum acceptable performance thresholds for overall accuracy, per-subgroup accuracy, and fairness metrics before deployment, and use these as go/no-go criteria.",
+      "hierarchy_level": "reduce",
+      "applicable_risk_categories": ["reliability"],
+      "implementation_guidance": "Document thresholds in the risk management plan: overall accuracy ≥ X%, subgroup accuracy ≥ Y%, fairness gap ≤ Z%. Make thresholds binding go/no-go criteria. Log evaluation results against thresholds for each release.",
+      "source": "EU AI Act Art. 9(7) / NIST AI RMF MEASURE 2.5"
+    },
+    {
+      "id": "MIT-018",
+      "title": "Adversarial robustness testing",
+      "description": "Conduct adversarial robustness testing (red-teaming, adversarial input generation) to identify vulnerabilities that could be exploited by malicious actors to manipulate outputs.",
+      "hierarchy_level": "reduce",
+      "applicable_risk_categories": ["security"],
+      "implementation_guidance": "Run adversarial input generation (e.g. FGSM for continuous inputs, genetic algorithms for discrete inputs). Test for gradient-based attacks, boundary attacks, and decision-based attacks. Document vulnerabilities and apply input sanitisation or adversarial training.",
+      "source": "EU AI Act Art. 15(4) / NIST AI RMF MANAGE 2.4"
+    },
+    {
+      "id": "MIT-019",
+      "title": "Input sanitisation and anomaly detection",
+      "description": "Implement input sanitisation and anomaly detection at the API boundary to detect and reject inputs that are statistically anomalous or match known adversarial patterns.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["security"],
+      "implementation_guidance": "Define statistical bounds for each input feature. Flag or reject inputs outside 4-sigma range. Apply rate limiting and authentication on inference API. Log anomalous inputs for security review.",
+      "source": "EU AI Act Art. 15(4) / OWASP LLM01:2025"
+    },
+    {
+      "id": "MIT-020",
+      "title": "Security awareness training for operators",
+      "description": "Train operators to recognise social engineering attempts and adversarial manipulation scenarios, including how attackers might attempt to game the AI system.",
+      "hierarchy_level": "inform",
+      "applicable_risk_categories": ["security"],
+      "implementation_guidance": "Include in operator training: known adversarial scenarios for this system type, red flags in input data, reporting procedure for suspected manipulation. Run tabletop exercise annually.",
+      "source": "EU AI Act Art. 13(3)(b)"
+    },
+    {
+      "id": "MIT-021",
+      "title": "Calibrated confidence display to reduce automation bias",
+      "description": "Present model outputs with calibrated uncertainty estimates rather than just point predictions, helping operators understand when the system is uncertain and human judgement is more important.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["human_oversight"],
+      "implementation_guidance": "Calibrate model confidence scores using Platt scaling or isotonic regression. Display confidence intervals or uncertainty indicators in the operator UI. Train operators to treat low-confidence outputs with higher scepticism.",
+      "source": "EU AI Act Art. 14(4) / NIST AI RMF GOVERN 5.1"
+    },
+    {
+      "id": "MIT-022",
+      "title": "Mandatory human review for vulnerable group members",
+      "description": "Implement automatic routing of decisions affecting identified members of vulnerable groups (minors, people with disabilities, individuals in financial distress) for mandatory human review.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["vulnerable_groups", "human_oversight"],
+      "implementation_guidance": "Define vulnerable group flags in the applicant profile (e.g. age < 18, disability indicator, benefit recipient). Route all flagged cases to human review queue with priority. Log review completion rates for compliance reporting.",
+      "source": "EU AI Act Art. 9(9) / NIST AI RMF GOVERN 6.2"
+    },
+    {
+      "id": "MIT-023",
+      "title": "Specific impact assessment for minors and vulnerable groups",
+      "description": "Conduct a dedicated impact assessment analysing how the system's decisions affect minors and other vulnerable groups, and document additional safeguards.",
+      "hierarchy_level": "reduce",
+      "applicable_risk_categories": ["vulnerable_groups"],
+      "implementation_guidance": "As part of the DPIA or standalone assessment: identify all decision pathways that could affect vulnerable individuals. Analyse disproportionate impact. Define additional safeguards (e.g. stricter human review thresholds, lower confidence requirements for acceptance).",
+      "source": "EU AI Act Art. 9(9) / GDPR Art. 35"
+    },
+    {
+      "id": "MIT-024",
+      "title": "Vulnerable group rights disclosure",
+      "description": "Provide targeted, accessible information to vulnerable individuals about how the AI system affects them, their rights, and how to seek redress.",
+      "hierarchy_level": "inform",
+      "applicable_risk_categories": ["vulnerable_groups"],
+      "implementation_guidance": "Create plain-language (WCAG 3.0 reading level) versions of decision notices for individuals who may have literacy, cognitive, or language barriers. Offer alternative formats on request. Test comprehension with user groups.",
+      "source": "EU AI Act Art. 9(9) / GDPR Art. 12"
+    },
+    {
+      "id": "MIT-025",
+      "title": "Structured testing against pre-defined metrics pre-deployment",
+      "description": "Before each deployment, execute a structured test plan against documented performance metrics and thresholds, with sign-off from a nominated responsible person.",
+      "hierarchy_level": "reduce",
+      "applicable_risk_categories": ["reliability", "governance"],
+      "implementation_guidance": "Maintain a test plan document: test cases, metrics, thresholds, pass/fail criteria. Automate execution in CI/CD pipeline. Require sign-off from AI system owner for release. Archive test results in technical documentation.",
+      "source": "EU AI Act Art. 9(7) / Annex IV §5"
+    },
+    {
+      "id": "MIT-026",
+      "title": "Define and enforce scope of use policy",
+      "description": "Implement a formal scope-of-use policy defining the permitted use cases, populations, and geographies for the system, with technical and contractual controls to prevent out-of-scope use.",
+      "hierarchy_level": "eliminate",
+      "applicable_risk_categories": ["governance"],
+      "implementation_guidance": "Document permitted scope in system documentation and deployment agreements. Implement API access controls that restrict use to authorised deployers. Include out-of-scope use as contract violation. Monitor for scope violations via usage analytics.",
+      "source": "EU AI Act Art. 9(2) / Art. 25"
+    },
+    {
+      "id": "MIT-027",
+      "title": "Automated logging of all system inputs and outputs",
+      "description": "Implement automated, tamper-evident logging of all system inputs, outputs, and decision metadata to support post-hoc audits and regulatory inspections.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["governance"],
+      "implementation_guidance": "Log at minimum: timestamp, input features (pseudonymised), model version, output score, final decision, operator ID if human reviewed. Retain for minimum 3 years (or as required by sector regulation). Implement access controls and integrity checks on log storage.",
+      "source": "EU AI Act Art. 12 / Annex IV §7"
+    },
+    {
+      "id": "MIT-028",
+      "title": "Complete technical documentation per Annex IV",
+      "description": "Compile and maintain the technical documentation required by EU AI Act Annex IV, covering system description, development process, testing, risk management, and post-market monitoring.",
+      "hierarchy_level": "inform",
+      "applicable_risk_categories": ["governance"],
+      "implementation_guidance": "Use Annex IV as a checklist. Assign documentation owner. Set documentation review cadence (at minimum: before deployment, after significant updates). Store in version-controlled repository. Make available to market surveillance authorities on request.",
+      "source": "EU AI Act Art. 11 / Annex IV"
+    },
+    {
+      "id": "MIT-029",
+      "title": "Incident response plan for AI-related incidents",
+      "description": "Establish and test an incident response plan specifically covering AI system incidents and serious incidents as defined by EU AI Act Art. 73.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["governance"],
+      "implementation_guidance": "Define: incident severity levels for AI systems, detection triggers, response procedures, responsible persons, Art. 73 notification threshold and process. Run tabletop exercise. Review after every incident.",
+      "source": "EU AI Act Art. 73 / NIST AI RMF RESPOND 1.1"
+    },
+    {
+      "id": "MIT-030",
+      "title": "Accessible UI and alternative output formats",
+      "description": "Ensure all operator and user-facing interfaces meet WCAG 2.1 AA accessibility standards, and provide output in accessible formats for individuals with disabilities.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["accessibility"],
+      "implementation_guidance": "Conduct WCAG 2.1 AA audit of all UI components. Fix critical and serious violations before deployment. Provide text alternatives for all visual outputs. Support screen readers. Offer alternative contact channel for individuals unable to use the digital interface.",
+      "source": "EU Accessibility Act / EU AI Act Art. 9(9)"
+    },
+    {
+      "id": "MIT-031",
+      "title": "Standard Contractual Clauses for international data transfers",
+      "description": "Ensure all international transfers of personal data processed by the AI system are covered by appropriate GDPR transfer mechanisms (SCCs, adequacy decision, BCRs).",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["privacy"],
+      "implementation_guidance": "Map all data flows involving third-country transfers. Execute SCCs 2021 for each transfer. Conduct Transfer Impact Assessment for high-risk destinations. Document in DPIA. Review when adequacy decisions change.",
+      "source": "GDPR Chapter V / EU AI Act Art. 10"
+    },
+    {
+      "id": "MIT-032",
+      "title": "LLM output grounding and hallucination reduction",
+      "description": "For systems using large language models, implement retrieval-augmented generation (RAG) or output verification to reduce hallucination and ensure factual accuracy.",
+      "hierarchy_level": "reduce",
+      "applicable_risk_categories": ["reliability"],
+      "implementation_guidance": "Implement RAG with a curated, version-controlled knowledge base. Add fact-checking layer for high-stakes outputs. Define confidence threshold below which outputs are flagged for human review. Evaluate hallucination rate on test set.",
+      "source": "EU AI Act Art. 15(1) / OWASP LLM09:2025"
+    },
+    {
+      "id": "MIT-033",
+      "title": "Regular penetration testing and security audits",
+      "description": "Conduct regular penetration testing of the AI system's infrastructure and model endpoints to identify and remediate security vulnerabilities.",
+      "hierarchy_level": "reduce",
+      "applicable_risk_categories": ["security"],
+      "implementation_guidance": "Commission annual penetration test from an independent third party. Include: API endpoint security, authentication bypass, data exfiltration, model extraction attempts. Track and remediate findings within defined SLA. Document results in technical file.",
+      "source": "EU AI Act Art. 15(4) / ISO 27001"
+    },
+    {
+      "id": "MIT-034",
+      "title": "Periodic bias re-audit in production",
+      "description": "Conduct periodic bias audits of the system's actual decisions in production, not just pre-deployment evaluation, to detect bias that emerges from real-world usage patterns.",
+      "hierarchy_level": "mitigate",
+      "applicable_risk_categories": ["bias"],
+      "implementation_guidance": "Collect pseudonymised decision outcomes. Disaggregate by available demographic proxies. Run fairness metrics quarterly. If disparities exceed thresholds: trigger investigation and potential model update. Log results in technical documentation.",
+      "source": "EU AI Act Art. 9(2)(c) / NIST AI RMF MEASURE 2.11"
+    },
+    {
+      "id": "MIT-035",
+      "title": "Complaint and redress mechanism",
+      "description": "Establish a formal mechanism for individuals affected by the system's decisions to raise complaints and seek redress, with defined response times and escalation paths.",
+      "hierarchy_level": "inform",
+      "applicable_risk_categories": ["governance", "human_oversight"],
+      "implementation_guidance": "Create a complaints procedure document. Publish contact details. Define response SLA (e.g. acknowledge within 5 business days, resolve within 30). Escalation to human decision-maker for all substantive complaints. Report complaint volumes and outcomes annually.",
+      "source": "EU AI Act Art. 85 / GDPR Art. 77"
+    }
+  ]
+}

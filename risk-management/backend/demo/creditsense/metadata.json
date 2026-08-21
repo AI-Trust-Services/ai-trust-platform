@@ -1,0 +1,26 @@
+{
+  "name": "CreditSense",
+  "version": "2.1",
+  "description": "AI-assisted creditworthiness scoring system for retail loan applications. Produces a numerical score (0-1000) and approve/refer/decline recommendation for loan officers.",
+  "developer_org": "Acme Financial Technologies Ltd.",
+  "annex_iii_category": "essential_services",
+  "annex_iii_point": "5b",
+  "intended_purpose": "Automated creditworthiness scoring for retail consumer loan applications",
+  "intended_users": ["loan officers", "branch managers", "credit risk analysts"],
+  "deployment_context": "Internal REST API, browser-based dashboard, UK retail banking, FCA regulation, EU AI Act",
+  "data_inputs": [
+    "income history",
+    "employment status and tenure",
+    "existing debt obligations",
+    "transaction behaviour (24 months)",
+    "credit bureau data",
+    "postcode",
+    "loan application details"
+  ],
+  "ai_techniques": [
+    "gradient boosting",
+    "XGBoost",
+    "SHAP explainability",
+    "isotonic calibration"
+  ]
+}

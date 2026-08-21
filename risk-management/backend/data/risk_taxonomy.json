@@ -1,0 +1,412 @@
+{
+  "version": "0.1.0",
+  "last_updated": "2025-01-01",
+  "sources": [
+    {"name": "EU AI Act", "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689"},
+    {"name": "NIST AI RMF 1.0", "url": "https://airc.nist.gov/RMF_Overview"},
+    {"name": "MIT AI Risk Repository", "url": "https://airisk.mit.edu/"},
+    {"name": "OWASP LLM Top 10 2025", "url": "https://owasp.org/www-project-top-10-for-large-language-model-applications/"}
+  ],
+  "risks": [
+    {
+      "id": "TAX-001",
+      "title": "Algorithmic bias and discrimination",
+      "category": "bias",
+      "description": "The AI system may produce outputs that systematically disadvantage individuals or groups based on protected characteristics such as race, gender, age, disability, or socioeconomic status, either directly or via proxy variables.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "justice"],
+      "default_severity": "high",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Fundamental rights risk", "identifier": "Art. 10(2)(f)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "BIAS", "identifier": "GOVERN 6.1"},
+        {"taxonomy": "MIT_AIRR", "category": "Discrimination / toxicity", "identifier": "2.5"},
+        {"taxonomy": "OWASP_LLM", "category": "Training Data Poisoning", "identifier": "LLM03:2025"}
+      ],
+      "keywords": ["bias", "discrimination", "fairness", "disparate impact", "protected attribute", "demographic", "race", "gender", "ethnicity", "age"],
+      "affects_vulnerable_groups": true,
+      "common_vulnerable_groups": ["ethnic minorities", "women", "people with disabilities", "elderly", "low-income individuals"]
+    },
+    {
+      "id": "TAX-002",
+      "title": "Proxy discrimination via correlated variables",
+      "category": "bias",
+      "description": "Even when protected attributes are excluded as direct inputs, the system may learn discriminatory patterns from variables that are statistically correlated with protected characteristics (e.g. postal code as a proxy for ethnicity).",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement"],
+      "default_severity": "high",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Fundamental rights risk", "identifier": "Art. 10(2)(f)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "BIAS", "identifier": "MAP 1.5"},
+        {"taxonomy": "MIT_AIRR", "category": "Discrimination / toxicity", "identifier": "2.6"}
+      ],
+      "keywords": ["proxy", "correlation", "postal code", "zip code", "neighbourhood", "indirect discrimination", "redlining"],
+      "affects_vulnerable_groups": true,
+      "common_vulnerable_groups": ["ethnic minorities", "low-income individuals", "residents of deprived areas"]
+    },
+    {
+      "id": "TAX-003",
+      "title": "Lack of model explainability and transparency",
+      "category": "transparency",
+      "description": "Decision-makers and affected individuals cannot understand why the AI system produced a particular output, making it impossible to meaningfully contest decisions or identify errors.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "justice", "critical_infrastructure"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Transparency obligation", "identifier": "Art. 13"},
+        {"taxonomy": "NIST_AI_RMF", "category": "EXPLAIN", "identifier": "MANAGE 2.2"},
+        {"taxonomy": "MIT_AIRR", "category": "Lack of transparency", "identifier": "3.1"},
+        {"taxonomy": "OWASP_LLM", "category": "Overreliance", "identifier": "LLM09:2025"}
+      ],
+      "keywords": ["black box", "explainability", "interpretability", "transparency", "SHAP", "LIME", "feature importance", "opacity"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-004",
+      "title": "Insufficient human oversight and override capability",
+      "category": "human_oversight",
+      "description": "The system does not provide adequate mechanisms for human operators to monitor, intervene in, or override automated decisions, as required by Art. 14 of the EU AI Act.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "justice", "biometric", "critical_infrastructure"],
+      "default_severity": "high",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Human oversight", "identifier": "Art. 14"},
+        {"taxonomy": "NIST_AI_RMF", "category": "GOVERN", "identifier": "GOVERN 1.4"},
+        {"taxonomy": "MIT_AIRR", "category": "Human-AI interaction failure", "identifier": "4.2"}
+      ],
+      "keywords": ["human oversight", "human-in-the-loop", "override", "review", "audit", "accountability", "automation bias"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-005",
+      "title": "Data privacy and unlawful processing of personal data",
+      "category": "privacy",
+      "description": "The system processes personal data in ways that may violate GDPR principles of data minimisation, purpose limitation, or lawful basis, or may expose sensitive personal data through model outputs or inference attacks.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "justice", "biometric", "migration"],
+      "default_severity": "high",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Data governance", "identifier": "Art. 10(5)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "PRIVACY", "identifier": "MAP 2.3"},
+        {"taxonomy": "MIT_AIRR", "category": "Privacy violation", "identifier": "5.1"},
+        {"taxonomy": "OWASP_LLM", "category": "Sensitive Information Disclosure", "identifier": "LLM02:2025"}
+      ],
+      "keywords": ["GDPR", "privacy", "personal data", "data minimisation", "purpose limitation", "lawful basis", "sensitive data", "special categories"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-006",
+      "title": "Training data quality and representativeness",
+      "category": "data_quality",
+      "description": "The training dataset may be unrepresentative of the deployment population, contain errors or mislabels, reflect historical biases, or be insufficient in size for reliable generalisation.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "justice", "biometric"],
+      "default_severity": "high",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Data and data governance", "identifier": "Art. 10(2)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "MAP", "identifier": "MAP 1.1"},
+        {"taxonomy": "MIT_AIRR", "category": "Data issues", "identifier": "6.2"}
+      ],
+      "keywords": ["training data", "dataset", "representativeness", "data quality", "mislabelled", "historical bias", "imbalanced", "data collection"],
+      "affects_vulnerable_groups": true,
+      "common_vulnerable_groups": ["underrepresented groups", "minorities"]
+    },
+    {
+      "id": "TAX-007",
+      "title": "Model performance degradation and distribution shift",
+      "category": "reliability",
+      "description": "The system's performance may degrade over time as the real-world data distribution shifts away from the training distribution, leading to unreliable or harmful outputs without detection.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "critical_infrastructure"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Accuracy and robustness", "identifier": "Art. 15"},
+        {"taxonomy": "NIST_AI_RMF", "category": "MANAGE", "identifier": "MANAGE 4.1"},
+        {"taxonomy": "MIT_AIRR", "category": "Reliability failure", "identifier": "7.1"}
+      ],
+      "keywords": ["model drift", "distribution shift", "concept drift", "performance degradation", "retraining", "monitoring", "accuracy decay"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-008",
+      "title": "Adversarial manipulation and robustness",
+      "category": "security",
+      "description": "Malicious actors may craft inputs specifically designed to manipulate the system's outputs, bypassing controls or causing incorrect decisions that benefit the attacker.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "law_enforcement", "biometric", "critical_infrastructure"],
+      "default_severity": "high",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Cybersecurity", "identifier": "Art. 15(4)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "MANAGE", "identifier": "MANAGE 2.4"},
+        {"taxonomy": "MIT_AIRR", "category": "Adversarial attack", "identifier": "8.1"},
+        {"taxonomy": "OWASP_LLM", "category": "Prompt Injection", "identifier": "LLM01:2025"}
+      ],
+      "keywords": ["adversarial", "manipulation", "gaming", "evasion", "injection", "attack", "robustness", "red team"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-009",
+      "title": "Over-reliance and automation bias",
+      "category": "human_oversight",
+      "description": "Human operators may over-rely on system outputs without applying independent judgement, particularly when the system presents outputs with high confidence scores, leading to under-scrutiny of potentially incorrect decisions.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "justice"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Human oversight", "identifier": "Art. 14(4)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "GOVERN", "identifier": "GOVERN 5.1"},
+        {"taxonomy": "MIT_AIRR", "category": "Human-AI interaction failure", "identifier": "4.3"},
+        {"taxonomy": "OWASP_LLM", "category": "Overreliance", "identifier": "LLM09:2025"}
+      ],
+      "keywords": ["automation bias", "over-reliance", "complacency", "rubber stamping", "confidence score", "trust calibration"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-010",
+      "title": "Inadequate testing and pre-deployment validation",
+      "category": "reliability",
+      "description": "The system has not been tested against pre-defined performance metrics and thresholds across representative subgroups and edge cases, as required by Art. 9(7) of the EU AI Act.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "justice", "biometric", "critical_infrastructure"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Testing", "identifier": "Art. 9(7)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "MEASURE", "identifier": "MEASURE 2.5"},
+        {"taxonomy": "MIT_AIRR", "category": "Reliability failure", "identifier": "7.3"}
+      ],
+      "keywords": ["testing", "validation", "benchmarks", "metrics", "thresholds", "evaluation", "test set", "hold-out"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-011",
+      "title": "Scope creep and unintended use beyond stated purpose",
+      "category": "governance",
+      "description": "The system may be applied to use cases or populations beyond its intended scope, for which it has not been validated, increasing the risk of harm.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "biometric"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Purpose limitation", "identifier": "Art. 9(2)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "GOVERN", "identifier": "GOVERN 1.2"},
+        {"taxonomy": "MIT_AIRR", "category": "Misuse", "identifier": "9.1"}
+      ],
+      "keywords": ["scope creep", "mission creep", "unintended use", "repurposing", "out of distribution", "off-label"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-012",
+      "title": "GDPR lawful basis and data subject rights",
+      "category": "privacy",
+      "description": "Processing of personal data by the AI system may lack a clearly established GDPR lawful basis, or the system may not support data subjects' rights to access, erasure, portability, or objection to automated decision-making under Art. 22 GDPR.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "justice", "migration"],
+      "default_severity": "high",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Data governance", "identifier": "Art. 10"},
+        {"taxonomy": "NIST_AI_RMF", "category": "GOVERN", "identifier": "GOVERN 1.7"},
+        {"taxonomy": "MIT_AIRR", "category": "Privacy violation", "identifier": "5.3"}
+      ],
+      "keywords": ["GDPR", "lawful basis", "consent", "legitimate interest", "Art. 22", "automated decision", "data subject rights", "erasure", "DPIA"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-013",
+      "title": "Thin data and coverage gaps for underrepresented subgroups",
+      "category": "bias",
+      "description": "The system performs significantly worse for individuals in subgroups that are underrepresented in the training data, leading to unequal accuracy and potentially harmful outcomes for these groups.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement"],
+      "default_severity": "high",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Data and data governance", "identifier": "Art. 10(2)(f)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "MEASURE", "identifier": "MEASURE 2.11"},
+        {"taxonomy": "MIT_AIRR", "category": "Discrimination / toxicity", "identifier": "2.7"}
+      ],
+      "keywords": ["thin data", "sparse data", "underrepresented", "subgroup", "minority", "coverage gap", "low sample size"],
+      "affects_vulnerable_groups": true,
+      "common_vulnerable_groups": ["ethnic minorities", "people with disabilities", "non-native speakers", "young adults", "elderly"]
+    },
+    {
+      "id": "TAX-014",
+      "title": "Insufficient operator and user training",
+      "category": "governance",
+      "description": "Operators and users of the system have not received adequate training on its capabilities, limitations, and appropriate use, increasing the risk of misuse and over-reliance.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "justice", "critical_infrastructure"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Obligations of providers", "identifier": "Art. 13(3)(b)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "GOVERN", "identifier": "GOVERN 5.2"},
+        {"taxonomy": "MIT_AIRR", "category": "Human-AI interaction failure", "identifier": "4.1"}
+      ],
+      "keywords": ["training", "education", "user guide", "instructions", "onboarding", "competence", "literacy"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-015",
+      "title": "Feedback loop and self-reinforcing bias",
+      "category": "bias",
+      "description": "Automated decisions made by the system influence future training data (e.g. hiring decisions feed back into training labels), creating a self-reinforcing loop that entrenches and amplifies existing biases.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement"],
+      "default_severity": "high",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Data governance", "identifier": "Art. 10(2)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "MAP", "identifier": "MAP 5.2"},
+        {"taxonomy": "MIT_AIRR", "category": "Discrimination / toxicity", "identifier": "2.8"}
+      ],
+      "keywords": ["feedback loop", "self-reinforcing", "historical decisions", "label leakage", "confirmation bias", "data collection bias"],
+      "affects_vulnerable_groups": true,
+      "common_vulnerable_groups": ["ethnic minorities", "women", "people with disabilities"]
+    },
+    {
+      "id": "TAX-016",
+      "title": "Security vulnerabilities and data breaches",
+      "category": "security",
+      "description": "The AI system or its associated infrastructure may be vulnerable to cyberattacks, data breaches, or model extraction, exposing personal data or enabling adversaries to reverse-engineer the model.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "law_enforcement", "biometric", "critical_infrastructure"],
+      "default_severity": "high",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Cybersecurity", "identifier": "Art. 15(4)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "MANAGE", "identifier": "MANAGE 2.2"},
+        {"taxonomy": "OWASP_LLM", "category": "Model Theft", "identifier": "LLM10:2025"}
+      ],
+      "keywords": ["security", "breach", "cyberattack", "model extraction", "inference attack", "membership inference", "data leak"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-017",
+      "title": "Harm to minors and vulnerable individuals",
+      "category": "vulnerable_groups",
+      "description": "The system may cause disproportionate harm to minors or other vulnerable individuals (people with disabilities, elderly, those in financial distress) who may be less able to contest or recover from adverse decisions.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "justice"],
+      "default_severity": "critical",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Fundamental rights", "identifier": "Art. 9(9)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "GOVERN", "identifier": "GOVERN 6.2"},
+        {"taxonomy": "MIT_AIRR", "category": "Harm to vulnerable groups", "identifier": "10.1"}
+      ],
+      "keywords": ["minors", "children", "vulnerable", "disability", "elderly", "financial distress", "mental health", "disproportionate harm"],
+      "affects_vulnerable_groups": true,
+      "common_vulnerable_groups": ["minors", "people with disabilities", "elderly", "individuals in financial distress"]
+    },
+    {
+      "id": "TAX-018",
+      "title": "Model hallucination and factual inaccuracy",
+      "category": "reliability",
+      "description": "For AI systems using language models or generative components, outputs may contain fabricated information presented with unwarranted confidence, potentially misleading decision-makers.",
+      "applicable_annex_iii_categories": ["education", "law_enforcement", "justice", "essential_services"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Accuracy", "identifier": "Art. 15(1)"},
+        {"taxonomy": "OWASP_LLM", "category": "Hallucination", "identifier": "LLM09:2025"},
+        {"taxonomy": "MIT_AIRR", "category": "Misinformation", "identifier": "11.2"}
+      ],
+      "keywords": ["hallucination", "fabrication", "inaccuracy", "LLM", "generative", "factual error", "confabulation"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-019",
+      "title": "Lack of audit trail and logging",
+      "category": "governance",
+      "description": "The system does not maintain adequate logs of inputs, outputs, and decisions, making it impossible to conduct post-hoc audits or investigate complaints about adverse decisions.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "justice", "biometric"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Record-keeping", "identifier": "Art. 12"},
+        {"taxonomy": "NIST_AI_RMF", "category": "GOVERN", "identifier": "GOVERN 1.6"},
+        {"taxonomy": "MIT_AIRR", "category": "Accountability gap", "identifier": "12.1"}
+      ],
+      "keywords": ["audit trail", "logging", "record keeping", "traceability", "accountability", "explainable decision", "decision log"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-020",
+      "title": "Inadequate conformity assessment documentation",
+      "category": "governance",
+      "description": "The technical documentation required by EU AI Act Art. 11 and Annex IV is incomplete, preventing regulators, notified bodies, or auditors from verifying compliance.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "justice", "biometric", "critical_infrastructure", "migration"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Technical documentation", "identifier": "Art. 11 / Annex IV"},
+        {"taxonomy": "NIST_AI_RMF", "category": "GOVERN", "identifier": "GOVERN 1.3"}
+      ],
+      "keywords": ["documentation", "conformity assessment", "Annex IV", "technical file", "CE marking", "notified body"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-021",
+      "title": "Inaccurate or incomplete input data at inference time",
+      "category": "data_quality",
+      "description": "The system may receive incomplete, stale, or erroneous input data at inference time (e.g. missing fields, outdated credit records), leading to unreliable outputs without appropriate handling.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Accuracy and robustness", "identifier": "Art. 15(1)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "MEASURE", "identifier": "MEASURE 2.6"}
+      ],
+      "keywords": ["missing data", "incomplete", "stale data", "data error", "input validation", "null values", "out-of-date"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-022",
+      "title": "Lack of accessibility for users with disabilities",
+      "category": "accessibility",
+      "description": "The system's user interface and outputs may not be accessible to users with visual, cognitive, or other disabilities, limiting their ability to understand and contest decisions.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Fundamental rights", "identifier": "Art. 9(9)"},
+        {"taxonomy": "NIST_AI_RMF", "category": "GOVERN", "identifier": "GOVERN 6.2"}
+      ],
+      "keywords": ["accessibility", "WCAG", "screen reader", "cognitive disability", "visual impairment", "assistive technology"],
+      "affects_vulnerable_groups": true,
+      "common_vulnerable_groups": ["people with visual disabilities", "people with cognitive disabilities"]
+    },
+    {
+      "id": "TAX-023",
+      "title": "Cross-border data transfer and jurisdictional risk",
+      "category": "privacy",
+      "description": "Personal data processed by the system may be transferred to or processed in jurisdictions without adequate data protection guarantees, creating legal risk under GDPR Chapter V.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "law_enforcement", "migration"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Data governance", "identifier": "Art. 10"},
+        {"taxonomy": "NIST_AI_RMF", "category": "GOVERN", "identifier": "GOVERN 1.7"}
+      ],
+      "keywords": ["cross-border", "third country", "data transfer", "SCCs", "adequacy decision", "GDPR Chapter V", "cloud"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-024",
+      "title": "Concentration of decision-making power",
+      "category": "governance",
+      "description": "Wide deployment of the system across many organisations may concentrate decision-making power and create systemic societal risks if the system contains systematic errors affecting many individuals simultaneously.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "General-purpose AI risk", "identifier": "Recital 55"},
+        {"taxonomy": "MIT_AIRR", "category": "Systemic risk", "identifier": "13.1"}
+      ],
+      "keywords": ["systemic risk", "concentration", "market power", "monoculture", "correlated failure", "SaaS", "multi-tenant"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    },
+    {
+      "id": "TAX-025",
+      "title": "Inadequate incident response and complaint handling",
+      "category": "governance",
+      "description": "The provider lacks a defined process for detecting, reporting, and responding to incidents or serious incidents as required by Art. 73 of the EU AI Act, or for handling complaints from affected individuals.",
+      "applicable_annex_iii_categories": ["employment", "essential_services", "education", "law_enforcement", "justice", "biometric", "critical_infrastructure"],
+      "default_severity": "medium",
+      "taxonomy_mappings": [
+        {"taxonomy": "AI_Act", "category": "Serious incident reporting", "identifier": "Art. 73"},
+        {"taxonomy": "NIST_AI_RMF", "category": "RESPOND", "identifier": "RESPOND 1.1"},
+        {"taxonomy": "MIT_AIRR", "category": "Accountability gap", "identifier": "12.2"}
+      ],
+      "keywords": ["incident response", "serious incident", "complaint", "grievance", "redress", "Art. 73", "reporting obligation"],
+      "affects_vulnerable_groups": false,
+      "common_vulnerable_groups": []
+    }
+  ]
+}
