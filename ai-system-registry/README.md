@@ -48,8 +48,9 @@ make test         # all tests
 | `PUT` | `/api/v1/systems/{id}` | Update mutable fields |
 | `DELETE` | `/api/v1/systems/{id}` | Delete a system |
 | `POST` | `/api/v1/systems/{id}/reclassify` | Re-run classifier on existing system |
-| `PUT` | `/api/v1/systems/{id}/model` | Link a model card |
-| `DELETE` | `/api/v1/systems/{id}/model` | Unlink a model card |
+| `GET` | `/api/v1/systems/{id}/models` | List linked model cards |
+| `POST` | `/api/v1/systems/{id}/models` | Link a model card (with optional `role`) |
+| `DELETE` | `/api/v1/systems/{id}/models/{model_id}` | Unlink a model card |
 | `GET` | `/api/v1/model-cards` | List all model cards |
 | `POST` | `/api/v1/model-cards` | Create a model card |
 | `PUT` | `/api/v1/model-cards/{id}` | Update a model card |
