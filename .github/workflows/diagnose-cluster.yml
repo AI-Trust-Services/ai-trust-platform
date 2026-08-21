@@ -1,5 +1,10 @@
 name: Diagnose Cluster Pods
 
+# Utility workflow for debugging a Gardener cluster.
+# Connects to the target cluster via OIDC (same auth as deploy-gardener.yml) and
+# prints pod status, events, logs for key services, and cert-manager certificate state.
+# Trigger manually from the Actions tab — pick the cluster to inspect.
+
 on:
   workflow_dispatch:
     inputs:

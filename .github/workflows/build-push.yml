@@ -16,8 +16,7 @@ name: Build and Push Images
 
 on:
   push:
-    # TODO: remove "20-set-up-cicd-pipeline-for-ai-trust-platform" before merging to main
-    branches: [main, "20-set-up-cicd-pipeline-for-ai-trust-platform"]
+    branches: [main]
     tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
@@ -68,8 +67,7 @@ jobs:
           fi
 
           # Determine target cluster and whether to trigger a deploy
-          if [[ "${GITHUB_EVENT_NAME}" == "push" && ( "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_REF}" == "refs/heads/20-set-up-cicd-pipeline-for-ai-trust-platform" ) ]]; then
-            # TODO: remove the feature branch condition before merging to main
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
             cluster="ai-trust-main"
             deploy="true"
           elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ inputs.gardener_cluster }}" != "none" ]]; then
