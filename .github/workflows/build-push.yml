@@ -88,7 +88,7 @@ jobs:
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           elif [[ "${deploy}" == "true" ]]; then
-            echo "tag=${cluster}/${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+            echo "tag=${cluster}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
           else
             echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
           fi
