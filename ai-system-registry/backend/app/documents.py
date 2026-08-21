@@ -26,7 +26,7 @@ PPTX_EXTENSIONS = {".ppt", ".pptx"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 ALL_SUPPORTED = TEXT_EXTENSIONS | PDF_EXTENSIONS | WORD_EXTENSIONS | PPTX_EXTENSIONS | IMAGE_EXTENSIONS
 
-MAX_TEXT_LENGTH = 15000
+MAX_TEXT_LENGTH = int(os.environ.get("ASSIST_MAX_TEXT_LENGTH", "15000"))
 MAX_IMAGE_SIDE = 1568  # vision-model recommended long side
 MAX_FILE_BYTES = 20 * 1024 * 1024  # 20 MB application-level cap (nginx allows 50 MB)
 

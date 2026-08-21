@@ -10,6 +10,7 @@ Two role variants share the same internal helpers:
 """
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 from typing import Any
 
@@ -47,7 +48,7 @@ logger = get_logger(__name__)
 
 # Bounded-agentic guardrail: after this many user turns without `complete`,
 # degrade to manual completion of whatever was collected.
-TURN_CAP = 12
+TURN_CAP = int(os.environ.get("ASSIST_TURN_CAP", "12"))
 
 _AI_UNAVAILABLE = "AI assistant is unavailable. Please switch to the manual form."
 
