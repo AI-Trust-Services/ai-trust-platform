@@ -22,6 +22,7 @@ use `http://localhost:19000` instead of `:9000`.
 ## Quick start
 
 ```bash
+cp .env.example .env
 cd k8s
 make up      # kind create cluster + bootstrap + build/load images + helm install
 ```
