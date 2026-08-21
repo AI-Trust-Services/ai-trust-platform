@@ -1,0 +1,86 @@
+name: Cleanup Old Images
+
+# Deletes untagged and sha-tagged image versions older than 1 day from ghcr.io.
+# Protected tags (never deleted): *-latest, v*.*.* version tags.
+# Runs daily and can be triggered manually.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"  # 03:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - users-backend
+          - ai-system-registry-backend
+          - monitoring-backend
+          - overview-backend
+          - alerts-backend
+          - compliance-backend
+          - decision-trace-analyzer-backend
+          - policy-checker-worker
+          - otel-clickhouse-consumer
+          - openfga-provision
+          - db-migrate
+          - clickhouse-migrate
+          - keycloak-provision
+          - shell
+          - otel-rmq-bridge
+          - ai-system-registry-frontend
+          - monitoring-frontend
+          - overview-frontend
+          - alerts-frontend
+          - compliance-frontend
+          - users-frontend
+          - decision-trace-analyzer-frontend
+    steps:
+      - name: Delete old image versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          IMAGE: ai-trust-platform/${{ matrix.image }}
+          CUTOFF_DAYS: 1
+        run: |
+          cutoff=$(date -u -d "-${CUTOFF_DAYS} days" +%s)
+          page=1
+          deleted=0
+          while true; do
+            versions=$(gh api \
+              "orgs/${OWNER}/packages/container/${IMAGE//\//%2F}/versions?per_page=100&page=${page}" \
+              --jq '.[]')
+            [[ -z "$versions" ]] && break
+
+            while IFS= read -r version; do
+              id=$(echo "$version" | jq -r '.id')
+              created=$(echo "$version" | jq -r '.created_at')
+              tags=$(echo "$version" | jq -r '.metadata.container.tags[]?' 2>/dev/null || true)
+
+              # Skip protected tags: *-latest and v*.*.* version tags
+              protected=false
+              while IFS= read -r tag; do
+                if [[ "$tag" == *-latest || "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+                  protected=true
+                  break
+                fi
+              done <<< "$tags"
+              $protected && continue
+
+              created_ts=$(date -u -d "$created" +%s 2>/dev/null || echo 0)
+              if (( created_ts < cutoff )); then
+                echo "Deleting version $id (created $created, tags: ${tags:-<untagged>})"
+                gh api --method DELETE \
+                  "orgs/${OWNER}/packages/container/${IMAGE//\//%2F}/versions/${id}" && ((deleted++)) || true
+              fi
+            done <<< "$(echo "$versions" | jq -c '.')"
+
+            ((page++))
+          done
+          echo "Deleted ${deleted} version(s) of ${IMAGE}"

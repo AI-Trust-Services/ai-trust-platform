@@ -50,6 +50,7 @@ jobs:
     outputs:
       owner: ${{ steps.vars.outputs.owner }}
       tag: ${{ steps.vars.outputs.tag }}
+      latest_tag: ${{ steps.vars.outputs.latest_tag }}
       cluster: ${{ steps.vars.outputs.cluster }}
       deploy: ${{ steps.vars.outputs.deploy }}
       ref: ${{ steps.vars.outputs.ref }}
@@ -83,14 +84,22 @@ jobs:
 
           # Image tag:
           #   - git version tag  → the version string (e.g. v1.2.3)
-          #   - cluster deploy   → <cluster>/<short-sha>  (isolated per cluster)
+          #   - cluster deploy   → <cluster>-<short-sha>  (isolated per cluster)
           #   - build-only       → <short-sha>
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "latest_tag=" >> "$GITHUB_OUTPUT"
           elif [[ "${deploy}" == "true" ]]; then
             echo "tag=${cluster}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+            # Only ai-trust-main gets a floating latest tag; other clusters use sha only
+            if [[ "${cluster}" == "ai-trust-main" ]]; then
+              echo "latest_tag=${cluster}-latest" >> "$GITHUB_OUTPUT"
+            else
+              echo "latest_tag=" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+            echo "latest_tag=" >> "$GITHUB_OUTPUT"
           fi
 
   build-push:
@@ -224,6 +233,7 @@ jobs:
           build-args: ${{ matrix.build_args }}
           tags: |
             ghcr.io/${{ needs.prepare.outputs.owner }}/ai-trust-platform/${{ matrix.name }}:${{ needs.prepare.outputs.tag }}
+            ${{ needs.prepare.outputs.latest_tag != '' && format('ghcr.io/{0}/ai-trust-platform/{1}:{2}', needs.prepare.outputs.owner, matrix.name, needs.prepare.outputs.latest_tag) || '' }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
