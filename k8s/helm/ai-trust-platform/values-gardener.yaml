@@ -23,6 +23,4 @@ ingress:
   className: traefik
   tls:
     enabled: true
-    selfSigned: false
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    selfSigned: true
