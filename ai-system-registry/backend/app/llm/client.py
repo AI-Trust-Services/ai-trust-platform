@@ -69,10 +69,16 @@ if LLM_PROVIDER == "external":
 # OpenAI-compatible backend (ollama, vLLM, or any /v1/chat/completions endpoint)
 # ---------------------------------------------------------------------------
 
+_openai_client: Any = None  # AsyncOpenAI singleton — reuses the connection pool across calls
+
+
 async def _chat_completions(messages: list[dict], model: str, max_tokens: int, json_mode: bool) -> dict:
+    global _openai_client
     from openai import AsyncOpenAI
 
-    client = AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
+    if _openai_client is None:
+        _openai_client = AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
+    client = _openai_client
     kwargs: dict[str, Any] = {"model": model, "messages": messages, "max_tokens": max_tokens}
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
