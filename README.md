@@ -59,6 +59,32 @@ docker compose down --remove-orphans          # stop, keep data
 docker compose down -v --remove-orphans       # stop, wipe all data (fresh start)
 ```
 
+## CI/CD Pipeline
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│  GitHub                                                                            │
+│                                                                                    │
+│  ┌───────────────┐   ┌──────────────────────────────────┐   ┌──────────────────┐  │
+│  │  main branch  │──▶│ GitHub Action:                   │──▶│ GitHub Action:   │  │
+│  └───────────────┘   │ Build and Push Images to GHCR    │   │ Gardener Deploy  │  │
+│                      └──────────────────────────────────┘   └────────┬─────────┘  │
+└──────────────────────────────────────────────────────────────────────┼─────────────┘
+                                                                       │
+                                                                       ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│  Gardener                                                                          │
+│                                                                                    │
+│  ┌──────────────────────────────────────────────────────────────────────────────┐  │
+│  │  Shoot cluster (e.g. ai-trust-main)                                          │  │
+│  └──────────────────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Images are built on every push to `main` (and on version tags) by the **Build and Push Images** workflow and stored in the GitHub Container Registry (`ghcr.io`). Third-party images (postgres, keycloak, openfga, etc.) are pulled straight from their upstream registries by the Helm chart — only first-party images are built here.
+
+Deployment to a Gardener shoot cluster is **manual** — trigger the **Gardener Deploy** workflow from the Actions tab, pick the target cluster (`ai-trust-main` or `sr-test`) and the image tag (short SHA from the build run, a version tag, or `latest`). The workflow authenticates via [Gardener Structured Authentication + GitHub OIDC](https://gardener.cloud/docs/guides/applications/app-ci-cd/#configure-github-actions) — no kubeconfig secret is stored in GitHub. Cluster-specific config lives in `k8s/env/<cluster>/.env` (committed to the repo). One-time cluster setup is documented in [k8s/README.md](k8s/README.md).
+
 ## Support, Feedback, Contributing
 
 This project is open to feature requests/suggestions, bug reports etc. via [GitHub issues](https://github.com/AI-Trust-Services/ai-trust-platform/issues). Contribution and feedback are encouraged and always welcome. For more information about how to contribute, the project structure, as well as additional contribution information, see our [Contribution Guidelines](CONTRIBUTING.md).
