@@ -5,6 +5,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 interface DetailPanelProps {
+  open?: boolean;
   title: string;
   subtitle?: string;
   badge?: string;
@@ -12,9 +13,9 @@ interface DetailPanelProps {
   children: ReactNode;
 }
 
-export default function DetailPanel({ title, subtitle, badge, onClose, children }: DetailPanelProps) {
+export default function DetailPanel({ open = true, title, subtitle, badge, onClose, children }: DetailPanelProps) {
   return (
-    <Sheet open onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-lg">
         <SheetHeader className="pr-12">
           <div className="flex items-start gap-2">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, RotateCw, ClipboardList } from "lucide-react";
+import { Plus, RotateCw, ClipboardList, CheckCircle2, FileText, Clock } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { StatusBadge, ScoreBar } from "../components/Badges";
@@ -7,7 +7,6 @@ import KpiCard from "../components/KpiCard";
 import DetailPanel, { DetailField, DetailSection } from "../components/DetailPanel";
 import CreateAssessmentModal from "../components/CreateAssessmentModal";
 import AssessmentCharts from "../components/AssessmentCharts";
-import KebabMenu from "../components/KebabMenu";
 import ScoreDonut from "../components/ScoreDonut";
 import { ASSESSMENT_STATUS_META, fmtDate, humanize } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
@@ -119,10 +118,10 @@ export default function AssessmentsPage() {
       </div>
 
       <div className="flex flex-wrap gap-3 px-5 pt-4">
-        <KpiCard label="Total" value={kpis.total} />
-        <KpiCard label="Approved" value={kpis.approved} sub={`${kpis.total ? Math.round(kpis.approved / kpis.total * 100) : 0}% of total`} />
-        <KpiCard label="In Review" value={kpis.submitted} />
-        <KpiCard label="Draft" value={kpis.draft} />
+        <KpiCard label="Total" value={kpis.total} icon={ClipboardList} color="#71717a" sub="all assessments" />
+        <KpiCard label="Approved" value={kpis.approved} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.approved / kpis.total * 100) : 0}% of total`} />
+        <KpiCard label="In Review" value={kpis.submitted} icon={Clock} color="#0a6ed1" sub="awaiting approval" />
+        <KpiCard label="Draft" value={kpis.draft} icon={FileText} color="#71717a" sub="work in progress" />
       </div>
 
       <div className="px-5 pt-4">
@@ -131,7 +130,7 @@ export default function AssessmentsPage() {
 
       <div className="flex items-center gap-2 px-5 pt-3">
         <Input className="max-w-xs" placeholder="Search assessments…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <Select value={statusFilter || ALL} onValueChange={(v) => setStatusFilter(v === ALL ? "" : v)}>
+        <Select value={statusFilter || ALL} onValueChange={(v: string) => setStatusFilter(v === ALL ? "" : v)}>
           <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All Statuses</SelectItem>
@@ -159,7 +158,7 @@ export default function AssessmentsPage() {
               {filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No assessments yet. Click "New Assessment" to begin.</TableCell></TableRow>
               ) : filtered.map((a) => (
-                <TableRow key={a.id} data-state={selected === a.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(a)}>
+                <TableRow key={a.id} data-state={selected === a.id ? "selected" : undefined}>
                   <TableCell><div className="font-medium text-foreground">{a.title}</div><div className="text-xs text-muted-foreground">{a.id}</div></TableCell>
                   <TableCell>{systemsById[a.ai_system_id]?.name ?? a.ai_system_id}</TableCell>
                   <TableCell>{frameworksById[a.framework_id]?.name ?? a.framework_id}</TableCell>
@@ -167,31 +166,29 @@ export default function AssessmentsPage() {
                   <TableCell><StatusBadge meta={ASSESSMENT_STATUS_META} value={a.status} /></TableCell>
                   <TableCell><ScoreBar score={a.score} /></TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{fmtDate(a.created_at)}</TableCell>
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <KebabMenu items={[
-                      ...(a.status === "draft" ? [{
-                        label: "Submit for Review",
-                        disabled: busy === a.id || !mayWrite,
-                        onClick: () => act(api.submitAssessment, a.id, "Submitted"),
-                      }] : []),
-                      ...(a.status !== "approved" ? [{
-                        label: "Approve",
-                        disabled: busy === a.id || !mayApprove,
-                        onClick: () => act(api.approveAssessment, a.id, (r) => `Approved — score ${r.score ?? "N/A"}%`),
-                      }] : []),
-                      {
-                        label: "Delete",
-                        danger: true,
-                        disabled: busy === a.id || !mayWrite,
-                        onClick: async () => {
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openDetail(a)}>View</Button>
+                      {a.status === "draft" && (
+                        <Button variant="ghost" size="sm" disabled={busy === a.id || !mayWrite}
+                          title={mayWrite ? undefined : noWriteTitle}
+                          onClick={() => act(api.submitAssessment, a.id, "Submitted")}>Submit</Button>
+                      )}
+                      {a.status !== "approved" && (
+                        <Button variant="ghost" size="sm" disabled={busy === a.id || !mayApprove}
+                          title={mayApprove ? undefined : noApproveTitle}
+                          onClick={() => act(api.approveAssessment, a.id, (r) => `Approved — score ${r.score ?? "N/A"}%`)}>Approve</Button>
+                      )}
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"
+                        disabled={busy === a.id || !mayWrite} title={mayWrite ? undefined : noWriteTitle}
+                        onClick={async () => {
                           if (!confirm(`Delete "${a.title}"?`)) return;
                           setBusy(a.id);
                           try { await api.deleteAssessment(a.id); showToast("Deleted"); closePanel(); await load(); }
                           catch (e) { showToast((e as Error).message, true); }
                           finally { setBusy(null); }
-                        },
-                      },
-                    ]} />
+                        }}>Delete</Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -200,43 +197,46 @@ export default function AssessmentsPage() {
         </Card>
       </div>
 
-      {selectedDetail && (
-        <DetailPanel
-          title={selectedDetail.title}
-          subtitle={frameworksById[selectedDetail.framework_id]?.name}
-          badge={ASSESSMENT_STATUS_META[selectedDetail.status]?.label}
-          onClose={closePanel}
-        >
-          <DetailSection title="Assessment Information">
-            <DetailField label="ID">{selectedDetail.id}</DetailField>
-            <DetailField label="AI System">{systemsById[selectedDetail.ai_system_id]?.name ?? selectedDetail.ai_system_id}</DetailField>
-            <DetailField label="Framework">{frameworksById[selectedDetail.framework_id]?.name}</DetailField>
-            <DetailField label="Type">{humanize(selectedDetail.type)}</DetailField>
-            <DetailField label="Status"><StatusBadge meta={ASSESSMENT_STATUS_META} value={selectedDetail.status} /></DetailField>
-            <DetailField label="Created">{fmtDate(selectedDetail.created_at)}</DetailField>
-          </DetailSection>
-          <DetailSection title="Score">
-            <ScoreDonut detail={selectedDetail} />
-          </DetailSection>
-          {selectedDetail.notes && (
-            <DetailSection title="Notes">
-              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{selectedDetail.notes}</p>
+      <DetailPanel
+        open={!!selectedDetail}
+        title={selectedDetail?.title ?? ""}
+        subtitle={selectedDetail ? frameworksById[selectedDetail.framework_id]?.name : undefined}
+        badge={selectedDetail ? ASSESSMENT_STATUS_META[selectedDetail.status]?.label : undefined}
+        onClose={closePanel}
+      >
+        {selectedDetail && (
+          <>
+            <DetailSection title="Assessment Information">
+              <DetailField label="ID">{selectedDetail.id}</DetailField>
+              <DetailField label="AI System">{systemsById[selectedDetail.ai_system_id]?.name ?? selectedDetail.ai_system_id}</DetailField>
+              <DetailField label="Framework">{frameworksById[selectedDetail.framework_id]?.name}</DetailField>
+              <DetailField label="Type">{humanize(selectedDetail.type)}</DetailField>
+              <DetailField label="Status"><StatusBadge meta={ASSESSMENT_STATUS_META} value={selectedDetail.status} /></DetailField>
+              <DetailField label="Created">{fmtDate(selectedDetail.created_at)}</DetailField>
             </DetailSection>
-          )}
-          <div className="flex gap-2 px-5 pt-4">
-            {selectedDetail.status === "draft" && (
-              <Button variant="outline" size="sm" disabled={busy === selectedDetail.id || !mayWrite}
-                title={mayWrite ? undefined : noWriteTitle}
-                onClick={() => act(api.submitAssessment, selectedDetail.id, "Submitted")}>Submit</Button>
+            <DetailSection title="Score">
+              <ScoreDonut detail={selectedDetail} />
+            </DetailSection>
+            {selectedDetail.notes && (
+              <DetailSection title="Notes">
+                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{selectedDetail.notes}</p>
+              </DetailSection>
             )}
-            {selectedDetail.status !== "approved" && (
-              <Button variant="outline" size="sm" disabled={busy === selectedDetail.id || !mayApprove}
-                title={mayApprove ? undefined : noApproveTitle}
-                onClick={() => act(api.approveAssessment, selectedDetail.id, (r) => `Approved — score ${r.score ?? "N/A"}%`)}>Approve</Button>
-            )}
-          </div>
-        </DetailPanel>
-      )}
+            <div className="flex gap-2 px-5 pt-4">
+              {selectedDetail.status === "draft" && (
+                <Button variant="outline" size="sm" disabled={busy === selectedDetail.id || !mayWrite}
+                  title={mayWrite ? undefined : noWriteTitle}
+                  onClick={() => act(api.submitAssessment, selectedDetail.id, "Submitted")}>Submit</Button>
+              )}
+              {selectedDetail.status !== "approved" && (
+                <Button variant="outline" size="sm" disabled={busy === selectedDetail.id || !mayApprove}
+                  title={mayApprove ? undefined : noApproveTitle}
+                  onClick={() => act(api.approveAssessment, selectedDetail.id, (r) => `Approved — score ${r.score ?? "N/A"}%`)}>Approve</Button>
+              )}
+            </div>
+          </>
+        )}
+      </DetailPanel>
 
       <CreateAssessmentModal open={createOpen} onClose={() => setCreateOpen(false)} onSuccess={load} />
     </>

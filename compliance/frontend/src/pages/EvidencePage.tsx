@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, RotateCw, Download, Upload, Check, X, Paperclip } from "lucide-react";
+import { Plus, RotateCw, Download, Upload, Check, X, Paperclip, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { StatusBadge } from "../components/Badges";
@@ -156,10 +156,10 @@ export default function EvidencePage() {
       </div>
 
       <div className="flex flex-wrap gap-3 px-5 pt-4">
-        <KpiCard label="Total" value={kpis.total} />
-        <KpiCard label="Approved" value={kpis.approved} sub={`${kpis.total ? Math.round(kpis.approved / kpis.total * 100) : 0}% of total`} />
-        <KpiCard label="Pending Review" value={kpis.pending} />
-        <KpiCard label="Expired / Rejected" value={kpis.expired} />
+        <KpiCard label="Total" value={kpis.total} icon={Paperclip} color="#71717a" sub="all evidence items" />
+        <KpiCard label="Approved" value={kpis.approved} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.approved / kpis.total * 100) : 0}% of total`} />
+        <KpiCard label="Pending Review" value={kpis.pending} icon={Clock} color="#0a6ed1" sub="awaiting decision" />
+        <KpiCard label="Expired / Rejected" value={kpis.expired} icon={AlertTriangle} color="#e05c00" sub="require attention" />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-5 pt-3">
@@ -273,13 +273,15 @@ export default function EvidencePage() {
         </Card>
       </div>
 
-      {detail && (
-        <DetailPanel
-          title={detail.title}
-          subtitle={humanize(detail.evidence_type)}
-          badge={EVIDENCE_STATUS_META[detail.status]?.label}
-          onClose={closePanel}
-        >
+      <DetailPanel
+        open={!!detail}
+        title={detail?.title ?? ""}
+        subtitle={detail ? humanize(detail.evidence_type) : undefined}
+        badge={detail ? EVIDENCE_STATUS_META[detail.status]?.label : undefined}
+        onClose={closePanel}
+      >
+        {detail && (
+          <>
           <DetailSection title="General Information">
             <DetailField label="ID">{detail.id}</DetailField>
             <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : "—"}</DetailField>
@@ -372,8 +374,9 @@ export default function EvidencePage() {
               </ul>
             </DetailSection>
           )}
-        </DetailPanel>
-      )}
+          </>
+        )}
+      </DetailPanel>
 
       <UploadEvidenceModal open={uploadOpen} onClose={() => setUploadOpen(false)} onSuccess={load} />
       <UploadVersionModal

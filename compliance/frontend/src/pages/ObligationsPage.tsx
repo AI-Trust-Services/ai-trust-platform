@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, RotateCw, ListChecks } from "lucide-react";
+import { Plus, RotateCw, ListChecks, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { StatusBadge } from "../components/Badges";
@@ -128,10 +128,10 @@ export default function ObligationsPage() {
       </div>
 
       <div className="flex flex-wrap gap-3 px-5 pt-4">
-        <KpiCard label="Total" value={kpis.total} />
-        <KpiCard label="Fulfilled" value={kpis.fulfilled} sub={`${kpis.total ? Math.round(kpis.fulfilled / kpis.total * 100) : 0}% of total`} />
-        <KpiCard label="In Progress" value={kpis.inProgress} />
-        <KpiCard label="Overdue" value={kpis.overdue} />
+        <KpiCard label="Total" value={kpis.total} icon={ListChecks} color="#71717a" sub="all obligations" />
+        <KpiCard label="Fulfilled" value={kpis.fulfilled} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.fulfilled / kpis.total * 100) : 0}% of total`} />
+        <KpiCard label="In Progress" value={kpis.inProgress} icon={Clock} color="#0a6ed1" sub="being addressed" />
+        <KpiCard label="Overdue" value={kpis.overdue} icon={AlertTriangle} color="#e05c00" sub="past due date" />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-5 pt-3">
@@ -208,56 +208,59 @@ export default function ObligationsPage() {
         </Card>
       </div>
 
-      {detail && (
-        <DetailPanel
-          title={detail.title}
-          subtitle={detail.article_ref ? `${detail.framework_id} — ${detail.article_ref}` : detail.framework_id}
-          badge={OBLIGATION_STATUS_META[detail.status]?.label}
-          onClose={closePanel}
-        >
-          <DetailSection title="Overview">
-            <DetailField label="ID">{detail.id}</DetailField>
-            <DetailField label="AI System">{systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id}</DetailField>
-            <DetailField label="Owner">{detail.owner || "—"}</DetailField>
-            <DetailField label="Status"><StatusBadge meta={OBLIGATION_STATUS_META} value={detail.status} /></DetailField>
-            <DetailField label="Due Date">{fmtDate(detail.due_date)}</DetailField>
-            <DetailField label="Created">{fmtDate(detail.created_at)}</DetailField>
-          </DetailSection>
-          {detail.description && (
-            <DetailSection title="Description">
-              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
+      <DetailPanel
+        open={!!detail}
+        title={detail?.title ?? ""}
+        subtitle={detail ? (detail.article_ref ? `${detail.framework_id} — ${detail.article_ref}` : detail.framework_id) : undefined}
+        badge={detail ? OBLIGATION_STATUS_META[detail.status]?.label : undefined}
+        onClose={closePanel}
+      >
+        {detail && (
+          <>
+            <DetailSection title="Overview">
+              <DetailField label="ID">{detail.id}</DetailField>
+              <DetailField label="AI System">{systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id}</DetailField>
+              <DetailField label="Owner">{detail.owner || "—"}</DetailField>
+              <DetailField label="Status"><StatusBadge meta={OBLIGATION_STATUS_META} value={detail.status} /></DetailField>
+              <DetailField label="Due Date">{fmtDate(detail.due_date)}</DetailField>
+              <DetailField label="Created">{fmtDate(detail.created_at)}</DetailField>
             </DetailSection>
-          )}
-          <DetailSection title={`Related Controls (${detailControls.length})`}>
-            {detailControls.length === 0
-              ? <p className="text-[13px] text-muted-foreground">No controls linked.</p>
-              : <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
-                ))}</ul>
-            }
-          </DetailSection>
-          <DetailSection title={`Evidence (${detailEvidence.length})`}>
-            {detailEvidence.length === 0
-              ? <p className="text-[13px] text-muted-foreground">No evidence linked.</p>
-              : <ul className="flex flex-col gap-1.5">{detailEvidence.map((e) => (
-                  <li key={e.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{e.title}</span><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></li>
-                ))}</ul>
-            }
-          </DetailSection>
-          <div className="px-5 pt-4">
-            <Select value={detail.status} disabled={!mayWrite}
-              onValueChange={async (v) => {
-                await changeStatus(detail.id, v);
-                setDetail((d) => d ? { ...d, status: v } : d);
-              }}>
-              <SelectTrigger className="w-full" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{OBLIGATION_STATUS_META[s].label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        </DetailPanel>
-      )}
+            {detail.description && (
+              <DetailSection title="Description">
+                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
+              </DetailSection>
+            )}
+            <DetailSection title={`Related Controls (${detailControls.length})`}>
+              {detailControls.length === 0
+                ? <p className="text-[13px] text-muted-foreground">No controls linked.</p>
+                : <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
+                    <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
+                  ))}</ul>
+              }
+            </DetailSection>
+            <DetailSection title={`Evidence (${detailEvidence.length})`}>
+              {detailEvidence.length === 0
+                ? <p className="text-[13px] text-muted-foreground">No evidence linked.</p>
+                : <ul className="flex flex-col gap-1.5">{detailEvidence.map((e) => (
+                    <li key={e.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{e.title}</span><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></li>
+                  ))}</ul>
+              }
+            </DetailSection>
+            <div className="px-5 pt-4">
+              <Select value={detail.status} disabled={!mayWrite}
+                onValueChange={async (v: string) => {
+                  await changeStatus(detail.id, v);
+                  setDetail((d) => d ? { ...d, status: v } : d);
+                }}>
+                <SelectTrigger className="w-full" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{OBLIGATION_STATUS_META[s].label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
+      </DetailPanel>
 
       <CreateObligationModal open={createOpen} onClose={() => setCreateOpen(false)} onSuccess={load} />
     </>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, RotateCw, ShieldCheck } from "lucide-react";
+import { Plus, RotateCw, ShieldCheck, CheckCircle2, Layers, Clock } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { StatusBadge } from "../components/Badges";
@@ -161,10 +161,10 @@ export default function ControlsPage() {
       </div>
 
       <div className="flex flex-wrap gap-3 px-5 pt-4">
-        <KpiCard label="Total" value={kpis.total} />
-        <KpiCard label="Effective" value={kpis.effective} sub={`${kpis.total ? Math.round(kpis.effective / kpis.total * 100) : 0}% of total`} />
-        <KpiCard label="Implemented" value={kpis.implemented} />
-        <KpiCard label="Not Started" value={kpis.notStarted} />
+        <KpiCard label="Total" value={kpis.total} icon={ShieldCheck} color="#71717a" sub="all controls" />
+        <KpiCard label="Effective" value={kpis.effective} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.effective / kpis.total * 100) : 0}% of total`} />
+        <KpiCard label="Implemented" value={kpis.implemented} icon={Layers} color="#0a6ed1" sub="ready for review" />
+        <KpiCard label="Not Started" value={kpis.notStarted} icon={Clock} color="#e05c00" sub="pending action" />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-5 pt-3">
@@ -265,59 +265,62 @@ export default function ControlsPage() {
         />
       </div>
 
-      {detail && (
-        <DetailPanel
-          title={detail.title}
-          subtitle={humanize(detail.category)}
-          badge={CONTROL_STATUS_META[detail.status]?.label}
-          onClose={closePanel}
-        >
-          <DetailSection title="General Information">
-            <DetailField label="ID">{detail.id}</DetailField>
-            <DetailField label="Category">{humanize(detail.category)}</DetailField>
-            <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</DetailField>
-            <DetailField label="Owner">{detail.owner || "—"}</DetailField>
-            <DetailField label="Status"><StatusBadge meta={CONTROL_STATUS_META} value={detail.status} /></DetailField>
-            <DetailField label="Effectiveness"><Badge variant="secondary" className="rounded-full font-medium">{humanize(detail.effectiveness)}</Badge></DetailField>
-            <DetailField label="Due Date">{fmtDate(detail.due_date)}</DetailField>
-          </DetailSection>
-          {detail.description && (
-            <DetailSection title="Description">
-              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
+      <DetailPanel
+        open={!!detail}
+        title={detail?.title ?? ""}
+        subtitle={detail ? humanize(detail.category) : undefined}
+        badge={detail ? CONTROL_STATUS_META[detail.status]?.label : undefined}
+        onClose={closePanel}
+      >
+        {detail && (
+          <>
+            <DetailSection title="General Information">
+              <DetailField label="ID">{detail.id}</DetailField>
+              <DetailField label="Category">{humanize(detail.category)}</DetailField>
+              <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</DetailField>
+              <DetailField label="Owner">{detail.owner || "—"}</DetailField>
+              <DetailField label="Status"><StatusBadge meta={CONTROL_STATUS_META} value={detail.status} /></DetailField>
+              <DetailField label="Effectiveness"><Badge variant="secondary" className="rounded-full font-medium">{humanize(detail.effectiveness)}</Badge></DetailField>
+              <DetailField label="Due Date">{fmtDate(detail.due_date)}</DetailField>
             </DetailSection>
-          )}
-          <DetailSection title={`Related Obligations (${detailObligations.length})`}>
-            {detailObligations.length === 0
-              ? <p className="text-[13px] text-muted-foreground">No obligations linked. Use "Link Obligations".</p>
-              : <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
-                  <li key={o.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
-                ))}</ul>
-            }
-          </DetailSection>
-          <DetailSection title={`Evidence (${detailEvidence.length})`}>
-            {detailEvidence.length === 0
-              ? <p className="text-[13px] text-muted-foreground">No evidence yet.</p>
-              : <ul className="flex flex-col gap-1.5">{detailEvidence.map((e) => (
-                  <li key={e.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{e.title}</span><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></li>
-                ))}</ul>
-            }
-          </DetailSection>
-          <div className="flex items-center gap-2 px-5 pt-4">
-            <Button variant="outline" size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-              onClick={() => setLinkControl(detail)}>Link Obligations</Button>
-            <Select value={detail.status} disabled={!mayWrite}
-              onValueChange={async (v) => {
-                await changeStatus(detail.id, v);
-                setDetail((d) => d ? { ...d, status: v } : d);
-              }}>
-              <SelectTrigger className="flex-1" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{CONTROL_STATUS_META[s].label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        </DetailPanel>
-      )}
+            {detail.description && (
+              <DetailSection title="Description">
+                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
+              </DetailSection>
+            )}
+            <DetailSection title={`Related Obligations (${detailObligations.length})`}>
+              {detailObligations.length === 0
+                ? <p className="text-[13px] text-muted-foreground">No obligations linked. Use "Link Obligations".</p>
+                : <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
+                    <li key={o.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
+                  ))}</ul>
+              }
+            </DetailSection>
+            <DetailSection title={`Evidence (${detailEvidence.length})`}>
+              {detailEvidence.length === 0
+                ? <p className="text-[13px] text-muted-foreground">No evidence yet.</p>
+                : <ul className="flex flex-col gap-1.5">{detailEvidence.map((e) => (
+                    <li key={e.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{e.title}</span><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></li>
+                  ))}</ul>
+              }
+            </DetailSection>
+            <div className="flex items-center gap-2 px-5 pt-4">
+              <Button variant="outline" size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+                onClick={() => setLinkControl(detail)}>Link Obligations</Button>
+              <Select value={detail.status} disabled={!mayWrite}
+                onValueChange={async (v: string) => {
+                  await changeStatus(detail.id, v);
+                  setDetail((d) => d ? { ...d, status: v } : d);
+                }}>
+                <SelectTrigger className="flex-1" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{CONTROL_STATUS_META[s].label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
+      </DetailPanel>
 
       <CreateControlModal open={createOpen} onClose={() => setCreateOpen(false)} onSuccess={load} />
       <LinkObligationModal
