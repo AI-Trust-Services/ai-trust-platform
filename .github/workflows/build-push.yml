@@ -42,6 +42,7 @@ concurrency:
 permissions:
   contents: read
   packages: write
+  id-token: write  # required for OIDC token exchange when deploy job calls deploy-gardener.yml
 
 jobs:
   prepare:
@@ -251,5 +252,4 @@ jobs:
     with:
       cluster: ${{ needs.images-published.outputs.cluster }}
       image_tag: ${{ needs.images-published.outputs.tag }}
-    secrets:
-      GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+    secrets: inherit
