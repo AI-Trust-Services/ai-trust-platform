@@ -83,7 +83,9 @@ docker compose down -v --remove-orphans       # stop, wipe all data (fresh start
 
 Images are built on every push to `main` (and on version tags) by the **Build and Push Images** workflow and stored in the GitHub Container Registry (`ghcr.io`). Third-party images (postgres, keycloak, openfga, etc.) are pulled straight from their upstream registries by the Helm chart — only first-party images are built here.
 
-Deployment to a Gardener shoot cluster is **manual** — trigger the **Gardener Deploy** workflow from the Actions tab, pick the target cluster (`ai-trust-main` or `sr-test`) and the image tag (short SHA from the build run, a version tag, or `latest`). The workflow authenticates via [Gardener Structured Authentication + GitHub OIDC](https://gardener.cloud/docs/guides/applications/app-ci-cd/#configure-github-actions) — no kubeconfig secret is stored in GitHub. Cluster-specific config lives in `k8s/env/<cluster>/.env` (committed to the repo). One-time cluster setup is documented in [k8s/README.md](k8s/README.md).
+On every push to `main`, deployment to the `ai-trust-main` Gardener cluster is **automatic** — the **Gardener Deploy** workflow is triggered immediately after all images are published. Images are tagged `ai-trust-main-<sha>` (cluster-scoped, to avoid cross-cluster tag collisions) plus `latest`. The workflow authenticates via [Gardener Structured Authentication + GitHub OIDC](https://gardener.cloud/docs/guides/applications/app-ci-cd/#configure-github-actions) — no kubeconfig secret is stored in GitHub. Cluster-specific config lives in `k8s/env/<cluster>/.env` (committed to the repo). One-time cluster setup is documented in [k8s/README.md](k8s/README.md).
+
+**Manual dispatch** is also available — trigger the **Build and Push Images** workflow from the Actions tab with optional `branch` (default: `main`) and `gardener_cluster` (default: `ai-trust-main`, or `sr-test`, or `none` to skip deploy) inputs. This is useful for deploying feature branches to a specific cluster before merging.
 
 ## Support, Feedback, Contributing
 

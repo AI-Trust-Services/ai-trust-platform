@@ -80,17 +80,25 @@ build/push images to `ghcr.io` and deploy this same Helm chart to a real Gardene
 Unlike the kind path (images loaded directly, no registry), this path needs a registry and a
 values overlay (`values-gardener.yaml`) that swaps NodePort services for a real Ingress.
 
-- **`build-push.yml`** - runs on every push to `main` and on version tags (`v*.*.*`), or manually.
+- **`build-push.yml`** - runs automatically on every push to `main` and on version tags (`v*.*.*`),
+  or manually via `workflow_dispatch` with optional `branch` and `gardener_cluster` inputs (defaults:
+  `main` / `ai-trust-main`; set `gardener_cluster=none` to build without deploying).
   Builds all ~22 locally-built images (same context/Dockerfile/build-args as
   `k8s/scripts/build-and-load-images.sh`) and pushes each to
-  `ghcr.io/<owner>/ai-trust-platform/<name>`, tagged with the short commit SHA (or the tag name)
-  and `latest`. Frontend Vite build-args come from repo **variables** (`VITE_REGISTRY_API_BASE`,
-  etc.) with the same defaults as `.env.example`, so it works out of the box even if unset.
-- **`deploy-gardener.yml`** - manual (`workflow_dispatch`) only, takes the image tag to roll out as
-  input. Authenticates to the shoot cluster via Gardener's **Structured Authentication** + GitHub
-  OIDC (no kubeconfig secret - see below), writes a `.env` from a secret, re-runs the existing
-  `k8s/scripts/bootstrap.sh` unchanged (namespace/Secret/ConfigMaps/RBAC - same script as the kind
-  path), then `helm upgrade --install` with `values-gardener.yaml` layered on top of `values.yaml`.
+  `ghcr.io/<owner>/ai-trust-platform/<name>`. Images are tagged `<cluster>-<short-sha>` (isolated
+  per cluster to avoid cross-cluster tag collisions) plus `latest` for `ai-trust-main` builds.
+  Frontend Vite build-args come from repo **variables** (`VITE_REGISTRY_API_BASE`, etc.) with the
+  same defaults as `.env.example`, so it works out of the box even if unset. After all images are
+  published, the deploy job calls `deploy-gardener.yml` automatically.
+- **`deploy-gardener.yml`** - called automatically by `build-push.yml` after every successful build,
+  or triggered manually via `workflow_dispatch` (pick cluster and image tag). Authenticates to the
+  shoot cluster via Gardener's **Structured Authentication** + GitHub OIDC (no kubeconfig secret -
+  see below), writes a `.env` from a secret, re-runs the existing `k8s/scripts/bootstrap.sh`
+  unchanged (namespace/Secret/ConfigMaps/RBAC - same script as the kind path), then
+  `helm upgrade --install` with `values-gardener.yaml` layered on top of `values.yaml`.
+- **`cleanup-images.yml`** - runs daily at 03:00 UTC (and can be triggered manually). Deletes image
+  versions older than 1 day from `ghcr.io`. Protected tags (`latest` and `v*.*.*`) are never
+  deleted.
 
 ### Cluster authentication - Structured Authentication + GitHub OIDC
 
@@ -159,7 +167,7 @@ Structured Authentication setup above avoids needing any kubeconfig in CI at all
 2. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>` (shoot cluster — Traefik, RBAC, cert-manager issuer)
 3. Get the Traefik LoadBalancer IP: `KUBECONFIG=<shoot-kubeconfig> kubectl get svc -A | grep LoadBalancer`
 4. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/sr-test/.env`, fill in LB IP and Gardener vars)
-5. Add `<cluster-name>` to the `options` list in `.github/workflows/deploy-gardener.yml`
+5. Add `<cluster-name>` to the `options` list in both `.github/workflows/deploy-gardener.yml` (for manual dispatch) and `.github/workflows/build-push.yml` (for manual dispatch input)
 6. Trigger `deploy-gardener.yml` with `cluster=<cluster-name>`
 
 The `ai-trust-main` cluster has its env at `k8s/env/ai-trust-main/.env` — fill in the `<LB_IP>` placeholders once Traefik is installed.
