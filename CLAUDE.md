@@ -354,13 +354,18 @@ decides the tier — it only translates natural language into flags. See
 
 - **Stateless / bounded-agentic** — the frontend holds the transcript + field state and resends it
   each turn. Nothing is persisted until the owner confirms at `POST /v1/intake`.
-- `POST /api/v1/intake/assist/turn` — one conversation turn. Body: `{transcript[], fields{}}`. Returns
+- `POST /api/v1/intake/assist/turn` — one conversation turn (owner flow). Body: `{transcript[], fields{}}`. Returns
   `{message, extracted_fields, next_field, complete, degraded, inferred_flags?, classification?}`. On
   `complete`, the flag-inference prompt runs, `classify()` is applied, and the result is returned.
-  Turn cap ~12 → `degraded=true` (offer manual completion).
+  Turn cap (`ASSIST_TURN_CAP`, default 12) → `degraded=true` (offer manual completion).
 - `POST /api/v1/intake/assist/extract` — multipart upload (TXT/MD/PDF/DOCX/PPTX/images). Parses via
-  `documents.py`, runs the doc-extract prompt (images use `LLM_VISION_MODEL`). Returns
-  `{extracted_fields, notes}`.
+  `documents.py` (max `ASSIST_MAX_TEXT_LENGTH` chars, default 15 000), runs the doc-extract prompt
+  (images use `LLM_VISION_MODEL`). Returns `{extracted_fields, notes}`.
+- `POST /api/v1/intake/assist/engineer/{system_id}/turn` — one conversation turn (engineer flow).
+  Same request/response shape as the owner turn; uses a different prompt focused on technical fields
+  (version, provider, system type, lifecycle, autonomy level).
+- `POST /api/v1/intake/assist/engineer/{system_id}/extract` — same as owner extract but scoped to an
+  existing system.
 - `POST /api/v1/intake` accepts the AI-collected descriptive fields, classifier flags, and
   `classification_rationale` (a JSONB array of `{flag, value, rationale, confidence}`); when any flags
   are present it runs `classify()` and persists the real tier. Manual owner mode sends no flags and
@@ -370,7 +375,7 @@ decides the tier — it only translates natural language into flags. See
   `external` (external provider, OAuth2 + Anthropic-format `/invoke`; fails fast at import on missing creds).
   Malformed JSON gets one auto-repair retry, then `LLMParseError` → the route returns 502 and the UI
   falls back to the manual form.
-- **Both routes gated** `require_permission(SYSTEMS_WRITE)`.
+- **All four assist routes gated** `require_permission(SYSTEMS_WRITE)`.
 
 ### overview/ (internal port 8004, accessed via /api/overview/)
 
@@ -534,7 +539,7 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `LLM_PROVIDER` | ai-system-registry-backend | `stub` | AI-assisted registration provider: `stub` (offline/deterministic), `ollama`, or `external` |
 | `LLM_BASE_URL` | ai-system-registry-backend | `http://ollama:11434/v1` | OpenAI-compatible endpoint (used when `LLM_PROVIDER=ollama`) |
 | `LLM_API_KEY` | ai-system-registry-backend | `ollama` | API key for the OpenAI-compatible endpoint |
-| `LLM_MODEL` | ai-system-registry-backend | `qwen2.5:7b` | Text/JSON model for conversation + flag inference |
+| `LLM_MODEL` | ai-system-registry-backend | `llama3.2` | Text/JSON model for conversation + flag inference |
 | `LLM_VISION_MODEL` | ai-system-registry-backend | `llama3.2-vision` | Vision model for image document extraction |
 | `AI_CLIENT_ID` | ai-system-registry-backend | *(required if external)* | External provider OAuth2 client ID |
 | `AI_CLIENT_SECRET` | ai-system-registry-backend | *(required if external)* | External provider OAuth2 client secret |
@@ -542,6 +547,9 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `AI_API_URL` | ai-system-registry-backend | *(required if external)* | External provider inference base URL |
 | `AI_RESOURCE_GROUP` | ai-system-registry-backend | `default` | External provider resource group (`AI-Resource-Group` header) |
 | `AI_DEPLOYMENT_ID` | ai-system-registry-backend | *(required if external)* | External provider deployment ID for the `/invoke` endpoint |
+| `AI_API_VERSION` | ai-system-registry-backend | `bedrock-2023-05-31` | Anthropic API version header sent to the external provider |
+| `ASSIST_TURN_CAP` | ai-system-registry-backend | `12` | Max conversation turns before `degraded=true` is returned |
+| `ASSIST_MAX_TEXT_LENGTH` | ai-system-registry-backend | `15000` | Max characters extracted from uploaded documents before truncation |
 
 All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code.
 
