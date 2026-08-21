@@ -194,7 +194,7 @@ function WorkflowProgress({
             <div className="form-group" style={{ marginBottom: 12 }}>
               <label className="required" htmlFor="reject_engineer">Reassign to AI Engineer</label>
               <select className="form-select" id="reject_engineer" value={rejectAssignee} onChange={(e) => setRejectAssignee(e.target.value)}>
-                <option value="">— select an engineer —</option>
+                <option value="">Choose AI Engineer</option>
                 {engineers.map((u) => (
                   <option key={u.username} value={u.username}>
                     {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username} ({u.username})

@@ -62,8 +62,9 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
   const [engineers, setEngineers] = useState<UserSummary[]>([]);
   const [complianceOfficers, setComplianceOfficers] = useState<UserSummary[]>([]);
   const [ownerExtra, setOwnerExtra] = useState({ department: "", use_case: "", people_affected: "", decision_context: "" });
-  const setOwnerField = (key: string, value: string) => setOwnerExtra(x => ({ ...x, [key]: value }));
+  const setOwnerField = (key: string, value: string) => { setOwnerExtra(x => ({ ...x, [key]: value })); setFlagsConfirmed(false); };
   const [loading, setLoading] = useState(false);
+  const [flagsConfirmed, setFlagsConfirmed] = useState(false);
   const submitting = useRef(false);
   const [doneId, setDoneId] = useState<string | null>(null);
   const showToast = useToast();
@@ -72,6 +73,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
     if (!open) return;
     setStep(0);
     setDoneId(null);
+    setFlagsConfirmed(false);
     submitting.current = false;
     if (isEngineerMode) {
       setForm({
@@ -128,10 +130,15 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
 
   if (!open) return null;
 
-  const set = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm((f) => ({ ...f, [k]: (e.target as HTMLInputElement).type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
-  const setNum = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const set = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const isCheckbox = (e.target as HTMLInputElement).type === "checkbox";
+    setForm((f) => ({ ...f, [k]: isCheckbox ? (e.target as HTMLInputElement).checked : e.target.value }));
+    setFlagsConfirmed(false);
+  };
+  const setNum = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((f) => ({ ...f, [k]: parseFloat(e.target.value) || 0 }));
+    setFlagsConfirmed(false);
+  };
 
   const maxStep = isEngineerMode ? 2 : 1;
 
@@ -304,7 +311,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     <div className="form-group">
                       <label className="required" htmlFor="reg_engineer">Assign to AI Engineer</label>
                       <select className="form-select" id="reg_engineer" value={assigneeUsername} onChange={(e) => setAssigneeUsername(e.target.value)}>
-                        <option value="">— select an engineer —</option>
+                        <option value="">Choose AI Engineer</option>
                         {engineers.map((u) => (
                           <option key={u.username} value={u.username}>{displayName(u)}</option>
                         ))}
@@ -313,7 +320,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     <div className="form-group">
                       <label htmlFor="reg_co">Pre-assign Compliance Officer (optional)</label>
                       <select className="form-select" id="reg_co" value={complianceOfficerUsername} onChange={(e) => setComplianceOfficerUsername(e.target.value)}>
-                        <option value="">— Let the AI Engineer choose —</option>
+                        <option value="">Choose Compliance Officer (optional)</option>
                         {complianceOfficers.map((u) => (
                           <option key={u.username} value={u.username}>{displayName(u)}</option>
                         ))}
@@ -435,6 +442,22 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                       <CheckItem id="generates_synthetic_content" label="Generates synthetic content" checked={form.generates_synthetic_content} onChange={set("generates_synthetic_content")} />
                     </div>
                   </CollapsiblePanel>
+                  <div style={{
+                    display: "flex", alignItems: "flex-start", gap: 10, marginTop: 16, padding: "12px 14px", borderRadius: 8,
+                    border: `2px solid ${flagsConfirmed ? "#27ae60" : "#e67e22"}`,
+                    background: flagsConfirmed ? "#f0faf4" : "#fffaf5",
+                  }}>
+                    <input type="checkbox" checked={flagsConfirmed} onChange={e => setFlagsConfirmed(e.target.checked)} style={{ marginTop: 2, flexShrink: 0, accentColor: "#27ae60", width: 16, height: 16 }} />
+                    <div>
+                      {flagsConfirmed
+                        ? <strong style={{ color: "#27ae60" }}>✓ All details reviewed and confirmed</strong>
+                        : <strong style={{ color: "#e67e22" }}>⚠ Please review all details before continuing</strong>
+                      }
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                        Any changes after ticking this will reset the confirmation.
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -486,7 +509,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                   <div className="form-group" style={{ marginTop: 16 }}>
                     <label className="required" htmlFor="assign_co">Assign to Compliance Officer</label>
                     <select className="form-select" id="assign_co" value={assigneeUsername} onChange={(e) => setAssigneeUsername(e.target.value)}>
-                      <option value="">— select a compliance officer —</option>
+                      <option value="">Choose Compliance Officer</option>
                       {complianceOfficers.map((u) => (
                         <option key={u.username} value={u.username}>{displayName(u)}</option>
                       ))}
@@ -519,7 +542,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
               )}
               {/* Engineer: next until last page, then submit */}
               {isEngineerMode && step < maxStep && (
-                <button className="btn-primary" onClick={handleNext}>Next →</button>
+                <button className="btn-primary" onClick={handleNext} disabled={step === 1 && !flagsConfirmed}>Next →</button>
               )}
               {isEngineerMode && step === maxStep && (
                 <button className="btn-primary" onClick={handleEngineerSubmit} disabled={loading}>

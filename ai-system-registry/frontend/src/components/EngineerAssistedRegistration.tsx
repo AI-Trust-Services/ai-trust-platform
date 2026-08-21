@@ -236,6 +236,7 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
 
   function handleFieldChange(key: string, value: string) {
     setFields(f => ({ ...f, [key]: value }));
+    setFlagsConfirmed(false);
   }
 
   async function handleSubmit() {
@@ -466,11 +467,11 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
                 <input type="checkbox" checked={flagsConfirmed} onChange={e => setFlagsConfirmed(e.target.checked)} style={{ marginTop: 2, flexShrink: 0, accentColor: "#27ae60", width: 16, height: 16 }} />
                 <span style={{ fontSize: 13 }}>
                   {flagsConfirmed
-                    ? <strong style={{ color: "#27ae60" }}>✓ Risk flags reviewed and confirmed</strong>
-                    : <strong style={{ color: "#e67e22" }}>⚠ Please review and confirm all risk flags</strong>
+                    ? <strong style={{ color: "#27ae60" }}>✓ All details reviewed and confirmed</strong>
+                    : <strong style={{ color: "#e67e22" }}>⚠ Please review all details before submitting</strong>
                   }
                   <span style={{ color: "var(--text-secondary)", display: "block", fontSize: 12, marginTop: 2 }}>
-                    Changing a flag after ticking this will reset the confirmation.
+                    Any changes after ticking this will reset the confirmation.
                   </span>
                 </span>
               </label>
@@ -480,7 +481,7 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
                 <div className="form-group">
                   <label className="required" htmlFor="eng_co">Assign Compliance Officer</label>
                   <select className="form-select" id="eng_co" value={complianceOfficerUsername} onChange={e => setComplianceOfficerUsername(e.target.value)}>
-                    <option value="">— select a compliance officer —</option>
+                    <option value="">Choose Compliance Officer</option>
                     {complianceOfficers.map(u => <option key={u.username} value={u.username}>{displayName(u)}</option>)}
                   </select>
                 </div>

@@ -57,6 +57,7 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
   const [complete, setComplete] = useState(false);
   const [degraded, setDegraded] = useState(false);
   const [inferredFlags, setInferredFlags] = useState<RationaleItem[]>([]);
+  const [flagsConfirmed, setFlagsConfirmed] = useState(false);
   const [classification, setClassification] = useState<ClassificationResult | null>(null);
   const [wizardStep, setWizardStep] = useState<0 | 1>(0);
 
@@ -81,6 +82,7 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
     setComplete(false);
     setDegraded(false);
     setInferredFlags([]);
+    setFlagsConfirmed(false);
     setClassification(null);
     setWizardStep(0);
     setAssigneeUsername("");
@@ -107,6 +109,7 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
 
   function handleFieldChange(key: string, value: string) {
     setFields(f => ({ ...f, [key]: value }));
+    setFlagsConfirmed(false);
   }
 
   async function runTurn(nextTranscript: ChatMessage[], overrideFields?: Record<string, unknown>) {
@@ -212,7 +215,7 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
     }
   }
 
-  const canRegister = !!fields.system_name && !!assigneeUsername && !registering;
+  const canRegister = !!fields.system_name && !!assigneeUsername && !registering && flagsConfirmed;
 
   return (
     <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget && !doneId) onClose(); }}>
@@ -396,19 +399,36 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
               </div>
             )}
 
+            <div style={{
+              display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 16, padding: "12px 14px", borderRadius: 8,
+              border: `2px solid ${flagsConfirmed ? "#27ae60" : "#e67e22"}`,
+              background: flagsConfirmed ? "#f0faf4" : "#fffaf5",
+            }}>
+              <input type="checkbox" checked={flagsConfirmed} onChange={e => setFlagsConfirmed(e.target.checked)} style={{ marginTop: 2, flexShrink: 0, accentColor: "#27ae60", width: 16, height: 16 }} />
+              <div>
+                {flagsConfirmed
+                  ? <strong style={{ color: "#27ae60" }}>✓ All details reviewed and confirmed</strong>
+                  : <strong style={{ color: "#e67e22" }}>⚠ Please review all details before registering</strong>
+                }
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                  Any changes after ticking this will reset the confirmation.
+                </div>
+              </div>
+            </div>
+
             <div className="assist-section-label">Assignment</div>
             <div className="form-grid single">
               <div className="form-group">
                 <label className="required" htmlFor="assist_engineer">Assign to AI Engineer</label>
                 <select className="form-select" id="assist_engineer" value={assigneeUsername} onChange={(e) => setAssigneeUsername(e.target.value)}>
-                  <option value="">— select an engineer —</option>
+                  <option value="">Choose AI Engineer</option>
                   {engineers.map((u) => <option key={u.username} value={u.username}>{displayName(u)}</option>)}
                 </select>
               </div>
               <div className="form-group">
                 <label htmlFor="assist_co">Pre-assign Compliance Officer (optional)</label>
                 <select className="form-select" id="assist_co" value={complianceOfficerUsername} onChange={(e) => setComplianceOfficerUsername(e.target.value)}>
-                  <option value="">— Let the AI Engineer choose —</option>
+                  <option value="">Choose Compliance Officer (optional)</option>
                   {complianceOfficers.map((u) => <option key={u.username} value={u.username}>{displayName(u)}</option>)}
                 </select>
               </div>
