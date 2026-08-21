@@ -65,10 +65,10 @@ if LLM_PROVIDER == "external":
 
 
 # ---------------------------------------------------------------------------
-# Ollama / OpenAI-compatible backend
+# OpenAI-compatible backend (ollama, vLLM, or any /v1/chat/completions endpoint)
 # ---------------------------------------------------------------------------
 
-async def _chat_ollama(messages: list[dict], model: str, max_tokens: int, json_mode: bool) -> dict:
+async def _chat_completions(messages: list[dict], model: str, max_tokens: int, json_mode: bool) -> dict:
     from openai import AsyncOpenAI
 
     client = AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
@@ -203,7 +203,7 @@ async def chat(
         elif LLM_PROVIDER == "external":
             result = await _chat_external(messages, model, max_tokens)
         else:  # ollama / OpenAI-compatible
-            result = await _chat_ollama(messages, model, max_tokens, json_mode)
+            result = await _chat_completions(messages, model, max_tokens, json_mode)
     except Exception as exc:
         logger.error(
             "llm.request_failed",
