@@ -194,6 +194,31 @@ async def test_engineer_turn_returns_response_for_valid_system(client: httpx.Asy
     assert isinstance(body["extracted_fields"], dict)
 
 
+async def test_engineer_turn_preserves_pre_seeded_fields(client: httpx.AsyncClient):
+    """Fields passed in from the existing system are preserved in extracted_fields."""
+    system_id = await _create_system(
+        client,
+        description="Hiring assistant",
+        intended_purpose="Screens job applicants",
+    )
+    pre_seeded = {
+        "description": "Hiring assistant",
+        "intended_purpose": "Screens job applicants",
+        "version": "1.0",
+        "provider": "ACME Corp",
+    }
+    transcript = [{"role": "assistant", "content": "Tell me the technical details."}]
+    r = await client.post(
+        f"/v1/intake/assist/engineer/{system_id}/turn",
+        json={"transcript": transcript, "fields": pre_seeded},
+        headers=_HEADERS,
+    )
+    assert r.status_code == 200
+    extracted = r.json()["extracted_fields"]
+    assert extracted.get("description") == "Hiring assistant"
+    assert extracted.get("intended_purpose") == "Screens job applicants"
+
+
 async def test_engineer_turn_404_on_missing_system(client: httpx.AsyncClient):
     r = await client.post(
         "/v1/intake/assist/engineer/SYS-NOTFOUND/turn",

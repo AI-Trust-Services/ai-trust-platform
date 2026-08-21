@@ -144,7 +144,16 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
 
   useEffect(() => {
     if (!open) return;
-    setFields({});
+    setFields({
+      description:      system.description      ?? "",
+      intended_purpose: system.intended_purpose ?? "",
+      version:          system.version          ?? "",
+      provider:         system.provider         ?? "",
+      org_name:         system.org_name         ?? "",
+      system_type:      system.system_type      ?? "",
+      lifecycle:        system.lifecycle        ?? "",
+      autonomy_level:   system.autonomy_level   ?? "",
+    });
     setStep(0);
     setTranscript([{ role: "assistant", content: GREETING }]);
     setInput("");
