@@ -1,4 +1,4 @@
-import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary } from "../types";
+import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, SystemModelResponse, WorkflowStep, UserSummary } from "../types";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
@@ -29,10 +29,16 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     }).then((r) => r.system),
-  linkModel: (systemId: string, modelId: string) =>
-    request<AISystem>(`/systems/${systemId}/model?model_id=${encodeURIComponent(modelId)}`, { method: "PUT" }),
-  unlinkModel: (systemId: string) =>
-    request<AISystem>(`/systems/${systemId}/model`, { method: "DELETE" }),
+  getSystemModels: (systemId: string) =>
+    request<SystemModelResponse[]>(`/systems/${systemId}/models`),
+  addSystemModel: (systemId: string, modelCardId: string, role?: string) =>
+    request<SystemModelResponse>(`/systems/${systemId}/models`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model_card_id: modelCardId, role }),
+    }),
+  removeSystemModel: (systemId: string, modelCardId: string) =>
+    request<null>(`/systems/${systemId}/models/${modelCardId}`, { method: "DELETE" }),
 
   getModels: () => request<ModelCard[]>("/model-cards?limit=200"),
   createModel: (data: ModelCardFormData) =>

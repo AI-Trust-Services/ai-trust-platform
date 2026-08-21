@@ -23,7 +23,6 @@ export interface AISystem {
   basis: string;
   annex_iii_area: number | null;
   compliance: number;
-  model_id: string | null;
   created_at: string;
   updated_at: string;
   workflow_status: string;
@@ -76,6 +75,10 @@ export interface ModelCard {
   description: string;
   inference_url: string;
   open_weights: boolean;
+}
+
+export interface SystemModelResponse extends ModelCard {
+  role: string | null;
 }
 
 export interface PreviewResult {
