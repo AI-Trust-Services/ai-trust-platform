@@ -62,6 +62,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
   const [engineers, setEngineers] = useState<UserSummary[]>([]);
   const [complianceOfficers, setComplianceOfficers] = useState<UserSummary[]>([]);
   const [ownerExtra, setOwnerExtra] = useState({ department: "", use_case: "", people_affected: "", decision_context: "" });
+  const setOwnerField = (key: string, value: string) => setOwnerExtra(x => ({ ...x, [key]: value }));
   const [loading, setLoading] = useState(false);
   const submitting = useRef(false);
   const [doneId, setDoneId] = useState<string | null>(null);
@@ -266,15 +267,15 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     </div>
                     <div className="form-group">
                       <label htmlFor="reg_dept">Department (optional)</label>
-                      <input type="text" id="reg_dept" value={ownerExtra.department} onChange={(e) => setOwnerExtra(x => ({ ...x, department: e.target.value }))} placeholder="e.g. HR, Finance, Operations" />
+                      <input type="text" id="reg_dept" value={ownerExtra.department} onChange={(e) => setOwnerField("department", e.target.value)} placeholder="e.g. HR, Finance, Operations" />
                     </div>
                     <div className="form-group">
                       <label htmlFor="reg_use_case">Use Case (optional)</label>
-                      <input type="text" id="reg_use_case" value={ownerExtra.use_case} onChange={(e) => setOwnerExtra(x => ({ ...x, use_case: e.target.value }))} placeholder="e.g. candidate screening" />
+                      <input type="text" id="reg_use_case" value={ownerExtra.use_case} onChange={(e) => setOwnerField("use_case", e.target.value)} placeholder="e.g. candidate screening" />
                     </div>
                     <div className="form-group">
                       <label htmlFor="reg_people">People Affected (optional)</label>
-                      <input type="text" id="reg_people" value={ownerExtra.people_affected} onChange={(e) => setOwnerExtra(x => ({ ...x, people_affected: e.target.value }))} placeholder="e.g. job applicants, employees" />
+                      <input type="text" id="reg_people" value={ownerExtra.people_affected} onChange={(e) => setOwnerField("people_affected", e.target.value)} placeholder="e.g. job applicants, employees" />
                     </div>
                     <div className="form-group">
                       <label htmlFor="reg_autonomy">Human Involvement</label>
@@ -287,7 +288,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     </div>
                     <div className="form-group span2">
                       <label htmlFor="reg_context">Decision Context (optional)</label>
-                      <textarea id="reg_context" rows={2} value={ownerExtra.decision_context} onChange={(e) => setOwnerExtra(x => ({ ...x, decision_context: e.target.value }))} placeholder="Describe how and where decisions are made by this system…" />
+                      <textarea id="reg_context" rows={2} value={ownerExtra.decision_context} onChange={(e) => setOwnerField("decision_context", e.target.value)} placeholder="Describe how and where decisions are made by this system…" />
                     </div>
                   </div>
                 </div>

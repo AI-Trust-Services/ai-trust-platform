@@ -135,7 +135,7 @@ def parse_document(filename: str, content: bytes) -> ParsedDoc:
             return ParsedDoc(filename=filename, image_b64=b64, media_type=media_type)
 
         if ext in TEXT_EXTENSIONS:
-            text = content.decode("utf-8", errors="ignore")
+            text = content.decode("utf-8", errors="replace")
         elif ext in PDF_EXTENSIONS:
             text = _parse_pdf(content)
         elif ext in WORD_EXTENSIONS:

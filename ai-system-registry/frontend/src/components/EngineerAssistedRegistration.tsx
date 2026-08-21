@@ -224,7 +224,7 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
       const assistMsg: ChatMessage = { role: "assistant", content: summary };
       const nextTranscript = [...currentTranscript, assistMsg];
       setTranscript(nextTranscript);
-      if (Object.keys(FIELD_LABELS).every(k => { const v = merged[k]; return v !== undefined && v !== null && v !== ""; })) setComplete(true);
+      if (ALL_FIELD_KEYS.every(k => { const v = merged[k]; return v !== undefined && v !== null && v !== ""; })) setComplete(true);
       setBusy(false);
       if (Object.keys(extracted).length) await runTurn(nextTranscript, merged);
     } catch (err) {
