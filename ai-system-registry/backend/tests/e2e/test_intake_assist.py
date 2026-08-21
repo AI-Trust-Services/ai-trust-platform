@@ -163,6 +163,19 @@ async def test_owner_extract_returns_notes(client: httpx.AsyncClient):
     assert len(body["notes"]) > 0
 
 
+async def test_owner_extract_oversized_file_returns_400(client: httpx.AsyncClient):
+    from app.documents import MAX_FILE_BYTES
+
+    oversized = b"x" * (MAX_FILE_BYTES + 1)
+    r = await client.post(
+        "/v1/intake/assist/extract",
+        files={"file": ("big.txt", io.BytesIO(oversized), "text/plain")},
+        headers=_HEADERS,
+    )
+    assert r.status_code == 400
+    assert "too large" in r.json()["detail"].lower()
+
+
 # ---------------------------------------------------------------------------
 # Engineer turn — POST /intake/assist/engineer/{system_id}/turn
 # ---------------------------------------------------------------------------
@@ -254,6 +267,20 @@ async def test_engineer_extract_unsupported_file_type_returns_400(client: httpx.
         headers=_HEADERS,
     )
     assert r.status_code == 400
+
+
+async def test_engineer_extract_oversized_file_returns_400(client: httpx.AsyncClient):
+    from app.documents import MAX_FILE_BYTES
+
+    system_id = await _create_system(client)
+    oversized = b"x" * (MAX_FILE_BYTES + 1)
+    r = await client.post(
+        f"/v1/intake/assist/engineer/{system_id}/extract",
+        files={"file": ("big.txt", io.BytesIO(oversized), "text/plain")},
+        headers=_HEADERS,
+    )
+    assert r.status_code == 400
+    assert "too large" in r.json()["detail"].lower()
 
 
 # ---------------------------------------------------------------------------

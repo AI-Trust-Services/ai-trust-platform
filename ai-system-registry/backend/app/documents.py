@@ -13,6 +13,8 @@ import io
 import os
 from dataclasses import dataclass
 
+from PIL import UnidentifiedImageError as _PILUnidentifiedImageError
+
 from ai_trust_logging import get_logger
 
 logger = get_logger(__name__)
@@ -109,7 +111,7 @@ def _parse_image(content: bytes, ext: str) -> tuple[str, str]:
             img.save(buffer, format="PNG" if ext == ".png" else "JPEG")
             content = buffer.getvalue()
             logger.info("document.image_resized", extra={"new_size": img.size})
-    except Exception as exc:  # resize is best-effort; fall back to original bytes
+    except (OSError, _PILUnidentifiedImageError) as exc:  # resize is best-effort; fall back to original bytes
         logger.warning("document.image_resize_failed", extra={"error": str(exc)})
     return base64.standard_b64encode(content).decode("utf-8"), media_type
 
