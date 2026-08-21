@@ -1,9 +1,15 @@
-export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal" | "pending";
+export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal";
 export type LifecycleKey = "development" | "testing" | "conformity" | "market" | "post-market" | "decommissioned";
 export type OrgRole = "provider" | "deployer" | "importer" | "distributor";
 export type SystemType = "application" | "model" | "component" | "service";
 export type AutonomyLevel = "decision_support" | "human_in_the_loop" | "human_on_the_loop" | "fully_automated";
 export type ModelType = "llm" | "embedding" | "multimodal" | "classifier";
+export type RegistrationStatus = "draft" | "pending_technical_review" | "pending_compliance_review" | "approved" | "rejected";
+
+// Task types for the AI Systems view
+export type TaskType = "new_request" | "clarification" | "reclassification";
+export type TaskStatus = "needs_action" | "in_progress" | "submitted" | "informational";
+export type Priority = "critical" | "high" | "medium" | "low";
 
 export interface AISystem {
   id: string;
@@ -24,11 +30,13 @@ export interface AISystem {
   annex_iii_area: number | null;
   compliance: number;
   model_id: string | null;
+  // Workflow fields
+  registration_status: RegistrationStatus;
+  waiting_on: string | null;
+  submitted_by: string | null;
+  submitted_at: string | null;
   created_at: string;
   updated_at: string;
-  workflow_status: string;
-  assignee_username: string | null;
-  compliance_officer_username: string | null;
   is_gpai: boolean;
   training_compute_flops: number;
   is_chatbot: boolean;
@@ -50,21 +58,6 @@ export interface AISystem {
   is_law_enforcement: boolean;
   is_migration: boolean;
   is_judicial_admin: boolean;
-}
-
-export interface WorkflowStep {
-  id: string;
-  step: string;
-  actor_username: string;
-  assignee_username: string | null;
-  note: string | null;
-  created_at: string;
-}
-
-export interface UserSummary {
-  username: string;
-  firstName: string;
-  lastName: string;
 }
 
 export interface ModelCard {
@@ -133,4 +126,6 @@ export interface ModelCardFormData {
 export interface PermissionsResponse {
   username: string;
   permissions: string[];
+  department: string;
+  businessUnit: string;
 }
