@@ -255,33 +255,6 @@ function WorkflowTab({ system, userMap }: { system: AISystem; userMap?: UserMap 
   );
 }
 
-const EDIT_REQUIRED_KEYS = ["name"];
-const EDIT_FIELD_META: { key: string; label: string; wide?: boolean; type?: "select" | "textarea" | "url"; options?: { value: string; label: string }[] }[] = [
-  { key: "name",             label: "System Name" },
-  { key: "version",          label: "Version" },
-  { key: "provider",         label: "Provider" },
-  { key: "org_name",         label: "Organisation" },
-  { key: "org_role",         label: "Role", type: "select", options: [
-    { value: "provider", label: "Provider" }, { value: "deployer", label: "Deployer" },
-    { value: "importer", label: "Importer" }, { value: "distributor", label: "Distributor" },
-  ]},
-  { key: "provider_country", label: "Country" },
-  { key: "system_type",      label: "System Type", type: "select", options: [
-    { value: "application", label: "Application" }, { value: "model", label: "Model" },
-    { value: "component", label: "Component" }, { value: "service", label: "Service" },
-  ]},
-  { key: "autonomy_level",   label: "Autonomy Level", type: "select", options: [
-    { value: "decision_support", label: "Decision support" }, { value: "human_in_the_loop", label: "Human in the loop" },
-    { value: "human_on_the_loop", label: "Human on the loop" }, { value: "fully_automated", label: "Fully automated" },
-  ]},
-  { key: "lifecycle",        label: "Lifecycle State", type: "select", options:
-    Object.entries(LIFECYCLE_LABELS).map(([v, l]) => ({ value: v, label: l }))
-  },
-  { key: "application_url",  label: "Application URL", type: "url" },
-  { key: "description",      label: "Description", type: "textarea", wide: true },
-  { key: "intended_purpose", label: "Intended Purpose", type: "textarea", wide: true },
-];
-
 function EditForm({ system, models: _models, onSave, onClose }: { system: AISystem; models: ModelCard[]; onSave: (updated: AISystem) => void; onClose: () => void }) {
   const [form, setForm] = useState<Record<string, string>>({
     name: system.name || "",
@@ -297,29 +270,10 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
     description: system.description || "",
     intended_purpose: system.intended_purpose || "",
   });
-  const [confirmed, setConfirmed] = useState<Record<string, boolean>>(system.field_confirmations ?? {});
   const [saving, setSaving] = useState(false);
   const showToast = useToast();
   const { mayWrite } = useModalControls();
   const NO_WRITE_TITLE = "Requires permission: systems:write";
-
-  function handleFieldChange(key: string, value: string) {
-    setForm(f => ({ ...f, [key]: value }));
-    if (confirmed[key]) setConfirmed(c => ({ ...c, [key]: false }));
-  }
-
-  async function handleConfirm(key: string) {
-    setConfirmed(c => ({ ...c, [key]: true }));
-    setSaving(true);
-    try {
-      await Promise.all([
-        api.updateSystem(system.id, { [key]: form[key] } as never),
-        api.patchFieldConfirmations(system.id, { [key]: true }),
-      ]);
-    } catch (e) {
-      showToast(`Failed to save: ${(e as Error).message}`, true);
-    } finally { setSaving(false); }
-  }
 
   async function handleSave() {
     setSaving(true);
@@ -332,75 +286,76 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
     } finally { setSaving(false); }
   }
 
-  const confirmedCount = EDIT_FIELD_META.filter(f => confirmed[f.key] === true).length;
-  const totalFields = EDIT_FIELD_META.length;
-
   return (
     <div className="tab-panel active">
-      <div className="msg-strip info" style={{ marginBottom: 12 }}>Changes to identity and purpose fields only. Classification flags are immutable after registration.</div>
+      <div className="msg-strip info" style={{ marginBottom: 16 }}>Changes to identity and purpose fields only. Classification flags are immutable after registration.</div>
 
-      <div className="assist-progress-strip" style={{ margin: "0 0 16px" }}>
-        <div className="assist-progress-bar">
-          <div className="assist-progress-fill" style={{
-            width: `${(confirmedCount / totalFields) * 100}%`,
-            background: confirmedCount === totalFields ? "#27ae60" : "var(--brand)",
-          }} />
+      <div className="form-grid">
+        <div className="form-group">
+          <label className="required" htmlFor="edit_name">System Name</label>
+          <input id="edit_name" type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
         </div>
-        <span className="assist-progress-label">
-          {confirmedCount === totalFields ? "✓ " : ""}{confirmedCount} / {totalFields} confirmed
-        </span>
-      </div>
-
-      <div className="assist-fields-grid">
-        {EDIT_FIELD_META.map(({ key, label, wide, type, options }) => {
-          const strVal = form[key] ?? "";
-          const isEmpty = strVal === "";
-          const isRequired = EDIT_REQUIRED_KEYS.includes(key);
-          const isConfirmed = confirmed[key] === true;
-
-          const borderColor = isConfirmed ? "#27ae60" : isEmpty ? (isRequired ? "#e74c3c" : "var(--border)") : "#e67e22";
-          const bgColor = isConfirmed ? "#f0faf4" : isEmpty ? (isRequired ? "#fff8f8" : "var(--surface)") : "#fffaf5";
-
-          return (
-            <div key={key} className={`assist-field-row${wide ? " assist-field-wide" : ""}`}
-              style={{ border: `1px solid ${borderColor}`, borderRadius: 6, padding: "8px 10px", background: bgColor }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                <label htmlFor={`edit_${key}`} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", margin: 0 }}>
-                  {label}{isRequired && <span style={{ color: "#e74c3c", marginLeft: 2 }}>*</span>}
-                </label>
-                {!isEmpty && (
-                  isConfirmed ? (
-                    <span style={{ fontSize: 11, color: "#27ae60", fontWeight: 600, flexShrink: 0 }}>✓ Confirmed</span>
-                  ) : (
-                    <button onClick={() => handleConfirm(key)} disabled={saving || !mayWrite}
-                      title={mayWrite ? undefined : NO_WRITE_TITLE}
-                      style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "none", background: "#27ae60", color: "#fff", cursor: mayWrite ? "pointer" : "not-allowed", flexShrink: 0, opacity: mayWrite ? 1 : 0.5 }}>
-                      ✓ Confirm
-                    </button>
-                  )
-                )}
-              </div>
-              {type === "select" ? (
-                <select id={`edit_${key}`} className="form-select" value={strVal}
-                  onChange={e => handleFieldChange(key, e.target.value)} style={{ fontSize: 13 }}>
-                  {options!.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              ) : type === "textarea" ? (
-                <textarea id={`edit_${key}`} rows={3} value={strVal}
-                  onChange={e => handleFieldChange(key, e.target.value)}
-                  style={{ fontSize: 13, width: "100%" }} />
-              ) : (
-                <input type={type === "url" ? "url" : "text"} id={`edit_${key}`} value={strVal}
-                  onChange={e => handleFieldChange(key, e.target.value)}
-                  style={{ fontSize: 13, width: "100%" }}
-                  {...(key === "provider_country" ? { maxLength: 2 } : {})} />
-              )}
-              {isEmpty && isRequired && (
-                <div style={{ fontSize: 11, color: "#e74c3c", marginTop: 3 }}>Required — please fill in</div>
-              )}
-            </div>
-          );
-        })}
+        <div className="form-group">
+          <label htmlFor="edit_version">Version</label>
+          <input id="edit_version" type="text" value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} />
+        </div>
+        <div className="form-group">
+          <label htmlFor="edit_provider">Provider</label>
+          <input id="edit_provider" type="text" value={form.provider} onChange={e => setForm(f => ({ ...f, provider: e.target.value }))} />
+        </div>
+        <div className="form-group">
+          <label htmlFor="edit_org_name">Organisation</label>
+          <input id="edit_org_name" type="text" value={form.org_name} onChange={e => setForm(f => ({ ...f, org_name: e.target.value }))} />
+        </div>
+        <div className="form-group">
+          <label htmlFor="edit_org_role">Role</label>
+          <select id="edit_org_role" className="form-select" value={form.org_role} onChange={e => setForm(f => ({ ...f, org_role: e.target.value }))}>
+            <option value="provider">Provider</option>
+            <option value="deployer">Deployer</option>
+            <option value="importer">Importer</option>
+            <option value="distributor">Distributor</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label htmlFor="edit_country">Country</label>
+          <input id="edit_country" type="text" maxLength={2} value={form.provider_country} onChange={e => setForm(f => ({ ...f, provider_country: e.target.value }))} />
+        </div>
+        <div className="form-group">
+          <label htmlFor="edit_system_type">System Type</label>
+          <select id="edit_system_type" className="form-select" value={form.system_type} onChange={e => setForm(f => ({ ...f, system_type: e.target.value }))}>
+            <option value="application">Application</option>
+            <option value="model">Model</option>
+            <option value="component">Component</option>
+            <option value="service">Service</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label htmlFor="edit_autonomy">Autonomy Level</label>
+          <select id="edit_autonomy" className="form-select" value={form.autonomy_level} onChange={e => setForm(f => ({ ...f, autonomy_level: e.target.value }))}>
+            <option value="decision_support">Decision support</option>
+            <option value="human_in_the_loop">Human in the loop</option>
+            <option value="human_on_the_loop">Human on the loop</option>
+            <option value="fully_automated">Fully automated</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label htmlFor="edit_lifecycle">Lifecycle State</label>
+          <select id="edit_lifecycle" className="form-select" value={form.lifecycle} onChange={e => setForm(f => ({ ...f, lifecycle: e.target.value }))}>
+            {Object.entries(LIFECYCLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label htmlFor="edit_app_url">Application URL</label>
+          <input id="edit_app_url" type="url" value={form.application_url} onChange={e => setForm(f => ({ ...f, application_url: e.target.value }))} />
+        </div>
+        <div className="form-group form-group-wide">
+          <label htmlFor="edit_description">Description</label>
+          <textarea id="edit_description" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+        </div>
+        <div className="form-group form-group-wide">
+          <label htmlFor="edit_purpose">Intended Purpose</label>
+          <textarea id="edit_purpose" rows={3} value={form.intended_purpose} onChange={e => setForm(f => ({ ...f, intended_purpose: e.target.value }))} />
+        </div>
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, gap: 8 }}>

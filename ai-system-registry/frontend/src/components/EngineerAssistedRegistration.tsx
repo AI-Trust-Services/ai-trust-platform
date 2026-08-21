@@ -119,7 +119,6 @@ function CollapsiblePanel({ title, children }: { title: string; children: React.
 }
 
 export default function EngineerAssistedRegistration({ open, system, onClose, onSuccess }: Props) {
-  // Two steps: 0 = chat + inline confirm, 1 = flags + submit
   const [step, setStep] = useState<0 | 1>(0);
 
   const [transcript, setTranscript] = useState<ChatMessage[]>([]);
@@ -128,10 +127,6 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
   const [busy, setBusy] = useState(false);
   const [complete, setComplete] = useState(false);
   const [degraded, setDegraded] = useState(false);
-
-  // Per-field confirmation state — persisted to DB on each confirm
-  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
-  const [saving, setSaving] = useState(false);
 
   const [flags, setFlags] = useState<Record<string, boolean>>({});
   const [inferredFlags, setInferredFlags] = useState<RationaleItem[]>([]);
@@ -149,28 +144,12 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
 
   useEffect(() => {
     if (!open) return;
-
-    // Only pre-populate fields the engineer has previously confirmed — backend
-    // sets defaults (version="1.0.0", system_type="application", etc.) on every
-    // new system, so reading raw system fields would show stale defaults as if
-    // the engineer had filled them.
-    const prevConfirmed = system.field_confirmations ?? {};
-    const savedFields: Record<string, unknown> = {};
-    for (const k of ALL_FIELD_KEYS) {
-      if (prevConfirmed[k] === true) {
-        const v = (system as Record<string, unknown>)[k];
-        if (v !== undefined && v !== null && v !== "") savedFields[k] = v;
-      }
-    }
-    const hasSavedFields = Object.keys(savedFields).length > 0;
-
-    setFields(savedFields);
-    setConfirmed(system.field_confirmations ?? {});
+    setFields({});
     setStep(0);
     setTranscript([{ role: "assistant", content: GREETING }]);
     setInput("");
     setBusy(false);
-    setComplete(hasSavedFields);
+    setComplete(false);
     setDegraded(false);
     setFlags({});
     setInferredFlags([]);
@@ -187,19 +166,9 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
 
   if (!open) return null;
 
-  // Derived counts for progress bar and warnings
   const filledCount = ALL_FIELD_KEYS.filter(k => {
     const v = fields[k]; return v !== undefined && v !== null && v !== "";
   }).length;
-  const emptyCount   = TOTAL_FIELDS - filledCount;
-  const confirmedCount = ALL_FIELD_KEYS.filter(k => confirmed[k] === true).length;
-  const unconfirmedCount = ALL_FIELD_KEYS.filter(k => {
-    const v = fields[k];
-    return (v !== undefined && v !== null && v !== "") && confirmed[k] !== true;
-  }).length;
-  const canProceedToStep1 = filledCount > 0 && unconfirmedCount === 0;
-
-  // ── Chat helpers ─────────────────────────────────────────────────────────
 
   async function runTurn(nextTranscript: ChatMessage[], overrideFields?: Record<string, unknown>) {
     setBusy(true);
@@ -265,32 +234,9 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
     }
   }
 
-  // ── Field confirmation ────────────────────────────────────────────────────
-
-  async function handleConfirm(key: string) {
-    const next = { ...confirmed, [key]: true };
-    setConfirmed(next);
-    setSaving(true);
-    try {
-      // Persist both the field value and its confirmation flag so re-opens show the saved state.
-      await Promise.all([
-        api.updateSystem(system.id, { [key]: fields[key] } as never),
-        api.patchFieldConfirmations(system.id, { [key]: true }),
-      ]);
-    } catch (e) {
-      showToast(`Failed to save confirmation: ${(e as Error).message}`, true);
-    } finally {
-      setSaving(false);
-    }
-  }
-
   function handleFieldChange(key: string, value: string) {
-    // Changing a confirmed field resets its confirmation — value changed, needs re-review
     setFields(f => ({ ...f, [key]: value }));
-    if (confirmed[key]) setConfirmed(c => ({ ...c, [key]: false }));
   }
-
-  // ── Submit ────────────────────────────────────────────────────────────────
 
   async function handleSubmit() {
     if (submitting) return;
@@ -324,7 +270,7 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
     }
   }
 
-  const STEPS = ["Describe & confirm fields", "Risk flags & submit"];
+  const STEPS = ["Describe & collect fields", "Risk flags & submit"];
 
   return (
     <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -347,18 +293,18 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
           ))}
         </div>
 
-        {/* ── STEP 0: Chat + inline field confirmation ── */}
+        {/* ── STEP 0: Chat + field review ── */}
         {step === 0 && (
           <>
             <div className="assist-progress-strip">
               <div className="assist-progress-bar">
                 <div className="assist-progress-fill" style={{
-                  width: `${(confirmedCount / TOTAL_FIELDS) * 100}%`,
-                  background: confirmedCount === TOTAL_FIELDS ? "#27ae60" : "var(--brand)",
+                  width: `${(filledCount / TOTAL_FIELDS) * 100}%`,
+                  background: complete ? "#27ae60" : "var(--brand)",
                 }} />
               </div>
               <span className="assist-progress-label">
-                {confirmedCount === TOTAL_FIELDS ? "✓ " : ""}{confirmedCount} / {TOTAL_FIELDS} confirmed
+                {complete ? "✓ " : ""}{filledCount} / {TOTAL_FIELDS} fields
               </span>
             </div>
 
@@ -398,56 +344,27 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
 
                   {degraded && (
                     <div className="msg-strip warn">
-                      Reached the question limit. Review and confirm the fields on the right, then proceed.
+                      Reached the question limit. Review and adjust the fields on the right, then proceed.
                     </div>
                   )}
                 </div>
 
-                {/* RIGHT: fields with inline confirm buttons */}
+                {/* RIGHT: collected fields */}
                 <div className="assist-fields-col">
-                  <div className="assist-section-label">Collected Details — confirm each field</div>
+                  <div className="assist-section-label">Collected Details — review and adjust</div>
                   <div className="assist-fields-grid">
                     {Object.entries(FIELD_LABELS).map(([key, label]) => {
                       const v = fields[key];
                       const strVal = (v !== undefined && v !== null && v !== "") ? String(v) : "";
-                      const isEmpty = strVal === "";
-                      const isConfirmed = confirmed[key] === true;
                       const isWide = key === "description" || key === "intended_purpose";
                       const opts = ENUM_OPTIONS[key];
 
-                      // Border colour: green=confirmed, red=empty, default=unconfirmed
-                      const borderColor = isConfirmed ? "#27ae60" : isEmpty ? "#e74c3c" : "var(--border)";
-                      const bgColor = isConfirmed ? "#f0faf4" : isEmpty ? "#fff8f8" : "var(--surface)";
-
                       return (
-                        <div key={key} className={`assist-field-row${isWide ? " assist-field-wide" : ""}`}
-                          style={{ border: `1px solid ${borderColor}`, borderRadius: 6, padding: "8px 10px", background: bgColor }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                            <label htmlFor={`eng_field_${key}`} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", margin: 0 }}>
-                              {label}
-                            </label>
-                            {/* Confirm button — only shown when field has a value */}
-                            {!isEmpty && (
-                              isConfirmed ? (
-                                <span style={{ fontSize: 11, color: "#27ae60", fontWeight: 600, flexShrink: 0 }}>✓ Confirmed</span>
-                              ) : (
-                                <button
-                                  onClick={() => handleConfirm(key)}
-                                  disabled={saving}
-                                  style={{
-                                    fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "none",
-                                    background: "#27ae60", color: "#fff", cursor: "pointer", flexShrink: 0,
-                                  }}
-                                >
-                                  ✓ Confirm
-                                </button>
-                              )
-                            )}
-                          </div>
+                        <div key={key} className={`assist-field-row${isWide ? " assist-field-wide" : ""}`}>
+                          <label htmlFor={`eng_field_${key}`}>{label}</label>
                           {opts ? (
                             <select id={`eng_field_${key}`} className="form-select" value={strVal}
-                              onChange={e => handleFieldChange(key, e.target.value)}
-                              style={{ fontSize: 13 }}>
+                              onChange={e => handleFieldChange(key, e.target.value)}>
                               <option value="">— not set —</option>
                               {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
@@ -455,17 +372,12 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
                             <textarea id={`eng_field_${key}`} value={strVal} rows={2}
                               onChange={e => handleFieldChange(key, e.target.value)}
                               placeholder={`Enter ${label.toLowerCase()}…`}
-                              style={{ fontSize: 13, width: "100%" }}
                             />
                           ) : (
                             <input type="text" id={`eng_field_${key}`} value={strVal}
                               onChange={e => handleFieldChange(key, e.target.value)}
                               placeholder={`Enter ${label.toLowerCase()}…`}
-                              style={{ fontSize: 13, width: "100%" }}
                             />
-                          )}
-                          {isEmpty && (
-                            <div style={{ fontSize: 11, color: "#e74c3c", marginTop: 3 }}>Required — please fill in</div>
                           )}
                         </div>
                       );
@@ -476,19 +388,10 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
               </div>
             </div>
 
-            {/* Status strip */}
-            {filledCount > 0 && (emptyCount > 0 || unconfirmedCount > 0) && (
-              <div className="msg-strip warn" style={{ margin: "0 24px" }}>
-                {emptyCount > 0 && <span>{emptyCount} field{emptyCount > 1 ? "s" : ""} not filled. </span>}
-                {unconfirmedCount > 0 && <span>{unconfirmedCount} field{unconfirmedCount > 1 ? "s" : ""} filled but not confirmed. </span>}
-                Confirm all filled fields to proceed.
-              </div>
-            )}
-
             <div className="modal-footer">
               <button className="btn-ghost" onClick={onClose}>Cancel</button>
-              <button className="btn-primary" onClick={() => setStep(1)} disabled={!canProceedToStep1}
-                title={!canProceedToStep1 ? (filledCount === 0 ? "Fill at least one field first" : "Confirm all filled fields before proceeding") : undefined}>
+              <button className="btn-primary" onClick={() => setStep(1)} disabled={filledCount === 0}
+                title={filledCount === 0 ? "Fill at least one field first" : undefined}>
                 Next →
               </button>
             </div>
@@ -499,14 +402,6 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
         {step === 1 && (
           <>
             <div className="modal-body" style={{ padding: 24 }}>
-
-              {/* Reminder for empty fields (unconfirmed can't reach here anymore) */}
-              {emptyCount > 0 && (
-                <div className="msg-strip warn" style={{ marginBottom: 12 }}>
-                  {emptyCount} field{emptyCount > 1 ? "s" : ""} not filled.
-                  <button className="btn-ghost" style={{ fontSize: 12, padding: "2px 8px", marginLeft: 8 }} onClick={() => setStep(0)}>← Review fields</button>
-                </div>
-              )}
 
               {classification && (
                 <div className="classification-box" style={{ marginBottom: 16 }}>
@@ -519,7 +414,7 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
                     <ul className="rationale-list">
                       {inferredFlags.map(f => (
                         <li key={f.flag}>
-                          <code>{f.flag}</code> — {f.rationale}
+                          {f.rationale}
                           <span className="rationale-confidence"> ({Math.round(f.confidence * 100)}% confident)</span>
                         </li>
                       ))}

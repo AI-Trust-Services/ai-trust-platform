@@ -145,7 +145,6 @@ class AISystemResponse(BaseModel):
     basis: str
     annex_iii_area: int | None
     classification_rationale: list[RationaleItem] | None
-    field_confirmations: dict[str, bool] | None
     lifecycle: str
     compliance: float
     subliminal_manipulation: bool
@@ -182,8 +181,3 @@ class AISystemResponse(BaseModel):
 class IntakeResponse(BaseModel):
     system: AISystemResponse
     classification: ClassificationResult
-
-
-class FieldConfirmationPatch(BaseModel):
-    """Partial field-confirmation update — only the keys sent are merged into field_confirmations."""
-    confirmations: dict[str, bool]
