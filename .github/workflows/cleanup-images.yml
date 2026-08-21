@@ -63,10 +63,10 @@ jobs:
               created=$(echo "$version" | jq -r '.created_at')
               tags=$(echo "$version" | jq -r '.metadata.container.tags[]?' 2>/dev/null || true)
 
-              # Skip protected tags: *-latest and v*.*.* version tags
+              # Skip protected tags: latest and v*.*.* version tags
               protected=false
               while IFS= read -r tag; do
-                if [[ "$tag" == *-latest || "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+                if [[ "$tag" == "latest" || "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
                   protected=true
                   break
                 fi

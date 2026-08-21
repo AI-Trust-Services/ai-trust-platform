@@ -93,7 +93,7 @@ jobs:
             echo "tag=${cluster}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
             # Only ai-trust-main gets a floating latest tag; other clusters use sha only
             if [[ "${cluster}" == "ai-trust-main" ]]; then
-              echo "latest_tag=${cluster}-latest" >> "$GITHUB_OUTPUT"
+              echo "latest_tag=latest" >> "$GITHUB_OUTPUT"
             else
               echo "latest_tag=" >> "$GITHUB_OUTPUT"
             fi
