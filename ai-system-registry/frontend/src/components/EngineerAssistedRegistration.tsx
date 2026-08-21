@@ -160,7 +160,28 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
     setBusy(false);
     setComplete(false);
     setDegraded(false);
-    setFlags({});
+    setFlags({
+      subliminal_manipulation:            system.subliminal_manipulation,
+      exploits_vulnerability:             system.exploits_vulnerability,
+      social_scoring_public:              system.social_scoring_public,
+      real_time_biometric_public:         system.real_time_biometric_public,
+      emotion_recognition_workplace:      system.emotion_recognition_workplace,
+      untargeted_facial_scraping:         system.untargeted_facial_scraping,
+      predictive_policing:                system.predictive_policing,
+      biometric_categorisation_sensitive: system.biometric_categorisation_sensitive,
+      is_biometric_identification:        system.is_biometric_identification,
+      is_critical_infrastructure:         system.is_critical_infrastructure,
+      is_education_related:               system.is_education_related,
+      is_employment_related:              system.is_employment_related,
+      is_credit_scoring:                  system.is_credit_scoring,
+      is_public_service:                  system.is_public_service,
+      is_law_enforcement:                 system.is_law_enforcement,
+      is_migration:                       system.is_migration,
+      is_judicial_admin:                  system.is_judicial_admin,
+      is_gpai:                            system.is_gpai,
+      is_chatbot:                         system.is_chatbot,
+      generates_synthetic_content:        system.generates_synthetic_content,
+    });
     setInferredFlags([]);
     setClassification(null);
     setFlagsConfirmed(false);
