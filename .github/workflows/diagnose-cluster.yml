@@ -1,0 +1,95 @@
+name: Diagnose Cluster Pods
+
+on:
+  workflow_dispatch:
+    inputs:
+      cluster:
+        description: "Target cluster"
+        required: true
+        default: ai-trust-main
+        type: choice
+        options:
+          - ai-trust-main
+          - sr-test
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: gardener
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Load cluster env
+        run: |
+          ENV_FILE="k8s/env/${{ inputs.cluster }}/.env"
+          set -a
+          source "$ENV_FILE"
+          set +a
+          while IFS='=' read -r key _; do
+            [[ -z "$key" || "$key" == \#* ]] && continue
+            value=$(printenv "$key" 2>/dev/null || true)
+            echo "${key}=${value}" >> "$GITHUB_ENV"
+          done < <(tr -d '\r' < "$ENV_FILE" | grep -v '^\s*#' | grep -v '^\s*$')
+          echo "NAMESPACE=${K8S_NAMESPACE:-ai-trust}" >> "$GITHUB_ENV"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Authenticate to Gardener cluster via OIDC
+        uses: gardener/cc-utils/.github/actions/kubernetes-auth@1e70b044f4d3305267a559e7ae74b4de57e1fdee
+        with:
+          server: ${{ env.GARDENER_SHOOT_API_SERVER }}
+          server-ca-discovery-url: ${{ env.GARDENER_CA_DISCOVERY_URL }}
+          audience: ${{ env.GARDENER_OIDC_AUDIENCE }}
+
+      - name: Point KUBECONFIG at the authenticated kubeconfig
+        run: echo "KUBECONFIG=$GITHUB_WORKSPACE/kubeconfig.yaml" >> "$GITHUB_ENV"
+
+      - name: Pod status
+        run: |
+          echo "=== POD STATUS ==="
+          kubectl get pods -n "$NAMESPACE" -o wide
+          echo ""
+          echo "=== EVENTS (last 50) ==="
+          kubectl get events -n "$NAMESPACE" --sort-by='.lastTimestamp' | tail -50
+
+      - name: Logs for all non-Running / non-Completed pods
+        run: |
+          echo "=== CHECKING ALL PODS FOR ERRORS ==="
+          kubectl get pods -n "$NAMESPACE" --no-headers | while read -r name ready status restarts age; do
+            if [[ "$status" != "Running" && "$status" != "Completed" && "$status" != "Succeeded" ]]; then
+              echo ""
+              echo "====== POD: $name (status: $status, restarts: $restarts) ======"
+              kubectl describe pod "$name" -n "$NAMESPACE" | tail -30
+              echo "--- LOGS ---"
+              kubectl logs "$name" -n "$NAMESPACE" --tail=50 2>&1 || kubectl logs "$name" -n "$NAMESPACE" --previous --tail=50 2>&1 || true
+            fi
+          done
+
+      - name: Logs for key services (shell, users-backend, oauth2-proxy, keycloak)
+        run: |
+          for svc in shell users-backend oauth2-proxy keycloak; do
+            echo ""
+            echo "====== LOGS: $svc (last 80 lines) ======"
+            kubectl logs -n "$NAMESPACE" -l "app.kubernetes.io/name=$svc" --tail=80 2>&1 || \
+            kubectl logs -n "$NAMESPACE" deployment/$svc --tail=80 2>&1 || true
+          done
+
+      - name: Check Ingress and cert-manager
+        run: |
+          echo "=== INGRESS ==="
+          kubectl get ingress -n "$NAMESPACE" -o wide
+          echo ""
+          echo "=== CERTIFICATES ==="
+          kubectl get certificate -n "$NAMESPACE" 2>/dev/null || echo "cert-manager not available"
+          echo ""
+          echo "=== CERTIFICATE DETAILS ==="
+          kubectl describe certificate -n "$NAMESPACE" 2>/dev/null | grep -A5 -E "Status|Reason|Message" || true
+          echo ""
+          echo "=== CERTIFICATE REQUESTS ==="
+          kubectl get certificaterequest -n "$NAMESPACE" 2>/dev/null | tail -10 || true
