@@ -41,6 +41,7 @@ AI_AUTH_URL = os.environ.get("AI_AUTH_URL")
 AI_API_URL = os.environ.get("AI_API_URL", "").rstrip("/")
 AI_RESOURCE_GROUP = os.environ.get("AI_RESOURCE_GROUP", "default")
 AI_DEPLOYMENT_ID = os.environ.get("AI_DEPLOYMENT_ID", "")
+AI_API_VERSION = os.environ.get("AI_API_VERSION", "bedrock-2023-05-31")
 
 # Fail fast on misconfiguration: when the external backend is selected, all
 # required credentials must be set — otherwise the first request dies deep
@@ -132,7 +133,7 @@ async def _chat_external(messages: list[dict], model: str, max_tokens: int) -> d
     if not convo:
         convo = [{"role": "user", "content": "(start)"}]
     body: dict[str, Any] = {
-        "anthropic_version": "bedrock-2023-05-31",
+        "anthropic_version": AI_API_VERSION,
         "max_tokens": max_tokens,
         "messages": convo,
     }
