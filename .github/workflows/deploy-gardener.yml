@@ -29,6 +29,19 @@ on:
         description: "Image tag to deploy (short SHA or version tag from Build and Push Images, or 'latest')"
         required: true
         default: latest
+  workflow_call:
+    inputs:
+      cluster:
+        description: "Target cluster"
+        required: true
+        type: string
+      image_tag:
+        description: "Image tag to deploy"
+        required: true
+        type: string
+    secrets:
+      GHCR_PULL_TOKEN:
+        required: false
 
 concurrency:
   group: deploy-gardener-${{ inputs.cluster }}
