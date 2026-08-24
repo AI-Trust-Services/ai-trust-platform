@@ -3,6 +3,9 @@ FROM python:3.12-slim AS build
 
 WORKDIR /app
 
+# git required to install ai-atlas-nexus from GitHub
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 COPY libs/logging /app/libs/logging
 COPY risk-management/backend/requirements.txt /app/requirements.txt
 
