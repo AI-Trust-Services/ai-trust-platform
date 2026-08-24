@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 ## Commands
 
@@ -10,555 +10,274 @@ docker compose up --build -d
 docker compose down --remove-orphans
 ```
 
-### Run the full platform on local Kubernetes (kind)
-
-Alternative deployment path to docker-compose — both are supported, share the same `.env`, and use
-identical host ports, so don't run them at the same time. See [k8s/README.md](k8s/README.md) for
-full details.
-
+### Run on local Kubernetes (kind)
+Alternative to docker-compose — both are supported, share the same `.env`, and use identical host ports (don't run them at the same time). See [k8s/README.md](k8s/README.md).
 ```bash
 cd k8s
-make up      # kind create cluster + bootstrap (namespace/Secret/ConfigMaps) + build&load images + helm install
+make up      # kind create cluster + bootstrap + build&load images + helm install
 make down    # helm uninstall + kind delete cluster
 ```
-
-Manifests live in `k8s/helm/ai-trust-platform/` (a Helm chart). Every k8s Service name is fixed to
-the literal docker-compose service name (`postgres`, `ai-system-registry-backend`, etc.) so
-`shell/nginx.conf` and every backend's env vars work unmodified — no image or app code changes were
-needed for this deployment path.
+Manifests live in `k8s/helm/ai-trust-platform/`. Every k8s Service name matches the docker-compose service name (`postgres`, `ai-system-registry-backend`, etc.) so `shell/nginx.conf` and backend env vars work unmodified.
 
 ### Run tests (any backend)
 ```bash
 cd <component>/backend   # e.g. cd compliance/backend
-make setup               # first time only — creates .venv and installs deps
+make setup               # first time only — creates .venv, installs deps
 make test-unit           # no Docker needed (where available)
 make test-e2e            # requires Postgres: docker compose up -d postgres
 make test                # all tests
 ```
-
-- `tests/unit/` — pure unit tests, no DB required
-- `tests/e2e/` — full stack via ASGITransport, requires Postgres only (no running server needed), auto-creates `ai_trust_test` DB and runs migrations on first run
-
-### Migrations
-```bash
-cd libs/persistence
-alembic upgrade head                              # apply all
-alembic revision --autogenerate -m "description" # generate new migration
-alembic downgrade -1                              # roll back one
-```
+- `tests/unit/` — pure unit tests, no DB
+- `tests/e2e/` — full stack via ASGITransport, requires Postgres only (no running server); auto-creates `ai_trust_test` DB and runs migrations on first run
 
 ### Consumer tests
 ```bash
 cd consumers/clickhouse-consumer
-make setup      # first time only — creates .venv and installs deps
-make test-unit  # no Docker needed
+make setup
+make test-unit
+```
+
+### Migrations
+```bash
+cd libs/persistence
+alembic upgrade head
+alembic revision --autogenerate -m "description"
+alembic downgrade -1
 ```
 
 ### VS Code debugging (any backend)
-```bash
-# Stop the Docker backend you want to debug
-docker compose stop <service-name>
-cd <component>/backend
-make setup  # first time only — creates .venv
-# Press F5 in VS Code — launch.json is pre-configured in each backend
-```
+Stop the Docker backend (`docker compose stop <service>`), `cd <component>/backend`, `make setup`, then press F5 — `launch.json` is pre-configured in each backend.
 
 ---
 
 ## Project conventions
 
-These are the decisions that are specific to this codebase. Follow them consistently — don't apply external patterns that contradict these even if they are more common elsewhere.
+Codebase-specific decisions. Follow them even where an external pattern is more common.
 
-### DB sessions
-This project uses `async with SessionLocal() as session` directly in each router function — not FastAPI's `Depends()` pattern. Follow this convention for consistency. Helper functions (e.g. `cascade.py`) never call `session.commit()` — only `session.flush()` if they need the row's ID before returning. The router function is always the one that calls `session.commit()`, keeping each request atomic.
-
-### Logging
-Event names follow the `resource.action` convention — e.g. `assessment.created`, `evidence.status_changed`, `policy_checker_worker.unknown_condition`. Contextual fields go in `extra={}`, never interpolated into the message string.
-```python
-logger.info("assessment.created", extra={"assessment_id": row.id, "framework_id": row.framework_id})
-```
-
-### ID generation
-All domain IDs use `new_id("PREFIX")` from `compliance/backend/app/ids.py` — e.g. `new_id("ASS")` → `ASS-XXXXXXXX`. Never use `uuid4()` directly. Existing prefixes: `ASS`, `OBL`, `CTL`, `EVD`. Add new prefixes to `ids.py` when creating new models.
-
-### E2E test helpers
-`conftest.py` in each component exposes module-level async functions (`create_system`, `create_assessment`, `create_obligation`, etc.) as building blocks for test setup. Import and call them directly — don't inline repeated HTTP calls or wrap them in fixtures. `create_system()` in the compliance tests writes directly to the DB (no HTTP intake endpoint exists in compliance — systems come from the registry).
-
-### M2M linking
-Many-to-many joins (`control_obligations`, `evidence_controls`, `evidence_obligations`) use raw `pg_insert(...).on_conflict_do_nothing()` — not SQLAlchemy `relationship()` with `secondary=`. Don't add ORM relationships to M2M tables.
-```python
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-await session.execute(
-    pg_insert(control_obligations).values(control_id=ctl_id, obligation_id=obl_id).on_conflict_do_nothing()
-)
-```
-
-### Frontend API client
-Every React frontend has `src/api/client.ts` with a typed `request<T>()` wrapper, a `json()` helper for POST/PUT bodies, a `qs()` helper for query params, and an `api` object with one method per endpoint. All API calls go through `request<T>()` — never raw `fetch()` inline in components. Error handling (`formatDetail`) normalises FastAPI validation errors into a readable string. Follow `compliance/frontend/src/api/client.ts` as the reference.
-
-### Pydantic schemas
-All response schemas set `model_config = {"from_attributes": True}`. Convert ORM rows with `Schema.model_validate(row)` — never `.from_orm()` (Pydantic v1, removed in v2).
+- **DB sessions** — use `async with SessionLocal() as session` directly in each router (not `Depends()`). Helper functions (e.g. `cascade.py`) never `commit()` — only `flush()` if they need a row ID. The router owns the transaction and is always the one to `commit()`, keeping each request atomic.
+- **Logging** — event names follow `resource.action` (e.g. `assessment.created`, `evidence.status_changed`). Contextual fields go in `extra={}`, never interpolated into the message: `logger.info("assessment.created", extra={"assessment_id": row.id})`.
+- **ID generation** — all domain IDs use `new_id("PREFIX")` from `compliance/backend/app/ids.py` (e.g. `new_id("ASS")` → `ASS-XXXXXXXX`). Never `uuid4()` directly. Prefixes: `ASS`, `OBL`, `CTL`, `EVD`. Add new prefixes to `ids.py`.
+- **E2E helpers** — `conftest.py` exposes module-level async functions (`create_system`, `create_assessment`, etc.). Import and call them directly; don't inline HTTP calls or wrap them in fixtures. `create_system()` in compliance tests writes directly to the DB (no HTTP intake endpoint in compliance).
+- **M2M linking** — many-to-many joins (`control_obligations`, `evidence_controls`, `evidence_obligations`) use raw `pg_insert(...).on_conflict_do_nothing()`, not ORM `relationship(secondary=)`. Don't add ORM relationships to M2M tables.
+- **Frontend API client** — every React frontend has `src/api/client.ts` with a typed `request<T>()` wrapper, `json()`/`qs()` helpers, and an `api` object with one method per endpoint. All calls go through `request<T>()` — never raw `fetch()` in components. `formatDetail` normalises FastAPI validation errors. Reference: `compliance/frontend/src/api/client.ts`.
+- **Pydantic schemas** — response schemas set `model_config = {"from_attributes": True}`. Convert rows with `Schema.model_validate(row)` — never `.from_orm()` (Pydantic v1, removed in v2).
 
 ---
 
 ## Service URLs
 
-All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports are not exposed — only accessible via the shell nginx reverse proxy.
+All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports are not exposed — only reachable via the shell nginx reverse proxy.
 
 | Service | URL |
 |---|---|
 | Luigi shell / entry point | http://localhost:8080 |
 | Keycloak (browser login) | http://localhost:8180 |
-| AI System Registry frontend | http://localhost:8080/registry/ |
-| AI System Registry backend API | http://localhost:8080/api/registry/v1 |
-| AI System Registry API docs | http://localhost:8080/api/registry/docs |
-| AI System Registry health | http://localhost:8080/api/registry/health |
-| Overview frontend | http://localhost:8080/overview/ |
-| Overview backend API | http://localhost:8080/api/overview/v1 |
-| Overview health | http://localhost:8080/api/overview/health |
-| Monitoring frontend | http://localhost:8080/monitoring/ |
-| Monitoring backend API | http://localhost:8080/api/monitoring/v1 |
-| Monitoring health | http://localhost:8080/api/monitoring/health |
-| Alerts frontend | http://localhost:8080/alerts/ |
-| Alerts backend API | http://localhost:8080/api/alerts/v1 |
-| Alerts health | http://localhost:8080/api/alerts/health |
-| Decision Trace Analyzer frontend | http://localhost:8080/dta/ |
-| Decision Trace Analyzer backend API | http://localhost:8080/api/dta/v1 |
-| Decision Trace Analyzer health | http://localhost:8080/api/dta/health |
-| Compliance frontend | http://localhost:8080/compliance/ |
-| Compliance backend API | http://localhost:8080/api/compliance/v1 |
-| Compliance health | http://localhost:8080/api/compliance/health |
-| Role Management (IAM) frontend | http://localhost:8080/iam/ |
-| IAM / roles API | http://localhost:8080/api/users/v1/iam |
-| Current user permissions | http://localhost:8080/api/users/v1/me/permissions |
-| PostgreSQL | localhost:5432 / db: `ai_trust` |
-| OTel Collector (gRPC) | localhost:4317 |
-| OTel Collector (HTTP) | localhost:4318 |
-| OTel RMQ Bridge | http://localhost:8002 |
-| OTel RMQ Bridge health | http://localhost:8002/health |
-| RabbitMQ management UI | http://localhost:15672 (credentials from `.env`) |
-| ClickHouse HTTP API | http://localhost:8123 / db: `otel` |
-| MinIO API | http://localhost:9000 |
-| MinIO console | http://localhost:9001 (credentials from `.env`) |
+| Frontends | `/registry/`, `/overview/`, `/monitoring/`, `/alerts/`, `/dta/`, `/compliance/`, `/iam/` under `:8080` |
+| Backend APIs | `/api/{registry,overview,monitoring,alerts,dta,compliance}/v1` under `:8080` (health at `/api/*/health`, docs at `/api/registry/docs`) |
+| IAM / roles API | `/api/users/v1/iam` · current-user permissions `/api/users/v1/me/permissions` |
+| PostgreSQL | localhost:5432 / db `ai_trust` |
+| OTel Collector | gRPC localhost:4317 · HTTP localhost:4318 |
+| OTel RMQ Bridge | http://localhost:8002 (health `/health`) |
+| RabbitMQ management | http://localhost:15672 (creds from `.env`) |
+| ClickHouse HTTP | http://localhost:8123 / db `otel` |
+| MinIO | API http://localhost:9000 · console http://localhost:9001 (creds from `.env`) |
 
 ## Authentication and Authorization
 
-**Hard separation of concerns:**
-- **Keycloak** — authentication only: who you are (identity, login, logout, JWT issuance)
-- **OpenFGA** — authorization only: what you can do (roles, permissions, access decisions)
-
-Keycloak has no knowledge of application roles or permissions. OpenFGA has no knowledge of passwords or sessions. The two systems are independent — never use Keycloak realm roles to gate application features.
-
-See [docs/auth-flow.md](docs/auth-flow.md) for sequence diagrams of the login, API request, and sign-out flows.
+**Hard separation:** **Keycloak** = authentication only (who you are). **OpenFGA** = authorization only (what you can do). The two are independent — never use Keycloak realm roles to gate application features. See [docs/auth-flow.md](docs/auth-flow.md) and [docs/rbac-design.md](docs/rbac-design.md).
 
 ### Authentication (Keycloak + oauth2-proxy)
+All traffic enters through **oauth2-proxy** at port 8080; nothing else is browser-reachable. No session → redirect to Keycloak login (`KEYCLOAK_PUBLIC_URL`, port 8180) → code exchanged for JWT stored in an encrypted session cookie → subsequent requests forwarded to the shell with `Authorization: Bearer <JWT>` added server-side. The browser only ever sees the cookie.
 
-All traffic enters through **oauth2-proxy** at port 8080. No backend or frontend is reachable directly from the browser — all ports are internal to Docker.
-
-#### Flow
-1. Browser hits `http://localhost:8080` → oauth2-proxy checks session cookie
-2. No session → redirects browser to Keycloak login at `KEYCLOAK_PUBLIC_URL` (port 8180)
-3. User logs in → Keycloak redirects back to `/oauth2/callback` with auth code
-4. oauth2-proxy exchanges code for JWT, stores it in an encrypted session cookie
-5. All subsequent requests: oauth2-proxy validates cookie, forwards to shell with `Authorization: Bearer <JWT>` added server-side
-6. Browser only ever sees the encrypted session cookie — JWT never exposed
-
-#### Components
-- **Keycloak 25** (`infra/keycloak/`) — identity provider, realm `ai-trust`, port 8180. Owns user accounts, credentials, and sessions only.
-- **keycloak-provision** — one-shot container that creates the realm, OIDC client, and bootstrap admin user via Admin API on startup. Idempotent. Config driven by `APP_PUBLIC_URL` — no hardcoded URLs.
-- **oauth2-proxy v7.6.0** — gateway at port 8080, enforces authentication on all paths. Forwards `X-Forwarded-Preferred-Username` (the human-readable username, used by backends) and `X-Forwarded-User` (the OIDC `sub` UUID, fallback only) to backends.
-- **Sign out** — shell bar button links to `/oauth2/sign_out`, which clears the session and calls Keycloak's logout endpoint server-side (`--backend-logout-url`).
-
-A single bootstrap admin user is always created on startup with credentials from `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` in `.env`.
+- **Keycloak 25** (`infra/keycloak/`) — realm `ai-trust`, port 8180. Owns accounts, credentials, sessions only.
+- **keycloak-provision** — one-shot, idempotent; creates realm, OIDC client, bootstrap admin via Admin API. Driven by `APP_PUBLIC_URL`, no hardcoded URLs.
+- **oauth2-proxy v7.6.0** — forwards `X-Forwarded-Preferred-Username` (human-readable, used by backends) and `X-Forwarded-User` (OIDC `sub` UUID, fallback).
+- **Sign out** — shell bar button → `/oauth2/sign_out`, which clears the session and calls Keycloak logout server-side.
+- Bootstrap admin created on startup from `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD`.
 
 ### Authorization — RBAC via OpenFGA
+**OpenFGA is the sole source of truth for roles and permissions.** Flat RBAC: users are members of roles, roles grant permissions on a single `platform:global` object.
 
-**OpenFGA is the sole source of truth for roles and permissions.** Backends never check Keycloak realm roles to make access decisions. See [docs/rbac-design.md](docs/rbac-design.md) for the full design.
-
-- **Model** — flat RBAC: users are members of roles, roles grant permissions on a single `platform:global` object.
-- **`libs/authorization`** — shared lib. `require_permission("evidence:approve")` is a FastAPI `Depends()` that reads `X-Forwarded-Preferred-Username` (set by oauth2-proxy), calls OpenFGA, and returns 403 on denial. **Fails closed** — any OpenFGA error denies. Permission strings + role definitions live in `ai_trust_authorization.constants` (single source of truth).
-- **`openfga` + `openfga-provision`** — OpenFGA uses its own Postgres DB (`openfga`, created by `infra/postgres/init.sh`). `openfga-provision` (one-shot, like `keycloak-provision`) creates the store, uploads the model generated from `constants.py`, seeds role→permission tuples, seeds `APP_ADMIN_USERNAME` as Platform Admin, and writes the store ID to the `openfga-config` volume. Backends read the store ID from `/config/store_id` on startup.
-- **IAM API** — `users` backend exposes four role/permission routers (all mounted at `/v1`):
-  - `routers/roles.py` — `GET /roles` → `[{id, name, description}]` (built-in roles list, used by the role assignment dropdown in the UI)
-  - `routers/iam.py` — `GET /iam/roles` → `[{name, permissions[]}]` (built-in roles with their full permission list, used by the IAM roles page)
-  - `routers/permissions.py` — `GET /me/permissions` → current user's effective permissions (used by the shell to gate the IAM nav node, and by MFEs to grey out unauthorized actions)
-  - `routers/custom_roles.py` — `GET/POST/PUT/DELETE /iam/custom-roles` (see Custom roles below)
-  - User management endpoints (`GET/POST /users`, `PUT/DELETE /users/{id}/roles/{role}`) live in `routers/users.py`
-- **IAM UI** — separate `iam/` frontend MFE (Role Management), proxied at `/iam/`, shown in the Luigi nav only to users with `iam:manage`.
-- **Built-in roles** — `platform_administrator`, `ai_engineer`, `ai_compliance_officer`, `business_owner`, `auditor`, `executive`. Each user holds exactly one role at a time (single-role invariant enforced in `assign_role`). Role assignment writes directly to OpenFGA.
-- **Custom roles** — `routers/custom_roles.py` (all endpoints require `iam:manage`): `GET /iam/custom-roles`, `POST /iam/custom-roles`, `PUT /iam/custom-roles/{role_id}`, `DELETE /iam/custom-roles/{role_id}`. Custom roles are stored in Postgres (`custom_roles` table, IDs prefixed `ROLE-`) and their permission tuples live in OpenFGA. Deletion removes OpenFGA member tuples → OpenFGA permission tuples → Postgres row in that order.
-- **Permission naming convention** — permission strings use `resource:action` format (e.g. `systems:read`, `evidence:approve`). The OpenFGA relation name is derived by prefixing `can_` and replacing `:` with `_` — e.g. `systems:read` → `can_read_systems`. The full mapping lives in `RELATION_BY_PERMISSION` in `ai_trust_authorization.constants`. **To add a new permission: add it to `constants.py` only** — `openfga-provision` auto-generates the authorization model from that file at startup. Never hand-edit an FGA schema file.
-- **Authorization model** — generated programmatically by `infra/openfga-provision/provision.py` from `constants.py` each time `openfga-provision` runs. There is no hand-authored DSL file. The model is re-uploaded only if no model exists in the store (idempotent).
-- **Store ID** — `openfga-provision` writes the store ID to `/config/store_id` on the shared `openfga-config` volume. Backends read it at startup via `libs/authorization`. For tests or production deployments that don't use the volume, set `OPENFGA_STORE_ID` env var directly — it takes precedence over the file.
+- **`libs/authorization`** — `require_permission("evidence:approve")` is a `Depends()` that reads `X-Forwarded-Preferred-Username`, calls OpenFGA, returns 403 on denial. **Fails closed.** Permission strings + role definitions live in `ai_trust_authorization.constants` (single source of truth).
+- **`openfga` + `openfga-provision`** — OpenFGA has its own Postgres DB (`openfga`, created by `infra/postgres/init.sh`). Provision (one-shot) creates the store, uploads the model generated from `constants.py`, seeds role→permission tuples, seeds `APP_ADMIN_USERNAME` as Platform Admin, writes the store ID to the `openfga-config` volume. Backends read it from `/config/store_id` at startup (or `OPENFGA_STORE_ID` env var, which takes precedence — used for tests/prod without the volume).
+- **IAM API** (`users` backend, all at `/v1`): `roles.py` (`GET /roles`, dropdown list) · `iam.py` (`GET /iam/roles` with full permission lists) · `permissions.py` (`GET /me/permissions`) · `custom_roles.py` (`GET/POST/PUT/DELETE /iam/custom-roles`) · user management in `users.py` (`GET/POST /users`, `PUT/DELETE /users/{id}/roles/{role}`).
+- **IAM UI** — separate `iam/` MFE at `/iam/`, shown in nav only to users with `iam:manage`.
+- **Built-in roles** — `platform_administrator`, `ai_engineer`, `ai_compliance_officer`, `business_owner`, `auditor`, `executive`. Single-role invariant enforced in `assign_role`.
+- **Custom roles** — stored in Postgres (`custom_roles`, IDs prefixed `ROLE-`), permission tuples in OpenFGA. Deletion order: OpenFGA member tuples → permission tuples → Postgres row.
+- **Permission naming** — `resource:action` (e.g. `systems:read`). OpenFGA relation = `can_` + name with `:` → `_` (e.g. `can_read_systems`); mapping in `RELATION_BY_PERMISSION`. **To add a permission, edit `constants.py` only** — `openfga-provision` regenerates the model from it at startup (re-uploaded only if the store has no model). Never hand-edit an FGA schema file.
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for repo layout, GenAI observability data flow, and Docker startup order diagrams.
+See [docs/architecture.md](docs/architecture.md) for repo layout, GenAI observability data flow, and Docker startup order.
 
 ## Frontend stacks
 
-All React frontends (AI System Registry, Alerts, Decision Trace Analyzer, Compliance) share the same pattern:
-- **Stack versions:** React 19, React Router 8, TypeScript 5.8 — use React 19 APIs (no `forwardRef`, no `React.FC` needed, use `use()` hook where applicable); React Router 8 route/loader APIs
-- **Build tool:** Vite 6 (`npm run build → dist/`), multi-stage Dockerfile (`node:24-alpine` build → `nginx:alpine` serve)
-- **Base path:** `base` set in `vite.config.ts` (e.g. `/registry/`) so assets resolve correctly when served under a sub-path via the shell proxy
-- **Routing:** `HashRouter` (compatible with Luigi's `useHashRouting: true`)
-- **Luigi integration:** `@luigi-project/client` npm package; `addInitListener` handshake in `useLuigi.js`
-- **API base URL:** read from `import.meta.env.VITE_*_API_BASE` at build time — all relative paths (e.g. `/api/registry/v1`)
-- **Backend health polling:** shows a red banner with auto-retry if backend is unavailable
-- **nginx headers:** `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding)
-- **UI5 Web Components** — `@ui5/webcomponents-react` 2.25 for SAP Fiori look. Import named components: `import { Button, ToggleButton } from "@ui5/webcomponents-react"` and use as JSX (`<Button>`, `<ToggleButton pressed={bool}>`). Raw `<ui5-button>` custom elements are not used — always go through the React bindings
+All React frontends (registry, alerts, DTA, compliance, monitoring, users, iam) share:
+- **Stack** — React 19, React Router 8, TypeScript 5.8. Use React 19 APIs (no `forwardRef`/`React.FC`, `use()` where applicable).
+- **Build** — Vite 6 (`npm run build → dist/`), multi-stage Dockerfile (`node:24-alpine` build → `nginx:alpine` serve).
+- **Base path** — `base` in `vite.config.ts` (e.g. `/registry/`) for correct asset resolution under the shell sub-path.
+- **Routing** — `HashRouter` (Luigi `useHashRouting: true`). Luigi via `@luigi-project/client`, `addInitListener` handshake in `useLuigi.js`.
+- **API base URL** — from `import.meta.env.VITE_*_API_BASE` at build time (relative paths, e.g. `/api/registry/v1`).
+- **Health polling** — red banner with auto-retry if backend is down.
+- **nginx headers** — `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding).
+- **UI5 Web Components** — `@ui5/webcomponents-react` 2.25 (SAP Fiori look). Import named components (`import { Button } from "@ui5/webcomponents-react"`) and use as JSX; never raw `<ui5-button>` custom elements.
 
-**Exceptions:**
-- **Overview** — static HTML served directly by nginx, no build step
-- **Decision Trace Analyzer** — dev proxy: `vite.config.ts` proxies `/api/*` → `http://localhost:8006`, so no CORS issues locally
+**Exceptions:** Overview is static HTML served by nginx (no build). DTA uses a dev proxy (`vite.config.ts` proxies `/api/*` → `http://localhost:8006`, no local CORS).
 
 ## Backend stacks
 
-All backends are **FastAPI 0.115 + Python 3.12**, served on port 8001+:
-- `main.py` — FastAPI app, mounts routers, `/health` endpoint tests DB connectivity
-- `schemas/` — Pydantic v2 request/response schemas, one file per domain
-- `healthcheck.py` — used by Docker healthcheck (`python healthcheck.py`), hits `/health` via stdlib urllib
+All backends are **FastAPI 0.115 + Python 3.12** on port 8001+:
+- `main.py` — app, router mounts, `/health` (tests DB connectivity)
+- `schemas/` — Pydantic v2, one file per domain
 - `routers/` — one file per resource group
+- `healthcheck.py` — Docker healthcheck (`python healthcheck.py`), hits `/health` via stdlib urllib
 
-## libs/persistence
+## Shared libs
 
-The shared DB package. All backends depend on it.
+- **`libs/persistence`** — async SQLAlchemy engine (`database.py`, reads `DATABASE_URL`; pool 5/+10, `pool_pre_ping`), ORM `models/` (one file per entity), Alembic `migrations/versions/` (all tables, all components).
+- **`libs/clickhouse`** — connection factory (`database.py`, reads `CLICKHOUSE_*`, fail-fast), `tables.py` (single source for table/column names), versioned SQL `migrations/` (applied in filename order, tracked in `otel.schema_migrations`).
+- **`libs/logging`** — `logger.py` JSON formatter (UTC timestamp, level, logger, correlation ID, `extra={}` fields). `correlation_id_var` is a `contextvars.ContextVar` set once per request in `logging_middleware`; it propagates through all `await`s automatically. Middleware logs INFO for 2xx, WARNING for 4xx, ERROR for 5xx. Usage: `from ai_trust_logging import get_logger, correlation_id_var`.
 
-- **`database.py`** — async SQLAlchemy engine, reads `DATABASE_URL` from environment. Pool: `pool_size=5`, `max_overflow=10`, `pool_pre_ping=True`
-- **`models/`** — SQLAlchemy ORM models, one file per domain entity
-- **`migrations/versions/`** — Alembic migration scripts for all tables across all components
-
-## libs/clickhouse
-
-The shared ClickHouse package. All consumers and any future services that read/write ClickHouse depend on it.
-
-- **`database.py`** — ClickHouse connection factory, reads `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` from environment (fail-fast)
-- **`tables.py`** — single source of truth for table names and column lists
-- **`migrations/`** — versioned SQL files, applied in filename order, tracked in `otel.schema_migrations`
-
-### Cold storage (tiered MergeTree → MinIO)
-
-Both `gen_ai_spans` and `alert_events` use a two-tier storage policy:
-
-| Tier | Storage | Trigger |
-|---|---|---|
-| Hot | Local disk (`clickhouse_data` volume) | Default for new data |
-| Cold | MinIO S3 (`minio_data` volume) | Age > 7 days **or** hot disk > 90% full |
-
-Key decisions:
-- **MinIO** — open-source S3-compatible object store, runs as a Docker container, no hyperscaler dependency. Swap to AWS S3 by changing three env vars — no code or schema changes needed
-- **Queryable cold data** — tiered MergeTree keeps cold data queryable via SQL (slower, network round-trip to MinIO); data is never detached or exported
-- **No delete TTL** — data kept forever in MinIO (compliance audit trail)
-- **Full fidelity** — `input_messages` and `output_messages` are retained in cold storage (not stripped)
-- **Query routing** — all existing dashboard queries stay on hot storage naturally (24h max window); alert worker queries are explicitly bounded to recent data (e.g. last 1h) to avoid cold scans
-- **Credentials** — `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` in `.env`, with `x-minio-env` anchor in `docker-compose.yml`
-- **ClickHouse config** — storage policy defined in `otel-pipeline/clickhouse-config/config.d/storage.xml`, mounted into the ClickHouse container as read-only
-- **Bucket init** — `minio-init` one-shot container creates the `clickhouse` bucket on first startup; ClickHouse `depends_on: minio-init`
-
-## libs/logging
-
-The shared structured logging package. All backends depend on it.
-
-- **`logger.py`** — JSON formatter with UTC timestamps, log level, logger name, correlation ID, and any extra fields passed via `extra={}`
-- **`correlation_id_var`** — `contextvars.ContextVar` set once per request in the `logging_middleware` in `main.py`. Because it uses `contextvars`, it automatically propagates through all `await` calls within that request — every `logger.info(...)` anywhere in the call chain includes the same `correlation_id` without passing it explicitly
-- **Log levels** — middleware logs `INFO` for 2xx, `WARNING` for 4xx, `ERROR` for 5xx
-- Usage: `from ai_trust_logging import get_logger, correlation_id_var`
+### ClickHouse cold storage (tiered MergeTree → MinIO)
+`gen_ai_spans` and `alert_events` use two tiers: **hot** (local `clickhouse_data` disk, default) and **cold** (MinIO S3, triggered by age > 7 days or hot disk > 90% full).
+- MinIO is an S3-compatible container (no hyperscaler dep); swap to AWS S3 via three env vars, no code/schema change.
+- Cold data stays queryable via SQL (slower); never detached/exported. No delete TTL — kept forever (audit trail), full fidelity (`input_messages`/`output_messages` retained).
+- Dashboard queries stay hot naturally (24h max window); alert worker queries are explicitly bounded to recent data to avoid cold scans.
+- Storage policy in `otel-pipeline/clickhouse-config/config.d/storage.xml` (mounted read-only). `minio-init` creates the `clickhouse` bucket on first startup; ClickHouse `depends_on: minio-init`.
 
 ## Shell (`shell/`)
 
-Static HTML + `luigi-config.js` served by nginx. Luigi core is loaded from CDN. Navigation nodes in `luigi-config.js` define which MFEs are mounted and at what paths. To add a component to the nav, add a `children` node with its `viewUrl`.
+Static HTML + `luigi-config.js` served by nginx (Luigi core from CDN). Nav nodes in `luigi-config.js` define mounted MFEs. The shell nginx also **reverse-proxies** all MFE (`/registry/`, …) and backend (`/api/registry/`, …) traffic.
 
-The shell nginx also acts as a **reverse proxy** — all MFE and backend API traffic routes through it:
-- `/registry/`, `/monitoring/`, `/overview/`, `/alerts/`, `/compliance/`, `/dta/` → frontend containers
-- `/api/registry/`, `/api/monitoring/`, `/api/overview/`, `/api/alerts/`, `/api/compliance/`, `/api/dta/` → backend containers
-
-If a container restarts and nginx returns 502, run `docker compose restart shell` to clear the stale DNS cache.
-
-**Sidebar customization** — the sidebar uses `responsiveNavigation: "Fiori3"` with a custom animated hamburger injected via `luigiAfterInit`. Key settings:
-- `sideNavigation: { collapsed: true }` — starts collapsed (icons only)
-- The custom hamburger is injected into the sidebar DOM after Luigi renders
-- Alerts is registered as `hideFromNav: true` — accessible via bell badge but not shown in nav
-- `defaultChildNode: "overview"` — Overview loads by default when navigating to `/home`
-- "Sign out" button injected into the shell bar via `luigiAfterInit`, links to `/oauth2/sign_out`
+- If a container restarts and nginx returns 502, run `docker compose restart shell` to clear the stale DNS cache.
+- **Sidebar** — `responsiveNavigation: "Fiori3"`, custom animated hamburger injected via `luigiAfterInit`, `sideNavigation.collapsed: true`. Alerts is `hideFromNav: true` (reached via bell badge). `defaultChildNode: "overview"`. "Sign out" button injected into the shell bar, links to `/oauth2/sign_out`.
 
 ## Components
 
-Each component has `frontend/` (nginx, internal only) and `backend/` (FastAPI, internal only). All traffic is routed through port 8080 via the shell nginx reverse proxy.
+Each component has `frontend/` (nginx, internal) and `backend/` (FastAPI, internal). All traffic routes through `:8080` via the shell proxy.
 
-### Dual deployment paths — docker-compose and k8s (kind)
-
-This platform has **two independent, fully-supported local deployment paths**: `docker-compose.yml`
-and the Helm chart under `k8s/helm/ai-trust-platform/` (see [k8s/README.md](k8s/README.md)). Only
-one is usually running in a given session, but **develop and change both together** — don't treat
-the k8s path as a one-off snapshot. Whenever you touch anything that affects how a service runs:
-
-- New service in `docker-compose.yml`? Add the matching Deployment+Service (or Job, for a one-shot
-  task) to the Helm chart, and add its image to `k8s/scripts/build-and-load-images.sh`.
-- New/changed env var or secret? Add it to `.env.example` for docker-compose — it flows through to
-  k8s automatically via `k8s/scripts/bootstrap.sh`'s Secret (sourced from that same `.env`; there is
-  no separate k8s-specific env file by design).
-- New `depends_on: condition:` in compose? Add the matching `waitForTcp`/`waitForHttp`/`waitForJob`
-  initContainer in the Helm chart (helpers defined once in `_helpers.tpl`).
-- Renamed or moved a file that's mounted as a volume/ConfigMap in either path (e.g. `infra/*/init.sh`,
-  `otel-pipeline/**/config`)? Update both `docker-compose.yml`'s `volumes:` **and**
-  `k8s/scripts/bootstrap.sh`'s `--from-file` references — nothing enforces this in CI, a rename on
-  one side silently breaks the other.
+### Dual deployment paths (docker-compose and k8s) — keep in sync
+Both paths are fully supported; **develop and change them together**. When you touch how a service runs:
+- New service in `docker-compose.yml` → add matching Deployment+Service (or Job) to the Helm chart + its image to `k8s/scripts/build-and-load-images.sh`.
+- New/changed env var or secret → add to `.env.example`; it flows to k8s via `k8s/scripts/bootstrap.sh`'s Secret (sourced from the same `.env`, no separate k8s env file).
+- New `depends_on: condition:` → add the matching `waitForTcp`/`waitForHttp`/`waitForJob` initContainer (helpers in `_helpers.tpl`).
+- Renamed/moved a mounted file (e.g. `infra/*/init.sh`, `otel-pipeline/**/config`) → update both `docker-compose.yml` `volumes:` **and** `bootstrap.sh` `--from-file`. Nothing enforces this in CI — a rename on one side silently breaks the other.
 
 ### Adding a new component
-1. Create `new-component/frontend/` and `new-component/backend/`
-2. Create `libs/persistence/ai_trust_persistence/models/your_model.py` and import it in `models/__init__.py`
-3. Add migration to `libs/persistence/migrations/versions/` and run `alembic upgrade head`
-4. Copy `ai-system-registry/backend/Dockerfile` pattern (build context must be repo root)
-5. Add the libs your component needs to `requirements.txt`: `-e /app/libs/persistence` (Postgres), `-e /app/libs/clickhouse` (ClickHouse), `-e /app/libs/logging` (all backends)
-6. Add `healthcheck.py` to the backend (copy from `ai-system-registry/backend/healthcheck.py`, update port)
-7. Add service to root `docker-compose.yml` with `depends_on: db-migrate: condition: service_completed_successfully` and a `healthcheck`. Do **not** add `ports:` — traffic goes through the shell proxy
-8. Add proxy routes to `shell/nginx.conf` for the frontend (`/new-component/`) and backend API (`/api/new-component/`)
-9. Add `base: "/new-component/"` to the frontend's `vite.config.ts`
-10. Add nav node to `shell/luigi-config.js` with `viewUrl: "http://localhost:8080/new-component/"`
-11. Add the matching Deployment+Service pair to the k8s Helm chart — if it fits the generic
-    backend+frontend pattern, add an entry to the `components` list in
-    `k8s/helm/ai-trust-platform/values.yaml` (templated once in `templates/components.yaml`); if not,
-    add a new template file. Add the component's image(s) to `k8s/scripts/build-and-load-images.sh`.
+1. Create `new-component/frontend/` and `new-component/backend/`.
+2. Add `libs/persistence/ai_trust_persistence/models/your_model.py` and import it in `models/__init__.py`.
+3. Add a migration to `libs/persistence/migrations/versions/` and `alembic upgrade head`.
+4. Copy `ai-system-registry/backend/Dockerfile` (build context = repo root).
+5. Add needed libs to `requirements.txt`: `-e /app/libs/persistence`, `-e /app/libs/clickhouse`, `-e /app/libs/logging`.
+6. Add `healthcheck.py` (copy from ai-system-registry, update port).
+7. Add the service to `docker-compose.yml` with `depends_on: db-migrate: condition: service_completed_successfully` and a `healthcheck`. Do **not** add `ports:`.
+8. Add proxy routes to `shell/nginx.conf` (`/new-component/`, `/api/new-component/`).
+9. Add `base: "/new-component/"` to the frontend `vite.config.ts`.
+10. Add a nav node to `shell/luigi-config.js`.
+11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh`.
 
-### ai-system-registry/ (internal port 8001, accessed via /api/registry/)
-
+### ai-system-registry/ (port 8001, `/api/registry/`)
 AI system registration and EU AI Act classification.
+- `POST /api/v1/intake` — entry point for all registrations. Runs the classifier (< 10ms), assigns `SYS-XXXXXXXX`, persists to Postgres. The frontend never sends `tier` — classification is backend-only.
+- `GET /api/v1/systems` — pagination `?limit=50&offset=0` (max 200).
+- `POST /api/v1/systems/{id}/reclassify` — re-runs classifier, updates `tier`/`basis`/`annex_iii_area`.
+- `classifier.py` — pure Python, no I/O. EU AI Act 4-tier waterfall, returns at first match (highest priority first):
 
-- `POST /api/v1/intake` — entry point for all new registrations. Runs the classifier (< 10ms), assigns a `SYS-XXXXXXXX` ID, persists to PostgreSQL. The frontend never sends a `tier` field — classification is backend-only.
-- `GET /api/v1/systems` — pagination via `?limit=50&offset=0` (max 200)
-- `POST /api/v1/systems/{id}/reclassify` — re-runs classifier on existing flags, updates `tier`, `basis`, `annex_iii_area`
-- `classifier.py` — EU AI Act 4-tier waterfall (Art. 5 → GPAI → Annex III → Art. 50 → minimal), pure Python, no I/O
+  | Priority | Tier | Trigger |
+  |---|---|---|
+  | 1 | `prohibited` | Any Art. 5 flag |
+  | 2 | `gpai-systemic` | `is_gpai` AND `training_compute_flops ≥ 10²⁵` |
+  | 3 | `gpai-standard` | `is_gpai` AND `training_compute_flops < 10²⁵` |
+  | 4 | `high` | Any Annex III flag |
+  | 5 | `limited` | `is_chatbot` OR `generates_synthetic_content` |
+  | 6 | `minimal` | none of the above |
 
-#### EU AI Act classifier waterfall
+  Logic is hardcoded (EU AI Act is law). Obligation texts/thresholds are constants in `classifier.py`.
 
-Waterfall — returns at first match, highest priority first:
+**AI-assisted registration** — conversational alternative to the manual form. An LLM extracts descriptive fields and infers classifier flags; the **same deterministic `classifier.py`** produces the tier (the LLM never decides the tier). Stateless: the frontend holds the transcript + field state and resends each turn; nothing persists until `POST /v1/intake`. See [docs/ai-assisted-registration.md](docs/ai-assisted-registration.md).
+- `POST /api/v1/intake/assist/turn` — one owner-flow turn. Body `{transcript[], fields{}}`; returns `{message, extracted_fields, next_field, complete, degraded, inferred_flags?, classification?}`. On `complete`, runs flag inference + `classify()`. Turn cap (`ASSIST_TURN_CAP`) → `degraded=true`.
+- `POST /api/v1/intake/assist/extract` — multipart upload (TXT/MD/PDF/DOCX/PPTX/images), parsed via `documents.py` (max `ASSIST_MAX_TEXT_LENGTH`); images use `LLM_VISION_MODEL`. Returns `{extracted_fields, notes}`.
+- `POST /api/v1/intake/assist/engineer/{system_id}/turn` and `/extract` — engineer flow, same shapes, prompts focused on technical fields.
+- `POST /api/v1/intake` accepts AI-collected fields, flags, and `classification_rationale` (JSONB `{flag, value, rationale, confidence}`); runs `classify()` when flags present. Manual owner mode sends no flags → stays a `pending` stub for the engineer.
+- **LLM layer** (`app/llm/`) — dispatch via `LLM_PROVIDER`: `stub` (default; deterministic, offline, dev/CI), `ollama` (OpenAI-compatible), `external` (OAuth2 + Anthropic-format `/invoke`, fails fast on missing creds). Malformed JSON → one auto-repair retry → `LLMParseError` → route returns 502, UI falls back to the manual form.
+- All four assist routes gated `require_permission(SYSTEMS_WRITE)`.
 
-| Priority | Tier | Trigger |
-|---|---|---|
-| 1 | `prohibited` | Any Art. 5 flag (subliminal manipulation, social scoring, etc.) |
-| 2 | `gpai-systemic` | `is_gpai=true` AND `training_compute_flops ≥ 10²⁵` |
-| 3 | `gpai-standard` | `is_gpai=true` AND `training_compute_flops < 10²⁵` |
-| 4 | `high` | Any Annex III flag (biometric, credit scoring, law enforcement, etc.) |
-| 5 | `limited` | `is_chatbot=true` OR `generates_synthetic_content=true` |
-| 6 | `minimal` | None of the above |
+### overview/ (port 8004, `/api/overview/`)
+Compliance-posture MFE, reads Postgres only, static HTML frontend.
+- `GET /api/overview/v1/stats?lifecycle=` — KPI counts, tier distribution, compliance data, recent registrations. Dashboard layout persists to `localStorage` (`ai_trust_overview_dashboard_v1`).
 
-Classification logic is hardcoded (EU AI Act is law, not config). Obligation texts and thresholds are constants in `classifier.py`.
+### monitoring/ (port 8003, `/api/monitoring/`)
+Live signals from ClickHouse + registry analytics from Postgres.
+- `GET /v1/services` — distinct services + models. `GET /v1/signals?service=&window=1h` — time-series count/latency/tokens (`window` ∈ `15m`,`1h`,`6h`,`24h`). `GET /v1/stats?lifecycle=` — Postgres analytics.
+- All ClickHouse queries use `clickhouse-connect` **parameterized queries** (`{param:Type}`) — never f-string interpolation. `window`/`interval` come from a server-side allowlist.
+- Live Signals polls every 30s; filters persist to `localStorage` (`ai_trust_monitoring_filters_v1`), analytics layout to `ai_trust_dashboard_v4`.
 
-### overview/ (internal port 8004, accessed via /api/overview/)
-
-Compliance posture MFE. Reads Postgres only. Static HTML frontend (no build step).
-
-- `GET /api/overview/v1/stats?lifecycle=` — KPI counts, tier distribution, compliance data, recent registrations
-- Frontend: fixed top section (KPI cards + tier donut + compliance bar chart) + customizable analytics dashboard. Layout persists to `localStorage` (`ai_trust_overview_dashboard_v1`)
-
-### monitoring/ (internal port 8003, accessed via /api/monitoring/)
-
-Live observability signals from ClickHouse + registry analytics from Postgres.
-
-- `GET /api/monitoring/v1/services` — distinct services + models seen in ClickHouse
-- `GET /api/monitoring/v1/signals?service=&window=1h` — time-series inference count, latency, token usage from ClickHouse. `window` accepts `15m`, `1h`, `6h`, `24h`
-- `GET /api/monitoring/v1/stats?lifecycle=` — registry analytics aggregated from Postgres
-- All ClickHouse queries use `clickhouse-connect` with **parameterized queries** (`{param:Type}` syntax) — never f-string interpolation of user input. `window` and `interval` values come from a server-side allowlist
-- Frontend: Live Signals section polls every 30s; selectors persist to `localStorage` (`ai_trust_monitoring_filters_v1`). Registry Analytics section layout persists to `localStorage` (`ai_trust_dashboard_v4`)
-
-### alerts/ (internal port 8005, accessed via /api/alerts/)
-
+### alerts/ (port 8005, `/api/alerts/`)
 Rule-based alerting. Rules in Postgres, events in ClickHouse.
+- `GET /v1/active` (unresolved/unhandled) · `GET /v1/history` · `GET /v1/rules` (incl. `parameters`, `is_custom`) · `GET /v1/count` (bell badge).
+- `POST /v1/events/{id}/handle` (sets `handled_at` + `resolved_at`) · `/approve-model` (marks handled + updates `service_model_baselines`; body `{service_name, new_model}`) · `/reject-model` (marks handled, baseline unchanged) · `POST /v1/rules/{id}/toggle`.
 
-- `GET /api/alerts/v1/active` — unresolved, unhandled events from ClickHouse
-- `GET /api/alerts/v1/history` — resolved/handled events
-- `GET /api/alerts/v1/rules` — all rules from Postgres (includes `parameters`, `is_custom`)
-- `GET /api/alerts/v1/count` — fast count for bell badge polling
-- `POST /api/alerts/v1/events/{id}/handle` — mark event as handled (sets both `handled_at` and `resolved_at`)
-- `POST /api/alerts/v1/events/{id}/approve-model` — approve a model change: marks handled + updates `service_model_baselines` to new model. Body: `{ service_name, new_model }`
-- `POST /api/alerts/v1/events/{id}/reject-model` — reject a model change: marks handled, baseline unchanged
-- `POST /api/alerts/v1/rules/{id}/toggle` — enable/disable a rule
+**policy-checker-worker/** — standalone background job (no HTTP port). Evaluates enabled rules every `ALERT_POLL_INTERVAL`s (10s dev, 60s+ prod) against Postgres + ClickHouse; creates events in `otel.alert_events`, auto-resolves threshold events when conditions clear. Event-type alerts suppressed 24h after handling (except `model_diverged`). Evaluators return `tuple[bool, float]` (aggregate) or `list[EvalResult]` (entity-scoped, one event per entity).
 
-#### policy-checker-worker/
+Seeded rules: `prohibited_exists`, `avg_compliance_below`, `high_risk_on_market_low_compliance`, `no_signals`, `high_latency`, `market_system_no_model_card`, `gpai_no_compliance`, `model_diverged`.
 
-Standalone background job (no HTTP port). Evaluates all enabled rules every `ALERT_POLL_INTERVAL` seconds (default 10s dev / raise to 60s+ for production).
+**Model divergence (`model_diverged`)** — detects a service switching models via a persistent baseline in `service_model_baselines` (Postgres), not a sliding window. First span → stores baseline, no alert. Later spans → compares `argMax(request_model, received_at)` against the baseline; if different, fires "Model changed for {service}: {old} → {new}". Baseline updates only on explicit human approve; rejecting leaves it unchanged and the alert re-fires every 24h until approved or the service reverts.
 
-- Reads enabled rules from Postgres `alert_rules` table
-- Evaluates each condition against live data (Postgres + ClickHouse)
-- Creates new events in ClickHouse `otel.alert_events` when conditions trigger
-- Auto-resolves threshold events when conditions clear
-- Event-type alerts suppressed for 24h after being handled (except `model_diverged` — baseline is the deduplication mechanism)
-- Supports two evaluator return types: `tuple[bool, float]` for aggregate rules, `list[EvalResult]` for entity-scoped rules (one event per entity)
+### decision-trace-analyzer/ (port 8006, `/api/dta/`)
+Trace viewer for GenAI spans, reads ClickHouse only.
+- `GET /api/v1/traces` — groups spans by `trace_id`, paginated. Dev: `vite.config.ts` proxies `/api/*` → `http://localhost:8006`. Prod: nginx proxies `/api/` → `decision-trace-analyzer-backend:8006`.
 
-#### Alert rules (seeded defaults)
+### compliance/ (port 8007, `/api/compliance/`)
+Governance chain — assessments, obligations, controls, evidence for EU AI Act / NIST / ISO. Reads/writes Postgres; evidence files in MinIO.
 
-| Rule | Category | Condition type |
-|---|---|---|
-| Prohibited system registered | risk | `prohibited_exists` |
-| Average compliance below 70% | compliance | `avg_compliance_below` |
-| High-risk on market with compliance < 50% | compliance | `high_risk_on_market_low_compliance` |
-| No inference signals in last 30 min | observability | `no_signals` |
-| Avg latency > 500ms | observability | `high_latency` |
-| System on market without model card | compliance | `market_system_no_model_card` |
-| GPAI system with no compliance score | risk | `gpai_no_compliance` |
-| Model version changed | observability | `model_diverged` |
+Backend (`compliance/backend/app/`):
+- `cascade.py` — status cascade + score recalc: approved evidence → effective control → fulfilled obligation → assessment score → `ai_systems.compliance`. Caller owns the transaction; cascade never commits.
+- `obligation_templates.py` — hardcoded obligation sets per (framework, tier): EU AI Act + NIST AI RMF + ISO/IEC 42001.
+- `control_templates.py` — hardcoded control templates per obligation `article_ref` (AISEC-* set), tier-filtered via `controls_for(article_ref, tier)`.
+- `minio_client.py` — async wrapper over the sync `minio` SDK (blocking calls in `asyncio.to_thread`). Two clients: `_client` (in-cluster, uploads) and `_presign_client` (public, presigned download URLs).
+- Routers: `frameworks.py`, `assessments.py` (CRUD + `/generate-obligations`, `/generate-controls`, `/submit`, `/approve`), `obligations.py`, `controls.py` (CRUD + `/link/{obligation_id}` POST/DELETE), `evidence.py` (multipart + CRUD + `/approve`, `/reject`, `/download-url`, `/versions`, `/upload-version`).
 
-#### Model divergence rule (`model_diverged`)
+**Governance chain** — `POST /api/v1/assessments` is the entry point: it auto-generates obligations **and** controls in one transaction. Obligations come from `obligation_templates.py` by tier, with owner/not-applicable pre-filled from the most recent approved prior assessment for the same (system, framework). For each obligation, `controls_for(article_ref, tier)` yields controls (stable `control_ref = "{article_ref}:{slug}"`) linked via `control_obligations`; a fresh control is `not_started`, so the cascade immediately moves each obligation `applicable → in_progress`. Owner (only) is carried forward from the most recent prior control with the same `control_ref` for that system. `POST /assessments/{id}/generate-controls` re-runs for API consumers and is idempotent (skips obligations that already have a control). Controls can also be linked manually via `POST /controls/{id}/link/{obligation_id}`. Approving evidence cascades automatically.
 
-Detects when a service switches to a different model. Uses a persistent baseline in `service_model_baselines` (Postgres) rather than a sliding window comparison.
+**Delete** — `DELETE /api/v1/assessments/{id}` cascades obligations (FK `ondelete=CASCADE`) and removes auto-generated controls (`control_ref` not null) linked **only** to that assessment's obligations. Manual controls (`control_ref` null) and shared controls are kept. Response includes `controls_deleted`.
 
-- On first span from a service → stores baseline, no alert
-- On subsequent spans → compares `argMax(request_model, received_at)` from ClickHouse against stored baseline
-- If different → fires alert with description "Model changed for {service}: {old} → {new}"
-- Baseline only updates when a human explicitly approves via **Approve new model** button
-- Rejecting an alert leaves the baseline unchanged; the alert re-fires every 24h until approved or the service reverts
+**Evidence** — `POST /api/v1/evidence` accepts `control_ids` and `obligation_ids` as repeated form fields (multi-value, one M2M row each); at least one of `control_ids`/`obligation_ids`/`ai_system_id`/`assessment_id` required. Versioned: `/upload-version` snapshots current file metadata to `evidence_versions` before replacing (old MinIO file deleted, snapshot retained); `/versions` returns history oldest-first; `version_label` tracks the current label. Stored in MinIO bucket `evidence-files`, key `evidence/{evidence_id}/{filename}`.
 
-### decision-trace-analyzer/ (internal port 8006, accessed via /api/dta/)
-
-Trace viewer for GenAI spans. Reads ClickHouse only (no Postgres).
-
-- `GET /api/v1/traces` — groups spans by `trace_id`, returns paginated list
-- Dev proxy — `vite.config.ts` proxies `/api/*` → `http://localhost:8006`, so no CORS issues locally
-- Prod — nginx proxies `/api/` → `decision-trace-analyzer-backend:8006`
-
-### compliance/ (internal port 8007, accessed via /api/compliance/)
-
-Governance chain MFE — assessments, obligations, controls, and evidence for EU AI Act / NIST / ISO compliance. Reads/writes Postgres; stores evidence files in MinIO.
-
-#### Backend structure (`compliance/backend/app/`)
-- `main.py` — FastAPI app, mounts all routers, `/health` endpoint, ensures MinIO bucket exists on startup
-- `cascade.py` — status cascade + score recalculation: approved evidence → effective control → fulfilled obligation → assessment score → `ai_systems.compliance`. Caller owns transaction boundary; cascade functions never commit
-- `obligation_templates.py` — hardcoded obligation sets per (framework, tier); EU AI Act tiers + NIST AI RMF + ISO/IEC 42001
-- `control_templates.py` — hardcoded control templates per obligation `article_ref` (adapted from the EU AI Act blueprint AISEC-* control set), tier-filtered via `controls_for(article_ref, tier)`; EU AI Act + NIST + ISO
-- `ids.py` — `new_id(prefix)` for `ASS-XXXXXXXX`, `OBL-XXXXXXXX`, `CTL-XXXXXXXX`, `EVD-XXXXXXXX` IDs
-- `minio_client.py` — async wrapper around the synchronous `minio` SDK; all blocking calls wrapped in `asyncio.to_thread`. Two clients: `_client` (in-cluster endpoint for uploads), `_presign_client` (public endpoint for presigned download URLs)
-- `routers/frameworks.py` — `GET/PATCH /api/v1/frameworks`
-- `routers/assessments.py` — full CRUD + `/generate-obligations`, `/generate-controls`, `/submit`, `/approve`
-- `routers/obligations.py` — full CRUD
-- `routers/controls.py` — full CRUD + `/link/{obligation_id}`, `/link/{obligation_id}` DELETE
-- `routers/evidence.py` — multipart upload, full CRUD + `/approve`, `/reject`, `/download-url`, `/versions`, `/upload-version`
-
-#### Evidence multi-link
-`POST /api/v1/evidence` accepts `control_ids` and `obligation_ids` as **repeated form fields** (multiple values allowed). Each creates a row in the relevant M2M table. At least one of `control_ids`, `obligation_ids`, `ai_system_id`, or `assessment_id` must be provided.
-
-#### Evidence versioning
-Evidence items are versioned. `POST /api/v1/evidence/{id}/upload-version` snapshots the current file metadata to `evidence_versions` before replacing. `GET /api/v1/evidence/{id}/versions` returns the version history ordered oldest-first. The `version_label` field on the evidence row tracks the current version label. Old files are deleted from MinIO after a successful version upload (metadata snapshot retained in `evidence_versions`).
-
-#### Governance chain
-`POST /api/v1/assessments` is the entry point: creating an assessment automatically generates obligations **and controls** in the same transaction — no separate call needed. Obligations are selected from `obligation_templates.py` based on the AI system's risk tier, with owner/not-applicable pre-filled from the most recent approved prior assessment for the same (system, framework). The `/generate-obligations` endpoint remains available for API consumers but is no longer used by the frontend.
-
-Controls are auto-generated from `control_templates.py`: for each obligation, `controls_for(article_ref, tier)` yields the tier-scoped control templates, each persisted as a `Control` (with a stable `control_ref = "{article_ref}:{slug}"`) and linked to its obligation via `control_obligations`. Because a freshly-linked control is `not_started` (not `effective`), the cascade immediately moves each obligation `applicable → in_progress`. Owner is carried forward from the most recent prior control with the same `control_ref` for that system (owner only — never status/effectiveness/due_date). Standalone `POST /api/v1/assessments/{id}/generate-controls` re-runs generation for API consumers and is idempotent: it skips any obligation that already has ≥1 linked control. Controls can also be linked to obligations manually via `POST /api/v1/controls/{id}/link/{obligation_id}`. Evidence is uploaded as multipart form data; approving evidence cascades automatically through the chain.
-
-Deleting an assessment cascades its obligations (FK `ondelete=CASCADE`) and cleans up the controls that were auto-generated for it: `DELETE /api/v1/assessments/{id}` removes controls that are auto-generated (`control_ref` not null) **and** linked only to that assessment's obligations. Manually-created controls (`control_ref` null) and controls shared with another assessment are always kept. The response includes `controls_deleted`.
-
-Evidence stored in MinIO bucket `evidence-files`, key pattern: `evidence/{evidence_id}/{filename}`.
-
-#### Evidence expiry (policy-checker-worker)
-Three alert rules seeded in migration `0004` drive evidence expiry:
-- `evidence_expired` — marks approved evidence past `validity_until` as `expired`, cascades control effectiveness + obligation status, fires alert
-- `evidence_expiring_30d` — fires warning for approved evidence expiring in 8–30 days
-- `evidence_expiring_7d` — fires warning for approved evidence expiring in 1–7 days; replaces the 30-day alert when evidence enters the 7-day window (auto-resolves the 30-day alert)
-
-## Environment variables
-
-All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fill in values before running `docker compose up`. Never commit `.env`.
-
-| Variable | Service | Default | Description |
-|---|---|---|---|
-| `POSTGRES_USER` | postgres, db-migrate, all backends | `postgres` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | postgres, db-migrate, all backends | `postgres` | PostgreSQL password |
-| `RABBITMQ_USER` | rabbitmq, otel-rmq-bridge, consumers | `guest` | RabbitMQ username |
-| `RABBITMQ_PASSWORD` | rabbitmq, otel-rmq-bridge, consumers | `guest` | RabbitMQ password |
-| `CLICKHOUSE_USER` | clickhouse, consumers, backends | `default` | ClickHouse username |
-| `CLICKHOUSE_PASSWORD` | clickhouse, consumers, backends | *(empty)* | ClickHouse password |
-| `MINIO_ROOT_USER` | minio, minio-init, clickhouse, compliance | `minioadmin` | MinIO access key (used by ClickHouse S3 disk) |
-| `MINIO_ROOT_PASSWORD` | minio, minio-init, clickhouse, compliance | `minioadmin` | MinIO secret key |
-| `DATABASE_URL` | all backends, db-migrate | derived from `POSTGRES_*` | Postgres connection string |
-| `ALLOWED_ORIGINS` | all backends | *(required — no default)* | Comma-separated CORS origins. App refuses to start if not set |
-| `VITE_ALERTS_API_BASE` | alerts frontend (build time) | `/api/alerts/v1` | Alerts API URL baked into bundle |
-| `VITE_ALERTS_URL` | alerts frontend (build time) | `http://localhost:8080/alerts` | Alerts frontend URL (used for bell badge deep-link) |
-| `VITE_COMPLIANCE_API_BASE` | compliance frontend (build time) | `/api/compliance/v1` | Compliance API URL baked into bundle |
-| `VITE_COMPLIANCE_URL` | alerts + overview frontends (build time) | `http://localhost:8080/compliance` | Compliance frontend URL |
-| `VITE_DTA_API_BASE` | DTA frontend (build time) | `/api/dta/v1` | DTA API base — relative path via shell nginx proxy |
-| `VITE_MONITORING_API_BASE` | monitoring frontend (build time) | `/api/monitoring/v1` | Monitoring API URL baked into bundle |
-| `VITE_OVERVIEW_API_BASE` | overview frontend (build time) | `/api/overview/v1` | Overview API URL baked into bundle |
-| `VITE_REGISTRY_API_BASE` | registry + compliance frontends (build time) | `/api/registry/v1` | Registry API URL baked into bundle |
-| `VITE_REGISTRY_URL` | overview + compliance frontends (build time) | `http://localhost:8080/registry` | Registry frontend URL |
-| `KEYCLOAK_ADMIN` | keycloak, keycloak-provision | `admin` | Keycloak admin username |
-| `KEYCLOAK_ADMIN_PASSWORD` | keycloak, keycloak-provision | `admin` | Keycloak admin password |
-| `KEYCLOAK_CLIENT_SECRET` | keycloak-provision, oauth2-proxy | *(required)* | Shared secret for the oauth2-proxy OIDC client |
-| `USERS_BACKEND_CLIENT_SECRET` | keycloak-provision, users-backend | *(required)* | Secret for the users-backend service account client in Keycloak |
-| `KEYCLOAK_PUBLIC_URL` | oauth2-proxy | `http://localhost:8180` | Public Keycloak URL reachable by the browser (for login redirect) |
-| `APP_PUBLIC_URL` | keycloak-provision | `http://localhost:8080` | Public app URL — used to set oauth2-proxy redirect URIs in Keycloak |
-| `APP_ADMIN_USERNAME` | keycloak-provision | `admin` | Bootstrap platform admin username |
-| `APP_ADMIN_PASSWORD` | keycloak-provision | `password` | Bootstrap platform admin password — change before any non-local deployment |
-| `VITE_USERS_API_BASE` | users frontend (build time) | `/api/users/v1` | Users API URL baked into bundle |
-| `OAUTH2_PROXY_COOKIE_SECRET` | oauth2-proxy | *(required)* | Cookie encryption key — must be exactly 16, 24, or 32 characters |
-| `MINIO_ENDPOINT` | compliance-backend | `minio:9000` | In-cluster MinIO host:port for uploads (used inside the container) |
-| `MINIO_PUBLIC_ENDPOINT` | compliance-backend | `localhost:9000` | Public-facing MinIO host:port for presigning download URLs the browser can reach |
-| `MINIO_SECURE` | compliance-backend | `false` | Set to `true` if MinIO is behind TLS |
-| `MINIO_REGION` | compliance-backend | `us-east-1` | Region used when presigning — avoids a GetBucketLocation network call from inside the container |
-| `ALERT_POLL_INTERVAL` | policy-checker-worker | `10` | Rule evaluation interval in seconds (use `60`+ in production) |
-| `SMTP_HOST` | ai-system-registry-backend | *(required)* | SMTP server hostname |
-| `SMTP_PORT` | ai-system-registry-backend | *(required)* | SMTP server port |
-| `SMTP_USER` | ai-system-registry-backend | *(optional)* | SMTP username — omit if the server requires no auth |
-| `SMTP_PASSWORD` | ai-system-registry-backend | *(optional)* | SMTP password — omit if the server requires no auth |
-| `SMTP_FROM` | ai-system-registry-backend | *(required)* | Envelope / From address for outgoing notifications |
-| `SMTP_FROM_NAME` | ai-system-registry-backend | `AI Trust Platform` | Display name in the From header |
-| `SMTP_SSL` | ai-system-registry-backend | *(required)* | `true` to use implicit TLS, `false` otherwise |
-| `SMTP_STARTTLS` | ai-system-registry-backend | *(required)* | `true` to upgrade with STARTTLS, `false` otherwise |
-| `USERS_BACKEND_URL` | ai-system-registry-backend | `http://users-backend:8008` | Internal URL of the users backend — used for email address lookups |
-
-All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code.
-
-## docker-compose.yml conventions
-
-- Credentials are defined via YAML anchors (`x-db-env`, `x-rmq-env`, `x-ch-env`, `x-minio-env`) and merged into each service — never copy-paste connection strings
-- Backend build context is always the repo root (`.`) so the Dockerfile can `COPY libs/persistence`
-- New backends follow the same pattern: `depends_on: db-migrate: condition: service_completed_successfully`
-- Each backend must have a `healthcheck.py` and declare a `healthcheck` in `docker-compose.yml` using `CMD python healthcheck.py` — no extra packages needed, uses Python stdlib `urllib`
-- Shell depends on backend via `condition: service_healthy` — it won't start until the backend passes its healthcheck
-- YAML does not allow two `<<:` merge keys in the same mapping block — expand env vars inline when a service needs multiple anchors (see `otel-clickhouse-consumer`)
-
-## Dependency pinning
-
-Each service has its own `requirements.txt` with pinned versions directly in it (e.g. `fastapi==0.115.6`). When adding or upgrading a dependency:
-
-1. Edit the version directly in the relevant service's `requirements.txt`
-2. Rebuild the service: `docker compose up --build -d <service-name>`
+**Evidence expiry** (policy-checker-worker, seeded in migration `0004`): `evidence_expired` (marks approved evidence past `validity_until` as `expired`, cascades, fires), `evidence_expiring_30d` (8–30 days), `evidence_expiring_7d` (1–7 days; replaces and auto-resolves the 30-day alert when evidence enters the 7-day window).
 
 ## otel-pipeline/
 
-GenAI observability pipeline. Receives OTLP from any application, routes through RabbitMQ, stores in ClickHouse.
+Receives OTLP from any app, routes through RabbitMQ, stores in ClickHouse.
+- **`collector/otel-collector-config.yaml`** — receives OTLP gRPC/HTTP, exports to rmq-bridge as OTLP/HTTP JSON. `encoding: json` and `compression: none` are required (the collector defaults to protobuf binary, which the bridge can't parse).
+- **`rmq-bridge/`** — FastAPI; `POST /v1/traces` publishes raw OTLP JSON to the RabbitMQ fanout exchange `otel.traces` (no parsing/filtering — that's the consumer's job). Reads `RABBITMQ_URL` (fail-fast).
+- **ClickHouse schema** — managed by `clickhouse-migrate` (migrations in `libs/clickhouse/migrations/`, tracked in `otel.schema_migrations`).
 
-- **`collector/otel-collector-config.yaml`** — OTel Collector receives OTLP gRPC/HTTP and exports to rmq-bridge as OTLP/HTTP JSON. `encoding: json` and `compression: none` are required — the collector defaults to protobuf binary which the bridge cannot parse
-- **`rmq-bridge/`** — FastAPI service. `POST /v1/traces` receives raw OTLP JSON and publishes it to RabbitMQ fanout exchange `otel.traces`. No parsing or filtering here — that is the consumer's job. Reads `RABBITMQ_URL` from env (fail-fast)
-- **ClickHouse schema** — managed by the `clickhouse-migrate` service (see `libs/clickhouse/`). Schema migrations live in `libs/clickhouse/migrations/` and are tracked in `otel.schema_migrations`
-
-### Connecting an external application
-
-Any app outside Docker can send spans to the collector running on the host:
-
-```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=http://<host-ip>:4317   # gRPC
-# or
-OTEL_EXPORTER_OTLP_ENDPOINT=http://<host-ip>:4318   # HTTP
-```
-
-To capture prompt/response message content (off by default for privacy):
-
-```bash
-OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true
-```
-
-This env var is set on the **instrumented application**, not on this platform. When `false` (default), `input_messages` and `output_messages` columns in ClickHouse will be empty strings.
+**Connecting an external app** — point it at the host collector: `OTEL_EXPORTER_OTLP_ENDPOINT=http://<host-ip>:4317` (gRPC) or `:4318` (HTTP). To capture prompt/response content (off by default for privacy), set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` **on the instrumented app**. When false, `input_messages`/`output_messages` are empty strings.
 
 ## consumers/
 
-One sub-directory per RabbitMQ consumer. Each is a standalone Python worker: no FastAPI, `asyncio.run(main())` entrypoint, no HTTP port. All consumers bind a named durable queue to the `otel.traces` fanout exchange — messages are queued while a consumer is down and processed on reconnect.
+One sub-directory per RabbitMQ consumer — standalone Python worker (no FastAPI, `asyncio.run(main())`, no HTTP port). Each binds a named durable queue to the `otel.traces` fanout exchange, so messages queue while a consumer is down. To add one, use the `/add-consumer` skill.
 
-To add a new consumer, use the `/add-consumer` skill.
+**`clickhouse-consumer/`** — parses OTLP JSON, skips spans without `gen_ai.operation.name`, batch-inserts into `otel.gen_ai_spans`. Hybrid batching: flush at `BATCH_SIZE` rows (default 100) or `BATCH_TIMEOUT` seconds (default 5). On ClickHouse failure retries 3× (1s/2s/4s backoff) then acks and drops the batch. Flushes on shutdown. Reads `RABBITMQ_URL`, `CLICKHOUSE_*` (fail-fast).
 
-**`consumers/clickhouse-consumer/`** — Parses OTLP JSON, skips spans without `gen_ai.operation.name`, batch-inserts into `otel.gen_ai_spans`. Reads `RABBITMQ_URL`, `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` from env (all fail-fast). Imports connection and schema constants from `ai_trust_clickhouse`.
+## Conventions & config
 
-Batching is hybrid — flushes when the buffer reaches `BATCH_SIZE` rows **or** after `BATCH_TIMEOUT` seconds, whichever comes first. On ClickHouse failure, retries up to 3 times with exponential backoff (1s, 2s, 4s) then acks and drops the batch. On shutdown, flushes the remaining buffer before exiting.
+### docker-compose.yml
+- Credentials via YAML anchors (`x-db-env`, `x-rmq-env`, `x-ch-env`, `x-minio-env`) merged into each service — never copy-paste connection strings.
+- Backend build context is always the repo root (so the Dockerfile can `COPY libs/...`).
+- New backends: `depends_on: db-migrate: condition: service_completed_successfully`, a `healthcheck.py` + `healthcheck: CMD python healthcheck.py`, no `ports:`. Shell depends on backends via `condition: service_healthy`.
+- YAML forbids two `<<:` merge keys in one mapping — expand env vars inline when a service needs multiple anchors (see `otel-clickhouse-consumer`).
 
-| Env var | Default | Description |
-|---|---|---|
-| `BATCH_SIZE` | `100` | Flush when buffer reaches this many rows |
-| `BATCH_TIMEOUT` | `5` | Flush after this many seconds if buffer is not full |
+### Dependency pinning
+Each service pins versions directly in its own `requirements.txt` (e.g. `fastapi==0.115.6`). To change: edit the version, then `docker compose up --build -d <service>`.
+
+### Environment variables
+All credentials load from `.env` (gitignored; copy from `.env.example`, never commit). All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code. See `.env.example` for the full list and defaults; notable groups:
+- **Infra creds** — `POSTGRES_*`, `RABBITMQ_*`, `CLICKHOUSE_*`, `MINIO_ROOT_*`, `DATABASE_URL`.
+- **`ALLOWED_ORIGINS`** (all backends) — comma-separated CORS origins; the app refuses to start if unset.
+- **`VITE_*`** (frontend build-time) — API base URLs and cross-MFE deep-link URLs baked into bundles.
+- **Auth** — `KEYCLOAK_*`, `USERS_BACKEND_CLIENT_SECRET`, `APP_PUBLIC_URL`, `APP_ADMIN_*`, `OAUTH2_PROXY_COOKIE_SECRET` (exactly 16/24/32 chars).
+- **compliance MinIO** — `MINIO_ENDPOINT` (in-cluster, uploads), `MINIO_PUBLIC_ENDPOINT` (presigned URLs), `MINIO_SECURE`, `MINIO_REGION`.
+- **alerts** — `ALERT_POLL_INTERVAL` (10 dev, 60+ prod).
+- **registry SMTP** — `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/SSL/STARTTLS`, `USERS_BACKEND_URL`.
+- **registry LLM** — `LLM_PROVIDER` (`stub`/`ollama`/`external`), `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_VISION_MODEL`; external provider `AI_CLIENT_ID/SECRET`, `AI_AUTH_URL`, `AI_API_URL`, `AI_RESOURCE_GROUP`, `AI_DEPLOYMENT_ID`, `AI_API_VERSION`; `ASSIST_TURN_CAP` (12), `ASSIST_MAX_TEXT_LENGTH` (15000).

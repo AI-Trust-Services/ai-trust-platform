@@ -173,3 +173,4 @@ async def unlink_model(system_id: str) -> AISystemResponse:
 
     logger.info("system.model_unlinked", extra={"system_id": system_id})
     return AISystemResponse.model_validate(row)
+

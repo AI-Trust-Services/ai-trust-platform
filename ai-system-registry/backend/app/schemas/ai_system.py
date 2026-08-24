@@ -11,11 +11,53 @@ VALID_LIFECYCLES = frozenset({
 VALID_ROLES = frozenset({"provider", "deployer", "importer", "distributor"})
 
 
+class RationaleItem(BaseModel):
+    """One LLM-inferred classifier flag with its rationale + confidence."""
+    flag: str
+    value: bool | float
+    rationale: str
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
 class AISystemCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: str = Field(default="")
     assignee_username: str = Field(..., min_length=1, max_length=200)
     compliance_officer_username: str | None = Field(default=None, max_length=200)
+
+    # Optional descriptive fields (populated by the AI-assisted flow; manual owner
+    # mode omits them and the intake stays a minimal stub).
+    intended_purpose: str | None = None
+    department: str | None = None
+    use_case: str | None = None
+    people_affected: str | None = None
+    decision_context: str | None = None
+    autonomy_level: str | None = None
+
+    # Optional classifier flags — when any are present, intake runs classify().
+    subliminal_manipulation: bool | None = None
+    exploits_vulnerability: bool | None = None
+    social_scoring_public: bool | None = None
+    real_time_biometric_public: bool | None = None
+    emotion_recognition_workplace: bool | None = None
+    untargeted_facial_scraping: bool | None = None
+    predictive_policing: bool | None = None
+    biometric_categorisation_sensitive: bool | None = None
+    is_biometric_identification: bool | None = None
+    is_critical_infrastructure: bool | None = None
+    is_education_related: bool | None = None
+    is_employment_related: bool | None = None
+    is_credit_scoring: bool | None = None
+    is_public_service: bool | None = None
+    is_law_enforcement: bool | None = None
+    is_migration: bool | None = None
+    is_judicial_admin: bool | None = None
+    is_gpai: bool | None = None
+    training_compute_flops: float | None = None
+    is_chatbot: bool | None = None
+    generates_synthetic_content: bool | None = None
+
+    classification_rationale: list[RationaleItem] | None = None
 
     @field_validator("name")
     @classmethod
@@ -33,6 +75,10 @@ class AISystemUpdate(BaseModel):
     org_role: str | None = None
     description: str | None = None
     intended_purpose: str | None = None
+    department: str | None = None
+    use_case: str | None = None
+    people_affected: str | None = None
+    decision_context: str | None = None
     system_type: str | None = None
     autonomy_level: str | None = None
     application_url: str | None = Field(default=None, max_length=500)
@@ -87,6 +133,10 @@ class AISystemResponse(BaseModel):
     org_role: str
     description: str
     intended_purpose: str
+    department: str | None
+    use_case: str | None
+    people_affected: str | None
+    decision_context: str | None
     system_type: str
     autonomy_level: str
     application_url: str
@@ -94,6 +144,7 @@ class AISystemResponse(BaseModel):
     tier: str
     basis: str
     annex_iii_area: int | None
+    classification_rationale: list[RationaleItem] | None
     lifecycle: str
     compliance: float
     subliminal_manipulation: bool
