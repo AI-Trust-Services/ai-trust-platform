@@ -67,7 +67,8 @@ export default function App() {
   return (
     <ToastContext.Provider value={showToast}>
       <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen, mayWrite, mayRegister, username }}>
-        <div className="flex h-14 items-center justify-between border-b border-border bg-card px-6 shadow-[var(--shadow-xs)]">
+        <div className="flex h-screen flex-col overflow-hidden">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6 shadow-[var(--shadow-xs)]">
           <div className="flex items-center gap-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
               <Database className="size-5" />
@@ -115,7 +116,9 @@ export default function App() {
           </div>
         )}
 
-        <Outlet />
+        <div className="flex-1 min-h-0 overflow-auto">
+          <Outlet />
+        </div>
 
         {toast && (
           <div className={cn(
@@ -125,6 +128,7 @@ export default function App() {
             {toast.msg}
           </div>
         )}
+        </div>
       </ModalContext.Provider>
     </ToastContext.Provider>
   );

@@ -1,8 +1,20 @@
 import { useState, useEffect, useRef } from "react";
+import { Bot, Check, ChevronDown, ChevronRight, Loader2, Paperclip, SendHorizonal, Sparkles, User } from "lucide-react";
 import { TierBadge } from "./Badges";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import type { AISystem, ChatMessage, RationaleItem, ClassificationResult, UserSummary } from "../types";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 
 interface Props {
   open: boolean;
@@ -67,6 +79,9 @@ const ANNEX_III_FLAGS: [string, string][] = [
   ["is_migration",                "Migration & border control"],
   ["is_judicial_admin",           "Justice & democratic processes"],
 ];
+const GPAI_FLAGS: [string, string][] = [
+  ["is_gpai", "General-purpose AI model"],
+];
 const LIMITED_FLAGS: [string, string][] = [
   ["is_chatbot",                  "Chatbot / direct user interaction"],
   ["generates_synthetic_content", "Generates synthetic content"],
@@ -81,40 +96,24 @@ function displayName(u: UserSummary) {
   return full ? `${full} (${u.username})` : u.username;
 }
 
-function IconPaperclip() {
+function CollapsiblePanel({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(true);
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-    </svg>
-  );
-}
-
-function IconSparkle() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
-    </svg>
+    <Collapsible open={open} onOpenChange={setOpen} className="mb-3 overflow-hidden rounded-md border border-border">
+      <CollapsibleTrigger className="flex w-full items-center justify-between bg-muted/40 px-4 py-2.5 text-sm font-medium">
+        {title} {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="p-4">{children}</CollapsibleContent>
+    </Collapsible>
   );
 }
 
 function CheckItem({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="check-item">
-      <input type="checkbox" id={id} checked={checked} onChange={e => onChange(e.target.checked)} />
+    <label className="flex items-start gap-2 text-sm cursor-pointer" htmlFor={id}>
+      <Checkbox id={id} checked={checked} onCheckedChange={(c) => onChange(c === true)} className="mt-0.5" />
       <span>{label}</span>
     </label>
-  );
-}
-
-function CollapsiblePanel({ title, children }: { title: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div className="panel">
-      <div className="panel-header" onClick={() => setOpen(o => !o)}>
-        {title} <span>{open ? "▼" : "▶"}</span>
-      </div>
-      {open && <div className="panel-body">{children}</div>}
-    </div>
   );
 }
 
@@ -128,10 +127,12 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
   const [complete, setComplete] = useState(false);
   const [degraded, setDegraded] = useState(false);
 
+  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState(false);
+
   const [flags, setFlags] = useState<Record<string, boolean>>({});
   const [inferredFlags, setInferredFlags] = useState<RationaleItem[]>([]);
   const [classification, setClassification] = useState<ClassificationResult | null>(null);
-
   const [flagsConfirmed, setFlagsConfirmed] = useState(false);
 
   const [complianceOfficers, setComplianceOfficers] = useState<UserSummary[]>([]);
@@ -139,49 +140,32 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
   const [submitting, setSubmitting] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const showToast = useToast();
 
   useEffect(() => {
     if (!open) return;
-    setFields({
-      description:      system.description      ?? "",
-      intended_purpose: system.intended_purpose ?? "",
-      version:          system.version          ?? "",
-      provider:         system.provider         ?? "",
-      org_name:         system.org_name         ?? "",
-      system_type:      system.system_type      ?? "",
-      lifecycle:        system.lifecycle        ?? "",
-      autonomy_level:   system.autonomy_level   ?? "",
-    });
+
+    const prevConfirmed = system.field_confirmations ?? {};
+    const savedFields: Record<string, unknown> = {};
+    for (const k of ALL_FIELD_KEYS) {
+      if (prevConfirmed[k] === true) {
+        const v = (system as Record<string, unknown>)[k];
+        if (v !== undefined && v !== null && v !== "") savedFields[k] = v;
+      }
+    }
+    const hasSavedFields = Object.keys(savedFields).length > 0;
+
+    setFields(savedFields);
+    setConfirmed(system.field_confirmations ?? {});
     setStep(0);
     setTranscript([{ role: "assistant", content: GREETING }]);
     setInput("");
     setBusy(false);
-    setComplete(false);
+    setComplete(hasSavedFields);
     setDegraded(false);
-    setFlags({
-      subliminal_manipulation:            system.subliminal_manipulation,
-      exploits_vulnerability:             system.exploits_vulnerability,
-      social_scoring_public:              system.social_scoring_public,
-      real_time_biometric_public:         system.real_time_biometric_public,
-      emotion_recognition_workplace:      system.emotion_recognition_workplace,
-      untargeted_facial_scraping:         system.untargeted_facial_scraping,
-      predictive_policing:                system.predictive_policing,
-      biometric_categorisation_sensitive: system.biometric_categorisation_sensitive,
-      is_biometric_identification:        system.is_biometric_identification,
-      is_critical_infrastructure:         system.is_critical_infrastructure,
-      is_education_related:               system.is_education_related,
-      is_employment_related:              system.is_employment_related,
-      is_credit_scoring:                  system.is_credit_scoring,
-      is_public_service:                  system.is_public_service,
-      is_law_enforcement:                 system.is_law_enforcement,
-      is_migration:                       system.is_migration,
-      is_judicial_admin:                  system.is_judicial_admin,
-      is_gpai:                            system.is_gpai,
-      is_chatbot:                         system.is_chatbot,
-      generates_synthetic_content:        system.generates_synthetic_content,
-    });
+    setFlags({});
     setInferredFlags([]);
     setClassification(null);
     setFlagsConfirmed(false);
@@ -194,11 +178,21 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [transcript, busy]);
 
-  if (!open) return null;
+  useEffect(() => {
+    if (!busy && step === 0) inputRef.current?.focus();
+  }, [busy, step]);
 
+  // Derived counts
   const filledCount = ALL_FIELD_KEYS.filter(k => {
     const v = fields[k]; return v !== undefined && v !== null && v !== "";
   }).length;
+  const emptyCount = TOTAL_FIELDS - filledCount;
+  const confirmedCount = ALL_FIELD_KEYS.filter(k => confirmed[k] === true).length;
+  const unconfirmedCount = ALL_FIELD_KEYS.filter(k => {
+    const v = fields[k];
+    return (v !== undefined && v !== null && v !== "") && confirmed[k] !== true;
+  }).length;
+  const canProceedToStep1 = filledCount > 0 && unconfirmedCount === 0;
 
   async function runTurn(nextTranscript: ChatMessage[], overrideFields?: Record<string, unknown>) {
     setBusy(true);
@@ -229,6 +223,7 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
     const text = input.trim();
     if (!text || busy) return;
     setInput("");
+    inputRef.current?.focus();
     const next: ChatMessage[] = [...transcript, { role: "user", content: text }];
     setTranscript(next);
     runTurn(next);
@@ -254,7 +249,7 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
       const assistMsg: ChatMessage = { role: "assistant", content: summary };
       const nextTranscript = [...currentTranscript, assistMsg];
       setTranscript(nextTranscript);
-      if (ALL_FIELD_KEYS.every(k => { const v = merged[k]; return v !== undefined && v !== null && v !== ""; })) setComplete(true);
+      if (Object.keys(FIELD_LABELS).every(k => { const v = merged[k]; return v !== undefined && v !== null && v !== ""; })) setComplete(true);
       setBusy(false);
       if (Object.keys(extracted).length) await runTurn(nextTranscript, merged);
     } catch (err) {
@@ -264,9 +259,25 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
     }
   }
 
+  async function handleConfirm(key: string) {
+    const next = { ...confirmed, [key]: true };
+    setConfirmed(next);
+    setSaving(true);
+    try {
+      await Promise.all([
+        api.updateSystem(system.id, { [key]: fields[key] } as never),
+        api.patchFieldConfirmations(system.id, { [key]: true }),
+      ]);
+    } catch (e) {
+      showToast(`Failed to save confirmation: ${(e as Error).message}`, true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function handleFieldChange(key: string, value: string) {
     setFields(f => ({ ...f, [key]: value }));
-    setFlagsConfirmed(false);
+    if (confirmed[key]) setConfirmed(c => ({ ...c, [key]: false }));
   }
 
   async function handleSubmit() {
@@ -301,235 +312,348 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
     }
   }
 
-  const STEPS = ["Describe & collect fields", "Risk flags & submit"];
+  if (!system) return null;
+
+  const STEPS = ["Describe & confirm fields", "Risk flags & submit"];
+  const selectCls = "w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary";
 
   return (
-    <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ maxWidth: step === 0 ? 960 : 720 }}>
-        <div className="modal-header">
-          <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <IconSparkle /> AI-Assisted Technical Review
-          </h2>
-          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginLeft: 8 }}>
-            {system.name} · {system.id}
-          </div>
-          <button className="btn-close" onClick={onClose}>×</button>
-        </div>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className={cn("p-0 gap-0 max-h-[90vh] flex flex-col overflow-hidden", step === 0 ? "sm:max-w-[960px]" : "sm:max-w-[720px]")}>
+        <DialogHeader className="shrink-0 px-6 pt-5 pb-0">
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="size-4 text-[var(--brand)]" /> AI-Assisted Technical Review
+            <span className="ml-2 text-[13px] font-normal text-muted-foreground">{system.name} · {system.id}</span>
+          </DialogTitle>
+        </DialogHeader>
 
-        <div className="wizard-steps">
+        {/* Step bar */}
+        <div className="shrink-0 flex border-b border-border bg-muted/30 px-6">
           {STEPS.map((label, i) => (
-            <div key={i} className={`wizard-step${i === step ? " active" : i < step ? " done" : ""}`}>
-              <span className="step-num">{i + 1}</span> {label}
+            <div key={i} className={cn(
+              "flex items-center gap-2 border-b-[3px] py-3 pr-6 text-[13px]",
+              i === step
+                ? "border-primary font-medium text-primary"
+                : i < step
+                  ? "border-transparent text-foreground"
+                  : "border-transparent text-muted-foreground",
+            )}>
+              <span className={cn(
+                "flex size-5 items-center justify-center rounded-full text-[11px] font-semibold",
+                i === step ? "bg-primary text-primary-foreground" : i < step ? "bg-[var(--success)] text-white" : "bg-muted text-muted-foreground",
+              )}>{i + 1}</span>
+              {label}
             </div>
           ))}
         </div>
 
-        {/* ── STEP 0: Chat + field review ── */}
+        {/* STEP 0: chat + fields */}
         {step === 0 && (
           <>
-            <div className="assist-progress-strip">
-              <div className="assist-progress-bar">
-                <div className="assist-progress-fill" style={{
-                  width: `${(filledCount / TOTAL_FIELDS) * 100}%`,
-                  background: complete ? "#27ae60" : "var(--brand)",
+            {/* Progress strip */}
+            <div className="shrink-0 flex items-center gap-3 border-b border-border bg-muted/20 px-6 py-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full transition-[width]" style={{
+                  width: `${(confirmedCount / TOTAL_FIELDS) * 100}%`,
+                  background: confirmedCount === TOTAL_FIELDS ? "var(--success)" : "var(--brand)",
                 }} />
               </div>
-              <span className="assist-progress-label">
-                {complete ? "✓ " : ""}{filledCount} / {TOTAL_FIELDS} fields
+              <span className="min-w-[90px] text-right text-xs text-muted-foreground">
+                {confirmedCount === TOTAL_FIELDS ? "✓ " : ""}{confirmedCount} / {TOTAL_FIELDS} confirmed
               </span>
             </div>
 
-            <div className="modal-body assist-split-wrap">
-              <div className="assist-split-body">
-
-                {/* LEFT: conversation */}
-                <div className="assist-chat-col">
-                  <div className="chat-scroll" ref={scrollRef}>
-                    {transcript.filter(m => m.role !== "system").map((m, i) => (
-                      <div key={i} className={`chat-bubble chat-${m.role}`}>{m.content}</div>
-                    ))}
-                    {busy && (
-                      <div className="chat-bubble chat-assistant chat-typing">
-                        <span className="spinner" /> thinking…
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+              {/* LEFT: chat */}
+              <div className="flex w-[44%] shrink-0 flex-col gap-2.5 overflow-hidden border-r border-border p-4">
+                <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+                  {transcript.filter(m => m.role !== "system").map((m, i) => (
+                    <div key={i} className={cn("flex items-end gap-2", m.role === "user" ? "flex-row-reverse" : "flex-row")}>
+                      <div className={cn(
+                        "flex size-6 shrink-0 items-center justify-center rounded-full",
+                        m.role === "user" ? "bg-primary/15 text-primary" : "bg-[var(--brand)] text-white",
+                      )}>
+                        {m.role === "user" ? <User className="size-3" /> : <Bot className="size-3" />}
                       </div>
-                    )}
-                  </div>
-
-                  <div className="chat-input-row">
-                    <input ref={fileRef} type="file" style={{ display: "none" }}
-                      accept=".txt,.md,.pdf,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp"
-                      onChange={handleUpload}
-                    />
-                    <button className="btn-ghost" title="Upload a document" disabled={busy}
-                      onClick={() => fileRef.current?.click()} style={{ padding: "7px 10px" }}>
-                      <IconPaperclip />
-                    </button>
-                    <input type="text" className="chat-input"
-                      placeholder={busy ? "Thinking…" : "Describe the system technically…"}
-                      value={input} disabled={busy}
-                      onChange={e => setInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") handleSend(); }}
-                    />
-                    <button className="btn-primary" disabled={busy || !input.trim()} onClick={handleSend}>Send</button>
-                  </div>
-
-                  {degraded && (
-                    <div className="msg-strip warn">
-                      Reached the question limit. Review and adjust the fields on the right, then proceed.
+                      <div className={cn(
+                        "max-w-[76%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words",
+                        m.role === "user"
+                          ? "rounded-br-sm bg-primary text-primary-foreground"
+                          : "rounded-bl-sm border border-border bg-muted text-foreground",
+                      )}>
+                        {m.content}
+                      </div>
+                    </div>
+                  ))}
+                  {busy && (
+                    <div className="flex items-end gap-2">
+                      <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-white">
+                        <Bot className="size-3" />
+                      </div>
+                      <div className="rounded-2xl rounded-bl-sm border border-border bg-muted px-4 py-3">
+                        <div className="flex gap-1.5">
+                          {[0, 150, 300].map((delay) => (
+                            <span key={delay} className="size-1.5 animate-bounce rounded-full bg-muted-foreground"
+                              style={{ animationDelay: `${delay}ms` }} />
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
 
-                {/* RIGHT: collected fields */}
-                <div className="assist-fields-col">
-                  <div className="assist-section-label">Collected Details — review and adjust</div>
-                  <div className="assist-fields-grid">
-                    {Object.entries(FIELD_LABELS).map(([key, label]) => {
-                      const v = fields[key];
-                      const strVal = (v !== undefined && v !== null && v !== "") ? String(v) : "";
-                      const isWide = key === "description" || key === "intended_purpose";
-                      const opts = ENUM_OPTIONS[key];
-
-                      return (
-                        <div key={key} className={`assist-field-row${isWide ? " assist-field-wide" : ""}`}>
-                          <label htmlFor={`eng_field_${key}`}>{label}</label>
-                          {opts ? (
-                            <select id={`eng_field_${key}`} className="form-select" value={strVal}
-                              onChange={e => handleFieldChange(key, e.target.value)}>
-                              <option value="">— not set —</option>
-                              {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
-                          ) : isWide ? (
-                            <textarea id={`eng_field_${key}`} value={strVal} rows={2}
-                              onChange={e => handleFieldChange(key, e.target.value)}
-                              placeholder={`Enter ${label.toLowerCase()}…`}
-                            />
-                          ) : (
-                            <input type="text" id={`eng_field_${key}`} value={strVal}
-                              onChange={e => handleFieldChange(key, e.target.value)}
-                              placeholder={`Enter ${label.toLowerCase()}…`}
-                            />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div className="flex items-center gap-1.5">
+                  <input ref={fileRef} type="file" className="hidden"
+                    accept=".txt,.md,.pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp"
+                    onChange={handleUpload}
+                  />
+                  <Button variant="ghost" size="icon" className="size-9 shrink-0" title="Upload a document"
+                    disabled={busy} onClick={() => fileRef.current?.click()}>
+                    <Paperclip className="size-4" />
+                  </Button>
+                <Input
+                    className="flex-1"
+                    placeholder={busy ? "Thinking…" : "Describe the system technically…"}
+                    value={input} disabled={busy}
+                    ref={inputRef}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") handleSend(); }}
+                  />
+                  <Button variant="ghost" size="icon" className="size-9 shrink-0" disabled={busy || !input.trim()} onClick={handleSend}>
+                    <SendHorizonal className="size-4" />
+                  </Button>
                 </div>
 
+                {degraded && (
+                  <Alert>
+                    <AlertDescription className="text-[13px]">
+                      Reached the question limit. Review and confirm the fields on the right, then proceed.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+
+              {/* RIGHT: fields */}
+              <div className="flex-1 overflow-y-auto p-4">
+                <div className="mb-2.5 border-b border-border pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Collected Details — confirm each field
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {Object.entries(FIELD_LABELS).map(([key, label]) => {
+                    const v = fields[key];
+                    const strVal = (v !== undefined && v !== null && v !== "") ? String(v) : "";
+                    const isEmpty = strVal === "";
+                    const isConfirmed = confirmed[key] === true;
+                    const isWide = key === "description" || key === "intended_purpose";
+                    const opts = ENUM_OPTIONS[key];
+
+                    const borderCls = isConfirmed
+                      ? "border-[var(--success)] bg-[#f0faf4]"
+                      : isEmpty
+                        ? "border-[var(--danger-fg)] bg-[#fff8f8]"
+                        : "border-border";
+
+                    return (
+                      <div key={key} className={cn(
+                        "flex flex-col gap-1 rounded-md border p-2.5",
+                        isWide && "col-span-2",
+                        borderCls,
+                      )}>
+                        <div className="flex items-center justify-between">
+                          <label htmlFor={`eng_field_${key}`} className="text-[11px] font-semibold text-muted-foreground">
+                            {label}
+                          </label>
+                          {!isEmpty && (
+                            isConfirmed ? (
+                              <Badge className="h-5 gap-1 rounded-full bg-[var(--success)] text-white hover:bg-[var(--success-fg)]">
+                                <Check className="size-3" /> Confirmed
+                              </Badge>
+                            ) : (
+                              <Button size="sm" className="h-6 gap-1 px-2 text-[11px] bg-[var(--success)] hover:bg-[var(--success-fg)] text-white"
+                                onClick={() => handleConfirm(key)} disabled={saving}>
+                                <Check className="size-3" /> Confirm
+                              </Button>
+                            )
+                          )}
+                        </div>
+                        {opts ? (
+                          <select id={`eng_field_${key}`} className="w-full rounded border border-border bg-background px-2 py-1 text-[13px]"
+                            value={strVal} onChange={e => handleFieldChange(key, e.target.value)}>
+                            <option value="">— not set —</option>
+                            {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        ) : isWide ? (
+                          <Textarea id={`eng_field_${key}`} value={strVal} rows={2}
+                            className="text-[13px]"
+                            onChange={e => handleFieldChange(key, e.target.value)}
+                            placeholder={`Enter ${label.toLowerCase()}…`}
+                          />
+                        ) : (
+                          <Input id={`eng_field_${key}`} value={strVal}
+                            className="text-[13px]"
+                            onChange={e => handleFieldChange(key, e.target.value)}
+                            placeholder={`Enter ${label.toLowerCase()}…`}
+                          />
+                        )}
+                        {isEmpty && (
+                          <div className="text-[11px] text-[var(--danger-fg)]">Required — please fill in</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
-            <div className="modal-footer">
-              <button className="btn-ghost" onClick={onClose}>Cancel</button>
-              <button className="btn-primary" onClick={() => setStep(1)} disabled={filledCount === 0}
-                title={filledCount === 0 ? "Fill at least one field first" : undefined}>
+            {filledCount > 0 && (emptyCount > 0 || unconfirmedCount > 0) && (
+            <div className="shrink-0 mx-6 mb-2">
+                <Alert>
+                  <AlertDescription className="text-[13px]">
+                    {emptyCount > 0 && <span>{emptyCount} field{emptyCount > 1 ? "s" : ""} not filled. </span>}
+                    {unconfirmedCount > 0 && <span>{unconfirmedCount} field{unconfirmedCount > 1 ? "s" : ""} filled but not confirmed. </span>}
+                    Confirm all filled fields to proceed.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
+
+          <DialogFooter className="shrink-0 px-6 py-4">
+              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button onClick={() => setStep(1)} disabled={!canProceedToStep1}
+                title={!canProceedToStep1 ? (filledCount === 0 ? "Fill at least one field first" : "Confirm all filled fields before proceeding") : undefined}>
                 Next →
-              </button>
-            </div>
+              </Button>
+            </DialogFooter>
           </>
         )}
 
-        {/* ── STEP 1: Risk flags + assignment + submit ── */}
+        {/* STEP 1: risk flags + assignment + submit */}
         {step === 1 && (
           <>
-            <div className="modal-body" style={{ padding: 24 }}>
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+              {emptyCount > 0 && (
+                <Alert className="mb-3">
+                  <AlertDescription className="flex items-center gap-2 text-[13px]">
+                    {emptyCount} field{emptyCount > 1 ? "s" : ""} not filled.
+                    <button className="underline text-[13px]" onClick={() => setStep(0)}>← Review fields</button>
+                  </AlertDescription>
+                </Alert>
+              )}
 
               {classification && (
-                <div className="classification-box" style={{ marginBottom: 16 }}>
-                  <h4>Inferred Classification</h4>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <Card className="mb-4 p-4">
+                  <h4 className="mb-2.5 text-sm font-semibold">Inferred Classification</h4>
+                  <div className="mb-2 flex items-center gap-2.5">
                     <TierBadge tier={classification.tier} />
-                    <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{classification.basis}</span>
+                    <span className="text-[13px] text-muted-foreground">{classification.basis}</span>
                   </div>
                   {inferredFlags.length > 0 && (
-                    <ul className="rationale-list">
+                    <ul className="list-inside space-y-1 text-[13px]">
                       {inferredFlags.map(f => (
                         <li key={f.flag}>
-                          {f.rationale}
-                          <span className="rationale-confidence"> ({Math.round(f.confidence * 100)}% confident)</span>
+                          <code className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[12px]">{f.flag}</code>
+                          {" — "}{f.rationale}
+                          <span className="text-muted-foreground"> ({Math.round(f.confidence * 100)}% confident)</span>
                         </li>
                       ))}
                     </ul>
                   )}
-                </div>
+                </Card>
               )}
 
-              <div className="msg-strip info" style={{ marginBottom: 12 }}>
-                Review the pre-checked risk flags below. Adjust as needed — the tier is recalculated on save.
-              </div>
+              <Alert className="mb-4">
+                <AlertDescription className="text-[13px]">
+                  Review the pre-checked risk flags below. Adjust as needed — the tier is recalculated on save.
+                </AlertDescription>
+              </Alert>
 
               <CollapsiblePanel title="Art. 5 — Prohibited Practices">
-                <div className="check-grid">
+                <div className="grid grid-cols-2 gap-2">
                   {PROHIBITED_FLAGS.map(([k, label]) => (
-                    <CheckItem key={k} id={k} label={label} checked={!!flags[k]} onChange={v => { setFlags(f => ({ ...f, [k]: v })); setFlagsConfirmed(false); }} />
+                    <CheckItem key={k} id={k} label={label} checked={!!flags[k]}
+                      onChange={v => { setFlags(f => ({ ...f, [k]: v })); setFlagsConfirmed(false); }} />
                   ))}
                 </div>
               </CollapsiblePanel>
 
               <CollapsiblePanel title="Annex III — High-Risk Categories">
-                <div className="check-grid">
+                <div className="grid grid-cols-2 gap-2">
                   {ANNEX_III_FLAGS.map(([k, label]) => (
-                    <CheckItem key={k} id={k} label={label} checked={!!flags[k]} onChange={v => { setFlags(f => ({ ...f, [k]: v })); setFlagsConfirmed(false); }} />
+                    <CheckItem key={k} id={k} label={label} checked={!!flags[k]}
+                      onChange={v => { setFlags(f => ({ ...f, [k]: v })); setFlagsConfirmed(false); }} />
                   ))}
                 </div>
               </CollapsiblePanel>
 
               <CollapsiblePanel title="GPAI — General Purpose AI">
-                <div className="check-grid">
-                  <CheckItem id="is_gpai" label="General-purpose AI model" checked={!!flags["is_gpai"]} onChange={v => { setFlags(f => ({ ...f, is_gpai: v })); setFlagsConfirmed(false); }} />
-                </div>
-              </CollapsiblePanel>
-
-              <CollapsiblePanel title="Art. 50 — Limited Risk (Transparency)">
-                <div className="check-grid">
-                  {LIMITED_FLAGS.map(([k, label]) => (
-                    <CheckItem key={k} id={k} label={label} checked={!!flags[k]} onChange={v => { setFlags(f => ({ ...f, [k]: v })); setFlagsConfirmed(false); }} />
+                <div className="grid grid-cols-2 gap-2">
+                  {GPAI_FLAGS.map(([k, label]) => (
+                    <CheckItem key={k} id={k} label={label} checked={!!flags[k]}
+                      onChange={v => { setFlags(f => ({ ...f, [k]: v })); setFlagsConfirmed(false); }} />
                   ))}
                 </div>
               </CollapsiblePanel>
 
-              <label style={{
-                display: "flex", alignItems: "flex-start", gap: 10, marginTop: 16,
-                padding: "12px 14px", borderRadius: 6, cursor: "pointer",
-                border: `2px solid ${flagsConfirmed ? "#27ae60" : "#e67e22"}`,
-                background: flagsConfirmed ? "#f0faf4" : "#fffaf5",
-              }}>
-                <input type="checkbox" checked={flagsConfirmed} onChange={e => setFlagsConfirmed(e.target.checked)} style={{ marginTop: 2, flexShrink: 0, accentColor: "#27ae60", width: 16, height: 16 }} />
-                <span style={{ fontSize: 13 }}>
-                  {flagsConfirmed
-                    ? <strong style={{ color: "#27ae60" }}>✓ All details reviewed and confirmed</strong>
-                    : <strong style={{ color: "#e67e22" }}>⚠ Please review all details before submitting</strong>
-                  }
-                  <span style={{ color: "var(--text-secondary)", display: "block", fontSize: 12, marginTop: 2 }}>
-                    Any changes after ticking this will reset the confirmation.
-                  </span>
-                </span>
-              </label>
+              <CollapsiblePanel title="Art. 50 — Limited Risk (Transparency)">
+                <div className="grid grid-cols-2 gap-2">
+                  {LIMITED_FLAGS.map(([k, label]) => (
+                    <CheckItem key={k} id={k} label={label} checked={!!flags[k]}
+                      onChange={v => { setFlags(f => ({ ...f, [k]: v })); setFlagsConfirmed(false); }} />
+                  ))}
+                </div>
+              </CollapsiblePanel>
 
-              <div className="assist-section-label" style={{ marginTop: 20 }}>Assignment</div>
-              <div className="form-grid single">
-                <div className="form-group">
-                  <label className="required" htmlFor="eng_co">Assign Compliance Officer</label>
-                  <select className="form-select" id="eng_co" value={complianceOfficerUsername} onChange={e => setComplianceOfficerUsername(e.target.value)}>
-                    <option value="">Choose Compliance Officer</option>
-                    {complianceOfficers.map(u => <option key={u.username} value={u.username}>{displayName(u)}</option>)}
-                  </select>
+              {/* Flags reviewed confirmation */}
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border-2 p-3 mt-4 cursor-pointer",
+                  flagsConfirmed ? "border-[var(--success)] bg-[#f0faf4]" : "border-[var(--warning)] bg-[var(--warning-bg)]",
+                )}
+                onClick={() => setFlagsConfirmed(v => !v)}
+              >
+                <Checkbox
+                  checked={flagsConfirmed}
+                  onCheckedChange={(c) => setFlagsConfirmed(c === true)}
+                  className="mt-0.5"
+                  id="flags_confirmed"
+                />
+                <div>
+                  <Label htmlFor="flags_confirmed" className="cursor-pointer text-[13px] font-semibold">
+                    {flagsConfirmed
+                      ? <span className="text-[var(--success)]">✓ Risk flags reviewed and confirmed</span>
+                      : <span className="text-[var(--warning)]">⚠ Please review and confirm all risk flags</span>}
+                  </Label>
+                  <p className="mt-0.5 text-[12px] text-muted-foreground">
+                    Changing a flag after ticking this will reset the confirmation.
+                  </p>
                 </div>
               </div>
 
+              <div className="mt-5 border-b border-border pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Assignment
+              </div>
+              <div className="mt-3 flex flex-col gap-1.5">
+                <label htmlFor="eng_co" className="text-sm font-medium">
+                  Assign Compliance Officer <span className="text-[var(--danger-fg)]">*</span>
+                </label>
+                <select id="eng_co" className={selectCls} value={complianceOfficerUsername}
+                  onChange={e => setComplianceOfficerUsername(e.target.value)}>
+                  <option value="">— select a compliance officer —</option>
+                  {complianceOfficers.map(u => <option key={u.username} value={u.username}>{displayName(u)}</option>)}
+                </select>
+              </div>
             </div>
 
-            <div className="modal-footer">
-              <button className="btn-ghost" onClick={onClose}>Cancel</button>
-              <button className="btn-ghost" onClick={() => setStep(0)}>← Back</button>
-              <button className="btn-primary" onClick={handleSubmit} disabled={submitting || !complianceOfficerUsername || !flagsConfirmed}>
-                {submitting && <span className="spinner" />} Forward to Compliance
-              </button>
-            </div>
+            <DialogFooter className="shrink-0 px-6 py-4">
+              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button variant="ghost" onClick={() => setStep(0)}>← Back</Button>
+              <Button onClick={handleSubmit} disabled={submitting || !complianceOfficerUsername || !flagsConfirmed}>
+                {submitting && <Loader2 className="animate-spin" />} Forward to Compliance
+              </Button>
+            </DialogFooter>
           </>
         )}
-
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

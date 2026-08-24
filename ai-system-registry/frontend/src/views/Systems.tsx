@@ -178,7 +178,7 @@ export default function Systems() {
       </div>
 
       <div className="px-6 py-5">
-        <Card className="overflow-hidden p-0">
+        <Card className="overflow-x-auto p-0">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
