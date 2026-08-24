@@ -38,10 +38,14 @@ function DemoStep({
   onSelect,
   useLlm,
   setUseLlm,
+  useRiskAtlasNexus,
+  setUseRiskAtlasNexus,
 }: {
   onSelect: (id: string | null, desc: string, meta: Record<string, unknown>, code?: string) => void;
   useLlm: boolean;
   setUseLlm: (v: boolean) => void;
+  useRiskAtlasNexus: boolean;
+  setUseRiskAtlasNexus: (v: boolean) => void;
 }) {
   const toast = useToast();
   const [demos, setDemos] = useState<DemoSummary[]>([]);
@@ -88,6 +92,14 @@ function DemoStep({
         </label>
         <span style={{ fontSize: 12, color: useLlm ? "var(--brand)" : "var(--text-secondary)" }}>
           {useLlm ? "Ollama on" : "Rule-based"}
+        </span>
+        <span style={{ marginLeft: 20, fontSize: 13, color: "var(--text-secondary)" }}>IBM Risk Atlas Nexus</span>
+        <label className="toggle" title={useRiskAtlasNexus ? "Risk Atlas Nexus on" : "Risk Atlas Nexus off"}>
+          <input type="checkbox" checked={useRiskAtlasNexus} onChange={e => setUseRiskAtlasNexus(e.target.checked)} />
+          <span className="slider" />
+        </label>
+        <span style={{ fontSize: 12, color: useRiskAtlasNexus ? "var(--brand)" : "var(--text-secondary)" }}>
+          {useRiskAtlasNexus ? "Atlas on" : "Atlas off"}
         </span>
       </div>
 
@@ -777,6 +789,7 @@ export default function AssessmentPage() {
   const toast = useToast();
   const [step, setStep] = useState<Step>("demo");
   const [useLlm, setUseLlm] = useState(false);
+  const [useRiskAtlasNexus, setUseRiskAtlasNexus] = useState(false);
 
   const [systemDesc, setSystemDesc] = useState("");
   const [systemMeta, setSystemMeta] = useState<Record<string, unknown>>({});
@@ -812,7 +825,8 @@ export default function AssessmentPage() {
         source_code: code ?? sourceCode,
         metadata: meta,
         use_llm: useLlm,
-        use_stub: _id !== null,
+        use_stub: _id !== null && !useRiskAtlasNexus,
+        use_risk_atlas_nexus: useRiskAtlasNexus,
       });
       setRisks(res.risks);
       setBackendUsed(res.backend_used);
@@ -924,7 +938,11 @@ export default function AssessmentPage() {
       </div>
 
       {step === "demo" && (
-        <DemoStep onSelect={handleDemoSelect} useLlm={useLlm} setUseLlm={setUseLlm} />
+        <DemoStep
+          onSelect={handleDemoSelect}
+          useLlm={useLlm} setUseLlm={setUseLlm}
+          useRiskAtlasNexus={useRiskAtlasNexus} setUseRiskAtlasNexus={setUseRiskAtlasNexus}
+        />
       )}
       {step === "identify" && (
         <IdentifyStep risks={risks} loading={loading} backendUsed={backendUsed} onNext={handleIdentifyNext} />
