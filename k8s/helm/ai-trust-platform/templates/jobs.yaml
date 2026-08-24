@@ -98,11 +98,11 @@ spec:
                 echo "waiting for keycloak:8080/realms/master"; sleep 2
               done
               echo "Realm endpoint up — waiting for admin token endpoint to be ready..."
-              until code=$(wget -q -O /dev/null --server-response \
+              until wget -q -O- \
                 --post-data "client_id=admin-cli&username=${KEYCLOAK_ADMIN}&password=${KEYCLOAK_ADMIN_PASSWORD}&grant_type=password" \
-                http://keycloak:8080/realms/master/protocol/openid-connect/token 2>&1 | awk '/HTTP\//{print $2}' | tail -1) \
-                && [ "$code" = "200" ]; do
-                echo "token endpoint returned $code — retrying in 3s"; sleep 3
+                http://keycloak:8080/realms/master/protocol/openid-connect/token 2>/dev/null \
+                | grep -q "access_token"; do
+                echo "token endpoint not ready — retrying in 3s"; sleep 3
               done
               echo "Keycloak admin token endpoint ready."
       containers:
