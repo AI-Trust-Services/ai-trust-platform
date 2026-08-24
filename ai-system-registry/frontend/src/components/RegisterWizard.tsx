@@ -264,10 +264,17 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
               </div>
             )}
             {!isEngineerMode && (
-              <div className="wizard-steps">
+              <div className="flex flex-wrap gap-4 border-b border-border px-6 py-3">
                 {OWNER_STEPS.map((label, i) => (
-                  <div key={i} className={`wizard-step${i === step ? " active" : i < step ? " done" : ""}`}>
-                    <span className="step-num">{i + 1}</span> {label}
+                  <div key={i} className={cn(
+                    "flex items-center gap-2 text-sm",
+                    i === step ? "font-semibold text-[var(--brand)]" : i < step ? "text-foreground" : "text-muted-foreground",
+                  )}>
+                    <span className={cn(
+                      "flex size-5 items-center justify-center rounded-full text-xs font-semibold",
+                      i === step ? "bg-[var(--brand)] text-white" : i < step ? "bg-[var(--success)] text-white" : "bg-muted text-muted-foreground",
+                    )}>{i + 1}</span>
+                    {label}
                   </div>
                 ))}
               </div>
