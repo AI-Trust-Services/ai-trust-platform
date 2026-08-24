@@ -69,7 +69,6 @@ spec:
               mc mb --ignore-existing local/clickhouse &&
               mc mb --ignore-existing local/evidence-files
 ---
----
 apiVersion: batch/v1
 kind: Job
 metadata:
