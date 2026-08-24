@@ -3,6 +3,7 @@ import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard } from "../utils";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
+import ModelDetail from "./ModelDetail";
 import type { AISystem, ModelCard, WorkflowStep, UserSummary, SystemModelResponse } from "../types";
 
 export type UserMap = Record<string, { firstName: string; lastName: string }>;
@@ -351,6 +352,7 @@ function ModelTab({ system, models }: { system: AISystem; models: ModelCard[] })
   const [selectedModelId, setSelectedModelId] = useState("");
   const [role, setRole] = useState("");
   const [linking, setLinking] = useState(false);
+  const [detailModelId, setDetailModelId] = useState<string | null>(null);
   const showToast = useToast();
   const { mayWrite } = useModalControls();
 
@@ -397,7 +399,8 @@ function ModelTab({ system, models }: { system: AISystem; models: ModelCard[] })
           <div className="msg-strip info">No model cards linked to this system yet.</div>
         ) : (
           linkedModels.map((m) => (
-            <div key={m.id} className="model-link-box linked" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+            <div key={m.id} className="model-link-box linked" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, cursor: "pointer" }}
+              onClick={() => setDetailModelId(m.id)}>
               <div>
                 <div className="model-link-name">{m.name}</div>
                 <div className="model-link-meta">
@@ -411,7 +414,7 @@ function ModelTab({ system, models }: { system: AISystem; models: ModelCard[] })
               </div>
               <button className="btn-ghost" style={{ flexShrink: 0 }} disabled={!mayWrite}
                 title={mayWrite ? undefined : NO_WRITE_TITLE}
-                onClick={() => handleRemoveModel(m.id)}>Unlink</button>
+                onClick={(e) => { e.stopPropagation(); handleRemoveModel(m.id); }}>Unlink</button>
             </div>
           ))
         )}
@@ -440,6 +443,11 @@ function ModelTab({ system, models }: { system: AISystem; models: ModelCard[] })
           </div>
         </div>
       )}
+      <ModelDetail
+        modelId={detailModelId}
+        open={detailModelId !== null}
+        onClose={() => setDetailModelId(null)}
+      />
     </div>
   );
 }

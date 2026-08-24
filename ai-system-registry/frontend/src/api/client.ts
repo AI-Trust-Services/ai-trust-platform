@@ -41,6 +41,7 @@ export const api = {
     request<null>(`/systems/${systemId}/models/${modelCardId}`, { method: "DELETE" }),
 
   getModels: () => request<ModelCard[]>("/model-cards?limit=200"),
+  getModelCard: (id: string) => request<ModelCard>(`/model-cards/${id}`),
   createModel: (data: ModelCardFormData) =>
     request<ModelCard>("/model-cards", {
       method: "POST",
