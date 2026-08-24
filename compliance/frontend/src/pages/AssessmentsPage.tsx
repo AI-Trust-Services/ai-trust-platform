@@ -158,7 +158,7 @@ export default function AssessmentsPage() {
               {filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No assessments yet. Click "New Assessment" to begin.</TableCell></TableRow>
               ) : filtered.map((a) => (
-                <TableRow key={a.id} data-state={selected === a.id ? "selected" : undefined}>
+                <TableRow key={a.id} data-state={selected === a.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(a)}>
                   <TableCell><div className="font-medium text-foreground">{a.title}</div><div className="text-xs text-muted-foreground">{a.id}</div></TableCell>
                   <TableCell>{systemsById[a.ai_system_id]?.name ?? a.ai_system_id}</TableCell>
                   <TableCell>{frameworksById[a.framework_id]?.name ?? a.framework_id}</TableCell>
@@ -168,7 +168,6 @@ export default function AssessmentsPage() {
                   <TableCell className="text-[13px] text-muted-foreground">{fmtDate(a.created_at)}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => openDetail(a)}>View</Button>
                       {a.status === "draft" && (
                         <Button variant="ghost" size="sm" disabled={busy === a.id || !mayWrite}
                           title={mayWrite ? undefined : noWriteTitle}
