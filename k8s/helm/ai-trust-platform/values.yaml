@@ -66,6 +66,18 @@ otel:
 policyChecker:
   pollInterval: "10"
 
+# ── Ollama (optional local LLM for AI-assisted registration) ──
+# Disabled by default: the registry backend defaults to the offline `stub`
+# provider. To use a real model, set enabled: true here AND LLM_PROVIDER=ollama
+# in .env (flows into the ai-trust-env Secret). The model is swappable via
+# LLM_MODEL / LLM_VISION_MODEL in that Secret — the ollama-pull Job reads the
+# same vars, so the puller and the backend always agree.
+ollama:
+  enabled: false
+  image: ollama/ollama:latest
+  storageSize: 20Gi # model blobs live here; qwen2.5:7b + a vision model easily exceed 10Gi
+  nodePort: 30434
+
 # ── the 7 near-identical backend+frontend MFE pairs ──
 # dependsOnJobs: Job names that must Complete before this backend starts
 #   (mirrors compose `depends_on: condition: service_completed_successfully`)

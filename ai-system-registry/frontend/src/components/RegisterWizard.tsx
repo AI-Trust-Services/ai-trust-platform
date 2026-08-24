@@ -23,6 +23,7 @@ const EMPTY_FORM: AISystemFormData = {
 };
 
 const ENGINEER_STEPS = ["Purpose & Lifecycle", "Risk Flags", "Review"];
+const OWNER_STEPS = ["System Details", "Assign & Register"];
 
 function CollapsiblePanel({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
@@ -60,7 +61,10 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
   const [complianceOfficerUsername, setComplianceOfficerUsername] = useState("");
   const [engineers, setEngineers] = useState<UserSummary[]>([]);
   const [complianceOfficers, setComplianceOfficers] = useState<UserSummary[]>([]);
+  const [ownerExtra, setOwnerExtra] = useState({ department: "", use_case: "", people_affected: "", decision_context: "" });
+  const setOwnerField = (key: string, value: string) => { setOwnerExtra(x => ({ ...x, [key]: value })); setFlagsConfirmed(false); };
   const [loading, setLoading] = useState(false);
+  const [flagsConfirmed, setFlagsConfirmed] = useState(false);
   const submitting = useRef(false);
   const [doneId, setDoneId] = useState<string | null>(null);
   const showToast = useToast();
@@ -69,6 +73,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
     if (!open) return;
     setStep(0);
     setDoneId(null);
+    setFlagsConfirmed(false);
     submitting.current = false;
     if (isEngineerMode) {
       setForm({
@@ -107,7 +112,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
         generates_synthetic_content: system.generates_synthetic_content,
       });
       // Pre-populate compliance officer from what the owner pre-set
-      setAssigneeUsername(system.compliance_officer_username || "");
+      setComplianceOfficerUsername(system.compliance_officer_username || "");
       api.getUsersByRole("ai_compliance_officer")
         .then(setComplianceOfficers)
         .catch(() => {});
@@ -115,6 +120,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
       setForm(EMPTY_FORM);
       setAssigneeUsername("");
       setComplianceOfficerUsername("");
+      setOwnerExtra({ department: "", use_case: "", people_affected: "", decision_context: "" });
       Promise.all([
         api.getUsersByRole("ai_engineer"),
         api.getUsersByRole("ai_compliance_officer"),
@@ -124,16 +130,20 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
 
   if (!open) return null;
 
-  const set = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm((f) => ({ ...f, [k]: (e.target as HTMLInputElement).type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
-  const setNum = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const set = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const isCheckbox = (e.target as HTMLInputElement).type === "checkbox";
+    setForm((f) => ({ ...f, [k]: isCheckbox ? (e.target as HTMLInputElement).checked : e.target.value }));
+    setFlagsConfirmed(false);
+  };
+  const setNum = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((f) => ({ ...f, [k]: parseFloat(e.target.value) || 0 }));
+    setFlagsConfirmed(false);
+  };
 
-  const maxStep = isEngineerMode ? 2 : 0;
+  const maxStep = isEngineerMode ? 2 : 1;
 
   function handleNext() {
-    if (!isEngineerMode && !form.name.trim()) { showToast("System name is required", true); return; }
-    if (!isEngineerMode && !assigneeUsername) { showToast("Please assign an AI Engineer", true); return; }
+    if (!isEngineerMode && step === 0 && !form.name.trim()) { showToast("System name is required", true); return; }
     setStep((s) => Math.min(s + 1, maxStep));
   }
 
@@ -144,7 +154,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
     submitting.current = true;
     setLoading(true);
     try {
-      const result = await api.intake({ name: form.name, description: form.description, assignee_username: assigneeUsername, compliance_officer_username: complianceOfficerUsername || null } as never);
+      const result = await api.intake({ name: form.name, description: form.description, intended_purpose: form.intended_purpose || null, department: ownerExtra.department || null, use_case: ownerExtra.use_case || null, people_affected: ownerExtra.people_affected || null, decision_context: ownerExtra.decision_context || null, autonomy_level: form.autonomy_level || null, assignee_username: assigneeUsername, compliance_officer_username: complianceOfficerUsername || null } as never);
       setDoneId(result.id);
       showToast("AI system registered and engineer notified");
       onSuccess();
@@ -232,27 +242,76 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                 ))}
               </div>
             )}
+            {!isEngineerMode && (
+              <div className="wizard-steps">
+                {OWNER_STEPS.map((label, i) => (
+                  <div key={i} className={`wizard-step${i === step ? " active" : i < step ? " done" : ""}`}>
+                    <span className="step-num">{i + 1}</span> {label}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="modal-body">
-              {/* OWNER MODE: single step */}
-              {!isEngineerMode && (
+              {/* OWNER MODE step 0: System Details */}
+              {!isEngineerMode && step === 0 && (
                 <div className="wizard-page">
                   <div className="msg-strip info" style={{ marginBottom: 16 }}>
                     Provide a name and optionally a description, then assign an AI Engineer who will fill in the technical details.
                   </div>
-                  <div className="form-grid single">
-                    <div className="form-group">
+                  <div className="form-grid">
+                    <div className="form-group span2">
                       <label className="required" htmlFor="reg_name">System Name</label>
                       <input type="text" id="reg_name" value={form.name} onChange={set("name")} placeholder="e.g. Fraud Detection Model" />
                     </div>
-                    <div className="form-group">
+                    <div className="form-group span2">
                       <label htmlFor="reg_description">Description (optional)</label>
-                      <textarea id="reg_description" rows={3} value={form.description} onChange={set("description")} placeholder="Brief description of the AI system…" />
+                      <textarea id="reg_description" rows={2} value={form.description} onChange={set("description")} placeholder="Brief description of the AI system…" />
                     </div>
+                    <div className="form-group span2">
+                      <label htmlFor="reg_purpose">Purpose / Intended Use (optional)</label>
+                      <textarea id="reg_purpose" rows={2} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="Describe the intended purpose and deployment context…" />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="reg_dept">Department (optional)</label>
+                      <input type="text" id="reg_dept" value={ownerExtra.department} onChange={(e) => setOwnerField("department", e.target.value)} placeholder="e.g. HR, Finance, Operations" />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="reg_use_case">Use Case (optional)</label>
+                      <input type="text" id="reg_use_case" value={ownerExtra.use_case} onChange={(e) => setOwnerField("use_case", e.target.value)} placeholder="e.g. candidate screening" />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="reg_people">People Affected (optional)</label>
+                      <input type="text" id="reg_people" value={ownerExtra.people_affected} onChange={(e) => setOwnerField("people_affected", e.target.value)} placeholder="e.g. job applicants, employees" />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="reg_autonomy">Human Involvement</label>
+                      <select className="form-select" id="reg_autonomy" value={form.autonomy_level} onChange={set("autonomy_level")}>
+                        <option value="decision_support">Decision support</option>
+                        <option value="human_in_the_loop">Human in the loop</option>
+                        <option value="human_on_the_loop">Human on the loop</option>
+                        <option value="fully_automated">Fully automated</option>
+                      </select>
+                    </div>
+                    <div className="form-group span2">
+                      <label htmlFor="reg_context">Decision Context (optional)</label>
+                      <textarea id="reg_context" rows={2} value={ownerExtra.decision_context} onChange={(e) => setOwnerField("decision_context", e.target.value)} placeholder="Describe how and where decisions are made by this system…" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* OWNER MODE step 1: Assign & Register */}
+              {!isEngineerMode && step === 1 && (
+                <div className="wizard-page">
+                  <div className="msg-strip info" style={{ marginBottom: 16 }}>
+                    Assign an AI Engineer who will fill in the technical details for <strong>{form.name}</strong>.
+                  </div>
+                  <div className="form-grid single">
                     <div className="form-group">
                       <label className="required" htmlFor="reg_engineer">Assign to AI Engineer</label>
                       <select className="form-select" id="reg_engineer" value={assigneeUsername} onChange={(e) => setAssigneeUsername(e.target.value)}>
-                        <option value="">— select an engineer —</option>
+                        <option value="">Choose AI Engineer</option>
                         {engineers.map((u) => (
                           <option key={u.username} value={u.username}>{displayName(u)}</option>
                         ))}
@@ -261,7 +320,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     <div className="form-group">
                       <label htmlFor="reg_co">Pre-assign Compliance Officer (optional)</label>
                       <select className="form-select" id="reg_co" value={complianceOfficerUsername} onChange={(e) => setComplianceOfficerUsername(e.target.value)}>
-                        <option value="">— let the engineer choose —</option>
+                        <option value="">Choose Compliance Officer (optional)</option>
                         {complianceOfficers.map((u) => (
                           <option key={u.username} value={u.username}>{displayName(u)}</option>
                         ))}
@@ -383,6 +442,22 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                       <CheckItem id="generates_synthetic_content" label="Generates synthetic content" checked={form.generates_synthetic_content} onChange={set("generates_synthetic_content")} />
                     </div>
                   </CollapsiblePanel>
+                  <div style={{
+                    display: "flex", alignItems: "flex-start", gap: 10, marginTop: 16, padding: "12px 14px", borderRadius: 8,
+                    border: `2px solid ${flagsConfirmed ? "#27ae60" : "#e67e22"}`,
+                    background: flagsConfirmed ? "#f0faf4" : "#fffaf5",
+                  }}>
+                    <input type="checkbox" checked={flagsConfirmed} onChange={e => setFlagsConfirmed(e.target.checked)} style={{ marginTop: 2, flexShrink: 0, accentColor: "#27ae60", width: 16, height: 16 }} />
+                    <div>
+                      {flagsConfirmed
+                        ? <strong style={{ color: "#27ae60" }}>✓ All details reviewed and confirmed</strong>
+                        : <strong style={{ color: "#e67e22" }}>⚠ Please review all details before continuing</strong>
+                      }
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                        Any changes after ticking this will reset the confirmation.
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -434,7 +509,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                   <div className="form-group" style={{ marginTop: 16 }}>
                     <label className="required" htmlFor="assign_co">Assign to Compliance Officer</label>
                     <select className="form-select" id="assign_co" value={assigneeUsername} onChange={(e) => setAssigneeUsername(e.target.value)}>
-                      <option value="">— select a compliance officer —</option>
+                      <option value="">Choose Compliance Officer</option>
                       {complianceOfficers.map((u) => (
                         <option key={u.username} value={u.username}>{displayName(u)}</option>
                       ))}
@@ -452,18 +527,22 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
           ) : (
             <>
               <button className="btn-ghost" onClick={onClose}>Cancel</button>
-              {isEngineerMode && step > 0 && (
+              {step > 0 && (
                 <button className="btn-ghost" onClick={() => setStep((s) => s - 1)}>← Back</button>
               )}
-              {/* Owner: single page → submit immediately */}
-              {!isEngineerMode && (
+              {/* Owner step 0 → next */}
+              {!isEngineerMode && step === 0 && (
+                <button className="btn-primary" onClick={handleNext}>Next →</button>
+              )}
+              {/* Owner step 1 → register */}
+              {!isEngineerMode && step === 1 && (
                 <button className="btn-primary" onClick={handleOwnerSubmit} disabled={loading}>
                   {loading && <span className="spinner" />} Register System
                 </button>
               )}
               {/* Engineer: next until last page, then submit */}
               {isEngineerMode && step < maxStep && (
-                <button className="btn-primary" onClick={handleNext}>Next →</button>
+                <button className="btn-primary" onClick={handleNext} disabled={step === 1 && !flagsConfirmed}>Next →</button>
               )}
               {isEngineerMode && step === maxStep && (
                 <button className="btn-primary" onClick={handleEngineerSubmit} disabled={loading}>

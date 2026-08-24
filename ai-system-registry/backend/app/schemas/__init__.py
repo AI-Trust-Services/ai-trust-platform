@@ -4,9 +4,17 @@ from app.schemas.ai_system import (
     AISystemUpdate,
     AISystemResponse,
     ClassificationResult,
+    RationaleItem,
     IntakeResponse,
     VALID_LIFECYCLES,
     VALID_ROLES,
+)
+from app.schemas.intake_assist import (
+    ChatMessage,
+    AssistTurnRequest,
+    AssistTurnResponse,
+    AssistExtractResponse,
+    InferredFlag,
 )
 from app.schemas.model_card import (
     ModelCardCreate,
@@ -26,9 +34,15 @@ __all__ = [
     "AISystemUpdate",
     "AISystemResponse",
     "ClassificationResult",
+    "RationaleItem",
     "IntakeResponse",
     "VALID_LIFECYCLES",
     "VALID_ROLES",
+    "ChatMessage",
+    "AssistTurnRequest",
+    "AssistTurnResponse",
+    "AssistExtractResponse",
+    "InferredFlag",
     "ModelCardCreate",
     "ModelCardUpdate",
     "ModelCardResponse",

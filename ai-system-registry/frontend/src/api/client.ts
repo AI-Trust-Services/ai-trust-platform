@@ -1,4 +1,4 @@
-import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, SystemModelResponse, ModelSystemResponse, WorkflowStep, UserSummary } from "../types";
+import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, SystemModelResponse, ModelSystemResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse } from "../types";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
@@ -39,6 +39,43 @@ export const api = {
     }),
   removeSystemModel: (systemId: string, modelCardId: string) =>
     request<null>(`/systems/${systemId}/models/${modelCardId}`, { method: "DELETE" }),
+
+  // AI-assisted registration — one stateless turn (frontend resends transcript + fields).
+  assistTurn: (transcript: ChatMessage[], fields: Record<string, unknown>) =>
+    request<AssistTurnResponse>("/intake/assist/turn", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript, fields }),
+    }),
+
+  // AI-assisted registration — extract fields from an uploaded document/image.
+  assistExtract: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<AssistExtractResponse>("/intake/assist/extract", { method: "POST", body: fd });
+  },
+
+  // Register with AI-collected fields + inferred flags + rationale; returns the classified system.
+  intakeAssisted: (data: Record<string, unknown>) =>
+    request<{ system: AISystem; classification: unknown }>("/intake", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+  // Engineer AI-assisted registration — one stateless turn, fetches owner fields from DB via system_id.
+  engineerAssistTurn: (systemId: string, transcript: ChatMessage[], fields: Record<string, unknown>) =>
+    request<AssistTurnResponse>(`/intake/assist/engineer/${encodeURIComponent(systemId)}/turn`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript, fields }),
+    }),
+
+  // Engineer AI-assisted registration — extract technical fields from an uploaded document/image.
+  engineerAssistExtract: (systemId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<AssistExtractResponse>(`/intake/assist/engineer/${encodeURIComponent(systemId)}/extract`, { method: "POST", body: fd });
+  },
 
   getModels: () => request<ModelCard[]>("/model-cards?limit=200"),
   getModelCard: (id: string) => request<ModelCard>(`/model-cards/${id}`),

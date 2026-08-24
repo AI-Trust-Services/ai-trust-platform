@@ -195,7 +195,7 @@ function WorkflowProgress({
             <div className="form-group" style={{ marginBottom: 12 }}>
               <label className="required" htmlFor="reject_engineer">Reassign to AI Engineer</label>
               <select className="form-select" id="reject_engineer" value={rejectAssignee} onChange={(e) => setRejectAssignee(e.target.value)}>
-                <option value="">— select an engineer —</option>
+                <option value="">Choose AI Engineer</option>
                 {engineers.map((u) => (
                   <option key={u.username} value={u.username}>
                     {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username} ({u.username})
@@ -257,7 +257,7 @@ function WorkflowTab({ system, userMap }: { system: AISystem; userMap?: UserMap 
 }
 
 function EditForm({ system, models: _models, onSave, onClose }: { system: AISystem; models: ModelCard[]; onSave: (updated: AISystem) => void; onClose: () => void }) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<Record<string, string>>({
     name: system.name || "",
     version: system.version || "",
     provider: system.provider || "",
@@ -276,9 +276,6 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
   const { mayWrite } = useModalControls();
   const NO_WRITE_TITLE = "Requires permission: systems:write";
 
-  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
-
   async function handleSave() {
     setSaving(true);
     try {
@@ -292,25 +289,41 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
 
   return (
     <div className="tab-panel active">
-      <div className="msg-strip info">Changes to identity and purpose fields only. Classification flags are immutable after registration.</div>
+      <div className="msg-strip info" style={{ marginBottom: 16 }}>Changes to identity and purpose fields only. Classification flags are immutable after registration.</div>
+
       <div className="form-grid">
-        <div className="form-group"><label className="required" htmlFor="edit_name">System Name</label><input type="text" id="edit_name" value={form.name} onChange={set("name")} /></div>
-        <div className="form-group"><label htmlFor="edit_version">Version</label><input type="text" id="edit_version" value={form.version} onChange={set("version")} /></div>
-        <div className="form-group"><label htmlFor="edit_provider">Provider</label><input type="text" id="edit_provider" value={form.provider} onChange={set("provider")} /></div>
-        <div className="form-group"><label htmlFor="edit_org_name">Organisation</label><input type="text" id="edit_org_name" value={form.org_name} onChange={set("org_name")} /></div>
+        <div className="form-group">
+          <label className="required" htmlFor="edit_name">System Name</label>
+          <input id="edit_name" type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+        </div>
+        <div className="form-group">
+          <label htmlFor="edit_version">Version</label>
+          <input id="edit_version" type="text" value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} />
+        </div>
+        <div className="form-group">
+          <label htmlFor="edit_provider">Provider</label>
+          <input id="edit_provider" type="text" value={form.provider} onChange={e => setForm(f => ({ ...f, provider: e.target.value }))} />
+        </div>
+        <div className="form-group">
+          <label htmlFor="edit_org_name">Organisation</label>
+          <input id="edit_org_name" type="text" value={form.org_name} onChange={e => setForm(f => ({ ...f, org_name: e.target.value }))} />
+        </div>
         <div className="form-group">
           <label htmlFor="edit_org_role">Role</label>
-          <select className="form-select" id="edit_org_role" value={form.org_role} onChange={set("org_role")}>
+          <select id="edit_org_role" className="form-select" value={form.org_role} onChange={e => setForm(f => ({ ...f, org_role: e.target.value }))}>
             <option value="provider">Provider</option>
             <option value="deployer">Deployer</option>
             <option value="importer">Importer</option>
             <option value="distributor">Distributor</option>
           </select>
         </div>
-        <div className="form-group"><label htmlFor="edit_country">Country</label><input type="text" id="edit_country" value={form.provider_country} onChange={set("provider_country")} maxLength={2} /></div>
+        <div className="form-group">
+          <label htmlFor="edit_country">Country</label>
+          <input id="edit_country" type="text" maxLength={2} value={form.provider_country} onChange={e => setForm(f => ({ ...f, provider_country: e.target.value }))} />
+        </div>
         <div className="form-group">
           <label htmlFor="edit_system_type">System Type</label>
-          <select className="form-select" id="edit_system_type" value={form.system_type} onChange={set("system_type")}>
+          <select id="edit_system_type" className="form-select" value={form.system_type} onChange={e => setForm(f => ({ ...f, system_type: e.target.value }))}>
             <option value="application">Application</option>
             <option value="model">Model</option>
             <option value="component">Component</option>
@@ -319,7 +332,7 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
         </div>
         <div className="form-group">
           <label htmlFor="edit_autonomy">Autonomy Level</label>
-          <select className="form-select" id="edit_autonomy" value={form.autonomy_level} onChange={set("autonomy_level")}>
+          <select id="edit_autonomy" className="form-select" value={form.autonomy_level} onChange={e => setForm(f => ({ ...f, autonomy_level: e.target.value }))}>
             <option value="decision_support">Decision support</option>
             <option value="human_in_the_loop">Human in the loop</option>
             <option value="human_on_the_loop">Human on the loop</option>
@@ -328,14 +341,24 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
         </div>
         <div className="form-group">
           <label htmlFor="edit_lifecycle">Lifecycle State</label>
-          <select className="form-select" id="edit_lifecycle" value={form.lifecycle} onChange={set("lifecycle")}>
+          <select id="edit_lifecycle" className="form-select" value={form.lifecycle} onChange={e => setForm(f => ({ ...f, lifecycle: e.target.value }))}>
             {Object.entries(LIFECYCLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
-        <div className="form-group"><label htmlFor="edit_app_url">Application URL</label><input type="url" id="edit_app_url" value={form.application_url} onChange={set("application_url")} /></div>
-        <div className="form-group span2"><label htmlFor="edit_description">Description</label><textarea id="edit_description" rows={3} value={form.description} onChange={set("description")} /></div>
-        <div className="form-group span2"><label htmlFor="edit_purpose">Intended Purpose</label><textarea id="edit_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} /></div>
+        <div className="form-group">
+          <label htmlFor="edit_app_url">Application URL</label>
+          <input id="edit_app_url" type="url" value={form.application_url} onChange={e => setForm(f => ({ ...f, application_url: e.target.value }))} />
+        </div>
+        <div className="form-group form-group-wide">
+          <label htmlFor="edit_description">Description</label>
+          <textarea id="edit_description" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+        </div>
+        <div className="form-group form-group-wide">
+          <label htmlFor="edit_purpose">Intended Purpose</label>
+          <textarea id="edit_purpose" rows={3} value={form.intended_purpose} onChange={e => setForm(f => ({ ...f, intended_purpose: e.target.value }))} />
+        </div>
       </div>
+
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, gap: 8 }}>
         <button className="btn-ghost" onClick={onClose}>Cancel</button>
         <button className="btn-primary" onClick={handleSave} disabled={saving || !mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE}>

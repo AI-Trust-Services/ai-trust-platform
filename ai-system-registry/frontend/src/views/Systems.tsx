@@ -3,6 +3,9 @@ import { TierBadge, LifecycleBadge, ComplianceBar, FormattedDate } from "../comp
 import SystemDetail from "../components/SystemDetail";
 import type { UserMap } from "../components/SystemDetail";
 import RegisterWizard from "../components/RegisterWizard";
+import RegisterModeChooser from "../components/RegisterModeChooser";
+import AssistedRegistration from "../components/AssistedRegistration";
+import EngineerAssistedRegistration from "../components/EngineerAssistedRegistration";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import type { AISystem, ModelCard } from "../types";
@@ -25,8 +28,23 @@ export default function Systems() {
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [fillInSystem, setFillInSystem] = useState<AISystem | undefined>(undefined);
+  const [ownerStage, setOwnerStage] = useState<"chooser" | "manual" | "assisted">("chooser");
+  const [engineerStage, setEngineerStage] = useState<"chooser" | "manual" | "assisted">("chooser");
   const { wizardOpen, setWizardOpen, mayRegister, username } = useModalControls();
   const showToast = useToast();
+
+  // Owner flow always starts at the mode chooser; engineer fill-in also starts at chooser.
+  useEffect(() => {
+    if (wizardOpen && !fillInSystem) setOwnerStage("chooser");
+    if (wizardOpen && fillInSystem) setEngineerStage("chooser");
+  }, [wizardOpen, fillInSystem]);
+
+  function closeWizard() {
+    setWizardOpen(false);
+    setFillInSystem(undefined);
+    setOwnerStage("chooser");
+    setEngineerStage("chooser");
+  }
 
   const loadSystems = useCallback(async () => {
     try {
@@ -236,10 +254,52 @@ export default function Systems() {
         </div>
       </div>
 
+      {/* Engineer: choose AI-assisted vs manual */}
+      <RegisterModeChooser
+        open={wizardOpen && !!fillInSystem && engineerStage === "chooser"}
+        onClose={closeWizard}
+        onAssisted={() => setEngineerStage("assisted")}
+        onManual={() => setEngineerStage("manual")}
+        title="Complete Technical Registration"
+        assistedDescription="Upload a model card or technical spec and let the assistant extract the details. Review and confirm each field before submitting."
+        manualDescription="Fill in the technical details and risk flags manually using the step-by-step form."
+      />
+
+      {/* Engineer: AI-assisted technical flow */}
+      <EngineerAssistedRegistration
+        open={wizardOpen && !!fillInSystem && engineerStage === "assisted"}
+        system={fillInSystem!}
+        onClose={closeWizard}
+        onSuccess={() => { loadSystems(); loadModels(); closeWizard(); }}
+      />
+
+      {/* Engineer: classic manual wizard */}
       <RegisterWizard
-        open={wizardOpen}
+        open={wizardOpen && !!fillInSystem && engineerStage === "manual"}
         system={fillInSystem}
-        onClose={() => { setWizardOpen(false); setFillInSystem(undefined); }}
+        onClose={closeWizard}
+        onSuccess={() => { loadSystems(); loadModels(); }}
+      />
+
+      {/* Owner: choose manual vs AI-assisted */}
+      <RegisterModeChooser
+        open={wizardOpen && !fillInSystem && ownerStage === "chooser"}
+        onClose={closeWizard}
+        onManual={() => setOwnerStage("manual")}
+        onAssisted={() => setOwnerStage("assisted")}
+      />
+
+      {/* Owner: classic manual stub */}
+      <RegisterWizard
+        open={wizardOpen && !fillInSystem && ownerStage === "manual"}
+        onClose={closeWizard}
+        onSuccess={() => { loadSystems(); loadModels(); }}
+      />
+
+      {/* Owner: conversational AI-assisted flow */}
+      <AssistedRegistration
+        open={wizardOpen && !fillInSystem && ownerStage === "assisted"}
+        onClose={closeWizard}
         onSuccess={() => { loadSystems(); loadModels(); }}
       />
 
