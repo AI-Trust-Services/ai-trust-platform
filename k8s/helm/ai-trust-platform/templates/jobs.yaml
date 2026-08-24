@@ -80,20 +80,31 @@ spec:
       restartPolicy: OnFailure
       {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
-        {{- include "ai-trust.waitForHttp" (dict "name" "keycloak" "port" 8080 "path" "/realms/master" "image" .Values.waitImages.busybox) | nindent 8 }}
-        # Keycloak 25 initializes the master realm with ssl_required=EXTERNAL on a
-        # fresh DB, which blocks HTTP token requests from inside the cluster (403).
-        # Patch it to NONE so keycloak-provision can authenticate via HTTP.
-        - name: patch-master-realm-ssl
-          image: {{ .Values.waitImages.postgres }}
+        # Wait until Keycloak is fully ready: /realms/master responds AND the
+        # admin-cli token endpoint accepts requests (HTTP 200). This handles both
+        # the startup race and the ssl_required=EXTERNAL issue on fresh DBs —
+        # Keycloak is started with --spi-realm-default-ssl-required=NONE so new
+        # realms default to NONE, and the token endpoint poll ensures the master
+        # realm is fully initialised before we attempt provisioning.
+        - name: wait-for-keycloak
+          image: {{ .Values.waitImages.busybox }}
           envFrom:
             - secretRef: { name: {{ .Values.secretName }} }
           command:
             - sh
             - -c
             - |
-              PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U "$POSTGRES_USER" -d keycloak \
-                -c "UPDATE realm SET ssl_required='NONE' WHERE name='master' AND ssl_required != 'NONE';"
+              until wget -q -O- http://keycloak:8080/realms/master >/dev/null 2>&1; do
+                echo "waiting for keycloak:8080/realms/master"; sleep 2
+              done
+              echo "Realm endpoint up — waiting for admin token endpoint to be ready..."
+              until code=$(wget -q -O /dev/null --server-response \
+                --post-data "client_id=admin-cli&username=${KEYCLOAK_ADMIN}&password=${KEYCLOAK_ADMIN_PASSWORD}&grant_type=password" \
+                http://keycloak:8080/realms/master/protocol/openid-connect/token 2>&1 | awk '/HTTP\//{print $2}' | tail -1) \
+                && [ "$code" = "200" ]; do
+                echo "token endpoint returned $code — retrying in 3s"; sleep 3
+              done
+              echo "Keycloak admin token endpoint ready."
       containers:
         - name: keycloak-provision
           image: {{ .Values.image.repository }}/keycloak-provision:{{ .Values.image.tag }}
