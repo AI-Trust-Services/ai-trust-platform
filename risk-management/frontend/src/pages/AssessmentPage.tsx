@@ -39,7 +39,7 @@ function DemoStep({
   useLlm,
   setUseLlm,
 }: {
-  onSelect: (id: string | null, desc: string, meta: Record<string, unknown>) => void;
+  onSelect: (id: string | null, desc: string, meta: Record<string, unknown>, code?: string) => void;
   useLlm: boolean;
   setUseLlm: (v: boolean) => void;
 }) {
@@ -48,8 +48,10 @@ function DemoStep({
   const [loading, setLoading] = useState(true);
   const [custom, setCustom] = useState(false);
   const [desc, setDesc] = useState("");
+  const [sourceCode, setSourceCode] = useState("");
   const [name, setName] = useState("");
   const [category, setCategory] = useState("employment");
+  const [inputTab, setInputTab] = useState<"docs" | "code">("docs");
 
   useEffect(() => {
     api.getDemos()
@@ -73,7 +75,7 @@ function DemoStep({
       intended_users: ["analyst"], deployment_context: "custom",
       data_inputs: [], ai_techniques: [],
     };
-    onSelect(null, desc, meta);
+    onSelect(null, desc, meta, sourceCode);
   }
 
   return (
@@ -136,10 +138,36 @@ function DemoStep({
                 </div>
               </div>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 12, display: "block", marginBottom: 4 }}>System description *</label>
-                <textarea value={desc} onChange={e => setDesc(e.target.value)}
-                  style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, minHeight: 100, fontFamily: "inherit" }}
-                  placeholder="Describe the AI system, its purpose, data inputs, and deployment context…" />
+                <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+                  <button
+                    className={inputTab === "docs" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}
+                    onClick={() => setInputTab("docs")}
+                    type="button"
+                  >Documentation</button>
+                  <button
+                    className={inputTab === "code" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}
+                    onClick={() => setInputTab("code")}
+                    type="button"
+                  >Source Code (optional)</button>
+                </div>
+                {inputTab === "docs" ? (
+                  <>
+                    <label style={{ fontSize: 12, display: "block", marginBottom: 4 }}>System description *</label>
+                    <textarea value={desc} onChange={e => setDesc(e.target.value)}
+                      style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, minHeight: 100, fontFamily: "inherit" }}
+                      placeholder="Describe the AI system, its purpose, data inputs, and deployment context…" />
+                  </>
+                ) : (
+                  <>
+                    <label style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Source code snippet (optional — aids risk identification)</label>
+                    <textarea value={sourceCode} onChange={e => setSourceCode(e.target.value)}
+                      style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 12, minHeight: 120, fontFamily: "monospace" }}
+                      placeholder={"# Paste relevant source code here (up to 3000 chars used)\ndef predict(features):\n    ..."} />
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
+                      First 3000 characters will be analysed alongside the documentation.
+                    </div>
+                  </>
+                )}
               </div>
               <button className="btn-primary" onClick={handleCustom}>Start assessment →</button>
             </div>
@@ -682,10 +710,12 @@ function ReportView({
 
 /* ── Export step ─────────────────────────────────────────────────────── */
 function ExportStep({
-  jsonOutput, markdownOutput, loading,
+  jsonOutput, markdownOutput, instructionsForUse, dpiaOutput, loading,
   systemMeta, risks, mitigations, classification, residualArg, vgAssessments, incidents,
 }: {
-  jsonOutput: string; markdownOutput: string; loading: boolean;
+  jsonOutput: string; markdownOutput: string;
+  instructionsForUse: string; dpiaOutput: string;
+  loading: boolean;
   systemMeta: Record<string, unknown>;
   risks: Risk[];
   mitigations: Mitigation[];
@@ -694,7 +724,7 @@ function ExportStep({
   vgAssessments: VulnerableGroupAssessment[];
   incidents: RelatedIncident[];
 }) {
-  const [tab, setTab] = useState<"report" | "json" | "md">("report");
+  const [tab, setTab] = useState<"report" | "ifu" | "dpia" | "json" | "md">("report");
 
   if (loading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>Generating export…</span></div>;
 
@@ -703,13 +733,21 @@ function ExportStep({
       <div className="msg-strip success" style={{ marginBottom: 14 }}>
         Assessment complete. View the styled report or download JSON/Markdown.
       </div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
         <button className={tab === "report" ? "btn-primary btn-sm" : "btn-ghost btn-sm"} onClick={() => setTab("report")}>Report</button>
+        <button className={tab === "ifu"    ? "btn-primary btn-sm" : "btn-ghost btn-sm"} onClick={() => setTab("ifu")}>Art. 13 IFU</button>
+        <button className={tab === "dpia"   ? "btn-primary btn-sm" : "btn-ghost btn-sm"} onClick={() => setTab("dpia")}>DPIA</button>
         <button className={tab === "json"   ? "btn-primary btn-sm" : "btn-ghost btn-sm"} onClick={() => setTab("json")}>JSON</button>
         <button className={tab === "md"     ? "btn-primary btn-sm" : "btn-ghost btn-sm"} onClick={() => setTab("md")}>Markdown</button>
         <div style={{ flex: 1 }} />
         <button className="btn-ghost btn-sm" onClick={() => downloadBlob(jsonOutput, "risk-register.json", "application/json")}>↓ JSON</button>
         <button className="btn-ghost btn-sm" onClick={() => downloadBlob(markdownOutput, "risk-register.md", "text/markdown")}>↓ Markdown</button>
+        {instructionsForUse && (
+          <button className="btn-ghost btn-sm" onClick={() => downloadBlob(instructionsForUse, "instructions-for-use.md", "text/markdown")}>↓ IFU</button>
+        )}
+        {dpiaOutput && (
+          <button className="btn-ghost btn-sm" onClick={() => downloadBlob(dpiaOutput, "dpia.md", "text/markdown")}>↓ DPIA</button>
+        )}
       </div>
       {tab === "report" ? (
         <ReportView
@@ -717,6 +755,14 @@ function ExportStep({
           classification={classification} residualArg={residualArg}
           vgAssessments={vgAssessments} incidents={incidents}
         />
+      ) : tab === "ifu" ? (
+        <div className="export-block">
+          {instructionsForUse || "Instructions for Use document not yet generated."}
+        </div>
+      ) : tab === "dpia" ? (
+        <div className="export-block">
+          {dpiaOutput || "DPIA is being generated…"}
+        </div>
       ) : (
         <div className="export-block">
           {tab === "json" ? jsonOutput : markdownOutput}
@@ -734,6 +780,7 @@ export default function AssessmentPage() {
 
   const [systemDesc, setSystemDesc] = useState("");
   const [systemMeta, setSystemMeta] = useState<Record<string, unknown>>({});
+  const [sourceCode, setSourceCode] = useState("");
 
   const [risks, setRisks] = useState<Risk[]>([]);
   const [backendUsed, setBackendUsed] = useState("");
@@ -746,19 +793,23 @@ export default function AssessmentPage() {
 
   const [jsonOutput, setJsonOutput] = useState("");
   const [markdownOutput, setMarkdownOutput] = useState("");
+  const [instructionsForUse, setInstructionsForUse] = useState("");
+  const [dpiaOutput, setDpiaOutput] = useState("");
 
   const [loading, setLoading] = useState(false);
 
   function stepIndex(s: Step) { return STEPS.findIndex(x => x.key === s); }
 
-  async function handleDemoSelect(_id: string | null, desc: string, meta: Record<string, unknown>) {
+  async function handleDemoSelect(_id: string | null, desc: string, meta: Record<string, unknown>, code?: string) {
     setSystemDesc(desc);
     setSystemMeta(meta);
+    if (code !== undefined) setSourceCode(code);
     setLoading(true);
     setStep("identify");
     try {
       const res = await api.identifyRisks({
         system_description: desc,
+        source_code: code ?? sourceCode,
         metadata: meta,
         use_llm: useLlm,
         use_stub: _id !== null,
@@ -834,6 +885,11 @@ export default function AssessmentPage() {
       const res = await api.exportRegister({ register });
       setJsonOutput(res.json_output);
       setMarkdownOutput(res.markdown_output);
+      setInstructionsForUse(res.instructions_for_use ?? "");
+      // Generate DPIA in parallel (non-blocking — if it fails we don't block the export)
+      api.generateDpia({ register })
+        .then(d => setDpiaOutput(d.markdown_output))
+        .catch(() => setDpiaOutput(""));
     } catch (e) {
       toast(String(e), true);
     } finally {
@@ -844,7 +900,7 @@ export default function AssessmentPage() {
   function resetWizard() {
     setStep("demo"); setRisks([]); setClassification(null); setVgAssessments([]);
     setIncidents([]); setMitigations([]); setResidualArg(null);
-    setJsonOutput(""); setMarkdownOutput("");
+    setJsonOutput(""); setMarkdownOutput(""); setInstructionsForUse(""); setDpiaOutput("");
   }
 
   const currentIdx = stepIndex(step);
@@ -885,7 +941,9 @@ export default function AssessmentPage() {
       )}
       {step === "export" && (
         <ExportStep
-          jsonOutput={jsonOutput} markdownOutput={markdownOutput} loading={loading}
+          jsonOutput={jsonOutput} markdownOutput={markdownOutput}
+          instructionsForUse={instructionsForUse} dpiaOutput={dpiaOutput}
+          loading={loading}
           systemMeta={systemMeta} risks={risks} mitigations={mitigations}
           classification={classification} residualArg={residualArg}
           vgAssessments={vgAssessments} incidents={incidents}

@@ -52,20 +52,32 @@ def _build_llm(use_llm: bool):
 async def identify_risks(body: AssessmentIdentifyRequest) -> AssessmentIdentifyResponse:
     metadata = AISystemMetadata(**body.metadata)
     llm_client = _build_llm(body.use_llm)
+
+    # Combine documentation with source code context when provided
+    combined_description = body.system_description
+    if body.source_code.strip():
+        combined_description = (
+            body.system_description
+            + "\n\n--- Source Code Analysis ---\n"
+            + body.source_code[:3000]
+        )
+
     identifier = RiskIdentifier(
         taxonomy_path=_config.risk_taxonomy_path,
         llm_client=llm_client,
     )
     result = identifier.identify(
-        system_description=body.system_description,
+        system_description=combined_description,
         metadata=metadata,
         use_llm=body.use_llm,
         use_stub=body.use_stub,
+        use_risk_atlas_nexus=body.use_risk_atlas_nexus,
     )
     logger.info("assessment.risks_identified", extra={
         "system": metadata.name,
         "count": len(result.risks),
         "backend": result.backend_used,
+        "has_source_code": bool(body.source_code.strip()),
     })
     return AssessmentIdentifyResponse(
         backend_used=result.backend_used,
@@ -155,6 +167,11 @@ async def export_register(body: AssessmentExportRequest) -> AssessmentExportResp
     reporter = Reporter()
     json_output = reporter.to_json(register)
     md_output = reporter.to_markdown(register)
+    ifu_output = reporter.to_instructions_for_use(register)
 
     logger.info("assessment.exported", extra={"register_id": register.id})
-    return AssessmentExportResponse(json_output=json_output, markdown_output=md_output)
+    return AssessmentExportResponse(
+        json_output=json_output,
+        markdown_output=md_output,
+        instructions_for_use=ifu_output,
+    )

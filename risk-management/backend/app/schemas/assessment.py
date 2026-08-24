@@ -7,9 +7,11 @@ from pydantic import BaseModel
 
 class AssessmentIdentifyRequest(BaseModel):
     system_description: str
+    source_code: str = ""  # optional: source code snippet to augment risk identification
     metadata: dict[str, Any]
     use_llm: bool = False
     use_stub: bool = True
+    use_risk_atlas_nexus: bool = False
 
 
 class AssessmentIdentifyResponse(BaseModel):
@@ -50,3 +52,4 @@ class AssessmentExportRequest(BaseModel):
 class AssessmentExportResponse(BaseModel):
     json_output: str
     markdown_output: str
+    instructions_for_use: str = ""

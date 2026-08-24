@@ -12,7 +12,7 @@ Module implementing the risk management cycle per **EU AI Act Article 9** for hi
 | Art. 9(2)(b) — evaluation and classification | ✅ Misuse scenarios, vulnerable groups, EU AI Act risk level classification |
 | Art. 9(2)(d) — mitigation measures | ✅ Mitigation library with hierarchy (eliminate → reduce → mitigate → inform) |
 | Art. 9(5) — residual risk argument | ✅ Structured GSN-inspired acceptability argument |
-| Art. 9(2)(c) — post-market monitoring | ❌ Out of scope for this PoC |
+| Art. 9(2)(c) — post-market monitoring | ✅ Webhook + file upload endpoint (`POST /v1/incidents/webhook`, `POST /v1/incidents/upload`) |
 | Art. 9(5) — formal assurance case | ❌ Out of scope for this PoC |
 
 ---
@@ -146,11 +146,11 @@ All traffic passes through the shell nginx reverse proxy on port 8080:
 
 ## Roadmap
 
-- [ ] IBM Risk Atlas Nexus integration (see `docs/risk-atlas-nexus-integration-kickoff.md`)
-- [ ] Post-market monitoring incident ingestion (Art. 9(2)(c)) — webhook or file upload
-- [ ] Art. 13-compliant instructions for use document generated from the risk register
-- [ ] Source code input support (in addition to documentation)
-- [ ] DPIA (Data Protection Impact Assessment) module
+- [x] IBM Risk Atlas Nexus integration — `RiskAtlasNexusBackend` using `ai-atlas-nexus[ollama]` (graceful fallback when library not installed)
+- [x] Post-market monitoring incident ingestion (Art. 9(2)(c)) — `POST /v1/incidents/webhook` and `POST /v1/incidents/upload`
+- [x] Art. 13-compliant "instructions for use" document generated from the risk register (`Reporter.to_instructions_for_use()`)
+- [x] Source code input support — optional source code tab in custom system form; passed to backend alongside documentation
+- [x] DPIA (Data Protection Impact Assessment) module — `DPIAAssessor`, `POST /v1/dpia`, DPIA tab in export view
 - [ ] PDF export
 - [ ] Risk register persistence in PostgreSQL
 

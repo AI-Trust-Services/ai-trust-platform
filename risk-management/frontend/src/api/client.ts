@@ -58,6 +58,15 @@ export interface MitigateResponse {
 export interface ExportResponse {
   json_output: string;
   markdown_output: string;
+  instructions_for_use: string;
+}
+
+export interface DPIAResponse {
+  dpia_id: string;
+  overall_risk_level: string;
+  sa_consultation_required: boolean;
+  markdown_output: string;
+  dpia: Record<string, unknown>;
 }
 
 export const api = {
@@ -72,9 +81,11 @@ export const api = {
 
   identifyRisks: (body: {
     system_description: string;
+    source_code?: string;
     metadata: Record<string, unknown>;
     use_llm: boolean;
     use_stub: boolean;
+    use_risk_atlas_nexus?: boolean;
   }): Promise<IdentifyResponse> =>
     request("/assessments/identify", json("POST", body)),
 
@@ -97,4 +108,9 @@ export const api = {
     register: Record<string, unknown>;
   }): Promise<ExportResponse> =>
     request("/assessments/export", json("POST", body)),
+
+  generateDpia: (body: {
+    register: Record<string, unknown>;
+  }): Promise<DPIAResponse> =>
+    request("/dpia", json("POST", body)),
 };

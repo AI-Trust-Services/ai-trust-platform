@@ -3,3 +3,6 @@ uvicorn[standard]==0.30.6
 pydantic==2.7.4
 httpx==0.27.2
 -e /app/libs/logging
+# Optional: IBM AI Atlas Nexus integration (requires Python >=3.11)
+# Uncomment to enable RiskAtlasNexusBackend (adds ~500MB for embedding model on first run)
+# ai-atlas-nexus[ollama]>=1.0.4
