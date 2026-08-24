@@ -141,6 +141,7 @@ export default function Models() {
         modelId={detailModelId}
         open={detailModelId !== null}
         onClose={() => setDetailModelId(null)}
+        onUpdate={loadModels}
       />
     </>
   );
