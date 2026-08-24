@@ -132,10 +132,11 @@ celerybeat.pid
 
 # Environments
 .env
+!k8s/env/**/.env
 .venv
-env/
+/env/
 venv/
-ENV/
+/ENV/
 env.bak/
 venv.bak/
 

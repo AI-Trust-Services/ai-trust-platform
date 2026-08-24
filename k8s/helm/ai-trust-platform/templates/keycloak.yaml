@@ -18,7 +18,7 @@ spec:
       containers:
         - name: keycloak
           image: {{ .Values.keycloak.image }}
-          args: ["start-dev"]
+          args: ["start-dev", "--spi-realm-default-ssl-required=NONE"]
           envFrom:
             - secretRef: { name: {{ .Values.secretName }} } # KEYCLOAK_ADMIN/KEYCLOAK_ADMIN_PASSWORD
           env:
@@ -32,8 +32,16 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: POSTGRES_PASSWORD } }
             - name: KC_HTTP_ENABLED
               value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_HOSTNAME_URL
+              value: {{ .Values.keycloakPublicUrl }}
+            - name: KC_HOSTNAME_ADMIN_URL
+              value: {{ .Values.keycloakPublicUrl }}
             - name: KC_HOSTNAME_STRICT
               value: "false"
+            - name: KC_SPI_ADMIN_REALM_SSL_REQUIRED
+              value: NONE
           ports:
             - containerPort: 8080
           readinessProbe:
@@ -55,10 +63,12 @@ kind: Service
 metadata:
   name: keycloak
 spec:
-  type: NodePort
+  type: {{ .Values.keycloak.serviceType }}
   selector:
     {{- include "ai-trust.labels" (dict "name" "keycloak") | nindent 4 }}
   ports:
     - port: 8080
       targetPort: 8080
+      {{- if eq .Values.keycloak.serviceType "NodePort" }}
       nodePort: {{ .Values.keycloak.nodePort }}
+      {{- end }}

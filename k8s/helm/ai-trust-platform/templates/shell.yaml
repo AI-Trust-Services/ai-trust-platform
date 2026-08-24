@@ -15,6 +15,7 @@ spec:
       labels:
         {{- include "ai-trust.labels" (dict "name" "shell") | nindent 8 }}
     spec:
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: shell
           image: {{ .Values.image.repository }}/shell:{{ .Values.image.tag }}
