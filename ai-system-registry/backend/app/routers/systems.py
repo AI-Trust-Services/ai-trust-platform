@@ -181,9 +181,10 @@ async def add_system_model(system_id: str, body: SystemModelLinkBody) -> SystemM
             )
         )
         await session.commit()
+        response = SystemModelResponse.from_card(card, body.role)
 
     logger.info("system.model_linked", extra={"system_id": system_id, "model_card_id": body.model_card_id, "role": body.role})
-    return SystemModelResponse.from_card(card, body.role)
+    return response
 
 
 @router.delete("/systems/{system_id}/models/{model_card_id}", dependencies=[Depends(require_permission(SYSTEMS_WRITE))])

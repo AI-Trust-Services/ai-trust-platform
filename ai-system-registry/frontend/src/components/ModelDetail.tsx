@@ -23,11 +23,13 @@ export default function ModelDetail({ modelId, open, onClose, onUpdate }: {
 
   useEffect(() => {
     if (!modelId) return;
+    let cancelled = false;
     setTab("overview");
     setLoading(true);
     Promise.all([api.getModelCard(modelId), api.getModelSystems(modelId)])
-      .then(([m, s]) => { setModel(m); setSystems(s); setForm({ ...EMPTY, ...m }); })
-      .finally(() => setLoading(false));
+      .then(([m, s]) => { if (!cancelled) { setModel(m); setSystems(s); setForm({ ...EMPTY, ...m }); } })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [modelId]);
 
   const set = (k: keyof ModelCardFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -126,7 +128,7 @@ export default function ModelDetail({ modelId, open, onClose, onUpdate }: {
                           {s.id} &nbsp;
                           <TierBadge tier={s.tier as any} /> <LifecycleBadge lc={s.lifecycle as any} />
                           {s.role && <> · <span style={{ color: "var(--brand)" }}>{s.role}</span></>}
-                          &nbsp; {Math.round(s.compliance * 100)}% compliance
+                          &nbsp; {Math.round(s.compliance)}% compliance
                         </div>
                       </div>
                     ))
