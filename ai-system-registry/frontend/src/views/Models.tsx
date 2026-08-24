@@ -12,7 +12,6 @@ export default function Models() {
   const [typeFilter, setTypeFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingModel, setEditingModel] = useState<ModelCard | null>(null);
   const [detailModelId, setDetailModelId] = useState<string | null>(null);
   const { modelCreateOpen, setModelCreateOpen, mayWrite } = useModalControls();
   const showToast = useToast();
@@ -32,7 +31,6 @@ export default function Models() {
   // Open "Add Model" modal when triggered from App header button
   useEffect(() => {
     if (modelCreateOpen) {
-      setEditingModel(null);
       setModalOpen(true);
       setModelCreateOpen(false);
     }
@@ -82,8 +80,6 @@ export default function Models() {
         </select>
         <div className="toolbar-spacer" />
         <button className="btn-ghost" onClick={loadModels}>↺ Refresh</button>
-        <button className="btn-primary" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-          onClick={() => { setEditingModel(null); setModalOpen(true); }}>+ Add Model</button>
       </div>
 
       <div className="content">
@@ -118,8 +114,6 @@ export default function Models() {
                   </td>
                   <td>
                     <div className="actions">
-                      <button className="btn-icon" title={mayWrite ? "Edit" : noWriteTitle} disabled={!mayWrite}
-                        onClick={(e) => { e.stopPropagation(); setEditingModel(m); setModalOpen(true); }}>✎</button>
                       <button className="btn-icon btn-danger" title={mayWrite ? "Delete" : noWriteTitle} disabled={!mayWrite}
                         onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}>✕</button>
                     </div>
@@ -133,7 +127,6 @@ export default function Models() {
 
       <ModelModal
         open={modalOpen}
-        editingModel={editingModel}
         onClose={() => setModalOpen(false)}
         onSuccess={loadModels}
       />

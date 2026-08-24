@@ -503,7 +503,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
         </div>
 
         <div className="tab-bar">
-          {["overview", "workflow", "model", "edit"].map((t) => (
+          {["overview", "workflow", "models", "edit"].map((t) => (
             <div key={t} className={`tab${tab === t ? " active" : ""}`} onClick={() => setTab(t)}>
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </div>
@@ -602,7 +602,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
             <WorkflowTab system={system} userMap={userMap} />
           )}
 
-          {tab === "model" && (
+          {tab === "models" && (
             <ModelTab system={system} models={models} />
           )}
 
