@@ -82,32 +82,31 @@ spec:
       serviceAccountName: keycloak-restarter
       initContainers:
         {{- include "ai-trust.waitForHttp" (dict "name" "keycloak" "port" 8080 "path" "/realms/master" "image" .Values.waitImages.busybox) | nindent 8 }}
-      containers:
-        - name: keycloak-ssl-patch
+        # Patch ssl_required=NONE in Postgres using psql
+        - name: patch-db
           image: {{ .Values.waitImages.postgres }}
           envFrom:
             - secretRef: { name: {{ .Values.secretName }} }
-          env:
-            - name: NAMESPACE
-              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
           command:
             - sh
             - -c
             - |
-              # Patch master realm ssl_required=NONE in Postgres so HTTP token requests work
               PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U "$POSTGRES_USER" -d keycloak \
                 -c "UPDATE realm SET ssl_required='NONE' WHERE name='master' AND ssl_required != 'NONE';"
-              ROWS=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U "$POSTGRES_USER" -d keycloak \
-                -tAc "SELECT ssl_required FROM realm WHERE name='master'")
-              echo "master realm ssl_required is now: $ROWS"
-              if [ "$ROWS" = "NONE" ]; then
-                echo "Restarting Keycloak to pick up the ssl_required=NONE change..."
-                kubectl rollout restart deployment/keycloak -n "$NAMESPACE"
-                kubectl rollout status deployment/keycloak -n "$NAMESPACE" --timeout=120s
-                echo "Keycloak restarted successfully."
-              else
-                echo "ssl_required was already NONE — no restart needed."
-              fi
+              echo "ssl_required patched."
+      containers:
+        # Restart Keycloak so it reloads ssl_required=NONE from DB
+        - name: restart-keycloak
+          image: {{ .Values.waitImages.kubectl }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+          args:
+            - rollout
+            - restart
+            - deployment/keycloak
+            - -n
+            - $(POD_NAMESPACE)
 ---
 apiVersion: batch/v1
 kind: Job
