@@ -169,7 +169,7 @@ async def users_by_role(
 
     async def _fetch(username: str) -> dict | None:
         async with sem:
-            def _sync():
+            try:
                 with admin_client() as kc:
                     resp = kc.get("/users", params={"username": username, "exact": "true"})
                     resp.raise_for_status()
@@ -182,8 +182,6 @@ async def users_by_role(
                     "firstName": u.get("firstName", ""),
                     "lastName": u.get("lastName", ""),
                 }
-            try:
-                return await asyncio.to_thread(_sync)
             except Exception:
                 logger.warning("user.by_role_fetch_failed", extra={"username": username})
                 return None
