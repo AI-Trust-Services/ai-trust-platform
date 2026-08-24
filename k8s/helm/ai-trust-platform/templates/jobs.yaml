@@ -69,6 +69,46 @@ spec:
               mc mb --ignore-existing local/clickhouse &&
               mc mb --ignore-existing local/evidence-files
 ---
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-ssl-patch
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: keycloak-restarter
+      initContainers:
+        {{- include "ai-trust.waitForHttp" (dict "name" "keycloak" "port" 8080 "path" "/realms/master" "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: keycloak-ssl-patch
+          image: {{ .Values.waitImages.postgres }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} }
+          env:
+            - name: NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+          command:
+            - sh
+            - -c
+            - |
+              # Patch master realm ssl_required=NONE in Postgres so HTTP token requests work
+              PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U "$POSTGRES_USER" -d keycloak \
+                -c "UPDATE realm SET ssl_required='NONE' WHERE name='master' AND ssl_required != 'NONE';"
+              ROWS=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U "$POSTGRES_USER" -d keycloak \
+                -tAc "SELECT ssl_required FROM realm WHERE name='master'")
+              echo "master realm ssl_required is now: $ROWS"
+              if [ "$ROWS" = "NONE" ]; then
+                echo "Restarting Keycloak to pick up the ssl_required=NONE change..."
+                kubectl rollout restart deployment/keycloak -n "$NAMESPACE"
+                kubectl rollout status deployment/keycloak -n "$NAMESPACE" --timeout=120s
+                echo "Keycloak restarted successfully."
+              else
+                echo "ssl_required was already NONE — no restart needed."
+              fi
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -78,26 +118,11 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      serviceAccountName: job-waiter
       {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
+        {{- include "ai-trust.waitForJob" (dict "job" "keycloak-ssl-patch" "image" .Values.waitImages.kubectl) | nindent 8 }}
         {{- include "ai-trust.waitForHttp" (dict "name" "keycloak" "port" 8080 "path" "/realms/master" "image" .Values.waitImages.busybox) | nindent 8 }}
-        # Wait until the admin token endpoint returns an access_token — confirms
-        # Keycloak started with ssl_required=NONE on the master realm.
-        - name: wait-for-keycloak-token
-          image: {{ .Values.waitImages.busybox }}
-          envFrom:
-            - secretRef: { name: {{ .Values.secretName }} }
-          command:
-            - sh
-            - -c
-            - |
-              until wget -q -O- \
-                --post-data "client_id=admin-cli&username=${KEYCLOAK_ADMIN}&password=${KEYCLOAK_ADMIN_PASSWORD}&grant_type=password" \
-                http://keycloak:8080/realms/master/protocol/openid-connect/token 2>/dev/null \
-                | grep -q "access_token"; do
-                echo "token endpoint not ready — retrying in 3s"; sleep 3
-              done
-              echo "Keycloak admin token endpoint ready."
       containers:
         - name: keycloak-provision
           image: {{ .Values.image.repository }}/keycloak-provision:{{ .Values.image.tag }}

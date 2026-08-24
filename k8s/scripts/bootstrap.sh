@@ -97,4 +97,30 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 EOF
 
+echo "==> RBAC for keycloak-ssl-patch job (needs deployment patch to trigger restart)"
+kubectl create serviceaccount keycloak-restarter -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+cat <<EOF | kubectl apply -n "$NAMESPACE" -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: keycloak-restarter
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: keycloak-restarter
+subjects:
+  - kind: ServiceAccount
+    name: keycloak-restarter
+    namespace: $NAMESPACE
+roleRef:
+  kind: Role
+  name: keycloak-restarter
+  apiGroup: rbac.authorization.k8s.io
+EOF
+
 echo "==> bootstrap complete (namespace: $NAMESPACE)"

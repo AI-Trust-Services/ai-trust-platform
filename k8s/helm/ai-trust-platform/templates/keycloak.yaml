@@ -15,19 +15,6 @@ spec:
       initContainers:
         # mirrors compose: keycloak depends_on postgres (service_healthy)
         {{- include "ai-trust.waitForTcp" (dict "name" "postgres" "port" 5432 "image" .Values.waitImages.busybox) | nindent 8 }}
-        # Keycloak 25 initializes the master realm with ssl_required=EXTERNAL on a
-        # fresh DB. Patch it to NONE before Keycloak starts so HTTP token requests
-        # from inside the cluster are accepted. No-op on subsequent restarts.
-        - name: patch-master-realm-ssl
-          image: {{ .Values.waitImages.postgres }}
-          envFrom:
-            - secretRef: { name: {{ .Values.secretName }} }
-          command:
-            - sh
-            - -c
-            - |
-              PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U "$POSTGRES_USER" -d keycloak \
-                -c "UPDATE realm SET ssl_required='NONE' WHERE name='master' AND ssl_required != 'NONE';" 2>/dev/null || true
       containers:
         - name: keycloak
           image: {{ .Values.keycloak.image }}

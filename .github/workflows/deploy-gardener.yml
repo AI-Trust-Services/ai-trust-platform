@@ -193,7 +193,7 @@ jobs:
 
       - name: Delete immutable Jobs before upgrade
         run: |
-          for job in db-migrate clickhouse-migrate keycloak-provision openfga-provision minio-init; do
+          for job in db-migrate clickhouse-migrate keycloak-ssl-patch keycloak-provision openfga-provision minio-init; do
             if kubectl get job "$job" -n "$NAMESPACE" &>/dev/null; then
               echo "Deleting job/$job"
               kubectl delete job "$job" -n "$NAMESPACE" --wait=false
