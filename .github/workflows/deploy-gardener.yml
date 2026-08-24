@@ -77,41 +77,30 @@ jobs:
             echo "error: $ENV_FILE not found — create it from k8s/env/ai-trust-main/.env.example" >&2
             exit 1
           fi
-          # Source first so variable references (e.g. APP_PUBLIC_URL=https://${LB_IP}.nip.io) expand
+          # Source .env so variable references expand (e.g. APP_PUBLIC_URL=https://${LB_IP}.nip.io)
           set -a
           # shellcheck disable=SC1090
           source "$ENV_FILE"
           set +a
-          # Override with GitHub secrets (takes precedence over empty .env values)
-          [[ -n "$SECRET_APP_ADMIN_PASSWORD" ]]           && APP_ADMIN_PASSWORD="$SECRET_APP_ADMIN_PASSWORD"
-          [[ -n "$SECRET_CLICKHOUSE_PASSWORD" ]]          && CLICKHOUSE_PASSWORD="$SECRET_CLICKHOUSE_PASSWORD"
-          [[ -n "$SECRET_KEYCLOAK_ADMIN_PASSWORD" ]]      && KEYCLOAK_ADMIN_PASSWORD="$SECRET_KEYCLOAK_ADMIN_PASSWORD"
-          [[ -n "$SECRET_KEYCLOAK_CLIENT_SECRET" ]]       && KEYCLOAK_CLIENT_SECRET="$SECRET_KEYCLOAK_CLIENT_SECRET"
-          [[ -n "$SECRET_MINIO_ROOT_PASSWORD" ]]          && MINIO_ROOT_PASSWORD="$SECRET_MINIO_ROOT_PASSWORD"
-          [[ -n "$SECRET_OAUTH2_PROXY_COOKIE_SECRET" ]]   && OAUTH2_PROXY_COOKIE_SECRET="$SECRET_OAUTH2_PROXY_COOKIE_SECRET"
-          [[ -n "$SECRET_POSTGRES_PASSWORD" ]]            && POSTGRES_PASSWORD="$SECRET_POSTGRES_PASSWORD"
-          [[ -n "$SECRET_RABBITMQ_PASSWORD" ]]            && RABBITMQ_PASSWORD="$SECRET_RABBITMQ_PASSWORD"
-          [[ -n "$SECRET_SMTP_PASSWORD" ]]                && SMTP_PASSWORD="$SECRET_SMTP_PASSWORD"
-          [[ -n "$SECRET_USERS_BACKEND_CLIENT_SECRET" ]]  && USERS_BACKEND_CLIENT_SECRET="$SECRET_USERS_BACKEND_CLIENT_SECRET"
-          # Write expanded values to GITHUB_ENV using key names from the file
+          # Unconditionally override secret keys from GitHub Secrets — .env values are placeholders only
+          APP_ADMIN_PASSWORD="$SECRET_APP_ADMIN_PASSWORD"
+          CLICKHOUSE_PASSWORD="$SECRET_CLICKHOUSE_PASSWORD"
+          KEYCLOAK_ADMIN_PASSWORD="$SECRET_KEYCLOAK_ADMIN_PASSWORD"
+          KEYCLOAK_CLIENT_SECRET="$SECRET_KEYCLOAK_CLIENT_SECRET"
+          MINIO_ROOT_PASSWORD="$SECRET_MINIO_ROOT_PASSWORD"
+          OAUTH2_PROXY_COOKIE_SECRET="$SECRET_OAUTH2_PROXY_COOKIE_SECRET"
+          POSTGRES_PASSWORD="$SECRET_POSTGRES_PASSWORD"
+          RABBITMQ_PASSWORD="$SECRET_RABBITMQ_PASSWORD"
+          SMTP_PASSWORD="$SECRET_SMTP_PASSWORD"
+          USERS_BACKEND_CLIENT_SECRET="$SECRET_USERS_BACKEND_CLIENT_SECRET"
+          # Export all non-secret keys from .env, then the secret keys with their real values
           while IFS='=' read -r key _; do
             [[ -z "$key" || "$key" == \#* ]] && continue
             value=$(printenv "$key" 2>/dev/null || true)
             echo "${key}=${value}" >> "$GITHUB_ENV"
           done < <(tr -d '\r' < "$ENV_FILE" | grep -v '^\s*#' | grep -v '^\s*$')
-          # Also write the secret-overridden values explicitly
-          echo "APP_ADMIN_PASSWORD=${APP_ADMIN_PASSWORD}" >> "$GITHUB_ENV"
-          echo "CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}" >> "$GITHUB_ENV"
-          echo "KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}" >> "$GITHUB_ENV"
-          echo "KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}" >> "$GITHUB_ENV"
-          echo "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}" >> "$GITHUB_ENV"
-          echo "OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_PROXY_COOKIE_SECRET}" >> "$GITHUB_ENV"
-          echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" >> "$GITHUB_ENV"
-          echo "RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}" >> "$GITHUB_ENV"
-          echo "SMTP_PASSWORD=${SMTP_PASSWORD}" >> "$GITHUB_ENV"
-          echo "USERS_BACKEND_CLIENT_SECRET=${USERS_BACKEND_CLIENT_SECRET}" >> "$GITHUB_ENV"
-          echo "Loaded env from $ENV_FILE"
           echo "NAMESPACE=${K8S_NAMESPACE:-ai-trust}" >> "$GITHUB_ENV"
+          echo "Loaded env from $ENV_FILE"
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
@@ -141,40 +130,28 @@ jobs:
         run: kubectl get namespace default
 
       - name: Write .env for bootstrap.sh
-        env:
-          SECRET_APP_ADMIN_PASSWORD: ${{ secrets.APP_ADMIN_PASSWORD }}
-          SECRET_CLICKHOUSE_PASSWORD: ${{ secrets.CLICKHOUSE_PASSWORD }}
-          SECRET_KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
-          SECRET_KEYCLOAK_CLIENT_SECRET: ${{ secrets.KEYCLOAK_CLIENT_SECRET }}
-          SECRET_MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
-          SECRET_OAUTH2_PROXY_COOKIE_SECRET: ${{ secrets.OAUTH2_PROXY_COOKIE_SECRET }}
-          SECRET_POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          SECRET_RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
-          SECRET_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          SECRET_USERS_BACKEND_CLIENT_SECRET: ${{ secrets.USERS_BACKEND_CLIENT_SECRET }}
         run: |
           umask 077
           cp "k8s/env/${{ inputs.cluster }}/.env" .env
-          # Inject GitHub secrets — overwrite the empty placeholder lines in .env
+          # Overwrite placeholder values with the real secrets from GITHUB_ENV
           inject() {
             local key="$1" val="$2"
-            [[ -z "$val" ]] && return
             if grep -q "^${key}=" .env; then
               sed -i "s|^${key}=.*|${key}=${val}|" .env
             else
               echo "${key}=${val}" >> .env
             fi
           }
-          inject APP_ADMIN_PASSWORD          "$SECRET_APP_ADMIN_PASSWORD"
-          inject CLICKHOUSE_PASSWORD         "$SECRET_CLICKHOUSE_PASSWORD"
-          inject KEYCLOAK_ADMIN_PASSWORD     "$SECRET_KEYCLOAK_ADMIN_PASSWORD"
-          inject KEYCLOAK_CLIENT_SECRET      "$SECRET_KEYCLOAK_CLIENT_SECRET"
-          inject MINIO_ROOT_PASSWORD         "$SECRET_MINIO_ROOT_PASSWORD"
-          inject OAUTH2_PROXY_COOKIE_SECRET  "$SECRET_OAUTH2_PROXY_COOKIE_SECRET"
-          inject POSTGRES_PASSWORD           "$SECRET_POSTGRES_PASSWORD"
-          inject RABBITMQ_PASSWORD           "$SECRET_RABBITMQ_PASSWORD"
-          inject SMTP_PASSWORD               "$SECRET_SMTP_PASSWORD"
-          inject USERS_BACKEND_CLIENT_SECRET "$SECRET_USERS_BACKEND_CLIENT_SECRET"
+          inject APP_ADMIN_PASSWORD          "$APP_ADMIN_PASSWORD"
+          inject CLICKHOUSE_PASSWORD         "$CLICKHOUSE_PASSWORD"
+          inject KEYCLOAK_ADMIN_PASSWORD     "$KEYCLOAK_ADMIN_PASSWORD"
+          inject KEYCLOAK_CLIENT_SECRET      "$KEYCLOAK_CLIENT_SECRET"
+          inject MINIO_ROOT_PASSWORD         "$MINIO_ROOT_PASSWORD"
+          inject OAUTH2_PROXY_COOKIE_SECRET  "$OAUTH2_PROXY_COOKIE_SECRET"
+          inject POSTGRES_PASSWORD           "$POSTGRES_PASSWORD"
+          inject RABBITMQ_PASSWORD           "$RABBITMQ_PASSWORD"
+          inject SMTP_PASSWORD               "$SMTP_PASSWORD"
+          inject USERS_BACKEND_CLIENT_SECRET "$USERS_BACKEND_CLIENT_SECRET"
 
       - name: Bootstrap namespace/secrets/configmaps
         run: bash k8s/scripts/bootstrap.sh
