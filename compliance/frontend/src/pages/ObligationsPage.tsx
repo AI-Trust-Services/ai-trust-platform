@@ -115,7 +115,7 @@ export default function ObligationsPage() {
     <>
       <div className="flex items-center justify-between border-b border-border px-5 py-2.5">
         <div className="flex items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
             <ListChecks className="size-5" />
           </span>
           <h1 className="text-lg font-semibold text-foreground">Obligations</h1>
@@ -130,7 +130,7 @@ export default function ObligationsPage() {
       <div className="flex flex-wrap gap-3 px-5 pt-4">
         <KpiCard label="Total" value={kpis.total} icon={ListChecks} color="#71717a" sub="all obligations" />
         <KpiCard label="Fulfilled" value={kpis.fulfilled} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.fulfilled / kpis.total * 100) : 0}% of total`} />
-        <KpiCard label="In Progress" value={kpis.inProgress} icon={Clock} color="#0a6ed1" sub="being addressed" />
+        <KpiCard label="In Progress" value={kpis.inProgress} icon={Clock} color="#1147E9" sub="being addressed" />
         <KpiCard label="Overdue" value={kpis.overdue} icon={AlertTriangle} color="#e05c00" sub="past due date" />
       </div>
 

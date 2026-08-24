@@ -132,7 +132,7 @@
 
   settings: {
     header: {
-      title: "AI Trust Platform",
+      title: "AI Trust",
     },
     responsiveNavigation: "Fiori3",
     sideNavigation: {
@@ -160,7 +160,7 @@
     luigiAfterInit: () => {
       const style = document.createElement("style");
       style.textContent = `:root {
-          --luigi-nav-bg: #ffffff;
+          --luigi-nav-bg: #0f172a;
           --luigi-nav-width: 256px;
         }
 
@@ -195,20 +195,22 @@
           flex: 0 0 256px !important;
           flex-grow: 0 !important;
           display: flex !important;
-          justify-content: center !important;
+          justify-content: flex-start !important;
           overflow: hidden !important;
-          padding: 0 !important;
+          padding: 0 0 0 12px !important;
           margin: 0 !important;
         }
         body.semiCollapsed .fd-shellbar__group--product {
           flex: 0 0 48px !important;
+          padding: 0 !important;
+          justify-content: center !important;
         }
         .fd-shellbar__branding {
           display: inline-flex !important;
           align-items: center !important;
-          justify-content: center !important;
+          justify-content: flex-start !important;
           height: 32px !important;
-          padding: 0 8px !important;
+          padding: 0 !important;
           background: transparent !important;
           cursor: pointer !important;
           outline: none !important;
@@ -217,7 +219,7 @@
         .fd-shellbar__branding:hover { background: #f3f4f6 !important; }
         .fd-shellbar__branding:focus { outline: none !important; box-shadow: none !important; }
         .fd-shellbar__branding:focus-visible {
-          outline: 2px solid #0a6ed1 !important;
+          outline: 2px solid #1147E9 !important;
           outline-offset: 2px !important;
           box-shadow: none !important;
         }
@@ -242,58 +244,72 @@
         .lui-nav-container,
         .lui-nav,
         .lui-nav__list-wrapper,
+        .fd-nested-list,
+        .fd-nested-list__group,
+        .fd-nested-list__item,
+        .fd-navigation__list,
         [class*="side-nav"],
         [class*="lui-nav"],
         nav.fd-navigation {
-          background: #ffffff !important;
-          background-color: #ffffff !important;
+          background: #0f172a !important;
+          background-color: #0f172a !important;
           border-right: none !important;
           box-shadow: none !important;
           overflow: hidden !important;
         }
         .lui-side-nav--collapsed,
         .lui-side-nav {
-          background: #ffffff !important;
-          background-color: #ffffff !important;
+          background: #0f172a !important;
+          background-color: #0f172a !important;
         }
         .fd-app__sidebar,
         .lui-nav-container {
-          --fdSideNavBackground: #ffffff !important;
-          --fdShellbarBackground: #ffffff !important;
+          --fdSideNavBackground: #0f172a !important;
+          --fdShellbarBackground: #0f172a !important;
+          --sapShellColor: #0f172a !important;
+          --sapBaseColor: #0f172a !important;
+          --sapBackgroundColor: #0f172a !important;
+          --sapNeutralBackground: #0f172a !important;
+          --sapContent_ForegroundBackgroundColor: #0f172a !important;
         }
 
         /* ── Nav items ── */
         .fd-navigation__list-item a,
         .lui-nav__item a,
         .lui-navigation-list-item a,
-        li.fd-navigation__list-item a {
-          color: #374151 !important;
+        li.fd-navigation__list-item a,
+        .fd-nested-list__link {
+          color: #94a3b8 !important;
           font-weight: 400 !important;
           font-size: 13px !important;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
           border-radius: 6px !important;
-          margin: 1px 8px !important;
-          padding: 7px 10px !important;
+          margin: 1px 0 !important;
+          padding: 7px 12px !important;
           background: transparent !important;
           border: none !important;
+          box-shadow: inset 2px 0 0 transparent !important;
           transition: background 0.1s, color 0.1s !important;
           display: flex !important;
           align-items: center !important;
           gap: 10px !important;
         }
         .fd-navigation__list-item a:hover,
-        .lui-nav__item a:hover {
-          background: #f3f4f6 !important;
-          color: #111827 !important;
+        .lui-nav__item a:hover,
+        .fd-nested-list__link:hover {
+          background: rgba(255,255,255,0.07) !important;
+          color: #e2e8f0 !important;
         }
         .fd-navigation__list-item--selected a,
         .lui-nav__item--selected a,
         .is-selected a,
-        .lui-navigation-list-item.is-selected a {
-          background: transparent !important;
-          color: #0a6ed1 !important;
+        .lui-navigation-list-item.is-selected a,
+        .fd-nested-list__link.is-selected,
+        .fd-nested-list__link--current {
+          background: rgba(17,71,233,0.18) !important;
+          color: #93c5fd !important;
           font-weight: 500 !important;
-          box-shadow: inset 2px 0 0 #0a6ed1 !important;
+          box-shadow: inset 2px 0 0 #1147E9 !important;
         }
         .fd-navigation__list-item--selected::before,
         .lui-nav__item--selected::before,
@@ -302,17 +318,40 @@
         }
         .fd-navigation__icon,
         .lui-nav__icon,
-        .sap-icon {
-          color: #9ca3af !important;
+        .sap-icon,
+        .fd-nested-list__icon {
+          color: #64748b !important;
           font-size: 15px !important;
         }
         .fd-navigation__list-item a:hover .sap-icon,
-        .lui-nav__item a:hover .sap-icon {
-          color: #6b7280 !important;
+        .lui-nav__item a:hover .sap-icon,
+        .fd-nested-list__link:hover .sap-icon,
+        .fd-nested-list__link:hover .fd-nested-list__icon {
+          color: #94a3b8 !important;
         }
         .is-selected .sap-icon,
-        .fd-navigation__list-item--selected .sap-icon {
-          color: #0a6ed1 !important;
+        .fd-navigation__list-item--selected .sap-icon,
+        .fd-nested-list__link.is-selected .sap-icon,
+        .fd-nested-list__link--current .sap-icon {
+          color: #60a5fa !important;
+        }
+        .fd-nested-list__title {
+          color: inherit !important;
+        }
+        .fd-nested-list__item,
+        .lui-nav__item,
+        .fd-navigation__list-item,
+        li.fd-navigation__list-item {
+          border-bottom: none !important;
+          border-top: none !important;
+          list-style: none !important;
+        }
+        .fd-nested-list,
+        .fd-navigation__list {
+          padding: 0 !important;
+          margin: 0 !important;
+          border-bottom: none !important;
+          border-top: none !important;
         }
 
         .fd-navigation__list-item a:focus,
@@ -325,9 +364,11 @@
         }
         .fd-navigation__list-item--selected a:focus,
         .lui-nav__item--selected a:focus,
-        .is-selected a:focus {
+        .is-selected a:focus,
+        .fd-nested-list__link.is-selected:focus,
+        .fd-nested-list__link--current:focus {
           outline: none !important;
-          box-shadow: inset 2px 0 0 #0a6ed1 !important;
+          box-shadow: inset 2px 0 0 #1147E9 !important;
         }
 
         /* ── Hide Luigi overlay badges (split-view btn, breadcrumbs, view labels) ── */
@@ -375,37 +416,52 @@
 
         /* ── Collapsed: icons only, centered ── */
         .lui-side-nav--collapsed .fd-navigation__list-item a,
-        .lui-side-nav--collapsed .lui-nav__item a {
+        .lui-side-nav--collapsed .lui-nav__item a,
+        body.semiCollapsed .fd-nested-list__link,
+        .lui-side-nav--collapsed .fd-nested-list__link {
           justify-content: center !important;
           padding: 10px !important;
-          margin: 2px 6px !important;
+          margin: 2px 0 !important;
         }
         .lui-side-nav--collapsed .fd-navigation__text,
         .lui-side-nav--collapsed .lui-nav__label,
-        .lui-side-nav--collapsed span:not(.sap-icon):not(.fd-navigation__icon) {
+        .lui-side-nav--collapsed span:not(.sap-icon):not(.fd-navigation__icon),
+        body.semiCollapsed .fd-nested-list__title,
+        .lui-side-nav--collapsed .fd-nested-list__title {
           display: none !important;
         }
         .lui-side-nav--collapsed .sap-icon,
-        .lui-side-nav--collapsed .fd-navigation__icon {
+        .lui-side-nav--collapsed .fd-navigation__icon,
+        body.semiCollapsed .sap-icon,
+        body.semiCollapsed .fd-navigation__icon {
           font-size: 17px !important;
           margin: 0 !important;
         }
 
-        /* ── Brand icon (shown only when collapsed) ── */
+        /* ── Brand logo ── */
         .luigi-brand-icon {
-          display: none !important;
-          font-size: 17px !important;
-          color: #374151 !important;
-          line-height: 1 !important;
-        }
-        body.semiCollapsed .luigi-brand-icon {
           display: inline-flex !important;
           align-items: center !important;
           justify-content: center !important;
         }
-        body.semiCollapsed .fd-shellbar__title,
-        body.semiCollapsed .lui-shellbar__title,
-        body.semiCollapsed .shellbar-title {
+        .brand-logo-full {
+          height: 30px !important;
+          display: block !important;
+        }
+        .brand-logo-icon {
+          width: 30px !important;
+          height: 30px !important;
+          display: none !important;
+        }
+        body.semiCollapsed .brand-logo-full {
+          display: none !important;
+        }
+        body.semiCollapsed .brand-logo-icon {
+          display: block !important;
+        }
+        .fd-shellbar__title,
+        .lui-shellbar__title,
+        .shellbar-title {
           display: none !important;
         }
 
@@ -437,7 +493,7 @@
           background: transparent;
           border: none;
           border-top: none;
-          color: #9ca3af;
+          color: #64748b;
           font-size: 13px;
           font-weight: 400;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -448,8 +504,8 @@
           transition: color 0.1s, background 0.1s;
         }
         #luigi-collapse-btn:hover {
-          color: #374151;
-          background: #f9fafb;
+          color: #94a3b8;
+          background: rgba(255,255,255,0.07);
         }
         body.semiCollapsed #luigi-collapse-btn {
           justify-content: center;
@@ -506,7 +562,17 @@
         if (!branding) return;
         clearInterval(waitForBranding);
         const icon = document.createElement("span");
-        icon.className = "sap-icon sap-icon--grid luigi-brand-icon";
+        icon.className = "luigi-brand-icon";
+        const imgFull = document.createElement("img");
+        imgFull.src = "/brand/svg/horizontal_color.svg";
+        imgFull.alt = "AI Trust";
+        imgFull.className = "brand-logo-full";
+        const imgIcon = document.createElement("img");
+        imgIcon.src = "/brand/svg/Icon_color.svg";
+        imgIcon.alt = "AI Trust";
+        imgIcon.className = "brand-logo-icon";
+        icon.appendChild(imgFull);
+        icon.appendChild(imgIcon);
         branding.appendChild(icon);
       }, 200);
 
@@ -619,7 +685,7 @@
           trigger.innerHTML = `
             <span style="
               width:28px; height:28px; border-radius:50%;
-              background:#18181b; display:inline-flex;
+              background:linear-gradient(135deg, #1147E9 0%, #6C1AF4 100%); display:inline-flex;
               align-items:center; justify-content:center;
               font-size:10px; font-weight:700; flex-shrink:0; color:#ffffff;
               letter-spacing:0.04em;
@@ -642,7 +708,7 @@
             <div style="padding:12px 14px 10px; display:flex; align-items:center; gap:10px;">
               <span style="
                 width:34px; height:34px; border-radius:50%; flex-shrink:0;
-                background:#18181b; display:inline-flex;
+                background:linear-gradient(135deg, #1147E9 0%, #6C1AF4 100%); display:inline-flex;
                 align-items:center; justify-content:center;
                 font-size:12px; font-weight:700; color:#ffffff; letter-spacing:0.04em;
               ">${initials}</span>

@@ -22,10 +22,10 @@
   /* Text colors */
   --color-text:           #18181b;   /* foreground — primary */
   --color-text-secondary: #71717a;   /* muted-foreground */
-  --color-link:           #0a6ed1;   /* brand blue */
+  --color-link:           #1147E9;   /* brand purple */
 
   /* Brand */
-  --color-brand:    #0a6ed1;         /* platform SAP blue — the one accent */
+  --color-brand:    #1147E9;         /* platform brand purple — the one accent */
 
   /* Backgrounds */
   --color-bg:       #fafafa;         /* page background */

@@ -139,7 +139,7 @@ export default function EvidencePage() {
     <>
       <div className="flex items-center justify-between border-b border-border px-5 py-2.5">
         <div className="flex items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
             <Paperclip className="size-5" />
           </span>
           <h1 className="text-lg font-semibold text-foreground">Evidence</h1>
@@ -158,7 +158,7 @@ export default function EvidencePage() {
       <div className="flex flex-wrap gap-3 px-5 pt-4">
         <KpiCard label="Total" value={kpis.total} icon={Paperclip} color="#71717a" sub="all evidence items" />
         <KpiCard label="Approved" value={kpis.approved} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.approved / kpis.total * 100) : 0}% of total`} />
-        <KpiCard label="Pending Review" value={kpis.pending} icon={Clock} color="#0a6ed1" sub="awaiting decision" />
+        <KpiCard label="Pending Review" value={kpis.pending} icon={Clock} color="#1147E9" sub="awaiting decision" />
         <KpiCard label="Expired / Rejected" value={kpis.expired} icon={AlertTriangle} color="#e05c00" sub="require attention" />
       </div>
 

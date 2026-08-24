@@ -18,25 +18,25 @@
   --card-foreground: #18181b;
   --popover: #ffffff;
   --popover-foreground: #18181b;
-  --primary: #0a6ed1;
+  --primary: #1147E9;
   --primary-foreground: #ffffff;
   --secondary: #f4f4f5;
   --secondary-foreground: #18181b;
   --muted: #f4f4f5;
   --muted-foreground: #71717a;
-  --accent: #eef5fc;
-  --accent-foreground: #084fa3;
+  --accent: #eff6ff;
+  --accent-foreground: #1147E9;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #e4e4e7;
   --input: #e4e4e7;
-  --ring: #0a6ed1;
+  --ring: #1147E9;
 
   /* ── Legacy design tokens ──
      Still referenced by a few inline styles / re-themed markup in this MFE.
      MUST move in lockstep with the shadcn neutrals above. */
-  --brand: #0a6ed1;      /* KEEP — platform SAP blue, shared across MFEs */
-  --brand-hover: #084fa3;
+  --brand: #1147E9;      /* KEEP — platform SAP blue, shared across MFEs */
+  --brand-hover: #0d39c4;
   --bg: #fafafa;
   --surface: #ffffff;
   --text: #18181b;

@@ -75,7 +75,7 @@ export default function App() {
       <HeaderContext.Provider value={{ alertCount, registryUrl: REGISTRY_URL }}>
         <header className="flex h-14 items-center justify-between border-b border-border bg-card px-6 print:hidden">
           <div className="flex items-center gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
               <LayoutDashboard className="size-5" />
             </span>
             <div className="flex flex-col justify-center">

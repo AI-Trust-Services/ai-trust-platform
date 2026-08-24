@@ -70,7 +70,7 @@ export default function App() {
         <div className="flex h-screen flex-col overflow-hidden">
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6 shadow-[var(--shadow-xs)]">
           <div className="flex items-center gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
               <Database className="size-5" />
             </span>
             <h1 className="text-lg font-semibold">AI System Registry</h1>

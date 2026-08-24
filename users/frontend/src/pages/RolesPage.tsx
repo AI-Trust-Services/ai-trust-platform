@@ -64,7 +64,7 @@ function RoleCard({
   return (
     <Card className="flex flex-col overflow-hidden p-0">
       <div className="flex items-start gap-3 p-5 pb-4">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
           <Icon className="size-4" />
         </span>
         <div className="min-w-0 flex-1">

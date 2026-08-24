@@ -9,15 +9,15 @@ import { cn } from "@/lib/utils";
 const TIER_CLASSES: Record<TierKey, string> = {
   prohibited: "bg-[#ffd5d5] text-[#8b0000]",
   high: "bg-[#fde8d0] text-[#8b3a00]",
-  "gpai-systemic": "bg-[#e8d5fd] text-[#5a0080]",
-  "gpai-standard": "bg-[#eed5fd] text-[#4a0070]",
+  "gpai-systemic": "bg-[#f0e8ff] text-[#4108A0]",
+  "gpai-standard": "bg-[#f4edff] text-[#6C1AF4]",
   limited: "bg-[#fff3c4] text-[#7a5900]",
   minimal: "bg-[#d5f5e3] text-[#1a5c35]",
   pending: "bg-[#eaecee] text-[#556b82]",
 };
 
 const LIFECYCLE_CLASSES: Record<LifecycleKey, string> = {
-  development: "bg-[#e8f0fb] text-[#0a6ed1]",
+  development: "bg-[#eff6ff] text-[#1147E9]",
   testing: "bg-[#fff3c4] text-[#7a5900]",
   conformity: "bg-[#fde8d0] text-[#8b3a00]",
   market: "bg-[#d5f5e3] text-[#1a5c35]",

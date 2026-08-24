@@ -15,7 +15,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  compliance:           "#0a6ed1",
+  compliance:           "#1147E9",
   risk:                 "#dc2626",
   privacy:              "#8b5cf6",
   security:             "#0891b2",
@@ -115,7 +115,7 @@ export default function AssessmentCharts({ assessments }: Props) {
               <XAxis dataKey="day" tick={{ fontSize: 11 }} tickLine={false} />
               <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit="%" />
               <Tooltip formatter={(v: number) => [`${v}%`, "Avg Score"]} />
-              <Line type="monotone" dataKey="score" stroke="#0a6ed1" strokeWidth={2} dot={{ r: 4, fill: "#0a6ed1" }} activeDot={{ r: 6 }} />
+              <Line type="monotone" dataKey="score" stroke="#1147E9" strokeWidth={2} dot={{ r: 4, fill: "#1147E9" }} activeDot={{ r: 6 }} />
             </LineChart>
           </ResponsiveContainer>
         </Card>

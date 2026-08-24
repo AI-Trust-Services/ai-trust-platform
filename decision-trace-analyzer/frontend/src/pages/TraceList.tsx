@@ -83,7 +83,7 @@ export function TraceList() {
         {/* Toolbar */}
         <div style={styles.toolbar}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
               <Network className="size-5" />
             </span>
             <span style={styles.title}>Trace Explorer</span>

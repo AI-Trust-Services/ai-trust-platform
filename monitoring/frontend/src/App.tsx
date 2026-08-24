@@ -42,7 +42,7 @@ export default function App() {
     <ToastContext.Provider value={showToast}>
       <header className="flex h-14 items-center justify-between border-b border-border bg-card px-6">
         <div className="flex items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
             <Activity className="size-5" />
           </span>
           <div className="flex flex-col justify-center">

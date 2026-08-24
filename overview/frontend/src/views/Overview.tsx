@@ -273,7 +273,7 @@ export default function Overview() {
               <PieChart>
                 <Pie data={tierData} dataKey="value" nameKey="name" cx="40%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={2} stroke="var(--card)" strokeWidth={2}>
                   {tierEntries.map(([tier]) => (
-                    <Cell key={tier} fill={TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#0a6ed1"} />
+                    <Cell key={tier} fill={TIER_COLORS[tier as keyof typeof TIER_COLORS] ?? "#1147E9"} />
                   ))}
                   <Label
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -58,7 +58,7 @@ export default function App() {
       )}
       <header className="flex h-14 items-center border-b border-border bg-card px-6">
         <div className="flex items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
             <Users className="size-5" />
           </span>
           <h1 className="text-lg font-semibold tracking-[-0.01em]">Users &amp; Roles</h1>

@@ -30,8 +30,8 @@ export function StatusBadge({ meta, value }: StatusBadgeProps) {
 const TIER_CLASSES: Record<string, string> = {
   prohibited:      "bg-[#fef2f2] text-[#b91c1c]",
   high:            "bg-[#fff7ed] text-[#c2410c]",
-  "gpai-systemic": "bg-[#f5f3ff] text-[#6d28d9]",
-  "gpai-standard": "bg-[#f5f3ff] text-[#7c3aed]",
+  "gpai-systemic": "bg-[#f0e8ff] text-[#4108A0]",
+  "gpai-standard": "bg-[#f4edff] text-[#6C1AF4]",
   limited:         "bg-[#fffbeb] text-[#b45309]",
   minimal:         "bg-[#f0fdf4] text-[#15803d]",
 };
