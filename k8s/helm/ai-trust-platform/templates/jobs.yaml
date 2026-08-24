@@ -80,13 +80,10 @@ spec:
       restartPolicy: OnFailure
       {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
-        # Wait until Keycloak is fully ready: /realms/master responds AND the
-        # admin-cli token endpoint accepts requests (HTTP 200). This handles both
-        # the startup race and the ssl_required=EXTERNAL issue on fresh DBs —
-        # Keycloak is started with --spi-realm-default-ssl-required=NONE so new
-        # realms default to NONE, and the token endpoint poll ensures the master
-        # realm is fully initialised before we attempt provisioning.
-        - name: wait-for-keycloak
+        {{- include "ai-trust.waitForHttp" (dict "name" "keycloak" "port" 8080 "path" "/realms/master" "image" .Values.waitImages.busybox) | nindent 8 }}
+        # Wait until the admin token endpoint returns an access_token — confirms
+        # Keycloak started with ssl_required=NONE on the master realm.
+        - name: wait-for-keycloak-token
           image: {{ .Values.waitImages.busybox }}
           envFrom:
             - secretRef: { name: {{ .Values.secretName }} }
@@ -94,10 +91,6 @@ spec:
             - sh
             - -c
             - |
-              until wget -q -O- http://keycloak:8080/realms/master >/dev/null 2>&1; do
-                echo "waiting for keycloak:8080/realms/master"; sleep 2
-              done
-              echo "Realm endpoint up — waiting for admin token endpoint to be ready..."
               until wget -q -O- \
                 --post-data "client_id=admin-cli&username=${KEYCLOAK_ADMIN}&password=${KEYCLOAK_ADMIN_PASSWORD}&grant_type=password" \
                 http://keycloak:8080/realms/master/protocol/openid-connect/token 2>/dev/null \
