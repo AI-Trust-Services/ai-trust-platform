@@ -84,6 +84,43 @@ export interface PreviewResult {
   obligations: string[];
 }
 
+// ── AI-assisted registration ──────────────────────────────────────────────
+export type ChatRole = "user" | "assistant" | "system";
+
+export interface ChatMessage {
+  role: ChatRole;
+  content: string;
+}
+
+export interface RationaleItem {
+  flag: string;
+  value: boolean | number;
+  rationale: string;
+  confidence: number;
+}
+
+export interface ClassificationResult {
+  tier: TierKey;
+  basis: string;
+  obligations: string[];
+  annex_iii_area: number | null;
+}
+
+export interface AssistTurnResponse {
+  message: string;
+  extracted_fields: Record<string, unknown>;
+  next_field: string | null;
+  complete: boolean;
+  degraded: boolean;
+  inferred_flags: RationaleItem[] | null;
+  classification: ClassificationResult | null;
+}
+
+export interface AssistExtractResponse {
+  extracted_fields: Record<string, unknown>;
+  notes: string | null;
+}
+
 export interface AISystemFormData {
   name: string;
   version: string;

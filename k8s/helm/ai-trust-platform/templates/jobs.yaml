@@ -140,3 +140,31 @@ spec:
         - name: openfga-config
           persistentVolumeClaim:
             claimName: openfga-config
+{{- if .Values.ollama.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ollama-pull
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        {{- include "ai-trust.waitForHttp" (dict "name" "ollama" "port" 11434 "path" "/" "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: ollama-pull
+          image: {{ .Values.ollama.image }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # LLM_MODEL / LLM_VISION_MODEL
+          env:
+            - name: OLLAMA_HOST
+              value: http://ollama:11434
+          command:
+            - /bin/sh
+            - -c
+            - |
+              ollama pull "${LLM_MODEL:-llama3.2}" &&
+              ollama pull "${LLM_VISION_MODEL:-llama3.2-vision}"
+{{- end }}
