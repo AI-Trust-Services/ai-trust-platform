@@ -19,7 +19,7 @@ from app.schemas.workflow import (
     WorkflowApproveRequest,
     WorkflowRejectRequest,
 )
-from app.schemas.system_model import SystemModelLinkBody, SystemModelResponse
+from app.schemas.system_model import SystemModelLinkBody, SystemModelResponse, ModelSystemResponse
 
 __all__ = [
     "AISystemCreate",
@@ -38,4 +38,5 @@ __all__ = [
     "WorkflowRejectRequest",
     "SystemModelLinkBody",
     "SystemModelResponse",
+    "ModelSystemResponse",
 ]

@@ -1,4 +1,4 @@
-import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, SystemModelResponse, WorkflowStep, UserSummary } from "../types";
+import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, SystemModelResponse, ModelSystemResponse, WorkflowStep, UserSummary } from "../types";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
@@ -54,6 +54,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
   deleteModel: (id: string) => request<null>(`/model-cards/${id}`, { method: "DELETE" }),
+  getModelSystems: (modelId: string) => request<ModelSystemResponse[]>(`/model-cards/${modelId}/systems`),
 
   myPermissions: () => request<PermissionsResponse>("/me/permissions", {}, USERS_API_BASE),
 

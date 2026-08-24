@@ -81,6 +81,15 @@ export interface SystemModelResponse extends ModelCard {
   role: string | null;
 }
 
+export interface ModelSystemResponse {
+  id: string;
+  name: string;
+  tier: string;
+  lifecycle: string;
+  compliance: number;
+  role: string | null;
+}
+
 export interface PreviewResult {
   tier: TierKey;
   basis: string;
