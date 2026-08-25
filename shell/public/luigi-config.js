@@ -410,8 +410,6 @@
           --sapContent_ForegroundBackgroundColor: #ffffff;
           --sapPageHeader_Background: #ffffff;
         }
-        .lui-main-app-frame,
-        iframe#app-iframe,
         .fd-app__main,
         .fd-app__main-container,
         .fd-shell,
@@ -444,7 +442,6 @@
         html.dark body,
         html.dark .fd-shell, html.dark .fd-shell__content, html.dark .fd-shell__body,
         html.dark .fd-app__main, html.dark .fd-app__main-container,
-        html.dark .lui-main-app-frame, html.dark iframe,
         html.dark [class*="app__main"], html.dark [class*="main-container"], html.dark [class*="main-frame"],
         html.dark .fd-busy-indicator, html.dark [class*="loading-indicator"], html.dark [class*="busy-indicator"] {
           background: #09090b !important;
@@ -843,7 +840,6 @@
                 }
                 .fd-shell, .fd-shell__content, .fd-shell__body,
                 .fd-app__main, .fd-app__main-container,
-                .lui-main-app-frame, iframe#app-iframe,
                 [class*="app__main"], [class*="main-container"], [class*="main-frame"] {
                   background: #09090b !important;
                 }
