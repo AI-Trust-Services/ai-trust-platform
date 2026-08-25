@@ -414,6 +414,25 @@
           background: #ffffff !important;
         }
 
+        /* ── Dark mode baked into static CSS — active immediately via html.dark ── */
+        html.dark {
+          background: #09090b !important;
+          --sapBackgroundColor: #09090b;
+          --sapShellColor: #09090b;
+          --sapBaseColor: #09090b;
+          --sapContent_ForegroundBackgroundColor: #09090b;
+          --sapPageHeader_Background: #09090b;
+        }
+        html.dark body, html.dark .fd-app, html.dark .lui-app, html.dark #app,
+        html.dark .fd-shell, html.dark .fd-shell__content, html.dark .fd-shell__body,
+        html.dark .fd-app__main, html.dark .fd-app__main-container,
+        html.dark .lui-main-app-frame, html.dark iframe,
+        html.dark [class*="app__main"], html.dark [class*="main-container"], html.dark [class*="main-frame"],
+        html.dark .fd-busy-indicator, html.dark [class*="loading-indicator"], html.dark [class*="busy-indicator"] {
+          background: #09090b !important;
+          background-color: #09090b !important;
+        }
+
         /* ── Collapsed: icons only, centered ── */
         .lui-side-nav--collapsed .fd-navigation__list-item a,
         .lui-side-nav--collapsed .lui-nav__item a,
@@ -459,6 +478,12 @@
         body.semiCollapsed .brand-logo-icon {
           display: block !important;
         }
+        /* dark variants hidden by default, swap in on html.dark */
+        .brand-logo-full--dark { height: 30px !important; display: none !important; }
+        html.dark .brand-logo-full { display: none !important; }
+        html.dark .brand-logo-full--dark { display: block !important; }
+        html.dark body.semiCollapsed .brand-logo-full--dark { display: none !important; }
+        /* icon: color icon works on both backgrounds — no dark swap needed */
         .fd-shellbar__title,
         .lui-shellbar__title,
         .shellbar-title {
@@ -567,11 +592,16 @@
         imgFull.src = "/brand/svg/horizontal_color.svg";
         imgFull.alt = "AI Trust";
         imgFull.className = "brand-logo-full";
+        const imgFullDark = document.createElement("img");
+        imgFullDark.src = "/brand/svg/horizontal_color_dark.svg";
+        imgFullDark.alt = "AI Trust";
+        imgFullDark.className = "brand-logo-full--dark";
         const imgIcon = document.createElement("img");
         imgIcon.src = "/brand/svg/Icon_color.svg";
         imgIcon.alt = "AI Trust";
         imgIcon.className = "brand-logo-icon";
         icon.appendChild(imgFull);
+        icon.appendChild(imgFullDark);
         icon.appendChild(imgIcon);
         branding.appendChild(icon);
       }, 200);
@@ -649,7 +679,7 @@
             "></span>
           `;
           bell.addEventListener("click", () => { window.location.hash = "#/home/alerts"; });
-          bell.addEventListener("mouseenter", () => { bell.style.background = "#f3f4f6"; });
+          bell.addEventListener("mouseenter", () => { bell.style.background = document.documentElement.classList.contains('dark') ? 'rgba(255,255,255,0.07)' : '#f3f4f6'; });
           bell.addEventListener("mouseleave", () => { bell.style.background = "transparent"; });
 
           async function fetchAlertCount() {
@@ -698,6 +728,7 @@
           `;
 
           const dropdown = document.createElement("div");
+          dropdown.id = 'luigi-account-dropdown';
           dropdown.style.cssText = `
             display:none; position:absolute; top:calc(100% + 8px); right:0;
             background:#ffffff; border:1px solid #e4e4e7; border-radius:10px;
@@ -713,11 +744,11 @@
                 font-size:12px; font-weight:700; color:#ffffff; letter-spacing:0.04em;
               ">${initials}</span>
               <div style="min-width:0;">
-                <div style="font-size:13px; font-weight:600; color:#111827; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${displayName}</div>
+                <div class="lui-name" style="font-size:13px; font-weight:600; color:#111827; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${displayName}</div>
                 <div style="font-size:11px; color:#9ca3af; margin-top:1px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${currentUser.username}</div>
               </div>
             </div>
-            <div style="height:1px; background:#f3f4f6; margin:0 4px;"></div>
+            <div class="lui-divider" style="height:1px; background:#f3f4f6; margin:0 4px;"></div>
             <div style="padding:4px;">
               <a href="/oauth2/sign_out" style="
                 display:flex; align-items:center; gap:8px;
@@ -725,7 +756,7 @@
                 font-size:13px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
                 border-radius:6px; transition:background 0.1s;
               "
-              onmouseover="this.style.background='#f4f4f5'"
+              onmouseover="this.style.background=document.documentElement.classList.contains('dark')?'rgba(255,255,255,0.07)':'#f4f4f5'"
               onmouseout="this.style.background='transparent'">
                 <span class="sap-icon sap-icon--log" style="font-size:14px; color:#9ca3af;"></span>
                 Sign out
@@ -738,13 +769,65 @@
             dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
           });
           document.addEventListener("click", () => { dropdown.style.display = "none"; });
-          trigger.addEventListener("mouseenter", () => { trigger.style.background = "#f4f4f5"; trigger.style.borderColor = "#e4e4e7"; });
+          trigger.addEventListener("mouseenter", () => { const d = document.documentElement.classList.contains('dark'); trigger.style.background = d ? 'rgba(255,255,255,0.07)' : '#f4f4f5'; trigger.style.borderColor = d ? 'rgba(255,255,255,0.08)' : '#e4e4e7'; });
           trigger.addEventListener("mouseleave", () => { trigger.style.background = "transparent"; trigger.style.borderColor = "transparent"; });
+
+          // ── Dark mode toggle ──
+          const THEME_KEY = 'trust-platform-theme';
+          const darkToggle = document.createElement('button');
+          darkToggle.setAttribute('aria-label', 'Toggle dark mode');
+          darkToggle.style.cssText = `
+            position:relative; display:inline-flex; align-items:center; justify-content:center;
+            width:32px; height:36px; background:transparent; border:none;
+            border-radius:6px; cursor:pointer; margin-right:4px; margin-top:3px;
+            flex-shrink:0; align-self:center;
+          `;
+
+          function applyShellTheme(dark) {
+            document.documentElement.classList.toggle('dark', dark);
+            let ov = document.getElementById('luigi-dark-overrides');
+            if (dark) {
+              if (!ov) { ov = document.createElement('style'); ov.id = 'luigi-dark-overrides'; document.head.appendChild(ov); }
+              ov.textContent = `
+                .fd-shellbar { background: #0f172a !important; border-bottom: none !important; }
+                html, body, .fd-app, .lui-app, #app,
+                .fd-shell, .fd-shell__content, .fd-shell__body,
+                .fd-app__main, .fd-app__main-container,
+                .lui-main-app-frame, iframe#app-iframe,
+                [class*="app__main"], [class*="main-container"], [class*="main-frame"] {
+                  background: #09090b !important;
+                }
+                #luigi-account-dropdown { background: #18181b !important; border-color: rgba(255,255,255,0.08) !important; box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3) !important; }
+                #luigi-account-dropdown .lui-name { color: #f9fafb !important; }
+                #luigi-account-dropdown .lui-divider { background: rgba(255,255,255,0.08) !important; }
+                #luigi-account-dropdown a { color: #e2e8f0 !important; }
+              `;
+            } else {
+              if (ov) ov.remove();
+            }
+            const moonSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+            const sunSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`;
+            darkToggle.innerHTML = dark ? sunSvg : moonSvg;
+            darkToggle.style.color = dark ? '#94a3b8' : '#374151';
+            bell.style.color = dark ? '#94a3b8' : '#374151';
+            trigger.style.color = dark ? '#e2e8f0' : '#374151';
+          }
+
+          applyShellTheme(localStorage.getItem(THEME_KEY) === 'dark');
+
+          darkToggle.addEventListener('click', () => {
+            const nowDark = !document.documentElement.classList.contains('dark');
+            localStorage.setItem(THEME_KEY, nowDark ? 'dark' : 'light');
+            applyShellTheme(nowDark);
+          });
+          darkToggle.addEventListener('mouseenter', () => { darkToggle.style.background = document.documentElement.classList.contains('dark') ? 'rgba(255,255,255,0.07)' : '#f3f4f6'; });
+          darkToggle.addEventListener('mouseleave', () => { darkToggle.style.background = 'transparent'; });
 
           wrapper.appendChild(trigger);
           wrapper.appendChild(dropdown);
           shellbar.prepend(wrapper);
           shellbar.prepend(bell);
+          shellbar.prepend(darkToggle);
         }
       }, 200);
     },

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 import { Outlet } from "react-router";
 import { Loader2, Plus, LayoutDashboard } from "lucide-react";
 import { useLuigiInit, navigateTo } from "./hooks/useLuigi";
+import { useTheme } from './hooks/useTheme';
 import { usePermissions } from "./hooks/usePermissions";
 import { api, HEALTH_URL, REGISTRY_URL } from "./api/client";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ export default function App() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useLuigiInit(() => {});
+  useTheme();
 
   const checkHealth = useCallback(async () => {
     if (healthTimer.current) clearTimeout(healthTimer.current);

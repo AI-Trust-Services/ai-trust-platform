@@ -55,3 +55,26 @@
   --color-error-text:   #b91c1c;
   --color-error-border: #fecaca;
 }
+
+.dark {
+  --color-text:           #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-link:           #60a5fa;
+  --color-brand:          #1147E9;
+  --color-bg:             #09090b;
+  --color-surface:        #18181b;
+  --color-surface-alt:    #27272a;
+  --color-border:         #27272a;
+  --color-hover-bg:       rgba(255,255,255,0.07);
+  --color-code-bg:        #27272a;
+  --sapList_SelectionBackgroundColor: #1e3a8a;
+  --color-info-bg:        #0f172a;
+  --color-info-text:      #93c5fd;
+  --color-success-bg:     #052e16;
+  --color-success-text:   #4ade80;
+  --color-warning-bg:     #1c0f00;
+  --color-warning-text:   #fbbf24;
+  --color-error-bg:       #450a0a;
+  --color-error-text:     #f87171;
+  --color-error-border:   #7f1d1d;
+}

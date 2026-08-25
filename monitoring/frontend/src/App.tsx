@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 import { Outlet } from "react-router";
 import { Activity, Loader2 } from "lucide-react";
 import { useLuigiInit } from "./hooks/useLuigi";
+import { useTheme } from './hooks/useTheme';
 import { HEALTH_URL } from "./api/client";
 
 type ToastFn = (msg: string, isError?: boolean) => void;
@@ -15,6 +16,7 @@ export default function App() {
   const healthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useLuigiInit(() => {});
+  useTheme();
 
   const checkHealth = useCallback(async () => {
     if (healthTimer.current) clearTimeout(healthTimer.current);

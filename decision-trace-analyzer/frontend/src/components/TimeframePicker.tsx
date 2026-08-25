@@ -222,17 +222,17 @@ const styles: Record<string, React.CSSProperties> = {
   quickGroup: { display: "flex", gap: 4 },
   quickBtn: {
     background: "none",
-    border: "1px solid var(--color-border)",
+    border: "1px solid var(--border)",
     borderRadius: 4,
     padding: "3px 10px",
-    fontSize: "var(--font-size-sm)",
-    fontFamily: "var(--font-family)",
-    color: "var(--color-text)",
+    fontSize: "0.75rem",
+    fontFamily: "'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    color: "var(--foreground)",
     cursor: "pointer",
   },
   quickBtnActive: {
-    background: "var(--color-brand)",
-    borderColor: "var(--color-brand)",
+    background: "var(--brand)",
+    borderColor: "var(--brand)",
     color: "#fff",
   },
   customRow: {
@@ -241,10 +241,10 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     flexWrap: "wrap" as const,
   },
-  dash: { color: "var(--color-text-secondary)", fontSize: "var(--font-size)" },
+  dash: { color: "var(--text-secondary)", fontSize: "0.875rem" },
   tzHint: {
-    fontSize: "var(--font-size-sm)",
-    color: "var(--color-text-secondary)",
+    fontSize: "0.75rem",
+    color: "var(--text-secondary)",
     marginLeft: 4,
   },
 };

@@ -14,6 +14,8 @@
       font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
   </style>
   <script>
+    // Apply dark mode synchronously before first paint to prevent flash.
+    (function(){var k='trust-platform-theme',d=localStorage.getItem(k)==='dark';document.documentElement.classList.toggle('dark',d);document.documentElement.style.background=d?'#09090b':'#ffffff';})();
     // Set Luigi's collapsed nav preference before Luigi initialises.
     // This ensures the sidebar starts collapsed on every fresh browser/machine.
     var LUIGI_NAV_KEY = "luigi.preferences.navigation.collapsedNavigation";
