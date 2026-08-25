@@ -623,6 +623,8 @@ services:
     build:
       context: .
       dockerfile: risk-management/backend/Dockerfile
+      args:
+        INSTALL_NEXUS: ${INSTALL_NEXUS:-false}
     environment:
       ALLOWED_ORIGINS: "http://localhost:8080"
       ROOT_PATH: "/api/risk-management"

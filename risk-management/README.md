@@ -50,6 +50,28 @@ make test-unit    # run unit tests
 
 ---
 
+## IBM Risk Atlas Nexus (optional)
+
+By default the module runs without IBM Risk Atlas Nexus — risk identification uses rule-based or LLM-assisted backends. To enable the Nexus backend:
+
+1. In your `.env` set:
+   ```
+   INSTALL_NEXUS=true
+   OLLAMA_BASE_URL=http://host-gateway:11434
+   OLLAMA_MODEL=granite3.3:8b   # recommended; llama3.2 also works
+   ```
+2. Rebuild the backend image (**first build takes ~10 min** — clones the repo and installs torch/transformers/docling):
+   ```bash
+   docker compose up --build -d risk-management-backend
+   ```
+3. Subsequent builds use Docker layer cache — fast unless `requirements.txt` or `INSTALL_NEXUS` changes.
+
+When `INSTALL_NEXUS=false` (default), the **IBM Risk Atlas Nexus** toggle in the UI is still shown but silently falls back to rule-based identification. No errors, no crashes.
+
+> **Why not installed by default?** The library pulls in `torch`, `transformers`, and `docling` — ~2 GB of ML dependencies. Keeping it optional makes the standard build fast and lightweight.
+
+---
+
 ## Ollama configuration (optional LLM assistance)
 
 By default the module runs in rule-based mode with no LLM. To enable LLM-assisted identification:
