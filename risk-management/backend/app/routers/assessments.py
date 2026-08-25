@@ -16,6 +16,8 @@ from app.schemas.assessment import (
     AssessmentMitigateResponse,
     AssessmentExportRequest,
     AssessmentExportResponse,
+    QuestionnaireFillRequest,
+    QuestionnaireFillResponse,
 )
 from risk_management.classifier import RiskClassifier
 from risk_management.config import AppConfig
@@ -62,6 +64,24 @@ async def identify_risks(body: AssessmentIdentifyRequest) -> AssessmentIdentifyR
             + body.source_code[:3000]
         )
 
+    if body.use_questionnaire and body.questionnaire_answers:
+        from risk_management.questionnaire import QuestionnaireAnswer, answers_to_risks
+        answers = [QuestionnaireAnswer(**a) for a in body.questionnaire_answers]
+        risks = answers_to_risks(answers)
+        backend_used = "questionnaire"
+        if body.use_llm:
+            backend_used = "questionnaire + llm_assisted"
+        logger.info("assessment.risks_identified", extra={
+            "system": metadata.name,
+            "count": len(risks),
+            "backend": backend_used,
+        })
+        return AssessmentIdentifyResponse(
+            backend_used=backend_used,
+            risks=[r.model_dump() for r in risks],
+            raw_output={"question_count": len(answers), "answered_yes": sum(1 for a in answers if a.answer)},
+        )
+
     identifier = RiskIdentifier(
         taxonomy_path=_config.risk_taxonomy_path,
         llm_client=llm_client,
@@ -83,6 +103,44 @@ async def identify_risks(body: AssessmentIdentifyRequest) -> AssessmentIdentifyR
         backend_used=result.backend_used,
         risks=[r.model_dump() for r in result.risks],
         raw_output=result.raw_output,
+    )
+
+
+@router.get("/assessments/questionnaire", response_model=QuestionnaireFillResponse)
+async def get_questionnaire() -> QuestionnaireFillResponse:
+    """Return the questionnaire structure with empty answers (no AI, no LLM)."""
+    from risk_management.questionnaire import QUESTIONNAIRE, QuestionnaireAnswer
+    empty_answers = [
+        QuestionnaireAnswer(question_id=q["id"], answer=False, justification="", confidence="medium")
+        for q in QUESTIONNAIRE
+    ]
+    return QuestionnaireFillResponse(
+        questions=QUESTIONNAIRE,
+        answers=[a.model_dump() for a in empty_answers],
+    )
+
+
+@router.post("/assessments/questionnaire/ai-fill", response_model=QuestionnaireFillResponse)
+async def ai_fill_questionnaire(body: QuestionnaireFillRequest) -> QuestionnaireFillResponse:
+    """Fill questionnaire using AI (LLM). Returns questions with AI-suggested answers and justifications."""
+    from risk_management.questionnaire import AIQuestionnaireAssistant, QUESTIONNAIRE
+    metadata = AISystemMetadata(**body.metadata)
+    base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    model = os.environ.get("OLLAMA_MODEL", "llama3.2")
+    llm_client = OllamaClient(base_url=base_url, model=model, temperature=0.2, timeout=120)
+    assistant = AIQuestionnaireAssistant(llm_client=llm_client)
+    answers = assistant.fill(
+        system_description=body.system_description,
+        metadata=metadata,
+        source_code=body.source_code,
+    )
+    logger.info("assessment.questionnaire_filled", extra={
+        "system": metadata.name,
+        "answered_yes": sum(1 for a in answers if a.answer),
+    })
+    return QuestionnaireFillResponse(
+        questions=QUESTIONNAIRE,
+        answers=[a.model_dump() for a in answers],
     )
 
 

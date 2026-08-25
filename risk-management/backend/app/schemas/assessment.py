@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
 
 class AssessmentIdentifyRequest(BaseModel):
     system_description: str
-    source_code: str = ""  # optional: source code snippet to augment risk identification
+    source_code: str = ""
     metadata: dict[str, Any]
     use_llm: bool = False
     use_stub: bool = True
     use_risk_atlas_nexus: bool = False
+    use_questionnaire: bool = False
+    questionnaire_answers: list[dict[str, Any]] = []
 
 
 class AssessmentIdentifyResponse(BaseModel):
@@ -53,3 +55,14 @@ class AssessmentExportResponse(BaseModel):
     json_output: str
     markdown_output: str
     instructions_for_use: str = ""
+
+
+class QuestionnaireFillRequest(BaseModel):
+    system_description: str
+    source_code: str = ""
+    metadata: dict[str, Any]
+
+
+class QuestionnaireFillResponse(BaseModel):
+    questions: list[dict[str, Any]]
+    answers: list[dict[str, Any]]

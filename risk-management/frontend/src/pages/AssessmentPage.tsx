@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
+import type React from "react";
 import { useToast } from "../App";
 import { api } from "../api/client";
+import type { QuestionnaireQuestion, QuestionnaireAnswer } from "../api/client";
 import type {
   DemoSummary, Risk, RiskClassification, VulnerableGroupAssessment,
   RelatedIncident, Mitigation, ResidualRiskArgument, Step,
@@ -85,14 +87,11 @@ function DemoStep({
   return (
     <div className="content">
       <div className="toolbar" style={{ marginBottom: 16 }}>
-        <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>LLM-assisted identification</span>
-        <label className="toggle" title={useLlm ? "LLM on" : "LLM off (rule-based)"}>
+        <span style={{ fontSize: 13, color: useLlm ? "var(--brand)" : "var(--text-secondary)" }}>AI-Assisted</span>
+        <label className="toggle" title={useLlm ? "AI-Assisted on" : "AI-Assisted off"}>
           <input type="checkbox" checked={useLlm} onChange={e => setUseLlm(e.target.checked)} />
           <span className="slider" />
         </label>
-        <span style={{ fontSize: 12, color: useLlm ? "var(--brand)" : "var(--text-secondary)" }}>
-          {useLlm ? "Ollama on" : "Rule-based"}
-        </span>
         <span style={{ marginLeft: 20, fontSize: 13, color: "var(--text-secondary)" }}>IBM Risk Atlas Nexus</span>
         <label className="toggle" title={useRiskAtlasNexus ? "Risk Atlas Nexus on" : "Risk Atlas Nexus off"}>
           <input type="checkbox" checked={useRiskAtlasNexus} onChange={e => setUseRiskAtlasNexus(e.target.checked)} />
@@ -190,50 +189,217 @@ function DemoStep({
   );
 }
 
-/* ── Identify step ───────────────────────────────────────────────────── */
-function IdentifyStep({
-  risks, loading, backendUsed, onNext,
+/* ── Identify step — questionnaire ───────────────────────────────────── */
+
+const SEV_OPTIONS = ["critical", "high", "medium", "low"];
+const LIK_OPTIONS = ["very_likely", "likely", "possible", "unlikely"];
+const MIT_OPTIONS = ["eliminate", "reduce", "mitigate", "inform"];
+
+const CONFIDENCE_LABELS: Record<string, string> = { high: "wysoka", medium: "średnia", low: "niska" };
+const MIT_LABELS: Record<string, string> = { eliminate: "Wyeliminuj", reduce: "Ogranicz", mitigate: "Łagodź", inform: "Informuj" };
+
+function QuestionRow({
+  q,
+  ans,
+  onChange,
 }: {
-  risks: Risk[]; loading: boolean; backendUsed: string;
-  onNext: () => void;
+  q: QuestionnaireQuestion;
+  ans: QuestionnaireAnswer;
+  onChange: (updated: QuestionnaireAnswer) => void;
 }) {
-  if (loading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>Identifying risks…</span></div>;
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="accordion" style={{ marginBottom: 8, borderLeft: ans.answer ? "3px solid var(--brand)" : "3px solid var(--border)" }}>
+      <div className="accordion-header" onClick={() => setOpen(v => !v)} style={{ gap: 10 }}>
+        <input
+          type="checkbox"
+          checked={ans.answer}
+          onChange={e => { e.stopPropagation(); onChange({ ...ans, answer: e.target.checked }); }}
+          style={{ marginRight: 4, cursor: "pointer", flexShrink: 0 }}
+          title="Zaznacz jeśli ryzyko dotyczy systemu"
+        />
+        <span style={{ flex: 1, fontSize: 13 }}>{q.question}</span>
+        <span className="chip" style={{ fontSize: 11 }}>{q.category}</span>
+        {ans.answer && ans.confidence && (
+          <span className="chip" style={{ fontSize: 11, background: "#d5f5e3", color: "#1a5c35" }}>
+            {CONFIDENCE_LABELS[ans.confidence] ?? ans.confidence}
+          </span>
+        )}
+        <span style={{ color: "var(--text-secondary)", fontSize: 16 }}>{open ? "▲" : "▼"}</span>
+      </div>
+      {open && (
+        <div className="accordion-body" style={{ fontSize: 13 }}>
+          <div style={{ marginBottom: 8, color: "var(--text-secondary)", fontSize: 12 }}>{q.hint}</div>
+
+          <label style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Uzasadnienie</label>
+          <textarea
+            value={ans.justification}
+            onChange={e => onChange({ ...ans, justification: e.target.value })}
+            className="notes-input"
+            placeholder="Opisz dlaczego to ryzyko dotyczy (lub nie dotyczy) tego systemu. Odwołaj się do dokumentacji lub kodu."
+            style={{ minHeight: 60 }}
+          />
+
+          {ans.answer && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
+              <div>
+                <label style={{ fontSize: 11, display: "block", marginBottom: 3, fontWeight: 600, color: "var(--text-secondary)" }}>Ważność</label>
+                <select
+                  value={ans.severity_override ?? q.default_severity}
+                  onChange={e => onChange({ ...ans, severity_override: e.target.value })}
+                  style={{ width: "100%", fontSize: 12, padding: "4px 6px", border: "1px solid var(--border)", borderRadius: 5 }}
+                >
+                  {SEV_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                {!ans.severity_override && <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>domyślna: {q.default_severity}</span>}
+              </div>
+              <div>
+                <label style={{ fontSize: 11, display: "block", marginBottom: 3, fontWeight: 600, color: "var(--text-secondary)" }}>Prawdopodobieństwo</label>
+                <select
+                  value={ans.likelihood_override ?? q.default_likelihood}
+                  onChange={e => onChange({ ...ans, likelihood_override: e.target.value })}
+                  style={{ width: "100%", fontSize: 12, padding: "4px 6px", border: "1px solid var(--border)", borderRadius: 5 }}
+                >
+                  {LIK_OPTIONS.map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+                {!ans.likelihood_override && <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>domyślne: {q.default_likelihood}</span>}
+              </div>
+              <div>
+                <label style={{ fontSize: 11, display: "block", marginBottom: 3, fontWeight: 600, color: "var(--text-secondary)" }}>Środek mitygacji</label>
+                <select
+                  value={ans.mitigation_override ?? q.default_mitigation}
+                  onChange={e => onChange({ ...ans, mitigation_override: e.target.value })}
+                  style={{ width: "100%", fontSize: 12, padding: "4px 6px", border: "1px solid var(--border)", borderRadius: 5 }}
+                >
+                  {MIT_OPTIONS.map(m => <option key={m} value={m}>{MIT_LABELS[m] ?? m}</option>)}
+                </select>
+                {!ans.mitigation_override && <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>domyślny: {q.default_mitigation}</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IdentifyStep({
+  systemDesc,
+  systemMeta,
+  sourceCode,
+  useLlm,
+  loading,
+  onSubmit,
+}: {
+  systemDesc: string;
+  systemMeta: Record<string, unknown>;
+  sourceCode: string;
+  useLlm: boolean;
+  loading: boolean;
+  onSubmit: (answers: QuestionnaireAnswer[]) => void;
+}) {
+  const toast = useToast();
+  const [questions, setQuestions] = useState<QuestionnaireQuestion[]>([]);
+  const [answers, setAnswers] = useState<QuestionnaireAnswer[]>([]);
+  const [filling, setFilling] = useState(false);
+  const [qLoading, setQLoading] = useState(true);
+
+  // Load questionnaire structure from backend on mount
+  useEffect(() => {
+    api.getQuestionnaire()
+      .then(r => {
+        setQuestions(r.questions);
+        setAnswers(r.questions.map(q => ({
+          question_id: q.id,
+          answer: false,
+          justification: "",
+          confidence: "medium",
+          severity_override: null,
+          likelihood_override: null,
+          mitigation_override: null,
+        })));
+      })
+      .catch(() => {
+        toast("Nie udało się pobrać kwestionariusza", true);
+      })
+      .finally(() => setQLoading(false));
+  }, []);
+
+  async function handleAiFill() {
+    setFilling(true);
+    try {
+      const r = await api.fillQuestionnaire({
+        system_description: systemDesc,
+        source_code: sourceCode,
+        metadata: systemMeta,
+      });
+      setQuestions(r.questions);
+      setAnswers(r.answers);
+    } catch (e) {
+      toast(String(e), true);
+    } finally {
+      setFilling(false);
+    }
+  }
+
+  function updateAnswer(idx: number, updated: QuestionnaireAnswer) {
+    setAnswers(prev => prev.map((a, i) => i === idx ? updated : a));
+  }
+
+  const yesCount = answers.filter(a => a.answer).length;
+
+  if (qLoading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>Ładowanie kwestionariusza…</span></div>;
+  if (loading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>Identyfikacja ryzyk…</span></div>;
 
   return (
     <div className="content">
-      <div className="msg-strip info" style={{ marginBottom: 12 }}>
-        Found <strong>{risks.length}</strong> candidate risk(s) via <em>{backendUsed}</em>.
-        Proceed to evaluate and confirm each risk.
+      <div className="msg-strip info" style={{ marginBottom: 14 }}>
+        Odpowiedz na poniższe pytania, aby zidentyfikować ryzyka systemu AI (Art. 9 EU AI Act).
+        Zaznacz pytania, które dotyczą Twojego systemu, i uzasadnij każdą odpowiedź.
+        {useLlm && (
+          <> Użyj przycisku <strong>AI-Fill</strong>, aby AI wypełniło kwestionariusz na podstawie dokumentacji systemu.</>
+        )}
       </div>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Risk</th><th>Category</th><th>Severity</th><th>Art. 9 step</th><th>Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            {risks.length === 0 ? (
-              <tr className="empty-row"><td colSpan={5}>No risks identified</td></tr>
-            ) : risks.map(r => (
-              <tr key={r.id}>
-                <td>
-                  <div className="row-name">{r.title}</div>
-                  <div className="row-sub">{r.description.slice(0, 80)}{r.description.length > 80 ? "…" : ""}</div>
-                </td>
-                <td><span className="chip">{r.category}</span></td>
-                <td><span className={sevClass(r.severity)}>{r.severity}</span></td>
-                <td style={{ fontSize: 12 }}>{r.article_9_step}</td>
-                <td><span className="chip">{r.source}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 13 }}>
+          <strong>{yesCount}</strong> z {questions.length} ryzyk oznaczonych
+        </div>
+        {useLlm && (
+          <button
+            className="btn-primary btn-sm"
+            onClick={handleAiFill}
+            disabled={filling}
+            style={{ display: "flex", alignItems: "center", gap: 6 }}
+          >
+            {filling ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Analiza AI…</> : "✦ AI-Fill"}
+          </button>
+        )}
       </div>
-      <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
-        <button className="btn-primary" onClick={onNext} disabled={risks.length === 0}>
-          Evaluate risks →
+
+      {questions.map((q, idx) => (
+        <QuestionRow
+          key={q.id}
+          q={q}
+          ans={answers[idx] ?? { question_id: q.id, answer: false, justification: "", confidence: "medium", severity_override: null, likelihood_override: null, mitigation_override: null }}
+          onChange={updated => updateAnswer(idx, updated)}
+        />
+      ))}
+
+      <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
+        <button
+          className="btn-primary"
+          onClick={() => onSubmit(answers)}
+          disabled={yesCount === 0}
+        >
+          Zidentyfikuj ryzyka ({yesCount}) →
         </button>
+        {yesCount === 0 && (
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            Zaznacz co najmniej jedno ryzyko aby kontynuować
+          </span>
+        )}
       </div>
     </div>
   );
@@ -794,6 +960,7 @@ export default function AssessmentPage() {
   const [systemDesc, setSystemDesc] = useState("");
   const [systemMeta, setSystemMeta] = useState<Record<string, unknown>>({});
   const [sourceCode, setSourceCode] = useState("");
+  const [demoId, setDemoId] = useState<string | null>(null);
 
   const [risks, setRisks] = useState<Risk[]>([]);
   const [backendUsed, setBackendUsed] = useState("");
@@ -813,46 +980,46 @@ export default function AssessmentPage() {
 
   function stepIndex(s: Step) { return STEPS.findIndex(x => x.key === s); }
 
-  async function handleDemoSelect(_id: string | null, desc: string, meta: Record<string, unknown>, code?: string) {
+  function handleDemoSelect(_id: string | null, desc: string, meta: Record<string, unknown>, code?: string) {
     setSystemDesc(desc);
     setSystemMeta(meta);
+    setDemoId(_id);
     if (code !== undefined) setSourceCode(code);
-    setLoading(true);
     setStep("identify");
+  }
+
+  async function handleQuestionnaireSubmit(answers: import("../api/client").QuestionnaireAnswer[]) {
+    setLoading(true);
     try {
       const res = await api.identifyRisks({
-        system_description: desc,
-        source_code: code ?? sourceCode,
-        metadata: meta,
+        system_description: systemDesc,
+        source_code: sourceCode,
+        metadata: systemMeta,
         use_llm: useLlm,
-        use_stub: _id !== null && !useRiskAtlasNexus,
+        use_stub: false,
         use_risk_atlas_nexus: useRiskAtlasNexus,
+        use_questionnaire: true,
+        questionnaire_answers: answers,
       });
       setRisks(res.risks);
       setBackendUsed(res.backend_used);
-    } catch (e) {
-      toast(String(e), true);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleIdentifyNext() {
-    setLoading(true);
-    setStep("evaluate");
-    try {
-      const res = await api.evaluateRisks({
+      // Auto-confirm all questionnaire risks (user already answered yes)
+      setRisks(res.risks.map(r => ({ ...r, confirmed: true })));
+      setStep("evaluate");
+      // Trigger evaluation immediately
+      const evalRes = await api.evaluateRisks({
         system_description: systemDesc,
         metadata: systemMeta,
-        risks,
+        risks: res.risks.map(r => ({ ...r, confirmed: true })),
         use_llm: useLlm,
       });
-      setRisks(res.risks);
-      setClassification(res.risk_classification);
-      setVgAssessments(res.vulnerable_group_assessments);
-      setIncidents(res.related_incidents);
+      setRisks(evalRes.risks);
+      setClassification(evalRes.risk_classification);
+      setVgAssessments(evalRes.vulnerable_group_assessments);
+      setIncidents(evalRes.related_incidents);
     } catch (e) {
       toast(String(e), true);
+      setStep("identify");
     } finally {
       setLoading(false);
     }
@@ -890,7 +1057,7 @@ export default function AssessmentPage() {
         vulnerable_group_assessments: vgAssessments,
         related_incidents: incidents,
         residual_risk_argument: residualArg,
-        generation_config: { use_llm: useLlm },
+        generation_config: { use_llm: useLlm, use_questionnaire: true },
         review_complete: true,
         residual_risk_acceptable: residualArg?.overall_verdict === "acceptable",
         notes: "",
@@ -900,7 +1067,6 @@ export default function AssessmentPage() {
       setJsonOutput(res.json_output);
       setMarkdownOutput(res.markdown_output);
       setInstructionsForUse(res.instructions_for_use ?? "");
-      // Generate DPIA in parallel (non-blocking — if it fails we don't block the export)
       api.generateDpia({ register })
         .then(d => setDpiaOutput(d.markdown_output))
         .catch(() => setDpiaOutput(""));
@@ -915,6 +1081,7 @@ export default function AssessmentPage() {
     setStep("demo"); setRisks([]); setClassification(null); setVgAssessments([]);
     setIncidents([]); setMitigations([]); setResidualArg(null);
     setJsonOutput(""); setMarkdownOutput(""); setInstructionsForUse(""); setDpiaOutput("");
+    setDemoId(null);
   }
 
   const currentIdx = stepIndex(step);
@@ -945,7 +1112,14 @@ export default function AssessmentPage() {
         />
       )}
       {step === "identify" && (
-        <IdentifyStep risks={risks} loading={loading} backendUsed={backendUsed} onNext={handleIdentifyNext} />
+        <IdentifyStep
+          systemDesc={systemDesc}
+          systemMeta={systemMeta}
+          sourceCode={sourceCode}
+          useLlm={useLlm}
+          loading={loading}
+          onSubmit={handleQuestionnaireSubmit}
+        />
       )}
       {step === "evaluate" && (
         <EvaluateStep

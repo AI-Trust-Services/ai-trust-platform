@@ -34,6 +34,8 @@ export interface Risk {
   review_notes: string;
   misuse_scenarios: MisuseScenario[];
   taxonomy_mappings: TaxonomyMapping[];
+  suggested_mitigation_id: string;
+  questionnaire_question_id: string;
 }
 
 export interface MisuseScenario {

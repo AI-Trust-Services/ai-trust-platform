@@ -69,6 +69,31 @@ export interface DPIAResponse {
   dpia: Record<string, unknown>;
 }
 
+export interface QuestionnaireQuestion {
+  id: string;
+  category: string;
+  question: string;
+  hint: string;
+  default_severity: string;
+  default_likelihood: string;
+  default_mitigation: string;
+}
+
+export interface QuestionnaireAnswer {
+  question_id: string;
+  answer: boolean;
+  justification: string;
+  confidence: string;
+  severity_override: string | null;
+  likelihood_override: string | null;
+  mitigation_override: string | null;
+}
+
+export interface QuestionnaireFillResponse {
+  questions: QuestionnaireQuestion[];
+  answers: QuestionnaireAnswer[];
+}
+
 export const api = {
   getDemos: (): Promise<{ demos: DemoSummary[] }> =>
     request("/demos"),
@@ -86,8 +111,20 @@ export const api = {
     use_llm: boolean;
     use_stub: boolean;
     use_risk_atlas_nexus?: boolean;
+    use_questionnaire?: boolean;
+    questionnaire_answers?: QuestionnaireAnswer[];
   }): Promise<IdentifyResponse> =>
     request("/assessments/identify", json("POST", body)),
+
+  getQuestionnaire: (): Promise<QuestionnaireFillResponse> =>
+    request("/assessments/questionnaire"),
+
+  fillQuestionnaire: (body: {
+    system_description: string;
+    source_code?: string;
+    metadata: Record<string, unknown>;
+  }): Promise<QuestionnaireFillResponse> =>
+    request("/assessments/questionnaire/ai-fill", json("POST", body)),
 
   evaluateRisks: (body: {
     system_description: string;

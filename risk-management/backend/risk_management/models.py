@@ -25,6 +25,7 @@ class RiskSource(str, Enum):
     STUB = "stub"
     LLM_ASSISTED = "llm_assisted"
     RISK_ATLAS_NEXUS = "risk_atlas_nexus"
+    QUESTIONNAIRE = "questionnaire"
     MANUAL = "manual"
 
 
@@ -126,6 +127,8 @@ class Risk(BaseModel):
     affects_vulnerable_groups: bool = False
     vulnerable_groups: list[str] = Field(default_factory=list)
     article_9_step: str = "9(2)(a)"
+    suggested_mitigation_id: str = ""
+    questionnaire_question_id: str = ""
     confirmed: bool = False
     dismissed: bool = False
     review_notes: str = ""
