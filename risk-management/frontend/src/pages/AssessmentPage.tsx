@@ -114,7 +114,7 @@ function DemoStep({
                 <div style={{ fontWeight: 600, marginBottom: 6 }}>{d.name}</div>
                 <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 10 }}>{d.description}</div>
                 <span className="chip">{d.annex_iii_category}</span>
-                <span className="chip" style={{ marginLeft: 4 }}>Art. III.{d.annex_iii_point}</span>
+                <span className="chip">Annex III.{d.annex_iii_point}</span>
               </div>
             ))}
             <div className="card" style={{ cursor: "pointer", borderStyle: "dashed" }}
