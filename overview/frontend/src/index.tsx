@@ -1,18 +1,21 @@
 import { createRoot } from "react-dom/client";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { createHashRouter, RouterProvider, Navigate } from "react-router";
 import "./index.css";
 import App from "./App";
 import Overview from "./views/Overview";
 
-const root = createRoot(document.getElementById("root")!);
-root.render(
-  <HashRouter>
-    <Routes>
-      <Route path="/" element={<App />}>
-        <Route path="overview" element={<Overview />} />
-        <Route index element={<Navigate to="overview" replace />} />
-        <Route path="*" element={<Navigate to="overview" replace />} />
-      </Route>
-    </Routes>
-  </HashRouter>
+const router = createHashRouter([
+  {
+    path: "/",
+    element: <App />,
+    children: [
+      { path: "overview", element: <Overview /> },
+      { index: true, element: <Navigate to="overview" replace /> },
+      { path: "*", element: <Navigate to="overview" replace /> },
+    ],
+  },
+]);
+
+createRoot(document.getElementById("root")!).render(
+  <RouterProvider router={router} />
 );

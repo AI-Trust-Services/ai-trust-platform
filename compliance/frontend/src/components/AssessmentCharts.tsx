@@ -5,6 +5,7 @@ import {
 } from "recharts";
 import { ASSESSMENT_STATUS_META } from "../utils";
 import type { Assessment } from "../types";
+import { Card } from "@/components/ui/card";
 
 const STATUS_COLORS: Record<string, string> = {
   draft:        "#94a3b8",
@@ -14,7 +15,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  compliance:           "#0a6ed1",
+  compliance:           "#1147E9",
   risk:                 "#dc2626",
   privacy:              "#8b5cf6",
   security:             "#0891b2",
@@ -29,7 +30,9 @@ interface Props {
   assessments: Assessment[];
 }
 
-export default function AssessmentCharts({ assessments }: Props): JSX.Element | null {
+const chartTitle = "mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+
+export default function AssessmentCharts({ assessments }: Props) {
   const statusData = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const a of assessments) counts[a.status] = (counts[a.status] ?? 0) + 1;
@@ -70,10 +73,10 @@ export default function AssessmentCharts({ assessments }: Props): JSX.Element | 
   if (assessments.length === 0) return null;
 
   return (
-    <div className="charts-section">
-      <div className="charts-row">
-        <div className="chart-card">
-          <div className="chart-title">Assessments by Status</div>
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card className="p-4">
+          <div className={chartTitle}>Assessments by Status</div>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={2}>
@@ -85,10 +88,10 @@ export default function AssessmentCharts({ assessments }: Props): JSX.Element | 
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
             </PieChart>
           </ResponsiveContainer>
-        </div>
+        </Card>
 
-        <div className="chart-card">
-          <div className="chart-title">Assessments by Type</div>
+        <Card className="p-4">
+          <div className={chartTitle}>Assessments by Type</div>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie data={typeData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={2}>
@@ -100,22 +103,22 @@ export default function AssessmentCharts({ assessments }: Props): JSX.Element | 
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
             </PieChart>
           </ResponsiveContainer>
-        </div>
+        </Card>
       </div>
 
       {trendData.length > 0 && (
-        <div className="chart-card chart-card--wide">
-          <div className="chart-title">Average Score Trend (Approved Assessments)</div>
+        <Card className="p-4">
+          <div className={chartTitle}>Average Score Trend (Approved Assessments)</div>
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={trendData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="day" tick={{ fontSize: 11 }} tickLine={false} />
               <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit="%" />
               <Tooltip formatter={(v: number) => [`${v}%`, "Avg Score"]} />
-              <Line type="monotone" dataKey="score" stroke="#0a6ed1" strokeWidth={2} dot={{ r: 4, fill: "#0a6ed1" }} activeDot={{ r: 6 }} />
+              <Line type="monotone" dataKey="score" stroke="#1147E9" strokeWidth={2} dot={{ r: 4, fill: "#1147E9" }} activeDot={{ r: 6 }} />
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </Card>
       )}
     </div>
   );

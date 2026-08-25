@@ -150,6 +150,7 @@ services:
       - --email-domain=*
       - --pass-authorization-header=true
       - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout?id_token_hint={id_token}
+      - --upstream-timeout=300s
     depends_on:
       keycloak-provision:
         condition: service_completed_successfully
@@ -292,6 +293,32 @@ services:
       ROOT_PATH: "/api/registry"
       OPENFGA_URL: http://openfga:8080
       KEYCLOAK_URL: http://keycloak:8080
+      USERS_BACKEND_URL: http://users-backend:8008
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-AI Trust Platform}
+      SMTP_SSL: ${SMTP_SSL}
+      SMTP_STARTTLS: ${SMTP_STARTTLS}
+      # AI-assisted registration LLM (defaults to the offline `stub` provider).
+      LLM_PROVIDER: ${LLM_PROVIDER:-stub}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-ollama}
+      LLM_MODEL: ${LLM_MODEL:-llama3.2}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      LLM_VISION_MODEL: ${LLM_VISION_MODEL:-llama3.2-vision}
+      AI_CLIENT_ID: ${AI_CLIENT_ID:-}
+      AI_CLIENT_SECRET: ${AI_CLIENT_SECRET:-}
+      AI_AUTH_URL: ${AI_AUTH_URL:-}
+      AI_API_URL: ${AI_API_URL:-}
+      AI_RESOURCE_GROUP: ${AI_RESOURCE_GROUP:-default}
+      AI_DEPLOYMENT_ID: ${AI_DEPLOYMENT_ID:-}
+      AI_API_VERSION: ${AI_API_VERSION:-bedrock-2023-05-31}
+      ASSIST_TURN_CAP: ${ASSIST_TURN_CAP:-12}
+      ASSIST_MAX_TEXT_LENGTH: ${ASSIST_MAX_TEXT_LENGTH:-15000}
     volumes:
       - openfga-config:/config:ro
     depends_on:
@@ -591,8 +618,54 @@ services:
       start_period: 10s
     restart: on-failure
 
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    restart: on-failure
+
+  # ---------------------------------------------------------------------------
+  # Ollama — local LLM backend for AI-assisted registration (opt-in).
+  # Only starts under the `ollama` profile so stub/CI users aren't forced to
+  # download multi-GB models. To use, set LLM_PROVIDER=ollama in .env and run:
+  #   docker compose --profile ollama up -d
+  # The model is swappable via LLM_MODEL / LLM_VISION_MODEL in .env — the puller
+  # and the registry backend read the same vars (single source of truth). The
+  # registry backend reaches it at http://ollama:11434/v1 (its LLM_BASE_URL default).
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: on-failure
+
+  # One-shot: pulls the configured chat + vision models, then exits. Re-runs are
+  # cheap (ollama skips already-present models).
+  ollama-pull:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama pull ${LLM_MODEL:-llama3.2} &&
+        ollama pull ${LLM_VISION_MODEL:-llama3.2-vision}
+    restart: "no"
+
 volumes:
   postgres_data:
   clickhouse_data:
   minio_data:
   openfga-config:
+  ollama_data:

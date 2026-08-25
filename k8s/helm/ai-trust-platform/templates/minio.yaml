@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.minio.storageSize }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # required for a ReadWriteOnce PVC
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "minio") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "minio") | nindent 8 }}
+    spec:
+      containers:
+        - name: minio
+          image: {{ .Values.minio.image }}
+          args: ["server", "/data", "--console-address", ":9001"]
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # MINIO_ROOT_USER/MINIO_ROOT_PASSWORD
+          ports:
+            - containerPort: 9000
+            - containerPort: 9001
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minio-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+spec:
+  type: NodePort
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "minio") | nindent 4 }}
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+      nodePort: {{ .Values.minio.apiNodePort }}
+    - name: console
+      port: 9001
+      targetPort: 9001
+      nodePort: {{ .Values.minio.consoleNodePort }}

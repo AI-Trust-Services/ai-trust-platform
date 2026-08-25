@@ -1,4 +1,4 @@
-import "@ui5/webcomponents-icons/dist/wrench.js";
+import { Wrench } from "lucide-react";
 import { type ToolCall } from "../lib/spanAttributes";
 import { CopyButton } from "./CopyButton";
 
@@ -27,8 +27,7 @@ export function ToolCalls({ calls }: Props) {
   return (
     <div style={styles.root}>
       <div style={styles.header}>
-        {/* @ts-ignore */}
-        <ui5-icon name="wrench" style={styles.headerIcon} />
+        <Wrench style={styles.headerIcon} />
         <span style={styles.headerLabel}>
           {calls.length === 1 ? "Tool call" : `${calls.length} tool calls`}
         </span>

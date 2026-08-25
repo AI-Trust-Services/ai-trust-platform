@@ -1,9 +1,4 @@
-import "@ui5/webcomponents/dist/Icon.js";
-import "@ui5/webcomponents-icons/dist/performance.js";
-import "@ui5/webcomponents-icons/dist/number-sign.js";
-import "@ui5/webcomponents-icons/dist/ai.js";
-import "@ui5/webcomponents-icons/dist/machine.js";
-import "@ui5/webcomponents-icons/dist/list.js";
+import { List, Timer, Hash, Sparkles, Server, type LucideIcon } from "lucide-react";
 import { type Span } from "../api/traces";
 import { CopyButton } from "./CopyButton";
 import { parseBackendDate } from "../lib/dates";
@@ -39,19 +34,19 @@ export function TraceHeader({ traceId, spans }: Props) {
       </div>
 
       <div style={styles.statBar}>
-        <Stat icon="list" label="Spans" value={String(spans.length)} />
+        <Stat icon={List} label="Spans" value={String(spans.length)} />
         <Divider />
-        <Stat icon="performance" label="Duration" value={formatDuration(totalDurationMs)} />
+        <Stat icon={Timer} label="Duration" value={formatDuration(totalDurationMs)} />
         <Divider />
-        <Stat icon="number-sign" label="Tokens" value={`${(totalInput + totalOutput).toLocaleString()} (${totalInput} in / ${totalOutput} out)`} />
+        <Stat icon={Hash} label="Tokens" value={`${(totalInput + totalOutput).toLocaleString()} (${totalInput} in / ${totalOutput} out)`} />
         <Divider />
-        <Stat icon="ai" label={models.length > 1 ? "Models" : "Model"} value={models.join(", ") || "—"} />
+        <Stat icon={Sparkles} label={models.length > 1 ? "Models" : "Model"} value={models.join(", ") || "—"} />
         <Divider />
-        <Stat icon="machine" label={services.length > 1 ? "Services" : "Service"} value={services.join(", ") || "—"} />
+        <Stat icon={Server} label={services.length > 1 ? "Services" : "Service"} value={services.join(", ") || "—"} />
         {systems.length > 0 && (
           <>
             <Divider />
-            <Stat icon="machine" label="System" value={systems.join(", ")} />
+            <Stat icon={Server} label="System" value={systems.join(", ")} />
           </>
         )}
       </div>
@@ -59,12 +54,11 @@ export function TraceHeader({ traceId, spans }: Props) {
   );
 }
 
-function Stat({ icon, label, value }: { icon: string; label: string; value: string }) {
+function Stat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <div style={styles.stat}>
       <div style={styles.statHeader}>
-        {/* @ts-ignore */}
-        <ui5-icon name={icon} style={styles.statIcon} />
+        <Icon style={styles.statIcon} />
         <span style={styles.statLabel}>{label}</span>
       </div>
       <div style={styles.statValue}>{value}</div>

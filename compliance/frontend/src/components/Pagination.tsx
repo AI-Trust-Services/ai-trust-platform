@@ -1,4 +1,16 @@
 import { useMemo } from "react";
+import {
+  Pagination as PaginationRoot,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationPrevious,
+  PaginationNext,
+  PaginationEllipsis,
+} from "@/components/ui/pagination";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 interface PaginationProps {
   page: number;                 // 1-indexed
@@ -17,7 +29,7 @@ interface PaginationProps {
 export default function Pagination({
   page, pageSize, total, onPageChange, onPageSizeChange,
   pageSizeOptions = [10, 25, 50, 100],
-}: PaginationProps): JSX.Element | null {
+}: PaginationProps) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const clamped = Math.min(page, pageCount);
   const from = total === 0 ? 0 : (clamped - 1) * pageSize + 1;
@@ -40,30 +52,49 @@ export default function Pagination({
   if (total === 0) return null;
 
   return (
-    <div className="pagination">
-      <span className="pagination-summary">{from}–{to} of {total}</span>
-      <div className="pagination-nav">
-        <button className="btn-ghost btn-sm" disabled={clamped <= 1} onClick={() => onPageChange(clamped - 1)}>‹ Prev</button>
-        {pages.map((p, i) =>
-          p === "…"
-            ? <span key={`gap-${i}`} className="pagination-gap">…</span>
-            : <button
-                key={p}
-                className={`btn-ghost btn-sm pagination-page${p === clamped ? " active" : ""}`}
-                onClick={() => onPageChange(p)}
-              >{p}</button>
-        )}
-        <button className="btn-ghost btn-sm" disabled={clamped >= pageCount} onClick={() => onPageChange(clamped + 1)}>Next ›</button>
-      </div>
-      <div className="pagination-size-wrap">
+    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 px-1 pt-3">
+      <span className="justify-self-start text-[13px] text-muted-foreground">{from}–{to} of {total}</span>
+      <PaginationRoot className="mx-0 w-auto justify-self-center">
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationPrevious
+              size="sm"
+              className={clamped <= 1 ? "pointer-events-none opacity-60" : ""}
+              aria-disabled={clamped <= 1}
+              onClick={() => { if (clamped > 1) onPageChange(clamped - 1); }}
+            />
+          </PaginationItem>
+          {pages.map((p, i) =>
+            p === "…"
+              ? <PaginationItem key={`gap-${i}`}><PaginationEllipsis /></PaginationItem>
+              : <PaginationItem key={p}>
+                  <PaginationLink
+                    size="sm"
+                    isActive={p === clamped}
+                    onClick={() => onPageChange(p)}
+                  >{p}</PaginationLink>
+                </PaginationItem>
+          )}
+          <PaginationItem>
+            <PaginationNext
+              size="sm"
+              className={clamped >= pageCount ? "pointer-events-none opacity-60" : ""}
+              aria-disabled={clamped >= pageCount}
+              onClick={() => { if (clamped < pageCount) onPageChange(clamped + 1); }}
+            />
+          </PaginationItem>
+        </PaginationContent>
+      </PaginationRoot>
+      <div className="justify-self-end">
         {onPageSizeChange && (
-          <select
-            className="filter-select pagination-size"
-            value={pageSize}
-            onChange={(e) => onPageSizeChange(Number(e.target.value))}
-          >
-            {pageSizeOptions.map((n) => <option key={n} value={n}>{n} / page</option>)}
-          </select>
+          <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
+            <SelectTrigger className="h-8 w-auto gap-1 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {pageSizeOptions.map((n) => <SelectItem key={n} value={String(n)}>{n} / page</SelectItem>)}
+            </SelectContent>
+          </Select>
         )}
       </div>
     </div>

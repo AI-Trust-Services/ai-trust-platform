@@ -1,5 +1,8 @@
 import type { RiskHeatCell } from "../types";
 import { useMemo } from "react";
+import { Grid3x3 } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { CardTitleBar } from "./CardTitleBar";
 
 interface Props {
   data: RiskHeatCell[];
@@ -38,7 +41,7 @@ function severityColor(tierX: number, residualY: number): string {
   return "#bb0000";                       // red
 }
 
-export default function RiskHeatMap({ data, onClick }: Props): JSX.Element {
+export default function RiskHeatMap({ data, onClick }: Props) {
   const lookup = useMemo(() => {
     const m: Record<string, RiskHeatCell> = {};
     for (const d of data) m[`${d.tier_x}:${d.residual_risk_y}`] = d;
@@ -48,32 +51,38 @@ export default function RiskHeatMap({ data, onClick }: Props): JSX.Element {
   const isEmpty = data.length === 0;
 
   return (
-    <div className="chart-card" onClick={onClick} style={{ cursor: onClick ? "pointer" : undefined, display: "flex", flexDirection: "column" }}>
-      <div className="chart-title">Risk Heat Map</div>
-      <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 8 }}>
-        Systems by risk tier and compliance level — red cells need immediate attention
-      </div>
+    <Card
+      className="flex break-inside-avoid flex-col p-4"
+      onClick={onClick}
+      style={{ cursor: onClick ? "pointer" : undefined }}
+    >
+      <CardTitleBar
+        icon={Grid3x3}
+        title="Risk Heat Map"
+        color="#bb0000"
+        sub="Systems by risk tier and compliance level — red cells need immediate attention"
+      />
 
       {isEmpty ? (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-secondary)", fontSize: 13 }}>
+        <div className="flex flex-1 items-center justify-center py-10 text-[13px] text-muted-foreground">
           No systems registered
         </div>
       ) : (
         <>
-          <div style={{ display: "flex", gap: 8, flex: 1 }}>
+          <div className="flex flex-1 gap-2">
             {/* Y-axis labels */}
-            <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-around", paddingBottom: 20 }}>
+            <div className="flex flex-col justify-around pb-5">
               {Y_ROWS.map((row) => (
-                <div key={row.y} style={{ fontSize: 10, color: "var(--text-secondary)", textAlign: "right", width: 50 }}>
+                <div key={row.y} className="w-[50px] text-right text-[10px] text-muted-foreground">
                   {row.label}
                 </div>
               ))}
             </div>
             {/* Grid + X labels */}
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+            <div className="flex flex-1 flex-col gap-[3px]">
+              <div className="flex flex-1 flex-col gap-[3px]">
                 {Y_ROWS.map((row) => (
-                  <div key={row.y} style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${X_COLS.length}, 1fr)`, gap: 3 }}>
+                  <div key={row.y} className="grid flex-1 gap-[3px]" style={{ gridTemplateColumns: `repeat(${X_COLS.length}, 1fr)` }}>
                     {X_COLS.map((col) => {
                       const cell = lookup[`${col.x}:${row.y}`];
                       const count = cell?.count ?? 0;
@@ -83,17 +92,11 @@ export default function RiskHeatMap({ data, onClick }: Props): JSX.Element {
                         <div
                           key={`${col.x}:${row.y}`}
                           title={count > 0 ? `${col.label} · ${row.desc} · ${count} system${count !== 1 ? "s" : ""}` : `${col.label} · ${row.label} · no systems`}
+                          className="flex min-h-7 items-center justify-center rounded text-[11px] font-semibold"
                           style={{
-                            borderRadius: 4,
                             background: bg,
                             opacity,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: 11,
-                            fontWeight: 600,
                             color: count > 0 ? "#fff" : "transparent",
-                            minHeight: 28,
                           }}
                         >
                           {count > 0 ? count : ""}
@@ -104,9 +107,9 @@ export default function RiskHeatMap({ data, onClick }: Props): JSX.Element {
                 ))}
               </div>
               {/* X-axis labels */}
-              <div style={{ display: "grid", gridTemplateColumns: `repeat(${X_COLS.length}, 1fr)`, gap: 3 }}>
+              <div className="grid gap-[3px]" style={{ gridTemplateColumns: `repeat(${X_COLS.length}, 1fr)` }}>
                 {X_COLS.map((col) => (
-                  <div key={col.x} style={{ fontSize: 10, color: "var(--text-secondary)", textAlign: "center" }}>
+                  <div key={col.x} className="text-center text-[10px] text-muted-foreground">
                     {col.label}
                   </div>
                 ))}
@@ -115,21 +118,21 @@ export default function RiskHeatMap({ data, onClick }: Props): JSX.Element {
           </div>
 
           {/* Color legend */}
-          <div style={{ display: "flex", gap: 12, marginTop: 10, justifyContent: "center", flexWrap: "wrap" }}>
+          <div className="mt-2.5 flex flex-wrap justify-center gap-3">
             {[
               { color: "#1a7a3c", label: "Low risk" },
               { color: "#e9a922", label: "Medium risk" },
               { color: "#e05c00", label: "High risk" },
               { color: "#bb0000", label: "Critical" },
             ].map((l) => (
-              <div key={l.color} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--text-secondary)" }}>
-                <span style={{ width: 10, height: 10, borderRadius: 2, background: l.color, flexShrink: 0 }} />
+              <div key={l.color} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="size-2.5 shrink-0 rounded-sm" style={{ background: l.color }} />
                 {l.label}
               </div>
             ))}
           </div>
         </>
       )}
-    </div>
+    </Card>
   );
 }

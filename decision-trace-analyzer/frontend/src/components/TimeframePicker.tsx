@@ -1,6 +1,6 @@
-import "@ui5/webcomponents/dist/DateTimePicker.js";
-import "@ui5/webcomponents/dist/Button.js";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export interface TimeframeValue {
   /** Backend format: "YYYY-MM-DD HH:mm:ss", interpreted as UTC by the API. */
@@ -19,12 +19,6 @@ const QUICK = [
   { label: "7D", hours: 24 * 7 },
   { label: "1M", hours: 24 * 30 },
 ];
-
-/**
- * Format pattern for `<ui5-datetime-picker>`. Uses 24-hour clock so users can
- * type the value directly without an AM/PM ambiguity.
- */
-const PICKER_FORMAT = "yyyy-MM-dd HH:mm";
 
 /** Format a Date as the backend's UTC "YYYY-MM-DD HH:mm:ss". */
 function toBackendUtc(d: Date): string {
@@ -79,7 +73,7 @@ function activeQuick(value: TimeframeValue): string | null {
 
 /**
  * Combined timeframe filter: three quick buttons (24H / 7D / 1M) plus a Custom
- * range with two `<ui5-datetime-picker>` instances (date + 24h time).
+ * range with two `<DateTimePicker>` instances (date + 24h time).
  *
  * Picker UI is in the user's LOCAL timezone (intuitive: "I want traces from
  * today 14:00") but the API receives UTC, matching how the backend stores
@@ -176,17 +170,13 @@ export function TimeframePicker({ value, onChange }: Props) {
             placeholder="To"
             onChange={(v) => setDraft((d) => ({ ...d, to: v }))}
           />
-          {/* @ts-ignore */}
-          <ui5-button design="Emphasized" disabled={!canApply || undefined} onClick={applyCustom}>
+          <Button size="sm" disabled={!canApply} onClick={applyCustom}>
             Apply
-          {/* @ts-ignore */}
-          </ui5-button>
+          </Button>
           {isCustomActive && (
-            // @ts-ignore
-            <ui5-button design="Transparent" onClick={() => onChange({})}>
+            <Button variant="ghost" size="sm" onClick={() => onChange({})}>
               Clear
-            {/* @ts-ignore */}
-            </ui5-button>
+            </Button>
           )}
           <span style={styles.tzHint}>
             Times in your local timezone ({Intl.DateTimeFormat().resolvedOptions().timeZone})
@@ -198,8 +188,10 @@ export function TimeframePicker({ value, onChange }: Props) {
 }
 
 /**
- * React wrapper around `<ui5-datetime-picker>`. UI5 emits `change` with
- * `{ value, valid }`; we forward only valid values upstream.
+ * Native `<input type="datetime-local">` styled as the kit Input. The picker
+ * works in "yyyy-MM-dd HH:mm" (space-separated) everywhere else in this file,
+ * but datetime-local uses a "T" separator — so we swap the separator on the way
+ * in and out, preserving the exact from/to change contract the parent expects.
  */
 function DateTimePickerField({
   value,
@@ -210,27 +202,17 @@ function DateTimePickerField({
   placeholder: string;
   onChange: (val: string) => void;
 }) {
-  const ref = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { value: string; valid: boolean };
-      if (detail.valid || detail.value === "") onChange(detail.value);
-    };
-    el.addEventListener("change", handler);
-    return () => el.removeEventListener("change", handler);
-  }, [onChange]);
-
+  const inputValue = value ? value.replace(" ", "T") : "";
   return (
-    // @ts-ignore — UI5 web component, no React typings
-    <ui5-datetime-picker
-      ref={ref}
-      value={value}
+    <Input
+      type="datetime-local"
+      value={inputValue}
       placeholder={placeholder}
-      format-pattern={PICKER_FORMAT}
       style={{ minWidth: 200 }}
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange(v ? v.replace("T", " ") : "");
+      }}
     />
   );
 }
@@ -240,17 +222,17 @@ const styles: Record<string, React.CSSProperties> = {
   quickGroup: { display: "flex", gap: 4 },
   quickBtn: {
     background: "none",
-    border: "1px solid var(--color-border)",
+    border: "1px solid var(--border)",
     borderRadius: 4,
     padding: "3px 10px",
-    fontSize: "var(--font-size-sm)",
-    fontFamily: "var(--font-family)",
-    color: "var(--color-text)",
+    fontSize: "0.75rem",
+    fontFamily: "'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    color: "var(--foreground)",
     cursor: "pointer",
   },
   quickBtnActive: {
-    background: "var(--color-brand)",
-    borderColor: "var(--color-brand)",
+    background: "var(--brand)",
+    borderColor: "var(--brand)",
     color: "#fff",
   },
   customRow: {
@@ -259,10 +241,10 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     flexWrap: "wrap" as const,
   },
-  dash: { color: "var(--color-text-secondary)", fontSize: "var(--font-size)" },
+  dash: { color: "var(--text-secondary)", fontSize: "0.875rem" },
   tzHint: {
-    fontSize: "var(--font-size-sm)",
-    color: "var(--color-text-secondary)",
+    fontSize: "0.75rem",
+    color: "var(--text-secondary)",
     marginLeft: 4,
   },
 };

@@ -1,12 +1,4 @@
-import "@ui5/webcomponents/dist/Table.js";
-import "@ui5/webcomponents/dist/TableHeaderRow.js";
-import "@ui5/webcomponents/dist/TableHeaderCell.js";
-import "@ui5/webcomponents/dist/TableRow.js";
-import "@ui5/webcomponents/dist/TableCell.js";
-import "@ui5/webcomponents/dist/Button.js";
-import "@ui5/webcomponents-icons/dist/navigation-left-arrow.js";
-import "@ui5/webcomponents-icons/dist/navigation-right-arrow.js";
-import "@ui5/webcomponents-icons/dist/refresh.js";
+import { ChevronLeft, ChevronRight, RefreshCw, Network } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchTraces, type Trace, type TracesResponse, type TraceFilters } from "../api/traces";
 import { TraceDetail } from "./TraceDetail";
@@ -14,6 +6,7 @@ import { FilterBar } from "../components/FilterBar";
 import { EmptyState } from "../components/EmptyState";
 import { TableSkeleton } from "../components/TableSkeleton";
 import { parseBackendDate } from "../lib/dates";
+import { Button } from "@/components/ui/button";
 
 const PAGE_SIZE = 50;
 
@@ -39,6 +32,7 @@ export function TraceList() {
   const [error, setError] = useState<string | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [filters, setFilters] = useState<TraceFilters>({});
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   // Accumulate known services/models from loaded data for filter dropdowns
   const knownServices = useRef<Set<string>>(new Set());
@@ -88,31 +82,39 @@ export function TraceList() {
       <div style={{ padding: "16px 24px", fontFamily: "var(--font-family)", fontSize: "var(--font-size)" }}>
         {/* Toolbar */}
         <div style={styles.toolbar}>
-          <span style={styles.title}>Trace Explorer</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
+              <Network className="size-5" />
+            </span>
+            <span style={styles.title}>Trace Explorer</span>
+          </div>
           <div style={styles.toolbarRight}>
             {data && data.items.length > 0 && (
               <span style={styles.meta}>
                 {currentPage} of {totalPages} &nbsp;|&nbsp; {data.total} total
               </span>
             )}
-            {/* @ts-ignore */}
-            <ui5-button
-              icon="navigation-left-arrow"
-              tooltip="Previous page"
-              design="Transparent"
-              disabled={offset === 0 || loading || undefined}
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Previous page"
+              disabled={offset === 0 || loading}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-            />
-            {/* @ts-ignore */}
-            <ui5-button
-              icon="navigation-right-arrow"
-              tooltip="Next page"
-              design="Transparent"
-              disabled={!data || offset + PAGE_SIZE >= data.total || loading || undefined}
+            >
+              <ChevronLeft />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Next page"
+              disabled={!data || offset + PAGE_SIZE >= data.total || loading}
               onClick={() => setOffset(offset + PAGE_SIZE)}
-            />
-            {/* @ts-ignore */}
-            <ui5-button icon="refresh" tooltip="Refresh" design="Transparent" onClick={() => load(offset, filters)} />
+            >
+              <ChevronRight />
+            </Button>
+            <Button variant="ghost" size="icon" title="Refresh" onClick={() => load(offset, filters)}>
+              <RefreshCw />
+            </Button>
           </div>
         </div>
 
@@ -145,73 +147,61 @@ export function TraceList() {
 
         {/* Table */}
         {data && data.items.length > 0 && (
-          // @ts-ignore
-          <ui5-table style={{ width: "100%", opacity: loading ? 0.6 : 1 }}>
-            {/* @ts-ignore */}
-            <ui5-table-header-row slot="headerRow">
-              {/* @ts-ignore */}
-              <ui5-table-header-cell width="280px">Trace ID</ui5-table-header-cell>
-              {/* @ts-ignore */}
-              <ui5-table-header-cell>Time</ui5-table-header-cell>
-              {/* @ts-ignore */}
-              <ui5-table-header-cell>Duration</ui5-table-header-cell>
-              {/* @ts-ignore */}
-              <ui5-table-header-cell>Service</ui5-table-header-cell>
-              {/* @ts-ignore */}
-              <ui5-table-header-cell>Operation</ui5-table-header-cell>
-              {/* @ts-ignore */}
-              <ui5-table-header-cell>Tokens</ui5-table-header-cell>
-              {/* @ts-ignore */}
-              <ui5-table-header-cell>Model</ui5-table-header-cell>
-            {/* @ts-ignore */}
-            </ui5-table-header-row>
-
-            {data.items.map((trace: Trace) => (
-              // @ts-ignore
-              <ui5-table-row key={trace.trace_id} onClick={() => setSelectedTraceId(trace.trace_id)}>
-                {/* @ts-ignore */}
-                <ui5-table-cell>
-                  <span style={styles.idCell} title={trace.trace_id}>
-                    {trace.has_error && (
-                      <span style={styles.errorDot} title="At least one span in this trace failed">
-                        ●
+          <div style={styles.tableWrap}>
+            <table style={{ ...styles.table, opacity: loading ? 0.6 : 1 }}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Trace ID</th>
+                  <th style={styles.th}>Time</th>
+                  <th style={styles.th}>Duration</th>
+                  <th style={styles.th}>Service</th>
+                  <th style={styles.th}>Operation</th>
+                  <th style={styles.th}>Tokens</th>
+                  <th style={styles.th}>Model</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((trace: Trace) => (
+                  <tr
+                    key={trace.trace_id}
+                    style={{ ...styles.tr, background: hoveredId === trace.trace_id ? "var(--color-hover-bg)" : undefined }}
+                    onClick={() => setSelectedTraceId(trace.trace_id)}
+                    onMouseEnter={() => setHoveredId(trace.trace_id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                  >
+                    <td style={styles.td}>
+                      <span style={styles.idCell} title={trace.trace_id}>
+                        {trace.has_error && (
+                          <span style={styles.errorDot} title="At least one span in this trace failed">
+                            ●
+                          </span>
+                        )}
+                        {shortId(trace.trace_id)}
                       </span>
-                    )}
-                    {shortId(trace.trace_id)}
-                  </span>
-                {/* @ts-ignore */}
-                </ui5-table-cell>
-                {/* @ts-ignore */}
-                <ui5-table-cell>{formatDate(trace.started_at)}</ui5-table-cell>
-                {/* @ts-ignore */}
-                <ui5-table-cell>{trace.total_duration_s.toFixed(3)}s</ui5-table-cell>
-                {/* @ts-ignore */}
-                <ui5-table-cell>{trace.service_name}</ui5-table-cell>
-                {/* @ts-ignore */}
-                <ui5-table-cell>
-                  {trace.root_span_name ? (
-                    <span style={styles.opName} title={trace.root_span_name}>
-                      {trace.root_span_name}
-                    </span>
-                  ) : (
-                    <span style={styles.opMuted}>—</span>
-                  )}
-                {/* @ts-ignore */}
-                </ui5-table-cell>
-                {/* @ts-ignore */}
-                <ui5-table-cell>{trace.total_tokens.toLocaleString()}</ui5-table-cell>
-                {/* @ts-ignore */}
-                <ui5-table-cell>
-                  {trace.request_model ? (
-                    <span style={styles.modelBadge}>{trace.request_model}</span>
-                  ) : "—"}
-                {/* @ts-ignore */}
-                </ui5-table-cell>
-              {/* @ts-ignore */}
-              </ui5-table-row>
-            ))}
-          {/* @ts-ignore */}
-          </ui5-table>
+                    </td>
+                    <td style={styles.td}>{formatDate(trace.started_at)}</td>
+                    <td style={styles.td}>{trace.total_duration_s.toFixed(3)}s</td>
+                    <td style={styles.td}>{trace.service_name}</td>
+                    <td style={styles.td}>
+                      {trace.root_span_name ? (
+                        <span style={styles.opName} title={trace.root_span_name}>
+                          {trace.root_span_name}
+                        </span>
+                      ) : (
+                        <span style={styles.opMuted}>—</span>
+                      )}
+                    </td>
+                    <td style={styles.td}>{trace.total_tokens.toLocaleString()}</td>
+                    <td style={styles.td}>
+                      {trace.request_model ? (
+                        <span style={styles.modelBadge}>{trace.request_model}</span>
+                      ) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>
@@ -236,6 +226,37 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "10px 14px",
     marginBottom: 12,
     fontSize: "var(--font-size)",
+  },
+  tableWrap: {
+    border: "1px solid var(--color-border)",
+    borderRadius: 6,
+    overflow: "hidden",
+    background: "var(--color-surface)",
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse" as const,
+    fontSize: "var(--font-size)",
+    fontFamily: "var(--font-family)",
+  },
+  th: {
+    textAlign: "left" as const,
+    padding: "10px 16px",
+    fontWeight: 600,
+    fontSize: "var(--font-size-sm)",
+    color: "var(--color-text-secondary)",
+    background: "var(--color-code-bg)",
+    borderBottom: "1px solid var(--color-border)",
+    whiteSpace: "nowrap" as const,
+  },
+  tr: {
+    cursor: "pointer",
+    borderBottom: "1px solid var(--color-border)",
+  },
+  td: {
+    padding: "10px 16px",
+    color: "var(--color-text)",
+    verticalAlign: "middle" as const,
   },
   idCell: {
     fontFamily: "monospace",

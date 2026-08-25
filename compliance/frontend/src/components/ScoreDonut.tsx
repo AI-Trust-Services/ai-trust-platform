@@ -6,12 +6,12 @@ interface Props {
   detail: AssessmentDetail;
 }
 
-export default function ScoreDonut({ detail }: Props): JSX.Element {
+export default function ScoreDonut({ detail }: Props) {
   if (detail.score === null) {
     return (
-      <div style={{ padding: "8px 0" }}>
+      <div className="py-2">
         <ScoreBar score={null} />
-        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>
+        <div className="mt-1.5 text-xs text-muted-foreground">
           {detail.fulfilled_count} / {detail.obligation_count} obligations fulfilled
         </div>
       </div>
@@ -19,25 +19,25 @@ export default function ScoreDonut({ detail }: Props): JSX.Element {
   }
 
   const score = detail.score;
-  const color = score >= 80 ? "#16a34a" : score >= 50 ? "#f59e0b" : "#dc2626";
+  const color = score >= 80 ? "var(--success)" : score >= 50 ? "var(--warning)" : "var(--destructive)";
   const data = [{ value: score }, { value: 100 - score }];
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "8px 0" }}>
-      <div style={{ position: "relative", width: 80, height: 80 }}>
+    <div className="flex items-center gap-4 py-2">
+      <div className="relative size-20">
         <PieChart width={80} height={80} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
           <Pie data={data} dataKey="value" cx={40} cy={40} innerRadius={26} outerRadius={36} startAngle={90} endAngle={-270} paddingAngle={0}>
             <Cell fill={color} />
             <Cell fill="var(--border)" />
           </Pie>
         </PieChart>
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color }}>
+        <div className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color }}>
           {score}%
         </div>
       </div>
       <div>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{score}% compliant</div>
-        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
+        <div className="text-[13px] font-semibold text-foreground">{score}% compliant</div>
+        <div className="mt-1 text-xs text-muted-foreground">
           {detail.fulfilled_count} / {detail.obligation_count} obligations fulfilled
         </div>
       </div>

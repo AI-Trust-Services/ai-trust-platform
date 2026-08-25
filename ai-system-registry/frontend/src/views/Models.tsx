@@ -1,9 +1,16 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { Pencil, Trash2, RefreshCw } from "lucide-react";
 import { ModelTypeBadge } from "../components/Badges";
 import ModelModal from "../components/ModelModal";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
+import { SELECT_CLASS } from "../utils";
 import type { ModelCard } from "../types";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 export default function Models() {
   const [models, setModels] = useState<ModelCard[]>([]);
@@ -65,68 +72,71 @@ export default function Models() {
 
   return (
     <>
-      <div className="toolbar">
-        <input type="text" className="search-input" placeholder="Search models…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="filter-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-6 py-3">
+        <Input type="text" className="w-56" placeholder="Search models…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select className={cn(SELECT_CLASS, "w-auto")} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
           <option value="">All Types</option>
           <option value="llm">LLM</option>
           <option value="embedding">Embedding</option>
           <option value="multimodal">Multimodal</option>
           <option value="classifier">Classifier</option>
         </select>
-        <select className="filter-select" value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)}>
+        <select className={cn(SELECT_CLASS, "w-auto")} value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)}>
           <option value="">All Providers</option>
           {providers.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
-        <div className="toolbar-spacer" />
-        <button className="btn-ghost" onClick={loadModels}>↺ Refresh</button>
-        <button className="btn-primary" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-          onClick={() => { setEditingModel(null); setModalOpen(true); }}>+ Add Model</button>
+        <div className="flex-1" />
+        <Button variant="ghost" onClick={loadModels}><RefreshCw /> Refresh</Button>
+        <Button disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+          onClick={() => { setEditingModel(null); setModalOpen(true); }}>+ Add Model</Button>
       </div>
 
-      <div className="content">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th>Provider</th>
-                <th>Type</th>
-                <th>Version</th>
-                <th>Weights</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+      <div className="px-6 py-5">
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Model</TableHead>
+                <TableHead>Provider</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Version</TableHead>
+                <TableHead>Weights</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filtered.length === 0 ? (
-                <tr className="empty-row"><td colSpan={6}>No model cards found.</td></tr>
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No model cards found.</TableCell>
+                </TableRow>
               ) : filtered.map((m) => (
-                <tr key={m.id} onClick={(e) => e.stopPropagation()} style={{ cursor: "default" }}>
-                  <td>
-                    <div className="system-name">{m.name}</div>
-                    <div className="system-sub">{m.id}{m.description ? ` · ${m.description.slice(0, 60)}` : ""}</div>
-                  </td>
-                  <td style={{ fontSize: 13 }}>{m.provider}</td>
-                  <td><ModelTypeBadge type={m.model_type} /></td>
-                  <td style={{ fontSize: 13, color: "var(--text-secondary)" }}>{m.version || "—"}</td>
-                  <td style={{ fontSize: 13 }}>
+                <TableRow key={m.id} className="hover:bg-transparent">
+                  <TableCell>
+                    <div className="font-medium">{m.name}</div>
+                    <div className="text-xs text-muted-foreground">{m.id}{m.description ? ` · ${m.description.slice(0, 60)}` : ""}</div>
+                  </TableCell>
+                  <TableCell className="text-[13px]">{m.provider}</TableCell>
+                  <TableCell><ModelTypeBadge type={m.model_type} /></TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{m.version || "—"}</TableCell>
+                  <TableCell className="text-[13px]">
                     {m.open_weights
-                      ? <span style={{ color: "#1a5c35", fontWeight: 500 }}>Open</span>
-                      : <span style={{ color: "var(--text-secondary)" }}>Proprietary</span>}
-                  </td>
-                  <td>
-                    <div className="actions">
-                      <button className="btn-icon" title={mayWrite ? "Edit" : noWriteTitle} disabled={!mayWrite}
-                        onClick={() => { setEditingModel(m); setModalOpen(true); }}>✎</button>
-                      <button className="btn-icon btn-danger" title={mayWrite ? "Delete" : noWriteTitle} disabled={!mayWrite}
-                        onClick={() => handleDelete(m.id, m.name)}>✕</button>
+                      ? <span className="font-medium text-[#1a5c35]">Open</span>
+                      : <span className="text-muted-foreground">Proprietary</span>}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" className="size-8" title={mayWrite ? "Edit" : noWriteTitle} disabled={!mayWrite}
+                        onClick={() => { setEditingModel(m); setModalOpen(true); }}><Pencil /></Button>
+                      <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-[var(--danger-fg)]"
+                        title={mayWrite ? "Delete" : noWriteTitle} disabled={!mayWrite}
+                        onClick={() => handleDelete(m.id, m.name)}><Trash2 /></Button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       </div>
 
       <ModelModal

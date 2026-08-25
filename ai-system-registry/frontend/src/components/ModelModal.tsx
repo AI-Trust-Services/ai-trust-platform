@@ -1,7 +1,15 @@
 import { useState, useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
+import { SELECT_CLASS } from "../utils";
 import type { ModelCard, ModelCardFormData } from "../types";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
 
 const EMPTY: ModelCardFormData = { name: "", provider: "", version: "", model_type: "llm", description: "", inference_url: "", open_weights: false };
 
@@ -20,8 +28,6 @@ export default function ModelModal({ open, editingModel, onClose, onSuccess }: P
   useEffect(() => {
     if (open) setForm(editingModel ? { ...EMPTY, ...editingModel } : EMPTY);
   }, [open, editingModel]);
-
-  if (!open) return null;
 
   const set = (k: keyof ModelCardFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: (e.target as HTMLInputElement).type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
@@ -49,61 +55,57 @@ export default function ModelModal({ open, editingModel, onClose, onSuccess }: P
   }
 
   return (
-    <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ maxWidth: 560 }}>
-        <div className="modal-header">
-          <h2>{editingModel ? "Edit Model Card" : "Add Model Card"}</h2>
-          <button className="btn-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <div style={{ padding: 24 }}>
-            <div className="form-grid">
-              <div className="form-group">
-                <label className="required" htmlFor="mc_name">Model Name</label>
-                <input type="text" id="mc_name" value={form.name} onChange={set("name")} placeholder="e.g. GPT-4o" />
-              </div>
-              <div className="form-group">
-                <label className="required" htmlFor="mc_provider">Provider</label>
-                <input type="text" id="mc_provider" value={form.provider} onChange={set("provider")} placeholder="e.g. openai" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="mc_version">Version</label>
-                <input type="text" id="mc_version" value={form.version} onChange={set("version")} placeholder="e.g. 2024-08" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="mc_model_type">Type</label>
-                <select className="form-select" id="mc_model_type" value={form.model_type} onChange={set("model_type")}>
-                  <option value="llm">LLM</option>
-                  <option value="embedding">Embedding</option>
-                  <option value="multimodal">Multimodal</option>
-                  <option value="classifier">Classifier</option>
-                </select>
-              </div>
-              <div className="form-group span2">
-                <label htmlFor="mc_description">Description</label>
-                <textarea id="mc_description" rows={2} value={form.description} onChange={set("description")} placeholder="Brief description…" />
-              </div>
-              <div className="form-group span2">
-                <label htmlFor="mc_inference_url">Inference URL (optional)</label>
-                <input type="url" id="mc_inference_url" value={form.inference_url} onChange={set("inference_url")} placeholder="https://api.example.com/v1" />
-              </div>
-              <div className="form-group span2">
-                <label className="check-item" style={{ fontWeight: 400 }}>
-                  <input type="checkbox" id="mc_open_weights" checked={form.open_weights} onChange={set("open_weights")} style={{ marginTop: 0, accentColor: "var(--brand)" }} />
-                  <span style={{ fontSize: 14 }}>Open weights (publicly available model weights)</span>
-                </label>
-              </div>
-            </div>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-[560px] gap-0 p-0">
+        <DialogHeader>
+          <DialogTitle>{editingModel ? "Edit Model Card" : "Add Model Card"}</DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-4 p-6">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="mc_name">Model Name <span className="text-[var(--danger-fg)]">*</span></Label>
+            <Input type="text" id="mc_name" value={form.name} onChange={set("name")} placeholder="e.g. GPT-4o" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="mc_provider">Provider <span className="text-[var(--danger-fg)]">*</span></Label>
+            <Input type="text" id="mc_provider" value={form.provider} onChange={set("provider")} placeholder="e.g. openai" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="mc_version">Version</Label>
+            <Input type="text" id="mc_version" value={form.version} onChange={set("version")} placeholder="e.g. 2024-08" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="mc_model_type">Type</Label>
+            <select className={SELECT_CLASS} id="mc_model_type" value={form.model_type} onChange={set("model_type")}>
+              <option value="llm">LLM</option>
+              <option value="embedding">Embedding</option>
+              <option value="multimodal">Multimodal</option>
+              <option value="classifier">Classifier</option>
+            </select>
+          </div>
+          <div className="col-span-2 flex flex-col gap-1.5">
+            <Label htmlFor="mc_description">Description</Label>
+            <Textarea id="mc_description" rows={2} value={form.description} onChange={set("description")} placeholder="Brief description…" />
+          </div>
+          <div className="col-span-2 flex flex-col gap-1.5">
+            <Label htmlFor="mc_inference_url">Inference URL (optional)</Label>
+            <Input type="url" id="mc_inference_url" value={form.inference_url} onChange={set("inference_url")} placeholder="https://api.example.com/v1" />
+          </div>
+          <div className="col-span-2">
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox id="mc_open_weights" checked={form.open_weights}
+                onCheckedChange={(c) => setForm((f) => ({ ...f, open_weights: c === true }))} />
+              <span>Open weights (publicly available model weights)</span>
+            </label>
           </div>
         </div>
-        <div className="modal-footer">
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saving}>
-            {saving && <span className="spinner" />}
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />}
             {editingModel ? "Save Changes" : "Add Model"}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

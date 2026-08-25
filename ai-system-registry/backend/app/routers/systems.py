@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 
 from ai_trust_authorization import require_permission
-from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
+from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE, SYSTEMS_APPROVE
 from ai_trust_logging import get_logger
-from app.classifier import classify
+from app.classifier import classify, CLASSIFIER_INPUTS
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.model_card import ModelCard
 from app.schemas import (
-    AISystemCreate,
     AISystemResponse,
     AISystemUpdate,
     IntakeResponse,
@@ -49,7 +48,8 @@ async def get_system(system_id: str) -> AISystemResponse:
 
 
 @router.put("/systems/{system_id}", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
-async def update_system(system_id: str, body: AISystemUpdate) -> AISystemResponse:
+async def update_system(system_id: str, body: AISystemUpdate, request: Request) -> AISystemResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     updates = body.model_dump(exclude_none=True)
 
     immutable_attempted = _IMMUTABLE_FIELDS & updates.keys()
@@ -67,9 +67,22 @@ async def update_system(system_id: str, body: AISystemUpdate) -> AISystemRespons
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
 
+        if row.assignee_username and current_user != row.assignee_username:
+            raise HTTPException(403, "Only the assigned user may update this system")
+
+        flag_updates = CLASSIFIER_INPUTS & updates.keys()
+        if flag_updates and row.workflow_status not in ("draft", "rejected"):
+            raise HTTPException(422, "Risk flags can only be changed while the system is in draft or rejected state")
+
         for field, value in updates.items():
             setattr(row, field, value)
         row.updated_at = datetime.now(timezone.utc)
+
+        if flag_updates:
+            classification = classify(row)
+            row.tier = classification.tier
+            row.basis = classification.basis
+            row.annex_iii_area = classification.annex_iii_area
 
         await session.commit()
         await session.refresh(row)
@@ -78,7 +91,7 @@ async def update_system(system_id: str, body: AISystemUpdate) -> AISystemRespons
     return AISystemResponse.model_validate(row)
 
 
-@router.delete("/systems/{system_id}", dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+@router.delete("/systems/{system_id}", dependencies=[Depends(require_permission(SYSTEMS_APPROVE))])
 async def delete_system(system_id: str) -> dict:
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
@@ -101,8 +114,7 @@ async def reclassify_system(system_id: str) -> IntakeResponse:
             raise HTTPException(404, f"System {system_id} not found")
 
         old_tier = row.tier
-        body = AISystemCreate.model_validate(row, from_attributes=True)
-        classification = classify(body)
+        classification = classify(row)
 
         row.tier = classification.tier
         row.basis = classification.basis
@@ -161,3 +173,4 @@ async def unlink_model(system_id: str) -> AISystemResponse:
 
     logger.info("system.model_unlinked", extra={"system_id": system_id})
     return AISystemResponse.model_validate(row)
+

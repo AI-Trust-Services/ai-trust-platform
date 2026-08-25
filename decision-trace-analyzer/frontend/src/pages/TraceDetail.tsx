@@ -1,5 +1,6 @@
-import "@ui5/webcomponents/dist/Button.js";
+import { X } from "lucide-react";
 import { useState, useEffect, lazy, Suspense } from "react";
+import { Button } from "@/components/ui/button";
 import {
   fetchTraceDetail,
   fetchTraceSummary,
@@ -91,8 +92,9 @@ export function TraceDetail({ traceId, onClose }: Props) {
     <div style={styles.overlay}>
       <div style={styles.topBar}>
         <span style={styles.topTitle}>Trace</span>
-        {/* @ts-ignore */}
-        <ui5-button design="Transparent" onClick={onClose} title="Close (Esc)">✕</ui5-button>
+        <Button variant="ghost" size="icon" onClick={onClose} title="Close (Esc)">
+          <X />
+        </Button>
       </div>
 
       <ViewTabs active={view} onChange={setView} />

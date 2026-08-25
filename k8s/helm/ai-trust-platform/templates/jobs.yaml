@@ -1,0 +1,170 @@
+{{/* One-shot init tasks. Each mirrors a docker-compose one-shot service:
+     restartPolicy: OnFailure ~ compose's `restart: on-failure` for a container
+     that runs once and exits 0. */}}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        {{- include "ai-trust.waitForTcp" (dict "name" "postgres" "port" 5432 "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: db-migrate
+          image: {{ .Values.image.repository }}/db-migrate:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # DATABASE_URL
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: clickhouse-migrate
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        {{- include "ai-trust.waitForHttp" (dict "name" "clickhouse" "port" 8123 "path" "/ping" "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: clickhouse-migrate
+          image: {{ .Values.image.repository }}/clickhouse-migrate:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # CLICKHOUSE_USER/CLICKHOUSE_PASSWORD
+          env:
+            - name: CLICKHOUSE_HOST
+              value: clickhouse
+            - name: CLICKHOUSE_PORT
+              value: "8123"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        {{- include "ai-trust.waitForHttp" (dict "name" "minio" "port" 9000 "path" "/minio/health/live" "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: minio-init
+          image: {{ .Values.minio.mcImage }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # MINIO_ROOT_USER/MINIO_ROOT_PASSWORD
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" &&
+              mc mb --ignore-existing local/clickhouse &&
+              mc mb --ignore-existing local/evidence-files
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-provision
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        {{- include "ai-trust.waitForHttp" (dict "name" "keycloak" "port" 8080 "path" "/realms/master" "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: keycloak-provision
+          image: {{ .Values.image.repository }}/keycloak-provision:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            # KEYCLOAK_ADMIN, KEYCLOAK_ADMIN_PASSWORD, APP_PUBLIC_URL, KEYCLOAK_CLIENT_SECRET,
+            # USERS_BACKEND_CLIENT_SECRET, APP_ADMIN_USERNAME, APP_ADMIN_PASSWORD
+            - secretRef: { name: {{ .Values.secretName }} }
+          env:
+            - name: KEYCLOAK_URL
+              value: http://keycloak:8080
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openfga-migrate
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        {{- include "ai-trust.waitForTcp" (dict "name" "postgres" "port" 5432 "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: openfga-migrate
+          image: {{ .Values.openfga.image }}
+          args: ["migrate"]
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # OPENFGA_DATASTORE_URI
+          env:
+            - name: OPENFGA_DATASTORE_ENGINE
+              value: postgres
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openfga-provision
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        {{- include "ai-trust.waitForTcp" (dict "name" "openfga" "port" 8081 "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: openfga-provision
+          image: {{ .Values.image.repository }}/openfga-provision:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} }
+          env:
+            - name: OPENFGA_URL
+              value: http://openfga:8080
+            - name: INITIAL_ADMIN_USER
+              valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: APP_ADMIN_USERNAME } }
+          volumeMounts:
+            - name: openfga-config
+              mountPath: /config
+      volumes:
+        - name: openfga-config
+          persistentVolumeClaim:
+            claimName: openfga-config
+{{- if .Values.ollama.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ollama-pull
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        {{- include "ai-trust.waitForHttp" (dict "name" "ollama" "port" 11434 "path" "/" "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: ollama-pull
+          image: {{ .Values.ollama.image }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # LLM_MODEL / LLM_VISION_MODEL
+          env:
+            - name: OLLAMA_HOST
+              value: http://ollama:11434
+          command:
+            - /bin/sh
+            - -c
+            - |
+              ollama pull "${LLM_MODEL:-llama3.2}" &&
+              ollama pull "${LLM_VISION_MODEL:-llama3.2-vision}"
+{{- end }}

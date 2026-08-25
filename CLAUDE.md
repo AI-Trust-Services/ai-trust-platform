@@ -10,6 +10,23 @@ docker compose up --build -d
 docker compose down --remove-orphans
 ```
 
+### Run the full platform on local Kubernetes (kind)
+
+Alternative deployment path to docker-compose — both are supported, share the same `.env`, and use
+identical host ports, so don't run them at the same time. See [k8s/README.md](k8s/README.md) for
+full details.
+
+```bash
+cd k8s
+make up      # kind create cluster + bootstrap (namespace/Secret/ConfigMaps) + build&load images + helm install
+make down    # helm uninstall + kind delete cluster
+```
+
+Manifests live in `k8s/helm/ai-trust-platform/` (a Helm chart). Every k8s Service name is fixed to
+the literal docker-compose service name (`postgres`, `ai-system-registry-backend`, etc.) so
+`shell/nginx.conf` and every backend's env vars work unmodified — no image or app code changes were
+needed for this deployment path.
+
 ### Run tests (any backend)
 ```bash
 cd <component>/backend   # e.g. cd compliance/backend
@@ -181,14 +198,15 @@ See [docs/architecture.md](docs/architecture.md) for repo layout, GenAI observab
 ## Frontend stacks
 
 All React frontends (AI System Registry, Alerts, Decision Trace Analyzer, Compliance) share the same pattern:
-- **Build tool:** Vite 6 (`npm run build → dist/`), multi-stage Dockerfile (`node:20-alpine` build → `nginx:alpine` serve)
+- **Stack versions:** React 19, React Router 8, TypeScript 5.8 — use React 19 APIs (no `forwardRef`, no `React.FC` needed, use `use()` hook where applicable); React Router 8 route/loader APIs
+- **Build tool:** Vite 6 (`npm run build → dist/`), multi-stage Dockerfile (`node:24-alpine` build → `nginx:alpine` serve)
 - **Base path:** `base` set in `vite.config.ts` (e.g. `/registry/`) so assets resolve correctly when served under a sub-path via the shell proxy
 - **Routing:** `HashRouter` (compatible with Luigi's `useHashRouting: true`)
 - **Luigi integration:** `@luigi-project/client` npm package; `addInitListener` handshake in `useLuigi.js`
 - **API base URL:** read from `import.meta.env.VITE_*_API_BASE` at build time — all relative paths (e.g. `/api/registry/v1`)
 - **Backend health polling:** shows a red banner with auto-retry if backend is unavailable
 - **nginx headers:** `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding)
-- **UI5 Web Components** — `<ui5-button>` etc. for SAP Fiori look. Import once per file: `import "@ui5/webcomponents/dist/Button.js"` then use as `<ui5-button>` JSX tags
+- **UI5 Web Components** — `@ui5/webcomponents-react` 2.25 for SAP Fiori look. Import named components: `import { Button, ToggleButton } from "@ui5/webcomponents-react"` and use as JSX (`<Button>`, `<ToggleButton pressed={bool}>`). Raw `<ui5-button>` custom elements are not used — always go through the React bindings
 
 **Exceptions:**
 - **Overview** — static HTML served directly by nginx, no build step
@@ -267,6 +285,25 @@ If a container restarts and nginx returns 502, run `docker compose restart shell
 
 Each component has `frontend/` (nginx, internal only) and `backend/` (FastAPI, internal only). All traffic is routed through port 8080 via the shell nginx reverse proxy.
 
+### Dual deployment paths — docker-compose and k8s (kind)
+
+This platform has **two independent, fully-supported local deployment paths**: `docker-compose.yml`
+and the Helm chart under `k8s/helm/ai-trust-platform/` (see [k8s/README.md](k8s/README.md)). Only
+one is usually running in a given session, but **develop and change both together** — don't treat
+the k8s path as a one-off snapshot. Whenever you touch anything that affects how a service runs:
+
+- New service in `docker-compose.yml`? Add the matching Deployment+Service (or Job, for a one-shot
+  task) to the Helm chart, and add its image to `k8s/scripts/build-and-load-images.sh`.
+- New/changed env var or secret? Add it to `.env.example` for docker-compose — it flows through to
+  k8s automatically via `k8s/scripts/bootstrap.sh`'s Secret (sourced from that same `.env`; there is
+  no separate k8s-specific env file by design).
+- New `depends_on: condition:` in compose? Add the matching `waitForTcp`/`waitForHttp`/`waitForJob`
+  initContainer in the Helm chart (helpers defined once in `_helpers.tpl`).
+- Renamed or moved a file that's mounted as a volume/ConfigMap in either path (e.g. `infra/*/init.sh`,
+  `otel-pipeline/**/config`)? Update both `docker-compose.yml`'s `volumes:` **and**
+  `k8s/scripts/bootstrap.sh`'s `--from-file` references — nothing enforces this in CI, a rename on
+  one side silently breaks the other.
+
 ### Adding a new component
 1. Create `new-component/frontend/` and `new-component/backend/`
 2. Create `libs/persistence/ai_trust_persistence/models/your_model.py` and import it in `models/__init__.py`
@@ -278,6 +315,10 @@ Each component has `frontend/` (nginx, internal only) and `backend/` (FastAPI, i
 8. Add proxy routes to `shell/nginx.conf` for the frontend (`/new-component/`) and backend API (`/api/new-component/`)
 9. Add `base: "/new-component/"` to the frontend's `vite.config.ts`
 10. Add nav node to `shell/luigi-config.js` with `viewUrl: "http://localhost:8080/new-component/"`
+11. Add the matching Deployment+Service pair to the k8s Helm chart — if it fits the generic
+    backend+frontend pattern, add an entry to the `components` list in
+    `k8s/helm/ai-trust-platform/values.yaml` (templated once in `templates/components.yaml`); if not,
+    add a new template file. Add the component's image(s) to `k8s/scripts/build-and-load-images.sh`.
 
 ### ai-system-registry/ (internal port 8001, accessed via /api/registry/)
 
@@ -302,6 +343,39 @@ Waterfall — returns at first match, highest priority first:
 | 6 | `minimal` | None of the above |
 
 Classification logic is hardcoded (EU AI Act is law, not config). Obligation texts and thresholds are constants in `classifier.py`.
+
+#### AI-assisted registration
+
+A conversational alternative to the manual intake form. A business owner describes their system in
+plain language (or uploads a document); an LLM extracts descriptive fields and infers the classifier
+boolean flags, then the **same deterministic `classifier.py`** produces the tier. The LLM never
+decides the tier — it only translates natural language into flags. See
+[docs/ai-assisted-registration.md](docs/ai-assisted-registration.md) for the full design.
+
+- **Stateless / bounded-agentic** — the frontend holds the transcript + field state and resends it
+  each turn. Nothing is persisted until the owner confirms at `POST /v1/intake`.
+- `POST /api/v1/intake/assist/turn` — one conversation turn (owner flow). Body: `{transcript[], fields{}}`. Returns
+  `{message, extracted_fields, next_field, complete, degraded, inferred_flags?, classification?}`. On
+  `complete`, the flag-inference prompt runs, `classify()` is applied, and the result is returned.
+  Turn cap (`ASSIST_TURN_CAP`, default 12) → `degraded=true` (offer manual completion).
+- `POST /api/v1/intake/assist/extract` — multipart upload (TXT/MD/PDF/DOCX/PPTX/images). Parses via
+  `documents.py` (max `ASSIST_MAX_TEXT_LENGTH` chars, default 15 000), runs the doc-extract prompt
+  (images use `LLM_VISION_MODEL`). Returns `{extracted_fields, notes}`.
+- `POST /api/v1/intake/assist/engineer/{system_id}/turn` — one conversation turn (engineer flow).
+  Same request/response shape as the owner turn; uses a different prompt focused on technical fields
+  (version, provider, system type, lifecycle, autonomy level).
+- `POST /api/v1/intake/assist/engineer/{system_id}/extract` — same as owner extract but scoped to an
+  existing system.
+- `POST /api/v1/intake` accepts the AI-collected descriptive fields, classifier flags, and
+  `classification_rationale` (a JSONB array of `{flag, value, rationale, confidence}`); when any flags
+  are present it runs `classify()` and persists the real tier. Manual owner mode sends no flags and
+  stays a `pending` stub for the engineer to complete.
+- **LLM layer** (`app/llm/`) — provider dispatch via `LLM_PROVIDER`: `stub` (default; deterministic,
+  offline, drives the full flow with no network — used in dev/CI), `ollama` (OpenAI-compatible), or
+  `external` (external provider, OAuth2 + Anthropic-format `/invoke`; fails fast at import on missing creds).
+  Malformed JSON gets one auto-repair retry, then `LLMParseError` → the route returns 502 and the UI
+  falls back to the manual form.
+- **All four assist routes gated** `require_permission(SYSTEMS_WRITE)`.
 
 ### overview/ (internal port 8004, accessed via /api/overview/)
 
@@ -453,6 +527,29 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `MINIO_SECURE` | compliance-backend | `false` | Set to `true` if MinIO is behind TLS |
 | `MINIO_REGION` | compliance-backend | `us-east-1` | Region used when presigning — avoids a GetBucketLocation network call from inside the container |
 | `ALERT_POLL_INTERVAL` | policy-checker-worker | `10` | Rule evaluation interval in seconds (use `60`+ in production) |
+| `SMTP_HOST` | ai-system-registry-backend | *(required)* | SMTP server hostname |
+| `SMTP_PORT` | ai-system-registry-backend | *(required)* | SMTP server port |
+| `SMTP_USER` | ai-system-registry-backend | *(optional)* | SMTP username — omit if the server requires no auth |
+| `SMTP_PASSWORD` | ai-system-registry-backend | *(optional)* | SMTP password — omit if the server requires no auth |
+| `SMTP_FROM` | ai-system-registry-backend | *(required)* | Envelope / From address for outgoing notifications |
+| `SMTP_FROM_NAME` | ai-system-registry-backend | `AI Trust Platform` | Display name in the From header |
+| `SMTP_SSL` | ai-system-registry-backend | *(required)* | `true` to use implicit TLS, `false` otherwise |
+| `SMTP_STARTTLS` | ai-system-registry-backend | *(required)* | `true` to upgrade with STARTTLS, `false` otherwise |
+| `USERS_BACKEND_URL` | ai-system-registry-backend | `http://users-backend:8008` | Internal URL of the users backend — used for email address lookups |
+| `LLM_PROVIDER` | ai-system-registry-backend | `stub` | AI-assisted registration provider: `stub` (offline/deterministic), `ollama`, or `external` |
+| `LLM_BASE_URL` | ai-system-registry-backend | `http://ollama:11434/v1` | OpenAI-compatible endpoint (used when `LLM_PROVIDER=ollama`) |
+| `LLM_API_KEY` | ai-system-registry-backend | `ollama` | API key for the OpenAI-compatible endpoint |
+| `LLM_MODEL` | ai-system-registry-backend | `llama3.2` | Text/JSON model for conversation + flag inference |
+| `LLM_VISION_MODEL` | ai-system-registry-backend | `llama3.2-vision` | Vision model for image document extraction |
+| `AI_CLIENT_ID` | ai-system-registry-backend | *(required if external)* | External provider OAuth2 client ID |
+| `AI_CLIENT_SECRET` | ai-system-registry-backend | *(required if external)* | External provider OAuth2 client secret |
+| `AI_AUTH_URL` | ai-system-registry-backend | *(required if external)* | External provider OAuth2 token URL |
+| `AI_API_URL` | ai-system-registry-backend | *(required if external)* | External provider inference base URL |
+| `AI_RESOURCE_GROUP` | ai-system-registry-backend | `default` | External provider resource group (`AI-Resource-Group` header) |
+| `AI_DEPLOYMENT_ID` | ai-system-registry-backend | *(required if external)* | External provider deployment ID for the `/invoke` endpoint |
+| `AI_API_VERSION` | ai-system-registry-backend | `bedrock-2023-05-31` | Anthropic API version header sent to the external provider |
+| `ASSIST_TURN_CAP` | ai-system-registry-backend | `12` | Max conversation turns before `degraded=true` is returned |
+| `ASSIST_MAX_TEXT_LENGTH` | ai-system-registry-backend | `15000` | Max characters extracted from uploaded documents before truncation |
 
 All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code.
 

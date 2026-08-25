@@ -1,14 +1,16 @@
-import "@ui5/webcomponents/dist/Select.js";
-import "@ui5/webcomponents/dist/Option.js";
-import "@ui5/webcomponents/dist/Button.js";
-import "@ui5/webcomponents/dist/ToggleButton.js";
-import "@ui5/webcomponents-icons/dist/filter.js";
-import "@ui5/webcomponents-icons/dist/reset.js";
-import "@ui5/webcomponents-icons/dist/error.js";
-import { useEffect, useRef } from "react";
+import { Filter, CircleAlert, RotateCcw } from "lucide-react";
 import { type TraceFilters } from "../api/traces";
 import { TimeframePicker } from "./TimeframePicker";
 import { TraceIdSearch } from "./TraceIdSearch";
+import { Button } from "@/components/ui/button";
+import { Toggle } from "@/components/ui/toggle";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Props {
   filters: TraceFilters;
@@ -17,7 +19,12 @@ interface Props {
   onChange: (filters: TraceFilters) => void;
 }
 
-function Ui5Select({
+// Radix Select disallows an empty-string item value, so the "all" option uses
+// a sentinel that maps back to "" (cleared) in the change handler — preserving
+// the original contract where selecting the placeholder clears the filter.
+const ALL = "__all__";
+
+function KitSelect({
   value,
   options,
   placeholder,
@@ -28,30 +35,21 @@ function Ui5Select({
   placeholder: string;
   onChange: (val: string) => void;
 }) {
-  const ref = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { selectedOption: { value: string } };
-      onChange(detail.selectedOption.value);
-    };
-    el.addEventListener("change", handler);
-    return () => el.removeEventListener("change", handler);
-  }, [onChange]);
-
   return (
-    // @ts-ignore
-    <ui5-select ref={ref} style={{ minWidth: 140 }}>
-      {/* @ts-ignore */}
-      <ui5-option value="">{placeholder}</ui5-option>
-      {options.map((o) => (
-        // @ts-ignore
-        <ui5-option key={o} value={o} selected={value === o || undefined}>{o}</ui5-option>
-      ))}
-    {/* @ts-ignore */}
-    </ui5-select>
+    <Select
+      value={value || ALL}
+      onValueChange={(v) => onChange(v === ALL ? "" : v)}
+    >
+      <SelectTrigger className="h-8" style={{ minWidth: 140 }}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL}>{placeholder}</SelectItem>
+        {options.map((o) => (
+          <SelectItem key={o} value={o}>{o}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -67,8 +65,7 @@ export function FilterBar({ filters, services, models, onChange }: Props) {
 
   return (
     <div style={styles.bar}>
-      {/* @ts-ignore */}
-      <ui5-icon name="filter" style={styles.icon} />
+      <Filter style={styles.icon} />
 
       <TraceIdSearch
         value={filters.trace_id}
@@ -84,40 +81,39 @@ export function FilterBar({ filters, services, models, onChange }: Props) {
 
       <div style={styles.divider} />
 
-      <Ui5Select
+      <KitSelect
         value={filters.service_name}
         options={services}
         placeholder="All services"
         onChange={(val) => onChange({ ...filters, service_name: val || undefined })}
       />
 
-      <Ui5Select
+      <KitSelect
         value={filters.model}
         options={models}
         placeholder="All models"
         onChange={(val) => onChange({ ...filters, model: val || undefined })}
       />
 
-      {/* @ts-ignore */}
-      <ui5-toggle-button
-        icon="error"
-        design={filters.errors_only ? "Negative" : "Default"}
-        pressed={filters.errors_only || undefined}
-        onClick={() =>
+      <Toggle
+        variant="outline"
+        size="sm"
+        pressed={!!filters.errors_only}
+        onPressedChange={() =>
           onChange({ ...filters, errors_only: filters.errors_only ? undefined : true })
         }
+        className="data-[state=on]:bg-[var(--danger-bg)] data-[state=on]:text-[var(--danger-fg)] data-[state=on]:border-[var(--danger-border)]"
         title="Show only traces with at least one errored span"
       >
+        <CircleAlert />
         Errors only
-      {/* @ts-ignore */}
-      </ui5-toggle-button>
+      </Toggle>
 
       {hasFilters && (
-        // @ts-ignore
-        <ui5-button design="Transparent" icon="reset" onClick={() => onChange({})}>
+        <Button variant="ghost" size="sm" onClick={() => onChange({})}>
+          <RotateCcw />
           Reset
-        {/* @ts-ignore */}
-        </ui5-button>
+        </Button>
       )}
     </div>
   );
@@ -128,13 +124,13 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: 10,
-    background: "var(--color-surface)",
-    border: "1px solid var(--color-border)",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
     borderRadius: 8,
     padding: "8px 16px",
     marginBottom: 16,
     flexWrap: "wrap" as const,
   },
-  icon: { color: "var(--color-text-secondary)", width: 16, height: 16 } as React.CSSProperties,
-  divider: { width: 1, height: 20, background: "var(--color-border)" },
+  icon: { color: "var(--text-secondary)", width: 16, height: 16 } as React.CSSProperties,
+  divider: { width: 1, height: 20, background: "var(--border)" },
 };

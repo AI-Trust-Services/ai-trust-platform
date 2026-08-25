@@ -4,14 +4,29 @@ from app.schemas.ai_system import (
     AISystemUpdate,
     AISystemResponse,
     ClassificationResult,
+    RationaleItem,
     IntakeResponse,
+    FieldConfirmationPatch,
     VALID_LIFECYCLES,
     VALID_ROLES,
+)
+from app.schemas.intake_assist import (
+    ChatMessage,
+    AssistTurnRequest,
+    AssistTurnResponse,
+    AssistExtractResponse,
+    InferredFlag,
 )
 from app.schemas.model_card import (
     ModelCardCreate,
     ModelCardUpdate,
     ModelCardResponse,
+)
+from app.schemas.workflow import (
+    WorkflowStepResponse,
+    WorkflowSubmitRequest,
+    WorkflowApproveRequest,
+    WorkflowRejectRequest,
 )
 
 __all__ = [
@@ -19,10 +34,21 @@ __all__ = [
     "AISystemUpdate",
     "AISystemResponse",
     "ClassificationResult",
+    "RationaleItem",
     "IntakeResponse",
+    "FieldConfirmationPatch",
     "VALID_LIFECYCLES",
     "VALID_ROLES",
+    "ChatMessage",
+    "AssistTurnRequest",
+    "AssistTurnResponse",
+    "AssistExtractResponse",
+    "InferredFlag",
     "ModelCardCreate",
     "ModelCardUpdate",
     "ModelCardResponse",
+    "WorkflowStepResponse",
+    "WorkflowSubmitRequest",
+    "WorkflowApproveRequest",
+    "WorkflowRejectRequest",
 ]

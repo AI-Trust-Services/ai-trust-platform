@@ -1,4 +1,4 @@
-export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal";
+export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal" | "pending";
 export type LifecycleKey = "development" | "testing" | "conformity" | "market" | "post-market" | "decommissioned";
 export type OrgRole = "provider" | "deployer" | "importer" | "distributor";
 export type SystemType = "application" | "model" | "component" | "service";
@@ -26,6 +26,9 @@ export interface AISystem {
   model_id: string | null;
   created_at: string;
   updated_at: string;
+  workflow_status: string;
+  assignee_username: string | null;
+  compliance_officer_username: string | null;
   is_gpai: boolean;
   training_compute_flops: number;
   is_chatbot: boolean;
@@ -47,6 +50,37 @@ export interface AISystem {
   is_law_enforcement: boolean;
   is_migration: boolean;
   is_judicial_admin: boolean;
+  field_confirmations: Record<string, boolean> | null;
+}
+
+export interface WorkflowStep {
+  id: string;
+  step: string;
+  actor_username: string;
+  assignee_username: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface UserSummary {
+  username: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface WorkflowStep {
+  id: string;
+  step: string;
+  actor_username: string;
+  assignee_username: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface UserSummary {
+  username: string;
+  firstName: string;
+  lastName: string;
 }
 
 export interface ModelCard {
@@ -64,6 +98,43 @@ export interface PreviewResult {
   tier: TierKey;
   basis: string;
   obligations: string[];
+}
+
+// ── AI-assisted registration ──────────────────────────────────────────────
+export type ChatRole = "user" | "assistant" | "system";
+
+export interface ChatMessage {
+  role: ChatRole;
+  content: string;
+}
+
+export interface RationaleItem {
+  flag: string;
+  value: boolean | number;
+  rationale: string;
+  confidence: number;
+}
+
+export interface ClassificationResult {
+  tier: TierKey;
+  basis: string;
+  obligations: string[];
+  annex_iii_area: number | null;
+}
+
+export interface AssistTurnResponse {
+  message: string;
+  extracted_fields: Record<string, unknown>;
+  next_field: string | null;
+  complete: boolean;
+  degraded: boolean;
+  inferred_flags: RationaleItem[] | null;
+  classification: ClassificationResult | null;
+}
+
+export interface AssistExtractResponse {
+  extracted_fields: Record<string, unknown>;
+  notes: string | null;
 }
 
 export interface AISystemFormData {

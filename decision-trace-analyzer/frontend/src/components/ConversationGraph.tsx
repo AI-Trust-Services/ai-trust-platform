@@ -1,5 +1,4 @@
-import "@ui5/webcomponents-icons/dist/person-placeholder.js";
-import "@ui5/webcomponents-icons/dist/discussion.js";
+import { User, MessageSquare } from "lucide-react";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   ReactFlow,
@@ -194,8 +193,9 @@ function BubbleNode({
           of the stack into this bubble. Only the assistant ever uses it. */}
       <Handle id="skip-in" type="target" position={Position.Left} style={handleStyles.hidden} />
       <div style={{ ...nodeStyles.bubbleHeader, color: accent }}>
-        {/* @ts-ignore */}
-        <ui5-icon name={variant === "user" ? "person-placeholder" : "discussion"} style={{ width: 14, height: 14 } as React.CSSProperties} />
+        {variant === "user"
+          ? <User style={{ width: 14, height: 14 } as React.CSSProperties} />
+          : <MessageSquare style={{ width: 14, height: 14 } as React.CSSProperties} />}
         {flowNode.label}
       </div>
       <div style={nodeStyles.bubbleText}>{flowNode.text}</div>

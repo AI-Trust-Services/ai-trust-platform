@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet } from "react-router";
+import { Loader2, Plus, LayoutDashboard } from "lucide-react";
 import { useLuigiInit, navigateTo } from "./hooks/useLuigi";
+import { useTheme } from './hooks/useTheme';
 import { usePermissions } from "./hooks/usePermissions";
-import { api, HEALTH_URL, ALERTS_URL, REGISTRY_URL } from "./api/client";
+import { api, HEALTH_URL, REGISTRY_URL } from "./api/client";
+import { Button } from "@/components/ui/button";
+
 type ToastFn = (msg: string, isError?: boolean) => void;
 const ToastContext = createContext<ToastFn | null>(null);
 export const useToast = () => useContext(ToastContext)!;
@@ -10,8 +14,6 @@ export const useToast = () => useContext(ToastContext)!;
 interface HeaderControls {
   alertCount: number;
   registryUrl: string;
-  alertsUrl: string;
-  onNavigateAlerts: (e: React.MouseEvent) => void;
 }
 export const HeaderContext = createContext<HeaderControls | null>(null);
 export const useHeader = () => useContext(HeaderContext)!;
@@ -26,6 +28,7 @@ export default function App() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useLuigiInit(() => {});
+  useTheme();
 
   const checkHealth = useCallback(async () => {
     if (healthTimer.current) clearTimeout(healthTimer.current);
@@ -65,50 +68,56 @@ export default function App() {
 
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
-  function handleNavigateAlerts(e: React.MouseEvent) {
-    e.preventDefault();
-    navigateTo("/home/alerts", ALERTS_URL);
+  function handleNavigateRegistry() {
+    navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
 
   return (
     <ToastContext.Provider value={showToast}>
-      <HeaderContext.Provider value={{
-        alertCount,
-        registryUrl: REGISTRY_URL,
-        alertsUrl: ALERTS_URL,
-        onNavigateAlerts: handleNavigateAlerts,
-      }}>
-        <div className="page-header">
-          <div className="header-left">
-            <h1>Compliance Overview</h1>
-            <p>Organisation compliance posture at a glance</p>
+      <HeaderContext.Provider value={{ alertCount, registryUrl: REGISTRY_URL }}>
+        <header className="flex h-14 items-center justify-between border-b border-border bg-card px-6 print:hidden">
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
+              <LayoutDashboard className="size-5" />
+            </span>
+            <div className="flex flex-col justify-center">
+              <h1 className="text-lg font-semibold tracking-[-0.01em]">Compliance Overview</h1>
+              <p className="mt-0.5 text-xs text-muted-foreground">Organisation compliance posture at a glance</p>
+            </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <a href="#" style={{ textDecoration: "none" }} onClick={handleNavigateAlerts}>
-              <button className={`alert-bell-btn${alertCount > 0 ? " has-errors" : ""}`}>
-                Alerts
-                {alertCount > 0 && <span className="alert-badge">{alertCount}</span>}
-              </button>
-            </a>
-            <button className="btn-primary" onClick={() => { navigateTo("/home/ai-system-registry", REGISTRY_URL); }}
-              disabled={!mayRegister} title={mayRegister ? undefined : "Requires permission: systems:write"}>
-              + Register System
-            </button>
-          </div>
-        </div>
+          <Button
+            onClick={handleNavigateRegistry}
+            disabled={!mayRegister}
+            title={mayRegister ? undefined : "Requires permission: systems:write"}
+          >
+            <Plus />
+            Register System
+          </Button>
+        </header>
 
         {backendOk === false && (
-          <div className="health-banner show">
-            <span className="spinner" style={{ borderTopColor: "#8b0000", borderColor: "#f5b8b8", width: 14, height: 14 }} />
-            <span>Backend is unavailable. Retrying in 5 s…</span>
-            <button className="btn-link" onClick={checkHealth}>Retry now</button>
+          <div className="flex items-center gap-3 border-b border-[var(--danger-border)] bg-[var(--danger-bg)] px-6 py-2.5 text-[13px] text-[var(--danger-fg)] print:hidden">
+            <Loader2 className="size-3.5 animate-spin" />
+            <span>Backend is unavailable. Retrying in 5&nbsp;s…</span>
+            <button
+              className="cursor-pointer border-none bg-transparent p-0 font-semibold text-[var(--danger-fg)] underline"
+              onClick={checkHealth}
+            >
+              Retry now
+            </button>
           </div>
         )}
 
         <Outlet />
 
         {toast && (
-          <div className={`toast show${toast.isError ? " error" : ""}`}>{toast.msg}</div>
+          <div className="fixed bottom-6 right-6 z-[2000] flex items-center gap-2.5 rounded-xl bg-foreground px-5 py-3 text-sm text-background shadow-[var(--shadow-md)]">
+            <span
+              className="size-1.5 shrink-0 rounded-full"
+              style={{ background: toast.isError ? "var(--destructive)" : "var(--success)" }}
+            />
+            {toast.msg}
+          </div>
         )}
       </HeaderContext.Provider>
     </ToastContext.Provider>

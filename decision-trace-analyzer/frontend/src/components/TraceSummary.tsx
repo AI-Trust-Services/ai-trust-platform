@@ -1,13 +1,15 @@
-import "@ui5/webcomponents/dist/Icon.js";
-import "@ui5/webcomponents-icons/dist/sys-enter-2.js";
-import "@ui5/webcomponents-icons/dist/decline.js";
-import "@ui5/webcomponents-icons/dist/warning.js";
-import "@ui5/webcomponents-icons/dist/error.js";
-import "@ui5/webcomponents-icons/dist/question-mark.js";
-import "@ui5/webcomponents-icons/dist/navigation-down-arrow.js";
-import "@ui5/webcomponents-icons/dist/navigation-right-arrow.js";
-import "@ui5/webcomponents-icons/dist/information.js";
-import "@ui5/webcomponents-icons/dist/alert.js";
+import {
+  ChevronRight,
+  ChevronDown,
+  CheckCircle2,
+  XCircle,
+  TriangleAlert,
+  CircleX,
+  HelpCircle,
+  Info,
+  Check,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   type DecisionFlag,
@@ -121,11 +123,9 @@ export function TraceSummary({ summary, loading, error }: Props) {
         aria-expanded={!collapsed}
         title={collapsed ? "Expand decision summary" : "Collapse decision summary"}
       >
-        {/* @ts-ignore */}
-        <ui5-icon
-          name={collapsed ? "navigation-right-arrow" : "navigation-down-arrow"}
-          style={styles.caret}
-        />
+        {collapsed
+          ? <ChevronRight style={styles.caret} />
+          : <ChevronDown style={styles.caret} />}
         <span style={styles.title}>Decision Summary</span>
 
         {loading && <span style={styles.loadingChip}>Loading…</span>}
@@ -135,8 +135,7 @@ export function TraceSummary({ summary, loading, error }: Props) {
 
         {summary && (
           <span style={{ ...styles.badge, background: badge.bg, color: badge.fg }}>
-            {/* @ts-ignore */}
-            <ui5-icon name={badge.icon} style={styles.badgeIcon} />
+            <badge.icon style={styles.badgeIcon} />
             {badge.label}
           </span>
         )}
@@ -242,8 +241,7 @@ function AnomalyRow({
   if (!detected) {
     return (
       <div style={styles.flagRowQuiet}>
-        {/* @ts-ignore */}
-        <ui5-icon name="sys-enter-2" style={styles.flagIconQuiet} />
+        <Check style={styles.flagIconQuiet} />
         <span style={styles.flagLabelQuiet}>{label}</span>
         <span style={styles.flagDetailQuiet}>{detail}</span>
       </div>
@@ -265,11 +263,9 @@ function AnomalyRow({
         borderLeft: `3px solid ${accent}`,
       }}
     >
-      {/* @ts-ignore */}
-      <ui5-icon
-        name={isWarn ? "alert" : "information"}
-        style={{ ...styles.flagIcon, color: accent }}
-      />
+      {isWarn
+        ? <TriangleAlert style={{ ...styles.flagIcon, color: accent }} />
+        : <Info style={{ ...styles.flagIcon, color: accent }} />}
       <span style={styles.flagLabel}>{label}</span>
       <span style={styles.flagDetail}>{detail}</span>
     </div>
@@ -391,7 +387,7 @@ function SkeletonBody() {
 
 interface BadgeStyle {
   label: string;
-  icon: string;
+  icon: LucideIcon;
   bg: string;
   fg: string;
 }
@@ -401,28 +397,28 @@ function outcomeBadge(outcome: DecisionOutcome): BadgeStyle {
     case "answered":
       return {
         label: "Answered",
-        icon: "sys-enter-2",
+        icon: CheckCircle2,
         bg: "var(--color-success-bg, #e3f4e6)",
         fg: "var(--color-success-text, #15803d)",
       };
     case "refused":
       return {
         label: "Refused",
-        icon: "decline",
+        icon: XCircle,
         bg: "var(--color-warning-bg, #fef3c7)",
         fg: "var(--color-warning-text, #b45309)",
       };
     case "partial":
       return {
         label: "Partial",
-        icon: "warning",
+        icon: TriangleAlert,
         bg: "var(--color-warning-bg, #fef3c7)",
         fg: "var(--color-warning-text, #b45309)",
       };
     case "errored":
       return {
         label: "Errored",
-        icon: "error",
+        icon: CircleX,
         bg: "var(--color-error-bg, #fee2e2)",
         fg: "var(--color-error-text, #b91c1c)",
       };
@@ -430,7 +426,7 @@ function outcomeBadge(outcome: DecisionOutcome): BadgeStyle {
     default:
       return {
         label: "Unknown",
-        icon: "question-mark",
+        icon: HelpCircle,
         bg: "var(--color-surface-alt, #f1f5f9)",
         fg: "var(--color-text-secondary, #475569)",
       };

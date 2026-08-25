@@ -1,9 +1,19 @@
 import { useState, useEffect, useRef, Fragment } from "react";
+import { Loader2, X, ChevronDown, ChevronRight, Copy } from "lucide-react";
 import { TierBadge } from "./Badges";
-import { previewClassify, copyToClipboard } from "../utils";
+import { previewClassify, copyToClipboard, SELECT_CLASS } from "../utils";
 import { api } from "../api/client";
 import { useToast } from "../App";
-import type { AISystemFormData } from "../types";
+import type { AISystem, AISystemFormData, UserSummary } from "../types";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 
 const EMPTY_FORM: AISystemFormData = {
   name: "", version: "1.0.0", provider: "", org_name: "",
@@ -22,24 +32,27 @@ const EMPTY_FORM: AISystemFormData = {
   is_chatbot: false, generates_synthetic_content: false,
 };
 
-const STEPS = ["Identity", "Purpose & Lifecycle", "Risk Flags", "Review"];
+const ENGINEER_STEPS = ["Purpose & Lifecycle", "Risk Flags", "Review"];
+const OWNER_STEPS = ["System Details", "Assign & Register"];
 
+// Re-themed "panel" — a bordered card with a muted header. No shadcn primitive
+// maps to this collapsible section, so it stays styled markup on the new tokens.
 function CollapsiblePanel({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
   return (
-    <div className="panel">
-      <div className="panel-header" onClick={() => setOpen((o) => !o)}>
-        {title} <span>{open ? "▼" : "▶"}</span>
-      </div>
-      {open && <div className="panel-body">{children}</div>}
-    </div>
+    <Collapsible open={open} onOpenChange={setOpen} className="mb-3 overflow-hidden rounded-md border border-border">
+      <CollapsibleTrigger className="flex w-full items-center justify-between bg-muted/40 px-4 py-2.5 text-sm font-medium">
+        {title} {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="p-4">{children}</CollapsibleContent>
+    </Collapsible>
   );
 }
 
-function CheckItem({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: React.ChangeEventHandler<HTMLInputElement> }) {
+function CheckItem({ id, label, checked, onCheckedChange }: { id: string; label: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
   return (
-    <label className="check-item">
-      <input type="checkbox" id={id} checked={checked} onChange={onChange} />
+    <label className="flex items-start gap-2 text-sm" htmlFor={id}>
+      <Checkbox id={id} checked={checked} onCheckedChange={(c) => onCheckedChange(c === true)} className="mt-0.5" />
       <span>{label}</span>
     </label>
   );
@@ -49,41 +62,113 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  system?: AISystem;
 }
 
-export default function RegisterWizard({ open, onClose, onSuccess }: Props) {
+export default function RegisterWizard({ open, onClose, onSuccess, system }: Props) {
+  const isEngineerMode = !!system;
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<AISystemFormData>(EMPTY_FORM);
+  const [assigneeUsername, setAssigneeUsername] = useState("");
+  const [complianceOfficerUsername, setComplianceOfficerUsername] = useState("");
+  const [engineers, setEngineers] = useState<UserSummary[]>([]);
+  const [complianceOfficers, setComplianceOfficers] = useState<UserSummary[]>([]);
+  const [ownerExtra, setOwnerExtra] = useState({ department: "", use_case: "", people_affected: "", decision_context: "" });
+  const setOwnerField = (key: string, value: string) => { setOwnerExtra(x => ({ ...x, [key]: value })); setFlagsConfirmed(false); };
   const [loading, setLoading] = useState(false);
+  const [flagsConfirmed, setFlagsConfirmed] = useState(false);
   const submitting = useRef(false);
-  const [registeredId, setRegisteredId] = useState<string | null>(null);
+  const [doneId, setDoneId] = useState<string | null>(null);
   const showToast = useToast();
 
   useEffect(() => {
-    if (open) { setStep(0); setForm(EMPTY_FORM); setRegisteredId(null); submitting.current = false; }
-  }, [open]);
+    if (!open) return;
+    setStep(0);
+    setDoneId(null);
+    setFlagsConfirmed(false);
+    submitting.current = false;
+    if (isEngineerMode) {
+      setForm({
+        name: system.name || "",
+        version: system.version || "1.0.0",
+        provider: system.provider || "",
+        org_name: system.org_name || "",
+        org_role: system.org_role || "provider",
+        provider_country: system.provider_country || "DE",
+        system_type: system.system_type || "application",
+        autonomy_level: system.autonomy_level || "decision_support",
+        application_url: system.application_url || "",
+        description: system.description || "",
+        intended_purpose: system.intended_purpose || "",
+        lifecycle: system.lifecycle || "development",
+        subliminal_manipulation: system.subliminal_manipulation,
+        exploits_vulnerability: system.exploits_vulnerability,
+        social_scoring_public: system.social_scoring_public,
+        real_time_biometric_public: system.real_time_biometric_public,
+        emotion_recognition_workplace: system.emotion_recognition_workplace,
+        untargeted_facial_scraping: system.untargeted_facial_scraping,
+        predictive_policing: system.predictive_policing,
+        biometric_categorisation_sensitive: system.biometric_categorisation_sensitive,
+        is_biometric_identification: system.is_biometric_identification,
+        is_critical_infrastructure: system.is_critical_infrastructure,
+        is_education_related: system.is_education_related,
+        is_employment_related: system.is_employment_related,
+        is_credit_scoring: system.is_credit_scoring,
+        is_public_service: system.is_public_service,
+        is_law_enforcement: system.is_law_enforcement,
+        is_migration: system.is_migration,
+        is_judicial_admin: system.is_judicial_admin,
+        is_gpai: system.is_gpai,
+        training_compute_flops: system.training_compute_flops,
+        is_chatbot: system.is_chatbot,
+        generates_synthetic_content: system.generates_synthetic_content,
+      });
+      setComplianceOfficerUsername(system.compliance_officer_username || "");
+      api.getUsersByRole("ai_compliance_officer")
+        .then(setComplianceOfficers)
+        .catch(() => {});
+    } else {
+      setForm(EMPTY_FORM);
+      setAssigneeUsername("");
+      setComplianceOfficerUsername("");
+      setOwnerExtra({ department: "", use_case: "", people_affected: "", decision_context: "" });
+      Promise.all([
+        api.getUsersByRole("ai_engineer"),
+        api.getUsersByRole("ai_compliance_officer"),
+      ]).then(([eng, co]) => { setEngineers(eng); setComplianceOfficers(co); }).catch(() => {});
+    }
+  }, [open, isEngineerMode, system]);
 
-  if (!open) return null;
-
-  const set = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+  const set = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setForm((f) => ({ ...f, [k]: (e.target as HTMLInputElement).type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
-  const setNum = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setFlagsConfirmed(false);
+  };
+  const setBool = (k: keyof AISystemFormData) => (checked: boolean) => {
+    setForm((f) => ({ ...f, [k]: checked }));
+    setFlagsConfirmed(false);
+  };
+  const setNum = (k: keyof AISystemFormData) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((f) => ({ ...f, [k]: parseFloat(e.target.value) || 0 }));
+    setFlagsConfirmed(false);
+  };
+
+  const maxStep = isEngineerMode ? 2 : 1;
 
   function handleNext() {
-    if (step === 0 && !form.name.trim()) { showToast("System name is required", true); return; }
-    setStep((s) => Math.min(s + 1, 3));
+    if (!isEngineerMode && step === 0 && !form.name.trim()) { showToast("System name is required", true); return; }
+    setStep((s) => Math.min(s + 1, maxStep));
   }
 
-  async function handleSubmit() {
+  async function handleOwnerSubmit() {
     if (!form.name.trim()) { showToast("System name is required", true); return; }
+    if (!assigneeUsername) { showToast("Please assign an AI Engineer", true); return; }
     if (submitting.current) return;
     submitting.current = true;
     setLoading(true);
     try {
-      const result = await api.intake({ ...form, version: form.version || "1.0.0", provider_country: form.provider_country || "DE" });
-      setRegisteredId(result.id);
-      showToast("AI system registered successfully");
+      const result = await api.intake({ name: form.name, description: form.description, intended_purpose: form.intended_purpose || null, department: ownerExtra.department || null, use_case: ownerExtra.use_case || null, people_affected: ownerExtra.people_affected || null, decision_context: ownerExtra.decision_context || null, autonomy_level: form.autonomy_level || null, assignee_username: assigneeUsername, compliance_officer_username: complianceOfficerUsername || null } as never);
+      setDoneId(result.id);
+      showToast("AI system registered and engineer notified");
       onSuccess();
     } catch (e) {
       showToast(`Registration failed: ${(e as Error).message}`, true);
@@ -93,145 +178,247 @@ export default function RegisterWizard({ open, onClose, onSuccess }: Props) {
     }
   }
 
+  async function handleEngineerSubmit() {
+    if (!assigneeUsername) { showToast("Please assign a Compliance Officer", true); return; }
+    if (submitting.current) return;
+    submitting.current = true;
+    setLoading(true);
+    try {
+      await api.updateSystem(system!.id, { ...form });
+      await api.submitForReview(system!.id, assigneeUsername);
+      setDoneId(system!.id);
+      showToast("System details saved and submitted for review");
+      onSuccess();
+    } catch (e) {
+      showToast(`Submission failed: ${(e as Error).message}`, true);
+    } finally {
+      submitting.current = false;
+      setLoading(false);
+    }
+  }
+
   function handleCopyId() {
-    copyToClipboard(registeredId!)
+    copyToClipboard(doneId!)
       .then(() => showToast("System ID copied"))
       .catch(() => showToast("Copy failed", true));
   }
 
   const preview = previewClassify(form, form.training_compute_flops);
 
-  return (
-    <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget && !registeredId) onClose(); }}>
-      <div className="modal">
-        <div className="modal-header">
-          <h2>Register AI System</h2>
-          <button className="btn-close" onClick={onClose}>×</button>
-        </div>
+  function displayName(u: UserSummary) {
+    const full = [u.firstName, u.lastName].filter(Boolean).join(" ");
+    return full ? `${full} (${u.username})` : u.username;
+  }
 
-        {registeredId ? (
-          <div className="modal-body">
-            <div className="msg-strip info" style={{ marginBottom: 16 }}>
-              Your AI system has been registered successfully.
-            </div>
-            <div className="panel">
-              <div className="panel-header">Telemetry Configuration</div>
-              <div className="panel-body">
-                <p style={{ fontSize: 13, marginBottom: 12 }}>
-                  Use this system ID as the telemetry service name for your application
-                  (e.g. set <code style={{ fontFamily: "monospace" }}>OTEL_SERVICE_NAME</code> to it)
-                  so its spans are linked to this system:
-                </p>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <code style={{ background: "var(--bg)", border: "1px solid var(--border)", padding: "6px 12px", borderRadius: 6, fontSize: 13, fontFamily: "monospace", flex: 1 }}>
-                    {registeredId}
-                  </code>
-                  <button className="btn-ghost" onClick={handleCopyId} style={{ flexShrink: 0 }}>⎘ Copy ID</button>
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !doneId) onClose(); }}>
+      <DialogContent showCloseButton={false} className="flex max-h-[90vh] max-w-2xl flex-col gap-0 p-0">
+        <DialogHeader className="flex-row items-center justify-between space-y-0">
+          <DialogTitle>{isEngineerMode ? `Fill in details — ${system!.name}` : "Register AI System"}</DialogTitle>
+          <button onClick={onClose} className="text-muted-foreground transition-opacity hover:text-foreground" aria-label="Close">
+            <X className="size-4" />
+          </button>
+        </DialogHeader>
+
+        {doneId ? (
+          <div className="overflow-y-auto px-6 py-5">
+            <Alert variant="info" className="mb-4">
+              {isEngineerMode
+                ? "System details saved and submitted for review. The compliance officer has been notified."
+                : "AI system registered. The assigned engineer has been notified by email."}
+            </Alert>
+            {!isEngineerMode && (
+              <div className="overflow-hidden rounded-md border border-border">
+                <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Telemetry Configuration</div>
+                <div className="p-4">
+                  <p className="mb-3 text-[13px]">
+                    Use this system ID as the telemetry service name
+                    (e.g. <code className="font-mono">OTEL_SERVICE_NAME</code>):
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 font-mono text-[13px]">
+                      {doneId}
+                    </code>
+                    <Button variant="ghost" onClick={handleCopyId} className="shrink-0"><Copy /> Copy ID</Button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         ) : (
           <>
-            <div className="wizard-steps">
-              {STEPS.map((label, i) => (
-                <div key={i} className={`wizard-step${i === step ? " active" : i < step ? " done" : ""}`}>
-                  <span className="step-num">{i + 1}</span> {label}
-                </div>
-              ))}
-            </div>
+            {isEngineerMode && (
+              <div className="flex flex-wrap gap-4 border-b border-border px-6 py-3">
+                {ENGINEER_STEPS.map((label, i) => (
+                  <div key={i} className={cn(
+                    "flex items-center gap-2 text-sm",
+                    i === step ? "font-semibold text-[var(--brand)]" : i < step ? "text-foreground" : "text-muted-foreground",
+                  )}>
+                    <span className={cn(
+                      "flex size-5 items-center justify-center rounded-full text-xs font-semibold",
+                      i === step ? "bg-[var(--brand)] text-white" : i < step ? "bg-[var(--success)] text-white" : "bg-muted text-muted-foreground",
+                    )}>{i + 1}</span>
+                    {label}
+                  </div>
+                ))}
+              </div>
+            )}
+            {!isEngineerMode && (
+              <div className="flex flex-wrap gap-4 border-b border-border px-6 py-3">
+                {OWNER_STEPS.map((label, i) => (
+                  <div key={i} className={cn(
+                    "flex items-center gap-2 text-sm",
+                    i === step ? "font-semibold text-[var(--brand)]" : i < step ? "text-foreground" : "text-muted-foreground",
+                  )}>
+                    <span className={cn(
+                      "flex size-5 items-center justify-center rounded-full text-xs font-semibold",
+                      i === step ? "bg-[var(--brand)] text-white" : i < step ? "bg-[var(--success)] text-white" : "bg-muted text-muted-foreground",
+                    )}>{i + 1}</span>
+                    {label}
+                  </div>
+                ))}
+              </div>
+            )}
 
-            <div className="modal-body">
-              {step === 0 && (
-                <div className="wizard-page">
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label className="required" htmlFor="reg_name">System Name</label>
-                      <input type="text" id="reg_name" value={form.name} onChange={set("name")} placeholder="e.g. Fraud Detection Model" />
+            <div className="overflow-y-auto px-6 py-5">
+              {/* OWNER MODE step 0: System Details */}
+              {!isEngineerMode && step === 0 && (
+                <div className="flex flex-col gap-4">
+                  <Alert variant="info">
+                    Provide a name and optionally a description, then assign an AI Engineer who will fill in the technical details.
+                  </Alert>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2 flex flex-col gap-1.5">
+                      <Label htmlFor="reg_name">System Name <span className="text-[var(--danger-fg)]">*</span></Label>
+                      <Input type="text" id="reg_name" value={form.name} onChange={set("name")} placeholder="e.g. Fraud Detection Model" />
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="reg_version">Version</label>
-                      <input type="text" id="reg_version" value={form.version} onChange={set("version")} placeholder="1.0.0" />
+                    <div className="col-span-2 flex flex-col gap-1.5">
+                      <Label htmlFor="reg_description">Description (optional)</Label>
+                      <Textarea id="reg_description" rows={2} value={form.description} onChange={set("description")} placeholder="Brief description of the AI system…" />
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="reg_provider">Provider Name</label>
-                      <input type="text" id="reg_provider" value={form.provider} onChange={set("provider")} placeholder="e.g. SAP SE" />
+                    <div className="col-span-2 flex flex-col gap-1.5">
+                      <Label htmlFor="reg_purpose">Purpose / Intended Use (optional)</Label>
+                      <Textarea id="reg_purpose" rows={2} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="Describe the intended purpose and deployment context…" />
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="reg_org_name">Organisation Name</label>
-                      <input type="text" id="reg_org_name" value={form.org_name} onChange={set("org_name")} placeholder="e.g. SAP AI Core" />
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="reg_dept">Department (optional)</Label>
+                      <Input type="text" id="reg_dept" value={ownerExtra.department} onChange={(e) => setOwnerField("department", e.target.value)} placeholder="e.g. HR, Finance, Operations" />
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="reg_org_role">Organisation Role</label>
-                      <select className="form-select" id="reg_org_role" value={form.org_role} onChange={set("org_role")}>
-                        <option value="provider">Provider</option>
-                        <option value="deployer">Deployer</option>
-                        <option value="importer">Importer</option>
-                        <option value="distributor">Distributor</option>
-                      </select>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="reg_use_case">Use Case (optional)</Label>
+                      <Input type="text" id="reg_use_case" value={ownerExtra.use_case} onChange={(e) => setOwnerField("use_case", e.target.value)} placeholder="e.g. candidate screening" />
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="reg_country">Provider Country (ISO)</label>
-                      <input type="text" id="reg_country" value={form.provider_country} onChange={set("provider_country")} placeholder="DE" maxLength={2} />
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="reg_people">People Affected (optional)</Label>
+                      <Input type="text" id="reg_people" value={ownerExtra.people_affected} onChange={(e) => setOwnerField("people_affected", e.target.value)} placeholder="e.g. job applicants, employees" />
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="reg_system_type">System Type</label>
-                      <select className="form-select" id="reg_system_type" value={form.system_type} onChange={set("system_type")}>
-                        <option value="application">Application</option>
-                        <option value="model">Model</option>
-                        <option value="component">Component</option>
-                        <option value="service">Service</option>
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="reg_autonomy">Autonomy Level</label>
-                      <select className="form-select" id="reg_autonomy" value={form.autonomy_level} onChange={set("autonomy_level")}>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="reg_autonomy">Human Involvement</Label>
+                      <select className={SELECT_CLASS} id="reg_autonomy" value={form.autonomy_level} onChange={set("autonomy_level")}>
                         <option value="decision_support">Decision support</option>
                         <option value="human_in_the_loop">Human in the loop</option>
                         <option value="human_on_the_loop">Human on the loop</option>
                         <option value="fully_automated">Fully automated</option>
                       </select>
                     </div>
-                    <div className="form-group span2">
-                      <label htmlFor="reg_app_url">Application URL (optional)</label>
-                      <input type="url" id="reg_app_url" value={form.application_url} onChange={set("application_url")} placeholder="https://your-ai-app.example.com" />
+                    <div className="col-span-2 flex flex-col gap-1.5">
+                      <Label htmlFor="reg_context">Decision Context (optional)</Label>
+                      <Textarea id="reg_context" rows={2} value={ownerExtra.decision_context} onChange={(e) => setOwnerField("decision_context", e.target.value)} placeholder="Describe how and where decisions are made by this system…" />
                     </div>
                   </div>
                 </div>
               )}
 
-              {step === 1 && (
-                <div className="wizard-page">
-                  <div className="form-grid single">
-                    <div className="form-group">
-                      <label htmlFor="reg_description">Description</label>
-                      <textarea id="reg_description" rows={3} value={form.description} onChange={set("description")} placeholder="Brief description of the AI system…" />
+              {/* OWNER MODE step 1: Assign & Register */}
+              {!isEngineerMode && step === 1 && (
+                <div className="flex flex-col gap-4">
+                  <Alert variant="info">
+                    Assign an AI Engineer who will fill in the technical details for <strong>{form.name}</strong>.
+                  </Alert>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="reg_engineer">Assign to AI Engineer <span className="text-[var(--danger-fg)]">*</span></Label>
+                      <select className={SELECT_CLASS} id="reg_engineer" value={assigneeUsername} onChange={(e) => setAssigneeUsername(e.target.value)}>
+                        <option value="">Choose AI Engineer</option>
+                        {engineers.map((u) => (
+                          <option key={u.username} value={u.username}>{displayName(u)}</option>
+                        ))}
+                      </select>
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="reg_purpose">Intended Purpose</label>
-                      <textarea id="reg_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="Describe the intended purpose and deployment context…" />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="reg_lifecycle">Initial Lifecycle State</label>
-                      <select className="form-select" id="reg_lifecycle" value={form.lifecycle} onChange={set("lifecycle")}>
-                        <option value="development">Development</option>
-                        <option value="testing">Testing</option>
-                        <option value="conformity">Conformity</option>
-                        <option value="market">On Market</option>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="reg_co">Pre-assign Compliance Officer (optional)</Label>
+                      <select className={SELECT_CLASS} id="reg_co" value={complianceOfficerUsername} onChange={(e) => setComplianceOfficerUsername(e.target.value)}>
+                        <option value="">Choose Compliance Officer (optional)</option>
+                        {complianceOfficers.map((u) => (
+                          <option key={u.username} value={u.username}>{displayName(u)}</option>
+                        ))}
                       </select>
                     </div>
                   </div>
                 </div>
               )}
 
-              {step === 2 && (
-                <div className="wizard-page">
-                  <div className="msg-strip info">
-                    Check all applicable flags. The backend will automatically determine the EU AI Act risk tier.
+              {/* ENGINEER MODE step 0: Purpose & Lifecycle */}
+              {isEngineerMode && step === 0 && (
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="eng_description">Description</Label>
+                    <Textarea id="eng_description" rows={3} value={form.description} onChange={set("description")} placeholder="Brief description of the AI system…" />
                   </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="eng_purpose">Intended Purpose</Label>
+                    <Textarea id="eng_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="Describe the intended purpose and deployment context…" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="eng_lifecycle">Lifecycle State</Label>
+                    <select className={SELECT_CLASS} id="eng_lifecycle" value={form.lifecycle} onChange={set("lifecycle")}>
+                      <option value="development">Development</option>
+                      <option value="testing">Testing</option>
+                      <option value="conformity">Conformity</option>
+                      <option value="market">On Market</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="eng_version">Version</Label>
+                    <Input type="text" id="eng_version" value={form.version} onChange={set("version")} placeholder="1.0.0" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="eng_provider">Provider Name</Label>
+                    <Input type="text" id="eng_provider" value={form.provider} onChange={set("provider")} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="eng_org_name">Organisation Name</Label>
+                    <Input type="text" id="eng_org_name" value={form.org_name} onChange={set("org_name")} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="eng_system_type">System Type</Label>
+                    <select className={SELECT_CLASS} id="eng_system_type" value={form.system_type} onChange={set("system_type")}>
+                      <option value="application">Application</option>
+                      <option value="model">Model</option>
+                      <option value="component">Component</option>
+                      <option value="service">Service</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="eng_autonomy">Autonomy Level</Label>
+                    <select className={SELECT_CLASS} id="eng_autonomy" value={form.autonomy_level} onChange={set("autonomy_level")}>
+                      <option value="decision_support">Decision support</option>
+                      <option value="human_in_the_loop">Human in the loop</option>
+                      <option value="human_on_the_loop">Human on the loop</option>
+                      <option value="fully_automated">Fully automated</option>
+                    </select>
+                  </div>
+                </div>
+              )}
 
+              {/* ENGINEER MODE step 1: Risk Flags */}
+              {isEngineerMode && step === 1 && (
+                <div>
+                  <Alert variant="info" className="mb-4">
+                    Check all applicable flags. The risk tier will be determined automatically from these flags.
+                  </Alert>
                   <CollapsiblePanel title="Art. 5 — Prohibited Practices">
-                    <div className="check-grid">
+                    <div className="grid grid-cols-2 gap-2">
                       {[
                         ["subliminal_manipulation", "Subliminal manipulation"],
                         ["exploits_vulnerability", "Exploits vulnerability"],
@@ -242,13 +429,12 @@ export default function RegisterWizard({ open, onClose, onSuccess }: Props) {
                         ["predictive_policing", "Predictive policing"],
                         ["biometric_categorisation_sensitive", "Biometric categorisation (sensitive attrs.)"],
                       ].map(([k, label]) => (
-                        <CheckItem key={k} id={k} label={label} checked={form[k as keyof AISystemFormData] as boolean} onChange={set(k as keyof AISystemFormData)} />
+                        <CheckItem key={k} id={k} label={label} checked={form[k as keyof AISystemFormData] as boolean} onCheckedChange={setBool(k as keyof AISystemFormData)} />
                       ))}
                     </div>
                   </CollapsiblePanel>
-
                   <CollapsiblePanel title="Annex III — High-Risk Categories">
-                    <div className="check-grid">
+                    <div className="grid grid-cols-2 gap-2">
                       {[
                         ["is_biometric_identification", "Biometric identification"],
                         ["is_critical_infrastructure", "Critical infrastructure"],
@@ -260,78 +446,100 @@ export default function RegisterWizard({ open, onClose, onSuccess }: Props) {
                         ["is_migration", "Migration & border control"],
                         ["is_judicial_admin", "Justice & democratic processes"],
                       ].map(([k, label]) => (
-                        <CheckItem key={k} id={k} label={label} checked={form[k as keyof AISystemFormData] as boolean} onChange={set(k as keyof AISystemFormData)} />
+                        <CheckItem key={k} id={k} label={label} checked={form[k as keyof AISystemFormData] as boolean} onCheckedChange={setBool(k as keyof AISystemFormData)} />
                       ))}
                     </div>
                   </CollapsiblePanel>
-
                   <CollapsiblePanel title="GPAI — General Purpose AI">
-                    <div className="check-grid">
-                      <CheckItem id="is_gpai" label="General-purpose AI model" checked={form.is_gpai} onChange={set("is_gpai")} />
+                    <div className="grid grid-cols-2 gap-2">
+                      <CheckItem id="is_gpai" label="General-purpose AI model" checked={form.is_gpai} onCheckedChange={setBool("is_gpai")} />
                     </div>
                     {form.is_gpai && (
-                      <div className="form-group" style={{ marginTop: 12, maxWidth: 320 }}>
-                        <label htmlFor="f_flops">Training Compute (FLOPs)</label>
-                        <input type="number" id="f_flops" value={form.training_compute_flops || ""} onChange={setNum("training_compute_flops")} placeholder="0" min={0} />
-                        <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>≥ 10²⁵ FLOPs = systemic risk</span>
+                      <div className="mt-3 flex max-w-80 flex-col gap-1.5">
+                        <Label htmlFor="f_flops">Training Compute (FLOPs)</Label>
+                        <Input type="number" id="f_flops" value={form.training_compute_flops || ""} onChange={setNum("training_compute_flops")} placeholder="0" min={0} />
+                        <span className="text-xs text-muted-foreground">≥ 10²⁵ FLOPs = systemic risk</span>
                       </div>
                     )}
                   </CollapsiblePanel>
-
                   <CollapsiblePanel title="Art. 50 — Limited Risk (Transparency)">
-                    <div className="check-grid">
-                      <CheckItem id="is_chatbot" label="Chatbot / direct user interaction" checked={form.is_chatbot} onChange={set("is_chatbot")} />
-                      <CheckItem id="generates_synthetic_content" label="Generates synthetic content" checked={form.generates_synthetic_content} onChange={set("generates_synthetic_content")} />
+                    <div className="grid grid-cols-2 gap-2">
+                      <CheckItem id="is_chatbot" label="Chatbot / direct user interaction" checked={form.is_chatbot} onCheckedChange={setBool("is_chatbot")} />
+                      <CheckItem id="generates_synthetic_content" label="Generates synthetic content" checked={form.generates_synthetic_content} onCheckedChange={setBool("generates_synthetic_content")} />
                     </div>
                   </CollapsiblePanel>
+                  <div style={{
+                    display: "flex", alignItems: "flex-start", gap: 10, marginTop: 16, padding: "12px 14px", borderRadius: 8,
+                    border: `2px solid ${flagsConfirmed ? "#27ae60" : "#e67e22"}`,
+                    background: flagsConfirmed ? "#f0faf4" : "#fffaf5",
+                  }}>
+                    <input type="checkbox" checked={flagsConfirmed} onChange={e => setFlagsConfirmed(e.target.checked)} style={{ marginTop: 2, flexShrink: 0, accentColor: "#27ae60", width: 16, height: 16 }} />
+                    <div>
+                      {flagsConfirmed
+                        ? <strong style={{ color: "#27ae60" }}>✓ All details reviewed and confirmed</strong>
+                        : <strong style={{ color: "#e67e22" }}>⚠ Please review all details before continuing</strong>
+                      }
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                        Any changes after ticking this will reset the confirmation.
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {step === 3 && (
-                <div className="wizard-page">
-                  <div className="msg-strip info">
-                    Review the information below. When you submit, the system will be classified automatically based on the risk flags.
-                  </div>
-                  <div className="panel">
-                    <div className="panel-header">Summary</div>
-                    <div className="panel-body">
-                      <div className="review-grid">
+              {/* ENGINEER MODE step 2: Review + assign compliance officer */}
+              {isEngineerMode && step === 2 && (
+                <div>
+                  <Alert variant="info" className="mb-4">
+                    Review the details below, then assign a Compliance Officer and submit for review.
+                  </Alert>
+                  <div className="mb-4 overflow-hidden rounded-md border border-border">
+                    <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Summary</div>
+                    <div className="p-4">
+                      <div className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2 text-[13px]">
                         {[
-                          ["Name", form.name],
+                          ["Name", system!.name],
+                          ["Description", form.description || "—"],
+                          ["Purpose", form.intended_purpose || "—"],
                           ["Version", form.version || "1.0.0"],
                           ["Provider", form.provider || "—"],
-                          ["Organisation", form.org_name || "—"],
-                          ["Role", form.org_role],
-                          ["Country", form.provider_country || "—"],
                           ["System Type", form.system_type],
                           ["Autonomy Level", form.autonomy_level.replace(/_/g, " ")],
                           ["Lifecycle", form.lifecycle],
-                          ["Purpose", form.intended_purpose || "—"],
                         ].map(([label, value]) => (
                           <Fragment key={label}>
-                            <span className="review-label">{label}</span>
-                            <span className="review-value">{value}</span>
+                            <span className="font-medium text-muted-foreground">{label}</span>
+                            <span>{value}</span>
                           </Fragment>
                         ))}
                       </div>
                     </div>
                   </div>
-                  <div className="classification-box">
-                    <h4>Estimated Classification (preview)</h4>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <div className="rounded-md border border-border bg-accent/40 p-4">
+                    <h4 className="mb-2.5 text-sm font-semibold">Estimated Classification (preview)</h4>
+                    <div className="mb-2.5 flex items-center gap-2.5">
                       <TierBadge tier={preview.tier} />
-                      <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{preview.basis}</span>
+                      <span className="text-[13px] text-muted-foreground">{preview.basis}</span>
                     </div>
                     {preview.obligations.length > 0 ? (
                       <>
-                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Obligations:</div>
-                        <ul className="obligation-list">
+                        <div className="mb-1 text-[13px] font-medium">Obligations:</div>
+                        <ul className="list-inside list-disc text-[13px] text-muted-foreground">
                           {preview.obligations.map((o) => <li key={o}>{o}</li>)}
                         </ul>
                       </>
                     ) : (
-                      <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>No mandatory obligations.</span>
+                      <span className="text-[13px] text-muted-foreground">No mandatory obligations.</span>
                     )}
+                  </div>
+                  <div className="mt-4 flex flex-col gap-1.5">
+                    <Label htmlFor="assign_co">Assign to Compliance Officer <span className="text-[var(--danger-fg)]">*</span></Label>
+                    <select className={SELECT_CLASS} id="assign_co" value={assigneeUsername} onChange={(e) => setAssigneeUsername(e.target.value)}>
+                      <option value="">Choose Compliance Officer</option>
+                      {complianceOfficers.map((u) => (
+                        <option key={u.username} value={u.username}>{displayName(u)}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               )}
@@ -339,23 +547,38 @@ export default function RegisterWizard({ open, onClose, onSuccess }: Props) {
           </>
         )}
 
-        <div className="modal-footer">
-          {registeredId ? (
-            <button className="btn-primary" onClick={onClose}>Done</button>
+        <DialogFooter className="sm:justify-start">
+          {doneId ? (
+            <Button onClick={onClose}>Done</Button>
           ) : (
             <>
-              <button className="btn-ghost" onClick={onClose}>Cancel</button>
-              {step > 0 && <button className="btn-ghost" onClick={() => setStep((s) => s - 1)}>← Back</button>}
-              {step < 3 && <button className="btn-primary" onClick={handleNext}>Next →</button>}
-              {step === 3 && (
-                <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
-                  {loading && <span className="spinner" />} Register System
-                </button>
+              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              {step > 0 && (
+                <Button variant="ghost" onClick={() => setStep((s) => s - 1)}>← Back</Button>
+              )}
+              {/* Owner step 0 → next */}
+              {!isEngineerMode && step === 0 && (
+                <Button onClick={handleNext}>Next →</Button>
+              )}
+              {/* Owner step 1 → register */}
+              {!isEngineerMode && step === 1 && (
+                <Button onClick={handleOwnerSubmit} disabled={loading}>
+                  {loading && <Loader2 className="animate-spin" />} Register System
+                </Button>
+              )}
+              {/* Engineer: next until last page, then submit */}
+              {isEngineerMode && step < maxStep && (
+                <Button onClick={handleNext} disabled={step === 1 && !flagsConfirmed}>Next →</Button>
+              )}
+              {isEngineerMode && step === maxStep && (
+                <Button onClick={handleEngineerSubmit} disabled={loading}>
+                  {loading && <Loader2 className="animate-spin" />} Submit for Review
+                </Button>
               )}
             </>
           )}
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

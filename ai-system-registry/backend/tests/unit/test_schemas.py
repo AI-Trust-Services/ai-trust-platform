@@ -9,55 +9,41 @@ from app.schemas import AISystemCreate, AISystemUpdate
 # --- AISystemCreate ---
 
 def test_create_valid_minimal():
-    s = AISystemCreate(name="My System")
+    s = AISystemCreate(name="My System", assignee_username="eng1")
     assert s.name == "My System"
-    assert s.is_gpai is False
-    assert s.training_compute_flops == 0.0
+    assert s.description == ""
+    assert s.assignee_username == "eng1"
+    assert s.compliance_officer_username is None
 
 
 def test_create_name_required():
     with pytest.raises(ValidationError):
-        AISystemCreate()
+        AISystemCreate(assignee_username="eng1")
 
 
 def test_create_name_empty_string():
     with pytest.raises(ValidationError):
-        AISystemCreate(name="")
+        AISystemCreate(name="", assignee_username="eng1")
 
 
 def test_create_name_whitespace_only():
     with pytest.raises(ValidationError, match="must not be blank"):
-        AISystemCreate(name="   ")
+        AISystemCreate(name="   ", assignee_username="eng1")
 
 
 def test_create_name_max_length():
     with pytest.raises(ValidationError):
-        AISystemCreate(name="x" * 201)
+        AISystemCreate(name="x" * 201, assignee_username="eng1")
 
 
-def test_create_flops_negative():
+def test_create_assignee_required():
     with pytest.raises(ValidationError):
-        AISystemCreate(name="Test", training_compute_flops=-1.0)
+        AISystemCreate(name="Test")
 
 
-def test_create_flops_infinity():
-    with pytest.raises(ValidationError, match="finite"):
-        AISystemCreate(name="Test", training_compute_flops=float("inf"))
-
-
-def test_create_flops_nan():
+def test_create_assignee_empty_string():
     with pytest.raises(ValidationError):
-        AISystemCreate(name="Test", training_compute_flops=float("nan"))
-
-
-def test_create_flops_zero():
-    s = AISystemCreate(name="Test", training_compute_flops=0.0)
-    assert s.training_compute_flops == 0.0
-
-
-def test_create_flops_valid_large():
-    s = AISystemCreate(name="Test", training_compute_flops=10**25)
-    assert s.training_compute_flops == pytest.approx(10**25)
+        AISystemCreate(name="Test", assignee_username="")
 
 
 # --- AISystemUpdate ---
