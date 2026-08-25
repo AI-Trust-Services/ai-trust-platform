@@ -3,10 +3,13 @@ NAMESPACE := ai-trust
 RELEASE := ai-trust
 CHART := helm/ai-trust-platform
 
-.PHONY: up down cluster delete-cluster bootstrap build install upgrade uninstall reset-jobs status
+.PHONY: up down cluster delete-cluster configure bootstrap build install upgrade uninstall reset-jobs status
 
-# Full stack, from nothing - the kind/Helm equivalent of `docker compose up --build -d`
-up: cluster bootstrap build install
+# Full stack, from nothing - the kind/Helm equivalent of `docker compose up --build -d`.
+# `configure` runs first: it PROMPTS for the tenancy mode (single vs multi-tenant) and
+# writes TENANCY_MODE into .env before bootstrap reads it. Skip the prompt in CI by
+# passing it explicitly, e.g. `TENANCY_MODE=single make up`.
+up: configure cluster bootstrap build install
 	@echo "==> open http://localhost:8080"
 
 # Tear the whole thing down - the kind/Helm equivalent of `docker compose down --remove-orphans`
@@ -17,6 +20,12 @@ cluster:
 
 delete-cluster:
 	kind delete cluster --name $(CLUSTER_NAME)
+
+# Interactive: choose single-tenant vs multi-tenant, written to .env (creates .env
+# from .env.example on first run). Run it standalone to change the mode later, then
+# `make bootstrap upgrade`.
+configure:
+	bash scripts/configure-tenancy.sh
 
 bootstrap:
 	bash scripts/bootstrap.sh

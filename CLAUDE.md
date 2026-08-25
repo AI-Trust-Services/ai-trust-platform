@@ -151,6 +151,25 @@ Keycloak has no knowledge of application roles or permissions. OpenFGA has no kn
 
 See [docs/auth-flow.md](docs/auth-flow.md) for sequence diagrams of the login, API request, and sign-out flows.
 
+### Tenancy mode (single vs multi-tenant)
+
+The platform is a **single codebase** that runs in one of two tenancy modes, selected by the
+`TENANCY_MODE` env var (default `single`). The whole tenancy layer (`libs/tenancy`) is a no-op in
+`single` mode, so there is nothing to strip out for a single-org deployment.
+
+- **`single`** (default) — one organization. The tenant middleware is not registered, Postgres uses
+  the plain `public` schema, one fixed Keycloak realm, no per-tenant scoping of ClickHouse/MinIO. This
+  is the mode for docker-compose, the local kind install (`k8s/`), and any standalone single-org deploy.
+- **`jwt`** — multi-tenant. Each request's tenant is resolved from a `tenant_id` OIDC claim
+  (`TENANT_CLAIM`), verified against `TENANCY_JWKS_ISSUER_BASE`. Data is isolated per tenant:
+  schema-per-tenant Postgres (`tenant_<org>`) + a per-tenant role, a per-tenant Keycloak realm, and
+  per-tenant ClickHouse DB / MinIO bucket. This mode is normally provisioned by the MSP operator
+  bundle, which stamps the per-tenant realm and wiring — selecting `jwt` alone is not enough.
+
+The kind installer (`cd k8s && make up`) **prompts** for the mode and writes `TENANCY_MODE` into
+`.env`. Set it non-interactively with `TENANCY_MODE=<single|jwt> make up`.
+
+
 ### Authentication (Keycloak + oauth2-proxy)
 
 All traffic enters through **oauth2-proxy** at port 8080. No backend or frontend is reachable directly from the browser — all ports are internal to Docker.
@@ -493,8 +512,10 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 
 | Variable | Service | Default | Description |
 |---|---|---|---|
-| `POSTGRES_USER` | postgres, db-migrate, all backends | `postgres` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | postgres, db-migrate, all backends | `postgres` | PostgreSQL password |
+| `TENANCY_MODE` | all backends + policy-checker-worker | `single` | Tenancy mode. `single` = one org, no per-tenant isolation (docker-compose / kind / standalone). `jwt` = multi-tenant, tenant resolved from a `tenant_id` OIDC claim with schema/realm/CH-DB/bucket isolation. The kind installer prompts for this. |
+| `TENANCY_JWKS_ISSUER_BASE` | all backends | *(required if `jwt`)* | Trusted OIDC issuer prefix (e.g. `https://<host>/keycloak/realms/`). App fails fast at startup in `jwt` mode without it. Unused in `single`. |
+| `TENANT_CLAIM` | all backends | `tenant_id` | JWT claim carrying the tenant id (only used in `jwt` mode). |
+| `POSTGRES_USER` | postgres, db-migrate, all backends | `postgres` | PostgreSQL username || `POSTGRES_PASSWORD` | postgres, db-migrate, all backends | `postgres` | PostgreSQL password |
 | `RABBITMQ_USER` | rabbitmq, otel-rmq-bridge, consumers | `guest` | RabbitMQ username |
 | `RABBITMQ_PASSWORD` | rabbitmq, otel-rmq-bridge, consumers | `guest` | RabbitMQ password |
 | `CLICKHOUSE_USER` | clickhouse, consumers, backends | `default` | ClickHouse username |
@@ -527,14 +548,14 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `MINIO_SECURE` | compliance-backend | `false` | Set to `true` if MinIO is behind TLS |
 | `MINIO_REGION` | compliance-backend | `us-east-1` | Region used when presigning — avoids a GetBucketLocation network call from inside the container |
 | `ALERT_POLL_INTERVAL` | policy-checker-worker | `10` | Rule evaluation interval in seconds (use `60`+ in production) |
-| `SMTP_HOST` | ai-system-registry-backend | *(required)* | SMTP server hostname |
-| `SMTP_PORT` | ai-system-registry-backend | *(required)* | SMTP server port |
+| `SMTP_HOST` | ai-system-registry-backend | *(empty — email disabled)* | SMTP server hostname. **Optional**: leave blank to disable email notifications entirely (the backend starts and skips them). Set it to enable outgoing mail. |
+| `SMTP_PORT` | ai-system-registry-backend | *(unset)* | SMTP server port (required only when `SMTP_HOST` is set). |
 | `SMTP_USER` | ai-system-registry-backend | *(optional)* | SMTP username — omit if the server requires no auth |
 | `SMTP_PASSWORD` | ai-system-registry-backend | *(optional)* | SMTP password — omit if the server requires no auth |
-| `SMTP_FROM` | ai-system-registry-backend | *(required)* | Envelope / From address for outgoing notifications |
+| `SMTP_FROM` | ai-system-registry-backend | *(unset)* | Envelope / From address (required only when `SMTP_HOST` is set). |
 | `SMTP_FROM_NAME` | ai-system-registry-backend | `AI Trust Platform` | Display name in the From header |
-| `SMTP_SSL` | ai-system-registry-backend | *(required)* | `true` to use implicit TLS, `false` otherwise |
-| `SMTP_STARTTLS` | ai-system-registry-backend | *(required)* | `true` to upgrade with STARTTLS, `false` otherwise |
+| `SMTP_SSL` | ai-system-registry-backend | `false` | `true` to use implicit TLS, `false` otherwise |
+| `SMTP_STARTTLS` | ai-system-registry-backend | `false` | `true` to upgrade with STARTTLS, `false` otherwise |
 | `USERS_BACKEND_URL` | ai-system-registry-backend | `http://users-backend:8008` | Internal URL of the users backend — used for email address lookups |
 | `LLM_PROVIDER` | ai-system-registry-backend | `stub` | AI-assisted registration provider: `stub` (offline/deterministic), `ollama`, or `external` |
 | `LLM_BASE_URL` | ai-system-registry-backend | `http://ollama:11434/v1` | OpenAI-compatible endpoint (used when `LLM_PROVIDER=ollama`) |
@@ -551,7 +572,7 @@ All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fil
 | `ASSIST_TURN_CAP` | ai-system-registry-backend | `12` | Max conversation turns before `degraded=true` is returned |
 | `ASSIST_MAX_TEXT_LENGTH` | ai-system-registry-backend | `15000` | Max characters extracted from uploaded documents before truncation |
 
-All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code.
+All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code. **Exception:** the SMTP settings are optional — when `SMTP_HOST` is unset, email notifications are disabled and the registry backend starts normally (it does not fail-fast on the SMTP vars).
 
 ## docker-compose.yml conventions
 
