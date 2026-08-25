@@ -162,6 +162,7 @@
       style.textContent = `:root {
           --luigi-nav-bg: #0f172a;
           --luigi-nav-width: 256px;
+          --luigi__shellbar--height: 48px;
         }
 
         /* ── Shell bar ── */
@@ -216,7 +217,7 @@
           outline: none !important;
           border-radius: 4px !important;
         }
-        .fd-shellbar__branding:hover { background: #f3f4f6 !important; }
+        .fd-shellbar__branding:hover { background: rgba(255,255,255,0.07) !important; }
         .fd-shellbar__branding:focus { outline: none !important; box-shadow: none !important; }
         .fd-shellbar__branding:focus-visible {
           outline: 2px solid #1147E9 !important;
@@ -256,6 +257,19 @@
           border-right: none !important;
           box-shadow: none !important;
           overflow: hidden !important;
+        }
+        .fd-app__sidebar {
+          border-top-right-radius: 10px !important;
+          border-bottom-right-radius: 0 !important;
+          margin-top: 0 !important;
+          padding-top: 0 !important;
+          border-top: none !important;
+        }
+        .fd-shell__content,
+        .fd-shell__body,
+        .fd-app__body {
+          padding-top: 0 !important;
+          margin-top: 0 !important;
         }
         .lui-side-nav--collapsed,
         .lui-side-nav {
@@ -410,8 +424,12 @@
           background-color: #ffffff !important;
           border: none !important;
         }
-        body, .fd-app, .lui-app, #app {
-          background: #ffffff !important;
+        body { background: #ffffff !important; }
+        .fd-app, .lui-app, #app {
+          background: linear-gradient(to right, #0f172a 256px, #ffffff 256px) !important;
+        }
+        body.semiCollapsed .fd-app, body.semiCollapsed .lui-app, body.semiCollapsed #app {
+          background: linear-gradient(to right, #0f172a 48px, #ffffff 48px) !important;
         }
 
         /* ── Dark mode baked into static CSS — active immediately via html.dark ── */
@@ -423,7 +441,7 @@
           --sapContent_ForegroundBackgroundColor: #09090b;
           --sapPageHeader_Background: #09090b;
         }
-        html.dark body, html.dark .fd-app, html.dark .lui-app, html.dark #app,
+        html.dark body,
         html.dark .fd-shell, html.dark .fd-shell__content, html.dark .fd-shell__body,
         html.dark .fd-app__main, html.dark .fd-app__main-container,
         html.dark .lui-main-app-frame, html.dark iframe,
@@ -431,6 +449,12 @@
         html.dark .fd-busy-indicator, html.dark [class*="loading-indicator"], html.dark [class*="busy-indicator"] {
           background: #09090b !important;
           background-color: #09090b !important;
+        }
+        html.dark .fd-app, html.dark .lui-app, html.dark #app {
+          background: linear-gradient(to right, #0f172a 256px, #09090b 256px) !important;
+        }
+        html.dark body.semiCollapsed .fd-app, html.dark body.semiCollapsed .lui-app, html.dark body.semiCollapsed #app {
+          background: linear-gradient(to right, #0f172a 48px, #09090b 48px) !important;
         }
 
         /* ── Collapsed: icons only, centered ── */
@@ -462,10 +486,18 @@
           display: inline-flex !important;
           align-items: center !important;
           justify-content: center !important;
+          pointer-events: none !important;
+        }
+        .luigi-brand-icon img {
+          pointer-events: none !important;
         }
         .brand-logo-full {
           height: 30px !important;
           display: block !important;
+        }
+        .brand-logo-full--dark {
+          height: 30px !important;
+          display: none !important;
         }
         .brand-logo-icon {
           width: 30px !important;
@@ -475,15 +507,24 @@
         body.semiCollapsed .brand-logo-full {
           display: none !important;
         }
+        body.semiCollapsed .brand-logo-full--dark {
+          display: none !important;
+        }
         body.semiCollapsed .brand-logo-icon {
           display: block !important;
         }
-        /* dark variants hidden by default, swap in on html.dark */
-        .brand-logo-full--dark { height: 30px !important; display: none !important; }
-        html.dark .brand-logo-full { display: none !important; }
-        html.dark .brand-logo-full--dark { display: block !important; }
-        html.dark body.semiCollapsed .brand-logo-full--dark { display: none !important; }
-        /* icon: color icon works on both backgrounds — no dark swap needed */
+        html.dark .brand-logo-full {
+          display: none !important;
+        }
+        html.dark .brand-logo-full--dark {
+          display: block !important;
+        }
+        html.dark body.semiCollapsed .brand-logo-full--dark {
+          display: none !important;
+        }
+        html.dark body.semiCollapsed .brand-logo-icon {
+          display: block !important;
+        }
         .fd-shellbar__title,
         .lui-shellbar__title,
         .shellbar-title {
@@ -604,6 +645,9 @@
         icon.appendChild(imgFullDark);
         icon.appendChild(imgIcon);
         branding.appendChild(icon);
+        branding.addEventListener("click", () => {
+          window.location.hash = '/home/overview';
+        });
       }, 200);
 
       // Inject collapse button at the bottom of the sidebar
@@ -790,7 +834,13 @@
               if (!ov) { ov = document.createElement('style'); ov.id = 'luigi-dark-overrides'; document.head.appendChild(ov); }
               ov.textContent = `
                 .fd-shellbar { background: #0f172a !important; border-bottom: none !important; }
-                html, body, .fd-app, .lui-app, #app,
+                html, body { background: #09090b !important; }
+                .fd-app, .lui-app, #app {
+                  background: linear-gradient(to right, #0f172a 256px, #09090b 256px) !important;
+                }
+                body.semiCollapsed .fd-app, body.semiCollapsed .lui-app, body.semiCollapsed #app {
+                  background: linear-gradient(to right, #0f172a 48px, #09090b 48px) !important;
+                }
                 .fd-shell, .fd-shell__content, .fd-shell__body,
                 .fd-app__main, .fd-app__main-container,
                 .lui-main-app-frame, iframe#app-iframe,
