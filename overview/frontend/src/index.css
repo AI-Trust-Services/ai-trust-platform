@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -96,8 +97,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: "72", "72full", -apple-system, BlinkMacSystemFont, "Segoe UI",
-      Arial, sans-serif;
+    font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: 14px;
   }
   button:not(:disabled),

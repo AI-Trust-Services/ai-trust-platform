@@ -176,7 +176,7 @@
         .lui-shellbar__title,
         .shellbar-title {
           color: #111827 !important;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+          font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
           font-weight: 600 !important;
           font-size: 14px !important;
           letter-spacing: 0 !important;
@@ -282,7 +282,7 @@
           color: #94a3b8 !important;
           font-weight: 400 !important;
           font-size: 13px !important;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+          font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
           border-radius: 6px !important;
           margin: 1px 0 !important;
           padding: 7px 12px !important;
