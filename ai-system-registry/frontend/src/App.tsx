@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
-import { useNavigate, useLocation, Outlet } from "react-router";
+import { useLocation, Outlet } from "react-router";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { usePermissions } from "./hooks/usePermissions";
 import { HEALTH_URL } from "./api/client";
@@ -28,7 +28,6 @@ export default function App() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [modelCreateOpen, setModelCreateOpen] = useState(false);
   const healthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const navigate = useNavigate();
   const location = useLocation();
   const { can, username } = usePermissions();
   const mayWrite = can("systems:write");
@@ -65,7 +64,7 @@ export default function App() {
     <ToastContext.Provider value={showToast}>
       <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen, mayWrite, mayRegister, username }}>
         <div className="page-header">
-          <h1>AI System Registry</h1>
+          <h1>{activeView === "models" ? "Model Catalog" : "AI System Registry"}</h1>
           <div>
             {activeView === "systems" ? (
               <button className="btn-primary" disabled={!mayRegister}
@@ -79,21 +78,6 @@ export default function App() {
                 + Add Model
               </button>
             )}
-          </div>
-        </div>
-
-        <div className="nav-tabs">
-          <div
-            className={`nav-tab${activeView === "systems" ? " active" : ""}`}
-            onClick={() => navigate("/systems")}
-          >
-            AI Systems
-          </div>
-          <div
-            className={`nav-tab${activeView === "models" ? " active" : ""}`}
-            onClick={() => navigate("/models")}
-          >
-            Model Catalog
           </div>
         </div>
 
