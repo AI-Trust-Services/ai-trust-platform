@@ -5,6 +5,9 @@ single-node [kind](https://kind.sigs.k8s.io/) cluster. **docker-compose remains 
 supported** - this is a second, independent deployment path that shares the same
 `.env` file, so there is nothing to keep in sync by hand.
 
+> Deploying to a real **Gardener shoot** (single-tenant, public HTTPS host via the cluster
+> gateway) instead of kind? See [SHOOT-INSTALL.md](SHOOT-INSTALL.md).
+
 Both paths use the exact same host ports (see the "Service URLs" table in
 `CLAUDE.md`), so don't run docker-compose and this kind cluster at the same time -
 they'll fight over ports 8080, 8180, 5432, etc. **Exception:** MinIO's API port is
