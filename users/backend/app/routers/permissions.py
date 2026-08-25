@@ -7,7 +7,7 @@ from ai_trust_authorization.constants import (
     PLATFORM_OBJECT,
     RELATION_BY_PERMISSION,
 )
-from app.keycloak import admin_client
+from app.keycloak import admin_client, current_realm
 from app.schemas import PermissionsResponse
 
 router = APIRouter(tags=["permissions"])
@@ -29,8 +29,12 @@ async def my_permissions(
 @router.get("/me")
 async def me(user: str = Depends(get_current_user)) -> dict:
     import asyncio
+    # Resolve the realm HERE (on the event loop), where the request's tenant ContextVar is set.
+    # current_realm() reads that ContextVar; ContextVars do NOT propagate into the asyncio.to_thread
+    # worker below, so resolving it inside _fetch would fail-closed ("No tenant in request context").
+    realm = current_realm()
     def _fetch():
-        kc = admin_client()
+        kc = admin_client(realm)
         results = kc.get(f"users?username={user}&exact=true").json()
         return results[0] if results else {}
     u, role_objects = await asyncio.gather(

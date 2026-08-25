@@ -575,9 +575,13 @@ async def create_event(
     now = datetime.now(timezone.utc)
     event_description = description or rule.description
 
+    # Capture the tenant on the event loop — ContextVars don't propagate into the run_in_executor
+    # worker thread below, so reading current_tenant() inside _insert would fail-closed in jwt mode.
+    tenant = current_tenant()
+
     def _insert():
         # Physical isolation: write to the current tenant's OWN ClickHouse database (tenant_<org>).
-        client = get_client_for_tenant(current_tenant())
+        client = get_client_for_tenant(tenant)
         client.insert(
             "alert_events",
             [[
