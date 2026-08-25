@@ -13,6 +13,7 @@ spec:
       labels:
         {{- include "ai-trust.labels" (dict "name" "otel-rmq-bridge") | nindent 8 }}
     spec:
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         # mirrors compose: otel-rmq-bridge depends_on rabbitmq (service_healthy)
         {{- include "ai-trust.waitForTcp" (dict "name" "rabbitmq" "port" 5672 "image" .Values.waitImages.busybox) | nindent 8 }}
@@ -114,6 +115,7 @@ spec:
         {{- include "ai-trust.labels" (dict "name" "otel-clickhouse-consumer") | nindent 8 }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         # mirrors compose: depends_on rabbitmq (service_healthy) + clickhouse-migrate (completed)
         {{- include "ai-trust.waitForTcp" (dict "name" "rabbitmq" "port" 5672 "image" .Values.waitImages.busybox) | nindent 8 }}

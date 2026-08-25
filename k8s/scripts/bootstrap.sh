@@ -28,13 +28,24 @@ echo "==> secret/ai-trust-env (from .env, plus computed connection strings)"
 # so every .env line is passed through as its own --from-literal instead.)
 set -a
 # shellcheck disable=SC1091
-# tr -d '\r' tolerates a CRLF .env (common when it's been edited on Windows)
-source <(tr -d '\r' < "$REPO_ROOT/.env")
+set +u  # .env may contain ${VAR} references (e.g. ${LB_IP}) not defined in all environments
+# Use a temp file so tr -d '\r' (Windows line endings) works AND variables
+# propagate into the current shell (source <(...) does not export in all bash versions)
+_env_tmp=$(mktemp)
+tr -d '\r' < "$REPO_ROOT/.env" > "$_env_tmp"
+source "$_env_tmp"
+rm -f "$_env_tmp"
+set -u
 set +a
 
+# Build --from-literal args from the *expanded* environment (post-source),
+# so variable references like APP_PUBLIC_URL=https://${LB_IP}.nip.io work.
+# Only export keys that were defined in the .env file (skip LB_IP itself and
+# shell builtins) by reading key names from the file, then resolving via printenv.
 literal_args=()
-while IFS='=' read -r key value; do
+while IFS='=' read -r key _; do
   [[ -z "$key" || "$key" == \#* ]] && continue
+  value=$(printenv "$key" 2>/dev/null || true)
   literal_args+=(--from-literal="${key}=${value}")
 done < <(tr -d '\r' < "$REPO_ROOT/.env" | grep -v '^\s*#' | grep -v '^\s*$')
 
@@ -83,6 +94,32 @@ subjects:
 roleRef:
   kind: Role
   name: job-waiter
+  apiGroup: rbac.authorization.k8s.io
+EOF
+
+echo "==> RBAC for keycloak-ssl-patch job (needs deployment patch to trigger restart)"
+kubectl create serviceaccount keycloak-restarter -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+cat <<EOF | kubectl apply -n "$NAMESPACE" -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: keycloak-restarter
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: keycloak-restarter
+subjects:
+  - kind: ServiceAccount
+    name: keycloak-restarter
+    namespace: $NAMESPACE
+roleRef:
+  kind: Role
+  name: keycloak-restarter
   apiGroup: rbac.authorization.k8s.io
 EOF
 
