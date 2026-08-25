@@ -17,11 +17,11 @@ from app.schemas.incident import (
 router = APIRouter(tags=["post-market monitoring"])
 logger = get_logger(__name__)
 
-_INCIDENTS_DIR = Path(__file__).parent.parent.parent / "output" / "incidents"
-_INCIDENTS_DIR.mkdir(parents=True, exist_ok=True)
+_INCIDENTS_DIR = Path("/tmp/ai-trust/incidents")
 
 
 def _incidents_file(register_id: str) -> Path:
+    _INCIDENTS_DIR.mkdir(parents=True, exist_ok=True)
     return _INCIDENTS_DIR / f"{register_id}.jsonl"
 
 
