@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://api.reuse.software/info/github.com/AI-Trust-Services/ai-trust-platform"><img alt="REUSE status" src="https://api.reuse.software/badge/github.com/AI-Trust-Services/ai-trust-platform"/></a>
   <img alt="License" src="https://img.shields.io/github/license/AI-Trust-Services/ai-trust-platform?style=flat-square"/>
   <img alt="Status" src="https://img.shields.io/badge/status-alpha-orange?style=flat-square"/>
 </p>
@@ -22,7 +23,7 @@
 
 Organizations register their AI assets once and maintain continuous, automated compliance: transparency, monitoring, and documentation are centralized in one place, with automatic requirements updates, gap analysis, and mitigation proposals.
 
-> ⚠️ **Status.** AI Trust Platform is currently under active development and is **not intended for production use**. The project is in an alpha stage. APIs, interfaces, and underlying concepts are subject to change without prior notice — including breaking changes, significant redesigns, or the deprecation and complete removal of APIs and functionality.
+> ⚠️ AI Trust Platform is currently under active development and is **not intended for production use**. The project is in an alpha stage. APIs, interfaces, and underlying concepts are subject to change without prior notice — including breaking changes, significant redesigns, or the deprecation and complete removal of APIs and functionality.
 
 ## Why AI Trust Platform
 
@@ -61,8 +62,7 @@ docker compose down -v --remove-orphans       # stop, wipe all data (fresh start
 This project is open to feature requests/suggestions, bug reports etc. via [GitHub issues](https://github.com/AI-Trust-Services/ai-trust-platform/issues). Contribution and feedback are encouraged and always welcome. For more information about how to contribute, the project structure, as well as additional contribution information, see our [Contribution Guidelines](CONTRIBUTING.md).
 
 ## Security / Disclosure
-
-If you find any bug that may be a security problem, please follow the instructions [in our security policy](https://github.com/AI-Trust-Services/ai-trust-platform/security/policy) on how to report it. Please do not create GitHub issues for security-related doubts or problems.
+If you find any bug that may be a security problem, please follow our instructions at [in our security policy](https://github.com/AI-Trust-Services/ai-trust-platform/security/policy) on how to report it. Please do not create GitHub issues for security-related doubts or problems.
 
 ## Code of Conduct
 
@@ -70,6 +70,6 @@ We as members, contributors, and leaders pledge to make participation in our com
 
 ## Licensing
 
-Please see our [LICENSE](LICENSE) for copyright and license information.
+Copyright 2026 SAP SE or an SAP affiliate company and ai-trust-platform contributors. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/AI-Trust-Services/ai-trust-platform).
 
 <p align="center"><img alt="Bundesministerium für Wirtschaft und Klimaschutz (BMWK)-EU funding logo" src="https://apeirora.eu/assets/img/BMWK-EU.png" width="400"/></p>
