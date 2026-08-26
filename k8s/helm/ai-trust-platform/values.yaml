@@ -35,6 +35,8 @@ ingress:
     selfSigned: false  # true = cert-manager self-signed issuer; false = external issuer (e.g. letsencrypt)
     secretName: "ai-trust-tls"  # cert-manager stores the provisioned cert here
   annotations: {}
+  gardenerDns:
+    enabled: false  # true on Gardener clusters — annotates Traefik LB Service for shoot-dns-service
 
 waitImages:
   busybox: busybox:1.36 # TCP/HTTP "wait for dependency" initContainers

@@ -21,6 +21,10 @@ keycloak:
 ingress:
   enabled: true
   className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
   tls:
     enabled: true
-    selfSigned: true
+    selfSigned: false
+  gardenerDns:
+    enabled: true

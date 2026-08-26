@@ -1,0 +1,36 @@
+{{/*
+  Annotate the Traefik LoadBalancer Service so Gardener shoot-dns-service
+  publishes DNS A-records for all ingress hostnames → the LB IP automatically.
+  Only rendered on Gardener clusters (ingress.gardenerDns.enabled=true in values-gardener.yaml).
+  Runs as a Helm post-install/post-upgrade hook Job so Traefik's LB Service is
+  guaranteed to exist before we try to annotate it.
+*/}}
+{{- if and .Values.ingress.enabled .Values.ingress.gardenerDns.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gardener-dns-patch
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "-5"
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      restartPolicy: OnFailure
+      containers:
+        - name: annotate
+          image: {{ .Values.waitImages.kubectl }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              DNSNAMES="{{ .Values.ingress.host }},{{ .Values.ingress.keycloakHost }}{{- if .Values.ingress.minioHost }},{{ .Values.ingress.minioHost }}{{- end }}"
+              kubectl annotate svc traefik -n default --overwrite \
+                dns.gardener.cloud/class=garden \
+                "dns.gardener.cloud/dnsnames=${DNSNAMES}" \
+                dns.gardener.cloud/ttl="120"
+              echo "Annotated Traefik LB Service for Gardener DNS: ${DNSNAMES}"
+{{- end }}
