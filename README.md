@@ -1,24 +1,38 @@
-# AI Trust Platform
+<p align="center">
+  <img alt="AI Trust Platform logo" src="https://ai-trust-services.github.io/logo.svg" width="120"/>
+</p>
+
+<h1 align="center">AI Trust Platform</h1>
+
+<p align="center">
+  <strong>EU AI Act compliance by design.</strong><br/>
+  Build trust into every AI system — from day one.
+</p>
 
 <p align="center">
   <a href="https://api.reuse.software/info/github.com/AI-Trust-Services/ai-trust-platform"><img alt="REUSE status" src="https://api.reuse.software/badge/github.com/AI-Trust-Services/ai-trust-platform"/></a>
   <img alt="License" src="https://img.shields.io/github/license/AI-Trust-Services/ai-trust-platform?style=flat-square"/>
+  <img alt="Status" src="https://img.shields.io/badge/status-alpha-orange?style=flat-square"/>
 </p>
+
+---
 
 ## About this project
 
-AI Trust Platform enables organizations to register AI assets once and maintain continuous, automated **EU AI Act** compliance — centralizing transparency, monitoring, and documentation in one place, with automatic requirements updates, gap analysis, and mitigation proposals.
+**AI Trust Platform** is a unified platform for registering, understanding, assessing, and continuously governing AI systems throughout their lifecycle — with **EU AI Act** compliance built in.
 
-> ⚠️ **Status.** AI Trust Platform is currently under active development and is not intended for production use. The project is in an alpha stage. APIs, interfaces, and underlying concepts are subject to change without prior notice. Such changes may include breaking changes, significant redesigns, or the deprecation and complete removal of APIs and functionality.
+Organizations register their AI assets once and maintain continuous, automated compliance: transparency, monitoring, and documentation are centralized in one place, with automatic requirements updates, gap analysis, and mitigation proposals.
 
-## Value proposition
+> ⚠️ AI Trust Platform is currently under active development and is **not intended for production use**. The project is in an alpha stage. APIs, interfaces, and underlying concepts are subject to change without prior notice — including breaking changes, significant redesigns, or the deprecation and complete removal of APIs and functionality.
 
-- **Reduced manual effort** — Regulatory requirements are tracked and updated automatically, eliminating manual compliance work.
-- **Faster time-to-compliance** — No need for costly ex-post remediation; systems are compliant from day one.
-- **Scalability** — Consistent EU AI Act compliance across all AI systems without repeated implementation effort.
-- **Stakeholder accountability** — Responsible parties are automatically notified whenever the compliance status of an AI system changes.
+## Why AI Trust Platform
 
-## Requirements and Setup
+- **EU AI Act — Compliant by Design** — Purpose-built for the EU AI Act — not adapted to it. Automated risk classification, assessments, obligations, and controls translate regulatory requirements into actionable compliance workflows.
+- **End-to-End — One Platform** — From initial registration to continuous compliance in one connected workflow. Manage classification, assessments, obligations, controls, evidence, monitoring, alerts, and audit readiness without stitching together multiple governance tools.
+- **Role-Based — AI-Assisted** — Make compliance a shared workflow, not a specialist task. Application Owners, AI Engineers, and Compliance Officers see exactly what they need — with clear handovers, guided workflows, and AI assistance along the way.
+- **Continuous Compliance — Ready for Change** — Stay compliant as AI systems and regulations evolve. Changes in models, systems, or regulatory requirements can trigger alerts, impact reviews, and re-assessments — keeping compliance aligned throughout the AI lifecycle.
+
+## Getting started
 
 ### Requirements
 
@@ -32,76 +46,15 @@ cp .env.example .env          # fill in credentials (defaults work for local dev
 docker compose up --build -d
 ```
 
-All traffic enters through the Luigi shell portal at port 8080. Frontend and backend ports are not exposed directly — they are only reachable via the shell reverse proxy behind oauth2-proxy.
+All traffic enters through the portal at **http://localhost:8080**. Frontend and backend ports are not exposed directly — they are only reachable via the shell reverse proxy behind oauth2-proxy.
 
 See [docs/architecture.md](docs/architecture.md) for the full repo layout, data flow diagrams, and Docker startup order.
-
-| Service | URL |
-|---|---|
-| Portal (Luigi shell / entry point) | http://localhost:8080 |
-| Keycloak (browser login) | http://localhost:8180 |
-| AI System Registry UI | http://localhost:8080/registry/ |
-| AI System Registry API | http://localhost:8080/api/registry/v1 |
-| AI System Registry API docs (Swagger) | http://localhost:8080/api/registry/docs |
-| Overview UI | http://localhost:8080/overview/ |
-| Monitoring UI | http://localhost:8080/monitoring/ |
-| Alerts UI | http://localhost:8080/alerts/ |
-| Compliance UI | http://localhost:8080/compliance/ |
-| Decision Trace Analyzer UI | http://localhost:8080/dta/ |
-| Role Management (IAM) UI | http://localhost:8080/iam/ |
-| RabbitMQ management | http://localhost:15672 |
-| ClickHouse HTTP API | http://localhost:8123 |
 
 ### Tear down
 
 ```bash
 docker compose down --remove-orphans          # stop, keep data
 docker compose down -v --remove-orphans       # stop, wipe all data (fresh start)
-```
-
-## CI/CD Pipeline
-
-```
-┌────────────────────────────────────────────────────────────────────────────────────┐
-│  GitHub                                                                            │
-│                                                                                    │
-│  ┌───────────────┐   ┌──────────────────────────────────┐   ┌──────────────────┐  │
-│  │  main branch  │──▶│ GitHub Action:                   │──▶│ GitHub Action:   │  │
-│  └───────────────┘   │ Build and Push Images to GHCR    │   │ Gardener Deploy  │  │
-│                      └──────────────────────────────────┘   └────────┬─────────┘  │
-└──────────────────────────────────────────────────────────────────────┼─────────────┘
-                                                                       │
-                                                                       ▼
-┌────────────────────────────────────────────────────────────────────────────────────┐
-│  Gardener                                                                          │
-│                                                                                    │
-│  ┌──────────────────────────────────────────────────────────────────────────────┐  │
-│  │  Shoot cluster (e.g. ai-trust-main)                                          │  │
-│  └──────────────────────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-Images are built on every push to `main` (and on version tags) by the **Build and Push Images** workflow and stored in the GitHub Container Registry (`ghcr.io`). Third-party images (postgres, keycloak, openfga, etc.) are pulled straight from their upstream registries by the Helm chart — only first-party images are built here.
-
-On every push to `main`, deployment to the `ai-trust-main` Gardener cluster is **automatic** — the **Gardener Deploy** workflow is triggered immediately after all images are published. Images are tagged `ai-trust-main-<sha>` (cluster-scoped, to avoid cross-cluster tag collisions) plus `latest`. The workflow authenticates via [Gardener Structured Authentication + GitHub OIDC](https://gardener.cloud/docs/guides/applications/app-ci-cd/#configure-github-actions) — no kubeconfig secret is stored in GitHub. Cluster-specific config lives in `k8s/env/<cluster>/.env` (committed to the repo). One-time cluster setup is documented in [k8s/README.md](k8s/README.md).
-
-**Manual dispatch** is also available — trigger the **Build and Push Images** workflow from the Actions tab with optional `branch` (default: `main`) and `gardener_cluster` (default: `ai-trust-main`, or `sr-test`, or `none` to skip deploy) inputs. This is useful for deploying feature branches to a specific cluster before merging.
-
-```bash
-# Deploy main branch to ai-trust-main (default)
-gh workflow run build-push.yml --repo AI-Trust-Services/ai-trust-platform --ref main
-
-# Deploy a feature branch to ai-trust-main
-gh workflow run build-push.yml --repo AI-Trust-Services/ai-trust-platform \
-  --ref <branch> -f branch=<branch> -f gardener_cluster=ai-trust-main
-
-# Deploy a feature branch to sr-test
-gh workflow run build-push.yml --repo AI-Trust-Services/ai-trust-platform \
-  --ref <branch> -f branch=<branch> -f gardener_cluster=sr-test
-
-# Build only, skip deploy
-gh workflow run build-push.yml --repo AI-Trust-Services/ai-trust-platform \
-  --ref <branch> -f gardener_cluster=none
 ```
 
 ## Support, Feedback, Contributing
