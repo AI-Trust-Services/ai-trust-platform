@@ -1,8 +1,16 @@
-# Local kind deployment. Service names are intentionally NOT prefixed with the
-# release name - shell/nginx.conf and every backend's env vars hardcode plain
-# docker-compose service names (e.g. "postgres", "ai-system-registry-backend")
+# Default values for any cluster. Service names are intentionally NOT prefixed
+# with the release name - shell/nginx.conf and every backend's env vars hardcode
+# plain docker-compose service names (e.g. "postgres", "ai-system-registry-backend")
 # and are baked into images at build time. Only ever install one release of
 # this chart per cluster.
+#
+# Deployment overlays:
+#   kind (local dev)  — apply values-kind.yaml on top: sets serviceType: NodePort
+#                       and nodePort numbers so kind's extraPortMappings expose
+#                       infra services on localhost. See Makefile install/upgrade.
+#   Gardener (prod)   — apply values-gardener.yaml on top: enables Ingress,
+#                       sets TLS + public hostnames. ClusterIP is already the
+#                       default here so no serviceType overrides are needed.
 
 image:
   repository: ai-trust # images are tagged ai-trust/<service>:<tag>, see k8s/scripts/build-and-load-images.sh
@@ -19,11 +27,10 @@ imagePullSecrets: []
 appPublicUrl: http://localhost:8080
 keycloakPublicUrl: http://localhost:8180
 
-# Ingress is off by default (kind has no ingress controller - NodePorts +
-# kind-config.yaml extraPortMappings handle local routing instead, see
-# oauthProxy.serviceType / keycloak.serviceType below). Turned on for Gardener
-# via values-gardener.yaml, with host/keycloakHost supplied at deploy time
-# (they depend on the target environment's DNS).
+# Ingress is off by default. Turned on for Gardener via values-gardener.yaml,
+# with host/keycloakHost supplied at deploy time (they depend on the target
+# environment's DNS). On kind, NodePort + kind-config.yaml extraPortMappings
+# handle routing instead (see values-kind.yaml).
 ingress:
   enabled: false
   className: nginx
@@ -47,31 +54,32 @@ serviceAccount:
 secretName: ai-trust-env # created by k8s/scripts/bootstrap.sh (from .env)
 
 # ── backing stores ──
+# serviceType defaults to ClusterIP (safe for any real cluster - no ports exposed
+# on node IPs). On kind, values-kind.yaml overrides these to NodePort so
+# kind-config.yaml extraPortMappings can bind them to localhost.
 postgres:
   image: postgres:16-alpine
   storageSize: 2Gi
-  nodePort: 30432
+  serviceType: ClusterIP
 
 rabbitmq:
   image: rabbitmq:3.13-management-alpine
-  nodePort: 30672
+  serviceType: ClusterIP
 
 clickhouse:
   image: clickhouse/clickhouse-server:24.5-alpine
   storageSize: 5Gi
-  nodePort: 30123
+  serviceType: ClusterIP
 
 minio:
   image: minio/minio:RELEASE.2025-09-07T16-13-09Z
   mcImage: minio/mc:RELEASE.2025-08-13T08-35-41Z
   storageSize: 5Gi
-  apiNodePort: 30900
-  consoleNodePort: 30901
+  serviceType: ClusterIP
 
 keycloak:
   image: quay.io/keycloak/keycloak:25.0
-  nodePort: 30180
-  serviceType: NodePort # ClusterIP on Gardener - reached via Ingress (ingress.keycloakHost) instead
+  serviceType: ClusterIP # NodePort on kind (values-kind.yaml); reached via Ingress on Gardener
 
 openfga:
   image: openfga/openfga:v1.18.1
@@ -79,15 +87,12 @@ openfga:
 
 oauthProxy:
   image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
-  nodePort: 30080
-  serviceType: NodePort # ClusterIP on Gardener - reached via Ingress (ingress.host) instead
+  serviceType: ClusterIP # NodePort on kind (values-kind.yaml); reached via Ingress on Gardener
   cookieSecure: false # true on Gardener - Ingress terminates TLS in front of it
 
 otel:
   collectorImage: otel/opentelemetry-collector-contrib:0.102.0
-  collectorGrpcNodePort: 30317
-  collectorHttpNodePort: 30318
-  rmqBridgeNodePort: 30802
+  serviceType: ClusterIP # NodePort on kind (values-kind.yaml) for external OTLP ingestion
 
 policyChecker:
   pollInterval: "10"
@@ -102,7 +107,7 @@ ollama:
   enabled: false
   image: ollama/ollama:latest
   storageSize: 20Gi # model blobs live here; qwen2.5:7b + a vision model easily exceed 10Gi
-  nodePort: 30434
+  serviceType: ClusterIP # NodePort on kind (values-kind.yaml)
 
 # ── the 7 near-identical backend+frontend MFE pairs ──
 # dependsOnJobs: Job names that must Complete before this backend starts

@@ -1,0 +1,42 @@
+# Overlay for local kind development. Applied on top of values.yaml by the
+# Makefile (make install / make upgrade). Switches all infra services from
+# ClusterIP (the default) to NodePort so that kind-config.yaml extraPortMappings
+# can bind them to localhost, replicating the docker-compose host-port layout.
+#
+# DO NOT apply this overlay on a real cluster (Gardener or otherwise) — NodePort
+# exposes these ports on every node's IP, bypassing the Ingress entirely.
+
+postgres:
+  serviceType: NodePort
+  nodePort: 30432
+
+rabbitmq:
+  serviceType: NodePort
+  nodePort: 30672
+
+clickhouse:
+  serviceType: NodePort
+  nodePort: 30123
+
+minio:
+  serviceType: NodePort
+  apiNodePort: 30900
+  consoleNodePort: 30901
+
+keycloak:
+  serviceType: NodePort
+  nodePort: 30180
+
+oauthProxy:
+  serviceType: NodePort
+  nodePort: 30080
+
+otel:
+  serviceType: NodePort
+  collectorGrpcNodePort: 30317
+  collectorHttpNodePort: 30318
+  rmqBridgeNodePort: 30802
+
+ollama:
+  serviceType: NodePort
+  nodePort: 30434

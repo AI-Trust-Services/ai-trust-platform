@@ -29,10 +29,10 @@ build:
 	bash scripts/build-and-load-images.sh
 
 install:
-	helm install $(RELEASE) $(CHART) -n $(NAMESPACE) $(OLLAMA_SET)
+	helm install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
 
 upgrade:
-	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) $(OLLAMA_SET)
+	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
 
 uninstall:
 	-helm uninstall $(RELEASE) -n $(NAMESPACE)
