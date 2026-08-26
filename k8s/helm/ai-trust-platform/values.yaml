@@ -32,9 +32,8 @@ ingress:
   minioHost: "" # e.g. minio.example.com -> minio API (presigned URL downloads from the browser)
   tls:
     enabled: false
-    selfSigned: false  # true = cert-manager self-signed issuer; false = external issuer (e.g. letsencrypt)
-    gardenerCert: false  # true on Gardener clusters — uses cert.gardener.cloud Certificate CRD (DNS-01, no port 80)
-    secretName: "ai-trust-tls"  # cert-manager or Gardener cert-service stores the provisioned cert here
+    selfSigned: false  # true = cert-manager self-signed issuer; false = external/pre-provisioned cert
+    secretName: "ai-trust-tls"  # on Gardener: provisioned by shoot-cluster-init.sh; on kind: cert-manager
   annotations: {}
 
 waitImages:

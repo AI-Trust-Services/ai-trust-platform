@@ -1,26 +1,7 @@
 {{/*
-  Gardener-managed TLS certificate (cert.gardener.cloud/v1alpha1).
-  Only rendered on Gardener clusters (ingress.tls.gardenerCert=true in values-gardener.yaml).
-  Gardener cert-service issues a Let's Encrypt cert via DNS-01 (no port 80 needed)
-  and writes it into the ai-trust-tls Secret that the Ingress references.
-
-  Gardener-managed DNS annotations are applied once to the Traefik LoadBalancer Service
-  during cluster init via k8s/gardener_init/shoot-cluster-init.sh — not managed by Helm
-  (the job-waiter ServiceAccount lacks cross-namespace RBAC to annotate the default ns).
+  Gardener-managed TLS certificate (cert.gardener.cloud/v1alpha1) and DNS
+  are handled exclusively by k8s/gardener_init/shoot-cluster-init.sh (one-time
+  manual setup). Helm does not manage these resources — the Ingress references
+  the ai-trust-tls Secret that shoot-cluster-init.sh provisions, but Helm
+  never creates or updates the Certificate itself.
 */}}
-{{- if and .Values.ingress.enabled .Values.ingress.tls.gardenerCert }}
-apiVersion: cert.gardener.cloud/v1alpha1
-kind: Certificate
-metadata:
-  name: ai-trust-tls
-spec:
-  dnsNames:
-    - {{ .Values.ingress.host | quote }}
-    - {{ .Values.ingress.keycloakHost | quote }}
-    {{- if .Values.ingress.minioHost }}
-    - {{ .Values.ingress.minioHost | quote }}
-    {{- end }}
-  secretRef:
-    name: {{ .Values.ingress.tls.secretName }}
-    namespace: {{ .Release.Namespace }}
-{{- end }}

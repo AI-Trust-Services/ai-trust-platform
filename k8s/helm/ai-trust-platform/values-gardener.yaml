@@ -24,4 +24,3 @@ ingress:
   tls:
     enabled: true
     selfSigned: false
-    gardenerCert: true
