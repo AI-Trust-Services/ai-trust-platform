@@ -3,13 +3,13 @@
 #
 # Usage:
 #   export KUBECONFIG=/path/to/shoot-kubeconfig.yaml
-#   bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name> <app-host> <keycloak-host> [<minio-host>]
+#   bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>
+#
+# Hostnames are read from k8s/gardener_init/env/<cluster-name>/.env.
+# Copy k8s/gardener_init/env/example/.env to env/<cluster-name>/.env and fill in before running.
 #
 # Example:
-#   bash k8s/gardener_init/shoot-cluster-init.sh sr-test \
-#     sr-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu \
-#     keycloak.sr-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu \
-#     minio.sr-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu
+#   bash k8s/gardener_init/shoot-cluster-init.sh sr-test
 #
 # What it does:
 #   1. Installs Traefik ingress controller via Helm (default namespace).
@@ -28,12 +28,28 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLUSTER_NAME="${1:-}"
-APP_HOST="${2:-}"
-KEYCLOAK_HOST="${3:-}"
-MINIO_HOST="${4:-}"
 
-if [[ -z "$CLUSTER_NAME" || -z "$APP_HOST" || -z "$KEYCLOAK_HOST" ]]; then
-  echo "usage: export KUBECONFIG=/path/to/shoot-kubeconfig.yaml && bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name> <app-host> <keycloak-host> [<minio-host>]" >&2
+if [[ -z "$CLUSTER_NAME" ]]; then
+  echo "usage: export KUBECONFIG=/path/to/shoot-kubeconfig.yaml && bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>" >&2
+  exit 1
+fi
+
+ENV_FILE="$SCRIPT_DIR/env/${CLUSTER_NAME}/.env"
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "error: env file not found: $ENV_FILE" >&2
+  echo "       Copy k8s/gardener_init/env/example/.env to env/${CLUSTER_NAME}/.env and fill in the hostnames." >&2
+  exit 1
+fi
+
+# shellcheck source=/dev/null
+source "$ENV_FILE"
+
+APP_HOST="${APP_HOST:-}"
+KEYCLOAK_HOST="${KEYCLOAK_HOST:-}"
+MINIO_HOST="${MINIO_HOST:-}"
+
+if [[ -z "$APP_HOST" || -z "$KEYCLOAK_HOST" ]]; then
+  echo "error: APP_HOST and KEYCLOAK_HOST must be set in $ENV_FILE" >&2
   exit 1
 fi
 

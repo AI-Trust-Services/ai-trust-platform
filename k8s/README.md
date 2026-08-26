@@ -140,12 +140,8 @@ Or apply manually:
    ```
 3. **`shoot-cluster-init.sh`** - run against the **shoot** cluster. Installs Traefik, applies `rbac.yaml`, requests a Let's Encrypt multi-SAN cert via Gardener cert-service (DNS-01, no port 80 needed), and annotates the Traefik LB Service for Gardener-managed DNS:
    ```bash
-   KUBECONFIG=$SHOOT_KUBECONFIG bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name> <app-host> <keycloak-host> [<minio-host>]
-   # example:
-   # bash k8s/gardener_init/shoot-cluster-init.sh sr-test \
-   #   sr-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu \
-   #   keycloak.sr-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu \
-   #   minio.sr-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu
+   KUBECONFIG=$SHOOT_KUBECONFIG bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>
+   # Hostnames read from k8s/gardener_init/env/<cluster-name>/.env
    ```
 
 Required GitHub secrets in the `gardener` environment:
@@ -167,7 +163,7 @@ Structured Authentication setup above avoids needing any kubeconfig in CI at all
 ### Adding a new cluster
 
 1. Run `bash k8s/gardener_init/garden-cluster-init.sh <cluster-name>` (Garden cluster — structured auth)
-2. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name> <app-host> <keycloak-host> [<minio-host>]` (shoot cluster — Traefik, RBAC, Gardener DNS annotations + Let's Encrypt cert)
+2. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>` (shoot cluster — Traefik, RBAC, Gardener DNS annotations + Let's Encrypt cert). Hostnames are read from `k8s/gardener_init/env/<cluster-name>/.env` — copy from `k8s/gardener_init/env/example/.env` and fill in.
 3. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/sr-test/.env`, fill in the Gardener connection vars and shoot domain hostnames)
 4. Add `<cluster-name>` to the `options` list in both `.github/workflows/deploy-gardener.yml` (for manual dispatch) and `.github/workflows/build-push.yml` (for manual dispatch input)
 5. Trigger `deploy-gardener.yml` with `cluster=<cluster-name>`
