@@ -208,8 +208,6 @@ jobs:
           # The self-signed cert is re-issued immediately by cert-manager on next apply.
           kubectl delete certificate --all -n "$NAMESPACE" --ignore-not-found || true
           kubectl delete issuer --all -n "$NAMESPACE" --ignore-not-found || true
-          # Also delete Gardener cert-service Certificate objects (different API group)
-          kubectl delete certificate.cert.gardener.cloud --all -n "$NAMESPACE" --ignore-not-found || true
           kubectl delete secret ai-trust-tls -n "$NAMESPACE" --ignore-not-found || true
 
       - name: Helm upgrade --install

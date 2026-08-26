@@ -76,6 +76,11 @@ kind: Certificate
 metadata:
   name: ai-trust-tls
   namespace: ai-trust
+  labels:
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    meta.helm.sh/release-name: ai-trust
+    meta.helm.sh/release-namespace: ai-trust
 spec:
   dnsNames:
     - "${APP_HOST}"
