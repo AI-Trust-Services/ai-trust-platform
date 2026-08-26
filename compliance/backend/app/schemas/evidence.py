@@ -45,8 +45,8 @@ class EvidenceUpdate(BaseModel):
 
 class EvidenceResponse(BaseModel):
     id: str
-    ai_system_id: str | None
-    assessment_id: str | None
+    ai_system_ids: list[str] = []
+    assessment_ids: list[str] = []
     title: str
     description: str
     evidence_type: str
