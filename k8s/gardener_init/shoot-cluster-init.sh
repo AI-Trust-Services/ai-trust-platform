@@ -15,8 +15,10 @@
 #   1. Installs Traefik ingress controller via Helm (default namespace).
 #   2. Applies rbac.yaml — creates the ClusterRole + ClusterRoleBinding that gives
 #      the GitHub Actions OIDC identity admin access to the shoot.
-#   3. Applies cert-manager-issuer.yaml — creates the Let's Encrypt ClusterIssuer
-#      used by the Helm chart for TLS certificates.
+#   3. Requests a wildcard TLS certificate via Gardener cert-service
+#      (cert.gardener.cloud/v1alpha1 Certificate CRD). Gardener uses DNS-01
+#      automatically — no port 80 required. The cert is stored in the
+#      ai-trust/ai-trust-tls Secret that the Helm Ingress references.
 #   4. Annotates the Traefik LoadBalancer Service with Gardener DNS annotations so
 #      shoot-dns-service auto-publishes A-records for all ingress hostnames.
 #
@@ -35,8 +37,12 @@ if [[ -z "$CLUSTER_NAME" || -z "$APP_HOST" || -z "$KEYCLOAK_HOST" ]]; then
   exit 1
 fi
 
+# Derive the shoot base domain from the app host (everything after the first label)
+SHOOT_DOMAIN="${APP_HOST#*.}"
+
 echo "KUBECONFIG: ${KUBECONFIG:-<not set>}"
-echo "Cluster: $CLUSTER_NAME"
+echo "Cluster:    $CLUSTER_NAME"
+echo "Domain:     $SHOOT_DOMAIN"
 echo ""
 
 echo "==> [1/4] Installing Traefik ingress controller (default namespace)"
@@ -56,12 +62,35 @@ echo "==> [2/4] Applying rbac.yaml to shoot cluster"
 kubectl apply -f "$SCRIPT_DIR/rbac.yaml"
 
 echo ""
-echo "==> [3/4] Applying cert-manager-issuer.yaml to shoot cluster"
-kubectl apply -f "$SCRIPT_DIR/cert-manager-issuer.yaml"
+echo "==> [3/4] Requesting TLS certificate via Gardener cert-service (DNS-01, no port 80 needed)"
+# Ensure the ai-trust namespace exists (deploy-gardener.yml bootstrap.sh creates it, but
+# shoot-cluster-init may run before the first deploy).
+kubectl create namespace ai-trust --dry-run=client -o yaml | kubectl apply -f -
+# cert.gardener.cloud Certificate CRD — Gardener cert-service issues a Let's Encrypt cert
+# via DNS-01 and writes it into the ai-trust-tls Secret (the same name the Helm Ingress uses).
+# NOTE: no spec.commonName — the X.509 CN is capped at 64 bytes and the Gardener domain is
+# longer. List all SANs in dnsNames only (Let's Encrypt ignores CN; uses SAN-only certs).
+kubectl apply -f - <<EOF
+apiVersion: cert.gardener.cloud/v1alpha1
+kind: Certificate
+metadata:
+  name: ai-trust-tls
+  namespace: ai-trust
+spec:
+  dnsNames:
+    - "${APP_HOST}"
+    - "${KEYCLOAK_HOST}"
+    $([ -n "${MINIO_HOST}" ] && echo "- \"${MINIO_HOST}\"" || true)
+  secretRef:
+    name: ai-trust-tls
+    namespace: ai-trust
+EOF
+echo "    Certificate requested — Gardener cert-service will issue via DNS-01 (takes ~1-2 min)"
+echo "    Monitor: kubectl get certificate ai-trust-tls -n ai-trust -w"
 
 echo ""
 echo "==> [4/4] Annotating Traefik LB Service for Gardener-managed DNS"
-echo "    Waiting for Traefik LB Service to be available..."
+echo "    Waiting for Traefik deployment to be available..."
 kubectl wait --for=condition=available deployment/traefik -n default --timeout=120s || true
 DNSNAMES="${APP_HOST},${KEYCLOAK_HOST}"
 if [[ -n "$MINIO_HOST" ]]; then
@@ -75,6 +104,9 @@ echo "    Annotated Traefik LB Service: ${DNSNAMES}"
 
 echo ""
 echo "==> shoot-cluster-init complete for '$CLUSTER_NAME'."
+echo ""
+echo "    Check certificate status:"
+echo "      kubectl get certificate ai-trust-tls -n ai-trust"
 echo ""
 echo "    Get the Traefik LoadBalancer IP:"
 echo "      kubectl get svc traefik -n default"

@@ -33,7 +33,8 @@ ingress:
   tls:
     enabled: false
     selfSigned: false  # true = cert-manager self-signed issuer; false = external issuer (e.g. letsencrypt)
-    secretName: "ai-trust-tls"  # cert-manager stores the provisioned cert here
+    gardenerCert: false  # true on Gardener clusters — uses cert.gardener.cloud Certificate CRD (DNS-01, no port 80)
+    secretName: "ai-trust-tls"  # cert-manager or Gardener cert-service stores the provisioned cert here
   annotations: {}
 
 waitImages:
