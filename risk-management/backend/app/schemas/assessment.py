@@ -66,3 +66,14 @@ class QuestionnaireFillRequest(BaseModel):
 class QuestionnaireFillResponse(BaseModel):
     questions: list[dict[str, Any]]
     answers: list[dict[str, Any]]
+
+
+class QuestionAnswerRequest(BaseModel):
+    question_id: str
+    system_description: str
+    source_code: str = ""
+    metadata: dict[str, Any]
+
+
+class QuestionAnswerResponse(BaseModel):
+    answer: dict[str, Any]  # QuestionnaireAnswer as dict

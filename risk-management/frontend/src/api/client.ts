@@ -119,6 +119,14 @@ export const api = {
   getQuestionnaire: (): Promise<QuestionnaireFillResponse> =>
     request("/assessments/questionnaire"),
 
+  answerOneQuestion: (body: {
+    question_id: string;
+    system_description: string;
+    source_code?: string;
+    metadata: Record<string, unknown>;
+  }): Promise<{ answer: QuestionnaireAnswer }> =>
+    request("/assessments/questionnaire/answer-one", json("POST", body)),
+
   fillQuestionnaire: (body: {
     system_description: string;
     source_code?: string;

@@ -18,6 +18,8 @@ from app.schemas.assessment import (
     AssessmentExportResponse,
     QuestionnaireFillRequest,
     QuestionnaireFillResponse,
+    QuestionAnswerRequest,
+    QuestionAnswerResponse,
 )
 from risk_management.classifier import RiskClassifier
 from risk_management.config import AppConfig
@@ -118,6 +120,24 @@ async def get_questionnaire() -> QuestionnaireFillResponse:
         questions=QUESTIONNAIRE,
         answers=[a.model_dump() for a in empty_answers],
     )
+
+
+@router.post("/assessments/questionnaire/answer-one", response_model=QuestionAnswerResponse)
+async def answer_one_question(body: QuestionAnswerRequest) -> QuestionAnswerResponse:
+    """Answer a single questionnaire question via LLM. Used for progressive filling."""
+    from risk_management.questionnaire import AIQuestionnaireAssistant
+    metadata = AISystemMetadata(**body.metadata)
+    base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    model = os.environ.get("OLLAMA_MODEL", "llama3.2")
+    llm_client = OllamaClient(base_url=base_url, model=model, temperature=0.2, timeout=60)
+    assistant = AIQuestionnaireAssistant(llm_client=llm_client)
+    answer = assistant.fill_single(
+        question_id=body.question_id,
+        system_description=body.system_description,
+        metadata=metadata,
+        source_code=body.source_code,
+    )
+    return QuestionAnswerResponse(answer=answer.model_dump())
 
 
 @router.post("/assessments/questionnaire/ai-fill", response_model=QuestionnaireFillResponse)

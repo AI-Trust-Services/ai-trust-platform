@@ -325,11 +325,108 @@ Pytania kwestionariusza:
 Zwróć tablicę JSON z odpowiedziami na WSZYSTKIE {question_count} pytania. Tylko JSON."""
 
 
+_SINGLE_Q_SYSTEM_PROMPT = """Jesteś ekspertem ds. zarządzania ryzykiem AI zgodnie z EU AI Act Art. 9.
+Odpowiedz na jedno pytanie kwestionariusza dotyczące ryzyka systemu AI.
+Odpowiadaj WYŁĄCZNIE poprawnym JSON-em. Bez wyjaśnień, bez markdown.
+Format:
+{
+  "question_id": "<id pytania>",
+  "answer": true/false,
+  "justification": "Krótkie uzasadnienie z odwołaniem do dokumentacji lub kodu.",
+  "confidence": "high" | "medium" | "low",
+  "severity_override": null,
+  "likelihood_override": null,
+  "mitigation_override": null
+}
+"""
+
+_SINGLE_Q_USER_TEMPLATE = """System AI: {name} ({annex_iii_category})
+Przeznaczenie: {intended_purpose}
+Kontekst: {deployment_context}
+Techniki AI: {ai_techniques}
+Dane wejściowe: {data_inputs}
+
+Opis systemu:
+{system_description}
+
+{source_code_section}
+
+Pytanie (id: {question_id}):
+{question}
+
+Wskazówka: {hint}
+
+Odpowiedz JSON-em."""
+
+
 class AIQuestionnaireAssistant:
     """Fills the questionnaire using an LLM. Falls back to all-false on error."""
 
     def __init__(self, llm_client):
         self._llm = llm_client
+
+    def fill_single(
+        self,
+        question_id: str,
+        system_description: str,
+        metadata,
+        source_code: str = "",
+    ) -> "QuestionnaireAnswer":
+        """Fill a single question. Used for streaming one-by-one filling."""
+        from risk_management.llm_client import LLMDisabledError, LLMUnavailableError
+
+        q = _question_by_id(question_id)
+        if q is None:
+            return QuestionnaireAnswer(question_id=question_id, answer=False, justification="", confidence="low")
+
+        source_code_section = ""
+        if source_code.strip():
+            source_code_section = f"Fragment kodu:\n```\n{source_code[:1500]}\n```"
+
+        user_prompt = _SINGLE_Q_USER_TEMPLATE.format(
+            name=metadata.name,
+            annex_iii_category=metadata.annex_iii_category.value,
+            intended_purpose=metadata.intended_purpose,
+            deployment_context=metadata.deployment_context,
+            ai_techniques=", ".join(metadata.ai_techniques) if metadata.ai_techniques else "—",
+            data_inputs=", ".join(metadata.data_inputs) if metadata.data_inputs else "—",
+            system_description=system_description[:2000],
+            source_code_section=source_code_section,
+            question_id=q["id"],
+            question=q["question"],
+            hint=q.get("hint", ""),
+        )
+
+        try:
+            response = self._llm.complete(_SINGLE_Q_SYSTEM_PROMPT, user_prompt)
+            raw = self._parse_single(response.content, question_id)
+            return QuestionnaireAnswer(
+                question_id=question_id,
+                answer=bool(raw.get("answer", False)),
+                justification=str(raw.get("justification", ""))[:500],
+                confidence=raw.get("confidence", "medium") if raw.get("confidence") in ("high", "medium", "low") else "medium",
+                severity_override=raw.get("severity_override") or None,
+                likelihood_override=raw.get("likelihood_override") or None,
+                mitigation_override=raw.get("mitigation_override") or None,
+            )
+        except (LLMDisabledError, LLMUnavailableError, ValueError):
+            return QuestionnaireAnswer(question_id=question_id, answer=False, justification="", confidence="low")
+
+    def _parse_single(self, content: str, question_id: str) -> dict:
+        content = re.sub(r"```(?:json)?\s*", "", content).strip()
+        try:
+            data = json.loads(content)
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            pass
+        m = re.search(r"\{.*\}", content, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group())
+            except json.JSONDecodeError:
+                pass
+        raise ValueError(f"Invalid JSON for question {question_id}")
 
     def fill(
         self,

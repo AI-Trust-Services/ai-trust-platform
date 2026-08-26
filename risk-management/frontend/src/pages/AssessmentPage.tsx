@@ -292,38 +292,41 @@ function IdentifyStep({
   const [answers, setAnswers] = useState<QuestionnaireAnswer[]>([]);
   const [qLoading, setQLoading] = useState(true);
 
-  // Load questionnaire — if AI-Assisted, fill automatically via LLM
+  // Load questionnaire — if AI-Assisted, fill questions one by one as answers arrive
   useEffect(() => {
-    if (useLlm) {
-      setQLoading(true);
-      api.fillQuestionnaire({
-        system_description: systemDesc,
-        source_code: sourceCode,
-        metadata: systemMeta,
+    api.getQuestionnaire()
+      .then(r => {
+        setQuestions(r.questions);
+        const empty = r.questions.map(q => ({
+          question_id: q.id,
+          answer: false,
+          justification: "",
+          confidence: "medium" as const,
+          severity_override: null,
+          likelihood_override: null,
+          mitigation_override: null,
+        }));
+        setAnswers(empty);
+        setQLoading(false);
+
+        if (useLlm) {
+          // Fire all questions in parallel; each updates its own answer as it arrives
+          r.questions.forEach((q, idx) => {
+            api.answerOneQuestion({
+              question_id: q.id,
+              system_description: systemDesc,
+              source_code: sourceCode,
+              metadata: systemMeta,
+            }).then(res => {
+              setAnswers(prev => prev.map((a, i) => i === idx ? res.answer : a));
+            }).catch(() => {/* keep empty answer on error */});
+          });
+        }
       })
-        .then(r => {
-          setQuestions(r.questions);
-          setAnswers(r.answers);
-        })
-        .catch(() => toast("Nie udało się wypełnić kwestionariusza przez AI", true))
-        .finally(() => setQLoading(false));
-    } else {
-      api.getQuestionnaire()
-        .then(r => {
-          setQuestions(r.questions);
-          setAnswers(r.questions.map(q => ({
-            question_id: q.id,
-            answer: false,
-            justification: "",
-            confidence: "medium",
-            severity_override: null,
-            likelihood_override: null,
-            mitigation_override: null,
-          })));
-        })
-        .catch(() => toast("Nie udało się pobrać kwestionariusza", true))
-        .finally(() => setQLoading(false));
-    }
+      .catch(() => {
+        toast("Nie udało się pobrać kwestionariusza", true);
+        setQLoading(false);
+      });
   }, []);
 
   function updateAnswer(idx: number, updated: QuestionnaireAnswer) {
@@ -332,12 +335,20 @@ function IdentifyStep({
 
   const yesCount = answers.filter(a => a.answer).length;
 
-  if (qLoading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>{useLlm ? "AI analizuje system…" : "Ładowanie kwestionariusza…"}</span></div>;
+  if (qLoading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>Ładowanie kwestionariusza…</span></div>;
   if (loading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>Identyfikacja ryzyk…</span></div>;
+
+  const aiPending = useLlm ? answers.filter(a => !a.justification && !a.answer).length : 0;
 
   return (
     <div className="content">
-      {useLlm && (
+      {useLlm && aiPending > 0 && (
+        <div className="msg-strip info" style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="spinner" style={{ width: 14, height: 14, flexShrink: 0 }} />
+          AI analizuje… ({questions.length - aiPending}/{questions.length} pytań gotowych)
+        </div>
+      )}
+      {useLlm && aiPending === 0 && (
         <div className="msg-strip info" style={{ marginBottom: 14 }}>
           Kwestionariusz wypełniony przez AI. Przejrzyj i popraw odpowiedzi przed kontynuacją.
         </div>
