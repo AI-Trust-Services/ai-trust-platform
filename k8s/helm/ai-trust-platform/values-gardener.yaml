@@ -18,6 +18,24 @@ oauthProxy:
 keycloak:
   serviceType: ClusterIP # reached via the Ingress below instead of a NodePort
 
+postgres:
+  serviceType: ClusterIP # internal only — no external access needed on Gardener
+
+rabbitmq:
+  serviceType: ClusterIP # internal only — no external access needed on Gardener
+
+clickhouse:
+  serviceType: ClusterIP # internal only — no external access needed on Gardener
+
+minio:
+  serviceType: ClusterIP # internal only — presigned URLs served via ingress.minioHost
+
+otel:
+  serviceType: ClusterIP # internal only — external apps push spans via the collector NodePort on kind only
+
+ollama:
+  serviceType: ClusterIP # internal only — registry backend reaches it cluster-internally
+
 ingress:
   enabled: true
   className: traefik

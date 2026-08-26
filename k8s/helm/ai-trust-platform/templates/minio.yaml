@@ -58,15 +58,19 @@ kind: Service
 metadata:
   name: minio
 spec:
-  type: NodePort
+  type: {{ .Values.minio.serviceType | default "NodePort" }}
   selector:
     {{- include "ai-trust.labels" (dict "name" "minio") | nindent 4 }}
   ports:
     - name: api
       port: 9000
       targetPort: 9000
+      {{- if ne (.Values.minio.serviceType | default "NodePort") "ClusterIP" }}
       nodePort: {{ .Values.minio.apiNodePort }}
+      {{- end }}
     - name: console
       port: 9001
       targetPort: 9001
+      {{- if ne (.Values.minio.serviceType | default "NodePort") "ClusterIP" }}
       nodePort: {{ .Values.minio.consoleNodePort }}
+      {{- end }}

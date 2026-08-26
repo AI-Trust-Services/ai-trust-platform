@@ -39,7 +39,7 @@ kind: Service
 metadata:
   name: rabbitmq
 spec:
-  type: NodePort
+  type: {{ .Values.rabbitmq.serviceType | default "NodePort" }}
   selector:
     {{- include "ai-trust.labels" (dict "name" "rabbitmq") | nindent 4 }}
   ports:
@@ -49,4 +49,6 @@ spec:
     - name: management
       port: 15672
       targetPort: 15672
+      {{- if ne (.Values.rabbitmq.serviceType | default "NodePort") "ClusterIP" }}
       nodePort: {{ .Values.rabbitmq.nodePort }}
+      {{- end }}
