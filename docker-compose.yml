@@ -630,6 +630,8 @@ services:
       ROOT_PATH: "/api/risk-management"
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host-gateway:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
+    extra_hosts:
+      - "host-gateway:host-gateway"
     healthcheck:
       test: ["CMD", "python", "healthcheck.py"]
       interval: 10s

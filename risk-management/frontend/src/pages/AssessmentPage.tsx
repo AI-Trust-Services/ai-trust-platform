@@ -40,14 +40,10 @@ function DemoStep({
   onSelect,
   useLlm,
   setUseLlm,
-  useRiskAtlasNexus,
-  setUseRiskAtlasNexus,
 }: {
   onSelect: (id: string | null, desc: string, meta: Record<string, unknown>, code?: string) => void;
   useLlm: boolean;
   setUseLlm: (v: boolean) => void;
-  useRiskAtlasNexus: boolean;
-  setUseRiskAtlasNexus: (v: boolean) => void;
 }) {
   const toast = useToast();
   const [demos, setDemos] = useState<DemoSummary[]>([]);
@@ -92,14 +88,6 @@ function DemoStep({
           <input type="checkbox" checked={useLlm} onChange={e => setUseLlm(e.target.checked)} />
           <span className="slider" />
         </label>
-        <span style={{ marginLeft: 20, fontSize: 13, color: "var(--text-secondary)" }}>IBM Risk Atlas Nexus</span>
-        <label className="toggle" title={useRiskAtlasNexus ? "Risk Atlas Nexus on" : "Risk Atlas Nexus off"}>
-          <input type="checkbox" checked={useRiskAtlasNexus} onChange={e => setUseRiskAtlasNexus(e.target.checked)} />
-          <span className="slider" />
-        </label>
-        <span style={{ fontSize: 12, color: useRiskAtlasNexus ? "var(--brand)" : "var(--text-secondary)" }}>
-          {useRiskAtlasNexus ? "Atlas on" : "Atlas off"}
-        </span>
       </div>
 
       {loading ? (
@@ -354,13 +342,11 @@ function IdentifyStep({
 
   return (
     <div className="content">
-      <div className="msg-strip info" style={{ marginBottom: 14 }}>
-        Odpowiedz na poniższe pytania, aby zidentyfikować ryzyka systemu AI (Art. 9 EU AI Act).
-        Zaznacz pytania, które dotyczą Twojego systemu, i uzasadnij każdą odpowiedź.
-        {useLlm && (
-          <> Użyj przycisku <strong>AI-Fill</strong>, aby AI wypełniło kwestionariusz na podstawie dokumentacji systemu.</>
-        )}
-      </div>
+      {useLlm && (
+        <div className="msg-strip info" style={{ marginBottom: 14 }}>
+          Użyj przycisku <strong>✦ AI-Fill</strong>, aby AI wypełniło kwestionariusz na podstawie dokumentacji systemu.
+        </div>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ fontSize: 13 }}>
@@ -955,7 +941,6 @@ export default function AssessmentPage() {
   const toast = useToast();
   const [step, setStep] = useState<Step>("demo");
   const [useLlm, setUseLlm] = useState(false);
-  const [useRiskAtlasNexus, setUseRiskAtlasNexus] = useState(false);
 
   const [systemDesc, setSystemDesc] = useState("");
   const [systemMeta, setSystemMeta] = useState<Record<string, unknown>>({});
@@ -997,7 +982,6 @@ export default function AssessmentPage() {
         metadata: systemMeta,
         use_llm: useLlm,
         use_stub: false,
-        use_risk_atlas_nexus: useRiskAtlasNexus,
         use_questionnaire: true,
         questionnaire_answers: answers,
       });
@@ -1108,7 +1092,6 @@ export default function AssessmentPage() {
         <DemoStep
           onSelect={handleDemoSelect}
           useLlm={useLlm} setUseLlm={setUseLlm}
-          useRiskAtlasNexus={useRiskAtlasNexus} setUseRiskAtlasNexus={setUseRiskAtlasNexus}
         />
       )}
       {step === "identify" && (
