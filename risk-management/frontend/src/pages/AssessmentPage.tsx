@@ -290,46 +290,41 @@ function IdentifyStep({
   const toast = useToast();
   const [questions, setQuestions] = useState<QuestionnaireQuestion[]>([]);
   const [answers, setAnswers] = useState<QuestionnaireAnswer[]>([]);
-  const [filling, setFilling] = useState(false);
   const [qLoading, setQLoading] = useState(true);
 
-  // Load questionnaire structure from backend on mount
+  // Load questionnaire — if AI-Assisted, fill automatically via LLM
   useEffect(() => {
-    api.getQuestionnaire()
-      .then(r => {
-        setQuestions(r.questions);
-        setAnswers(r.questions.map(q => ({
-          question_id: q.id,
-          answer: false,
-          justification: "",
-          confidence: "medium",
-          severity_override: null,
-          likelihood_override: null,
-          mitigation_override: null,
-        })));
-      })
-      .catch(() => {
-        toast("Nie udało się pobrać kwestionariusza", true);
-      })
-      .finally(() => setQLoading(false));
-  }, []);
-
-  async function handleAiFill() {
-    setFilling(true);
-    try {
-      const r = await api.fillQuestionnaire({
+    if (useLlm) {
+      setQLoading(true);
+      api.fillQuestionnaire({
         system_description: systemDesc,
         source_code: sourceCode,
         metadata: systemMeta,
-      });
-      setQuestions(r.questions);
-      setAnswers(r.answers);
-    } catch (e) {
-      toast(String(e), true);
-    } finally {
-      setFilling(false);
+      })
+        .then(r => {
+          setQuestions(r.questions);
+          setAnswers(r.answers);
+        })
+        .catch(() => toast("Nie udało się wypełnić kwestionariusza przez AI", true))
+        .finally(() => setQLoading(false));
+    } else {
+      api.getQuestionnaire()
+        .then(r => {
+          setQuestions(r.questions);
+          setAnswers(r.questions.map(q => ({
+            question_id: q.id,
+            answer: false,
+            justification: "",
+            confidence: "medium",
+            severity_override: null,
+            likelihood_override: null,
+            mitigation_override: null,
+          })));
+        })
+        .catch(() => toast("Nie udało się pobrać kwestionariusza", true))
+        .finally(() => setQLoading(false));
     }
-  }
+  }, []);
 
   function updateAnswer(idx: number, updated: QuestionnaireAnswer) {
     setAnswers(prev => prev.map((a, i) => i === idx ? updated : a));
@@ -337,14 +332,14 @@ function IdentifyStep({
 
   const yesCount = answers.filter(a => a.answer).length;
 
-  if (qLoading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>Ładowanie kwestionariusza…</span></div>;
+  if (qLoading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>{useLlm ? "AI analizuje system…" : "Ładowanie kwestionariusza…"}</span></div>;
   if (loading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>Identyfikacja ryzyk…</span></div>;
 
   return (
     <div className="content">
       {useLlm && (
         <div className="msg-strip info" style={{ marginBottom: 14 }}>
-          Użyj przycisku <strong>✦ AI-Fill</strong>, aby AI wypełniło kwestionariusz na podstawie dokumentacji systemu.
+          Kwestionariusz wypełniony przez AI. Przejrzyj i popraw odpowiedzi przed kontynuacją.
         </div>
       )}
 
@@ -352,16 +347,6 @@ function IdentifyStep({
         <div style={{ fontSize: 13 }}>
           <strong>{yesCount}</strong> z {questions.length} ryzyk oznaczonych
         </div>
-        {useLlm && (
-          <button
-            className="btn-primary btn-sm"
-            onClick={handleAiFill}
-            disabled={filling}
-            style={{ display: "flex", alignItems: "center", gap: 6 }}
-          >
-            {filling ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Analiza AI…</> : "✦ AI-Fill"}
-          </button>
-        )}
       </div>
 
       {questions.map((q, idx) => (
