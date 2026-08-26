@@ -26,5 +26,3 @@ ingress:
   tls:
     enabled: true
     selfSigned: false
-  gardenerDns:
-    enabled: true
