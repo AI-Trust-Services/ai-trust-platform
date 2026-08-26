@@ -2,6 +2,12 @@
 # One-time setup on the SHOOT cluster for a new Gardener shoot.
 #
 # Usage:
+#   # Authenticate to the shoot first (gardenctl recommended):
+#   gardenctl target --garden <landscape> --project <project> --shoot <cluster-name>
+#   eval $(gardenctl kubectl-env bash)
+#   bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>
+#
+#   # Or with an explicit kubeconfig:
 #   export KUBECONFIG=/path/to/shoot-kubeconfig.yaml
 #   bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>
 #
@@ -128,8 +134,11 @@ echo "    Annotated Traefik LB Service: ${DNSNAMES}"
 echo ""
 echo "==> shoot-cluster-init complete for '$CLUSTER_NAME'."
 echo ""
+echo "    NOTE: all kubectl commands below require the shoot KUBECONFIG to be active."
+echo "    If you used gardenctl to authenticate, run: eval \$(gardenctl kubectl-env bash)"
+echo ""
 echo "    Check certificate status:"
-echo "      kubectl get certificate ai-trust-tls -n ai-trust"
+echo "      kubectl get certificate.cert.gardener.cloud ai-trust-tls -n ai-trust"
 echo ""
 echo "    Get the Traefik LoadBalancer IP:"
 echo "      kubectl get svc traefik -n default"
