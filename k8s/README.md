@@ -163,7 +163,7 @@ Structured Authentication setup above avoids needing any kubeconfig in CI at all
 ### Adding a new cluster
 
 1. Run `bash k8s/gardener_init/garden-cluster-init.sh <cluster-name>` (Garden cluster — structured auth)
-2. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>` (shoot cluster — RBAC, Gardener DNS annotations + Let's Encrypt cert). Hostnames are read from `k8s/gardener_init/env/<cluster-name>/.env` — copy from `k8s/gardener_init/env/example/.env` and fill in. Note: Traefik and cert-manager are provisioned automatically by Gardener shoot extensions.
+2. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>` (shoot cluster — Traefik install if needed, RBAC, Gardener DNS annotations + Let's Encrypt cert). Hostnames are read from `k8s/gardener_init/env/<cluster-name>/.env` — copy from `k8s/gardener_init/env/example/.env` and fill in.
 3. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/sr-test/.env`, fill in the Gardener connection vars and shoot domain hostnames)
 4. Add `<cluster-name>` to the `options` list in both `.github/workflows/deploy-gardener.yml` (for manual dispatch) and `.github/workflows/build-push.yml` (for manual dispatch input)
 5. Trigger `deploy-gardener.yml` with `cluster=<cluster-name>`
