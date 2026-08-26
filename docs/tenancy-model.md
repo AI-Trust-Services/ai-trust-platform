@@ -2,7 +2,8 @@
 
 How the AI Trust Platform isolates tenants when run as a shared multi-tenant instance on
 Platform Mesh. The decision record is [ADR-001](adr/adr-001-tenancy.md); this document is the
-operational reference.
+operational reference. For **how to install/deploy** MT (and why single-tenant is the default), see
+[mt_install.md](mt_install.md).
 
 Isolation is **physical, per store** — each tenant gets its own Postgres schema (reached through
 a per-tenant Postgres role), its own ClickHouse database, and its own MinIO bucket prefix. There
