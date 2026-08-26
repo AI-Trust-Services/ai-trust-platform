@@ -116,9 +116,9 @@ One-time setup per cluster, checked into `k8s/gardener_init/`. Two scripts, run 
 export KUBECONFIG=/path/to/kubeconfig-garden-<landscape>.yaml
 bash k8s/gardener_init/garden-cluster-init.sh <cluster-name>
 
-# Step 2 — Shoot cluster: install Traefik, apply RBAC + cert-manager issuer
+# Step 2 — Shoot cluster: install Traefik, apply RBAC, provision DNS + Let's Encrypt cert
 export KUBECONFIG=/path/to/kubeconfig-<shoot>.yaml
-bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>
+bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name> <app-host> <keycloak-host> [<minio-host>]
 ```
 
 Or apply manually:
@@ -138,9 +138,14 @@ Or apply manually:
    ```bash
    KUBECONFIG=$SHOOT_KUBECONFIG kubectl apply -f k8s/gardener_init/rbac.yaml
    ```
-3. **`cert-manager-issuer.yaml`** - applied once to the **shoot** cluster. Edit the `email` field before applying:
+3. **`shoot-cluster-init.sh`** - run against the **shoot** cluster. Installs Traefik, applies `rbac.yaml`, requests a Let's Encrypt multi-SAN cert via Gardener cert-service (DNS-01, no port 80 needed), and annotates the Traefik LB Service for Gardener-managed DNS:
    ```bash
-   KUBECONFIG=$SHOOT_KUBECONFIG kubectl apply -f k8s/gardener_init/cert-manager-issuer.yaml
+   KUBECONFIG=$SHOOT_KUBECONFIG bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name> <app-host> <keycloak-host> [<minio-host>]
+   # example:
+   # bash k8s/gardener_init/shoot-cluster-init.sh sr-test \
+   #   sr-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu \
+   #   keycloak.sr-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu \
+   #   minio.sr-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu
    ```
 
 Required GitHub secrets in the `gardener` environment:
@@ -152,9 +157,7 @@ Required GitHub secrets in the `gardener` environment:
 All other cluster config (Gardener connection vars, app env) lives in `k8s/env/<cluster>/.env`,
 committed to the repo. No per-cluster GitHub secrets or variables needed.
 
-The chart assumes Traefik Ingress controller and cert-manager are already installed on the shoot
-(`values-gardener.yaml` sets `ingress.className: traefik`). `oauth2-proxy` and `keycloak` switch
-from NodePort to ClusterIP in this overlay and are reached through the Ingress.
+The chart assumes Traefik Ingress controller is already installed on the shoot (`values-gardener.yaml` sets `ingress.className: traefik`). cert-manager is not required — TLS is provisioned by Gardener cert-service via `shoot-cluster-init.sh`. `oauth2-proxy` and `keycloak` switch from NodePort to ClusterIP in this overlay and are reached through the Ingress.
 
 **Do not point the workflow at the kubeconfig from the Gardener dashboard / `gardenctl target`** -
 that one authenticates via an `exec:` credential plugin (`kubectl-gardenlogin`) that does an
@@ -164,13 +167,12 @@ Structured Authentication setup above avoids needing any kubeconfig in CI at all
 ### Adding a new cluster
 
 1. Run `bash k8s/gardener_init/garden-cluster-init.sh <cluster-name>` (Garden cluster — structured auth)
-2. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>` (shoot cluster — Traefik, RBAC, cert-manager issuer)
-3. Get the Traefik LoadBalancer IP: `KUBECONFIG=<shoot-kubeconfig> kubectl get svc -A | grep LoadBalancer`
-4. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/sr-test/.env`, fill in LB IP and Gardener vars)
-5. Add `<cluster-name>` to the `options` list in both `.github/workflows/deploy-gardener.yml` (for manual dispatch) and `.github/workflows/build-push.yml` (for manual dispatch input)
-6. Trigger `deploy-gardener.yml` with `cluster=<cluster-name>`
+2. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name> <app-host> <keycloak-host> [<minio-host>]` (shoot cluster — Traefik, RBAC, Gardener DNS annotations + Let's Encrypt cert)
+3. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/sr-test/.env`, fill in the Gardener connection vars and shoot domain hostnames)
+4. Add `<cluster-name>` to the `options` list in both `.github/workflows/deploy-gardener.yml` (for manual dispatch) and `.github/workflows/build-push.yml` (for manual dispatch input)
+5. Trigger `deploy-gardener.yml` with `cluster=<cluster-name>`
 
-The `ai-trust-main` cluster has its env at `k8s/env/ai-trust-main/.env` — fill in the `<LB_IP>` placeholders once Traefik is installed.
+The `ai-trust-main` cluster env is at `k8s/env/ai-trust-main/.env` — update it with the shoot domain hostnames (following the sr-test pattern) before running `shoot-cluster-init.sh` and deploying.
 
 ## Known limitations / gaps as of local-dev scope (same as docker-compose today)
 

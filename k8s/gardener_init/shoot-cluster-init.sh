@@ -15,7 +15,7 @@
 #   1. Installs Traefik ingress controller via Helm (default namespace).
 #   2. Applies rbac.yaml — creates the ClusterRole + ClusterRoleBinding that gives
 #      the GitHub Actions OIDC identity admin access to the shoot.
-#   3. Requests a wildcard TLS certificate via Gardener cert-service
+#   3. Requests a multi-SAN TLS certificate via Gardener cert-service
 #      (cert.gardener.cloud/v1alpha1 Certificate CRD). Gardener uses DNS-01
 #      automatically — no port 80 required. The cert is stored in the
 #      ai-trust/ai-trust-tls Secret that the Helm Ingress references.
