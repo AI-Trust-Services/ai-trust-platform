@@ -429,7 +429,7 @@
               <div style="font-size:13px; font-weight:600; color:#1d2d3e;">${displayName}</div>
               <div style="font-size:11px; color:#8a9bb0; margin-top:2px;">${currentUser.username}</div>
             </div>
-            <a href="/oauth2/sign_out" style="
+            <a href="/oauth2/sign_out?rd=/oauth2/start" style="
               display:flex; align-items:center; gap:8px;
               padding:10px 14px; color:#1d2d3e; text-decoration:none;
               font-size:13px; transition:background 0.1s;
