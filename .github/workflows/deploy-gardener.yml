@@ -202,12 +202,12 @@ jobs:
 
       - name: Delete unowned cert-manager resources before upgrade
         run: |
-          # cert-manager Certificate/Issuer objects owned by a previous Helm release
-          # block helm upgrade with "cannot be imported into the current release".
-          # On Gardener clusters, Helm no longer manages certificates — they are
-          # provisioned once by shoot-cluster-init.sh and left untouched by deploys.
-          kubectl delete certificate --all -n "$NAMESPACE" --ignore-not-found || true
-          kubectl delete issuer --all -n "$NAMESPACE" --ignore-not-found || true
+          # Remove the old self-signed cert-manager Issuer/Certificate that a previous Helm release
+          # may have left behind. These block helm upgrade with "cannot be imported".
+          # Do NOT delete cert.gardener.cloud Certificates — those are managed by shoot-cluster-init.sh
+          # and deleting them would destroy the Let's Encrypt TLS secret.
+          kubectl delete issuer ai-trust-selfsigned -n "$NAMESPACE" --ignore-not-found || true
+          kubectl delete certificate.cert-manager.io ai-trust-tls -n "$NAMESPACE" --ignore-not-found || true
 
       - name: Helm upgrade --install
         env:
