@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, Fragment } from "react";
-import { Loader2, X, ChevronDown, ChevronRight, Copy } from "lucide-react";
+import { Check, Loader2, X, ChevronDown, ChevronRight, Copy } from "lucide-react";
 import { TierBadge } from "./Badges";
 import { previewClassify, copyToClipboard, SELECT_CLASS } from "../utils";
 import { api } from "../api/client";
-import { useToast } from "../App";
+import { useToast, useModalControls } from "../App";
 import type { AISystem, AISystemFormData, UserSummary } from "../types";
+import { BUSINESS_QUESTIONS, TECHNICAL_QUESTIONS } from "../config/questionnaire";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,7 +35,7 @@ const EMPTY_FORM: AISystemFormData = {
 };
 
 const ENGINEER_STEPS = ["Purpose & Lifecycle", "Risk Flags", "Review"];
-const OWNER_STEPS = ["System Details", "Assign & Register"];
+const OWNER_STEPS = ["Fill Questionnaire", "Assign & Submit"];
 
 // Re-themed "panel" — a bordered card with a muted header. No shadcn primitive
 // maps to this collapsible section, so it stays styled markup on the new tokens.
@@ -52,7 +54,7 @@ function CollapsiblePanel({ title, children }: { title: string; children: React.
 function CheckItem({ id, label, checked, onCheckedChange }: { id: string; label: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
   return (
     <label className="flex items-start gap-2 text-sm" htmlFor={id}>
-      <Checkbox id={id} checked={checked} onCheckedChange={(c) => onCheckedChange(c === true)} className="mt-0.5" />
+      <Checkbox id={id} checked={checked} onCheckedChange={(c: boolean | "indeterminate") => onCheckedChange(c === true)} className="mt-0.5" />
       <span>{label}</span>
     </label>
   );
@@ -69,17 +71,21 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
   const isEngineerMode = !!system;
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<AISystemFormData>(EMPTY_FORM);
-  const [assigneeUsername, setAssigneeUsername] = useState("");
+  const [businessFields, setBusinessFields] = useState<Record<string, unknown>>({});
+  const [businessOwners, setBusinessOwners] = useState<UserSummary[]>([]);
+  const [businessAssigneeUsername, setBusinessAssigneeUsername] = useState("");
+  const [assigneeUsername, setAssigneeUsername] = useState(""); // CO for engineer mode
+  const [technicalAssigneeUsername, setTechnicalAssigneeUsername] = useState("");
   const [complianceOfficerUsername, setComplianceOfficerUsername] = useState("");
   const [engineers, setEngineers] = useState<UserSummary[]>([]);
   const [complianceOfficers, setComplianceOfficers] = useState<UserSummary[]>([]);
-  const [ownerExtra, setOwnerExtra] = useState({ department: "", use_case: "", people_affected: "", decision_context: "" });
-  const setOwnerField = (key: string, value: string) => { setOwnerExtra(x => ({ ...x, [key]: value })); setFlagsConfirmed(false); };
+  const [techSectionOpen, setTechSectionOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [flagsConfirmed, setFlagsConfirmed] = useState(false);
   const submitting = useRef(false);
   const [doneId, setDoneId] = useState<string | null>(null);
   const showToast = useToast();
+  const { username } = useModalControls();
 
   useEffect(() => {
     if (!open) return;
@@ -129,13 +135,21 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
         .catch(() => {});
     } else {
       setForm(EMPTY_FORM);
+      setBusinessFields({});
+      setBusinessAssigneeUsername("");
       setAssigneeUsername("");
+      setTechnicalAssigneeUsername("");
       setComplianceOfficerUsername("");
-      setOwnerExtra({ department: "", use_case: "", people_affected: "", decision_context: "" });
+      setTechSectionOpen(false);
       Promise.all([
+        api.getUsersByRole("business_owner"),
         api.getUsersByRole("ai_engineer"),
         api.getUsersByRole("ai_compliance_officer"),
-      ]).then(([eng, co]) => { setEngineers(eng); setComplianceOfficers(co); }).catch(() => {});
+      ]).then(([biz, eng, co]) => {
+        setBusinessOwners(biz);
+        setEngineers(eng);
+        setComplianceOfficers(co);
+      }).catch(() => {});
     }
   }, [open, isEngineerMode, system]);
 
@@ -161,14 +175,42 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
 
   async function handleOwnerSubmit() {
     if (!form.name.trim()) { showToast("System name is required", true); return; }
-    if (!assigneeUsername) { showToast("Please assign an AI Engineer", true); return; }
+    if (!businessAssigneeUsername) { showToast("Please assign a Business Assignee", true); return; }
+    if (!technicalAssigneeUsername) { showToast("Please assign a Technical Assignee", true); return; }
+    if (!complianceOfficerUsername) { showToast("Please assign a Compliance Officer", true); return; }
     if (submitting.current) return;
     submitting.current = true;
     setLoading(true);
     try {
-      const result = await api.intake({ name: form.name, description: form.description, intended_purpose: form.intended_purpose || null, department: ownerExtra.department || null, use_case: ownerExtra.use_case || null, people_affected: ownerExtra.people_affected || null, decision_context: ownerExtra.decision_context || null, autonomy_level: form.autonomy_level || null, assignee_username: assigneeUsername, compliance_officer_username: complianceOfficerUsername || null } as never);
+      const systemFields: Record<string, unknown> = {};
+      const answerFields: Record<string, string> = {};
+      for (const q of BUSINESS_QUESTIONS) {
+        const val = businessFields[q.key];
+        if (val == null || val === "") continue;
+        if (q.storage === "system") systemFields[q.key] = val;
+        else answerFields[q.key] = String(val);
+      }
+      for (const q of TECHNICAL_QUESTIONS) {
+        const val = businessFields[q.key];
+        if (val == null) continue;
+        systemFields[q.key] = q.type === "number" ? Number(val) : Boolean(val);
+      }
+      const result = await api.intake({ ...EMPTY_FORM, name: form.name, description: form.description, ...systemFields } as AISystemFormData);
+      if (Object.keys(answerFields).length > 0) {
+        await api.patchQuestionnaireAnswers(result.id, answerFields);
+      }
+      await api.assignWorkflow(result.id, {
+        business_assignee_username: businessAssigneeUsername,
+        technical_assignee_username: technicalAssigneeUsername,
+        compliance_officer_username: complianceOfficerUsername,
+      });
+      if (businessAssigneeUsername === username) {
+        await api.submitBusinessSection(result.id);
+      }
       setDoneId(result.id);
-      showToast("AI system registered and engineer notified");
+      showToast(businessAssigneeUsername === username
+        ? "System registered — technical assignee notified"
+        : "System registered — business assignee notified");
       onSuccess();
     } catch (e) {
       showToast(`Registration failed: ${(e as Error).message}`, true);
@@ -205,13 +247,22 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
 
   const preview = previewClassify(form, form.training_compute_flops);
 
+  const bizAnswered = BUSINESS_QUESTIONS.filter(q => {
+    const v = businessFields[q.key];
+    return q.type === "boolean" ? v === true : (v != null && v !== "");
+  });
+  const techAnswered = TECHNICAL_QUESTIONS.filter(q => {
+    const v = businessFields[q.key];
+    return q.type === "boolean" ? v === true : (q.type === "number" ? (typeof v === "number" && v > 0) : (v != null && v !== ""));
+  });
+
   function displayName(u: UserSummary) {
     const full = [u.firstName, u.lastName].filter(Boolean).join(" ");
     return full ? `${full} (${u.username})` : u.username;
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o && !doneId) onClose(); }}>
+    <Dialog open={open} onOpenChange={(o: boolean) => { if (!o && !doneId) onClose(); }}>
       <DialogContent showCloseButton={false} className="flex max-h-[90vh] max-w-2xl flex-col gap-0 p-0">
         <DialogHeader className="flex-row items-center justify-between space-y-0">
           <DialogTitle>{isEngineerMode ? `Fill in details — ${system!.name}` : "Register AI System"}</DialogTitle>
@@ -281,81 +332,149 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
             )}
 
             <div className="overflow-y-auto px-6 py-5">
-              {/* OWNER MODE step 0: System Details */}
+              {/* OWNER MODE step 0: Full questionnaire */}
               {!isEngineerMode && step === 0 && (
-                <div className="flex flex-col gap-4">
-                  <Alert variant="info">
-                    Provide a name and optionally a description, then assign an AI Engineer who will fill in the technical details.
-                  </Alert>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="col-span-2 flex flex-col gap-1.5">
-                      <Label htmlFor="reg_name">System Name <span className="text-[var(--danger-fg)]">*</span></Label>
-                      <Input type="text" id="reg_name" value={form.name} onChange={set("name")} placeholder="e.g. Fraud Detection Model" />
-                    </div>
-                    <div className="col-span-2 flex flex-col gap-1.5">
-                      <Label htmlFor="reg_description">Description (optional)</Label>
-                      <Textarea id="reg_description" rows={2} value={form.description} onChange={set("description")} placeholder="Brief description of the AI system…" />
-                    </div>
-                    <div className="col-span-2 flex flex-col gap-1.5">
-                      <Label htmlFor="reg_purpose">Purpose / Intended Use (optional)</Label>
-                      <Textarea id="reg_purpose" rows={2} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="Describe the intended purpose and deployment context…" />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="reg_dept">Department (optional)</Label>
-                      <Input type="text" id="reg_dept" value={ownerExtra.department} onChange={(e) => setOwnerField("department", e.target.value)} placeholder="e.g. HR, Finance, Operations" />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="reg_use_case">Use Case (optional)</Label>
-                      <Input type="text" id="reg_use_case" value={ownerExtra.use_case} onChange={(e) => setOwnerField("use_case", e.target.value)} placeholder="e.g. candidate screening" />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="reg_people">People Affected (optional)</Label>
-                      <Input type="text" id="reg_people" value={ownerExtra.people_affected} onChange={(e) => setOwnerField("people_affected", e.target.value)} placeholder="e.g. job applicants, employees" />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="reg_autonomy">Human Involvement</Label>
-                      <select className={SELECT_CLASS} id="reg_autonomy" value={form.autonomy_level} onChange={set("autonomy_level")}>
-                        <option value="decision_support">Decision support</option>
-                        <option value="human_in_the_loop">Human in the loop</option>
-                        <option value="human_on_the_loop">Human on the loop</option>
-                        <option value="fully_automated">Fully automated</option>
-                      </select>
-                    </div>
-                    <div className="col-span-2 flex flex-col gap-1.5">
-                      <Label htmlFor="reg_context">Decision Context (optional)</Label>
-                      <Textarea id="reg_context" rows={2} value={ownerExtra.decision_context} onChange={(e) => setOwnerField("decision_context", e.target.value)} placeholder="Describe how and where decisions are made by this system…" />
-                    </div>
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="reg_name">System Name <span className="text-[var(--danger-fg)]">*</span></Label>
+                    <Input type="text" id="reg_name" value={form.name} onChange={set("name")} placeholder="e.g. Fraud Detection Model" />
                   </div>
+
+                  <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    General Information (optional)
+                  </div>
+                  {BUSINESS_QUESTIONS.map((q) => {
+                    const val = businessFields[q.key];
+                    if (q.type === "select") {
+                      return (
+                        <div key={q.key} className="flex flex-col gap-1">
+                          <Label className="text-xs font-medium">{q.label}</Label>
+                          <select className={SELECT_CLASS} value={val != null ? String(val) : ""} onChange={(e) => setBusinessFields((f) => ({ ...f, [q.key]: e.target.value }))}>
+                            <option value="">— select —</option>
+                            {q.options?.map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </div>
+                      );
+                    }
+                    if (q.type === "textarea") {
+                      return (
+                        <div key={q.key} className="flex flex-col gap-1">
+                          <Label className="text-xs font-medium">{q.label}</Label>
+                          <Textarea value={val != null ? String(val) : ""} onChange={(e) => setBusinessFields((f) => ({ ...f, [q.key]: e.target.value }))} placeholder={q.hint} rows={2} className="text-sm" />
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={q.key} className="flex flex-col gap-1">
+                        <Label className="text-xs font-medium">{q.label}</Label>
+                        <Input value={val != null ? String(val) : ""} onChange={(e) => setBusinessFields((f) => ({ ...f, [q.key]: e.target.value }))} placeholder={q.hint} className="text-sm" />
+                      </div>
+                    );
+                  })}
+
+                  <Collapsible open={techSectionOpen} onOpenChange={setTechSectionOpen}>
+                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <span>AI Risk Classification (optional)</span>
+                      {techSectionOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-2 flex flex-col gap-2">
+                      {TECHNICAL_QUESTIONS.map((q) => {
+                        const val = businessFields[q.key];
+                        if (q.type === "number") {
+                          return (
+                            <div key={q.key} className="flex flex-col gap-1">
+                              <Label className="text-xs font-medium">{q.label}</Label>
+                              <Input type="number" value={val != null ? String(val) : ""} onChange={(e) => setBusinessFields((f) => ({ ...f, [q.key]: parseFloat(e.target.value) || 0 }))} placeholder={q.hint} className="text-sm" />
+                            </div>
+                          );
+                        }
+                        return (
+                          <label key={q.key} className="flex items-start gap-2.5 rounded-md border border-border p-2.5 text-sm">
+                            <Checkbox checked={Boolean(val)} onCheckedChange={(c: boolean | "indeterminate") => setBusinessFields((f) => ({ ...f, [q.key]: c === true }))} className="mt-0.5 shrink-0" />
+                            <div>
+                              <div className="font-medium text-[13px]">{q.label}</div>
+                              <div className="text-xs text-muted-foreground">{q.hint}</div>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </CollapsibleContent>
+                  </Collapsible>
                 </div>
               )}
 
-              {/* OWNER MODE step 1: Assign & Register */}
+              {/* OWNER MODE step 1: Assign & Submit */}
               {!isEngineerMode && step === 1 && (
-                <div className="flex flex-col gap-4">
-                  <Alert variant="info">
-                    Assign an AI Engineer who will fill in the technical details for <strong>{form.name}</strong>.
-                  </Alert>
-                  <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="reg_engineer">Assign to AI Engineer <span className="text-[var(--danger-fg)]">*</span></Label>
-                      <select className={SELECT_CLASS} id="reg_engineer" value={assigneeUsername} onChange={(e) => setAssigneeUsername(e.target.value)}>
-                        <option value="">Choose AI Engineer</option>
-                        {engineers.map((u) => (
-                          <option key={u.username} value={u.username}>{displayName(u)}</option>
-                        ))}
-                      </select>
+                  <div className="flex flex-col gap-5">
+                    {/* Business summary */}
+                    <div>
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-sm font-semibold">General Information</span>
+                        <Badge variant="outline" className="text-xs">{bizAnswered.length}/{BUSINESS_QUESTIONS.length} answered</Badge>
+                      </div>
+                      <div className="mb-3 divide-y divide-border rounded-md border border-border">
+                        {BUSINESS_QUESTIONS.map((q) => {
+                          const v = businessFields[q.key];
+                          const answered = v != null && v !== "";
+                          return (
+                            <div key={q.key} className="flex items-center gap-2.5 px-3 py-2 text-[13px]">
+                              {answered ? <Check className="size-3.5 shrink-0 text-[var(--success)]" /> : <span className="inline-block size-3.5 shrink-0 rounded-full border border-muted-foreground" />}
+                              <span className={answered ? "" : "text-muted-foreground"}>{q.label}</span>
+                              {answered && <span className="ml-auto max-w-[180px] truncate text-xs text-muted-foreground">{String(v)}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label htmlFor="reg_biz">Business Assignee <span className="text-[var(--danger-fg)]">*</span> <span className="font-normal text-muted-foreground text-xs">— will complete unanswered questions</span></Label>
+                        <select className={SELECT_CLASS} id="reg_biz" value={businessAssigneeUsername} onChange={(e) => setBusinessAssigneeUsername(e.target.value)}>
+                          <option value="">Choose Business Assignee</option>
+                          {businessOwners.map((u) => <option key={u.username} value={u.username}>{displayName(u)}</option>)}
+                        </select>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="reg_co">Pre-assign Compliance Officer (optional)</Label>
+
+                    {/* Technical summary */}
+                    <div>
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-sm font-semibold">AI Risk Classification</span>
+                        <Badge variant="outline" className="text-xs">{techAnswered.length}/{TECHNICAL_QUESTIONS.length} flagged</Badge>
+                      </div>
+                      <Collapsible>
+                        <CollapsibleTrigger className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+                          <ChevronRight className="size-3" /> Show all flags
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="mb-3 divide-y divide-border rounded-md border border-border">
+                          {TECHNICAL_QUESTIONS.map((q) => {
+                            const v = businessFields[q.key];
+                            const answered = q.type === "boolean" ? v === true : (q.type === "number" ? (typeof v === "number" && v > 0) : (v != null && v !== ""));
+                            return (
+                              <div key={q.key} className="flex items-center gap-2.5 px-3 py-2 text-[13px]">
+                                {answered ? <Check className="size-3.5 shrink-0 text-[var(--success)]" /> : <span className="inline-block size-3.5 shrink-0 rounded-full border border-muted-foreground" />}
+                                <span className={answered ? "" : "text-muted-foreground"}>{q.label}</span>
+                              </div>
+                            );
+                          })}
+                        </CollapsibleContent>
+                      </Collapsible>
+                      <div className="flex flex-col gap-1">
+                        <Label htmlFor="reg_technical">Technical Assignee <span className="text-[var(--danger-fg)]">*</span> <span className="font-normal text-muted-foreground text-xs">— will complete risk classification</span></Label>
+                        <select className={SELECT_CLASS} id="reg_technical" value={technicalAssigneeUsername} onChange={(e) => setTechnicalAssigneeUsername(e.target.value)}>
+                          <option value="">Choose Technical Assignee</option>
+                          {engineers.map((u) => <option key={u.username} value={u.username}>{displayName(u)}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* CO */}
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="reg_co">Compliance Officer <span className="text-[var(--danger-fg)]">*</span></Label>
                       <select className={SELECT_CLASS} id="reg_co" value={complianceOfficerUsername} onChange={(e) => setComplianceOfficerUsername(e.target.value)}>
-                        <option value="">Choose Compliance Officer (optional)</option>
-                        {complianceOfficers.map((u) => (
-                          <option key={u.username} value={u.username}>{displayName(u)}</option>
-                        ))}
+                        <option value="">Choose Compliance Officer</option>
+                        {complianceOfficers.map((u) => <option key={u.username} value={u.username}>{displayName(u)}</option>)}
                       </select>
                     </div>
                   </div>
-                </div>
               )}
 
               {/* ENGINEER MODE step 0: Purpose & Lifecycle */}
@@ -556,12 +675,11 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
               {step > 0 && (
                 <Button variant="ghost" onClick={() => setStep((s) => s - 1)}>← Back</Button>
               )}
-              {/* Owner step 0 → next */}
-              {!isEngineerMode && step === 0 && (
+              {/* Owner: next until last step, then register */}
+              {!isEngineerMode && step < maxStep && (
                 <Button onClick={handleNext}>Next →</Button>
               )}
-              {/* Owner step 1 → register */}
-              {!isEngineerMode && step === 1 && (
+              {!isEngineerMode && step === maxStep && (
                 <Button onClick={handleOwnerSubmit} disabled={loading}>
                   {loading && <Loader2 className="animate-spin" />} Register System
                 </Button>

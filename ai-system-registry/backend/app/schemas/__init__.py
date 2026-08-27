@@ -7,6 +7,7 @@ from app.schemas.ai_system import (
     RationaleItem,
     IntakeResponse,
     FieldConfirmationPatch,
+    QuestionnaireAnswersPatch,
     VALID_LIFECYCLES,
     VALID_ROLES,
 )
@@ -27,6 +28,8 @@ from app.schemas.workflow import (
     WorkflowSubmitRequest,
     WorkflowApproveRequest,
     WorkflowRejectRequest,
+    WorkflowAssignRequest,
+    WorkflowSubmitSectionRequest,
 )
 from app.schemas.system_model import SystemModelLinkBody, SystemModelResponse, ModelSystemResponse
 
@@ -38,6 +41,7 @@ __all__ = [
     "RationaleItem",
     "IntakeResponse",
     "FieldConfirmationPatch",
+    "QuestionnaireAnswersPatch",
     "VALID_LIFECYCLES",
     "VALID_ROLES",
     "ChatMessage",
@@ -55,4 +59,6 @@ __all__ = [
     "SystemModelLinkBody",
     "SystemModelResponse",
     "ModelSystemResponse",
+    "WorkflowAssignRequest",
+    "WorkflowSubmitSectionRequest",
 ]

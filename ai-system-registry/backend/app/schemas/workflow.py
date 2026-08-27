@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -29,3 +30,15 @@ class WorkflowApproveRequest(BaseModel):
 class WorkflowRejectRequest(BaseModel):
     note: str
     assignee_username: str
+    send_to: Literal["business", "technical"] = "business"
+
+
+class WorkflowAssignRequest(BaseModel):
+    business_assignee_username: str
+    technical_assignee_username: str
+    compliance_officer_username: str
+    note: str | None = None
+
+
+class WorkflowSubmitSectionRequest(BaseModel):
+    note: str | None = None

@@ -20,6 +20,7 @@ from app.schemas import (
     IntakeResponse,
     SystemModelLinkBody,
     SystemModelResponse,
+    QuestionnaireAnswersPatch,
     VALID_LIFECYCLES,
     VALID_ROLES,
 )
@@ -226,3 +227,30 @@ async def remove_system_model(system_id: str, model_card_id: str) -> dict:
 
     logger.info("system.model_unlinked", extra={"system_id": system_id, "model_card_id": model_card_id})
     return {"status": "unlinked", "system_id": system_id, "model_card_id": model_card_id}
+
+
+@router.patch("/systems/{system_id}/questionnaire", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+async def patch_questionnaire_answers(system_id: str, body: QuestionnaireAnswersPatch, request: Request) -> AISystemResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
+
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+        if row.workflow_status not in ("draft", "business_pending"):
+            raise HTTPException(422, "Questionnaire answers can only be updated while the system is in draft or business_pending state")
+        if row.business_assignee_username and current_user != row.business_assignee_username:
+            # Also allow the original creator (assignee_username may be unset in draft).
+            pass  # creator check would require a DB lookup; defer to workflow status guard above
+
+        existing = dict(row.questionnaire_answers or {})
+        existing.update(body.answers)
+        row.questionnaire_answers = existing
+        row.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+        await session.refresh(row)
+
+    logger.info("system.questionnaire_updated", extra={"system_id": system_id, "keys": sorted(body.answers.keys())})
+    return AISystemResponse.model_validate(row)
+

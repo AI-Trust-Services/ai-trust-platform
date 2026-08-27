@@ -136,8 +136,8 @@ async def test_owner_extract_from_text_file(client: httpx.AsyncClient):
     assert r.status_code == 200
     body = r.json()
     assert isinstance(body["extracted_fields"], dict)
-    # Stub always extracts system_name + purpose + department from documents
-    assert "system_name" in body["extracted_fields"]
+    # Stub extracts department, technologies, use_case, entity_role, etc. from documents
+    assert "department" in body["extracted_fields"]
 
 
 async def test_owner_extract_unsupported_file_type_returns_400(client: httpx.AsyncClient):
@@ -340,7 +340,7 @@ async def test_full_owner_flow_registers_high_risk_system(client: httpx.AsyncCli
     assert inferred_flags is not None
 
     intake_payload: dict = {
-        "name": fields.get("system_name", "TalentMatch"),
+        "name": "TalentMatch",
         "description": fields.get("purpose", ""),
         "assignee_username": _ENGINEER,
         "classification_rationale": inferred_flags,
