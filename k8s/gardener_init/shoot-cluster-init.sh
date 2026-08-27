@@ -109,7 +109,7 @@ spec:
   dnsNames:
     - "${APP_HOST}"
     - "${KEYCLOAK_HOST}"
-    $([ -n "${MINIO_HOST}" ] && echo "- \"${MINIO_HOST}\"" || true)
+$([ -n "${MINIO_HOST}" ] && echo "    - \"${MINIO_HOST}\"")
   secretRef:
     name: ai-trust-tls
     namespace: ai-trust
