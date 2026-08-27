@@ -42,13 +42,13 @@ kind: Service
 metadata:
   name: otel-rmq-bridge
 spec:
-  type: {{ .Values.otel.serviceType | default "NodePort" }}
+  type: {{ .Values.otel.serviceType | default "ClusterIP" }}
   selector:
     {{- include "ai-trust.labels" (dict "name" "otel-rmq-bridge") | nindent 4 }}
   ports:
     - port: 8002
       targetPort: 8002
-      {{- if ne (.Values.otel.serviceType | default "NodePort") "ClusterIP" }}
+      {{- if ne (.Values.otel.serviceType | default "ClusterIP") "ClusterIP" }}
       nodePort: {{ .Values.otel.rmqBridgeNodePort }}
       {{- end }}
 ---
@@ -89,20 +89,20 @@ kind: Service
 metadata:
   name: otel-collector
 spec:
-  type: {{ .Values.otel.serviceType | default "NodePort" }}
+  type: {{ .Values.otel.serviceType | default "ClusterIP" }}
   selector:
     {{- include "ai-trust.labels" (dict "name" "otel-collector") | nindent 4 }}
   ports:
     - name: grpc
       port: 4317
       targetPort: 4317
-      {{- if ne (.Values.otel.serviceType | default "NodePort") "ClusterIP" }}
+      {{- if ne (.Values.otel.serviceType | default "ClusterIP") "ClusterIP" }}
       nodePort: {{ .Values.otel.collectorGrpcNodePort }}
       {{- end }}
     - name: http
       port: 4318
       targetPort: 4318
-      {{- if ne (.Values.otel.serviceType | default "NodePort") "ClusterIP" }}
+      {{- if ne (.Values.otel.serviceType | default "ClusterIP") "ClusterIP" }}
       nodePort: {{ .Values.otel.collectorHttpNodePort }}
       {{- end }}
 ---
