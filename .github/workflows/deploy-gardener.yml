@@ -200,16 +200,6 @@ jobs:
             fi
           done
 
-      - name: Delete unowned cert-manager resources before upgrade
-        run: |
-          # cert-manager Certificate/Issuer objects owned by a previous Helm release
-          # block helm upgrade with "cannot be imported into the current release".
-          # Always delete them so Helm recreates them with proper ownership annotations.
-          # The self-signed cert is re-issued immediately by cert-manager on next apply.
-          kubectl delete certificate --all -n "$NAMESPACE" --ignore-not-found || true
-          kubectl delete issuer --all -n "$NAMESPACE" --ignore-not-found || true
-          kubectl delete secret ai-trust-tls -n "$NAMESPACE" --ignore-not-found || true
-
       - name: Helm upgrade --install
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
