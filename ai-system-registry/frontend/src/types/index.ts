@@ -4,6 +4,7 @@ export type OrgRole = "provider" | "deployer" | "importer" | "distributor";
 export type SystemType = "application" | "model" | "component" | "service";
 export type AutonomyLevel = "decision_support" | "human_in_the_loop" | "human_on_the_loop" | "fully_automated";
 export type ModelType = "llm" | "embedding" | "multimodal" | "classifier";
+export type WorkflowStatus = "draft" | "business_pending" | "technical_pending" | "pending_review" | "approved" | "rejected";
 
 export interface AISystem {
   id: string;
@@ -19,6 +20,10 @@ export interface AISystem {
   application_url: string;
   description: string;
   intended_purpose: string;
+  department: string | null;
+  use_case: string | null;
+  people_affected: string | null;
+  decision_context: string | null;
   tier: TierKey;
   basis: string;
   annex_iii_area: number | null;
@@ -26,9 +31,12 @@ export interface AISystem {
   model_id: string | null;
   created_at: string;
   updated_at: string;
-  workflow_status: string;
+  workflow_status: WorkflowStatus;
   assignee_username: string | null;
   compliance_officer_username: string | null;
+  business_assignee_username: string | null;
+  technical_assignee_username: string | null;
+  questionnaire_answers: Record<string, string> | null;
   is_gpai: boolean;
   training_compute_flops: number;
   is_chatbot: boolean;
@@ -52,7 +60,6 @@ export interface AISystem {
   is_judicial_admin: boolean;
   field_confirmations: Record<string, boolean> | null;
 }
-
 
 export interface WorkflowStep {
   id: string;
@@ -173,3 +180,4 @@ export interface PermissionsResponse {
   username: string;
   permissions: string[];
 }
+

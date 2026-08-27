@@ -23,6 +23,11 @@ _DESCRIPTIVE_FIELDS = (
     "decision_context", "autonomy_level",
 )
 
+# New questionnaire-specific fields.
+_QUESTIONNAIRE_FIELDS = (
+    "business_assignee_username", "technical_assignee_username", "questionnaire_answers",
+)
+
 
 @router.post("/intake", response_model=IntakeResponse, status_code=201, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
 async def intake_system(body: AISystemCreate, request: Request, background_tasks: BackgroundTasks) -> IntakeResponse:
@@ -45,6 +50,12 @@ async def intake_system(body: AISystemCreate, request: Request, background_tasks
 
     # Persist any descriptive fields the AI-assisted flow collected.
     for field in _DESCRIPTIVE_FIELDS:
+        value = getattr(body, field, None)
+        if value is not None:
+            setattr(row, field, value)
+
+    # Persist questionnaire-specific fields (new workflow).
+    for field in _QUESTIONNAIRE_FIELDS:
         value = getattr(body, field, None)
         if value is not None:
             setattr(row, field, value)

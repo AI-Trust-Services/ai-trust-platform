@@ -1,4 +1,5 @@
 import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult } from "../types";
+import type { SectionKey } from "../config/questionnaire";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
@@ -75,6 +76,14 @@ export const api = {
       body: JSON.stringify({ confirmations }),
     }),
 
+  // Merge questionnaire answers — only the keys sent are merged.
+  patchQuestionnaireAnswers: (systemId: string, answers: Record<string, string>) =>
+    request<AISystem>(`/systems/${encodeURIComponent(systemId)}/questionnaire`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers }),
+    }),
+
   linkModel: (systemId: string, modelId: string) =>
     request<AISystem>(`/systems/${systemId}/model?model_id=${encodeURIComponent(modelId)}`, { method: "PUT" }),
   unlinkModel: (systemId: string) =>
@@ -117,10 +126,47 @@ export const api = {
       body: JSON.stringify({ note: note ?? null }),
     }),
 
-  rejectSystem: (systemId: string, note: string, assigneeUsername: string) =>
+  rejectSystem: (systemId: string, note: string, assigneeUsername: string, sendTo: "business" | "technical" = "business") =>
     request<WorkflowStep[]>(`/systems/${systemId}/workflow/reject`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note, assignee_username: assigneeUsername }),
+      body: JSON.stringify({ note, assignee_username: assigneeUsername, send_to: sendTo }),
     }),
+
+  // New questionnaire workflow endpoints.
+  assignWorkflow: (systemId: string, body: { business_assignee_username: string; technical_assignee_username: string; compliance_officer_username: string; note?: string }) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  submitBusinessSection: (systemId: string, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-business`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note ?? null }),
+    }),
+
+  submitTechnicalSection: (systemId: string, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-technical`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note ?? null }),
+    }),
+
+  // Questionnaire chatbot — stateful, system must exist in DB.
+  questionnaireTurn: (systemId: string, section: SectionKey, transcript: ChatMessage[], fields: Record<string, unknown>) =>
+    request<AssistTurnResponse>(`/intake/assist/questionnaire/${encodeURIComponent(systemId)}/turn`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ section, transcript, fields }),
+    }),
+
+  questionnaireExtract: (systemId: string, section: SectionKey, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<AssistExtractResponse>(`/intake/assist/questionnaire/${encodeURIComponent(systemId)}/extract?section=${section}`, { method: "POST", body: fd });
+  },
 };
+

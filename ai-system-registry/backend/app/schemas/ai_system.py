@@ -22,7 +22,7 @@ class RationaleItem(BaseModel):
 class AISystemCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: str = Field(default="")
-    assignee_username: str = Field(..., min_length=1, max_length=200)
+    assignee_username: str | None = Field(default=None, max_length=200)
     compliance_officer_username: str | None = Field(default=None, max_length=200)
 
     # Optional descriptive fields (populated by the AI-assisted flow; manual owner
@@ -58,6 +58,10 @@ class AISystemCreate(BaseModel):
     generates_synthetic_content: bool | None = None
 
     classification_rationale: list[RationaleItem] | None = None
+
+    business_assignee_username: str | None = None
+    technical_assignee_username: str | None = None
+    questionnaire_answers: dict | None = None
 
     @field_validator("name")
     @classmethod
@@ -175,6 +179,9 @@ class AISystemResponse(BaseModel):
     workflow_status: str
     assignee_username: str | None
     compliance_officer_username: str | None
+    business_assignee_username: str | None
+    technical_assignee_username: str | None
+    questionnaire_answers: dict | None
 
     model_config = {"from_attributes": True}
 
@@ -187,3 +194,8 @@ class IntakeResponse(BaseModel):
 class FieldConfirmationPatch(BaseModel):
     """Partial field-confirmation update — only the keys sent are merged into field_confirmations."""
     confirmations: dict[str, bool]
+
+
+class QuestionnaireAnswersPatch(BaseModel):
+    """Merge-patch update for business-section questionnaire answers."""
+    answers: dict[str, str]

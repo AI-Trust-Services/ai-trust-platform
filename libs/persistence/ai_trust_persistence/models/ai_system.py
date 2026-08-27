@@ -77,6 +77,9 @@ class AISystem(Base):
     workflow_status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
     assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
     compliance_officer_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    business_assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    technical_assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    questionnaire_answers: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

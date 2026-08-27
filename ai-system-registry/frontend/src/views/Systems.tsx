@@ -7,6 +7,8 @@ import RegisterWizard from "../components/RegisterWizard";
 import RegisterModeChooser from "../components/RegisterModeChooser";
 import AssistedRegistration from "../components/AssistedRegistration";
 import EngineerAssistedRegistration from "../components/EngineerAssistedRegistration";
+import QuestionnaireView from "../components/QuestionnaireView";
+import type { SectionKey } from "../config/questionnaire";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import { SELECT_CLASS } from "../utils";
@@ -20,7 +22,9 @@ import { cn } from "@/lib/utils";
 
 const WORKFLOW_STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
-  pending_review: "Pending Review",
+  business_pending: "Business Review",
+  technical_pending: "Technical Review",
+  pending_review: "Compliance Review",
   approved: "Approved",
   rejected: "Rejected",
 };
@@ -36,6 +40,8 @@ export default function Systems() {
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [fillInSystem, setFillInSystem] = useState<AISystem | undefined>(undefined);
+  const [questionnaireSystem, setQuestionnaireSystem] = useState<AISystem | null>(null);
+  const [questionnaireSection, setQuestionnaireSection] = useState<SectionKey>("business");
   const [ownerStage, setOwnerStage] = useState<"chooser" | "manual" | "assisted">("chooser");
   const [engineerStage, setEngineerStage] = useState<"chooser" | "manual" | "assisted">("chooser");
   const { wizardOpen, setWizardOpen, mayRegister, username } = useModalControls();
@@ -76,9 +82,10 @@ export default function Systems() {
     Promise.all([
       api.getUsersByRole("ai_engineer").catch(() => []),
       api.getUsersByRole("ai_compliance_officer").catch(() => []),
-    ]).then(([engineers, cos]) => {
+      api.getUsersByRole("business_owner").catch(() => []),
+    ]).then(([engineers, cos, biz]) => {
       const map: UserMap = {};
-      for (const u of [...engineers, ...cos]) {
+      for (const u of [...engineers, ...cos, ...biz]) {
         map[u.username] = { firstName: u.firstName, lastName: u.lastName };
       }
       setUserMap(map);
@@ -105,9 +112,32 @@ export default function Systems() {
   }
 
   async function openSystem(s: AISystem) {
-    // Engineer mode: assigned user + editable status → open wizard to fill in
+    // Questionnaire assignee: open section view directly
+    const isBusinessAssignee = username && s.business_assignee_username === username;
+    const isTechnicalAssignee = username && s.technical_assignee_username === username;
+    if (isBusinessAssignee && s.workflow_status === "business_pending") {
+      try {
+        const fresh = await api.getSystem(s.id);
+        setQuestionnaireSystem(fresh);
+        setQuestionnaireSection("business");
+      } catch (e) {
+        showToast(`Failed to load system: ${(e as Error).message}`, true);
+      }
+      return;
+    }
+    if (isTechnicalAssignee && s.workflow_status === "technical_pending") {
+      try {
+        const fresh = await api.getSystem(s.id);
+        setQuestionnaireSystem(fresh);
+        setQuestionnaireSection("technical");
+      } catch (e) {
+        showToast(`Failed to load system: ${(e as Error).message}`, true);
+      }
+      return;
+    }
+    // Legacy engineer fill-in (rejected systems)
     const isAssignee = username && s.assignee_username === username;
-    if (isAssignee && (s.workflow_status === "draft" || s.workflow_status === "rejected")) {
+    if (isAssignee && s.workflow_status === "rejected") {
       try {
         const fresh = await api.getSystem(s.id);
         setFillInSystem(fresh);
@@ -133,6 +163,8 @@ export default function Systems() {
   function workflowStatusBadge(status: string) {
     const colors: Record<string, string> = {
       draft: "bg-[#8a9bb0]",
+      business_pending: "bg-[#7b5ea7]",
+      technical_pending: "bg-[#2980b9]",
       pending_review: "bg-[#e67e22]",
       approved: "bg-[#27ae60]",
       rejected: "bg-[#c0392b]",
@@ -169,7 +201,9 @@ export default function Systems() {
         <select className={cn(SELECT_CLASS, "w-auto")} value={workflowFilter} onChange={(e) => setWorkflowFilter(e.target.value)}>
           <option value="">All Workflow States</option>
           <option value="draft">Draft</option>
-          <option value="pending_review">Pending Review</option>
+          <option value="business_pending">Business Review</option>
+          <option value="technical_pending">Technical Review</option>
+          <option value="pending_review">Compliance Review</option>
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </select>
@@ -323,7 +357,22 @@ export default function Systems() {
           setSelectedSystem(updated);
           loadSystems();
         }}
+        onFillSection={(sys, section) => {
+          setDetailOpen(false);
+          setQuestionnaireSystem(sys);
+          setQuestionnaireSection(section);
+        }}
       />
+
+      {questionnaireSystem && (
+        <QuestionnaireView
+          open={!!questionnaireSystem}
+          system={questionnaireSystem}
+          section={questionnaireSection}
+          onClose={() => setQuestionnaireSystem(null)}
+          onSuccess={() => { setQuestionnaireSystem(null); loadSystems(); }}
+        />
+      )}
     </>
   );
 }

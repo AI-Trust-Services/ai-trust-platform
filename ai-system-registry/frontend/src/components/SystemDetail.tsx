@@ -4,7 +4,7 @@ import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS } from "../utils";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, ModelCard, WorkflowStep, UserSummary } from "../types";
+import type { AISystem, ModelCard, WorkflowStep } from "../types";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -68,55 +68,53 @@ function FlagPanel({ title, flags }: { title: string; flags: [unknown, string][]
 }
 
 const STEP_LABELS: Record<string, string> = {
-  registered: "System Registered",
-  assigned_engineer: "Engineer Assigned",
-  details_submitted: "Submitted for Review",
-  approved: "Approved",
-  rejected: "Rejected",
+  registered:           "System Registered",
+  section_assigned:     "Sections Assigned",
+  business_submitted:   "Business Section Submitted",
+  technical_submitted:  "Technical Section Submitted",
+  assigned_engineer:    "Engineer Assigned",
+  details_submitted:    "Submitted for Review",
+  approved:             "Approved",
+  rejected:             "Rejected",
 };
 
 const WF_PHASES = [
   { key: "registered",  label: "Registered" },
-  { key: "in_progress", label: "Engineer Review" },
-  { key: "review",      label: "Compliance Review" },
+  { key: "business",    label: "Business Review" },
+  { key: "technical",   label: "Technical Review" },
+  { key: "compliance",  label: "Compliance Review" },
   { key: "outcome",     label: "Outcome" },
 ];
 
 function workflowPhase(status: string): number {
-  if (status === "approved" || status === "rejected") return 4;
-  if (status === "pending_review") return 3;
-  return 2;
+  if (status === "approved" || status === "rejected") return 5;
+  if (status === "pending_review") return 4;
+  if (status === "technical_pending") return 3;
+  if (status === "business_pending") return 2;
+  return 1;
 }
 
 function WorkflowProgress({
   system,
   onSystemUpdate,
+  onFillSection,
   userMap,
 }: {
   system: AISystem;
   onSystemUpdate: (updated: AISystem) => void;
+  onFillSection?: (section: "business" | "technical") => void;
   userMap?: UserMap;
 }) {
-  const [engineers, setEngineers] = useState<UserSummary[]>([]);
-  const [lastSubmitter, setLastSubmitter] = useState("");
   const [rejectNote, setRejectNote] = useState("");
-  const [rejectAssignee, setRejectAssignee] = useState("");
+  const [rejectSendTo, setRejectSendTo] = useState<"business" | "technical">("business");
   const [rejectOpen, setRejectOpen] = useState(false);
   const [acting, setActing] = useState(false);
   const { username } = useModalControls();
   const showToast = useToast();
 
   const canAct = system.workflow_status === "pending_review" && system.assignee_username === username;
-
-  useEffect(() => {
-    if (canAct) {
-      api.getUsersByRole("ai_engineer").then(setEngineers).catch(() => {});
-      api.getWorkflow(system.id).then((steps) => {
-        const submitted = [...steps].reverse().find((s) => s.step === "details_submitted");
-        if (submitted) setLastSubmitter(submitted.actor_username);
-      }).catch(() => {});
-    }
-  }, [system.id, system.workflow_status, username]);
+  const canFillBusiness = system.workflow_status === "business_pending" && system.business_assignee_username === username;
+  const canFillTechnical = system.workflow_status === "technical_pending" && system.technical_assignee_username === username;
 
   async function handleApprove() {
     setActing(true);
@@ -131,13 +129,12 @@ function WorkflowProgress({
 
   async function handleReject() {
     if (!rejectNote.trim()) { showToast("Rejection note is required", true); return; }
-    if (!rejectAssignee) { showToast("Please reassign to an engineer", true); return; }
     setActing(true);
     try {
-      await api.rejectSystem(system.id, rejectNote, rejectAssignee);
+      await api.rejectSystem(system.id, rejectNote, system.assignee_username || "", rejectSendTo);
       onSystemUpdate(await api.getSystem(system.id));
-      setRejectOpen(false); setRejectNote(""); setRejectAssignee("");
-      showToast("System rejected and engineer notified");
+      setRejectOpen(false); setRejectNote("");
+      showToast("System rejected");
     } catch (e) {
       showToast(`Reject failed: ${(e as Error).message}`, true);
     } finally { setActing(false); }
@@ -145,8 +142,6 @@ function WorkflowProgress({
 
   const phase = workflowPhase(system.workflow_status);
 
-  // WORKFLOW STEPPER — no shadcn primitive maps to this; kept as styled markup
-  // re-themed onto the new tokens. Logic and data unchanged.
   return (
     <div>
       <div className="flex items-center">
@@ -184,20 +179,25 @@ function WorkflowProgress({
         })}
       </div>
 
-      {(system.assignee_username || system.compliance_officer_username) && (
-        <div className="mt-3 flex gap-6 text-[13px] text-muted-foreground">
-          {system.workflow_status !== "approved" && system.assignee_username && (
-            <span>
-              <span className="font-semibold">Assigned to: </span>
-              {userName(system.assignee_username, userMap)}
-            </span>
+      {(system.business_assignee_username || system.technical_assignee_username || system.compliance_officer_username) && (
+        <div className="mt-3 grid grid-cols-3 gap-2 text-[13px] text-muted-foreground">
+          {system.business_assignee_username && (
+            <span><span className="font-semibold">Business: </span>{userName(system.business_assignee_username, userMap)}</span>
           )}
-          {system.compliance_officer_username && system.workflow_status !== "approved" && (
-            <span>
-              <span className="font-semibold">Compliance officer: </span>
-              {userName(system.compliance_officer_username, userMap)}
-            </span>
+          {system.technical_assignee_username && (
+            <span><span className="font-semibold">Technical: </span>{userName(system.technical_assignee_username, userMap)}</span>
           )}
+          {system.compliance_officer_username && (
+            <span><span className="font-semibold">CO: </span>{userName(system.compliance_officer_username, userMap)}</span>
+          )}
+        </div>
+      )}
+
+      {(canFillBusiness || canFillTechnical) && onFillSection && (
+        <div className="mt-4">
+          <Button onClick={() => onFillSection(canFillBusiness ? "business" : "technical")}>
+            Fill {canFillBusiness ? "Business" : "Technical"} Section
+          </Button>
         </div>
       )}
 
@@ -207,7 +207,7 @@ function WorkflowProgress({
             {acting && <Loader2 className="animate-spin" />} Approve
           </Button>
           <Button variant="ghost" className="text-[var(--danger-fg)] hover:text-[var(--danger-fg)]"
-            onClick={() => { setRejectOpen(true); setRejectAssignee(lastSubmitter || ""); }}
+            onClick={() => { setRejectOpen(true); setRejectSendTo("business"); }}
             disabled={acting}>
             Reject…
           </Button>
@@ -223,18 +223,25 @@ function WorkflowProgress({
               <Textarea id="reject_note" rows={3} value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} placeholder="Explain what needs to be changed…" />
             </div>
             <div className="mb-3 flex flex-col gap-1.5">
-              <Label htmlFor="reject_engineer">Reassign to AI Engineer <span className="text-[var(--danger-fg)]">*</span></Label>
-              <select className={SELECT_CLASS} id="reject_engineer" value={rejectAssignee} onChange={(e) => setRejectAssignee(e.target.value)}>
-                <option value="">— select an engineer —</option>
-                {engineers.map((u) => (
-                  <option key={u.username} value={u.username}>
-                    {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username} ({u.username})
-                  </option>
+              <Label>Return to</Label>
+              <div className="flex gap-4 text-sm">
+                {(["business", "technical"] as const).map((opt) => (
+                  <label key={opt} className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="reject_send_to"
+                      value={opt}
+                      checked={rejectSendTo === opt}
+                      onChange={() => setRejectSendTo(opt)}
+                      className="accent-[var(--brand)]"
+                    />
+                    {opt === "business" ? "Business Section" : "Technical Section"}
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => { setRejectOpen(false); setRejectNote(""); setRejectAssignee(""); }}>Cancel</Button>
+              <Button variant="ghost" onClick={() => { setRejectOpen(false); setRejectNote(""); }}>Cancel</Button>
               <Button variant="destructive" onClick={handleReject} disabled={acting}>
                 {acting && <Loader2 className="animate-spin" />} Confirm Rejection
               </Button>
@@ -447,13 +454,14 @@ function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models
   );
 }
 
-export default function SystemDetail({ system: initialSystem, models, open, onClose, onDelete, onUpdate, userMap }: {
+export default function SystemDetail({ system: initialSystem, models, open, onClose, onDelete, onUpdate, onFillSection, userMap }: {
   system: AISystem | null;
   models: ModelCard[];
   open: boolean;
   onClose: () => void;
   onDelete: () => void;
   onUpdate: (updated: AISystem) => void;
+  onFillSection?: (system: AISystem, section: "business" | "technical") => void;
   userMap?: UserMap;
 }) {
   const [tab, setTab] = useState("overview");
@@ -507,7 +515,12 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
               <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
                 <TabsContent value="overview">
                   <Section>
-                    <WorkflowProgress system={system} onSystemUpdate={handleSystemUpdate} userMap={userMap} />
+                    <WorkflowProgress
+                      system={system}
+                      onSystemUpdate={handleSystemUpdate}
+                      onFillSection={onFillSection ? (section) => onFillSection(system, section) : undefined}
+                      userMap={userMap}
+                    />
                   </Section>
                   <Section title="Identity">
                     <DetailGrid rows={[

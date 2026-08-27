@@ -170,7 +170,7 @@ async def users_by_role(
     async def _fetch(username: str) -> dict | None:
         async with sem:
             try:
-                with admin_client() as kc:
+                with admin_client(current_realm()) as kc:
                     resp = kc.get("/users", params={"username": username, "exact": "true"})
                     resp.raise_for_status()
                     users = resp.json()
@@ -332,7 +332,7 @@ internal_router = APIRouter(prefix="/internal", tags=["internal"])
 
 @internal_router.post("/users/email-lookup")
 async def email_lookup(username: str = Body(..., embed=True)) -> dict:
-    with admin_client() as kc:
+    with admin_client(current_realm()) as kc:
         resp = kc.get("/users", params={"username": username, "exact": "true"})
         resp.raise_for_status()
         users = resp.json()
