@@ -1,25 +1,24 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { useToast } from "../App";
-import type { ModelCard, ModelCardFormData } from "../types";
+import type { ModelCardFormData } from "../types";
 
 const EMPTY: ModelCardFormData = { name: "", provider: "", version: "", model_type: "llm", description: "", inference_url: "", open_weights: false };
 
 interface Props {
   open: boolean;
-  editingModel: ModelCard | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export default function ModelModal({ open, editingModel, onClose, onSuccess }: Props) {
+export default function ModelModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<ModelCardFormData>(EMPTY);
   const [saving, setSaving] = useState(false);
   const showToast = useToast();
 
   useEffect(() => {
-    if (open) setForm(editingModel ? { ...EMPTY, ...editingModel } : EMPTY);
-  }, [open, editingModel]);
+    if (open) setForm(EMPTY);
+  }, [open]);
 
   if (!open) return null;
 
@@ -32,13 +31,8 @@ export default function ModelModal({ open, editingModel, onClose, onSuccess }: P
     }
     setSaving(true);
     try {
-      if (editingModel) {
-        await api.updateModel(editingModel.id, form);
-        showToast("Model updated");
-      } else {
-        await api.createModel(form);
-        showToast("Model card added");
-      }
+      await api.createModel(form);
+      showToast("Model card added");
       onClose();
       onSuccess();
     } catch (e) {
@@ -52,7 +46,7 @@ export default function ModelModal({ open, editingModel, onClose, onSuccess }: P
     <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" style={{ maxWidth: 560 }}>
         <div className="modal-header">
-          <h2>{editingModel ? "Edit Model Card" : "Add Model Card"}</h2>
+          <h2>Add Model Card</h2>
           <button className="btn-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
@@ -99,8 +93,7 @@ export default function ModelModal({ open, editingModel, onClose, onSuccess }: P
         <div className="modal-footer">
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn-primary" onClick={handleSave} disabled={saving}>
-            {saving && <span className="spinner" />}
-            {editingModel ? "Save Changes" : "Add Model"}
+            {saving && <span className="spinner" />} Add Model
           </button>
         </div>
       </div>

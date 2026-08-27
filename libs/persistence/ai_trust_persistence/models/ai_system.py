@@ -42,10 +42,6 @@ class AISystem(Base):
     lifecycle: Mapped[str] = mapped_column(String(30), default="development", index=True)
     compliance: Mapped[float] = mapped_column(Float, default=0.0)  # 0.0–100.0 percentage
 
-    model_id: Mapped[str | None] = mapped_column(
-        String(20), ForeignKey("model_cards.id", ondelete="SET NULL"), nullable=True
-    )
-
     subliminal_manipulation: Mapped[bool] = mapped_column(Boolean, default=False)
     exploits_vulnerability: Mapped[bool] = mapped_column(Boolean, default=False)
     social_scoring_public: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -20,13 +20,14 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone, date, timedelta
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import exists, func, select, text, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_trust_clickhouse import ch_command, ch_query, get_client
 from ai_trust_logging import get_logger
 from ai_trust_persistence.models.ai_system import AISystem
+from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.alert_rule import AlertRule
 from ai_trust_persistence.models.control import Control, control_obligations
 from ai_trust_persistence.models.evidence import Evidence, evidence_ai_systems, evidence_controls
@@ -191,18 +192,23 @@ async def eval_market_system_no_model_card(rule: AlertRule, ch) -> list[EvalResu
     # Candidate set = all market/post-market systems. Triggered when no model
     # card is linked; non-triggered results let cleared alerts auto-resolve.
     async with SessionLocal() as session:
+        # exists() is correlated: AISystem.id refers to the outer query's current row
+        has_model = exists(
+            select(AISystemModelCard.__table__.c.system_id)
+            .where(AISystemModelCard.__table__.c.system_id == AISystem.id)
+        ).correlate(AISystem)
+
         rows = (await session.execute(
-            select(AISystem.id, AISystem.name, AISystem.model_id).where(
+            select(AISystem.id, AISystem.name, (~has_model).label("missing")).where(
                 AISystem.lifecycle.in_(["market", "post-market"]),
             )
         )).all()
     results: list[EvalResult] = []
-    for sid, name, model_id in rows:
-        missing = model_id is None
+    for sid, name, is_missing in rows:
         results.append(EvalResult(
-            triggered=missing,
-            value=1.0 if missing else 0.0,
-            description=f"System on market without a model card: {name} ({sid})" if missing else "",
+            triggered=is_missing,
+            value=1.0 if is_missing else 0.0,
+            description=f"System on market without a model card: {name} ({sid})" if is_missing else "",
             entity_id=sid,
             entity_type="ai_system",
         ))

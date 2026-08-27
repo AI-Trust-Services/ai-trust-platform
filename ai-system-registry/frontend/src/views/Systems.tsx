@@ -91,10 +91,6 @@ export default function Systems() {
     });
   }, [systems, search, tierFilter, lifecycleFilter, workflowFilter]);
 
-  function modelName(modelId: string | null) {
-    const m = models.find((x) => x.id === modelId);
-    return m ? m.name : modelId;
-  }
 
   async function openSystem(s: AISystem) {
     // Engineer mode: assigned user + editable status → open wizard to fill in
@@ -201,7 +197,6 @@ export default function Systems() {
                     <div className="system-name">{s.name}</div>
                     <div className="system-sub">
                       {s.id} · v{s.version || "1.0.0"}
-                      {s.model_id && <> · <span style={{ color: "var(--brand)" }}>{modelName(s.model_id)}</span></>}
                     </div>
                   </td>
                   <td>{workflowStatusBadge(s.workflow_status)}</td>
