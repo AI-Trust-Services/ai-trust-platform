@@ -58,11 +58,13 @@ kind: Service
 metadata:
   name: ollama
 spec:
-  type: NodePort
+  type: {{ .Values.ollama.serviceType | default "ClusterIP" }}
   selector:
     {{- include "ai-trust.labels" (dict "name" "ollama") | nindent 4 }}
   ports:
     - port: 11434
       targetPort: 11434
+      {{- if ne (.Values.ollama.serviceType | default "ClusterIP") "ClusterIP" }}
       nodePort: {{ .Values.ollama.nodePort }}
+      {{- end }}
 {{- end }}

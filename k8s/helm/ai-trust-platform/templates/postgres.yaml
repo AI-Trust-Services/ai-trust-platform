@@ -32,6 +32,8 @@ spec:
           env:
             - name: POSTGRES_DB
               value: ai_trust
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           ports:
             - containerPort: 5432
           volumeMounts:
@@ -63,10 +65,12 @@ kind: Service
 metadata:
   name: postgres
 spec:
-  type: NodePort
+  type: {{ .Values.postgres.serviceType | default "ClusterIP" }}
   selector:
     {{- include "ai-trust.labels" (dict "name" "postgres") | nindent 4 }}
   ports:
     - port: 5432
       targetPort: 5432
+      {{- if ne (.Values.postgres.serviceType | default "ClusterIP") "ClusterIP" }}
       nodePort: {{ .Values.postgres.nodePort }}
+      {{- end }}

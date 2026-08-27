@@ -3,6 +3,9 @@ NAMESPACE := ai-trust
 RELEASE := ai-trust
 CHART := helm/ai-trust-platform
 
+# Auto-enable Ollama in Helm when LLM_PROVIDER=ollama is set in ../.env
+OLLAMA_SET := $(shell grep -s '^LLM_PROVIDER=ollama' ../.env > /dev/null 2>&1 && echo '--set ollama.enabled=true' || echo '')
+
 .PHONY: up down cluster delete-cluster configure bootstrap build install upgrade uninstall reset-jobs status
 
 # Full stack, from nothing - the kind/Helm equivalent of `docker compose up --build -d`.
@@ -34,10 +37,10 @@ build:
 	bash scripts/build-and-load-images.sh
 
 install:
-	helm install $(RELEASE) $(CHART) -n $(NAMESPACE)
+	helm install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
 
 upgrade:
-	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE)
+	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
 
 uninstall:
 	-helm uninstall $(RELEASE) -n $(NAMESPACE)

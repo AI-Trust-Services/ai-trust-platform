@@ -26,6 +26,7 @@
   // A pathSegment absent from this map is always visible (e.g. "overview").
   const PAGE_PERMISSIONS = {
     "ai-system-registry": ["systems:read", "systems:write"],
+    "model-catalog": ["systems:read", "systems:write"],
     // DTA has no dedicated permission — reuse monitoring:read (same audience).
     "decision-trace-analyzer": ["monitoring:read"],
     "monitoring": ["monitoring:read"],
@@ -39,6 +40,7 @@
   const canSee = (seg) =>
     !PAGE_PERMISSIONS[seg] || PAGE_PERMISSIONS[seg].some((p) => permissions.includes(p));
 
+  const base = window.location.origin;
   const children = [
       {
         pathSegment: "overview",
@@ -53,6 +55,13 @@
         icon: "database",
         viewUrl: "/registry/",
         navigationContext: "ai-system-registry",
+      },
+      {
+        pathSegment: "model-catalog",
+        label: "Model Catalog",
+        icon: "product",
+        viewUrl: base + "/registry/#/models",
+        navigationContext: "model-catalog",
       },
       {
         pathSegment: "decision-trace-analyzer",

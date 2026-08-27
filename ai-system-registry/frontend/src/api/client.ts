@@ -29,6 +29,16 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     }).then((r) => r.system),
+  getSystemModels: (systemId: string) =>
+    request<SystemModelResponse[]>(`/systems/${systemId}/models`),
+  addSystemModel: (systemId: string, modelCardId: string, role?: string) =>
+    request<SystemModelResponse>(`/systems/${systemId}/models`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model_card_id: modelCardId, role }),
+    }),
+  removeSystemModel: (systemId: string, modelCardId: string) =>
+    request<null>(`/systems/${systemId}/models/${modelCardId}`, { method: "DELETE" }),
 
   // AI-assisted registration — one stateless turn (frontend resends transcript + fields).
   assistTurn: (transcript: ChatMessage[], fields: Record<string, unknown>) =>
@@ -81,6 +91,7 @@ export const api = {
     request<AISystem>(`/systems/${systemId}/model`, { method: "DELETE" }),
 
   getModels: () => request<ModelCard[]>("/model-cards?limit=200"),
+  getModelCard: (id: string) => request<ModelCard>(`/model-cards/${id}`),
   createModel: (data: ModelCardFormData) =>
     request<ModelCard>("/model-cards", {
       method: "POST",
@@ -94,6 +105,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
   deleteModel: (id: string) => request<null>(`/model-cards/${id}`, { method: "DELETE" }),
+  getModelSystems: (modelId: string) => request<ModelSystemResponse[]>(`/model-cards/${modelId}/systems`),
 
   myPermissions: () => request<PermissionsResponse>("/me/permissions", {}, USERS_API_BASE),
 

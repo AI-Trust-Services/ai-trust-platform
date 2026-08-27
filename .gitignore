@@ -132,10 +132,12 @@ celerybeat.pid
 
 # Environments
 .env
+!k8s/env/**/.env
+!k8s/gardener_init/env/**/.env
 .venv
-env/
+/env/
 venv/
-ENV/
+/ENV/
 env.bak/
 venv.bak/
 

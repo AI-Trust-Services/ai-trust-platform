@@ -377,31 +377,47 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
   );
 }
 
-function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models: ModelCard[]; onSystemUpdate: (updated: AISystem) => void }) {
-  const [selectedModelId, setSelectedModelId] = useState(system.model_id || "");
+function ModelTab({ system, models }: { system: AISystem; models: ModelCard[] }) {
+  const [linkedModels, setLinkedModels] = useState<SystemModelResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedModelId, setSelectedModelId] = useState("");
+  const [role, setRole] = useState("");
   const [linking, setLinking] = useState(false);
+  const [detailModelId, setDetailModelId] = useState<string | null>(null);
   const showToast = useToast();
   const { mayWrite } = useModalControls();
-  const NO_WRITE_TITLE = "Requires permission: systems:write";
-  const linkedModel = models.find((m) => m.id === system.model_id);
 
-  async function handleLink() {
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api.getSystemModels(system.id)
+      .then((data) => { if (!cancelled) setLinkedModels(data); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [system.id]);
+
+  const linkedIds = new Set(linkedModels.map((m) => m.id));
+  const availableModels = models.filter((m) => !linkedIds.has(m.id));
+
+  async function handleAddModel() {
     if (!selectedModelId) { showToast("Please select a model first", true); return; }
     setLinking(true);
     try {
-      const updated = await api.linkModel(system.id, selectedModelId);
-      showToast("Model linked successfully");
-      onSystemUpdate(updated);
+      const added = await api.addSystemModel(system.id, selectedModelId, role || undefined);
+      setLinkedModels((prev) => [...prev, added]);
+      setSelectedModelId("");
+      setRole("");
+      showToast("Model linked");
     } catch (e) {
       showToast(`Link failed: ${(e as Error).message}`, true);
     } finally { setLinking(false); }
   }
 
-  async function handleUnlink() {
+  async function handleRemoveModel(modelCardId: string) {
     try {
-      const updated = await api.unlinkModel(system.id);
+      await api.removeSystemModel(system.id, modelCardId);
+      setLinkedModels((prev) => prev.filter((m) => m.id !== modelCardId));
       showToast("Model unlinked");
-      onSystemUpdate(updated);
     } catch (e) {
       showToast(`Unlink failed: ${(e as Error).message}`, true);
     }

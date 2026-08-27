@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Pencil, Trash2, RefreshCw } from "lucide-react";
 import { ModelTypeBadge } from "../components/Badges";
 import ModelModal from "../components/ModelModal";
+import ModelDetail from "../components/ModelDetail";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import { SELECT_CLASS } from "../utils";
@@ -18,7 +19,7 @@ export default function Models() {
   const [typeFilter, setTypeFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingModel, setEditingModel] = useState<ModelCard | null>(null);
+  const [detailModelId, setDetailModelId] = useState<string | null>(null);
   const { modelCreateOpen, setModelCreateOpen, mayWrite } = useModalControls();
   const showToast = useToast();
   const noWriteTitle = "Requires permission: systems:write";
@@ -37,7 +38,6 @@ export default function Models() {
   // Open "Add Model" modal when triggered from App header button
   useEffect(() => {
     if (modelCreateOpen) {
-      setEditingModel(null);
       setModalOpen(true);
       setModelCreateOpen(false);
     }
@@ -141,9 +141,14 @@ export default function Models() {
 
       <ModelModal
         open={modalOpen}
-        editingModel={editingModel}
         onClose={() => setModalOpen(false)}
         onSuccess={loadModels}
+      />
+      <ModelDetail
+        modelId={detailModelId}
+        open={detailModelId !== null}
+        onClose={() => setDetailModelId(null)}
+        onUpdate={loadModels}
       />
     </>
   );

@@ -15,19 +15,18 @@ const EMPTY: ModelCardFormData = { name: "", provider: "", version: "", model_ty
 
 interface Props {
   open: boolean;
-  editingModel: ModelCard | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export default function ModelModal({ open, editingModel, onClose, onSuccess }: Props) {
+export default function ModelModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<ModelCardFormData>(EMPTY);
   const [saving, setSaving] = useState(false);
   const showToast = useToast();
 
   useEffect(() => {
-    if (open) setForm(editingModel ? { ...EMPTY, ...editingModel } : EMPTY);
-  }, [open, editingModel]);
+    if (open) setForm(EMPTY);
+  }, [open]);
 
   const set = (k: keyof ModelCardFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: (e.target as HTMLInputElement).type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
@@ -38,13 +37,8 @@ export default function ModelModal({ open, editingModel, onClose, onSuccess }: P
     }
     setSaving(true);
     try {
-      if (editingModel) {
-        await api.updateModel(editingModel.id, form);
-        showToast("Model updated");
-      } else {
-        await api.createModel(form);
-        showToast("Model card added");
-      }
+      await api.createModel(form);
+      showToast("Model card added");
       onClose();
       onSuccess();
     } catch (e) {

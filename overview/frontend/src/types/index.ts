@@ -35,7 +35,6 @@ export interface AttentionSystem {
   tier: TierKey;
   lifecycle: LifecycleKey;
   compliance: number;
-  model_id: string | null;
   reason: string;
 }
 

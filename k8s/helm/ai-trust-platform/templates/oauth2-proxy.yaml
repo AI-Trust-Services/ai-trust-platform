@@ -41,7 +41,10 @@ spec:
             - --redirect-url={{ .Values.appPublicUrl }}/oauth2/callback
             - --upstream=http://shell:80
             - --http-address=0.0.0.0:4180
-            - --cookie-secure=false
+            - --cookie-secure={{ .Values.oauthProxy.cookieSecure }}
+            {{- if .Values.oauthProxy.cookieSecure }}
+            - --cookie-samesite=none
+            {{- end }}
             - --email-domain=*
             - --pass-authorization-header=true
             - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout?id_token_hint={id_token}
@@ -59,10 +62,12 @@ kind: Service
 metadata:
   name: oauth2-proxy
 spec:
-  type: NodePort
+  type: {{ .Values.oauthProxy.serviceType }}
   selector:
     {{- include "ai-trust.labels" (dict "name" "oauth2-proxy") | nindent 4 }}
   ports:
     - port: 4180
       targetPort: 4180
+      {{- if eq .Values.oauthProxy.serviceType "NodePort" }}
       nodePort: {{ .Values.oauthProxy.nodePort }}
+      {{- end }}
