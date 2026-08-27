@@ -4,8 +4,7 @@ RELEASE := ai-trust
 CHART := helm/ai-trust-platform
 
 # Auto-enable Ollama in Helm when LLM_PROVIDER=ollama is set in ../.env
-LLM_PROVIDER := $(shell grep -s '^LLM_PROVIDER=' ../.env | cut -d= -f2- | tr -d '"' | sed 's/[[:space:]]*#.*//' | tr -d '[:space:]')
-OLLAMA_SET := $(if $(filter ollama,$(LLM_PROVIDER)),--set ollama.enabled=true,)
+OLLAMA_SET := $(shell grep -s '^LLM_PROVIDER=ollama' ../.env > /dev/null 2>&1 && echo '--set ollama.enabled=true' || echo '')
 
 .PHONY: up down cluster delete-cluster bootstrap build install upgrade uninstall reset-jobs status
 
@@ -29,10 +28,10 @@ build:
 	bash scripts/build-and-load-images.sh
 
 install:
-	helm install $(RELEASE) $(CHART) -n $(NAMESPACE) $(OLLAMA_SET)
+	helm install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
 
 upgrade:
-	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) $(OLLAMA_SET)
+	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
 
 uninstall:
 	-helm uninstall $(RELEASE) -n $(NAMESPACE)

@@ -1,0 +1,7 @@
+{{/*
+  Gardener-managed TLS certificate (cert.gardener.cloud/v1alpha1) and DNS
+  are handled exclusively by k8s/gardener_init/shoot-cluster-init.sh (one-time
+  manual setup). Helm does not manage these resources — the Ingress references
+  the ai-trust-tls Secret that shoot-cluster-init.sh provisions, but Helm
+  never creates or updates the Certificate itself.
+*/}}

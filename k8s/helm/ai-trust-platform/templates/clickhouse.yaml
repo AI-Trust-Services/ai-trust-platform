@@ -79,14 +79,16 @@ kind: Service
 metadata:
   name: clickhouse
 spec:
-  type: NodePort
+  type: {{ .Values.clickhouse.serviceType | default "ClusterIP" }}
   selector:
     {{- include "ai-trust.labels" (dict "name" "clickhouse") | nindent 4 }}
   ports:
     - name: http
       port: 8123
       targetPort: 8123
+      {{- if ne (.Values.clickhouse.serviceType | default "ClusterIP") "ClusterIP" }}
       nodePort: {{ .Values.clickhouse.nodePort }}
+      {{- end }}
     - name: native
       port: 9000
       targetPort: 9000
