@@ -64,3 +64,16 @@ def install_tenant_scoping(engine) -> None:
             # Fail-closed: no valid tenant → do NOT switch role (stay as the shared login role with NO
             # direct schema access) and stay on public (no tenant tables).
             conn.exec_driver_sql("SELECT set_config('search_path', 'public', true)")
+
+    @event.listens_for(sync_engine, "reset")
+    def _reset_tenant_on_checkin(conn, reset_state):
+        # Defense-in-depth: sanitize the connection before it returns to the pool.
+        # SET LOCAL ROLE only resets on COMMIT/ROLLBACK — if an exception bypasses the
+        # clean teardown path, the t_<org> role would linger on the connection and leak
+        # to the next request that checks it out. RESET ROLE + public search_path here
+        # ensures the pool never hands out a connection still wearing a tenant identity.
+        try:
+            conn.exec_driver_sql("RESET ROLE")
+            conn.exec_driver_sql("SET search_path = public")
+        except Exception:
+            pass  # broken connection — pool will discard it
