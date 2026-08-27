@@ -7,7 +7,7 @@ from ai_trust_authorization.constants import (
     PLATFORM_OBJECT,
     RELATION_BY_PERMISSION,
 )
-from app.keycloak import admin_client
+from app.keycloak import admin_client, current_realm
 from app.schemas import PermissionsResponse
 
 router = APIRouter(tags=["permissions"])
@@ -30,7 +30,7 @@ async def my_permissions(
 async def me(user: str = Depends(get_current_user)) -> dict:
     import asyncio
     def _fetch():
-        kc = admin_client()
+        kc = admin_client(current_realm())
         results = kc.get(f"users?username={user}&exact=true").json()
         return results[0] if results else {}
     u, role_objects = await asyncio.gather(
