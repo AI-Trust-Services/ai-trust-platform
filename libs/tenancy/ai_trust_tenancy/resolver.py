@@ -46,13 +46,12 @@ def register_resolver(fn: ResolverFn | None) -> None:
 def _load_custom_from_env() -> None:
     """Load TENANCY_RESOLVER="module.path:callable" once, if set."""
     global _custom_loaded
-    _custom_loaded = True
     spec = os.environ.get("TENANCY_RESOLVER", "").strip()
-    if not spec:
-        return
-    mod, _, attr = spec.partition(":")
-    fn = getattr(importlib.import_module(mod), attr)
-    register_resolver(fn)
+    if spec:
+        mod, _, attr = spec.partition(":")
+        fn = getattr(importlib.import_module(mod), attr)
+        register_resolver(fn)
+    _custom_loaded = True  # set AFTER _custom_resolver is populated
 
 
 def resolve_tenant(request: Request) -> str | None:
