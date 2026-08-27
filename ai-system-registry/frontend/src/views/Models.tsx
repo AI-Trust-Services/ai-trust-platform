@@ -19,6 +19,7 @@ export default function Models() {
   const [typeFilter, setTypeFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingModel, setEditingModel] = useState<ModelCard | null>(null);
   const [detailModelId, setDetailModelId] = useState<string | null>(null);
   const { modelCreateOpen, setModelCreateOpen, mayWrite } = useModalControls();
   const showToast = useToast();
@@ -141,7 +142,8 @@ export default function Models() {
 
       <ModelModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        editingModel={editingModel}
+        onClose={() => { setModalOpen(false); setEditingModel(null); }}
         onSuccess={loadModels}
       />
       <ModelDetail
