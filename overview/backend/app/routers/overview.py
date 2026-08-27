@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Query
-from sqlalchemy import and_, case, func, or_, select
-from sqlalchemy.orm import aliased
+from sqlalchemy import and_, case, exists, func, or_, select
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.evidence import Evidence, evidence_obligations
+from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.obligation import Obligation
@@ -231,17 +231,13 @@ async def get_compliance_stats(
 
         # Expiring evidence — approved evidence with validity_until within the window,
         # soonest first. (Powers the "Evidence Expiring Soon" widget.)
-        evd_sys = aliased(AISystem)
         evd_deadlines = (await session.execute(
             select(
                 Evidence.id,
                 Evidence.title,
                 Evidence.validity_until.label("due_date"),
                 Evidence.status,
-                Evidence.ai_system_id,
-                evd_sys.name.label("ai_system_name"),
             )
-            .join(evd_sys, evd_sys.id == Evidence.ai_system_id)
             .where(
                 Evidence.validity_until >= today,
                 Evidence.validity_until < window_end,
@@ -253,14 +249,11 @@ async def get_compliance_stats(
 
         deadlines = [
             {
-                "type":           "evidence",
-                "id":             r.id,
-                "title":          r.title,
-                "due_date":       r.due_date.isoformat() if r.due_date else None,
-                "status":         r.status,
-                "ai_system_id":   r.ai_system_id,
-                "ai_system_name": r.ai_system_name,
-                "framework_id":   None,
+                "type":     "evidence",
+                "id":       r.id,
+                "title":    r.title,
+                "due_date": r.due_date.isoformat() if r.due_date else None,
+                "status":   r.status,
             }
             for r in evd_deadlines
         ]
