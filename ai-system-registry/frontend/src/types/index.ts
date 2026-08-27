@@ -53,20 +53,6 @@ export interface AISystem {
   field_confirmations: Record<string, boolean> | null;
 }
 
-export interface WorkflowStep {
-  id: string;
-  step: string;
-  actor_username: string;
-  assignee_username: string | null;
-  note: string | null;
-  created_at: string;
-}
-
-export interface UserSummary {
-  username: string;
-  firstName: string;
-  lastName: string;
-}
 
 export interface WorkflowStep {
   id: string;
