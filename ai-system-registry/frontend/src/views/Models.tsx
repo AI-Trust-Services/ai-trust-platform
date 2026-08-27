@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { ModelTypeBadge } from "../components/Badges";
 import ModelModal from "../components/ModelModal";
+import ModelDetail from "../components/ModelDetail";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import type { ModelCard } from "../types";
@@ -11,7 +12,7 @@ export default function Models() {
   const [typeFilter, setTypeFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingModel, setEditingModel] = useState<ModelCard | null>(null);
+  const [detailModelId, setDetailModelId] = useState<string | null>(null);
   const { modelCreateOpen, setModelCreateOpen, mayWrite } = useModalControls();
   const showToast = useToast();
   const noWriteTitle = "Requires permission: systems:write";
@@ -30,7 +31,6 @@ export default function Models() {
   // Open "Add Model" modal when triggered from App header button
   useEffect(() => {
     if (modelCreateOpen) {
-      setEditingModel(null);
       setModalOpen(true);
       setModelCreateOpen(false);
     }
@@ -80,8 +80,6 @@ export default function Models() {
         </select>
         <div className="toolbar-spacer" />
         <button className="btn-ghost" onClick={loadModels}>↺ Refresh</button>
-        <button className="btn-primary" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-          onClick={() => { setEditingModel(null); setModalOpen(true); }}>+ Add Model</button>
       </div>
 
       <div className="content">
@@ -101,7 +99,7 @@ export default function Models() {
               {filtered.length === 0 ? (
                 <tr className="empty-row"><td colSpan={6}>No model cards found.</td></tr>
               ) : filtered.map((m) => (
-                <tr key={m.id} onClick={(e) => e.stopPropagation()} style={{ cursor: "default" }}>
+                <tr key={m.id} onClick={() => setDetailModelId(m.id)} style={{ cursor: "pointer" }}>
                   <td>
                     <div className="system-name">{m.name}</div>
                     <div className="system-sub">{m.id}{m.description ? ` · ${m.description.slice(0, 60)}` : ""}</div>
@@ -116,10 +114,8 @@ export default function Models() {
                   </td>
                   <td>
                     <div className="actions">
-                      <button className="btn-icon" title={mayWrite ? "Edit" : noWriteTitle} disabled={!mayWrite}
-                        onClick={() => { setEditingModel(m); setModalOpen(true); }}>✎</button>
                       <button className="btn-icon btn-danger" title={mayWrite ? "Delete" : noWriteTitle} disabled={!mayWrite}
-                        onClick={() => handleDelete(m.id, m.name)}>✕</button>
+                        onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}>✕</button>
                     </div>
                   </td>
                 </tr>
@@ -131,9 +127,14 @@ export default function Models() {
 
       <ModelModal
         open={modalOpen}
-        editingModel={editingModel}
         onClose={() => setModalOpen(false)}
         onSuccess={loadModels}
+      />
+      <ModelDetail
+        modelId={detailModelId}
+        open={detailModelId !== null}
+        onClose={() => setDetailModelId(null)}
+        onUpdate={loadModels}
       />
     </>
   );

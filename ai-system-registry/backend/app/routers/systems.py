@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import select
+from sqlalchemy import select, delete
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE, SYSTEMS_APPROVE
@@ -11,10 +12,13 @@ from app.classifier import classify, CLASSIFIER_INPUTS
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.model_card import ModelCard
+from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from app.schemas import (
     AISystemResponse,
     AISystemUpdate,
     IntakeResponse,
+    SystemModelLinkBody,
+    SystemModelResponse,
     VALID_LIFECYCLES,
     VALID_ROLES,
 )
@@ -137,40 +141,64 @@ async def reclassify_system(system_id: str) -> IntakeResponse:
     )
 
 
-@router.put("/systems/{system_id}/model", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
-async def link_model(system_id: str, model_id: str = Query(...)) -> AISystemResponse:
+@router.get("/systems/{system_id}/models", response_model=list[SystemModelResponse], dependencies=[Depends(require_permission(SYSTEMS_READ))])
+async def list_system_models(system_id: str) -> list[SystemModelResponse]:
     async with SessionLocal() as session:
         sys_result = await session.execute(select(AISystem).where(AISystem.id == system_id))
-        row = sys_result.scalar_one_or_none()
-        if not row:
+        if not sys_result.scalar_one_or_none():
             raise HTTPException(404, f"System {system_id} not found")
 
-        mdl_result = await session.execute(select(ModelCard).where(ModelCard.id == model_id))
-        if not mdl_result.scalar_one_or_none():
-            raise HTTPException(404, f"Model card {model_id} not found")
+        result = await session.execute(
+            select(ModelCard, AISystemModelCard.__table__.c.role)
+            .join(AISystemModelCard.__table__, ModelCard.id == AISystemModelCard.__table__.c.model_card_id)
+            .where(AISystemModelCard.__table__.c.system_id == system_id)
+            .order_by(ModelCard.name)
+        )
+        return [
+            SystemModelResponse.from_card(card, role)
+            for card, role in result.all()
+        ]
 
-        row.model_id = model_id
-        row.updated_at = datetime.now(timezone.utc)
-        await session.commit()
-        await session.refresh(row)
 
-    logger.info("system.model_linked", extra={"system_id": system_id, "model_id": model_id})
-    return AISystemResponse.model_validate(row)
-
-
-@router.delete("/systems/{system_id}/model", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
-async def unlink_model(system_id: str) -> AISystemResponse:
+@router.post("/systems/{system_id}/models", response_model=SystemModelResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+async def add_system_model(system_id: str, body: SystemModelLinkBody) -> SystemModelResponse:
     async with SessionLocal() as session:
-        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
-        row = result.scalar_one_or_none()
-        if not row:
+        sys_result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        if not sys_result.scalar_one_or_none():
             raise HTTPException(404, f"System {system_id} not found")
 
-        row.model_id = None
-        row.updated_at = datetime.now(timezone.utc)
+        mdl_result = await session.execute(select(ModelCard).where(ModelCard.id == body.model_card_id))
+        card = mdl_result.scalar_one_or_none()
+        if not card:
+            raise HTTPException(404, f"Model card {body.model_card_id} not found")
+
+        await session.execute(
+            pg_insert(AISystemModelCard.__table__)
+            .values(system_id=system_id, model_card_id=body.model_card_id, role=body.role)
+            .on_conflict_do_update(
+                index_elements=["system_id", "model_card_id"],
+                set_={"role": body.role},
+            )
+        )
         await session.commit()
-        await session.refresh(row)
+        response = SystemModelResponse.from_card(card, body.role)
 
-    logger.info("system.model_unlinked", extra={"system_id": system_id})
-    return AISystemResponse.model_validate(row)
+    logger.info("system.model_linked", extra={"system_id": system_id, "model_card_id": body.model_card_id, "role": body.role})
+    return response
 
+
+@router.delete("/systems/{system_id}/models/{model_card_id}", dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+async def remove_system_model(system_id: str, model_card_id: str) -> dict:
+    async with SessionLocal() as session:
+        result = await session.execute(
+            delete(AISystemModelCard.__table__)
+            .where(AISystemModelCard.__table__.c.system_id == system_id)
+            .where(AISystemModelCard.__table__.c.model_card_id == model_card_id)
+            .returning(AISystemModelCard.__table__.c.model_card_id)
+        )
+        if not result.fetchone():
+            raise HTTPException(404, f"Link between {system_id} and {model_card_id} not found")
+        await session.commit()
+
+    logger.info("system.model_unlinked", extra={"system_id": system_id, "model_card_id": model_card_id})
+    return {"status": "unlinked", "system_id": system_id, "model_card_id": model_card_id}

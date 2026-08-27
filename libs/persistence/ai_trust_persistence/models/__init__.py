@@ -1,4 +1,5 @@
 from ai_trust_persistence.models.ai_system import AISystem
+from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.alert_rule import AlertRule
 from ai_trust_persistence.models.assessment import Assessment
 from ai_trust_persistence.models.control import Control, control_obligations
@@ -16,6 +17,7 @@ from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 
 __all__ = [
     "AISystem",
+    "AISystemModelCard",
     "AlertRule",
     "CustomRole",
     "ModelCard",
