@@ -380,9 +380,12 @@ function ModelTab({ system, models }: { system: AISystem; models: ModelCard[] })
   const { mayWrite } = useModalControls();
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     api.getSystemModels(system.id)
-      .then(setLinkedModels)
-      .finally(() => setLoading(false));
+      .then((data) => { if (!cancelled) setLinkedModels(data); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [system.id]);
 
   const linkedIds = new Set(linkedModels.map((m) => m.id));
