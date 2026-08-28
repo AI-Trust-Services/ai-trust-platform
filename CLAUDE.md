@@ -262,46 +262,6 @@ Backend (`compliance/backend/app/`):
 
 **Evidence** — `POST /api/v1/evidence` accepts `control_ids` and `obligation_ids` as repeated form fields (multi-value, one M2M row each); at least one of `control_ids`/`obligation_ids`/`ai_system_id`/`assessment_id` required. Versioned: `/upload-version` snapshots current file metadata to `evidence_versions` before replacing (old MinIO file deleted, snapshot retained); `/versions` returns history oldest-first; `version_label` tracks the current label. Stored in MinIO bucket `evidence-files`, key `evidence/{evidence_id}/{filename}`.
 
-### decision-trace-analyzer/ (internal port 8006, accessed via /api/dta/)
-
-Trace viewer for GenAI spans. Reads ClickHouse only (no Postgres).
-
-- `GET /api/v1/traces` — groups spans by `trace_id`, returns paginated list
-- Dev proxy — `vite.config.ts` proxies `/api/*` → `http://localhost:8006`, so no CORS issues locally
-- Prod — nginx proxies `/api/` → `decision-trace-analyzer-backend:8006`
-
-### compliance/ (internal port 8007, accessed via /api/compliance/)
-
-Governance chain MFE — assessments, obligations, controls, and evidence for EU AI Act / NIST / ISO compliance. Reads/writes Postgres; stores evidence files in MinIO.
-
-#### Backend structure (`compliance/backend/app/`)
-- `main.py` — FastAPI app, mounts all routers, `/health` endpoint, ensures MinIO bucket exists on startup
-- `cascade.py` — status cascade + score recalculation: approved evidence → effective control → fulfilled obligation → assessment score → `ai_systems.compliance`. Caller owns transaction boundary; cascade functions never commit
-- `obligation_templates.py` — hardcoded obligation sets per (framework, tier); EU AI Act tiers + NIST AI RMF + ISO/IEC 42001
-- `control_templates.py` — hardcoded control templates per obligation `article_ref` (adapted from the EU AI Act blueprint AISEC-* control set), tier-filtered via `controls_for(article_ref, tier)`; EU AI Act + NIST + ISO
-- `ids.py` — `new_id(prefix)` for `ASS-XXXXXXXX`, `OBL-XXXXXXXX`, `CTL-XXXXXXXX`, `EVD-XXXXXXXX` IDs
-- `minio_client.py` — async wrapper around the synchronous `minio` SDK; all blocking calls wrapped in `asyncio.to_thread`. Two clients: `_client` (in-cluster endpoint for uploads), `_presign_client` (public endpoint for presigned download URLs)
-- `routers/frameworks.py` — `GET/PATCH /api/v1/frameworks`
-- `routers/assessments.py` — full CRUD + `/generate-obligations`, `/generate-controls`, `/submit`, `/approve`
-- `routers/obligations.py` — full CRUD
-- `routers/controls.py` — full CRUD + `/link/{obligation_id}`, `/link/{obligation_id}` DELETE
-- `routers/evidence.py` — multipart upload, full CRUD + `/approve`, `/reject`, `/download-url`, `/versions`, `/upload-version`
-
-#### Evidence multi-link
-`POST /api/v1/evidence` accepts `control_ids` and `obligation_ids` as **repeated form fields** (multiple values allowed). Each creates a row in the relevant M2M table. At least one of `control_ids`, `obligation_ids`, `ai_system_id`, or `assessment_id` must be provided.
-
-#### Evidence versioning
-Evidence items are versioned. `POST /api/v1/evidence/{id}/upload-version` snapshots the current file metadata to `evidence_versions` before replacing. `GET /api/v1/evidence/{id}/versions` returns the version history ordered oldest-first. The `version_label` field on the evidence row tracks the current version label. Old files are deleted from MinIO after a successful version upload (metadata snapshot retained in `evidence_versions`).
-
-#### Governance chain
-`POST /api/v1/assessments` is the entry point: creating an assessment automatically generates obligations **and controls** in the same transaction — no separate call needed. Obligations are selected from `obligation_templates.py` based on the AI system's risk tier, with owner/not-applicable pre-filled from the most recent approved prior assessment for the same (system, framework). The `/generate-obligations` endpoint remains available for API consumers but is no longer used by the frontend.
-
-Controls are auto-generated from `control_templates.py`: for each obligation, `controls_for(article_ref, tier)` yields the tier-scoped control templates, each persisted as a `Control` (with a stable `control_ref = "{article_ref}:{slug}"`) and linked to its obligation via `control_obligations`. Because a freshly-linked control is `not_started` (not `effective`), the cascade immediately moves each obligation `applicable → in_progress`. Owner is carried forward from the most recent prior control with the same `control_ref` for that system (owner only — never status/effectiveness/due_date). Standalone `POST /api/v1/assessments/{id}/generate-controls` re-runs generation for API consumers and is idempotent: it skips any obligation that already has ≥1 linked control. Controls can also be linked to obligations manually via `POST /api/v1/controls/{id}/link/{obligation_id}`. Evidence is uploaded as multipart form data; approving evidence cascades automatically through the chain.
-
-Deleting an assessment cascades its obligations (FK `ondelete=CASCADE`) and cleans up the controls that were auto-generated for it: `DELETE /api/v1/assessments/{id}` removes controls that are auto-generated (`control_ref` not null) **and** linked only to that assessment's obligations. Manually-created controls (`control_ref` null) and controls shared with another assessment are always kept. The response includes `controls_deleted`.
-
-Evidence stored in MinIO bucket `evidence-files`, key pattern: `evidence/{evidence_id}/{filename}`.
-
 #### Evidence expiry (policy-checker-worker)
 Three alert rules seeded in migration `0004` drive evidence expiry:
 - `evidence_expired` — marks approved evidence past `validity_until` as `expired`, cascades control effectiveness + obligation status, fires alert
@@ -310,87 +270,18 @@ Three alert rules seeded in migration `0004` drive evidence expiry:
 
 ## Environment variables
 
-All credentials are loaded from `.env` (gitignored). Copy `.env.example` and fill in values before running `docker compose up`. Never commit `.env`.
+All credentials load from `.env` (gitignored; copy from `.env.example`, never commit). All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code. **Exception:** SMTP settings are optional — when `SMTP_HOST` is unset, the registry backend skips email and starts normally.
 
-| Variable | Service | Default | Description |
-|---|---|---|---|
-| `TENANCY_MODE` | all backends + policy-checker-worker | `single` | Tenancy mode. `single` = one org, no per-tenant isolation (docker-compose / kind / standalone). `jwt` = multi-tenant, tenant resolved from a `tenant_id` OIDC claim with schema/realm/CH-DB/bucket isolation. The kind installer prompts for this. |
-| `TENANCY_JWKS_ISSUER_BASE` | all backends | *(required if `jwt`)* | Trusted OIDC issuer prefix (e.g. `https://<host>/keycloak/realms/`). App fails fast at startup in `jwt` mode without it. Unused in `single`. |
-| `TENANT_CLAIM` | all backends | `tenant_id` | JWT claim carrying the tenant id (only used in `jwt` mode). |
-| `POSTGRES_USER` | postgres, db-migrate, all backends | `postgres` | PostgreSQL username || `POSTGRES_PASSWORD` | postgres, db-migrate, all backends | `postgres` | PostgreSQL password |
-| `RABBITMQ_USER` | rabbitmq, otel-rmq-bridge, consumers | `guest` | RabbitMQ username |
-| `RABBITMQ_PASSWORD` | rabbitmq, otel-rmq-bridge, consumers | `guest` | RabbitMQ password |
-| `CLICKHOUSE_USER` | clickhouse, consumers, backends | `default` | ClickHouse username |
-| `CLICKHOUSE_PASSWORD` | clickhouse, consumers, backends | *(empty)* | ClickHouse password |
-| `MINIO_ROOT_USER` | minio, minio-init, clickhouse, compliance | `minioadmin` | MinIO access key (used by ClickHouse S3 disk) |
-| `MINIO_ROOT_PASSWORD` | minio, minio-init, clickhouse, compliance | `minioadmin` | MinIO secret key |
-| `DATABASE_URL` | all backends, db-migrate | derived from `POSTGRES_*` | Postgres connection string |
-| `ALLOWED_ORIGINS` | all backends | *(required — no default)* | Comma-separated CORS origins. App refuses to start if not set |
-| `VITE_ALERTS_API_BASE` | alerts frontend (build time) | `/api/alerts/v1` | Alerts API URL baked into bundle |
-| `VITE_ALERTS_URL` | alerts frontend (build time) | `http://localhost:8080/alerts` | Alerts frontend URL (used for bell badge deep-link) |
-| `VITE_COMPLIANCE_API_BASE` | compliance frontend (build time) | `/api/compliance/v1` | Compliance API URL baked into bundle |
-| `VITE_COMPLIANCE_URL` | alerts + overview frontends (build time) | `http://localhost:8080/compliance` | Compliance frontend URL |
-| `VITE_DTA_API_BASE` | DTA frontend (build time) | `/api/dta/v1` | DTA API base — relative path via shell nginx proxy |
-| `VITE_MONITORING_API_BASE` | monitoring frontend (build time) | `/api/monitoring/v1` | Monitoring API URL baked into bundle |
-| `VITE_OVERVIEW_API_BASE` | overview frontend (build time) | `/api/overview/v1` | Overview API URL baked into bundle |
-| `VITE_REGISTRY_API_BASE` | registry + compliance frontends (build time) | `/api/registry/v1` | Registry API URL baked into bundle |
-| `VITE_REGISTRY_URL` | overview + compliance frontends (build time) | `http://localhost:8080/registry` | Registry frontend URL |
-| `KEYCLOAK_ADMIN` | keycloak, keycloak-provision | `admin` | Keycloak admin username |
-| `KEYCLOAK_ADMIN_PASSWORD` | keycloak, keycloak-provision | `admin` | Keycloak admin password |
-| `KEYCLOAK_CLIENT_SECRET` | keycloak-provision, oauth2-proxy | *(required)* | Shared secret for the oauth2-proxy OIDC client |
-| `USERS_BACKEND_CLIENT_SECRET` | keycloak-provision, users-backend | *(required)* | Secret for the users-backend service account client in Keycloak |
-| `KEYCLOAK_PUBLIC_URL` | oauth2-proxy | `http://localhost:8180` | Public Keycloak URL reachable by the browser (for login redirect) |
-| `APP_PUBLIC_URL` | keycloak-provision | `http://localhost:8080` | Public app URL — used to set oauth2-proxy redirect URIs in Keycloak |
-| `APP_ADMIN_USERNAME` | keycloak-provision | `admin` | Bootstrap platform admin username |
-| `APP_ADMIN_PASSWORD` | keycloak-provision | `password` | Bootstrap platform admin password — change before any non-local deployment |
-| `VITE_USERS_API_BASE` | users frontend (build time) | `/api/users/v1` | Users API URL baked into bundle |
-| `OAUTH2_PROXY_COOKIE_SECRET` | oauth2-proxy | *(required)* | Cookie encryption key — must be exactly 16, 24, or 32 characters |
-| `MINIO_ENDPOINT` | compliance-backend | `minio:9000` | In-cluster MinIO host:port for uploads (used inside the container) |
-| `MINIO_PUBLIC_ENDPOINT` | compliance-backend | `localhost:9000` | Public-facing MinIO host:port for presigning download URLs the browser can reach |
-| `MINIO_SECURE` | compliance-backend | `false` | Set to `true` if MinIO is behind TLS |
-| `MINIO_REGION` | compliance-backend | `us-east-1` | Region used when presigning — avoids a GetBucketLocation network call from inside the container |
-| `ALERT_POLL_INTERVAL` | policy-checker-worker | `10` | Rule evaluation interval in seconds (use `60`+ in production) |
-| `SMTP_HOST` | ai-system-registry-backend | *(empty — email disabled)* | SMTP server hostname. **Optional**: leave blank to disable email notifications entirely (the backend starts and skips them). Set it to enable outgoing mail. |
-| `SMTP_PORT` | ai-system-registry-backend | *(unset)* | SMTP server port (required only when `SMTP_HOST` is set). |
-| `SMTP_USER` | ai-system-registry-backend | *(optional)* | SMTP username — omit if the server requires no auth |
-| `SMTP_PASSWORD` | ai-system-registry-backend | *(optional)* | SMTP password — omit if the server requires no auth |
-| `SMTP_FROM` | ai-system-registry-backend | *(unset)* | Envelope / From address (required only when `SMTP_HOST` is set). |
-| `SMTP_FROM_NAME` | ai-system-registry-backend | `AI Trust Platform` | Display name in the From header |
-| `SMTP_SSL` | ai-system-registry-backend | `false` | `true` to use implicit TLS, `false` otherwise |
-| `SMTP_STARTTLS` | ai-system-registry-backend | `false` | `true` to upgrade with STARTTLS, `false` otherwise |
-| `USERS_BACKEND_URL` | ai-system-registry-backend | `http://users-backend:8008` | Internal URL of the users backend — used for email address lookups |
-| `LLM_PROVIDER` | ai-system-registry-backend | `stub` | AI-assisted registration provider: `stub` (offline/deterministic), `ollama`, or `external` |
-| `LLM_BASE_URL` | ai-system-registry-backend | `http://ollama:11434/v1` | OpenAI-compatible endpoint (used when `LLM_PROVIDER=ollama`) |
-| `LLM_API_KEY` | ai-system-registry-backend | `ollama` | API key for the OpenAI-compatible endpoint |
-| `LLM_MODEL` | ai-system-registry-backend | `llama3.2` | Text/JSON model for conversation + flag inference |
-| `LLM_VISION_MODEL` | ai-system-registry-backend | `llama3.2-vision` | Vision model for image document extraction |
-| `AI_CLIENT_ID` | ai-system-registry-backend | *(required if external)* | External provider OAuth2 client ID |
-| `AI_CLIENT_SECRET` | ai-system-registry-backend | *(required if external)* | External provider OAuth2 client secret |
-| `AI_AUTH_URL` | ai-system-registry-backend | *(required if external)* | External provider OAuth2 token URL |
-| `AI_API_URL` | ai-system-registry-backend | *(required if external)* | External provider inference base URL |
-| `AI_RESOURCE_GROUP` | ai-system-registry-backend | `default` | External provider resource group (`AI-Resource-Group` header) |
-| `AI_DEPLOYMENT_ID` | ai-system-registry-backend | *(required if external)* | External provider deployment ID for the `/invoke` endpoint |
-| `AI_API_VERSION` | ai-system-registry-backend | `bedrock-2023-05-31` | Anthropic API version header sent to the external provider |
-| `ASSIST_TURN_CAP` | ai-system-registry-backend | `12` | Max conversation turns before `degraded=true` is returned |
-| `ASSIST_MAX_TEXT_LENGTH` | ai-system-registry-backend | `15000` | Max characters extracted from uploaded documents before truncation |
-
-All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code. **Exception:** the SMTP settings are optional — when `SMTP_HOST` is unset, email notifications are disabled and the registry backend starts normally (it does not fail-fast on the SMTP vars).
-
-## docker-compose.yml conventions
-
-- Credentials are defined via YAML anchors (`x-db-env`, `x-rmq-env`, `x-ch-env`, `x-minio-env`) and merged into each service — never copy-paste connection strings
-- Backend build context is always the repo root (`.`) so the Dockerfile can `COPY libs/persistence`
-- New backends follow the same pattern: `depends_on: db-migrate: condition: service_completed_successfully`
-- Each backend must have a `healthcheck.py` and declare a `healthcheck` in `docker-compose.yml` using `CMD python healthcheck.py` — no extra packages needed, uses Python stdlib `urllib`
-- Shell depends on backend via `condition: service_healthy` — it won't start until the backend passes its healthcheck
-- YAML does not allow two `<<:` merge keys in the same mapping block — expand env vars inline when a service needs multiple anchors (see `otel-clickhouse-consumer`)
-
-## Dependency pinning
-
-Each service has its own `requirements.txt` with pinned versions directly in it (e.g. `fastapi==0.115.6`). When adding or upgrading a dependency:
-
-1. Edit the version directly in the relevant service's `requirements.txt`
-2. Rebuild the service: `docker compose up --build -d <service-name>`
+See `.env.example` for the full list, defaults, and per-service mapping. Notable groups:
+- **Infra creds** — `POSTGRES_*`, `RABBITMQ_*`, `CLICKHOUSE_*`, `MINIO_ROOT_*`, `DATABASE_URL`.
+- **Tenancy** — `TENANCY_MODE` (`single` default / `jwt`), `TENANCY_JWKS_ISSUER_BASE` (required if `jwt`), `TENANT_CLAIM` (`tenant_id`).
+- **`ALLOWED_ORIGINS`** (all backends) — comma-separated CORS origins; the app refuses to start if unset.
+- **`VITE_*`** (frontend build-time) — API base URLs and cross-MFE deep-link URLs baked into bundles.
+- **Auth** — `KEYCLOAK_*`, `USERS_BACKEND_CLIENT_SECRET`, `APP_PUBLIC_URL`, `APP_ADMIN_*`, `OAUTH2_PROXY_COOKIE_SECRET` (exactly 16/24/32 chars).
+- **compliance MinIO** — `MINIO_ENDPOINT` (in-cluster, uploads), `MINIO_PUBLIC_ENDPOINT` (presigned URLs), `MINIO_SECURE`, `MINIO_REGION`.
+- **alerts** — `ALERT_POLL_INTERVAL` (10 dev, 60+ prod).
+- **registry SMTP** — `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/SSL/STARTTLS`, `USERS_BACKEND_URL`.
+- **registry LLM** — `LLM_PROVIDER` (`stub`/`ollama`/`external`), `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_VISION_MODEL`; external provider `AI_CLIENT_ID/SECRET`, `AI_AUTH_URL`, `AI_API_URL`, `AI_RESOURCE_GROUP`, `AI_DEPLOYMENT_ID`, `AI_API_VERSION`; `ASSIST_TURN_CAP` (12), `ASSIST_MAX_TEXT_LENGTH` (15000).
 
 ## otel-pipeline/
 
@@ -406,25 +297,3 @@ Receives OTLP from any app, routes through RabbitMQ, stores in ClickHouse.
 One sub-directory per RabbitMQ consumer — standalone Python worker (no FastAPI, `asyncio.run(main())`, no HTTP port). Each binds a named durable queue to the `otel.traces` fanout exchange, so messages queue while a consumer is down. To add one, use the `/add-consumer` skill.
 
 **`clickhouse-consumer/`** — parses OTLP JSON, skips spans without `gen_ai.operation.name`, batch-inserts into `otel.gen_ai_spans`. Hybrid batching: flush at `BATCH_SIZE` rows (default 100) or `BATCH_TIMEOUT` seconds (default 5). On ClickHouse failure retries 3× (1s/2s/4s backoff) then acks and drops the batch. Flushes on shutdown. Reads `RABBITMQ_URL`, `CLICKHOUSE_*` (fail-fast).
-
-## Conventions & config
-
-### docker-compose.yml
-- Credentials via YAML anchors (`x-db-env`, `x-rmq-env`, `x-ch-env`, `x-minio-env`) merged into each service — never copy-paste connection strings.
-- Backend build context is always the repo root (so the Dockerfile can `COPY libs/...`).
-- New backends: `depends_on: db-migrate: condition: service_completed_successfully`, a `healthcheck.py` + `healthcheck: CMD python healthcheck.py`, no `ports:`. Shell depends on backends via `condition: service_healthy`.
-- YAML forbids two `<<:` merge keys in one mapping — expand env vars inline when a service needs multiple anchors (see `otel-clickhouse-consumer`).
-
-### Dependency pinning
-Each service pins versions directly in its own `requirements.txt` (e.g. `fastapi==0.115.6`). To change: edit the version, then `docker compose up --build -d <service>`.
-
-### Environment variables
-All credentials load from `.env` (gitignored; copy from `.env.example`, never commit). All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code. See `.env.example` for the full list and defaults; notable groups:
-- **Infra creds** — `POSTGRES_*`, `RABBITMQ_*`, `CLICKHOUSE_*`, `MINIO_ROOT_*`, `DATABASE_URL`.
-- **`ALLOWED_ORIGINS`** (all backends) — comma-separated CORS origins; the app refuses to start if unset.
-- **`VITE_*`** (frontend build-time) — API base URLs and cross-MFE deep-link URLs baked into bundles.
-- **Auth** — `KEYCLOAK_*`, `USERS_BACKEND_CLIENT_SECRET`, `APP_PUBLIC_URL`, `APP_ADMIN_*`, `OAUTH2_PROXY_COOKIE_SECRET` (exactly 16/24/32 chars).
-- **compliance MinIO** — `MINIO_ENDPOINT` (in-cluster, uploads), `MINIO_PUBLIC_ENDPOINT` (presigned URLs), `MINIO_SECURE`, `MINIO_REGION`.
-- **alerts** — `ALERT_POLL_INTERVAL` (10 dev, 60+ prod).
-- **registry SMTP** — `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/SSL/STARTTLS`, `USERS_BACKEND_URL`.
-- **registry LLM** — `LLM_PROVIDER` (`stub`/`ollama`/`external`), `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_VISION_MODEL`; external provider `AI_CLIENT_ID/SECRET`, `AI_AUTH_URL`, `AI_API_URL`, `AI_RESOURCE_GROUP`, `AI_DEPLOYMENT_ID`, `AI_API_VERSION`; `ASSIST_TURN_CAP` (12), `ASSIST_MAX_TEXT_LENGTH` (15000).
