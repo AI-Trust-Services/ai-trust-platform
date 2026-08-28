@@ -149,6 +149,13 @@ New migrations added (building on GitHub's 0012):
 2. **Navigation** — Task-driven with permission-gated visibility
 3. **Luigi config** — Complete rewrite (920 → 1755 lines)
 
+### Changed Roles/Permissions
+
+1. **Platform Administrator role** — Now has only `iam:manage` permission (admin-only view)
+   - Changed in `libs/authorization/ai_trust_authorization/constants.py`
+   - Platform admins see only Administration menu, not AI Systems/Today/My Work
+   - This is the correct behavior for admin-only users who manage IAM
+
 ### Dropped from Fork
 
 1. **owner_username field** — Removed; derive owner from workflow data instead
@@ -185,6 +192,38 @@ New migrations added (building on GitHub's 0012):
 
 ---
 
+## Post-Merge Fixes
+
+The following fixes were applied after the initial merge:
+
+### 1. DTA Frontend Build Error
+
+**Problem:** `decision-trace-analyzer/frontend` failed to build with `Cannot find module './hooks/useTheme'`
+
+**Fix:**
+- Added `useLuigiThemeSync()` function to `decision-trace-analyzer/frontend/src/hooks/useLuigi.ts`
+- Updated `decision-trace-analyzer/frontend/src/App.tsx` to use `useLuigiThemeSync` instead of removed `useTheme`
+
+### 2. Platform Administrator Role Permissions
+
+**Problem:** Platform Administrator had all 14 permissions, showing full navigation instead of admin-only view
+
+**Fix:**
+- Changed `libs/authorization/ai_trust_authorization/constants.py`:
+  ```python
+  # Before
+  "platform_administrator": ALL_PERMISSIONS,
+  
+  # After
+  "platform_administrator": [IAM_MANAGE],  # Admin-only: manages users/roles
+  ```
+- Deleted and recreated OpenFGA store to clear old permission tuples
+- Rebuilt `openfga-provision` and `users-backend` images
+
+**Result:** Platform admins now see only Administration menu (Users & Roles, AI Providers, Mail Service, Settings)
+
+---
+
 ## Testing Checklist
 
 After pulling these changes:
@@ -199,11 +238,19 @@ After pulling these changes:
    ```bash
    docker compose up --build
    ```
+   
+   **Note:** If OpenFGA has old permission data, you may need to delete and recreate the store:
+   ```bash
+   # The openfga-provision container will recreate the store on next startup
+   docker compose down openfga openfga-provision
+   docker compose up -d
+   ```
 
 3. **Verify Features**
+   - [ ] Platform Admin user sees only Administration menu (not Today/My Work/AI Systems)
+   - [ ] Platform Administrator role card shows only 1 permission (Manage users & roles)
    - [ ] Dark theme toggle in shell syncs across all MFEs
-   - [ ] Today view shows pending tasks
-   - [ ] My Work shows user's task queue
+   - [ ] AI Engineer user sees Today/My Work/AI Systems navigation
    - [ ] System Workspace has all tabs (Overview, Details, Tasks, Compliance, Activity, Notes)
    - [ ] Admin portal loads at `/admin/`
    - [ ] Ctrl+K opens command palette

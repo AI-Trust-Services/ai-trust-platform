@@ -1,10 +1,9 @@
-import { useLuigiInit } from "./hooks/useLuigi";
-import { useTheme } from './hooks/useTheme';
+import { useLuigiInit, useLuigiThemeSync } from "./hooks/useLuigi";
 import { TraceList } from "./pages/TraceList";
 
 export default function App() {
   // Complete the Luigi handshake so the shell hides its loading spinner.
   useLuigiInit(() => {});
-  useTheme();
+  useLuigiThemeSync();
   return <TraceList />;
 }

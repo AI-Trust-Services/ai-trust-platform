@@ -73,7 +73,7 @@ PLATFORM_OBJECT = "platform:global"
 
 # Built-in roles and the permissions each grants. Seeded by openfga-provision.
 ROLE_PERMISSIONS = {
-    "platform_administrator": ALL_PERMISSIONS,
+    "platform_administrator": [IAM_MANAGE],  # Admin-only: manages users/roles, nothing else
     "ai_engineer": [
         SYSTEMS_READ, SYSTEMS_WRITE,
         ASSESSMENTS_READ,
