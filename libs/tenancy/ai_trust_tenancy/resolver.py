@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import os
 import threading
 from typing import Callable, Optional
+
+log = logging.getLogger(__name__)
 
 from starlette.requests import Request
 
@@ -169,7 +172,8 @@ def _verify_and_decode(token: str) -> dict | None:
             issuer=issuer,
             options=options,
         )
-    except Exception:
+    except Exception as e:
+        log.warning("tenant.jwt_verify_failed", extra={"error": type(e).__name__, "detail": str(e)})
         return None  # signature/expiry/issuer/JWKS failure → fail-closed
 
 
