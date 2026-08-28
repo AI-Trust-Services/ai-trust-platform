@@ -23,9 +23,11 @@ export interface AISystem {
   basis: string;
   annex_iii_area: number | null;
   compliance: number;
+  model_id: string | null;
   created_at: string;
   updated_at: string;
   workflow_status: string;
+  owner_username: string | null;
   assignee_username: string | null;
   compliance_officer_username: string | null;
   is_gpai: boolean;
@@ -67,6 +69,20 @@ export interface UserSummary {
   lastName: string;
 }
 
+export interface WorkflowStep {
+  id: string;
+  step: string;
+  actor_username: string;
+  assignee_username: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface UserSummary {
+  username: string;
+  firstName: string;
+  lastName: string;
+}
 
 export interface ModelCard {
   id: string;
@@ -77,19 +93,6 @@ export interface ModelCard {
   description: string;
   inference_url: string;
   open_weights: boolean;
-}
-
-export interface SystemModelResponse extends ModelCard {
-  role: string | null;
-}
-
-export interface ModelSystemResponse {
-  id: string;
-  name: string;
-  tier: string;
-  lifecycle: string;
-  compliance: number;
-  role: string | null;
 }
 
 export interface PreviewResult {
@@ -184,4 +187,174 @@ export interface ModelCardFormData {
 export interface PermissionsResponse {
   username: string;
   permissions: string[];
+}
+
+// ── System Actions ────────────────────────────────────────────────────────────
+
+export interface SystemAction {
+  label: string;
+  href: string;
+  external?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
+// ── Tasks ─────────────────────────────────────────────────────────────────────
+
+export type TaskStatus = "open" | "in_progress" | "waiting" | "completed";
+export type TaskPriority = "low" | "medium" | "high";
+export type TaskType = "registration" | "review" | "compliance";
+
+export interface SystemTask {
+  id: string;
+  title: string;
+  description: string;
+  type: TaskType;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assignee: string | null;
+  assigneeRole: string;
+  stage: string;
+  actionHref: string;
+  external?: boolean;
+}
+
+// ── Review Notes (POC feedback) ───────────────────────────────────────────────
+
+export type ReviewNoteStatus = "pending" | "confirmed" | "rejected" | "done";
+
+export interface ReviewNote {
+  id: string;
+  page_path: string;
+  content: string;
+  status: ReviewNoteStatus;
+  author_username: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewNoteCreate {
+  page_path: string;
+  content: string;
+}
+
+export interface ReviewNoteUpdate {
+  content?: string;
+  status?: ReviewNoteStatus;
+}
+
+// ── Compliance Types (from compliance MFE) ────────────────────────────────────
+
+export interface Framework {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface Assessment {
+  id: string;
+  ai_system_id: string;
+  framework_id: string;
+  title: string;
+  type: string;
+  status: string;
+  score: number | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssessmentDetail extends Assessment {
+  obligation_count: number;
+  fulfilled_count: number;
+}
+
+export interface Obligation {
+  id: string;
+  assessment_id: string;
+  ai_system_id: string;
+  framework_id: string;
+  title: string;
+  article_ref: string;
+  description: string;
+  status: string;
+  due_date: string | null;
+  owner: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ObligationDetail extends Obligation {
+  control_ids: string[];
+}
+
+export interface Control {
+  id: string;
+  ai_system_id: string | null;
+  control_ref: string | null;
+  title: string;
+  description: string;
+  category: string;
+  status: string;
+  effectiveness: string;
+  owner: string;
+  due_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ControlDetail extends Control {
+  obligation_ids: string[];
+  evidence_count: number;
+}
+
+export interface Evidence {
+  id: string;
+  ai_system_id: string | null;
+  assessment_id: string | null;
+  title: string;
+  description: string;
+  evidence_type: string;
+  status: string;
+  validity_from: string | null;
+  validity_until: string | null;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  uploaded_by: string;
+  version_label: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EvidenceDetail extends Evidence {
+  control_ids: string[];
+  obligation_ids: string[];
+}
+
+export interface BadgeMeta {
+  label: string;
+  cls: string;
+}
+
+// ── System Notes ──────────────────────────────────────────────────────────────
+
+export interface SystemNote {
+  id: string;
+  ai_system_id: string;
+  content: string;
+  author_username: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SystemNoteCreate {
+  content: string;
+}
+
+export interface SystemNoteUpdate {
+  content?: string;
 }

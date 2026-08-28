@@ -13,6 +13,9 @@ from ai_trust_persistence.models.evidence import (
 from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.obligation import Obligation
+from ai_trust_persistence.models.platform_setting import PlatformSetting
+from ai_trust_persistence.models.review_note import ReviewNote
+from ai_trust_persistence.models.system_note import SystemNote
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 
 __all__ = [
@@ -27,6 +30,9 @@ __all__ = [
     "Control",
     "Evidence",
     "EvidenceVersion",
+    "PlatformSetting",
+    "ReviewNote",
+    "SystemNote",
     "SystemWorkflowStep",
     "control_obligations",
     "evidence_controls",

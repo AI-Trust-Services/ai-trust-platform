@@ -1,7 +1,8 @@
-import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult } from "../types";
+import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult, ReviewNote, ReviewNoteCreate, ReviewNoteUpdate, Framework, Assessment, AssessmentDetail, Obligation, ObligationDetail, Control, ControlDetail, Evidence, EvidenceDetail, SystemNote, SystemNoteCreate, SystemNoteUpdate } from "../types";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
+const COMPLIANCE_API_BASE = import.meta.env.VITE_COMPLIANCE_API_BASE || "/api/compliance/v1";
 export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 
 async function request<T>(path: string, options: RequestInit = {}, base: string = API_BASE): Promise<T> {
@@ -29,16 +30,6 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     }).then((r) => r.system),
-  getSystemModels: (systemId: string) =>
-    request<SystemModelResponse[]>(`/systems/${systemId}/models`),
-  addSystemModel: (systemId: string, modelCardId: string, role?: string) =>
-    request<SystemModelResponse>(`/systems/${systemId}/models`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model_card_id: modelCardId, role }),
-    }),
-  removeSystemModel: (systemId: string, modelCardId: string) =>
-    request<null>(`/systems/${systemId}/models/${modelCardId}`, { method: "DELETE" }),
 
   // AI-assisted registration — one stateless turn (frontend resends transcript + fields).
   assistTurn: (transcript: ChatMessage[], fields: Record<string, unknown>) =>
@@ -91,7 +82,6 @@ export const api = {
     request<AISystem>(`/systems/${systemId}/model`, { method: "DELETE" }),
 
   getModels: () => request<ModelCard[]>("/model-cards?limit=200"),
-  getModelCard: (id: string) => request<ModelCard>(`/model-cards/${id}`),
   createModel: (data: ModelCardFormData) =>
     request<ModelCard>("/model-cards", {
       method: "POST",
@@ -105,7 +95,6 @@ export const api = {
       body: JSON.stringify(data),
     }),
   deleteModel: (id: string) => request<null>(`/model-cards/${id}`, { method: "DELETE" }),
-  getModelSystems: (modelId: string) => request<ModelSystemResponse[]>(`/model-cards/${modelId}/systems`),
 
   myPermissions: () => request<PermissionsResponse>("/me/permissions", {}, USERS_API_BASE),
 
@@ -135,4 +124,114 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ note, assignee_username: assigneeUsername }),
     }),
+
+  // ── Review Notes (POC feedback) ────────────────────────────────────────────
+  reviewNotes: {
+    list: (pagePath?: string) => {
+      const params = pagePath ? `?page_path=${encodeURIComponent(pagePath)}` : "";
+      return request<ReviewNote[]>(`/review-notes${params}`);
+    },
+    create: (data: ReviewNoteCreate) =>
+      request<ReviewNote>("/review-notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: ReviewNoteUpdate) =>
+      request<ReviewNote>(`/review-notes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) => request<{ status: string; id: string }>(`/review-notes/${id}`, { method: "DELETE" }),
+    exportUrl: () => `${API_BASE}/review-notes/export`,
+  },
+
+  // ── Compliance API (from compliance MFE) ─────────────────────────────────────
+  compliance: {
+    // Frameworks
+    getFrameworks: () => request<Framework[]>("/frameworks", {}, COMPLIANCE_API_BASE),
+
+    // Assessments
+    getAssessments: (aiSystemId?: string) => {
+      const params = aiSystemId ? `?ai_system_id=${encodeURIComponent(aiSystemId)}` : "";
+      return request<Assessment[]>(`/assessments${params}`, {}, COMPLIANCE_API_BASE);
+    },
+    getAssessment: (id: string) =>
+      request<AssessmentDetail>(`/assessments/${id}`, {}, COMPLIANCE_API_BASE),
+    createAssessment: (data: { ai_system_id: string; framework_id: string; title: string; type: string; notes: string }) =>
+      request<Assessment>("/assessments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }, COMPLIANCE_API_BASE),
+    submitAssessment: (id: string) =>
+      request<Assessment>(`/assessments/${id}/submit`, { method: "POST" }, COMPLIANCE_API_BASE),
+    approveAssessment: (id: string) =>
+      request<Assessment>(`/assessments/${id}/approve`, { method: "POST" }, COMPLIANCE_API_BASE),
+    deleteAssessment: (id: string) =>
+      request<null>(`/assessments/${id}`, { method: "DELETE" }, COMPLIANCE_API_BASE),
+
+    // Obligations
+    getObligations: (params: Record<string, string> = {}) => {
+      const qs = new URLSearchParams(params).toString();
+      return request<Obligation[]>(`/obligations${qs ? `?${qs}` : ""}`, {}, COMPLIANCE_API_BASE);
+    },
+    getObligation: (id: string) =>
+      request<ObligationDetail>(`/obligations/${id}`, {}, COMPLIANCE_API_BASE),
+    updateObligation: (id: string, data: Partial<Obligation>) =>
+      request<Obligation>(`/obligations/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }, COMPLIANCE_API_BASE),
+
+    // Controls
+    getControls: (params: Record<string, string> = {}) => {
+      const qs = new URLSearchParams(params).toString();
+      return request<Control[]>(`/controls${qs ? `?${qs}` : ""}`, {}, COMPLIANCE_API_BASE);
+    },
+    getControl: (id: string) =>
+      request<ControlDetail>(`/controls/${id}`, {}, COMPLIANCE_API_BASE),
+    updateControl: (id: string, data: Partial<Control>) =>
+      request<Control>(`/controls/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }, COMPLIANCE_API_BASE),
+
+    // Evidence
+    getEvidence: (params: Record<string, string> = {}) => {
+      const qs = new URLSearchParams(params).toString();
+      return request<Evidence[]>(`/evidence${qs ? `?${qs}` : ""}`, {}, COMPLIANCE_API_BASE);
+    },
+    getEvidenceItem: (id: string) =>
+      request<EvidenceDetail>(`/evidence/${id}`, {}, COMPLIANCE_API_BASE),
+    approveEvidence: (id: string) =>
+      request<Evidence>(`/evidence/${id}/approve`, { method: "POST" }, COMPLIANCE_API_BASE),
+    rejectEvidence: (id: string) =>
+      request<Evidence>(`/evidence/${id}/reject`, { method: "POST" }, COMPLIANCE_API_BASE),
+    getDownloadUrl: (id: string) =>
+      request<{ url: string; expires_hours: number }>(`/evidence/${id}/download-url`, {}, COMPLIANCE_API_BASE),
+  },
+
+  // ── System Notes ─────────────────────────────────────────────────────────────
+  systemNotes: {
+    list: (systemId: string) =>
+      request<SystemNote[]>(`/systems/${systemId}/notes`),
+    create: (systemId: string, data: SystemNoteCreate) =>
+      request<SystemNote>(`/systems/${systemId}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }),
+    update: (systemId: string, noteId: string, data: SystemNoteUpdate) =>
+      request<SystemNote>(`/systems/${systemId}/notes/${noteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }),
+    delete: (systemId: string, noteId: string) =>
+      request<void>(`/systems/${systemId}/notes/${noteId}`, { method: "DELETE" }),
+  },
 };
