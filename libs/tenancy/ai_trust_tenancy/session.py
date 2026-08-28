@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import re
 
 from ai_trust_tenancy.config import MODE
 from ai_trust_tenancy.context import tenant_id_var
+
+log = logging.getLogger(__name__)
 
 # A tenant id is a Platform Mesh account / realm name — restrict to a safe charset so it can be
 # inlined into the SET as a literal without any driver-specific paramstyle (the raw DBAPI conn in
@@ -76,4 +79,5 @@ def install_tenant_scoping(engine) -> None:
             conn.exec_driver_sql("RESET ROLE")
             conn.exec_driver_sql("SET search_path = public")
         except Exception:
-            pass  # broken connection — pool will discard it
+            log.warning("tenant.reset_failed — invalidating pool connection to prevent role leak")
+            raise  # re-raise so SQLAlchemy invalidates and discards this connection
