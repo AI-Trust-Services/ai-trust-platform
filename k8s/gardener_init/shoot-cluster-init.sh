@@ -19,14 +19,16 @@
 #
 # What it does:
 #   1. Installs Traefik ingress controller via Helm (skipped if already present).
-#   2. Applies rbac.yaml — grants the GitHub Actions OIDC identity the permissions
-#      needed by deploy-gardener.yml (namespace, Helm chart resources, cert.gardener.cloud).
-#   3. Requests a multi-SAN TLS certificate via Gardener cert-service
+#   2. Requests a multi-SAN TLS certificate via Gardener cert-service
 #      (cert.gardener.cloud/v1alpha1 Certificate CRD). Gardener uses DNS-01
 #      automatically — no port 80 required. The cert is stored in the
 #      ai-trust/ai-trust-tls Secret that the Helm Ingress references.
-#   4. Annotates the Traefik LoadBalancer Service with Gardener DNS annotations so
+#   3. Annotates the Traefik LoadBalancer Service with Gardener DNS annotations so
 #      shoot-dns-service auto-publishes A-records for all ingress hostnames.
+#   4. Installs the OCM controller (which also installs Flux as a prerequisite)
+#      via the OCM CLI (`ocm controller install`).
+#   5. Applies rbac.yaml — grants the GitHub Actions OIDC identity the permissions
+#      needed by bootstrap-gardener.yml (ai-trust namespace + ocm-system namespace).
 #
 # NOTE: Traefik is installed by this script on first run. If the deployment already
 # exists (e.g. Helm release secret lost after a cluster event), the install is skipped.
@@ -70,7 +72,7 @@ echo "Cluster:    $CLUSTER_NAME"
 echo "Domain:     $SHOOT_DOMAIN"
 echo ""
 
-echo "==> [1/4] Installing Traefik ingress controller (default namespace)"
+echo "==> [1/5] Installing Traefik ingress controller (default namespace)"
 if kubectl get deployment traefik -n default &>/dev/null; then
   echo "    Traefik deployment already exists — skipping install."
 else
@@ -87,12 +89,8 @@ else
 fi
 
 echo ""
-echo "==> [2/4] Applying rbac.yaml to shoot cluster"
-kubectl apply -f "$SCRIPT_DIR/rbac.yaml"
-
-echo ""
-echo "==> [3/4] Requesting TLS certificate via Gardener cert-service (DNS-01, no port 80 needed)"
-# Ensure the ai-trust namespace exists (deploy-gardener.yml bootstrap.sh creates it, but
+echo "==> [2/5] Requesting TLS certificate via Gardener cert-service (DNS-01, no port 80 needed)"
+# Ensure the ai-trust namespace exists (bootstrap-gardener.yml creates it, but
 # shoot-cluster-init may run before the first deploy).
 kubectl create namespace ai-trust --dry-run=client -o yaml | kubectl apply -f -
 # cert.gardener.cloud Certificate CRD — Gardener cert-service issues a Let's Encrypt cert
@@ -118,7 +116,7 @@ echo "    Certificate requested — Gardener cert-service will issue via DNS-01 
 echo "    Monitor: kubectl get certificate ai-trust-tls -n ai-trust -w"
 
 echo ""
-echo "==> [4/4] Annotating Traefik LB Service for Gardener-managed DNS"
+echo "==> [3/5] Annotating Traefik LB Service for Gardener-managed DNS"
 echo "    Waiting for Traefik deployment to be available..."
 kubectl wait --for=condition=available deployment/traefik -n default --timeout=120s || true
 DNSNAMES="${APP_HOST},${KEYCLOAK_HOST}"
@@ -132,6 +130,25 @@ kubectl annotate svc traefik -n default --overwrite \
 echo "    Annotated Traefik LB Service: ${DNSNAMES}"
 
 echo ""
+echo "==> [4/5] Installing OCM controller (also installs Flux as a prerequisite)"
+if kubectl get deployment ocm-controller-manager -n ocm-system &>/dev/null; then
+  echo "    OCM controller already installed — skipping."
+else
+  if ! command -v ocm &>/dev/null; then
+    echo "    Installing OCM CLI..."
+    curl -sSfL https://ocm.software/install.sh | sudo bash
+  fi
+  ocm controller install
+  echo "    OCM controller installed."
+fi
+
+echo ""
+echo "==> [5/5] Applying RBAC (creates ai-trust and ocm-system roles for CI)"
+# ocm-system namespace is created by 'ocm controller install' above.
+# Apply RBAC after so the ocm-system Role/RoleBinding can be created.
+kubectl apply -f "$SCRIPT_DIR/rbac.yaml"
+
+echo ""
 echo "==> shoot-cluster-init complete for '$CLUSTER_NAME'."
 echo ""
 echo "    NOTE: all kubectl commands below require the shoot KUBECONFIG to be active."
@@ -143,5 +160,5 @@ echo ""
 echo "    Get the Traefik LoadBalancer IP:"
 echo "      kubectl get svc traefik -n default"
 echo ""
-echo "    Deploy the platform:"
-echo "      gh workflow run deploy-gardener.yml --field cluster=$CLUSTER_NAME --field image_tag=latest"
+echo "    Bootstrap and deploy the platform:"
+echo "      gh workflow run bootstrap-gardener.yml --field cluster=$CLUSTER_NAME"

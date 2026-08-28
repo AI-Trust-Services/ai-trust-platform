@@ -1,15 +1,12 @@
-name: Gardener Deploy (Structured Authentication)
+name: Bootstrap Gardener Cluster
 
-# Deploys the Helm chart under k8s/helm/ai-trust-platform to a real Gardener
-# shoot cluster, using the images published by build-push.yml. Manual only -
-# pick the target cluster and image tag to roll out.
+# Runs the namespace/secret bootstrap and applies OCM CRs so the OCM controller
+# + Flux can take over the actual Helm deployment. Called automatically by
+# build-push.yml on every main merge, and can also be triggered manually.
 #
-# Authenticates via Gardener's Structured Authentication + GitHub OIDC, per
-# https://gardener.cloud/docs/guides/applications/app-ci-cd/#configure-github-actions -
-# no kubeconfig secret. One-time cluster setup: k8s/gardener_init/ (see k8s/README.md).
-#
-# All cluster config (Gardener connection vars + app env) lives in:
-#   k8s/env/<cluster>/.env   (committed to the repo)
+# Prerequisites (one-time, per cluster):
+#   bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>
+#   (installs Traefik, OCM controller, Flux, certs, DNS)
 #
 # Required GitHub secret (gardener environment):
 #   GHCR_PULL_TOKEN   - PAT with read:packages (only if ghcr.io packages are private)
@@ -25,18 +22,10 @@ on:
         options:
           - ai-trust-main
           - sr-test
-      image_tag:
-        description: "Image tag to deploy (short SHA or version tag from Build and Push Images, or 'latest')"
-        required: true
-        default: latest
   workflow_call:
     inputs:
       cluster:
         description: "Target cluster"
-        required: true
-        type: string
-      image_tag:
-        description: "Image tag to deploy"
         required: true
         type: string
     secrets:
@@ -44,15 +33,15 @@ on:
         required: false
 
 concurrency:
-  group: deploy-gardener-${{ inputs.cluster }}
+  group: bootstrap-gardener-${{ inputs.cluster }}
   cancel-in-progress: false
 
 permissions:
   contents: read
-  id-token: write # required for the OIDC token exchange with the Gardener shoot's kube-apiserver
+  id-token: write  # required for OIDC token exchange with Gardener shoot
 
 jobs:
-  deploy:
+  bootstrap:
     runs-on: ubuntu-latest
     environment: gardener
     steps:
@@ -74,15 +63,18 @@ jobs:
         run: |
           ENV_FILE="k8s/env/${{ inputs.cluster }}/.env"
           if [[ ! -f "$ENV_FILE" ]]; then
-            echo "error: $ENV_FILE not found — create it from k8s/env/ai-trust-main/.env.example" >&2
+            echo "error: $ENV_FILE not found — create it from k8s/env/ai-trust-main/.env" >&2
             exit 1
           fi
-          # Source .env so variable references expand (e.g. APP_PUBLIC_URL=https://${LB_IP}.nip.io)
           set -a
           # shellcheck disable=SC1090
-          source "$ENV_FILE"
+          set +u
+          _env_tmp=$(mktemp)
+          tr -d '\r' < "$ENV_FILE" > "$_env_tmp"
+          source "$_env_tmp"
+          rm -f "$_env_tmp"
+          set -u
           set +a
-          # Unconditionally override secret keys from GitHub Secrets — .env values are placeholders only
           APP_ADMIN_PASSWORD="$SECRET_APP_ADMIN_PASSWORD"
           CLICKHOUSE_PASSWORD="$SECRET_CLICKHOUSE_PASSWORD"
           KEYCLOAK_ADMIN_PASSWORD="$SECRET_KEYCLOAK_ADMIN_PASSWORD"
@@ -93,7 +85,6 @@ jobs:
           RABBITMQ_PASSWORD="$SECRET_RABBITMQ_PASSWORD"
           SMTP_PASSWORD="$SECRET_SMTP_PASSWORD"
           USERS_BACKEND_CLIENT_SECRET="$SECRET_USERS_BACKEND_CLIENT_SECRET"
-          # Export all non-secret keys from .env, then the secret keys with their real values
           while IFS='=' read -r key _; do
             [[ -z "$key" || "$key" == \#* ]] && continue
             value=$(printenv "$key" 2>/dev/null || true)
@@ -104,9 +95,6 @@ jobs:
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
-
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
 
       - name: Print Gardener OIDC vars
         run: |
@@ -121,7 +109,6 @@ jobs:
           server: ${{ env.GARDENER_SHOOT_API_SERVER }}
           server-ca-discovery-url: ${{ env.GARDENER_CA_DISCOVERY_URL }}
           audience: ${{ env.GARDENER_OIDC_AUDIENCE }}
-          # writes ./kubeconfig.yaml (default kubeconfig-path) using the short-lived OIDC token
 
       - name: Point KUBECONFIG at the authenticated kubeconfig
         run: echo "KUBECONFIG=$GITHUB_WORKSPACE/kubeconfig.yaml" >> "$GITHUB_ENV"
@@ -133,7 +120,6 @@ jobs:
         run: |
           umask 077
           cp "k8s/env/${{ inputs.cluster }}/.env" .env
-          # Overwrite placeholder values with the real secrets from GITHUB_ENV
           inject() {
             local key="$1" val="$2"
             if grep -q "^${key}=" .env; then
@@ -170,64 +156,20 @@ jobs:
             --docker-password="$GHCR_PULL_TOKEN" \
             -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Derive ingress hostnames
-        id: hosts
-        run: |
-          app_host=$(echo "$APP_PUBLIC_URL" | sed -E 's#^[a-zA-Z]+://##')
-          keycloak_host=$(echo "$KEYCLOAK_PUBLIC_URL" | sed -E 's#^[a-zA-Z]+://##')
-          minio_host=$(echo "${MINIO_PUBLIC_URL:-}" | sed -E 's#^[a-zA-Z]+://##')
-          echo "app_host=${app_host}" >> "$GITHUB_OUTPUT"
-          echo "keycloak_host=${keycloak_host}" >> "$GITHUB_OUTPUT"
-          echo "minio_host=${minio_host}" >> "$GITHUB_OUTPUT"
-
-      - name: Clear any pending Helm state
-        run: |
-          status=$(helm status ai-trust -n "$NAMESPACE" -o json 2>/dev/null | jq -r '.info.status' || echo "not-found")
-          if [[ "$status" == "pending-install" || "$status" == "pending-upgrade" || "$status" == "pending-rollback" ]]; then
-            echo "Clearing stuck Helm release (status: $status)"
-            revision=$(helm status ai-trust -n "$NAMESPACE" -o json | jq -r '.version')
-            kubectl delete secret "sh.helm.release.v1.ai-trust.v${revision}" -n "$NAMESPACE" || true
-          else
-            echo "Helm release status: ${status} — no cleanup needed"
-          fi
-
-      - name: Delete immutable Jobs before upgrade
-        run: |
-          for job in db-migrate clickhouse-migrate keycloak-ssl-patch keycloak-provision openfga-provision minio-init; do
-            if kubectl get job "$job" -n "$NAMESPACE" &>/dev/null; then
-              echo "Deleting job/$job"
-              kubectl delete job "$job" -n "$NAMESPACE" --wait=false
-            fi
-          done
-
-      - name: Helm upgrade --install
+      - name: Create ghcr-credentials secret in ocm-system
         env:
-          IMAGE_TAG: ${{ inputs.image_tag }}
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         run: |
-          owner="${GITHUB_REPOSITORY_OWNER,,}"
-          set_args=(
-            --set "image.repository=ghcr.io/${owner}/ai-trust-platform"
-            --set "image.tag=${IMAGE_TAG}"
-            --set "appPublicUrl=${APP_PUBLIC_URL}"
-            --set "keycloakPublicUrl=${KEYCLOAK_PUBLIC_URL}"
-            --set "ingress.host=${{ steps.hosts.outputs.app_host }}"
-            --set "ingress.keycloakHost=${{ steps.hosts.outputs.keycloak_host }}"
-          )
-          if [[ -n "${{ steps.hosts.outputs.minio_host }}" ]]; then
-            set_args+=(--set "ingress.minioHost=${{ steps.hosts.outputs.minio_host }}")
+          kubectl create namespace ocm-system --dry-run=client -o yaml | kubectl apply -f -
+          if [[ -z "$GHCR_PULL_TOKEN" ]]; then
+            echo "GHCR_PULL_TOKEN not set - skipping (packages must be public)"
+            exit 0
           fi
-          if [[ -n "$GHCR_PULL_TOKEN" ]]; then
-            set_args+=(--set "imagePullSecrets[0].name=ghcr-pull-secret")
-          fi
-          if [[ "${LLM_PROVIDER:-stub}" == "ollama" ]]; then
-            set_args+=(--set "ollama.enabled=true")
-          fi
-          helm upgrade --install ai-trust k8s/helm/ai-trust-platform \
-            -n "$NAMESPACE" \
-            -f k8s/helm/ai-trust-platform/values-gardener.yaml \
-            "${set_args[@]}"
+          kubectl create secret docker-registry ghcr-credentials \
+            --docker-server=ghcr.io \
+            --docker-username="${{ github.actor }}" \
+            --docker-password="$GHCR_PULL_TOKEN" \
+            -n ocm-system --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Show pod status
-        if: always()
-        run: kubectl get pods -n "$NAMESPACE" --no-headers | sort
+      - name: Apply OCM component CRs
+        run: kubectl apply -f k8s/ocm/
