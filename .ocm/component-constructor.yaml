@@ -1,0 +1,166 @@
+name: github.com/ai-trust-services/ai-trust-platform
+version: ${VERSION}
+provider:
+  name: ${GITHUB_REPOSITORY_OWNER}
+
+resources:
+  - name: ai-trust-platform-chart
+    type: helmChart
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/charts/ai-trust-platform:${CHART_TAG}
+
+  - name: users-backend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/users-backend:${IMAGE_TAG}
+
+  - name: ai-system-registry-backend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/ai-system-registry-backend:${IMAGE_TAG}
+
+  - name: monitoring-backend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/monitoring-backend:${IMAGE_TAG}
+
+  - name: overview-backend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/overview-backend:${IMAGE_TAG}
+
+  - name: alerts-backend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/alerts-backend:${IMAGE_TAG}
+
+  - name: compliance-backend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/compliance-backend:${IMAGE_TAG}
+
+  - name: decision-trace-analyzer-backend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/decision-trace-analyzer-backend:${IMAGE_TAG}
+
+  - name: policy-checker-worker
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/policy-checker-worker:${IMAGE_TAG}
+
+  - name: otel-clickhouse-consumer
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/otel-clickhouse-consumer:${IMAGE_TAG}
+
+  - name: openfga-provision
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/openfga-provision:${IMAGE_TAG}
+
+  - name: db-migrate
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/db-migrate:${IMAGE_TAG}
+
+  - name: clickhouse-migrate
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/clickhouse-migrate:${IMAGE_TAG}
+
+  - name: keycloak-provision
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/keycloak-provision:${IMAGE_TAG}
+
+  - name: shell
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/shell:${IMAGE_TAG}
+
+  - name: otel-rmq-bridge
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/otel-rmq-bridge:${IMAGE_TAG}
+
+  - name: ai-system-registry-frontend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/ai-system-registry-frontend:${IMAGE_TAG}
+
+  - name: monitoring-frontend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/monitoring-frontend:${IMAGE_TAG}
+
+  - name: overview-frontend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/overview-frontend:${IMAGE_TAG}
+
+  - name: alerts-frontend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/alerts-frontend:${IMAGE_TAG}
+
+  - name: compliance-frontend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/compliance-frontend:${IMAGE_TAG}
+
+  - name: users-frontend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/users-frontend:${IMAGE_TAG}
+
+  - name: decision-trace-analyzer-frontend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/decision-trace-analyzer-frontend:${IMAGE_TAG}

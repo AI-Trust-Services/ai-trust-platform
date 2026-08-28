@@ -1,8 +1,8 @@
 # One-time setup, applied to the SHOOT cluster (not the garden cluster) - see k8s/README.md.
 # Grants the OIDC identity mapped by structured-auth-configmap.yaml (any GitHub Actions run in
 # AI-Trust-Services/ai-trust-platform, any branch/ref) exactly the permissions
-# deploy-gardener.yml needs: bootstrap.sh's namespace/Secret/ConfigMap/RBAC setup, plus
-# `helm upgrade --install` of the whole chart. Deliberately not cluster-admin.
+# bootstrap-gardener.yml needs: bootstrap.sh's namespace/Secret/ConfigMap/RBAC setup, plus
+# applying OCM component CRs in ocm-system. Deliberately not cluster-admin.
 #
 # NOTE: the ai-trust namespace is NOT created here — bootstrap.sh creates it idempotently
 # on every deploy. The ClusterRole grants create+patch so bootstrap can run from scratch.
@@ -71,4 +71,33 @@ subjects:
 roleRef:
   kind: Role
   name: ai-trust-ci-deployer
+  apiGroup: rbac.authorization.k8s.io
+---
+# Permissions for bootstrap-gardener.yml to manage OCM CRs and the ghcr-credentials
+# pull secret in ocm-system (the OCM controller's namespace).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ai-trust-ci-ocm-manager
+  namespace: ocm-system
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["delivery.ocm.software"]
+    resources: ["componentversions", "resources", "fluxdeployers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ai-trust-ci-ocm-manager
+  namespace: ocm-system
+subjects:
+  - kind: User
+    name: "github.com:284992593:1285188431"
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: ai-trust-ci-ocm-manager
   apiGroup: rbac.authorization.k8s.io

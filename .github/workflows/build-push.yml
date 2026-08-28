@@ -6,12 +6,13 @@ name: Build and Push Images
 # not built here - the Helm chart pulls them straight from their upstream
 # registries, same as docker-compose.
 #
-# Automatic (push to main): builds images tagged ai-trust-main/<sha> and
-# automatically triggers deploy-gardener.yml targeting ai-trust-main.
+# Automatic (push to main): builds images tagged ai-trust-main-<sha>, packages
+# the Helm chart, builds an OCM component, and triggers bootstrap-gardener.yml
+# to sync the cluster.
 #
 # Manual (workflow_dispatch): optional branch (default: main) and
 # gardener_cluster (default: ai-trust-main) inputs. Images are tagged
-# <cluster>/<sha> so each cluster has its own isolated image path in the
+# <cluster>-<sha> so each cluster has its own isolated image path in the
 # registry and will never accidentally pull another cluster's latest image.
 
 on:
@@ -253,12 +254,90 @@ jobs:
           fi
           echo "All images published successfully."
 
+  package-chart:
+    name: Package and Push Helm Chart
+    needs: [prepare, images-published]
+    if: needs.images-published.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Package and push chart
+        env:
+          OWNER: ${{ needs.prepare.outputs.owner }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          LATEST_TAG: ${{ needs.prepare.outputs.latest_tag }}
+        run: |
+          set -euo pipefail
+          helm dependency update k8s/helm/ai-trust-platform
+          helm package k8s/helm/ai-trust-platform --destination dist/ --version "0.0.0-${TAG}" --app-version "${TAG}"
+          helm push dist/ai-trust-platform-0.0.0-${TAG}.tgz "oci://ghcr.io/${OWNER}/charts"
+          if [[ -n "${LATEST_TAG}" ]]; then
+            helm package k8s/helm/ai-trust-platform --destination dist-latest/ --version "0.0.0-${LATEST_TAG}" --app-version "${TAG}"
+            helm push dist-latest/ai-trust-platform-0.0.0-${LATEST_TAG}.tgz "oci://ghcr.io/${OWNER}/charts"
+          fi
+
+  publish-ocm:
+    name: Build and Push OCM Component
+    needs: [prepare, images-published, package-chart]
+    if: needs.images-published.result == 'success' && needs.package-chart.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install OCM CLI
+        run: curl -sSfL https://ocm.software/install.sh | sudo bash
+
+      - name: Build and push OCM component
+        env:
+          OWNER: ${{ needs.prepare.outputs.owner }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          LATEST_TAG: ${{ needs.prepare.outputs.latest_tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/ctf
+          ocm add componentversions --create --file dist/ctf .ocm/component-constructor.yaml \
+            VERSION="0.0.0-${TAG}" \
+            GITHUB_REPOSITORY_OWNER="${OWNER}" \
+            IMAGE_TAG="${TAG}" \
+            CHART_TAG="0.0.0-${TAG}"
+          ocm transfer commontransportarchive dist/ctf "oci://ghcr.io/${OWNER}/ocm" --copy-resources --overwrite || \
+            echo "::warning::OCM component push failed — images and chart are still published"
+          if [[ -n "${LATEST_TAG}" ]]; then
+            mkdir -p dist/ctf-latest
+            ocm add componentversions --create --file dist/ctf-latest .ocm/component-constructor.yaml \
+              VERSION="0.0.0-${LATEST_TAG}" \
+              GITHUB_REPOSITORY_OWNER="${OWNER}" \
+              IMAGE_TAG="${TAG}" \
+              CHART_TAG="0.0.0-${LATEST_TAG}"
+            ocm transfer commontransportarchive dist/ctf-latest "oci://ghcr.io/${OWNER}/ocm" --copy-resources --overwrite || \
+              echo "::warning::OCM latest component push failed"
+          fi
+
   deploy:
-    name: Deploy to Gardener (${{ needs.images-published.outputs.cluster }})
-    needs: images-published
-    if: needs.images-published.result == 'success' && needs.images-published.outputs.deploy == 'true'
-    uses: ./.github/workflows/deploy-gardener.yml
+    name: Bootstrap Gardener (${{ needs.images-published.outputs.cluster }})
+    needs: [images-published, publish-ocm]
+    if: needs.images-published.result == 'success' && needs.publish-ocm.result != 'failure' && needs.images-published.outputs.deploy == 'true'
+    uses: ./.github/workflows/bootstrap-gardener.yml
     with:
       cluster: ${{ needs.images-published.outputs.cluster }}
-      image_tag: ${{ needs.images-published.outputs.tag }}
     secrets: inherit

@@ -1,0 +1,82 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: ComponentVersion
+metadata:
+  name: ai-trust-platform
+  namespace: ocm-system
+spec:
+  component: github.com/ai-trust-services/ai-trust-platform
+  version:
+    semver: ">=0.0.0-latest"
+  repository:
+    url: ghcr.io/ai-trust-services/ocm
+    secretRef:
+      name: ghcr-credentials
+  interval: 1m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: ai-trust-platform-chart
+  namespace: ocm-system
+spec:
+  interval: 1m
+  sourceRef:
+    kind: ComponentVersion
+    name: ai-trust-platform
+    namespace: ocm-system
+    resourceRef:
+      name: ai-trust-platform-chart
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: FluxDeployer
+metadata:
+  name: ai-trust-platform
+  namespace: ocm-system
+spec:
+  interval: 1m
+  sourceRef:
+    kind: Resource
+    name: ai-trust-platform-chart
+    namespace: ocm-system
+  helmReleaseTemplate:
+    releaseName: ai-trust
+    targetNamespace: ai-trust
+    valuesFrom:
+      # APP_PUBLIC_URL / KEYCLOAK_PUBLIC_URL are set in ai-trust-env by bootstrap.sh
+      - kind: Secret
+        name: ai-trust-env
+        valuesKey: APP_PUBLIC_URL
+        targetPath: appPublicUrl
+      - kind: Secret
+        name: ai-trust-env
+        valuesKey: KEYCLOAK_PUBLIC_URL
+        targetPath: keycloakPublicUrl
+      # INGRESS_HOST / INGRESS_KEYCLOAK_HOST / INGRESS_MINIO_HOST are injected by
+      # bootstrap-gardener.yml (derived from APP_PUBLIC_URL / KEYCLOAK_PUBLIC_URL)
+      - kind: Secret
+        name: ai-trust-env
+        valuesKey: INGRESS_HOST
+        targetPath: ingress.host
+      - kind: Secret
+        name: ai-trust-env
+        valuesKey: INGRESS_KEYCLOAK_HOST
+        targetPath: ingress.keycloakHost
+      - kind: Secret
+        name: ai-trust-env
+        valuesKey: INGRESS_MINIO_HOST
+        targetPath: ingress.minioHost
+    values:
+      image:
+        repository: ghcr.io/ai-trust-services/ai-trust-platform
+        tag: latest
+        pullPolicy: IfNotPresent
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      oauthProxy:
+        cookieSecure: true
+      ingress:
+        enabled: true
+        className: traefik
+        tls:
+          enabled: true
+          selfSigned: false
