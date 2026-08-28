@@ -6,10 +6,22 @@ from datetime import datetime, timezone
 from typing import Callable
 
 import aio_pika
-from ai_trust_clickhouse import COLUMNS, GEN_AI_SPANS, get_client
+from ai_trust_clickhouse import COLUMNS, GEN_AI_SPANS, get_client, get_client_for_tenant
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
+
+
+def _tenancy_mode() -> str:
+    """Active tenancy mode (guarded — libs/tenancy may be absent in single/local)."""
+    try:
+        from ai_trust_tenancy.config import MODE
+        return MODE
+    except ImportError:
+        return os.environ.get("TENANCY_MODE", "single").strip().lower()
+
+
+_TENANCY_MODE = _tenancy_mode()
 
 
 class Batcher:
@@ -135,6 +147,11 @@ def _process_payload(body: bytes) -> list[dict]:
     for resource_span in payload.get("resourceSpans", []):
         resource_attrs = _attrs_dict(resource_span.get("resource", {}).get("attributes", []))
         service_name = _extract_attr(resource_attrs, "service.name") or ""
+        # Database-per-tenant routing: the instrumented app emits its tenant as an OTLP resource
+        # attribute `ai_trust.tenant_id`. This selects which tenant database the span is written
+        # to (see insert_routed). Empty when absent → in a multi-tenant mode the span is dropped
+        # (fail-closed); in `single` mode it goes to the shared 'otel' database.
+        resource_tenant = _extract_attr(resource_attrs, "ai_trust.tenant_id") or ""
         for scope_span in resource_span.get("scopeSpans", []):
             for span in scope_span.get("spans", []):
                 attrs = _attrs_dict(span.get("attributes", []))
@@ -189,6 +206,10 @@ def _process_payload(body: bytes) -> list[dict]:
                     "status_code": int(status.get("code", 0)),
                     "status_message": status.get("message", "") or "",
                     "attributes": _attrs_as_map(attrs),
+                    # Routing key only — NOT a table column. Resolves the tenant whose ClickHouse
+                    # database this span is written to (span attr overrides resource attr). Popped
+                    # out in insert_routed before the row is turned into column values.
+                    "_route_tenant": _extract_attr(attrs, "ai_trust.tenant_id") or resource_tenant,
                 })
     return rows
 
@@ -219,13 +240,44 @@ async def main() -> None:
     rabbitmq_url = os.environ["RABBITMQ_URL"]
     batch_size = int(os.environ.get("BATCH_SIZE", "100"))
     batch_timeout = float(os.environ.get("BATCH_TIMEOUT", "5"))
-    ch = get_client()
+
+    # Database-per-tenant write routing: group each batch by the span's tenant (extracted from the
+    # OTLP `ai_trust.tenant_id` resource/span attribute into the private `_route_tenant` key) and
+    # insert each group into that tenant's OWN ClickHouse database (tenant_<org>). Fail-closed:
+    # in a multi-tenant mode a span with NO resolved tenant is dropped (logged), never written to a
+    # shared database; only in `single` mode do untenanted spans go to the shared 'otel' db.
+    # Per-tenant clients are cached. `_route_tenant` is a routing key only, never a table column,
+    # so it is stripped from each row before the values are built.
+    _clients: dict[str, object] = {}
+
+    def _client_for(tenant: str):
+        key = tenant or ""
+        c = _clients.get(key)
+        if c is None:
+            c = get_client_for_tenant(tenant or None)  # single mode: None → shared 'otel' db
+            _clients[key] = c
+        return c
+
+    def insert_routed(rows: list[dict]) -> None:
+        if not rows:
+            return
+        by_tenant: dict[str, list[dict]] = {}
+        for r in rows:
+            by_tenant.setdefault(r.pop("_route_tenant", "") or "", []).append(r)
+        for tenant, trows in by_tenant.items():
+            if not tenant and _TENANCY_MODE != "single":
+                # Fail-closed: an untenanted span in a multi-tenant deploy has no database to
+                # belong to — drop it (loudly) rather than leak it into a shared 'otel' db.
+                log.warning("Dropping %d untenanted span(s) in TENANCY_MODE=%s (no tenant DB)",
+                            len(trows), _TENANCY_MODE)
+                continue
+            _client_for(tenant).insert(
+                GEN_AI_SPANS, [list(r.values()) for r in trows], column_names=COLUMNS
+            )
 
     batcher = Batcher(
         batch_size=batch_size,
-        flush_fn=make_flush_fn(
-            lambda rows: ch.insert(GEN_AI_SPANS, [list(r.values()) for r in rows], column_names=COLUMNS)
-        ),
+        flush_fn=make_flush_fn(insert_routed),
     )
 
     log.info("Connecting to RabbitMQ (credentials masked)")

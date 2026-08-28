@@ -1,6 +1,10 @@
+import { CalendarClock } from "lucide-react";
 import { COMPLIANCE_URL } from "../api/client";
 import { navigateTo } from "../hooks/useLuigi";
 import type { Deadline } from "../types";
+import { Card } from "@/components/ui/card";
+import { CardTitleBar } from "./CardTitleBar";
+import { cn } from "@/lib/utils";
 
 interface Props {
   deadlines: Deadline[];
@@ -13,48 +17,48 @@ function daysUntil(dateStr: string | null): number {
 }
 
 function pillStyle(days: number): { color: string; background: string } {
-  if (days < 7)  return { color: "#bb0000", background: "#fff5f5" };
-  if (days < 14) return { color: "#e05c00", background: "#fff8f0" };
-  return { color: "#e9a922", background: "#fffbf0" };
+  if (days < 7)  return { color: "var(--danger-fg)",  background: "var(--danger-bg)" };
+  if (days < 14) return { color: "var(--warning-fg)", background: "var(--warning-bg)" };
+  return { color: "var(--warning-fg)", background: "var(--warning-bg)" };
 }
 
 export default function UpcomingDeadlines({ deadlines, windowDays }: Props) {
   return (
-    <div className="chart-card deadlines-card">
-      <div className="chart-title">Evidence Expiring Soon</div>
+    <Card className="break-inside-avoid p-4">
+      <CardTitleBar icon={CalendarClock} title="Evidence Expiring Soon" color="var(--warning)" />
       {deadlines.length === 0 ? (
-        <div style={{ padding: "20px 0", textAlign: "center", color: "var(--text-secondary)", fontSize: 13 }}>
+        <div className="py-5 text-center text-[13px] text-muted-foreground">
           No evidence expiring in the next {windowDays} days
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div className="flex flex-col">
           {deadlines.map((d) => {
             const days = daysUntil(d.due_date);
             const path = d.type === "obligation" ? "/home/obligations" : "/home/evidence";
             return (
               <div
                 key={d.id}
-                className="deadline-row"
+                className="flex cursor-pointer items-center gap-2.5 border-b border-border py-2 last:border-b-0 hover:bg-muted/60"
                 onClick={() => navigateTo(path, COMPLIANCE_URL)}
-                style={{ cursor: "pointer" }}
               >
-                <span style={{
-                  fontSize: 11, fontWeight: 600, padding: "1px 6px", borderRadius: 4,
-                  background: d.type === "obligation" ? "#e8f0fb" : "#f0e8fb",
-                  color:      d.type === "obligation" ? "#0a6ed1" : "#5a0080",
-                  flexShrink: 0,
-                }}>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-md px-1.5 py-px text-[11px] font-semibold",
+                    d.type === "obligation" ? "bg-muted text-muted-foreground" : "bg-accent text-accent-foreground",
+                  )}
+                >
                   {d.type === "obligation" ? "OBL" : "EVD"}
                 </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {d.title}
-                  </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-medium">{d.title}</div>
                   {d.ai_system_name && (
-                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{d.ai_system_name}</div>
+                    <div className="text-xs text-muted-foreground">{d.ai_system_name}</div>
                   )}
                 </div>
-                <span className="days-pill" style={pillStyle(days)}>
+                <span
+                  className="shrink-0 rounded-md px-2 py-0.5 text-[11px] font-semibold tabular-nums"
+                  style={pillStyle(days)}
+                >
                   {days === 0 ? "today" : `${days}d`}
                 </span>
               </div>
@@ -62,6 +66,6 @@ export default function UpcomingDeadlines({ deadlines, windowDays }: Props) {
           })}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

@@ -1,5 +1,7 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 pydantic==2.10.3
+PyJWT[crypto]==2.9.0
+-e /app/libs/tenancy
 -e /app/libs/persistence
 -e /app/libs/logging

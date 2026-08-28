@@ -1,4 +1,8 @@
+import { FileWarning } from "lucide-react";
 import type { EvidenceGap } from "../types";
+import { Card } from "@/components/ui/card";
+import { CardTitleBar } from "./CardTitleBar";
+import { cn } from "@/lib/utils";
 
 interface Props {
   data: EvidenceGap;
@@ -7,9 +11,9 @@ interface Props {
 }
 
 const ROWS = [
-  { key: "expired",      label: "Expired",                     color: "#bb0000", bg: "#fff5f5" },
-  { key: "expiring_soon",label: "Expiring soon",               color: "#e05c00", bg: "#fff8f0" },
-  { key: "missing",      label: "Missing approved evidence",   color: "#e9a922", bg: "#fffbf0" },
+  { key: "expired",      label: "Expired",                     color: "var(--danger-fg)",  bg: "var(--danger-bg)" },
+  { key: "expiring_soon",label: "Expiring soon",               color: "var(--warning-fg)", bg: "var(--warning-bg)" },
+  { key: "missing",      label: "Missing approved evidence",   color: "var(--warning-fg)", bg: "var(--warning-bg)" },
 ] as const;
 
 export default function EvidenceGapCard({ data, windowDays, onClick }: Props) {
@@ -18,23 +22,27 @@ export default function EvidenceGapCard({ data, windowDays, onClick }: Props) {
     r.key === "expiring_soon" ? `${r.label} (${windowDays}d)` : r.label;
 
   return (
-    <div className="chart-card" onClick={onClick} style={{ cursor: onClick ? "pointer" : undefined }}>
-      <div className="chart-title">Evidence Gap</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 0" }}>
+    <Card
+      className={cn("break-inside-avoid p-4", onClick && "cursor-pointer")}
+      onClick={onClick}
+    >
+      <CardTitleBar icon={FileWarning} title="Evidence Gap" color="var(--warning)" />
+      <div className="flex flex-col gap-2.5 py-3">
         {rows.map((r) => (
-          <div key={r.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{label(r)}</span>
-            <span style={{
-              minWidth: 32, textAlign: "center", fontWeight: 600, fontSize: 13,
-              padding: "2px 10px", borderRadius: 10,
-              color: r.count > 0 ? r.color : "#1a7a3c",
-              background: r.count > 0 ? r.bg : "#f0faf4",
-            }}>
+          <div key={r.key} className="flex items-center justify-between gap-2">
+            <span className="text-[13px] text-muted-foreground">{label(r)}</span>
+            <span
+              className="min-w-8 rounded-md px-2.5 py-0.5 text-center text-[13px] font-semibold tabular-nums"
+              style={{
+                color: r.count > 0 ? r.color : "var(--success-fg)",
+                background: r.count > 0 ? r.bg : "var(--success-bg)",
+              }}
+            >
               {r.count}
             </span>
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

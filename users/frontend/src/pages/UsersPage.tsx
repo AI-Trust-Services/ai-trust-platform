@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { MoreHorizontal, Plus } from "lucide-react";
 import { useToast } from "../App";
 import { api } from "../api/client";
 import { InviteModal } from "../components/InviteModal";
@@ -6,6 +7,23 @@ import { UserDetailPanel } from "../components/UserDetailPanel";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import type { RoleSummary, UserDetail, UserSummary } from "../types";
 import { ROLE_LABELS } from "../constants";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious,
+} from "@/components/ui/pagination";
+import { cn } from "@/lib/utils";
 
 
 const PAGE_SIZE = 10;
@@ -23,7 +41,6 @@ export default function UsersPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -66,14 +83,6 @@ export default function UsersPage() {
     return () => clearTimeout(timer);
   }, [search, page, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- load is stable
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    if (!openMenuId) return;
-    const handler = () => setOpenMenuId(null);
-    document.addEventListener("click", handler);
-    return () => document.removeEventListener("click", handler);
-  }, [openMenuId]);
-
   async function openDetail(id: string) {
     setSelectedId(id);
     try {
@@ -113,113 +122,154 @@ export default function UsersPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <div className="page">
-      <div className="page-header">
+    <div className="mx-auto max-w-[1200px] px-6 py-6">
+      <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <div className="page-title">Users &amp; Roles</div>
-          <div className="page-subtitle">Manage platform users and role assignments</div>
+          <p className="text-sm text-muted-foreground">
+            Manage platform users and role assignments
+            {total > 0 && <span className="ml-1 text-foreground font-medium">· {total} total</span>}
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setInviteOpen(true)}>+ Invite User</button>
+        <Button onClick={() => setInviteOpen(true)}>
+          <Plus className="size-4" /> Invite User
+        </Button>
       </div>
 
-      <div className="kpi-row">
-        <div className="kpi-card">
-          <div className="kpi-label">Total Users</div>
-          <div className="kpi-value">{total}</div>
-        </div>
-      </div>
-
-      <div className="toolbar">
-        <input
-          className="search-input"
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Input
+          className="max-w-sm"
           placeholder="Search by name, username or email…"
           value={search}
           onChange={e => { setPage(0); setSearch(e.target.value); }}
         />
-        <select
-          className="filter-select"
-          value={statusFilter}
-          onChange={e => { setPage(0); setStatusFilter(e.target.value as "" | "true" | "false"); }}
+        <Select
+          value={statusFilter || "all"}
+          onValueChange={v => { setPage(0); setStatusFilter(v === "all" ? "" : (v as "true" | "false")); }}
         >
-          <option value="">All statuses</option>
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
-        </select>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="true">Active</SelectItem>
+            <SelectItem value="false">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>User</th>
-              <th>Username</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th style={{ width: 48 }}></th>
-            </tr>
-          </thead>
-          <tbody>
+      <Card className="overflow-hidden p-0">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>User</TableHead>
+              <TableHead>Username</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-12" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {loading && users.length === 0 && (
-              <tr><td colSpan={5} className="empty">Loading…</td></tr>
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">Loading…</TableCell>
+              </TableRow>
             )}
             {!loading && users.length === 0 && (
-              <tr><td colSpan={5} className="empty">No users found.</td></tr>
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">No users found.</TableCell>
+              </TableRow>
             )}
-            {users.map((u: UserSummary) => (
-              <tr key={u.id} className="clickable-row" onClick={() => openDetail(u.id)}>
-                <td>
-                  <div style={{ fontWeight: 500 }}>{u.firstName} {u.lastName}</div>
-                  <div style={{ fontSize: 12, color: "#556b82" }}>{u.email}</div>
-                </td>
-                <td style={{ color: "#556b82" }}>{u.username}</td>
-                <td>
-                  {u.roles.length === 0
-                    ? <span style={{ color: "#aab4be" }}>—</span>
-                    : u.roles.map(r => (
-                      <span key={r} className="badge badge-role">{ROLE_LABELS[r] ?? r}</span>
-                    ))
-                  }
-                </td>
-                <td>
-                  <span className={`badge ${u.enabled ? "badge-active" : "badge-inactive"}`}>
-                    {u.enabled ? "Active" : "Inactive"}
-                  </span>
-                </td>
-                <td className="action-cell" onClick={e => e.stopPropagation()}>
-                  <button
-                    className="kebab-btn"
-                    aria-label="Actions"
-                    disabled={deleting}
-                    onClick={e => { e.stopPropagation(); setOpenMenuId(openMenuId === u.id ? null : u.id); }}
-                  >
-                    ⋯
-                  </button>
-                  {openMenuId === u.id && (
-                    <div className="dropdown">
-                      <button className="dropdown-item" onClick={() => { openDetail(u.id); setOpenMenuId(null); }}>
-                        View details
-                      </button>
-                      <button
-                        className="dropdown-item danger"
-                        onClick={() => { setOpenMenuId(null); setDeleteTarget(u); }}
-                      >
-                        Delete
-                      </button>
+            {users.map((u: UserSummary) => {
+              const initials = u.firstName && u.lastName
+                ? (u.firstName[0] + u.lastName[0]).toUpperCase()
+                : (u.username || "?").slice(0, 2).toUpperCase();
+              return (
+                <TableRow key={u.id} className="cursor-pointer" onClick={() => openDetail(u.id)}>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">
+                        {initials}
+                      </span>
+                      <div>
+                        <div className="font-medium text-foreground">{u.firstName} {u.lastName}</div>
+                        <div className="text-xs text-muted-foreground">{u.email}</div>
+                      </div>
                     </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{u.username}</TableCell>
+                  <TableCell>
+                    {u.roles.length === 0
+                      ? <span className="text-muted-foreground">—</span>
+                      : (
+                        <div className="flex flex-wrap gap-1">
+                          {u.roles.map(r => (
+                            <Badge key={r} variant="secondary">{ROLE_LABELS[r] ?? r}</Badge>
+                          ))}
+                        </div>
+                      )
+                    }
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={cn(
+                        "inline-block rounded-md px-2 py-0.5 text-xs font-medium",
+                        u.enabled
+                          ? "bg-[var(--success-bg)] text-[var(--success-fg)]"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {u.enabled ? "Active" : "Inactive"}
+                    </span>
+                  </TableCell>
+                  <TableCell onClick={e => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="size-8" aria-label="Actions" disabled={deleting}>
+                          <MoreHorizontal className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => openDetail(u.id)}>
+                          View details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() => setDeleteTarget(u)}
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Card>
 
       {totalPages > 1 && (
-        <div className="pagination">
-          <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>‹ Prev</button>
-          <span className="pagination-info">Page {page + 1} of {totalPages}</span>
-          <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next ›</button>
-        </div>
+        <Pagination className="mt-4 justify-between">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                aria-disabled={page === 0}
+                className={cn(page === 0 && "pointer-events-none opacity-50")}
+                onClick={() => { if (page > 0) setPage(p => p - 1); }}
+              />
+            </PaginationItem>
+          </PaginationContent>
+          <span className="text-sm text-muted-foreground">Page {page + 1} of {totalPages}</span>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationNext
+                aria-disabled={page >= totalPages - 1}
+                className={cn(page >= totalPages - 1 && "pointer-events-none opacity-50")}
+                onClick={() => { if (page < totalPages - 1) setPage(p => p + 1); }}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
       )}
 
       {inviteOpen && (

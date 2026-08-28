@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-trust-tenancy"
+version = "0.1.0"
+requires-python = ">=3.10"
+# starlette: middleware/Request types (was previously imported but undeclared).
+# PyJWT[crypto]: jwt-mode signature verification via JWKS (SEC-C2). Only used in jwt mode
+# but declared unconditionally so the package is self-contained.
+dependencies = [
+    "starlette>=0.37",
+    "PyJWT[crypto]>=2.9,<3",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ai_trust_tenancy*"]

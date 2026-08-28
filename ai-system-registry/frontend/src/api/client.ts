@@ -1,4 +1,4 @@
-import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, SystemModelResponse, ModelSystemResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse } from "../types";
+import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult } from "../types";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
@@ -57,7 +57,7 @@ export const api = {
 
   // Register with AI-collected fields + inferred flags + rationale; returns the classified system.
   intakeAssisted: (data: Record<string, unknown>) =>
-    request<{ system: AISystem; classification: unknown }>("/intake", {
+    request<{ system: AISystem; classification: ClassificationResult }>("/intake", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -76,6 +76,19 @@ export const api = {
     fd.append("file", file);
     return request<AssistExtractResponse>(`/intake/assist/engineer/${encodeURIComponent(systemId)}/extract`, { method: "POST", body: fd });
   },
+
+  // Merge field confirmation state — only the keys sent are merged, never replaced wholesale.
+  patchFieldConfirmations: (systemId: string, confirmations: Record<string, boolean>) =>
+    request<AISystem>(`/systems/${encodeURIComponent(systemId)}/field-confirmations`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmations }),
+    }),
+
+  linkModel: (systemId: string, modelId: string) =>
+    request<AISystem>(`/systems/${systemId}/model?model_id=${encodeURIComponent(modelId)}`, { method: "PUT" }),
+  unlinkModel: (systemId: string) =>
+    request<AISystem>(`/systems/${systemId}/model`, { method: "DELETE" }),
 
   getModels: () => request<ModelCard[]>("/model-cards?limit=200"),
   getModelCard: (id: string) => request<ModelCard>(`/model-cards/${id}`),

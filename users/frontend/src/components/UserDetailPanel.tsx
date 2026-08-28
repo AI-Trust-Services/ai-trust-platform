@@ -1,10 +1,20 @@
 import { useState } from "react";
+import { Check } from "lucide-react";
 import { useToast } from "../App";
 import { api } from "../api/client";
 import type { RoleSummary, UserDetail } from "../types";
 import { EditModal } from "./EditModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ROLE_LABELS, PERMISSION_LABELS } from "../constants";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter,
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 interface Props {
   user: UserDetail;
@@ -13,6 +23,25 @@ interface Props {
   onClose: () => void;
   onUpdated: (u: UserDetail) => void;
   onDeleted: (id: string) => void;
+}
+
+const ADD_ROLE = "__add__";
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1.5">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium text-foreground">{children}</span>
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">
+      {children}
+    </div>
+  );
 }
 
 export function UserDetailPanel({ user, roles, rolePermissions, onClose, onUpdated, onDeleted }: Props) {
@@ -84,108 +113,117 @@ export function UserDetailPanel({ user, roles, rolePermissions, onClose, onUpdat
 
   return (
     <>
-      <div className="panel-overlay" onClick={onClose} aria-hidden="true" />
-      <div className="panel" role="dialog" aria-modal="true">
-        <div className="panel-header">
-          <div>
-            <div className="panel-user-name">{user.firstName} {user.lastName}</div>
-            <div className="panel-user-email">{user.email}</div>
-          </div>
-          <button className="panel-close" onClick={onClose} aria-label="Close panel">×</button>
-        </div>
-        <div className="panel-body">
-          <div className="panel-section">
-            <div className="panel-section-title">User Information</div>
-            <div className="panel-row"><span className="panel-label">Username</span><span className="panel-value">{user.username}</span></div>
-            <div className="panel-row"><span className="panel-label">Job title</span><span className="panel-value">{attr("jobTitle")}</span></div>
-            <div className="panel-row"><span className="panel-label">Department</span><span className="panel-value">{attr("department")}</span></div>
-            <div className="panel-row"><span className="panel-label">Business unit</span><span className="panel-value">{attr("businessUnit")}</span></div>
-            <div className="panel-row"><span className="panel-label">Phone</span><span className="panel-value">{attr("phone")}</span></div>
-          </div>
-          <div className="panel-section">
-            <div className="panel-section-title">Account Status</div>
-            <div className="panel-row">
-              <span className="panel-label">Status</span>
-              <span className="panel-value">
-                <span className={`badge ${user.enabled ? "badge-active" : "badge-inactive"}`}>
+      <Sheet open onOpenChange={(o) => { if (!o) onClose(); }}>
+        <SheetContent className="w-full gap-0 p-0 sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>{user.firstName} {user.lastName}</SheetTitle>
+            <SheetDescription>{user.email}</SheetDescription>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="mb-6">
+              <SectionTitle>User Information</SectionTitle>
+              <Row label="Username">{user.username}</Row>
+              <Row label="Job title">{attr("jobTitle")}</Row>
+              <Row label="Department">{attr("department")}</Row>
+              <Row label="Business unit">{attr("businessUnit")}</Row>
+              <Row label="Phone">{attr("phone")}</Row>
+            </div>
+
+            <div className="mb-6">
+              <SectionTitle>Account Status</SectionTitle>
+              <Row label="Status">
+                <span
+                  className={cn(
+                    "inline-block rounded-md px-2 py-0.5 text-xs font-medium",
+                    user.enabled
+                      ? "bg-[var(--success-bg)] text-[var(--success-fg)]"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
                   {user.enabled ? "Active" : "Inactive"}
                 </span>
-              </span>
+              </Row>
+              <Row label="Email verified">{user.emailVerified ? "Yes" : "No"}</Row>
             </div>
-            <div className="panel-row">
-              <span className="panel-label">Email verified</span>
-              <span className="panel-value">{user.emailVerified ? "Yes" : "No"}</span>
-            </div>
-          </div>
-          <div className="panel-section">
-            <div className="panel-section-title">Roles</div>
-            {user.roles.length === 0 && (
-              <div className="panel-empty">No roles assigned.</div>
-            )}
-            {user.roles.map(r => (
-              <div key={r} className="panel-role-row">
-                <span className="badge badge-role">{ROLE_LABELS[r] ?? r}</span>
-                <button className="btn btn-sm btn-danger" onClick={() => handleRemoveRole(r)} disabled={working}>
-                  Remove
-                </button>
-              </div>
-            ))}
-            {availableRoles.length > 0 && (
-              <div className="panel-role-add">
-                <select value={addRole} onChange={e => setAddRole(e.target.value)}>
-                  <option value="">Add role…</option>
-                  {availableRoles.map(r => (
-                    <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] ?? r.name}</option>
-                  ))}
-                </select>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={handleAssignRole}
-                  disabled={!addRole || working}
-                >
-                  Assign
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="panel-section">
-            <div className="panel-section-title">Permissions</div>
-            {user.roles.length === 0 ? (
-              <div className="panel-empty">No permissions (no roles assigned).</div>
-            ) : (
-              user.roles.map(r => {
-                const perms = rolePermissions[r] ?? [];
-                return (
-                  <div key={r} style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1d2d3e", marginBottom: 6 }}>
-                      {ROLE_LABELS[r] ?? r}
-                    </div>
-                    {perms.length === 0 ? (
-                      <div className="panel-empty" style={{ paddingLeft: 0 }}>No permissions</div>
-                    ) : (
-                      <ul className="perm-list" style={{ margin: 0 }}>
-                        {perms.map(p => (
-                          <li key={p} className="perm-item">
-                            <span className="perm-check">✓</span>
-                            {PERMISSION_LABELS[p] ?? p}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+
+            <div className="mb-6">
+              <SectionTitle>Roles</SectionTitle>
+              {user.roles.length === 0 && (
+                <div className="text-sm text-muted-foreground">No roles assigned.</div>
+              )}
+              <div className="flex flex-col gap-2">
+                {user.roles.map(r => (
+                  <div key={r} className="flex items-center justify-between gap-2">
+                    <Badge variant="secondary">{ROLE_LABELS[r] ?? r}</Badge>
+                    <Button variant="destructive" size="sm" onClick={() => handleRemoveRole(r)} disabled={working}>
+                      Remove
+                    </Button>
                   </div>
-                );
-              })
-            )}
+                ))}
+              </div>
+              {availableRoles.length > 0 && (
+                <div className="mt-3 flex items-center gap-2">
+                  <Select
+                    value={addRole || ADD_ROLE}
+                    onValueChange={v => setAddRole(v === ADD_ROLE ? "" : v)}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Add role…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableRoles.map(r => (
+                        <SelectItem key={r.id} value={r.name}>{ROLE_LABELS[r.name] ?? r.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" onClick={handleAssignRole} disabled={!addRole || working}>
+                    Assign
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <SectionTitle>Permissions</SectionTitle>
+              {user.roles.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No permissions (no roles assigned).</div>
+              ) : (
+                user.roles.map(r => {
+                  const perms = rolePermissions[r] ?? [];
+                  return (
+                    <div key={r} className="mb-3">
+                      <div className="mb-1.5 text-[13px] font-semibold text-foreground">
+                        {ROLE_LABELS[r] ?? r}
+                      </div>
+                      {perms.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">No permissions</div>
+                      ) : (
+                        <ul className="flex flex-col gap-1.5">
+                          {perms.map(p => (
+                            <li key={p} className="flex items-center gap-2 text-sm text-foreground">
+                              <Check className="size-3.5 shrink-0 text-[var(--success-fg)]" />
+                              {PERMISSION_LABELS[p] ?? p}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
-        </div>
-        <div className="panel-footer">
-          <button className="btn btn-secondary" onClick={() => setEditOpen(true)} disabled={working}>Edit</button>
-          <button className="btn btn-secondary" onClick={toggle} disabled={working}>
-            {user.enabled ? "Deactivate" : "Activate"}
-          </button>
-          <button className="btn btn-danger" onClick={() => setConfirmDelete(true)} disabled={working}>Delete</button>
-        </div>
-      </div>
+
+          <SheetFooter className="flex-row justify-end">
+            <Button variant="outline" onClick={() => setEditOpen(true)} disabled={working}>Edit</Button>
+            <Button variant="outline" onClick={toggle} disabled={working}>
+              {user.enabled ? "Deactivate" : "Activate"}
+            </Button>
+            <Button variant="destructive" onClick={() => setConfirmDelete(true)} disabled={working}>Delete</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {editOpen && (
         <EditModal

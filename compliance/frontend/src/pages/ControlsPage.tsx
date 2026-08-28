@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { Plus, RotateCw, ShieldCheck, CheckCircle2, Layers, Clock } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { StatusBadge } from "../components/Badges";
@@ -10,11 +11,24 @@ import Pagination from "../components/Pagination";
 import { CONTROL_STATUS_META, OBLIGATION_STATUS_META, EVIDENCE_STATUS_META, fmtDate, humanize } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import type { AISystem, Control, ControlDetail, Evidence, Obligation } from "../types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 
 const STATUS_OPTIONS = [
   "not_started", "planned", "in_implementation", "implemented",
   "under_review", "effective", "ineffective", "deactivated",
 ] as const;
+// Radix Select disallows an empty-string item value — sentinel for "All". Note
+// "__org__" is a real filter value (org-wide controls), distinct from this.
+const ALL = "__all__";
 
 export default function ControlsPage() {
   const [controls, setControls] = useState<Control[]>([]);
@@ -132,99 +146,116 @@ export default function ControlsPage() {
 
   return (
     <>
-      <div className="page-header">
-        <h1>Controls</h1>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn-ghost" onClick={load}>↺ Refresh</button>
-          <button className="btn-primary" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-            onClick={() => setCreateOpen(true)}>+ New Control</button>
+      <div className="flex items-center justify-between border-b border-border px-5 py-2.5">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
+            <ShieldCheck className="size-5" />
+          </span>
+          <h1 className="text-lg font-semibold text-foreground">Controls</h1>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={load}><RotateCw /> Refresh</Button>
+          <Button size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+            onClick={() => setCreateOpen(true)}><Plus /> New Control</Button>
         </div>
       </div>
 
-      <div className="kpi-row">
-        <KpiCard label="Total" value={kpis.total} />
-        <KpiCard label="Effective" value={kpis.effective} sub={`${kpis.total ? Math.round(kpis.effective / kpis.total * 100) : 0}% of total`} />
-        <KpiCard label="Implemented" value={kpis.implemented} />
-        <KpiCard label="Not Started" value={kpis.notStarted} />
+      <div className="flex flex-wrap gap-3 px-5 pt-4">
+        <KpiCard label="Total" value={kpis.total} icon={ShieldCheck} color="#71717a" sub="all controls" />
+        <KpiCard label="Effective" value={kpis.effective} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.effective / kpis.total * 100) : 0}% of total`} />
+        <KpiCard label="Implemented" value={kpis.implemented} icon={Layers} color="#1147E9" sub="ready for review" />
+        <KpiCard label="Not Started" value={kpis.notStarted} icon={Clock} color="#e05c00" sub="pending action" />
       </div>
 
-      <div className="toolbar" style={{ marginTop: 12 }}>
-        <input className="search-input" placeholder="Search controls…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">All Statuses</option>
-          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{CONTROL_STATUS_META[s].label}</option>)}
-        </select>
-        <select className="filter-select" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-          <option value="">All Categories</option>
-          {categories.map((c) => <option key={c} value={c}>{humanize(c)}</option>)}
-        </select>
-        <select className="filter-select" value={effectivenessFilter} onChange={(e) => setEffectivenessFilter(e.target.value)}>
-          <option value="">All Effectiveness</option>
-          {["high", "medium", "low"].map((e) => <option key={e} value={e}>{humanize(e)}</option>)}
-        </select>
-        <select className="filter-select" value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
-          <option value="">All AI Systems</option>
-          {hasOrgWide && <option value="__org__">Org-wide</option>}
-          {systemOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+      <div className="flex flex-wrap items-center gap-2 px-5 pt-3">
+        <Input className="max-w-xs" placeholder="Search controls…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Select value={statusFilter || ALL} onValueChange={(v) => setStatusFilter(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Statuses</SelectItem>
+            {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{CONTROL_STATUS_META[s].label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={categoryFilter || ALL} onValueChange={(v) => setCategoryFilter(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Categories</SelectItem>
+            {categories.map((c) => <SelectItem key={c} value={c}>{humanize(c)}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={effectivenessFilter || ALL} onValueChange={(v) => setEffectivenessFilter(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Effectiveness</SelectItem>
+            {["high", "medium", "low"].map((e) => <SelectItem key={e} value={e}>{humanize(e)}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={systemFilter || ALL} onValueChange={(v) => setSystemFilter(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All AI Systems</SelectItem>
+            {hasOrgWide && <SelectItem value="__org__">Org-wide</SelectItem>}
+            {systemOptions.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
         {activeFilterCount > 0 && (
-          <button className="btn-ghost btn-sm" onClick={clearFilters}>Clear filters ({activeFilterCount})</button>
+          <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters ({activeFilterCount})</Button>
         )}
-        <div className="toolbar-spacer" />
-        <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>{filtered.length} of {controls.length}</span>
+        <div className="flex-1" />
+        <span className="text-[13px] text-muted-foreground">{filtered.length} of {controls.length}</span>
       </div>
 
-      <div className="content">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Control</th>
-                <th>Category</th>
-                <th>AI System</th>
-                <th>Owner</th>
-                <th>Status</th>
-                <th>Effectiveness</th>
-                <th>Due</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+      <div className="px-5 py-4">
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Control</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>AI System</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Effectiveness</TableHead>
+                <TableHead>Due</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filtered.length === 0 ? (
-                <tr className="empty-row"><td colSpan={8}>No controls yet.</td></tr>
+                <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No controls yet.</TableCell></TableRow>
               ) : paged.map((c) => (
-                <tr key={c.id} className={`clickable${selected === c.id ? " selected" : ""}`} onClick={() => openDetail(c)}>
-                  <td><div className="row-name">{c.title}</div><div className="row-sub">{c.id}</div></td>
-                  <td style={{ fontSize: 13 }}>{humanize(c.category)}</td>
-                  <td>{c.ai_system_id ? (systemsById[c.ai_system_id]?.name ?? c.ai_system_id) : <span className="chip">Org-wide</span>}</td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{c.owner || "—"}</td>
-                  <td><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></td>
-                  <td><span className="chip">{humanize(c.effectiveness)}</span></td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{fmtDate(c.due_date)}</td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div className="actions">
-                      <button className="btn-ghost btn-sm" data-tip="Link or unlink obligations"
-                        disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-                        onClick={() => setLinkControl(c)}>Link Obligations</button>
-                      <select className="inline-select" value={c.status} disabled={!mayWrite}
-                        title={mayWrite ? undefined : noWriteTitle}
-                        onChange={(e) => changeStatus(c.id, e.target.value)}>
-                        {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{CONTROL_STATUS_META[s].label}</option>)}
-                      </select>
-                      <button className="btn-ghost btn-sm btn-danger" data-tip="Delete this control"
-                        disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+                <TableRow key={c.id} data-state={selected === c.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(c)}>
+                  <TableCell><div className="font-medium text-foreground">{c.title}</div><div className="text-xs text-muted-foreground">{c.id}</div></TableCell>
+                  <TableCell className="text-[13px]">{humanize(c.category)}</TableCell>
+                  <TableCell>{c.ai_system_id ? (systemsById[c.ai_system_id]?.name ?? c.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{c.owner || "—"}</TableCell>
+                  <TableCell><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></TableCell>
+                  <TableCell><Badge variant="secondary" className="rounded-full font-medium">{humanize(c.effectiveness)}</Badge></TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{fmtDate(c.due_date)}</TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="ghost" size="sm" disabled={!mayWrite} title={mayWrite ? "Link or unlink obligations" : noWriteTitle}
+                        onClick={() => setLinkControl(c)}>Link Obligations</Button>
+                      <Select value={c.status} disabled={!mayWrite} onValueChange={(v) => changeStatus(c.id, v)}>
+                        <SelectTrigger className="h-8 w-[150px]" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{CONTROL_STATUS_META[s].label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"
+                        disabled={!mayWrite} title={mayWrite ? "Delete this control" : noWriteTitle}
                         onClick={async () => {
                           if (!confirm(`Delete "${c.title}"?`)) return;
                           try { await api.deleteControl(c.id); showToast("Deleted"); load(); closePanel(); }
                           catch (e) { showToast((e as Error).message, true); }
-                        }}>Delete</button>
+                        }}>Delete</Button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
         <Pagination
           page={safePage}
           pageSize={pageSize}
@@ -234,57 +265,62 @@ export default function ControlsPage() {
         />
       </div>
 
-      {detail && (
-        <DetailPanel
-          title={detail.title}
-          subtitle={humanize(detail.category)}
-          badge={CONTROL_STATUS_META[detail.status]?.label}
-          onClose={closePanel}
-        >
-          <DetailSection title="General Information">
-            <DetailField label="ID">{detail.id}</DetailField>
-            <DetailField label="Category">{humanize(detail.category)}</DetailField>
-            <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : <span className="chip">Org-wide</span>}</DetailField>
-            <DetailField label="Owner">{detail.owner || "—"}</DetailField>
-            <DetailField label="Status"><StatusBadge meta={CONTROL_STATUS_META} value={detail.status} /></DetailField>
-            <DetailField label="Effectiveness"><span className="chip">{humanize(detail.effectiveness)}</span></DetailField>
-            <DetailField label="Due Date">{fmtDate(detail.due_date)}</DetailField>
-          </DetailSection>
-          {detail.description && (
-            <DetailSection title="Description">
-              <p className="dp-description">{detail.description}</p>
+      <DetailPanel
+        open={!!detail}
+        title={detail?.title ?? ""}
+        subtitle={detail ? humanize(detail.category) : undefined}
+        badge={detail ? CONTROL_STATUS_META[detail.status]?.label : undefined}
+        onClose={closePanel}
+      >
+        {detail && (
+          <>
+            <DetailSection title="General Information">
+              <DetailField label="ID">{detail.id}</DetailField>
+              <DetailField label="Category">{humanize(detail.category)}</DetailField>
+              <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</DetailField>
+              <DetailField label="Owner">{detail.owner || "—"}</DetailField>
+              <DetailField label="Status"><StatusBadge meta={CONTROL_STATUS_META} value={detail.status} /></DetailField>
+              <DetailField label="Effectiveness"><Badge variant="secondary" className="rounded-full font-medium">{humanize(detail.effectiveness)}</Badge></DetailField>
+              <DetailField label="Due Date">{fmtDate(detail.due_date)}</DetailField>
             </DetailSection>
-          )}
-          <DetailSection title={`Related Obligations (${detailObligations.length})`}>
-            {detailObligations.length === 0
-              ? <p className="dp-description" style={{ color: "var(--text-secondary)" }}>No obligations linked. Use "Link Obligations".</p>
-              : <ul className="dp-list">{detailObligations.map((o) => (
-                  <li key={o.id}><span className="dp-list-name">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
-                ))}</ul>
-            }
-          </DetailSection>
-          <DetailSection title={`Evidence (${detailEvidence.length})`}>
-            {detailEvidence.length === 0
-              ? <p className="dp-description" style={{ color: "var(--text-secondary)" }}>No evidence yet.</p>
-              : <ul className="dp-list">{detailEvidence.map((e) => (
-                  <li key={e.id}><span className="dp-list-name">{e.title}</span><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></li>
-                ))}</ul>
-            }
-          </DetailSection>
-          <div className="dp-actions">
-            <button className="btn-ghost btn-sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-              onClick={() => setLinkControl(detail)}>Link Obligations</button>
-            <select className="form-select" value={detail.status} disabled={!mayWrite}
-              title={mayWrite ? undefined : noWriteTitle}
-              onChange={async (e) => {
-                await changeStatus(detail.id, e.target.value);
-                setDetail((d) => d ? { ...d, status: e.target.value } : d);
-              }}>
-              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{CONTROL_STATUS_META[s].label}</option>)}
-            </select>
-          </div>
-        </DetailPanel>
-      )}
+            {detail.description && (
+              <DetailSection title="Description">
+                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
+              </DetailSection>
+            )}
+            <DetailSection title={`Related Obligations (${detailObligations.length})`}>
+              {detailObligations.length === 0
+                ? <p className="text-[13px] text-muted-foreground">No obligations linked. Use "Link Obligations".</p>
+                : <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
+                    <li key={o.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
+                  ))}</ul>
+              }
+            </DetailSection>
+            <DetailSection title={`Evidence (${detailEvidence.length})`}>
+              {detailEvidence.length === 0
+                ? <p className="text-[13px] text-muted-foreground">No evidence yet.</p>
+                : <ul className="flex flex-col gap-1.5">{detailEvidence.map((e) => (
+                    <li key={e.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{e.title}</span><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></li>
+                  ))}</ul>
+              }
+            </DetailSection>
+            <div className="flex items-center gap-2 px-5 pt-4">
+              <Button variant="outline" size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+                onClick={() => setLinkControl(detail)}>Link Obligations</Button>
+              <Select value={detail.status} disabled={!mayWrite}
+                onValueChange={async (v: string) => {
+                  await changeStatus(detail.id, v);
+                  setDetail((d) => d ? { ...d, status: v } : d);
+                }}>
+                <SelectTrigger className="flex-1" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{CONTROL_STATUS_META[s].label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
+      </DetailPanel>
 
       <CreateControlModal open={createOpen} onClose={() => setCreateOpen(false)} onSuccess={load} />
       <LinkObligationModal

@@ -1,8 +1,19 @@
 import { useState, useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { CONTROL_CATEGORIES, humanize } from "../utils";
 import type { AISystem } from "../types";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 interface Props {
   open: boolean;
@@ -20,6 +31,8 @@ interface FormState {
 }
 
 const EMPTY: FormState = { ai_system_id: "", title: "", description: "", category: "general", owner: "", due_date: "" };
+// Sentinel for the "Org-wide" option — Radix Select disallows an empty-string value.
+const ORG_WIDE = "__org__";
 
 export default function CreateControlModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -42,8 +55,7 @@ export default function CreateControlModal({ open, onClose, onSuccess }: Props) 
 
   if (!open) return null;
 
-  const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+  const setVal = (k: keyof FormState) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   async function handleSubmit() {
     if (!form.title.trim()) { showToast("Title is required", true); return; }
@@ -61,52 +73,58 @@ export default function CreateControlModal({ open, onClose, onSuccess }: Props) 
   }
 
   return (
-    <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
-        <div className="modal-header">
-          <h2>New Control</h2>
-          <button className="btn-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <div className="form-grid single">
-            <div className="form-group">
-              <label className="required">Title</label>
-              <input type="text" value={form.title} onChange={set("title")} placeholder="e.g. Human-in-the-loop approval workflow" />
-            </div>
-            <div className="form-group">
-              <label>Category</label>
-              <select className="form-select" value={form.category} onChange={set("category")}>
-                {CONTROL_CATEGORIES.map((c) => <option key={c} value={c}>{humanize(c)}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>AI System (leave blank for org-wide)</label>
-              <select className="form-select" value={form.ai_system_id} onChange={set("ai_system_id")}>
-                <option value="">Org-wide (all systems)</option>
-                {systems.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.id})</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Description</label>
-              <textarea value={form.description} onChange={set("description")} />
-            </div>
-            <div className="form-group">
-              <label>Owner</label>
-              <input type="text" value={form.owner} onChange={set("owner")} placeholder="e.g. AI Engineer" />
-            </div>
-            <div className="form-group">
-              <label>Due Date</label>
-              <input type="date" value={form.due_date} onChange={set("due_date")} />
-            </div>
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="gap-0 p-0 sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>New Control</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4 p-6">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="cc-title">Title <span className="text-destructive">*</span></Label>
+            <Input id="cc-title" value={form.title} onChange={(e) => setVal("title")(e.target.value)} placeholder="e.g. Human-in-the-loop approval workflow" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Category</Label>
+            <Select value={form.category} onValueChange={setVal("category")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CONTROL_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{humanize(c)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>AI System (leave blank for org-wide)</Label>
+            <Select
+              value={form.ai_system_id || ORG_WIDE}
+              onValueChange={(v) => setVal("ai_system_id")(v === ORG_WIDE ? "" : v)}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ORG_WIDE}>Org-wide (all systems)</SelectItem>
+                {systems.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.id})</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="cc-desc">Description</Label>
+            <Textarea id="cc-desc" value={form.description} onChange={(e) => setVal("description")(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="cc-owner">Owner</Label>
+            <Input id="cc-owner" value={form.owner} onChange={(e) => setVal("owner")(e.target.value)} placeholder="e.g. AI Engineer" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="cc-due">Due Date</Label>
+            <Input id="cc-due" type="date" value={form.due_date} onChange={(e) => setVal("due_date")(e.target.value)} />
           </div>
         </div>
-        <div className="modal-footer">
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
-            {loading && <span className="spinner" />} Create
-          </button>
-        </div>
-      </div>
-    </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={loading}>
+            {loading && <Loader2 className="animate-spin" />} Create
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

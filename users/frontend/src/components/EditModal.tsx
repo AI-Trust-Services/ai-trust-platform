@@ -2,6 +2,12 @@ import { useState } from "react";
 import { useToast } from "../App";
 import { api } from "../api/client";
 import type { UpdateUserRequest, UserDetail } from "../types";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface Props {
   user: UserDetail;
@@ -43,57 +49,56 @@ export function EditModal({ user, onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">Edit User</span>
-          <button className="panel-close" onClick={onClose} aria-label="Close">×</button>
-        </div>
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="gap-0 p-0 sm:max-w-[560px]">
+        <DialogHeader className="border-b border-border px-6 py-4">
+          <DialogTitle>Edit User</DialogTitle>
+        </DialogHeader>
         <form onSubmit={submit}>
-          <div className="modal-body">
-            <div className="field-row">
-              <div className="field">
-                <label>First name</label>
-                <input value={form.firstName ?? ""} onChange={set("firstName")} />
+          <div className="flex flex-col gap-4 p-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-firstName">First name</Label>
+                <Input id="edit-firstName" value={form.firstName ?? ""} onChange={set("firstName")} />
               </div>
-              <div className="field">
-                <label>Last name</label>
-                <input value={form.lastName ?? ""} onChange={set("lastName")} />
-              </div>
-            </div>
-            <div className="field">
-              <label>Email</label>
-              <input type="email" value={form.email ?? ""} onChange={set("email")} />
-            </div>
-            <div className="field-row">
-              <div className="field">
-                <label>Job title</label>
-                <input value={form.jobTitle ?? ""} onChange={set("jobTitle")} />
-              </div>
-              <div className="field">
-                <label>Department</label>
-                <input value={form.department ?? ""} onChange={set("department")} />
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-lastName">Last name</Label>
+                <Input id="edit-lastName" value={form.lastName ?? ""} onChange={set("lastName")} />
               </div>
             </div>
-            <div className="field-row">
-              <div className="field">
-                <label>Business unit</label>
-                <input value={form.businessUnit ?? ""} onChange={set("businessUnit")} />
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-email">Email</Label>
+              <Input id="edit-email" type="email" value={form.email ?? ""} onChange={set("email")} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-jobTitle">Job title</Label>
+                <Input id="edit-jobTitle" value={form.jobTitle ?? ""} onChange={set("jobTitle")} />
               </div>
-              <div className="field">
-                <label>Phone</label>
-                <input value={form.phone ?? ""} onChange={set("phone")} />
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-department">Department</Label>
+                <Input id="edit-department" value={form.department ?? ""} onChange={set("department")} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-businessUnit">Business unit</Label>
+                <Input id="edit-businessUnit" value={form.businessUnit ?? ""} onChange={set("businessUnit")} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-phone">Phone</Label>
+                <Input id="edit-phone" value={form.phone ?? ""} onChange={set("phone")} />
               </div>
             </div>
           </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
+          <DialogFooter className="border-t border-border px-6 py-4">
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={saving}>
               {saving ? "Saving…" : "Save changes"}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

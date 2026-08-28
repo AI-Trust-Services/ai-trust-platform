@@ -1,5 +1,4 @@
-import "@ui5/webcomponents-icons/dist/document.js";
-import { Icon } from "@ui5/webcomponents-react";
+import { FileText } from "lucide-react";
 
 interface Props {
   title: string;
@@ -11,7 +10,7 @@ interface Props {
 export function EmptyState({ title, description, action }: Props) {
   return (
     <div style={styles.root}>
-      <Icon name="document" style={styles.icon} />
+      <FileText style={styles.icon} />
       <div style={styles.title}>{title}</div>
       {description && <div style={styles.description}>{description}</div>}
       {action && (

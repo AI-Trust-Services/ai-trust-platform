@@ -1,6 +1,6 @@
-import "@ui5/webcomponents-icons/dist/search.js";
-import { Icon, Input } from "@ui5/webcomponents-react";
+import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Input } from "@/components/ui/input";
 
 interface Props {
   value: string | undefined;
@@ -34,17 +34,22 @@ export function TraceIdSearch({ value, onChange, debounceMs = 300 }: Props) {
   }, [local, debounceMs, onChange, value]);
 
   return (
-    <Input
-      value={local}
-      placeholder="Search trace ID…"
-      icon={<Icon name="search" />}
-      style={{ minWidth: 240 }}
-      onInput={(e) => setLocal(e.target.value ?? "")}
-      onKeyDown={(e) => {
-        if (e.key !== "Enter") return;
-        const trimmed = local.trim();
-        onChange(trimmed === "" ? undefined : trimmed);
-      }}
-    />
+    <div className="relative" style={{ minWidth: 240 }}>
+      <Search
+        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+        style={{ width: 14, height: 14 }}
+      />
+      <Input
+        value={local}
+        placeholder="Search trace ID…"
+        className="pl-8"
+        onChange={(e) => setLocal(e.target.value ?? "")}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          const trimmed = local.trim();
+          onChange(trimmed === "" ? undefined : trimmed);
+        }}
+      />
+    </div>
   );
 }
