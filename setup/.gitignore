@@ -1,0 +1,13 @@
+# Local, environment-specific inputs — never commit these.
+prerequisites/config.env
+prerequisites/tls.crt
+prerequisites/tls.key
+prerequisites/*.kubeconfig
+prerequisites/kubeconfig*
+
+# Runtime scratch (rendered manifests, generated secrets, cloned app source).
+.state/
+
+# Python bytecode cache.
+__pycache__/
+*.pyc
