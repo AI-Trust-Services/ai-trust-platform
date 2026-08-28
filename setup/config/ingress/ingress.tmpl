@@ -1,0 +1,36 @@
+# Standard Kubernetes Ingress for the AI Trust Platform (INGRESS_MODE=ingress).
+# Routes ALL traffic to oauth2-proxy (the app's single entry point). Keycloak is
+# served by the app UNDER /keycloak on the SAME host, and oauth2-proxy is
+# configured to pass /keycloak/* straight through, so a single backend is enough.
+#
+# TLS handling is controlled by TLS_MODE in config.env:
+#   provided     -> uses the Secret `app-tls` (created by the deploy script from
+#                   prerequisites/tls.crt + tls.key)
+#   cert-manager -> adds the cert-manager.io/cluster-issuer annotation (CERT_ISSUER)
+#   none         -> the `tls:` block is stripped by the deploy script (HTTP only)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-trust-app
+  namespace: __APP_NS__
+  annotations:
+    # Larger bodies + longer reads for AI-assisted registration (LLM calls + uploads).
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    # cert-manager annotation is injected by the deploy script when TLS_MODE=cert-manager.
+spec:
+  # ingressClassName is injected by the deploy script when INGRESS_CLASS is set.
+  tls:
+    - hosts: [ "__APP_DOMAIN__" ]
+      secretName: app-tls
+  rules:
+    - host: "__APP_DOMAIN__"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: oauth2-proxy
+                port:
+                  number: 8080
