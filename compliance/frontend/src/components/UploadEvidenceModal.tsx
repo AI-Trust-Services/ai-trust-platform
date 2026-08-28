@@ -1,8 +1,22 @@
 import { useState, useEffect, useRef } from "react";
+import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { EVIDENCE_TYPES, humanize } from "../utils";
 import type { AISystem, Assessment, Control, Obligation } from "../types";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 interface Props {
   open: boolean;
@@ -26,6 +40,8 @@ const EMPTY: FormState = {
   ai_system_id: "", assessment_id: "",
   validity_from: "", validity_until: "", uploaded_by: "",
 };
+// Radix Select disallows empty-string item values — use a sentinel for "none".
+const NONE = "__none__";
 
 export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -99,9 +115,6 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
 
   if (!open) return null;
 
-  const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
-
   function toggleControl(id: string) {
     setSelectedControls((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
@@ -147,16 +160,18 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
   }
 
   return (
-    <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ width: 760 }}>
-        <div className="modal-header">
-          <h2>Upload Evidence</h2>
-          <button className="btn-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="gap-0 p-0 sm:max-w-[780px]">
+        <DialogHeader>
+          <DialogTitle>Upload Evidence</DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[70vh] overflow-y-auto p-6">
           {/* File drop */}
           <div
-            className={`dropzone${drag ? " drag" : ""}`}
+            className={cn(
+              "cursor-pointer rounded-md border border-dashed border-border bg-muted/30 px-4 py-6 text-center text-[13px] text-muted-foreground transition-colors hover:border-primary hover:bg-accent",
+              drag && "border-primary bg-accent",
+            )}
             onClick={() => fileRef.current?.click()}
             onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
             onDragLeave={() => setDrag(false)}
@@ -164,92 +179,114 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
           >
             <input ref={fileRef} type="file" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             {file ? (
-              <>Drop a different file or click to replace<div className="file-name">{file.name} ({(file.size / 1024).toFixed(0)} KB)</div></>
+              <>Drop a different file or click to replace<div className="mt-1.5 font-medium text-foreground">{file.name} ({(file.size / 1024).toFixed(0)} KB)</div></>
             ) : (
               <>Drag &amp; drop a file here, or click to browse (max 100 MB, optional)</>
             )}
           </div>
 
-          <div className="form-grid" style={{ marginTop: 16 }}>
+          <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2">
             {/* Left column: metadata */}
-            <div className="form-grid single">
-              <div className="form-group">
-                <label className="required">Title</label>
-                <input type="text" value={form.title} onChange={set("title")} placeholder="e.g. Human Oversight Policy v2.1" />
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ue-title">Title <span className="text-destructive">*</span></Label>
+                <Input id="ue-title" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Human Oversight Policy v2.1" />
               </div>
-              <div className="form-group">
-                <label>Evidence Type</label>
-                <select className="form-select" value={form.evidence_type} onChange={set("evidence_type")}>
-                  {EVIDENCE_TYPES.map((t) => <option key={t} value={t}>{humanize(t)}</option>)}
-                </select>
+              <div className="flex flex-col gap-1.5">
+                <Label>Evidence Type</Label>
+                <Select value={form.evidence_type} onValueChange={(v) => setForm((f) => ({ ...f, evidence_type: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {EVIDENCE_TYPES.map((t) => <SelectItem key={t} value={t}>{humanize(t)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="form-group">
-                <label>AI System</label>
-                <select className="form-select" value={form.ai_system_id} onChange={set("ai_system_id")}>
-                  <option value="">— none —</option>
-                  {systems.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.id})</option>)}
-                </select>
+              <div className="flex flex-col gap-1.5">
+                <Label>AI System</Label>
+                <Select
+                  value={form.ai_system_id || NONE}
+                  onValueChange={(v) => setForm((f) => ({ ...f, ai_system_id: v === NONE ? "" : v }))}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>— none —</SelectItem>
+                    {systems.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.id})</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="form-group">
-                <label>Description</label>
-                <textarea value={form.description} onChange={set("description")} />
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ue-desc">Description</Label>
+                <Textarea id="ue-desc" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
               </div>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>Valid From</label>
-                  <input type="date" value={form.validity_from} onChange={set("validity_from")} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="ue-vf">Valid From</Label>
+                  <Input id="ue-vf" type="date" value={form.validity_from} onChange={(e) => setForm((f) => ({ ...f, validity_from: e.target.value }))} />
                 </div>
-                <div className="form-group">
-                  <label>Valid Until</label>
-                  <input type="date" value={form.validity_until} onChange={set("validity_until")} />
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="ue-vu">Valid Until</Label>
+                  <Input id="ue-vu" type="date" value={form.validity_until} onChange={(e) => setForm((f) => ({ ...f, validity_until: e.target.value }))} />
                 </div>
               </div>
-              <div className="form-group">
-                <label>Uploaded By</label>
-                <input type="text" value={form.uploaded_by} onChange={set("uploaded_by")} placeholder="Your name" />
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ue-by">Uploaded By</Label>
+                <Input id="ue-by" value={form.uploaded_by} onChange={(e) => setForm((f) => ({ ...f, uploaded_by: e.target.value }))} placeholder="Your name" />
               </div>
             </div>
 
             {/* Right column: linking */}
-            <div className="form-grid single">
+            <div className="flex flex-col gap-4">
               {/* Controls checklist */}
-              <div className="form-group">
-                <label>Link to Controls {selectedControls.size > 0 && <span className="chip" style={{ marginLeft: 6 }}>{selectedControls.size} selected</span>}</label>
-                <div className="checklist-box">
+              <div className="flex flex-col gap-1.5">
+                <Label className="flex items-center gap-1.5">
+                  Link to Controls
+                  {selectedControls.size > 0 && <Badge variant="secondary" className="rounded-full font-medium">{selectedControls.size} selected</Badge>}
+                </Label>
+                <div className="max-h-40 overflow-y-auto rounded-md border border-border">
                   {!form.ai_system_id ? (
-                    <div className="checklist-empty">Select an AI system to see its controls</div>
+                    <div className="p-4 text-center text-xs text-muted-foreground">Select an AI system to see its controls</div>
                   ) : controls.length === 0 ? (
-                    <div className="checklist-empty">No controls for this system</div>
+                    <div className="p-4 text-center text-xs text-muted-foreground">No controls for this system</div>
                   ) : controls.map((c) => (
-                    <label key={c.id} className="checklist-item">
-                      <input type="checkbox" checked={selectedControls.has(c.id)} onChange={() => toggleControl(c.id)} />
-                      <span className="checklist-label">{c.title}</span>
-                      <span className="checklist-sub">{c.id}</span>
+                    <label key={c.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
+                      <Checkbox checked={selectedControls.has(c.id)} onCheckedChange={() => toggleControl(c.id)} />
+                      <span className="flex-1 truncate text-[13px] text-foreground">{c.title}</span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">{c.id}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
               {/* Obligations: pick assessment first */}
-              <div className="form-group">
-                <label>Assessment</label>
-                <select className="form-select" value={form.assessment_id} onChange={set("assessment_id")} disabled={!form.ai_system_id}>
-                  <option value="">— select to filter obligations —</option>
-                  {assessments.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
-                </select>
+              <div className="flex flex-col gap-1.5">
+                <Label>Assessment</Label>
+                <Select
+                  value={form.assessment_id || NONE}
+                  onValueChange={(v) => setForm((f) => ({ ...f, assessment_id: v === NONE ? "" : v }))}
+                  disabled={!form.ai_system_id}
+                >
+                  <SelectTrigger><SelectValue placeholder="— select to filter obligations —" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>— select to filter obligations —</SelectItem>
+                    {assessments.map((a) => <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="form-group">
-                <label>Link to Obligations {selectedObligations.size > 0 && <span className="chip" style={{ marginLeft: 6 }}>{selectedObligations.size} selected</span>}</label>
-                <div className="checklist-box">
+              <div className="flex flex-col gap-1.5">
+                <Label className="flex items-center gap-1.5">
+                  Link to Obligations
+                  {selectedObligations.size > 0 && <Badge variant="secondary" className="rounded-full font-medium">{selectedObligations.size} selected</Badge>}
+                </Label>
+                <div className="max-h-40 overflow-y-auto rounded-md border border-border">
                   {!form.assessment_id ? (
-                    <div className="checklist-empty">Select an assessment to see its obligations</div>
+                    <div className="p-4 text-center text-xs text-muted-foreground">Select an assessment to see its obligations</div>
                   ) : obligations.length === 0 ? (
-                    <div className="checklist-empty">No obligations for this assessment</div>
+                    <div className="p-4 text-center text-xs text-muted-foreground">No obligations for this assessment</div>
                   ) : obligations.map((o) => (
-                    <label key={o.id} className="checklist-item">
-                      <input type="checkbox" checked={selectedObligations.has(o.id)} onChange={() => toggleObligation(o.id)} />
-                      <span className="checklist-label">{o.title}</span>
-                      <span className="checklist-sub">{o.article_ref || o.id}</span>
+                    <label key={o.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
+                      <Checkbox checked={selectedObligations.has(o.id)} onCheckedChange={() => toggleObligation(o.id)} />
+                      <span className="flex-1 truncate text-[13px] text-foreground">{o.title}</span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">{o.article_ref || o.id}</span>
                     </label>
                   ))}
                 </div>
@@ -257,13 +294,13 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
             </div>
           </div>
         </div>
-        <div className="modal-footer">
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
-            {loading && <span className="spinner" />} Upload
-          </button>
-        </div>
-      </div>
-    </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={loading}>
+            {loading && <Loader2 className="animate-spin" />} Upload
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -33,4 +33,6 @@ class ModelSystemResponse(BaseModel):
 
     @classmethod
     def from_system(cls, system: AISystem, role: str | None) -> ModelSystemResponse:
-        return cls(role=role, id=system.id, name=system.name, tier=system.tier, lifecycle=system.lifecycle, compliance=system.compliance)
+        base = cls.model_validate(system)
+        base.role = role
+        return base

@@ -23,7 +23,7 @@ from sqlalchemy import exists, func, select, text, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from ai_trust_clickhouse import ch_command, ch_query, get_client
+from ai_trust_clickhouse import ch_command, ch_query, current_tenant, get_client_for_tenant
 from ai_trust_logging import get_logger
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
@@ -36,9 +36,48 @@ log = get_logger(__name__)
 
 DATABASE_URL   = os.environ["DATABASE_URL"]
 POLL_INTERVAL  = int(os.environ.get("ALERT_POLL_INTERVAL", "60"))
+# Multi-tenancy: isolation is schema-per-tenant, so each poll runs once per tenant with the
+# tenant ContextVar set — install_tenant_scoping then routes every query into that tenant's
+# schema (and per-tenant role). OWNER_DATABASE_URL (a role that can see the tenant schemas in
+# the catalog) is used ONLY to enumerate the tenants; when unset the worker does a single
+# unscoped pass (single-tenant / local dev).
+OWNER_DATABASE_URL = os.environ.get("OWNER_DATABASE_URL", "")
 
 engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+# Turn on the per-transaction schema/role routing hook for this worker's engine
+# (no-op when TENANCY_MODE=single). Mirrors what database.py does for the HTTP backends.
+try:
+    from ai_trust_tenancy import install_tenant_scoping, tenant_id_var
+
+    install_tenant_scoping(engine)
+except ImportError:
+    tenant_id_var = None
+
+_owner_engine = create_async_engine(OWNER_DATABASE_URL, pool_pre_ping=True) if OWNER_DATABASE_URL else None
+
+
+async def _distinct_tenants() -> list[str]:
+    """Enumerate the tenants that own data, from the per-tenant Postgres schemas.
+
+    Isolation is schema-per-tenant (`tenant_<org>`), so the set of tenants is the set of those
+    schemas. The org id is recovered by stripping the `tenant_` prefix (schema names replace
+    '-' with '_'; org ids in practice do not contain '-', so this round-trips). Returns [] when
+    no owner URL is configured or tenancy is off → the caller then does a single unscoped pass
+    (legacy single-tenant behaviour).
+    """
+    if _owner_engine is None or tenant_id_var is None:
+        return []
+    async with _owner_engine.connect() as conn:
+        rows = (await conn.execute(
+            text(
+                "SELECT schema_name FROM information_schema.schemata "
+                "WHERE schema_name LIKE 'tenant\\_%'"
+            )
+        )).all()
+    return [r[0][len("tenant_"):] for r in rows if r[0].startswith("tenant_")]
+
 
 WINDOW_MAP = {"15m": "15 MINUTE", "1h": "1 HOUR", "6h": "6 HOUR", "24h": "24 HOUR"}
 
@@ -123,7 +162,7 @@ async def eval_no_signals(rule: AlertRule, ch) -> list[EvalResult]:
         return []
 
     rows = await ch_query(
-        "SELECT service_name, count() AS n FROM otel.gen_ai_spans "
+        "SELECT service_name, count() AS n FROM gen_ai_spans "
         "WHERE received_at >= now() - INTERVAL {minutes:UInt32} MINUTE "
         "GROUP BY service_name",
         {"minutes": int(rule.threshold)},
@@ -152,9 +191,10 @@ async def eval_high_latency(rule: AlertRule, ch) -> list[EvalResult]:
     # are considered; spans from unregistered service names are ignored.
     rows = await ch_query(
         "SELECT service_name, round(avg(duration_ms), 2) AS avg_ms "
-        "FROM otel.gen_ai_spans "
+        "FROM gen_ai_spans "
         "WHERE received_at >= now() - INTERVAL 1 HOUR "
-        "GROUP BY service_name"
+        "GROUP BY service_name",
+        {},
     )
     if not rows:
         return []
@@ -251,7 +291,7 @@ async def eval_model_diverged(rule: AlertRule, ch) -> list[EvalResult]:
     if service_filter:
         rows = await ch_query(
             f"SELECT service_name, argMax(request_model, received_at) AS current_model "
-            f"FROM otel.gen_ai_spans "
+            f"FROM gen_ai_spans "
             f"WHERE received_at >= now() - INTERVAL {interval} "
             f"AND service_name = {{svc:String}} "
             f"AND request_model != '' "
@@ -261,10 +301,11 @@ async def eval_model_diverged(rule: AlertRule, ch) -> list[EvalResult]:
     else:
         rows = await ch_query(
             f"SELECT service_name, argMax(request_model, received_at) AS current_model "
-            f"FROM otel.gen_ai_spans "
+            f"FROM gen_ai_spans "
             f"WHERE received_at >= now() - INTERVAL {interval} "
             f"AND request_model != '' "
-            f"GROUP BY service_name"
+            f"GROUP BY service_name",
+            {},
         )
 
     if not rows:
@@ -504,7 +545,7 @@ EVALUATORS = {
 
 async def get_active_event(rule_id: str, entity_id: str = "") -> dict | None:
     rows = await ch_query(
-        "SELECT id, rule_id FROM otel.alert_events "
+        "SELECT id, rule_id FROM alert_events "
         "WHERE rule_id = {rule_id:String} "
         "AND entity_id = {entity_id:String} "
         "AND resolved_at IS NULL AND handled_at IS NULL "
@@ -519,7 +560,7 @@ async def get_active_event(rule_id: str, entity_id: str = "") -> dict | None:
 async def was_handled_recently(rule_id: str, entity_id: str = "") -> bool:
     """Returns True if this rule+entity was handled within the last 24 hours."""
     rows = await ch_query(
-        "SELECT count() AS n FROM otel.alert_events "
+        "SELECT count() AS n FROM alert_events "
         "WHERE rule_id = {rule_id:String} "
         "AND entity_id = {entity_id:String} "
         "AND handled_at IS NOT NULL "
@@ -540,10 +581,15 @@ async def create_event(
     now = datetime.now(timezone.utc)
     event_description = description or rule.description
 
+    # Capture the tenant on the event loop — ContextVars don't propagate into the run_in_executor
+    # worker thread below, so reading current_tenant() inside _insert would fail-closed in jwt mode.
+    tenant = current_tenant()
+
     def _insert():
-        client = get_client()
+        # Physical isolation: write to the current tenant's OWN ClickHouse database (tenant_<org>).
+        client = get_client_for_tenant(tenant)
         client.insert(
-            "otel.alert_events",
+            "alert_events",
             [[
                 str(uuid.uuid4()),
                 rule.id, rule.name, rule.category, rule.severity,
@@ -561,8 +607,10 @@ async def create_event(
 
 async def resolve_event(event_id: str, rule_name: str) -> None:
     now = datetime.now(timezone.utc)
+    # Physical isolation: ch_command routes to the current tenant's own ClickHouse database,
+    # so this only ever resolves events belonging to the current tenant.
     await ch_command(
-        "ALTER TABLE otel.alert_events UPDATE resolved_at = {ts:DateTime} "
+        "ALTER TABLE alert_events UPDATE resolved_at = {ts:DateTime} "
         "WHERE id = {id:String} "
         "SETTINGS mutations_sync = 1",
         {"ts": now, "id": event_id},
@@ -628,11 +676,34 @@ async def evaluate_once() -> None:
             await _process_single(rule, triggered, value)
 
 
+async def evaluate_all_tenants() -> None:
+    """Run one evaluation pass per tenant (multi-tenant) or a single pass (single-tenant).
+
+    In multi-tenant mode we set the tenant ContextVar before each pass — install_tenant_scoping
+    then routes every Postgres query into that tenant's schema (and per-tenant role), and the
+    ClickHouse helpers route to that tenant's own database, so evaluate_once() sees only that
+    tenant's data. When no tenants are enumerable (single-tenant or no OWNER_DATABASE_URL), we
+    fall back to one unscoped pass.
+    """
+    tenants = await _distinct_tenants()
+    if not tenants:
+        await evaluate_once()
+        return
+    for t in tenants:
+        tok = tenant_id_var.set(t) if tenant_id_var is not None else None
+        try:
+            log.info("policy_checker_worker.tenant_pass", extra={"tenant_id": t})
+            await evaluate_once()
+        finally:
+            if tenant_id_var is not None and tok is not None:
+                tenant_id_var.reset(tok)
+
+
 async def main() -> None:
     log.info("policy_checker_worker.started", extra={"poll_interval": POLL_INTERVAL})
     while True:
         try:
-            await evaluate_once()
+            await evaluate_all_tenants()
         except Exception:
             log.exception("policy_checker_worker.cycle_failed")
         await asyncio.sleep(POLL_INTERVAL)

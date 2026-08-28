@@ -160,8 +160,10 @@ async def list_system_models(system_id: str) -> list[SystemModelResponse]:
         ]
 
 
-@router.post("/systems/{system_id}/models", response_model=SystemModelResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+@router.post("/systems/{system_id}/models", response_model=SystemModelResponse, status_code=200, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
 async def add_system_model(system_id: str, body: SystemModelLinkBody) -> SystemModelResponse:
+    # Upsert: creates the link on first call, updates role on repeat. Always 200 —
+    # distinguishing insert from update requires xmax trickery the frontend doesn't need.
     async with SessionLocal() as session:
         sys_result = await session.execute(select(AISystem).where(AISystem.id == system_id))
         if not sys_result.scalar_one_or_none():

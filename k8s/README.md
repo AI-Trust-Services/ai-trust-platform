@@ -5,6 +5,9 @@ single-node [kind](https://kind.sigs.k8s.io/) cluster. **docker-compose remains 
 supported** - this is a second, independent deployment path that shares the same
 `.env` file, so there is nothing to keep in sync by hand.
 
+> Deploying to a real **Gardener shoot** (single-tenant, public HTTPS host via the cluster
+> gateway) instead of kind? See [SHOOT-INSTALL.md](SHOOT-INSTALL.md).
+
 Both paths use the exact same host ports (see the "Service URLs" table in
 `CLAUDE.md`), so don't run docker-compose and this kind cluster at the same time -
 they'll fight over ports 8080, 8180, 5432, etc. **Exception:** MinIO's API port is
@@ -17,32 +20,56 @@ use `http://localhost:19000` instead of `:9000`.
 
 - `kind`, `kubectl`, `docker` (already required for docker-compose)
 - `helm` - not installed by default; e.g. `choco install kubernetes-helm` on Windows
-- A `.env` at the repo root (copy `.env.example` if you don't have one)
+- A `.env` at the repo root (copy `.env.example` if you don't have one). If you don't
+  have one, `make up` creates it from `.env.example` for you during the `configure` step.
+
+## Single-tenant vs multi-tenant (you choose at install time)
+
+This platform runs in one of two tenancy modes, selected by the `TENANCY_MODE` env var
+(a single codebase — no separate build):
+
+| Mode | `TENANCY_MODE` | What it means | Use it for |
+|---|---|---|---|
+| **Single-tenant** (default) | `single` | One organization. One Keycloak realm, one shared Postgres schema, no per-tenant isolation. | docker-compose, this kind install, any standalone single-org deployment. |
+| **Multi-tenant** | `jwt` | Tenant resolved from a `tenant_id` OIDC claim; data isolated per tenant (schema-per-tenant Postgres + role, per-tenant Keycloak realm, per-tenant ClickHouse DB / MinIO bucket). Requires `TENANCY_JWKS_ISSUER_BASE`. | SaaS / MSP deployments. Normally installed via the MSP operator bundle, **not** this kind path. |
+
+**`make up` PROMPTS you to pick one** (the `configure` step) and writes `TENANCY_MODE`
+into `.env` before anything is deployed. To skip the prompt (CI / scripted installs),
+set it explicitly: `TENANCY_MODE=single make up`. To change it later:
+`make configure` then `make bootstrap upgrade`.
+
+> The plain kind install targets **single-tenant**. Multi-tenant (`jwt`) additionally
+> needs a per-tenant Keycloak realm and `TENANCY_JWKS_ISSUER_BASE` set, which the MSP
+> operator provisions — selecting `jwt` here without that wiring will not give you a
+> working multi-tenant cluster on its own.
 
 ## Quick start
 
 ```bash
 cp .env.example .env
 cd k8s
-make up      # kind create cluster + bootstrap + build/load images + helm install
+make up      # PROMPT tenancy mode → kind create cluster → bootstrap → build/load images → helm install
 ```
 
 Then open http://localhost:8080 and log in via Keycloak, same as with docker-compose.
 
 `make up` runs these steps individually, in order:
 
-1. `make cluster` - `kind create cluster --config kind-config.yaml` (single node; `extraPortMappings`
+1. `make configure` - **prompts** for the tenancy mode (single vs multi-tenant), creating
+   `.env` from `.env.example` on first run and writing your choice to `TENANCY_MODE`. Skip
+   with `TENANCY_MODE=<single|jwt> make up`.
+2. `make cluster` - `kind create cluster --config kind-config.yaml` (single node; `extraPortMappings`
    map the same host ports docker-compose uses today straight onto NodePort Services - no ingress
    controller needed, since oauth2-proxy is already the single routing gateway internally).
-2. `make bootstrap` - runs `scripts/bootstrap.sh`, which creates (idempotently) the `ai-trust`
+3. `make bootstrap` - runs `scripts/bootstrap.sh`, which creates (idempotently) the `ai-trust`
    namespace, a `Secret` called `ai-trust-env` from `.env` (plus a couple of computed connection
    strings, e.g. `DATABASE_URL`, that docker-compose builds via YAML anchors), `ConfigMap`s from the
    existing `infra/postgres/init.sh` and `otel-pipeline/**/config` files, and the small RBAC role
    used by the "wait for job" pattern below.
-3. `make build` - runs `scripts/build-and-load-images.sh`, which `docker build`s all ~22
+4. `make build` - runs `scripts/build-and-load-images.sh`, which `docker build`s all ~22
    locally-built images (same context/Dockerfile/build-args as the matching docker-compose
    service) and `kind load docker-image`s them into the cluster - no registry involved.
-4. `make install` - `helm install ai-trust helm/ai-trust-platform -n ai-trust -f helm/ai-trust-platform/values-kind.yaml`.
+5. `make install` - `helm install ai-trust helm/ai-trust-platform -n ai-trust -f helm/ai-trust-platform/values-kind.yaml`.
    The `values-kind.yaml` overlay switches all infra services from `ClusterIP` (the chart default,
    safe for any real cluster) to `NodePort` so that `kind-config.yaml` `extraPortMappings` can bind
    them to localhost. **Never apply `values-kind.yaml` on a real cluster** — it exposes postgres,

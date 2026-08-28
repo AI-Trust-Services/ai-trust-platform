@@ -38,6 +38,9 @@ class AISystem(Base):
     # Per-flag LLM rationale + confidence from AI-assisted registration:
     # a JSON array of {flag, value, rationale, confidence}.
     classification_rationale: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    # Per-field confirmation state from engineer AI-assisted review:
+    # {"version": true, "provider": false, ...} — merged via PATCH, never replaced wholesale.
+    field_confirmations: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
 
     lifecycle: Mapped[str] = mapped_column(String(30), default="development", index=True)
     compliance: Mapped[float] = mapped_column(Float, default=0.0)  # 0.0–100.0 percentage
