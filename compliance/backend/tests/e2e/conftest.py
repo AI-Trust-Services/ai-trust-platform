@@ -131,6 +131,7 @@ def _truncate() -> None:
     cur.execute(
         "TRUNCATE ai_systems, assessments, obligations, controls, evidence, "
         "control_obligations, evidence_controls, evidence_obligations, "
+        "evidence_ai_systems, evidence_assessments, "
         "service_model_baselines RESTART IDENTITY CASCADE"
     )
     cur.close()
@@ -268,7 +269,7 @@ async def create_control(client: httpx.AsyncClient, system_id: str | None = None
 
 
 async def create_evidence(client: httpx.AsyncClient, **kwargs) -> dict:
-    """Creates evidence without a file. At least one link target required."""
+    """Creates evidence without a file."""
     data = {"title": "Test Evidence", "evidence_type": "document", **kwargs}
     r = await client.post("/v1/evidence", data=data)
     assert r.status_code == 201, r.text

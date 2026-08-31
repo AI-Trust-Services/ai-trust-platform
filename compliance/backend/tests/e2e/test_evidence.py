@@ -46,16 +46,8 @@ async def test_create_evidence_linked_to_obligation(client: httpx.AsyncClient):
 
 async def test_create_evidence_linked_to_system(client: httpx.AsyncClient):
     system = await create_system()
-    evd = await create_evidence(client, ai_system_id=system["id"])
-    assert evd["ai_system_id"] == system["id"]
-
-
-async def test_create_evidence_requires_link_target(client: httpx.AsyncClient):
-    r = await client.post("/v1/evidence", data={
-        "title": "Orphan Evidence",
-        "evidence_type": "document",
-    })
-    assert r.status_code == 422
+    evd = await create_evidence(client, ai_system_ids=system["id"])
+    assert system["id"] in evd["ai_system_ids"]
 
 
 async def test_create_evidence_404_on_missing_control(client: httpx.AsyncClient):
@@ -100,7 +92,7 @@ async def test_list_evidence_filter_by_control(client: httpx.AsyncClient):
     system = await create_system()
     ctl = await create_control(client, system["id"])
     await create_evidence(client, control_ids=[ctl["id"]])
-    await create_evidence(client, ai_system_id=system["id"])
+    await create_evidence(client, ai_system_ids=system["id"])
 
     r = await client.get(f"/v1/evidence?control_id={ctl['id']}")
     assert r.status_code == 200
@@ -109,7 +101,7 @@ async def test_list_evidence_filter_by_control(client: httpx.AsyncClient):
 
 async def test_list_evidence_filter_by_system(client: httpx.AsyncClient):
     system = await create_system()
-    await create_evidence(client, ai_system_id=system["id"])
+    await create_evidence(client, ai_system_ids=system["id"])
     r = await client.get(f"/v1/evidence?ai_system_id={system['id']}")
     assert r.status_code == 200
     assert len(r.json()) == 1
@@ -121,7 +113,7 @@ async def test_list_evidence_filter_by_system(client: httpx.AsyncClient):
 
 async def test_get_evidence_returns_detail(client: httpx.AsyncClient):
     system = await create_system()
-    evd = await create_evidence(client, ai_system_id=system["id"])
+    evd = await create_evidence(client, ai_system_ids=system["id"])
     r = await client.get(f"/v1/evidence/{evd['id']}")
     assert r.status_code == 200
     body = r.json()
@@ -141,7 +133,7 @@ async def test_get_evidence_404_on_missing(client: httpx.AsyncClient):
 
 async def test_update_evidence_title(client: httpx.AsyncClient):
     system = await create_system()
-    evd = await create_evidence(client, ai_system_id=system["id"])
+    evd = await create_evidence(client, ai_system_ids=system["id"])
     r = await client.put(f"/v1/evidence/{evd['id']}", json={"title": "Updated"})
     assert r.status_code == 200
     assert r.json()["title"] == "Updated"
@@ -158,7 +150,7 @@ async def test_update_evidence_404_on_missing(client: httpx.AsyncClient):
 
 async def test_delete_evidence(client: httpx.AsyncClient):
     system = await create_system()
-    evd = await create_evidence(client, ai_system_id=system["id"])
+    evd = await create_evidence(client, ai_system_ids=system["id"])
     r = await client.delete(f"/v1/evidence/{evd['id']}")
     assert r.status_code == 200
     assert (await client.get(f"/v1/evidence/{evd['id']}")).status_code == 404
@@ -175,7 +167,7 @@ async def test_delete_evidence_404_on_missing(client: httpx.AsyncClient):
 
 async def test_approve_evidence(client: httpx.AsyncClient):
     system = await create_system()
-    evd = await create_evidence(client, ai_system_id=system["id"])
+    evd = await create_evidence(client, ai_system_ids=system["id"])
     r = await client.post(f"/v1/evidence/{evd['id']}/approve")
     assert r.status_code == 200
     assert r.json()["status"] == "approved"
@@ -183,7 +175,7 @@ async def test_approve_evidence(client: httpx.AsyncClient):
 
 async def test_reject_evidence(client: httpx.AsyncClient):
     system = await create_system()
-    evd = await create_evidence(client, ai_system_id=system["id"])
+    evd = await create_evidence(client, ai_system_ids=system["id"])
     r = await client.post(f"/v1/evidence/{evd['id']}/reject")
     assert r.status_code == 200
     assert r.json()["status"] == "rejected"
@@ -253,7 +245,7 @@ async def test_download_url_returned_for_evidence_with_file(client: httpx.AsyncC
 
 async def test_download_url_404_for_evidence_without_file(client: httpx.AsyncClient):
     system = await create_system()
-    evd = await create_evidence(client, ai_system_id=system["id"])
+    evd = await create_evidence(client, ai_system_ids=system["id"])
     r = await client.get(f"/v1/evidence/{evd['id']}/download-url")
     assert r.status_code == 404
 
