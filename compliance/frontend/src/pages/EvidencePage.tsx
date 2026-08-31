@@ -111,7 +111,7 @@ export default function EvidencePage() {
       if (s && !e.title.toLowerCase().includes(s) && !(e.file_name ?? "").toLowerCase().includes(s) && !(e.uploaded_by ?? "").toLowerCase().includes(s)) return false;
       if (statusFilter && e.status !== statusFilter) return false;
       if (typeFilter && e.evidence_type !== typeFilter) return false;
-      if (systemFilter && e.ai_system_id !== systemFilter) return false;
+      if (systemFilter && !e.ai_system_ids.includes(systemFilter)) return false;
       if (uploaderFilter && e.uploaded_by !== uploaderFilter) return false;
       if (expiryFilter === "expired") {
         if (e.status !== "expired") return false;
@@ -225,7 +225,7 @@ export default function EvidencePage() {
                 <TableRow key={e.id} data-state={selected === e.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(e)}>
                   <TableCell><div className="font-medium text-foreground">{e.title}</div><div className="text-xs text-muted-foreground">{e.id}</div></TableCell>
                   <TableCell className="text-[13px]">{humanize(e.evidence_type)}</TableCell>
-                  <TableCell>{e.ai_system_id ? (systemsById[e.ai_system_id]?.name ?? e.ai_system_id) : "—"}</TableCell>
+                  <TableCell>{e.ai_system_ids.length > 0 ? (systemsById[e.ai_system_ids[0]]?.name ?? e.ai_system_ids[0]) : "—"}</TableCell>
                   <TableCell><Badge variant="secondary" className="rounded-full font-medium">v{e.version_label}</Badge></TableCell>
                   <TableCell><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></TableCell>
                   <TableCell>{e.file_name ? <Badge variant="secondary" className="max-w-[160px] truncate rounded-full font-medium">{e.file_name}</Badge> : "—"}</TableCell>
@@ -284,7 +284,7 @@ export default function EvidencePage() {
           <>
           <DetailSection title="General Information">
             <DetailField label="ID">{detail.id}</DetailField>
-            <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : "—"}</DetailField>
+            <DetailField label="AI System">{detail.ai_system_ids.length > 0 ? (systemsById[detail.ai_system_ids[0]]?.name ?? detail.ai_system_ids[0]) : "—"}</DetailField>
             <DetailField label="Type">{humanize(detail.evidence_type)}</DetailField>
             <DetailField label="Status"><StatusBadge meta={EVIDENCE_STATUS_META} value={detail.status} /></DetailField>
             <DetailField label="Uploaded By">{detail.uploaded_by || "—"}</DetailField>
@@ -304,7 +304,7 @@ export default function EvidencePage() {
               <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
             </DetailSection>
           )}
-          {(detailControls.length > 0 || detailObligations.length > 0 || detail.assessment_id) && (
+          {(detailControls.length > 0 || detailObligations.length > 0 || detail.assessment_ids.length > 0) && (
             <DetailSection title="Linked To">
               {detailControls.length > 0 && (
                 <>
@@ -322,8 +322,8 @@ export default function EvidencePage() {
                   ))}</ul>
                 </>
               )}
-              {detail.assessment_id && (
-                <DetailField label="Assessment">{detail.assessment_id}</DetailField>
+              {detail.assessment_ids.length > 0 && (
+                <DetailField label="Assessment">{detail.assessment_ids[0]}</DetailField>
               )}
             </DetailSection>
           )}

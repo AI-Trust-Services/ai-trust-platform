@@ -141,8 +141,8 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
       fd.append("description", form.description);
       fd.append("evidence_type", form.evidence_type);
       fd.append("uploaded_by", form.uploaded_by);
-      if (form.ai_system_id) fd.append("ai_system_id", form.ai_system_id);
-      if (form.assessment_id) fd.append("assessment_id", form.assessment_id);
+      if (form.ai_system_id) fd.append("ai_system_ids", form.ai_system_id);
+      if (form.assessment_id) fd.append("assessment_ids", form.assessment_id);
       if (form.validity_from) fd.append("validity_from", form.validity_from);
       if (form.validity_until) fd.append("validity_until", form.validity_until);
       selectedControls.forEach((id) => fd.append("control_ids", id));
