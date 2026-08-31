@@ -90,6 +90,8 @@ build users-frontend ./users/frontend ./users/frontend/Dockerfile \
 build decision-trace-analyzer-frontend ./decision-trace-analyzer/frontend ./decision-trace-analyzer/frontend/Dockerfile \
   --build-arg "VITE_DTA_API_BASE=${VITE_DTA_API_BASE}"
 
+build admin-frontend ./admin/frontend ./admin/frontend/Dockerfile
+
 echo "==> loading ${#images[@]} images into kind cluster '${CLUSTER_NAME}'"
 kind load docker-image "${images[@]}" --name "$CLUSTER_NAME"
 

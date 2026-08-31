@@ -61,13 +61,10 @@ export function useLuigiThemeSync(): void {
  * Use this instead of target="_top" links to avoid sandbox restrictions.
  */
 export function navigateToPath(path: string): void {
-  console.log("[Luigi] navigateToPath called with:", path);
   try {
     // Use absolute path from root (no context modifier)
     LuigiClient.linkManager().navigate(path);
-    console.log("[Luigi] navigation initiated");
-  } catch (e) {
-    console.error("[Luigi] navigation failed:", e);
+  } catch {
     // Fallback for non-Luigi context (e.g., standalone dev)
     window.top?.location.assign(window.location.origin + "/#" + path);
   }

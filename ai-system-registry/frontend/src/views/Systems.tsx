@@ -118,8 +118,9 @@ function SystemRow({ system, userMap, onClick }: SystemRowProps) {
       ? "medium"
       : "low";
 
-  // Calculate open tasks (mock - would come from real data)
-  const openTasks = Math.floor(Math.random() * 5);
+  // Open tasks - placeholder until real task data is available
+  // TODO: Replace with actual task count from backend when task API is implemented
+  const openTasks: number | null = null;
 
   // Format date
   const lastUpdated = new Date(system.updated_at || system.created_at).toLocaleDateString("en-GB", {
@@ -190,7 +191,7 @@ function SystemRow({ system, userMap, onClick }: SystemRowProps) {
       {/* Open Tasks */}
       <div className="w-20 shrink-0 text-center">
         <Badge variant="secondary" className="text-xs">
-          {openTasks}
+          {openTasks !== null ? openTasks : "—"}
         </Badge>
       </div>
 
