@@ -46,9 +46,10 @@
   const canReadSystems = permissions.includes("systems:read");
   const canReadAlerts = permissions.some(p => ["alerts:read", "alerts:handle", "alerts:manage_rules"].includes(p));
 
-  // Determine if user is admin-only (no systems/compliance perms)
-  const isAdminOnly = permissions.includes("iam:manage") &&
-    !permissions.some(p => ["systems:read", "systems:write", "assessments:read", "monitoring:read"].includes(p));
+  // Determine if user is admin-only (has iam:manage but not systems:read).
+  // Using systems:read as the single anchor avoids maintaining an exclusion list
+  // that breaks whenever a custom role combines iam:manage with any other permission.
+  const isAdminOnly = permissions.includes("iam:manage") && !permissions.includes("systems:read");
 
   // New task-driven navigation structure - only for non-admin users
   const mainNav = isAdminOnly ? [
