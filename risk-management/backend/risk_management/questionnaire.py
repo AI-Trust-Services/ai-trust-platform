@@ -25,8 +25,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_bias",
         "category": "bias",
-        "question": "Czy system podejmuje decyzje wpływające na różne grupy ludzi (np. rekrutacja, kredyty, dostęp do usług)?",
-        "hint": "Dotyczy Art. 10(2)(f) AI Act oraz NIST AI RMF GOVERN 6.1",
+        "question": "Does the system make decisions that affect different groups of people (e.g. recruitment, credit scoring, access to services)?",
+        "hint": "Relates to Art. 10(2)(f) AI Act and NIST AI RMF GOVERN 6.1",
         "taxonomy_ai_act": "Art. 10(2)(f)",
         "taxonomy_nist": "GOVERN 6.1",
         "default_severity": "high",
@@ -36,8 +36,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_data_bias",
         "category": "bias",
-        "question": "Czy dane treningowe mogły zawierać historyczne uprzedzenia lub niedoreprezentowane grupy?",
-        "hint": "Np. danych historycznych dot. zatrudnienia, ocen kredytowych, recydywy.",
+        "question": "Could the training data contain historical biases or under-represented groups?",
+        "hint": "E.g. historical employment data, credit scores, recidivism records.",
         "taxonomy_ai_act": "Art. 10(2)(f)",
         "taxonomy_nist": "MAP 1.5",
         "default_severity": "high",
@@ -47,8 +47,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_explainability",
         "category": "transparency",
-        "question": "Czy użytkownicy lub osoby dotknięte decyzją potrzebują wyjaśnienia dlaczego system podjął daną decyzję?",
-        "hint": "Wymóg wyjaśnialności wynika z Art. 13 AI Act i GDPR Art. 22.",
+        "question": "Do users or affected persons need an explanation of why the system made a particular decision?",
+        "hint": "Explainability requirement stems from Art. 13 AI Act and GDPR Art. 22.",
         "taxonomy_ai_act": "Art. 13",
         "taxonomy_nist": "MANAGE 2.2",
         "default_severity": "medium",
@@ -58,8 +58,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_transparency_external",
         "category": "transparency",
-        "question": "Czy osoby dotknięte wiedzą, że decyzja była podejmowana lub wspomagana przez AI?",
-        "hint": "Art. 50 AI Act nakłada obowiązek informowania o interakcji z systemem AI.",
+        "question": "Are affected persons aware that a decision was made or assisted by an AI system?",
+        "hint": "Art. 50 AI Act imposes an obligation to inform about interaction with an AI system.",
         "taxonomy_ai_act": "Art. 50",
         "taxonomy_nist": "GOVERN 1.1",
         "default_severity": "medium",
@@ -69,8 +69,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_privacy",
         "category": "privacy",
-        "question": "Czy system przetwarza dane osobowe lub wrażliwe (zdrowie, biometria, finanse, lokalizacja)?",
-        "hint": "GDPR Art. 9 i GDPR Art. 22. Wymaga DPIA jeśli przetwarza dane szczególne.",
+        "question": "Does the system process personal or sensitive data (health, biometrics, finances, location)?",
+        "hint": "GDPR Art. 9 and GDPR Art. 22. Requires a DPIA if processing special category data.",
         "taxonomy_ai_act": "Art. 10(5)",
         "taxonomy_nist": "MAP 5.1",
         "default_severity": "high",
@@ -80,8 +80,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_data_minimization",
         "category": "privacy",
-        "question": "Czy system zbiera więcej danych niż jest to konieczne do realizacji celu?",
-        "hint": "Zasada minimalizacji danych (GDPR Art. 5(1)(c)) i Art. 10(3) AI Act.",
+        "question": "Does the system collect more data than is necessary to fulfil its purpose?",
+        "hint": "Data minimisation principle (GDPR Art. 5(1)(c)) and Art. 10(3) AI Act.",
         "taxonomy_ai_act": "Art. 10(3)",
         "taxonomy_nist": "MAP 5.1",
         "default_severity": "medium",
@@ -91,8 +91,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_robustness",
         "category": "reliability",
-        "question": "Czy błędna lub niepewna decyzja systemu może wyrządzić realną szkodę (zdrowotną, finansową, prawną)?",
-        "hint": "Art. 9(2)(b) wymaga analizy scenariuszy błędnych decyzji.",
+        "question": "Could an incorrect or uncertain decision by the system cause real harm (health, financial, legal)?",
+        "hint": "Art. 9(2)(b) requires analysis of erroneous decision scenarios.",
         "taxonomy_ai_act": "Art. 9(2)(b)",
         "taxonomy_nist": "MANAGE 3.1",
         "default_severity": "critical",
@@ -102,8 +102,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_degradation",
         "category": "reliability",
-        "question": "Czy działanie systemu może się pogorszyć w czasie (dryfowanie modelu, zmiany w danych)?",
-        "hint": "Art. 9(2)(c) wymaga monitoringu po wdrożeniu (post-market monitoring).",
+        "question": "Could the system's performance degrade over time (model drift, data distribution shift)?",
+        "hint": "Art. 9(2)(c) requires post-deployment monitoring.",
         "taxonomy_ai_act": "Art. 9(2)(c)",
         "taxonomy_nist": "MANAGE 4.1",
         "default_severity": "medium",
@@ -113,8 +113,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_human_agency",
         "category": "human_oversight",
-        "question": "Czy istnieje możliwość podważenia lub nadpisania decyzji systemu przez człowieka?",
-        "hint": "Art. 14 AI Act wymaga środków nadzoru ludzkiego dla systemów wysokiego ryzyka.",
+        "question": "Is it possible for a human to challenge or override the system's decision?",
+        "hint": "Art. 14 AI Act requires human oversight measures for high-risk systems.",
         "taxonomy_ai_act": "Art. 14",
         "taxonomy_nist": "GOVERN 6.2",
         "default_severity": "high",
@@ -124,8 +124,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_vulnerable",
         "category": "human_oversight",
-        "question": "Czy system może mieć wpływ na grupy wrażliwe (dzieci, osoby starsze, osoby z niepełnosprawnościami, mniejszości)?",
-        "hint": "Art. 9(9) AI Act wymaga szczególnej uwagi dla grup wrażliwych.",
+        "question": "Could the system affect vulnerable groups (children, elderly, persons with disabilities, minorities)?",
+        "hint": "Art. 9(9) AI Act requires special attention for vulnerable groups.",
         "taxonomy_ai_act": "Art. 9(9)",
         "taxonomy_nist": "MAP 1.5",
         "default_severity": "high",
@@ -135,8 +135,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_security",
         "category": "security",
-        "question": "Czy system jest dostępny publicznie lub przez API, narażając go na ataki adversarialne lub wstrzykiwanie danych?",
-        "hint": "OWASP LLM Top 10: prompt injection, model inversion. Art. 15 AI Act — cyberbezpieczeństwo.",
+        "question": "Is the system publicly accessible or exposed via an API, making it susceptible to adversarial attacks or data injection?",
+        "hint": "OWASP LLM Top 10: prompt injection, model inversion. Art. 15 AI Act — cybersecurity.",
         "taxonomy_ai_act": "Art. 15",
         "taxonomy_nist": "MANAGE 2.4",
         "default_severity": "high",
@@ -146,8 +146,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_governance",
         "category": "governance",
-        "question": "Czy zdefiniowano odpowiedzialność (właściciela, role, procesy) za decyzje systemu AI?",
-        "hint": "Art. 9(1) i Art. 17 AI Act wymagają systemu zarządzania jakością i odpowiedzialności.",
+        "question": "Has accountability been defined (owner, roles, processes) for the AI system's decisions?",
+        "hint": "Art. 9(1) and Art. 17 AI Act require a quality management system and clear accountability.",
         "taxonomy_ai_act": "Art. 17",
         "taxonomy_nist": "GOVERN 1.2",
         "default_severity": "medium",
@@ -157,8 +157,8 @@ QUESTIONNAIRE: list[dict] = [
     {
         "id": "q_audit",
         "category": "governance",
-        "question": "Czy decyzje systemu są rejestrowane w sposób umożliwiający późniejszy audyt?",
-        "hint": "Art. 12 AI Act wymaga przechowywania logów dla systemów wysokiego ryzyka.",
+        "question": "Are the system's decisions logged in a way that enables subsequent audit?",
+        "hint": "Art. 12 AI Act requires log retention for high-risk AI systems.",
         "taxonomy_ai_act": "Art. 12",
         "taxonomy_nist": "GOVERN 1.4",
         "default_severity": "medium",
@@ -254,19 +254,19 @@ def answers_to_risks(answers: list[QuestionnaireAnswer]) -> list[Risk]:
 
 def _risk_title_from_question(q: dict) -> str:
     titles = {
-        "q_bias": "Ryzyko dyskryminacji algorytmicznej",
-        "q_data_bias": "Uprzedzenia w danych treningowych",
-        "q_explainability": "Brak wyjaśnialności decyzji",
-        "q_transparency_external": "Brak informowania o roli AI",
-        "q_privacy": "Ryzyko naruszenia prywatności",
-        "q_data_minimization": "Nadmierne zbieranie danych",
-        "q_robustness": "Ryzyko szkody wynikającej z błędnej decyzji",
-        "q_degradation": "Degradacja jakości modelu w czasie",
-        "q_human_agency": "Brak mechanizmów nadzoru ludzkiego",
-        "q_vulnerable": "Wpływ na grupy wrażliwe",
-        "q_security": "Zagrożenia bezpieczeństwa i ataki adversarialne",
-        "q_governance": "Brak zdefiniowanej odpowiedzialności za AI",
-        "q_audit": "Brak ścieżki audytu decyzji",
+        "q_bias": "Risk of algorithmic discrimination",
+        "q_data_bias": "Bias in training data",
+        "q_explainability": "Lack of decision explainability",
+        "q_transparency_external": "Failure to disclose AI involvement",
+        "q_privacy": "Risk of privacy violation",
+        "q_data_minimization": "Excessive data collection",
+        "q_robustness": "Risk of harm from erroneous decision",
+        "q_degradation": "Model quality degradation over time",
+        "q_human_agency": "Lack of human oversight mechanisms",
+        "q_vulnerable": "Impact on vulnerable groups",
+        "q_security": "Security threats and adversarial attacks",
+        "q_governance": "Undefined accountability for AI decisions",
+        "q_audit": "Lack of decision audit trail",
     }
     return titles.get(q["id"], q["question"][:60])
 
@@ -274,7 +274,7 @@ def _risk_title_from_question(q: dict) -> str:
 def _risk_description(q: dict, ans: QuestionnaireAnswer) -> str:
     base = q.get("hint", q["question"])
     if ans.justification:
-        return f"{base} Uzasadnienie: {ans.justification}"
+        return f"{base} Justification: {ans.justification}"
     return base
 
 
@@ -282,57 +282,57 @@ def _risk_description(q: dict, ans: QuestionnaireAnswer) -> str:
 # AI-assisted questionnaire filling
 # ---------------------------------------------------------------------------
 
-_AI_FILL_SYSTEM_PROMPT = """Jesteś ekspertem ds. zarządzania ryzykiem AI zgodnie z EU AI Act Art. 9.
-Twoim zadaniem jest odpowiedź na pytania kwestionariusza dotyczącego ryzyk systemu AI.
-Dla każdego pytania oceń na podstawie opisu systemu czy ryzyko jest obecne (answer: true/false).
-Podaj krótkie uzasadnienie z odwołaniem do dokumentacji, kodu lub opisu systemu.
-Odpowiadaj WYŁĄCZNIE poprawnym JSON-em. Bez wyjaśnień, bez markdown, bez dodatkowego tekstu.
-Format odpowiedzi — tablica obiektów:
+_AI_FILL_SYSTEM_PROMPT = """You are an AI risk management expert specialising in EU AI Act Art. 9.
+Your task is to answer questionnaire questions about the risks of an AI system.
+For each question, assess based on the system description whether the risk is present (answer: true/false).
+Provide a brief justification referencing the documentation, code, or system description.
+Respond ONLY with valid JSON. No explanations, no markdown, no additional text.
+Response format — array of objects:
 [
   {
     "question_id": "q_bias",
     "answer": true,
-    "justification": "Cytat z dokumentacji lub kodu uzasadniający odpowiedź.",
+    "justification": "Quote from documentation or code justifying the answer.",
     "confidence": "high",
     "severity_override": null,
     "likelihood_override": null,
     "mitigation_override": null
   }
 ]
-Pola *_override mogą być null (wtedy użyte są wartości domyślne) lub jedną z wartości:
+The *_override fields may be null (defaults are used) or one of:
 - severity_override: "critical" | "high" | "medium" | "low"
 - likelihood_override: "very_likely" | "likely" | "possible" | "unlikely"
 - mitigation_override: "eliminate" | "reduce" | "mitigate" | "inform"
 """
 
-_AI_FILL_USER_TEMPLATE = """Na podstawie poniższego opisu systemu AI odpowiedz na wszystkie pytania kwestionariusza.
+_AI_FILL_USER_TEMPLATE = """Based on the following AI system description, answer all questionnaire questions.
 
-Nazwa systemu: {name}
-Kategoria Annex III: {annex_iii_category}
-Przeznaczenie: {intended_purpose}
-Kontekst wdrożenia: {deployment_context}
-Techniki AI: {ai_techniques}
-Dane wejściowe: {data_inputs}
+System name: {name}
+Annex III category: {annex_iii_category}
+Intended purpose: {intended_purpose}
+Deployment context: {deployment_context}
+AI techniques: {ai_techniques}
+Data inputs: {data_inputs}
 
-Opis systemu:
+System description:
 {system_description}
 
 {source_code_section}
 
-Pytania kwestionariusza:
+Questionnaire questions:
 {questions_json}
 
-Zwróć tablicę JSON z odpowiedziami na WSZYSTKIE {question_count} pytania. Tylko JSON."""
+Return a JSON array with answers to ALL {question_count} questions. JSON only."""
 
 
-_SINGLE_Q_SYSTEM_PROMPT = """Jesteś ekspertem ds. zarządzania ryzykiem AI zgodnie z EU AI Act Art. 9.
-Odpowiedz na jedno pytanie kwestionariusza dotyczące ryzyka systemu AI.
-Odpowiadaj WYŁĄCZNIE poprawnym JSON-em. Bez wyjaśnień, bez markdown.
+_SINGLE_Q_SYSTEM_PROMPT = """You are an AI risk management expert specialising in EU AI Act Art. 9.
+Answer a single questionnaire question about the risk of an AI system.
+Respond ONLY with valid JSON. No explanations, no markdown.
 Format:
 {
-  "question_id": "<id pytania>",
+  "question_id": "<question id>",
   "answer": true/false,
-  "justification": "Krótkie uzasadnienie z odwołaniem do dokumentacji lub kodu.",
+  "justification": "Brief justification referencing the documentation or code.",
   "confidence": "high" | "medium" | "low",
   "severity_override": null,
   "likelihood_override": null,
@@ -340,23 +340,23 @@ Format:
 }
 """
 
-_SINGLE_Q_USER_TEMPLATE = """System AI: {name} ({annex_iii_category})
-Przeznaczenie: {intended_purpose}
-Kontekst: {deployment_context}
-Techniki AI: {ai_techniques}
-Dane wejściowe: {data_inputs}
+_SINGLE_Q_USER_TEMPLATE = """AI system: {name} ({annex_iii_category})
+Intended purpose: {intended_purpose}
+Deployment context: {deployment_context}
+AI techniques: {ai_techniques}
+Data inputs: {data_inputs}
 
-Opis systemu:
+System description:
 {system_description}
 
 {source_code_section}
 
-Pytanie (id: {question_id}):
+Question (id: {question_id}):
 {question}
 
-Wskazówka: {hint}
+Hint: {hint}
 
-Odpowiedz JSON-em."""
+Respond with JSON."""
 
 
 class AIQuestionnaireAssistant:
@@ -381,7 +381,7 @@ class AIQuestionnaireAssistant:
 
         source_code_section = ""
         if source_code.strip():
-            source_code_section = f"Fragment kodu:\n```\n{source_code[:1500]}\n```"
+            source_code_section = f"Source code excerpt:\n```\n{source_code[:1500]}\n```"
 
         user_prompt = _SINGLE_Q_USER_TEMPLATE.format(
             name=metadata.name,
@@ -443,7 +443,7 @@ class AIQuestionnaireAssistant:
 
         source_code_section = ""
         if source_code.strip():
-            source_code_section = f"Fragment kodu źródłowego:\n```\n{source_code[:2000]}\n```"
+            source_code_section = f"Source code excerpt:\n```\n{source_code[:2000]}\n```"
 
         user_prompt = _AI_FILL_USER_TEMPLATE.format(
             name=metadata.name,

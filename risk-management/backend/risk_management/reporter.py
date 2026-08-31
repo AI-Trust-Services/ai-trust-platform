@@ -649,6 +649,8 @@ class Reporter:
         ]
 
         return "\n".join(lines)
+
+    def save(self, register: RiskRegister, output_dir: str) -> tuple[Path, Path]:
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
         slug = f"{register.system.name.lower().replace(' ', '_')}_{register.id[:8]}"

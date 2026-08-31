@@ -183,8 +183,8 @@ const SEV_OPTIONS = ["critical", "high", "medium", "low"];
 const LIK_OPTIONS = ["very_likely", "likely", "possible", "unlikely"];
 const MIT_OPTIONS = ["eliminate", "reduce", "mitigate", "inform"];
 
-const CONFIDENCE_LABELS: Record<string, string> = { high: "wysoka", medium: "średnia", low: "niska" };
-const MIT_LABELS: Record<string, string> = { eliminate: "Wyeliminuj", reduce: "Ogranicz", mitigate: "Łagodź", inform: "Informuj" };
+const CONFIDENCE_LABELS: Record<string, string> = { high: "high", medium: "medium", low: "low" };
+const MIT_LABELS: Record<string, string> = { eliminate: "Eliminate", reduce: "Reduce", mitigate: "Mitigate", inform: "Inform" };
 
 function QuestionRow({
   q,
@@ -205,7 +205,7 @@ function QuestionRow({
           checked={ans.answer}
           onChange={e => { e.stopPropagation(); onChange({ ...ans, answer: e.target.checked }); }}
           style={{ marginRight: 4, cursor: "pointer", flexShrink: 0 }}
-          title="Zaznacz jeśli ryzyko dotyczy systemu"
+          title="Check if this risk applies to the system"
         />
         <span style={{ flex: 1, fontSize: 13 }}>{q.question}</span>
         <span className="chip" style={{ fontSize: 11 }}>{q.category}</span>
@@ -220,19 +220,19 @@ function QuestionRow({
         <div className="accordion-body" style={{ fontSize: 13 }}>
           <div style={{ marginBottom: 8, color: "var(--text-secondary)", fontSize: 12 }}>{q.hint}</div>
 
-          <label style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Uzasadnienie</label>
+          <label style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Justification</label>
           <textarea
             value={ans.justification}
             onChange={e => onChange({ ...ans, justification: e.target.value })}
             className="notes-input"
-            placeholder="Opisz dlaczego to ryzyko dotyczy (lub nie dotyczy) tego systemu. Odwołaj się do dokumentacji lub kodu."
+            placeholder="Describe why this risk applies (or does not apply) to this system. Reference the documentation or source code."
             style={{ minHeight: 60 }}
           />
 
           {ans.answer && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
               <div>
-                <label style={{ fontSize: 11, display: "block", marginBottom: 3, fontWeight: 600, color: "var(--text-secondary)" }}>Ważność</label>
+                <label style={{ fontSize: 11, display: "block", marginBottom: 3, fontWeight: 600, color: "var(--text-secondary)" }}>Severity</label>
                 <select
                   value={ans.severity_override ?? q.default_severity}
                   onChange={e => onChange({ ...ans, severity_override: e.target.value })}
@@ -240,10 +240,10 @@ function QuestionRow({
                 >
                   {SEV_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                {!ans.severity_override && <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>domyślna: {q.default_severity}</span>}
+                {!ans.severity_override && <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>default: {q.default_severity}</span>}
               </div>
               <div>
-                <label style={{ fontSize: 11, display: "block", marginBottom: 3, fontWeight: 600, color: "var(--text-secondary)" }}>Prawdopodobieństwo</label>
+                <label style={{ fontSize: 11, display: "block", marginBottom: 3, fontWeight: 600, color: "var(--text-secondary)" }}>Likelihood</label>
                 <select
                   value={ans.likelihood_override ?? q.default_likelihood}
                   onChange={e => onChange({ ...ans, likelihood_override: e.target.value })}
@@ -251,10 +251,10 @@ function QuestionRow({
                 >
                   {LIK_OPTIONS.map(l => <option key={l} value={l}>{l}</option>)}
                 </select>
-                {!ans.likelihood_override && <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>domyślne: {q.default_likelihood}</span>}
+                {!ans.likelihood_override && <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>default: {q.default_likelihood}</span>}
               </div>
               <div>
-                <label style={{ fontSize: 11, display: "block", marginBottom: 3, fontWeight: 600, color: "var(--text-secondary)" }}>Środek mitygacji</label>
+                <label style={{ fontSize: 11, display: "block", marginBottom: 3, fontWeight: 600, color: "var(--text-secondary)" }}>Mitigation</label>
                 <select
                   value={ans.mitigation_override ?? q.default_mitigation}
                   onChange={e => onChange({ ...ans, mitigation_override: e.target.value })}
@@ -262,7 +262,7 @@ function QuestionRow({
                 >
                   {MIT_OPTIONS.map(m => <option key={m} value={m}>{MIT_LABELS[m] ?? m}</option>)}
                 </select>
-                {!ans.mitigation_override && <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>domyślny: {q.default_mitigation}</span>}
+                {!ans.mitigation_override && <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>default: {q.default_mitigation}</span>}
               </div>
             </div>
           )}
@@ -324,7 +324,7 @@ function IdentifyStep({
         }
       })
       .catch(() => {
-        toast("Nie udało się pobrać kwestionariusza", true);
+        toast("Failed to load questionnaire", true);
         setQLoading(false);
       });
   }, []);
@@ -335,8 +335,8 @@ function IdentifyStep({
 
   const yesCount = answers.filter(a => a.answer).length;
 
-  if (qLoading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>Ładowanie kwestionariusza…</span></div>;
-  if (loading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>Identyfikacja ryzyk…</span></div>;
+  if (qLoading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>Loading questionnaire…</span></div>;
+  if (loading) return <div className="loading-center"><span className="spinner spinner-lg" /><span>Identifying risks…</span></div>;
 
   const aiPending = useLlm ? answers.filter(a => !a.justification && !a.answer).length : 0;
 
@@ -345,18 +345,18 @@ function IdentifyStep({
       {useLlm && aiPending > 0 && (
         <div className="msg-strip info" style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
           <span className="spinner" style={{ width: 14, height: 14, flexShrink: 0 }} />
-          AI analizuje… ({questions.length - aiPending}/{questions.length} pytań gotowych)
+          AI analysing… ({questions.length - aiPending}/{questions.length} questions ready)
         </div>
       )}
       {useLlm && aiPending === 0 && (
         <div className="msg-strip info" style={{ marginBottom: 14 }}>
-          Kwestionariusz wypełniony przez AI. Przejrzyj i popraw odpowiedzi przed kontynuacją.
+          Questionnaire filled by AI. Review and adjust answers before continuing.
         </div>
       )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ fontSize: 13 }}>
-          <strong>{yesCount}</strong> z {questions.length} ryzyk oznaczonych
+          <strong>{yesCount}</strong> of {questions.length} risks flagged
         </div>
       </div>
 
@@ -375,11 +375,11 @@ function IdentifyStep({
           onClick={() => onSubmit(answers)}
           disabled={yesCount === 0}
         >
-          Zidentyfikuj ryzyka ({yesCount}) →
+          Identify risks ({yesCount}) →
         </button>
         {yesCount === 0 && (
           <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-            Zaznacz co najmniej jedno ryzyko aby kontynuować
+            Select at least one risk to continue
           </span>
         )}
       </div>
