@@ -28,7 +28,6 @@ from ai_trust_persistence.settings_service import (
     get_settings_by_category,
     get_smtp_config,
     get_llm_config,
-    invalidate_cache,
     set_setting,
     bulk_set_settings,
 )

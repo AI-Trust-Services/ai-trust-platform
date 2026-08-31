@@ -1,10 +1,9 @@
 """Platform settings service with database lookup and env var fallback.
 
 This service provides async access to platform settings with:
-1. In-memory cache (60s TTL)
-2. Database lookup
-3. Environment variable fallback (key "smtp.host" → SMTP_HOST)
-4. Default value
+1. Database lookup
+2. Environment variable fallback (key "smtp.host" → SMTP_HOST)
+3. Default value
 
 Usage:
     from ai_trust_persistence.settings_service import get_setting, set_setting
@@ -19,18 +18,12 @@ Usage:
 from __future__ import annotations
 
 import os
-import time
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_persistence.models.platform_setting import PlatformSetting
-
-
-# Cache settings for 60 seconds
-_cache: dict[str, tuple[Any, float]] = {}
-_CACHE_TTL = 60.0
 
 
 def _key_to_env_var(key: str) -> str:
@@ -44,70 +37,32 @@ def _key_to_env_var(key: str) -> str:
     return key.upper().replace(".", "_")
 
 
-def invalidate_cache(key: str | None = None) -> None:
-    """Invalidate cache for a specific key or all keys.
-
-    Call this after updating settings to ensure changes take effect.
-    """
-    global _cache
-    if key is None:
-        _cache.clear()
-    elif key in _cache:
-        del _cache[key]
-
-
 async def get_setting(
     session: AsyncSession,
     key: str,
     default: Any = None,
-    use_cache: bool = True,
 ) -> Any:
     """Get a platform setting value.
 
     Lookup order:
-    1. In-memory cache (if not expired)
-    2. Database
-    3. Environment variable
-    4. Default value
-
-    Args:
-        session: Database session for queries
-        key: Setting key (e.g., "smtp.host")
-        default: Default value if not found anywhere
-        use_cache: Whether to use cached value
-
-    Returns:
-        The setting value, or default if not found
+    1. Database
+    2. Environment variable
+    3. Default value
     """
-    # Check cache first
-    if use_cache and key in _cache:
-        value, timestamp = _cache[key]
-        if time.time() - timestamp < _CACHE_TTL:
-            return value if value is not None else default
-
-    # Query database
     result = await session.execute(
         select(PlatformSetting).where(PlatformSetting.key == key)
     )
     setting = result.scalar_one_or_none()
 
     if setting is not None and setting.value is not None:
-        # Cache and return database value
-        _cache[key] = (setting.value, time.time())
         return setting.value
 
-    # Try environment variable
     env_var = _key_to_env_var(key)
     env_value = os.environ.get(env_var)
 
     if env_value is not None:
-        # Parse env value based on expected type
-        parsed_value = _parse_env_value(env_value, setting.value_type if setting else "string")
-        _cache[key] = (parsed_value, time.time())
-        return parsed_value
+        return _parse_env_value(env_value, setting.value_type if setting else "string")
 
-    # Return default
-    _cache[key] = (default, time.time())
     return default
 
 
@@ -203,8 +158,6 @@ async def set_setting(
         setting.updated_by = username
 
     await session.flush()
-    invalidate_cache(key)
-
     return setting
 
 
