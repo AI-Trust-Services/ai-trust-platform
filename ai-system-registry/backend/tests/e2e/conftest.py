@@ -27,15 +27,9 @@ import httpx
 os.environ.setdefault("OPENFGA_URL", "http://localhost:8080")
 os.environ.setdefault("OPENFGA_STORE_ID", "test-store-id")
 
-# email_sender reads these fail-fast at import time. Notifications themselves are
-# stubbed out in e2e_setup, so the values only need to be present, not valid.
-os.environ.setdefault("SMTP_HOST", "localhost")
-os.environ.setdefault("SMTP_PORT", "25")
-os.environ.setdefault("SMTP_FROM", "noreply@example.com")
-os.environ.setdefault("SMTP_SSL", "false")
-os.environ.setdefault("SMTP_STARTTLS", "false")
-os.environ.setdefault("USERS_BACKEND_URL", "http://users-backend:8008")
-
+# ai_trust_persistence.database reads DATABASE_URL at import time (fail-fast).
+# Set a placeholder so collection succeeds; e2e_setup overwrites it with the
+# real test DB URL once Postgres reachability is confirmed.
 _PG_USER = os.environ.get("POSTGRES_USER", "postgres")
 _PG_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "postgres")
 _PG_HOST = "localhost"
@@ -44,6 +38,16 @@ _TEST_DB = "ai_trust_test"
 _TEST_DATABASE_URL = (
     f"postgresql+asyncpg://{_PG_USER}:{_PG_PASSWORD}@{_PG_HOST}:{_PG_PORT}/{_TEST_DB}"
 )
+os.environ.setdefault("DATABASE_URL", _TEST_DATABASE_URL)
+
+# email_sender reads these fail-fast at import time. Notifications themselves are
+# stubbed out in e2e_setup, so the values only need to be present, not valid.
+os.environ.setdefault("SMTP_HOST", "localhost")
+os.environ.setdefault("SMTP_PORT", "25")
+os.environ.setdefault("SMTP_FROM", "noreply@example.com")
+os.environ.setdefault("SMTP_SSL", "false")
+os.environ.setdefault("SMTP_STARTTLS", "false")
+os.environ.setdefault("USERS_BACKEND_URL", "http://users-backend:8008")
 _ALEMBIC_INI = Path(__file__).parents[4] / "libs" / "persistence" / "alembic.ini"
 _ALEMBIC_BIN = Path(__file__).parents[2] / ".venv" / "bin" / "alembic"
 
@@ -92,7 +96,7 @@ def _truncate() -> None:
     )
     conn.autocommit = True
     cur = conn.cursor()
-    cur.execute("TRUNCATE ai_systems, model_cards RESTART IDENTITY CASCADE")
+    cur.execute("TRUNCATE ai_systems, model_cards, review_notes RESTART IDENTITY CASCADE")
     cur.close()
     conn.close()
 
