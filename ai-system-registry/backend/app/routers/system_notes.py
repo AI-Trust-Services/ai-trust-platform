@@ -1,13 +1,13 @@
 """System notes router — CRUD for notes attached to AI systems."""
 from __future__ import annotations
 
-import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException
 from sqlalchemy import select
 
-from ai_trust_persistence.database import SessionLocal
+from ai_trust_logging import get_logger
+from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import SystemNote
 
 from app.ids import new_id
@@ -17,7 +17,7 @@ from app.schemas.system_note import (
     SystemNoteUpdate,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 router = APIRouter(prefix="/systems/{system_id}/notes", tags=["system-notes"])
 
 
