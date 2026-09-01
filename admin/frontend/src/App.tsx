@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { Outlet } from "react-router";
-import { Loader2 } from "lucide-react";
-import { useLuigiInit, useLuigiThemeSync } from "./hooks/useLuigi";
+import { useLuigiThemeSync } from "./hooks/useLuigi";
 import { HEALTH_URL } from "./api/client";
 import { cn } from "@/lib/utils";
 // [REVIEW_MODE] -- POC feedback collection, remove before merging to main
@@ -22,13 +21,9 @@ export function useToast(): ShowToast {
 export default function App() {
   const [backendOk, setBackendOk] = useState<boolean | null>(null);
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null);
-  const [luigiReady, setLuigiReady] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
   const healthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useLuigiInit(() => {
-    setLuigiReady(true);
-  });
   useLuigiThemeSync();
 
   const checkHealth = useCallback(async () => {
@@ -54,15 +49,6 @@ export default function App() {
     setToast({ msg, isError });
     setTimeout(() => setToast(null), 3500);
   }, []);
-
-  // Show loading state until Luigi handshake completes
-  if (!luigiReady) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <Loader2 className="size-8 animate-spin text-primary" />
-      </div>
-    );
-  }
 
   return (
     <ToastContext.Provider value={showToast}>

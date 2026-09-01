@@ -200,7 +200,7 @@
     ...mainNav,
     // Legacy nav items hidden from sidebar but still routable via command bar
     ...legacyNav
-      .filter(node => !(isAdminOnly && node.pathSegment === "admin"))
+      .filter(node => !(isAdminOnly && (node.pathSegment === "admin" || node.pathSegment === "users")))
       .map(node => ({ ...node, hideFromNav: true })),
   ];
 
