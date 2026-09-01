@@ -320,7 +320,13 @@ export default function EvidencePage() {
                 <TableRow key={e.id} data-state={selected === e.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(e)}>
                   <TableCell><div className="font-medium text-foreground">{e.title}</div><div className="text-xs text-muted-foreground">{e.id}</div></TableCell>
                   <TableCell className="text-[13px]">{humanize(e.evidence_type)}</TableCell>
-                  <TableCell>{e.ai_system_ids.length > 0 ? (systemsById[e.ai_system_ids[0]]?.name ?? e.ai_system_ids[0]) : "—"}</TableCell>
+                  <TableCell>
+                    {e.ai_system_ids.length === 0
+                      ? "—"
+                      : e.ai_system_ids.length === 1
+                        ? (systemsById[e.ai_system_ids[0]]?.name ?? e.ai_system_ids[0])
+                        : `${e.ai_system_ids.length} AI Systems`}
+                  </TableCell>
                   <TableCell><Badge variant="secondary" className="rounded-full font-medium">v{e.version_label}</Badge></TableCell>
                   <TableCell><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></TableCell>
                   <TableCell>{e.file_name ? <Badge variant="secondary" className="max-w-[160px] truncate rounded-full font-medium">{e.file_name}</Badge> : "—"}</TableCell>
