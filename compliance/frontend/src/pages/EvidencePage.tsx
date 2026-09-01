@@ -42,7 +42,11 @@ export default function EvidencePage() {
   const [versionOpen, setVersionOpen] = useState(false);
   const [addSystemOpen, setAddSystemOpen] = useState(false);
   const [addAssessmentOpen, setAddAssessmentOpen] = useState(false);
+  const [addControlOpen, setAddControlOpen] = useState(false);
+  const [addObligationOpen, setAddObligationOpen] = useState(false);
   const [allAssessments, setAllAssessments] = useState<Assessment[]>([]);
+  const [allControls, setAllControls] = useState<Control[]>([]);
+  const [allObligations, setAllObligations] = useState<Obligation[]>([]);
   const showToast = useToast();
   const { can } = usePermissions();
   const mayWrite = can("evidence:write");
@@ -69,22 +73,26 @@ export default function EvidencePage() {
     try {
       const det = await api.getEvidenceItem(e.id);
       setDetail(det);
-      const [controls, obligations, vers, assessments] = await Promise.all([
+      const [controls, obligations, vers, assessments, allCtl, allObl] = await Promise.all([
         api.getControls({ evidence_id: e.id }),
         api.getObligations({ evidence_id: e.id }),
         api.getEvidenceVersions(e.id),
         api.getAssessments(),
+        api.getControls(),
+        api.getObligations(),
       ]);
       setDetailControls(controls);
       setDetailObligations(obligations);
       setVersions(vers);
       setAllAssessments(assessments);
+      setAllControls(allCtl);
+      setAllObligations(allObl);
     } catch (err) {
       showToast(`Failed to load detail: ${(err as Error).message}`, true);
     }
   }
 
-  function closePanel() { setSelected(null); setDetail(null); setDetailControls([]); setDetailObligations([]); setVersions([]); setAddSystemOpen(false); setAddAssessmentOpen(false); }
+  function closePanel() { setSelected(null); setDetail(null); setDetailControls([]); setDetailObligations([]); setVersions([]); setAddSystemOpen(false); setAddAssessmentOpen(false); setAddControlOpen(false); setAddObligationOpen(false); }
 
   async function linkSystem(systemId: string) {
     if (!detail) return;
@@ -120,6 +128,48 @@ export default function EvidencePage() {
     try {
       const updated = await api.unlinkEvidenceAssessment(detail.id, assessmentId);
       setDetail(updated);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function linkControl(controlId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.linkEvidenceControl(detail.id, controlId);
+      setDetail(updated);
+      setDetailControls(await api.getControls({ evidence_id: detail.id }));
+      setAddControlOpen(false);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function unlinkControl(controlId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.unlinkEvidenceControl(detail.id, controlId);
+      setDetail(updated);
+      setDetailControls(await api.getControls({ evidence_id: detail.id }));
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function linkObligation(obligationId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.linkEvidenceObligation(detail.id, obligationId);
+      setDetail(updated);
+      setDetailObligations(await api.getObligations({ evidence_id: detail.id }));
+      setAddObligationOpen(false);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function unlinkObligation(obligationId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.unlinkEvidenceObligation(detail.id, obligationId);
+      setDetail(updated);
+      setDetailObligations(await api.getObligations({ evidence_id: detail.id }));
       load();
     } catch (e) { showToast((e as Error).message, true); }
   }
@@ -426,24 +476,82 @@ export default function EvidencePage() {
                 </ul>
               )}
 
-              {/* Controls (read-only) */}
-              {detailControls.length > 0 && (
-                <>
-                  <div className="pb-0.5 pt-3 text-xs font-semibold text-muted-foreground">Controls</div>
-                  <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
-                  ))}</ul>
-                </>
+              {/* Controls */}
+              <div className="pb-0.5 pt-3 flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground">Controls</span>
+                {mayWrite && (
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setAddControlOpen((v) => !v)}>
+                    <Link className="size-3 mr-1" /> Add
+                  </Button>
+                )}
+              </div>
+              {addControlOpen && (
+                <select
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] text-foreground mb-1"
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) linkControl(e.target.value); }}
+                >
+                  <option value="" disabled>— select a control —</option>
+                  {allControls.filter((c) => !detail.control_ids.includes(c.id)).map((c) => (
+                    <option key={c.id} value={c.id}>{c.title} ({c.id})</option>
+                  ))}
+                </select>
+              )}
+              {detailControls.length === 0 ? (
+                <div className="text-[13px] text-muted-foreground">—</div>
+              ) : (
+                <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[13px] text-foreground">{c.title}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <StatusBadge meta={CONTROL_STATUS_META} value={c.status} />
+                      {mayWrite && (
+                        <Button variant="ghost" size="sm" className="h-6 px-1.5 text-muted-foreground hover:text-destructive" onClick={() => unlinkControl(c.id)}>
+                          <Unlink className="size-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                ))}</ul>
               )}
 
-              {/* Obligations (read-only) */}
-              {detailObligations.length > 0 && (
-                <>
-                  <div className="pb-0.5 pt-3 text-xs font-semibold text-muted-foreground">Obligations</div>
-                  <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
-                    <li key={o.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
-                  ))}</ul>
-                </>
+              {/* Obligations */}
+              <div className="pb-0.5 pt-3 flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground">Obligations</span>
+                {mayWrite && (
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setAddObligationOpen((v) => !v)}>
+                    <Link className="size-3 mr-1" /> Add
+                  </Button>
+                )}
+              </div>
+              {addObligationOpen && (
+                <select
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] text-foreground mb-1"
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) linkObligation(e.target.value); }}
+                >
+                  <option value="" disabled>— select an obligation —</option>
+                  {allObligations.filter((o) => !detail.obligation_ids.includes(o.id)).map((o) => (
+                    <option key={o.id} value={o.id}>{o.title} ({o.article_ref || o.id})</option>
+                  ))}
+                </select>
+              )}
+              {detailObligations.length === 0 ? (
+                <div className="text-[13px] text-muted-foreground">—</div>
+              ) : (
+                <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
+                  <li key={o.id} className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[13px] text-foreground">{o.title}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} />
+                      {mayWrite && (
+                        <Button variant="ghost" size="sm" className="h-6 px-1.5 text-muted-foreground hover:text-destructive" onClick={() => unlinkObligation(o.id)}>
+                          <Unlink className="size-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                ))}</ul>
               )}
             </DetailSection>
           )}
