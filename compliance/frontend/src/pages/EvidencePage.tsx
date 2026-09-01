@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, RotateCw, Download, Upload, Check, X, Paperclip, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { Plus, RotateCw, Download, Upload, Check, X, Paperclip, CheckCircle2, Clock, AlertTriangle, Link, Unlink } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { StatusBadge } from "../components/Badges";
@@ -40,6 +40,9 @@ export default function EvidencePage() {
   const [versions, setVersions] = useState<EvidenceVersion[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [versionOpen, setVersionOpen] = useState(false);
+  const [addSystemOpen, setAddSystemOpen] = useState(false);
+  const [addAssessmentOpen, setAddAssessmentOpen] = useState(false);
+  const [allAssessments, setAllAssessments] = useState<Assessment[]>([]);
   const showToast = useToast();
   const { can } = usePermissions();
   const mayWrite = can("evidence:write");
@@ -61,23 +64,65 @@ export default function EvidencePage() {
 
   async function openDetail(e: Evidence) {
     setSelected(e.id);
+    setAddSystemOpen(false);
+    setAddAssessmentOpen(false);
     try {
       const det = await api.getEvidenceItem(e.id);
       setDetail(det);
-      const [controls, obligations, vers] = await Promise.all([
+      const [controls, obligations, vers, assessments] = await Promise.all([
         api.getControls({ evidence_id: e.id }),
         api.getObligations({ evidence_id: e.id }),
         api.getEvidenceVersions(e.id),
+        api.getAssessments(),
       ]);
       setDetailControls(controls);
       setDetailObligations(obligations);
       setVersions(vers);
+      setAllAssessments(assessments);
     } catch (err) {
       showToast(`Failed to load detail: ${(err as Error).message}`, true);
     }
   }
 
-  function closePanel() { setSelected(null); setDetail(null); setDetailControls([]); setDetailObligations([]); setVersions([]); }
+  function closePanel() { setSelected(null); setDetail(null); setDetailControls([]); setDetailObligations([]); setVersions([]); setAddSystemOpen(false); setAddAssessmentOpen(false); }
+
+  async function linkSystem(systemId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.linkEvidenceSystem(detail.id, systemId);
+      setDetail(updated);
+      setAddSystemOpen(false);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function unlinkSystem(systemId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.unlinkEvidenceSystem(detail.id, systemId);
+      setDetail(updated);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function linkAssessment(assessmentId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.linkEvidenceAssessment(detail.id, assessmentId);
+      setDetail(updated);
+      setAddAssessmentOpen(false);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function unlinkAssessment(assessmentId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.unlinkEvidenceAssessment(detail.id, assessmentId);
+      setDetail(updated);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
 
   async function act(fn: (id: string) => Promise<Evidence>, id: string, msg: string) {
     try {
