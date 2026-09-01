@@ -329,7 +329,6 @@ export default function EvidencePage() {
           <>
           <DetailSection title="General Information">
             <DetailField label="ID">{detail.id}</DetailField>
-            <DetailField label="AI System">{detail.ai_system_ids.length > 0 ? (systemsById[detail.ai_system_ids[0]]?.name ?? detail.ai_system_ids[0]) : "—"}</DetailField>
             <DetailField label="Type">{humanize(detail.evidence_type)}</DetailField>
             <DetailField label="Status"><StatusBadge meta={EVIDENCE_STATUS_META} value={detail.status} /></DetailField>
             <DetailField label="Uploaded By">{detail.uploaded_by || "—"}</DetailField>
@@ -349,26 +348,102 @@ export default function EvidencePage() {
               <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
             </DetailSection>
           )}
-          {(detailControls.length > 0 || detailObligations.length > 0 || detail.assessment_ids.length > 0) && (
+          {(detailControls.length > 0 || detailObligations.length > 0 || detail.assessment_ids.length > 0 || detail.ai_system_ids.length > 0 || mayWrite) && (
             <DetailSection title="Linked To">
+              {/* AI Systems */}
+              <div className="pb-0.5 pt-1 flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground">AI Systems</span>
+                {mayWrite && (
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setAddSystemOpen((v) => !v)}>
+                    <Link className="size-3 mr-1" /> Add
+                  </Button>
+                )}
+              </div>
+              {addSystemOpen && (
+                <select
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] text-foreground mb-1"
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) linkSystem(e.target.value); }}
+                >
+                  <option value="" disabled>— select a system —</option>
+                  {systems.filter((s) => !detail.ai_system_ids.includes(s.id)).map((s) => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.id})</option>
+                  ))}
+                </select>
+              )}
+              {detail.ai_system_ids.length === 0 ? (
+                <div className="text-[13px] text-muted-foreground">—</div>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {detail.ai_system_ids.map((sid) => (
+                    <li key={sid} className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[13px] text-foreground">{systemsById[sid]?.name ?? sid}</span>
+                      {mayWrite && (
+                        <Button variant="ghost" size="sm" className="h-6 px-1.5 text-muted-foreground hover:text-destructive" onClick={() => unlinkSystem(sid)}>
+                          <Unlink className="size-3" />
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Assessments */}
+              <div className="pb-0.5 pt-3 flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground">Assessments</span>
+                {mayWrite && (
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setAddAssessmentOpen((v) => !v)}>
+                    <Link className="size-3 mr-1" /> Add
+                  </Button>
+                )}
+              </div>
+              {addAssessmentOpen && (
+                <select
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] text-foreground mb-1"
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) linkAssessment(e.target.value); }}
+                >
+                  <option value="" disabled>— select an assessment —</option>
+                  {allAssessments.filter((a) => !detail.assessment_ids.includes(a.id)).map((a) => (
+                    <option key={a.id} value={a.id}>{a.title} ({a.id})</option>
+                  ))}
+                </select>
+              )}
+              {detail.assessment_ids.length === 0 ? (
+                <div className="text-[13px] text-muted-foreground">—</div>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {detail.assessment_ids.map((aid) => (
+                    <li key={aid} className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[13px] text-foreground">{allAssessments.find((a) => a.id === aid)?.title ?? aid}</span>
+                      {mayWrite && (
+                        <Button variant="ghost" size="sm" className="h-6 px-1.5 text-muted-foreground hover:text-destructive" onClick={() => unlinkAssessment(aid)}>
+                          <Unlink className="size-3" />
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Controls (read-only) */}
               {detailControls.length > 0 && (
                 <>
-                  <div className="pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">Controls</div>
+                  <div className="pb-0.5 pt-3 text-xs font-semibold text-muted-foreground">Controls</div>
                   <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
                     <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
                   ))}</ul>
                 </>
               )}
+
+              {/* Obligations (read-only) */}
               {detailObligations.length > 0 && (
                 <>
-                  <div className="pb-0.5 pt-2 text-xs font-semibold text-muted-foreground">Obligations</div>
+                  <div className="pb-0.5 pt-3 text-xs font-semibold text-muted-foreground">Obligations</div>
                   <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
                     <li key={o.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
                   ))}</ul>
                 </>
-              )}
-              {detail.assessment_ids.length > 0 && (
-                <DetailField label="Assessment">{detail.assessment_ids[0]}</DetailField>
               )}
             </DetailSection>
           )}
