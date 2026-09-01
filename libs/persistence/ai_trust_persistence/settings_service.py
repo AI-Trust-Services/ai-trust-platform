@@ -1,7 +1,7 @@
 """Platform settings service with database lookup and env var fallback.
 
 This service provides async access to platform settings with:
-1. In-memory cache (60s TTL)
+1. In-memory cache (60s TTL, per-tenant in multi-tenant mode)
 2. Database lookup
 3. Environment variable fallback (key "smtp.host" → SMTP_HOST)
 4. Default value
@@ -28,8 +28,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai_trust_persistence.models.platform_setting import PlatformSetting
 
 
-# Cache settings for 60 seconds
-_cache: dict[str, tuple[Any, float]] = {}
+def _get_tenant_id() -> str:
+    """Get current tenant ID for cache keying. Returns 'default' in single-tenant mode."""
+    try:
+        from ai_trust_tenancy.context import tenant_id_var
+        return tenant_id_var.get() or "default"
+    except ImportError:
+        # Tenancy lib not installed (e.g., in tests)
+        return "default"
+
+
+# Cache settings for 60 seconds, keyed by (tenant_id, key)
+_cache: dict[tuple[str, str], tuple[Any, float]] = {}
 _CACHE_TTL = 60.0
 
 
@@ -44,16 +54,31 @@ def _key_to_env_var(key: str) -> str:
     return key.upper().replace(".", "_")
 
 
-def invalidate_cache(key: str | None = None) -> None:
+def invalidate_cache(key: str | None = None, tenant_id: str | None = None) -> None:
     """Invalidate cache for a specific key or all keys.
 
     Call this after updating settings to ensure changes take effect.
+
+    Args:
+        key: Specific setting key to invalidate, or None for all keys.
+        tenant_id: Specific tenant to invalidate, or None for current tenant.
+                   Pass "*" to invalidate all tenants.
     """
     global _cache
-    if key is None:
-        _cache.clear()
-    elif key in _cache:
-        del _cache[key]
+
+    if tenant_id == "*":
+        # Invalidate all tenants
+        if key is None:
+            _cache.clear()
+        else:
+            _cache = {k: v for k, v in _cache.items() if k[1] != key}
+    else:
+        # Invalidate specific tenant (or current tenant if None)
+        tid = tenant_id if tenant_id is not None else _get_tenant_id()
+        if key is None:
+            _cache = {k: v for k, v in _cache.items() if k[0] != tid}
+        else:
+            _cache.pop((tid, key), None)
 
 
 async def get_setting(
@@ -65,7 +90,7 @@ async def get_setting(
     """Get a platform setting value.
 
     Lookup order:
-    1. In-memory cache (if not expired)
+    1. In-memory cache (if not expired, per-tenant in multi-tenant mode)
     2. Database
     3. Environment variable
     4. Default value
@@ -79,9 +104,12 @@ async def get_setting(
     Returns:
         The setting value, or default if not found
     """
+    tenant_id = _get_tenant_id()
+    cache_key = (tenant_id, key)
+
     # Check cache first
-    if use_cache and key in _cache:
-        value, timestamp = _cache[key]
+    if use_cache and cache_key in _cache:
+        value, timestamp = _cache[cache_key]
         if time.time() - timestamp < _CACHE_TTL:
             return value if value is not None else default
 
@@ -93,7 +121,7 @@ async def get_setting(
 
     if setting is not None and setting.value is not None:
         # Cache and return database value
-        _cache[key] = (setting.value, time.time())
+        _cache[cache_key] = (setting.value, time.time())
         return setting.value
 
     # Try environment variable
@@ -103,11 +131,11 @@ async def get_setting(
     if env_value is not None:
         # Parse env value based on expected type
         parsed_value = _parse_env_value(env_value, setting.value_type if setting else "string")
-        _cache[key] = (parsed_value, time.time())
+        _cache[cache_key] = (parsed_value, time.time())
         return parsed_value
 
     # Return default
-    _cache[key] = (default, time.time())
+    _cache[cache_key] = (default, time.time())
     return default
 
 

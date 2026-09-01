@@ -2,13 +2,21 @@
 
 Public surface:
   - ``chat`` — provider-dispatched LLM call with a uniform return shape.
+  - ``get_vision_model`` / ``get_model`` — async helpers to get configured model names.
+  - ``invalidate_config_cache`` — invalidate cached config for immediate settings refresh.
   - ``parse_json_response`` / ``LLMParseError`` — JSON parsing with repair retry.
   - ``LLMResponseError`` — raised when the external provider returns an unexpected shape.
   - prompt builders — owner: ``build_turn_messages``, ``build_doc_extract_messages``,
     ``build_infer_flags_messages``; engineer: ``build_engineer_turn_messages``,
     ``build_engineer_doc_extract_messages``.
 """
-from app.llm.client import LLM_MODEL, LLM_VISION_MODEL, LLMResponseError, chat
+from app.llm.client import (
+    LLMResponseError,
+    chat,
+    get_model,
+    get_vision_model,
+    invalidate_config_cache,
+)
 from app.llm.parsing import LLMParseError, parse_json_response
 from app.llm.prompts import (
     REQUIRED_FIELD_KEYS,
@@ -24,8 +32,9 @@ from app.llm.prompts import (
 
 __all__ = [
     "chat",
-    "LLM_MODEL",
-    "LLM_VISION_MODEL",
+    "get_model",
+    "get_vision_model",
+    "invalidate_config_cache",
     "parse_json_response",
     "LLMParseError",
     "LLMResponseError",

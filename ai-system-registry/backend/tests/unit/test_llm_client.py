@@ -5,7 +5,25 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.llm.client import LLMResponseError, _chat_external
+from app.llm.client import LLMConfig, LLMResponseError, _chat_external
+
+
+def _make_external_config() -> LLMConfig:
+    """Create a minimal LLMConfig for external provider tests."""
+    return LLMConfig(
+        provider="external",
+        base_url="",
+        api_key="",
+        model="test-model",
+        vision_model="test-vision",
+        client_id="test-client",
+        client_secret="test-secret",
+        auth_url="https://auth.example.com/token",
+        api_url="https://api.example.com",
+        resource_group="default",
+        deployment_id="test-deployment",
+        api_version="bedrock-2023-05-31",
+    )
 
 
 @pytest.mark.asyncio
@@ -15,6 +33,8 @@ async def test_chat_external_raises_on_missing_content_key():
     mock_resp.raise_for_status = MagicMock()
     mock_resp.json.return_value = {"error": "quota exceeded"}
 
+    config = _make_external_config()
+
     with patch("app.llm.client._get_token", return_value="tok"), \
          patch("httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
@@ -23,7 +43,7 @@ async def test_chat_external_raises_on_missing_content_key():
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
         with pytest.raises(LLMResponseError, match="unexpected shape"):
-            await _chat_external([{"role": "user", "content": "hi"}], "model", 100)
+            await _chat_external([{"role": "user", "content": "hi"}], "model", 100, config)
 
 
 @pytest.mark.asyncio
@@ -33,6 +53,8 @@ async def test_chat_external_raises_on_empty_content_list():
     mock_resp.raise_for_status = MagicMock()
     mock_resp.json.return_value = {"content": [], "stop_reason": "end_turn"}
 
+    config = _make_external_config()
+
     with patch("app.llm.client._get_token", return_value="tok"), \
          patch("httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
@@ -41,7 +63,7 @@ async def test_chat_external_raises_on_empty_content_list():
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
         with pytest.raises(LLMResponseError, match="unexpected shape"):
-            await _chat_external([{"role": "user", "content": "hi"}], "model", 100)
+            await _chat_external([{"role": "user", "content": "hi"}], "model", 100, config)
 
 
 @pytest.mark.asyncio
@@ -55,6 +77,8 @@ async def test_chat_external_succeeds_with_valid_response():
         "usage": {"input_tokens": 10, "output_tokens": 5},
     }
 
+    config = _make_external_config()
+
     with patch("app.llm.client._get_token", return_value="tok"), \
          patch("httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
@@ -62,7 +86,7 @@ async def test_chat_external_succeeds_with_valid_response():
         ))
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        result = await _chat_external([{"role": "user", "content": "hi"}], "model", 100)
+        result = await _chat_external([{"role": "user", "content": "hi"}], "model", 100, config)
 
     assert result["text"] == "Hello!"
     assert result["input_tokens"] == 10

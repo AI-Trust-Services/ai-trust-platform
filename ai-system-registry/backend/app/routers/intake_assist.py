@@ -25,7 +25,6 @@ from ai_trust_persistence.models.ai_system import AISystem
 from app.classifier import CLASSIFIER_INPUTS, classify
 from app.documents import DocumentParseError, is_supported, parse_document
 from app.llm import (
-    LLM_VISION_MODEL,
     LLMParseError,
     build_doc_extract_messages,
     build_engineer_doc_extract_messages,
@@ -33,6 +32,7 @@ from app.llm import (
     build_infer_flags_messages,
     build_turn_messages,
     chat,
+    get_vision_model,
     parse_json_response,
 )
 from app.schemas import (
@@ -138,7 +138,7 @@ async def _run_assist_extract(
 
     if doc.is_image:
         messages = build_messages_fn(image_b64=doc.image_b64, media_type=doc.media_type)
-        model = LLM_VISION_MODEL
+        model = await get_vision_model()
     else:
         messages = build_messages_fn(parsed_text=doc.text)
         model = None
