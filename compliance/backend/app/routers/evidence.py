@@ -570,3 +570,108 @@ async def unlink_evidence_assessment(evidence_id: str, assessment_id: str) -> Ev
     detail.ai_system_ids = sys_ids
     detail.assessment_ids = ass_ids
     return detail
+
+
+@router.post("/evidence/{evidence_id}/controls/{control_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def link_evidence_control(evidence_id: str, control_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        row = await _load(session, evidence_id)
+        if not (await session.execute(select(Control.id).where(Control.id == control_id))).scalar_one_or_none():
+            raise HTTPException(404, f"Control {control_id} not found")
+        await session.execute(pg_insert(evidence_controls).values(
+            evidence_id=evidence_id, control_id=control_id).on_conflict_do_nothing())
+        if row.status == "approved":
+            await _cascade_from_evidence(session, evidence_id)
+        await session.commit()
+        row = await _load(session, evidence_id)
+        ctrl_ids = await _linked_control_ids(session, evidence_id)
+        obl_ids = await _linked_obligation_ids(session, evidence_id)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
+    logger.info("evidence.control_linked", extra={"evidence_id": evidence_id, "control_id": control_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = ctrl_ids
+    detail.obligation_ids = obl_ids
+    detail.ai_system_ids = sys_ids
+    detail.assessment_ids = ass_ids
+    return detail
+
+
+@router.delete("/evidence/{evidence_id}/controls/{control_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def unlink_evidence_control(evidence_id: str, control_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        row = await _load(session, evidence_id)
+        await session.execute(
+            evidence_controls.delete().where(
+                evidence_controls.c.evidence_id == evidence_id,
+                evidence_controls.c.control_id == control_id,
+            )
+        )
+        if row.status == "approved":
+            await refresh_control_effectiveness(session, control_id)
+            await refresh_obligations_for_control(session, control_id)
+        await session.commit()
+        row = await _load(session, evidence_id)
+        ctrl_ids = await _linked_control_ids(session, evidence_id)
+        obl_ids = await _linked_obligation_ids(session, evidence_id)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
+    logger.info("evidence.control_unlinked", extra={"evidence_id": evidence_id, "control_id": control_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = ctrl_ids
+    detail.obligation_ids = obl_ids
+    detail.ai_system_ids = sys_ids
+    detail.assessment_ids = ass_ids
+    return detail
+
+
+@router.post("/evidence/{evidence_id}/obligations/{obligation_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def link_evidence_obligation(evidence_id: str, obligation_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        row = await _load(session, evidence_id)
+        if not (await session.execute(select(Obligation.id).where(Obligation.id == obligation_id))).scalar_one_or_none():
+            raise HTTPException(404, f"Obligation {obligation_id} not found")
+        await session.execute(pg_insert(evidence_obligations).values(
+            evidence_id=evidence_id, obligation_id=obligation_id).on_conflict_do_nothing())
+        if row.status == "approved":
+            await _cascade_from_evidence(session, evidence_id)
+        await session.commit()
+        row = await _load(session, evidence_id)
+        ctrl_ids = await _linked_control_ids(session, evidence_id)
+        obl_ids = await _linked_obligation_ids(session, evidence_id)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
+    logger.info("evidence.obligation_linked", extra={"evidence_id": evidence_id, "obligation_id": obligation_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = ctrl_ids
+    detail.obligation_ids = obl_ids
+    detail.ai_system_ids = sys_ids
+    detail.assessment_ids = ass_ids
+    return detail
+
+
+@router.delete("/evidence/{evidence_id}/obligations/{obligation_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def unlink_evidence_obligation(evidence_id: str, obligation_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        row = await _load(session, evidence_id)
+        await session.execute(
+            evidence_obligations.delete().where(
+                evidence_obligations.c.evidence_id == evidence_id,
+                evidence_obligations.c.obligation_id == obligation_id,
+            )
+        )
+        if row.status == "approved":
+            await refresh_obligation(session, obligation_id)
+        await session.commit()
+        row = await _load(session, evidence_id)
+        ctrl_ids = await _linked_control_ids(session, evidence_id)
+        obl_ids = await _linked_obligation_ids(session, evidence_id)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
+    logger.info("evidence.obligation_unlinked", extra={"evidence_id": evidence_id, "obligation_id": obligation_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = ctrl_ids
+    detail.obligation_ids = obl_ids
+    detail.ai_system_ids = sys_ids
+    detail.assessment_ids = ass_ids
+    return detail

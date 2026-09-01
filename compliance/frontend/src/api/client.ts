@@ -142,6 +142,14 @@ export const api = {
     request<EvidenceDetail>(API_BASE, `/evidence/${id}/assessments/${assessmentId}`, { method: "POST" }),
   unlinkEvidenceAssessment: (id: string, assessmentId: string): Promise<EvidenceDetail> =>
     request<EvidenceDetail>(API_BASE, `/evidence/${id}/assessments/${assessmentId}`, { method: "DELETE" }),
+  linkEvidenceControl: (id: string, controlId: string): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${id}/controls/${controlId}`, { method: "POST" }),
+  unlinkEvidenceControl: (id: string, controlId: string): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${id}/controls/${controlId}`, { method: "DELETE" }),
+  linkEvidenceObligation: (id: string, obligationId: string): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${id}/obligations/${obligationId}`, { method: "POST" }),
+  unlinkEvidenceObligation: (id: string, obligationId: string): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${id}/obligations/${obligationId}`, { method: "DELETE" }),
 
   // Current user's effective permissions — served by the registry backend.
   myPermissions: (): Promise<PermissionsResponse> =>
