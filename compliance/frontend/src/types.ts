@@ -68,8 +68,8 @@ export interface ControlDetail extends Control {
 
 export interface Evidence {
   id: string;
-  ai_system_id: string | null;
-  assessment_id: string | null;
+  ai_system_ids: string[];
+  assessment_ids: string[];
   title: string;
   description: string;
   evidence_type: string;
@@ -88,6 +88,8 @@ export interface Evidence {
 export interface EvidenceDetail extends Evidence {
   control_ids: string[];
   obligation_ids: string[];
+  ai_system_ids: string[];
+  assessment_ids: string[];
 }
 
 export interface EvidenceVersion {

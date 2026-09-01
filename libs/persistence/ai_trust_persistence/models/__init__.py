@@ -9,6 +9,8 @@ from ai_trust_persistence.models.evidence import (
     EvidenceVersion,
     evidence_controls,
     evidence_obligations,
+    evidence_ai_systems,
+    evidence_assessments,
 )
 from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
@@ -31,4 +33,6 @@ __all__ = [
     "control_obligations",
     "evidence_controls",
     "evidence_obligations",
+    "evidence_ai_systems",
+    "evidence_assessments",
 ]

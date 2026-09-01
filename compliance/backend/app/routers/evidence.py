@@ -19,6 +19,8 @@ from ai_trust_persistence.models import (
     Evidence,
     EvidenceVersion,
     Obligation,
+    evidence_ai_systems,
+    evidence_assessments,
     evidence_controls,
     evidence_obligations,
 )
@@ -69,14 +71,28 @@ async def _load(session: AsyncSession, evidence_id: str) -> Evidence:
     return row
 
 
-async def _linked_ids(session: AsyncSession, evidence_id: str) -> tuple[list[str], list[str]]:
-    control_ids = (await session.execute(
+async def _linked_control_ids(session: AsyncSession, evidence_id: str) -> list[str]:
+    return list((await session.execute(
         select(evidence_controls.c.control_id).where(evidence_controls.c.evidence_id == evidence_id)
-    )).scalars().all()
-    obligation_ids = (await session.execute(
+    )).scalars().all())
+
+
+async def _linked_obligation_ids(session: AsyncSession, evidence_id: str) -> list[str]:
+    return list((await session.execute(
         select(evidence_obligations.c.obligation_id).where(evidence_obligations.c.evidence_id == evidence_id)
-    )).scalars().all()
-    return list(control_ids), list(obligation_ids)
+    )).scalars().all())
+
+
+async def _linked_system_ids(session: AsyncSession, evidence_id: str) -> list[str]:
+    return list((await session.execute(
+        select(evidence_ai_systems.c.ai_system_id).where(evidence_ai_systems.c.evidence_id == evidence_id)
+    )).scalars().all())
+
+
+async def _linked_assessment_ids(session: AsyncSession, evidence_id: str) -> list[str]:
+    return list((await session.execute(
+        select(evidence_assessments.c.assessment_id).where(evidence_assessments.c.evidence_id == evidence_id)
+    )).scalars().all())
 
 
 @router.get("/evidence", response_model=list[EvidenceResponse], dependencies=[Depends(require_permission(EVIDENCE_READ))])
@@ -84,11 +100,12 @@ async def list_evidence(
     control_id: str | None = Query(default=None),
     obligation_id: str | None = Query(default=None),
     ai_system_id: str | None = Query(default=None),
+    assessment_id: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[EvidenceResponse]:
     async with SessionLocal() as session:
-        stmt = select(Evidence).order_by(Evidence.created_at.desc())
+        stmt = select(Evidence).distinct().order_by(Evidence.created_at.desc())
         if control_id:
             stmt = stmt.join(
                 evidence_controls, evidence_controls.c.evidence_id == Evidence.id
@@ -98,10 +115,22 @@ async def list_evidence(
                 evidence_obligations, evidence_obligations.c.evidence_id == Evidence.id
             ).where(evidence_obligations.c.obligation_id == obligation_id)
         if ai_system_id:
-            stmt = stmt.where(Evidence.ai_system_id == ai_system_id)
+            stmt = stmt.join(
+                evidence_ai_systems, evidence_ai_systems.c.evidence_id == Evidence.id
+            ).where(evidence_ai_systems.c.ai_system_id == ai_system_id)
+        if assessment_id:
+            stmt = stmt.join(
+                evidence_assessments, evidence_assessments.c.evidence_id == Evidence.id
+            ).where(evidence_assessments.c.assessment_id == assessment_id)
         stmt = stmt.limit(limit).offset(offset)
-        result = await session.execute(stmt)
-        return [EvidenceResponse.model_validate(r) for r in result.scalars().all()]
+        rows = (await session.execute(stmt)).scalars().all()
+        out = []
+        for row in rows:
+            r = EvidenceResponse.model_validate(row)
+            r.ai_system_ids = await _linked_system_ids(session, row.id)
+            r.assessment_ids = await _linked_assessment_ids(session, row.id)
+            out.append(r)
+        return out
 
 
 @router.post("/evidence", response_model=EvidenceDetailResponse, status_code=201, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
@@ -111,8 +140,8 @@ async def create_evidence(
     evidence_type: str = Form(default="document"),
     control_ids: list[str] = Form(default=[]),
     obligation_ids: list[str] = Form(default=[]),
-    ai_system_id: str | None = Form(default=None),
-    assessment_id: str | None = Form(default=None),
+    ai_system_ids: list[str] = Form(default=[]),
+    assessment_ids: list[str] = Form(default=[]),
     validity_from: str | None = Form(default=None),
     validity_until: str | None = Form(default=None),
     uploaded_by: str = Form(default=""),
@@ -122,9 +151,6 @@ async def create_evidence(
         raise HTTPException(422, "title must not be blank")
     if evidence_type not in VALID_EVIDENCE_TYPES:
         raise HTTPException(422, f"invalid evidence type '{evidence_type}'")
-    # At least one link target is required (spec EVD-FR-02).
-    if not any([control_ids, obligation_ids, ai_system_id, assessment_id]):
-        raise HTTPException(422, "Evidence must link to at least one of: control, obligation, AI system, or assessment")
 
     v_from = _parse_date(validity_from, "validity_from")
     v_until = _parse_date(validity_until, "validity_until")
@@ -142,14 +168,16 @@ async def create_evidence(
                 select(Obligation.id).where(Obligation.id == oid)
             )).scalar_one_or_none():
                 raise HTTPException(404, f"Obligation {oid} not found")
-        if ai_system_id and not (await session.execute(
-            select(AISystem.id).where(AISystem.id == ai_system_id)
-        )).scalar_one_or_none():
-            raise HTTPException(404, f"AI system {ai_system_id} not found")
-        if assessment_id and not (await session.execute(
-            select(Assessment.id).where(Assessment.id == assessment_id)
-        )).scalar_one_or_none():
-            raise HTTPException(404, f"Assessment {assessment_id} not found")
+        for sid in ai_system_ids:
+            if not (await session.execute(
+                select(AISystem.id).where(AISystem.id == sid)
+            )).scalar_one_or_none():
+                raise HTTPException(404, f"AI system {sid} not found")
+        for aid in assessment_ids:
+            if not (await session.execute(
+                select(Assessment.id).where(Assessment.id == aid)
+            )).scalar_one_or_none():
+                raise HTTPException(404, f"Assessment {aid} not found")
 
     evidence_id = new_id("EVD")
     file_path = file_name = mime_type = ""
@@ -180,8 +208,6 @@ async def create_evidence(
         async with SessionLocal() as session:
             row = Evidence(
                 id=evidence_id,
-                ai_system_id=ai_system_id,
-                assessment_id=assessment_id,
                 title=title,
                 description=description,
                 evidence_type=evidence_type,
@@ -203,10 +229,19 @@ async def create_evidence(
             for oid in obligation_ids:
                 await session.execute(pg_insert(evidence_obligations).values(
                     evidence_id=evidence_id, obligation_id=oid).on_conflict_do_nothing())
+            for sid in ai_system_ids:
+                await session.execute(pg_insert(evidence_ai_systems).values(
+                    evidence_id=evidence_id, ai_system_id=sid).on_conflict_do_nothing())
+            for aid in assessment_ids:
+                await session.execute(pg_insert(evidence_assessments).values(
+                    evidence_id=evidence_id, assessment_id=aid).on_conflict_do_nothing())
 
             await session.commit()
             await session.refresh(row)
-            linked_control_ids, linked_obligation_ids = await _linked_ids(session, evidence_id)
+            linked_control_ids = await _linked_control_ids(session, evidence_id)
+            linked_obligation_ids = await _linked_obligation_ids(session, evidence_id)
+            linked_ai_system_ids = await _linked_system_ids(session, evidence_id)
+            linked_assessment_ids = await _linked_assessment_ids(session, evidence_id)
     except Exception:
         if file_path:
             await minio_client.delete_file(file_path)
@@ -218,6 +253,8 @@ async def create_evidence(
     detail = EvidenceDetailResponse.model_validate(row)
     detail.control_ids = linked_control_ids
     detail.obligation_ids = linked_obligation_ids
+    detail.ai_system_ids = linked_ai_system_ids
+    detail.assessment_ids = linked_assessment_ids
     return detail
 
 
@@ -225,10 +262,15 @@ async def create_evidence(
 async def get_evidence(evidence_id: str) -> EvidenceDetailResponse:
     async with SessionLocal() as session:
         row = await _load(session, evidence_id)
-        control_ids, obligation_ids = await _linked_ids(session, evidence_id)
+        control_ids = await _linked_control_ids(session, evidence_id)
+        obligation_ids = await _linked_obligation_ids(session, evidence_id)
+        ai_system_ids = await _linked_system_ids(session, evidence_id)
+        assessment_ids = await _linked_assessment_ids(session, evidence_id)
         detail = EvidenceDetailResponse.model_validate(row)
         detail.control_ids = control_ids
         detail.obligation_ids = obligation_ids
+        detail.ai_system_ids = ai_system_ids
+        detail.assessment_ids = assessment_ids
         return detail
 
 
@@ -257,8 +299,15 @@ async def update_evidence(evidence_id: str, body: EvidenceUpdate) -> EvidenceRes
             await _cascade_from_evidence(session, evidence_id)
         await session.commit()
         await session.refresh(row)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
     logger.info("evidence.updated", extra={"evidence_id": evidence_id, "fields": sorted(updates.keys())})
-    return EvidenceResponse.model_validate(row)
+    # ai_system_ids/assessment_ids are not ORM columns — must be loaded from
+    # join tables and assigned manually after model_validate.
+    r = EvidenceResponse.model_validate(row)
+    r.ai_system_ids = sys_ids
+    r.assessment_ids = ass_ids
+    return r
 
 
 @router.delete("/evidence/{evidence_id}", dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
@@ -266,7 +315,7 @@ async def delete_evidence(evidence_id: str) -> dict:
     async with SessionLocal() as session:
         row = await _load(session, evidence_id)
         file_path = row.file_path
-        control_ids, _ = await _linked_ids(session, evidence_id)
+        control_ids = await _linked_control_ids(session, evidence_id)
         await session.delete(row)
         await session.flush()
         # Removing evidence may drop a control below 'effective'.
@@ -299,8 +348,15 @@ async def _set_status(evidence_id: str, status: str) -> EvidenceResponse:
         await _cascade_from_evidence(session, evidence_id)
         await session.commit()
         await session.refresh(row)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
     logger.info("evidence.status_changed", extra={"evidence_id": evidence_id, "status": status})
-    return EvidenceResponse.model_validate(row)
+    # ai_system_ids/assessment_ids are not ORM columns — must be loaded from
+    # join tables and assigned manually after model_validate.
+    r = EvidenceResponse.model_validate(row)
+    r.ai_system_ids = sys_ids
+    r.assessment_ids = ass_ids
+    return r
 
 
 async def _cascade_from_evidence(session: AsyncSession, evidence_id: str) -> None:
@@ -393,7 +449,10 @@ async def upload_evidence_version(
 
             await session.commit()
             await session.refresh(row)
-            linked_control_ids, linked_obligation_ids = await _linked_ids(session, evidence_id)
+            linked_control_ids = await _linked_control_ids(session, evidence_id)
+            linked_obligation_ids = await _linked_obligation_ids(session, evidence_id)
+            linked_ai_system_ids = await _linked_system_ids(session, evidence_id)
+            linked_assessment_ids = await _linked_assessment_ids(session, evidence_id)
     except Exception:
         await minio_client.delete_file(new_file_path)
         raise
@@ -408,4 +467,211 @@ async def upload_evidence_version(
     detail = EvidenceDetailResponse.model_validate(row)
     detail.control_ids = linked_control_ids
     detail.obligation_ids = linked_obligation_ids
+    detail.ai_system_ids = linked_ai_system_ids
+    detail.assessment_ids = linked_assessment_ids
+    return detail
+
+
+@router.post("/evidence/{evidence_id}/systems/{ai_system_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def link_evidence_system(evidence_id: str, ai_system_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        # check for existence of evindence
+        await _load(session, evidence_id)
+        if not (await session.execute(select(AISystem.id).where(AISystem.id == ai_system_id))).scalar_one_or_none():
+            raise HTTPException(404, f"AI system {ai_system_id} not found")
+        await session.execute(pg_insert(evidence_ai_systems).values(
+            evidence_id=evidence_id, ai_system_id=ai_system_id).on_conflict_do_nothing())
+        await session.commit()
+        row = await _load(session, evidence_id)
+        ctrl_ids = await _linked_control_ids(session, evidence_id)
+        obl_ids = await _linked_obligation_ids(session, evidence_id)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
+    logger.info("evidence.system_linked", extra={"evidence_id": evidence_id, "ai_system_id": ai_system_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = ctrl_ids
+    detail.obligation_ids = obl_ids
+    detail.ai_system_ids = sys_ids
+    detail.assessment_ids = ass_ids
+    return detail
+
+
+@router.delete("/evidence/{evidence_id}/systems/{ai_system_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def unlink_evidence_system(evidence_id: str, ai_system_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        #cherk for existence
+        await _load(session, evidence_id)
+        await session.execute(
+            evidence_ai_systems.delete().where(
+                evidence_ai_systems.c.evidence_id == evidence_id,
+                evidence_ai_systems.c.ai_system_id == ai_system_id,
+            )
+        )
+        await session.commit()
+        row = await _load(session, evidence_id)
+        ctrl_ids = await _linked_control_ids(session, evidence_id)
+        obl_ids = await _linked_obligation_ids(session, evidence_id)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
+    logger.info("evidence.system_unlinked", extra={"evidence_id": evidence_id, "ai_system_id": ai_system_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = ctrl_ids
+    detail.obligation_ids = obl_ids
+    detail.ai_system_ids = sys_ids
+    detail.assessment_ids = ass_ids
+    return detail
+
+
+@router.post("/evidence/{evidence_id}/assessments/{assessment_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def link_evidence_assessment(evidence_id: str, assessment_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        #check for existence
+        await _load(session, evidence_id)
+        if not (await session.execute(select(Assessment.id).where(Assessment.id == assessment_id))).scalar_one_or_none():
+            raise HTTPException(404, f"Assessment {assessment_id} not found")
+        await session.execute(pg_insert(evidence_assessments).values(
+            evidence_id=evidence_id, assessment_id=assessment_id).on_conflict_do_nothing())
+        await session.commit()
+        row = await _load(session, evidence_id)
+        ctrl_ids = await _linked_control_ids(session, evidence_id)
+        obl_ids = await _linked_obligation_ids(session, evidence_id)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
+    logger.info("evidence.assessment_linked", extra={"evidence_id": evidence_id, "assessment_id": assessment_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = ctrl_ids
+    detail.obligation_ids = obl_ids
+    detail.ai_system_ids = sys_ids
+    detail.assessment_ids = ass_ids
+    return detail
+
+
+@router.delete("/evidence/{evidence_id}/assessments/{assessment_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def unlink_evidence_assessment(evidence_id: str, assessment_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        #check for existence
+        await _load(session, evidence_id)
+        await session.execute(
+            evidence_assessments.delete().where(
+                evidence_assessments.c.evidence_id == evidence_id,
+                evidence_assessments.c.assessment_id == assessment_id,
+            )
+        )
+        await session.commit()
+        row = await _load(session, evidence_id)
+        ctrl_ids = await _linked_control_ids(session, evidence_id)
+        obl_ids = await _linked_obligation_ids(session, evidence_id)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
+    logger.info("evidence.assessment_unlinked", extra={"evidence_id": evidence_id, "assessment_id": assessment_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = ctrl_ids
+    detail.obligation_ids = obl_ids
+    detail.ai_system_ids = sys_ids
+    detail.assessment_ids = ass_ids
+    return detail
+
+
+@router.post("/evidence/{evidence_id}/controls/{control_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def link_evidence_control(evidence_id: str, control_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        row = await _load(session, evidence_id)
+        if not (await session.execute(select(Control.id).where(Control.id == control_id))).scalar_one_or_none():
+            raise HTTPException(404, f"Control {control_id} not found")
+        await session.execute(pg_insert(evidence_controls).values(
+            evidence_id=evidence_id, control_id=control_id).on_conflict_do_nothing())
+        if row.status == "approved":
+            await _cascade_from_evidence(session, evidence_id)
+        await session.commit()
+        row = await _load(session, evidence_id)
+        ctrl_ids = await _linked_control_ids(session, evidence_id)
+        obl_ids = await _linked_obligation_ids(session, evidence_id)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
+    logger.info("evidence.control_linked", extra={"evidence_id": evidence_id, "control_id": control_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = ctrl_ids
+    detail.obligation_ids = obl_ids
+    detail.ai_system_ids = sys_ids
+    detail.assessment_ids = ass_ids
+    return detail
+
+
+@router.delete("/evidence/{evidence_id}/controls/{control_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def unlink_evidence_control(evidence_id: str, control_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        row = await _load(session, evidence_id)
+        await session.execute(
+            evidence_controls.delete().where(
+                evidence_controls.c.evidence_id == evidence_id,
+                evidence_controls.c.control_id == control_id,
+            )
+        )
+        if row.status == "approved":
+            await refresh_control_effectiveness(session, control_id)
+            await refresh_obligations_for_control(session, control_id)
+        await session.commit()
+        row = await _load(session, evidence_id)
+        ctrl_ids = await _linked_control_ids(session, evidence_id)
+        obl_ids = await _linked_obligation_ids(session, evidence_id)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
+    logger.info("evidence.control_unlinked", extra={"evidence_id": evidence_id, "control_id": control_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = ctrl_ids
+    detail.obligation_ids = obl_ids
+    detail.ai_system_ids = sys_ids
+    detail.assessment_ids = ass_ids
+    return detail
+
+
+@router.post("/evidence/{evidence_id}/obligations/{obligation_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def link_evidence_obligation(evidence_id: str, obligation_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        row = await _load(session, evidence_id)
+        if not (await session.execute(select(Obligation.id).where(Obligation.id == obligation_id))).scalar_one_or_none():
+            raise HTTPException(404, f"Obligation {obligation_id} not found")
+        await session.execute(pg_insert(evidence_obligations).values(
+            evidence_id=evidence_id, obligation_id=obligation_id).on_conflict_do_nothing())
+        if row.status == "approved":
+            await _cascade_from_evidence(session, evidence_id)
+        await session.commit()
+        row = await _load(session, evidence_id)
+        ctrl_ids = await _linked_control_ids(session, evidence_id)
+        obl_ids = await _linked_obligation_ids(session, evidence_id)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
+    logger.info("evidence.obligation_linked", extra={"evidence_id": evidence_id, "obligation_id": obligation_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = ctrl_ids
+    detail.obligation_ids = obl_ids
+    detail.ai_system_ids = sys_ids
+    detail.assessment_ids = ass_ids
+    return detail
+
+
+@router.delete("/evidence/{evidence_id}/obligations/{obligation_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def unlink_evidence_obligation(evidence_id: str, obligation_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        row = await _load(session, evidence_id)
+        await session.execute(
+            evidence_obligations.delete().where(
+                evidence_obligations.c.evidence_id == evidence_id,
+                evidence_obligations.c.obligation_id == obligation_id,
+            )
+        )
+        if row.status == "approved":
+            await refresh_obligation(session, obligation_id)
+        await session.commit()
+        row = await _load(session, evidence_id)
+        ctrl_ids = await _linked_control_ids(session, evidence_id)
+        obl_ids = await _linked_obligation_ids(session, evidence_id)
+        sys_ids = await _linked_system_ids(session, evidence_id)
+        ass_ids = await _linked_assessment_ids(session, evidence_id)
+    logger.info("evidence.obligation_unlinked", extra={"evidence_id": evidence_id, "obligation_id": obligation_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.control_ids = ctrl_ids
+    detail.obligation_ids = obl_ids
+    detail.ai_system_ids = sys_ids
+    detail.assessment_ids = ass_ids
     return detail

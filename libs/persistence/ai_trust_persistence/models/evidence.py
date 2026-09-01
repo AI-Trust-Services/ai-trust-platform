@@ -7,9 +7,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
 
-# Evidence links (many-to-many) — one evidence item can prove multiple controls
-# and multiple obligations (spec EVD-FR-02). Direct ai_system_id / assessment_id
-# links live on the evidence row itself for scope-level evidence.
 evidence_controls = Table(
     "evidence_controls",
     Base.metadata,
@@ -24,25 +21,33 @@ evidence_obligations = Table(
     Column("obligation_id", String(30), ForeignKey("obligations.id", ondelete="CASCADE"), primary_key=True),
 )
 
+evidence_ai_systems = Table(
+    "evidence_ai_systems",
+    Base.metadata,
+    Column("evidence_id", String(30), ForeignKey("evidence.id", ondelete="CASCADE"), primary_key=True),
+    Column("ai_system_id", String(20), ForeignKey("ai_systems.id", ondelete="CASCADE"), primary_key=True),
+)
+
+evidence_assessments = Table(
+    "evidence_assessments",
+    Base.metadata,
+    Column("evidence_id", String(30), ForeignKey("evidence.id", ondelete="CASCADE"), primary_key=True),
+    Column("assessment_id", String(30), ForeignKey("assessments.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class Evidence(Base):
     """An artifact proving a control is implemented / an obligation fulfilled.
 
-    Links to controls and obligations via the association tables above, and may
-    also carry direct ai_system_id / assessment_id scope links. When a file is
-    uploaded it is stored in MinIO; file_path is the object key within the
-    evidence bucket. Approving evidence cascades to control effectiveness.
+    Links to controls and obligations via the association tables above.
+    Scope links to AI systems and assessments live in evidence_ai_systems
+    and evidence_assessments (N:M) — no direct FK columns on this row.
+    Approving evidence cascades to control effectiveness.
     """
 
     __tablename__ = "evidence"
 
     id: Mapped[str] = mapped_column(String(30), primary_key=True)
-    ai_system_id: Mapped[str | None] = mapped_column(
-        String(20), ForeignKey("ai_systems.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    assessment_id: Mapped[str | None] = mapped_column(
-        String(30), ForeignKey("assessments.id", ondelete="SET NULL"), nullable=True, index=True
-    )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
     evidence_type: Mapped[str] = mapped_column(String(50), default="document")

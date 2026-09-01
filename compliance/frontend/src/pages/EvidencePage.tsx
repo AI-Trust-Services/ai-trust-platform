@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, RotateCw, Download, Upload, Check, X, Paperclip, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { Plus, RotateCw, Download, Upload, Check, X, Paperclip, CheckCircle2, Clock, AlertTriangle, Link, Unlink } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { StatusBadge } from "../components/Badges";
@@ -40,6 +40,13 @@ export default function EvidencePage() {
   const [versions, setVersions] = useState<EvidenceVersion[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [versionOpen, setVersionOpen] = useState(false);
+  const [addSystemOpen, setAddSystemOpen] = useState(false);
+  const [addAssessmentOpen, setAddAssessmentOpen] = useState(false);
+  const [addControlOpen, setAddControlOpen] = useState(false);
+  const [addObligationOpen, setAddObligationOpen] = useState(false);
+  const [allAssessments, setAllAssessments] = useState<Assessment[]>([]);
+  const [allControls, setAllControls] = useState<Control[]>([]);
+  const [allObligations, setAllObligations] = useState<Obligation[]>([]);
   const showToast = useToast();
   const { can } = usePermissions();
   const mayWrite = can("evidence:write");
@@ -61,23 +68,111 @@ export default function EvidencePage() {
 
   async function openDetail(e: Evidence) {
     setSelected(e.id);
+    setAddSystemOpen(false);
+    setAddAssessmentOpen(false);
     try {
       const det = await api.getEvidenceItem(e.id);
       setDetail(det);
-      const [controls, obligations, vers] = await Promise.all([
+      const [controls, obligations, vers, assessments, allCtl, allObl] = await Promise.all([
         api.getControls({ evidence_id: e.id }),
         api.getObligations({ evidence_id: e.id }),
         api.getEvidenceVersions(e.id),
+        api.getAssessments(),
+        api.getControls(),
+        api.getObligations(),
       ]);
       setDetailControls(controls);
       setDetailObligations(obligations);
       setVersions(vers);
+      setAllAssessments(assessments);
+      setAllControls(allCtl);
+      setAllObligations(allObl);
     } catch (err) {
       showToast(`Failed to load detail: ${(err as Error).message}`, true);
     }
   }
 
-  function closePanel() { setSelected(null); setDetail(null); setDetailControls([]); setDetailObligations([]); setVersions([]); }
+  function closePanel() { setSelected(null); setDetail(null); setDetailControls([]); setDetailObligations([]); setVersions([]); setAddSystemOpen(false); setAddAssessmentOpen(false); setAddControlOpen(false); setAddObligationOpen(false); }
+
+  async function linkSystem(systemId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.linkEvidenceSystem(detail.id, systemId);
+      setDetail(updated);
+      setAddSystemOpen(false);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function unlinkSystem(systemId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.unlinkEvidenceSystem(detail.id, systemId);
+      setDetail(updated);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function linkAssessment(assessmentId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.linkEvidenceAssessment(detail.id, assessmentId);
+      setDetail(updated);
+      setAddAssessmentOpen(false);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function unlinkAssessment(assessmentId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.unlinkEvidenceAssessment(detail.id, assessmentId);
+      setDetail(updated);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function linkControl(controlId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.linkEvidenceControl(detail.id, controlId);
+      setDetail(updated);
+      setDetailControls(await api.getControls({ evidence_id: detail.id }));
+      setAddControlOpen(false);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function unlinkControl(controlId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.unlinkEvidenceControl(detail.id, controlId);
+      setDetail(updated);
+      setDetailControls(await api.getControls({ evidence_id: detail.id }));
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function linkObligation(obligationId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.linkEvidenceObligation(detail.id, obligationId);
+      setDetail(updated);
+      setDetailObligations(await api.getObligations({ evidence_id: detail.id }));
+      setAddObligationOpen(false);
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
+
+  async function unlinkObligation(obligationId: string) {
+    if (!detail) return;
+    try {
+      const updated = await api.unlinkEvidenceObligation(detail.id, obligationId);
+      setDetail(updated);
+      setDetailObligations(await api.getObligations({ evidence_id: detail.id }));
+      load();
+    } catch (e) { showToast((e as Error).message, true); }
+  }
 
   async function act(fn: (id: string) => Promise<Evidence>, id: string, msg: string) {
     try {
@@ -111,7 +206,7 @@ export default function EvidencePage() {
       if (s && !e.title.toLowerCase().includes(s) && !(e.file_name ?? "").toLowerCase().includes(s) && !(e.uploaded_by ?? "").toLowerCase().includes(s)) return false;
       if (statusFilter && e.status !== statusFilter) return false;
       if (typeFilter && e.evidence_type !== typeFilter) return false;
-      if (systemFilter && e.ai_system_id !== systemFilter) return false;
+      if (systemFilter && !e.ai_system_ids.includes(systemFilter)) return false;
       if (uploaderFilter && e.uploaded_by !== uploaderFilter) return false;
       if (expiryFilter === "expired") {
         if (e.status !== "expired") return false;
@@ -225,7 +320,13 @@ export default function EvidencePage() {
                 <TableRow key={e.id} data-state={selected === e.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(e)}>
                   <TableCell><div className="font-medium text-foreground">{e.title}</div><div className="text-xs text-muted-foreground">{e.id}</div></TableCell>
                   <TableCell className="text-[13px]">{humanize(e.evidence_type)}</TableCell>
-                  <TableCell>{e.ai_system_id ? (systemsById[e.ai_system_id]?.name ?? e.ai_system_id) : "—"}</TableCell>
+                  <TableCell>
+                    {e.ai_system_ids.length === 0
+                      ? "—"
+                      : e.ai_system_ids.length === 1
+                        ? (systemsById[e.ai_system_ids[0]]?.name ?? e.ai_system_ids[0])
+                        : `${e.ai_system_ids.length} AI Systems`}
+                  </TableCell>
                   <TableCell><Badge variant="secondary" className="rounded-full font-medium">v{e.version_label}</Badge></TableCell>
                   <TableCell><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></TableCell>
                   <TableCell>{e.file_name ? <Badge variant="secondary" className="max-w-[160px] truncate rounded-full font-medium">{e.file_name}</Badge> : "—"}</TableCell>
@@ -284,7 +385,6 @@ export default function EvidencePage() {
           <>
           <DetailSection title="General Information">
             <DetailField label="ID">{detail.id}</DetailField>
-            <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : "—"}</DetailField>
             <DetailField label="Type">{humanize(detail.evidence_type)}</DetailField>
             <DetailField label="Status"><StatusBadge meta={EVIDENCE_STATUS_META} value={detail.status} /></DetailField>
             <DetailField label="Uploaded By">{detail.uploaded_by || "—"}</DetailField>
@@ -304,26 +404,160 @@ export default function EvidencePage() {
               <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
             </DetailSection>
           )}
-          {(detailControls.length > 0 || detailObligations.length > 0 || detail.assessment_id) && (
+          {(detailControls.length > 0 || detailObligations.length > 0 || detail.assessment_ids.length > 0 || detail.ai_system_ids.length > 0 || mayWrite) && (
             <DetailSection title="Linked To">
-              {detailControls.length > 0 && (
-                <>
-                  <div className="pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">Controls</div>
-                  <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
-                  ))}</ul>
-                </>
+              {/* AI Systems */}
+              <div className="pb-0.5 pt-1 flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground">AI Systems</span>
+                {mayWrite && (
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setAddSystemOpen((v) => !v)}>
+                    <Link className="size-3 mr-1" /> Add
+                  </Button>
+                )}
+              </div>
+              {addSystemOpen && (
+                <select
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] text-foreground mb-1"
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) linkSystem(e.target.value); }}
+                >
+                  <option value="" disabled>— select a system —</option>
+                  {systems.filter((s) => !detail.ai_system_ids.includes(s.id)).map((s) => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.id})</option>
+                  ))}
+                </select>
               )}
-              {detailObligations.length > 0 && (
-                <>
-                  <div className="pb-0.5 pt-2 text-xs font-semibold text-muted-foreground">Obligations</div>
-                  <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
-                    <li key={o.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
-                  ))}</ul>
-                </>
+              {detail.ai_system_ids.length === 0 ? (
+                <div className="text-[13px] text-muted-foreground">—</div>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {detail.ai_system_ids.map((sid) => (
+                    <li key={sid} className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[13px] text-foreground">{systemsById[sid]?.name ?? sid}</span>
+                      {mayWrite && (
+                        <Button variant="ghost" size="sm" className="h-6 px-1.5 text-muted-foreground hover:text-destructive" onClick={() => unlinkSystem(sid)}>
+                          <Unlink className="size-3" />
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
-              {detail.assessment_id && (
-                <DetailField label="Assessment">{detail.assessment_id}</DetailField>
+
+              {/* Assessments */}
+              <div className="pb-0.5 pt-3 flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground">Assessments</span>
+                {mayWrite && (
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setAddAssessmentOpen((v) => !v)}>
+                    <Link className="size-3 mr-1" /> Add
+                  </Button>
+                )}
+              </div>
+              {addAssessmentOpen && (
+                <select
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] text-foreground mb-1"
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) linkAssessment(e.target.value); }}
+                >
+                  <option value="" disabled>— select an assessment —</option>
+                  {allAssessments.filter((a) => !detail.assessment_ids.includes(a.id)).map((a) => (
+                    <option key={a.id} value={a.id}>{a.title} ({a.id})</option>
+                  ))}
+                </select>
+              )}
+              {detail.assessment_ids.length === 0 ? (
+                <div className="text-[13px] text-muted-foreground">—</div>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {detail.assessment_ids.map((aid) => (
+                    <li key={aid} className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[13px] text-foreground">{allAssessments.find((a) => a.id === aid)?.title ?? aid}</span>
+                      {mayWrite && (
+                        <Button variant="ghost" size="sm" className="h-6 px-1.5 text-muted-foreground hover:text-destructive" onClick={() => unlinkAssessment(aid)}>
+                          <Unlink className="size-3" />
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Controls */}
+              <div className="pb-0.5 pt-3 flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground">Controls</span>
+                {mayWrite && (
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setAddControlOpen((v) => !v)}>
+                    <Link className="size-3 mr-1" /> Add
+                  </Button>
+                )}
+              </div>
+              {addControlOpen && (
+                <select
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] text-foreground mb-1"
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) linkControl(e.target.value); }}
+                >
+                  <option value="" disabled>— select a control —</option>
+                  {allControls.filter((c) => !detail.control_ids.includes(c.id)).map((c) => (
+                    <option key={c.id} value={c.id}>{c.title} ({c.id})</option>
+                  ))}
+                </select>
+              )}
+              {detailControls.length === 0 ? (
+                <div className="text-[13px] text-muted-foreground">—</div>
+              ) : (
+                <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[13px] text-foreground">{c.title}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <StatusBadge meta={CONTROL_STATUS_META} value={c.status} />
+                      {mayWrite && (
+                        <Button variant="ghost" size="sm" className="h-6 px-1.5 text-muted-foreground hover:text-destructive" onClick={() => unlinkControl(c.id)}>
+                          <Unlink className="size-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                ))}</ul>
+              )}
+
+              {/* Obligations */}
+              <div className="pb-0.5 pt-3 flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground">Obligations</span>
+                {mayWrite && (
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setAddObligationOpen((v) => !v)}>
+                    <Link className="size-3 mr-1" /> Add
+                  </Button>
+                )}
+              </div>
+              {addObligationOpen && (
+                <select
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] text-foreground mb-1"
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) linkObligation(e.target.value); }}
+                >
+                  <option value="" disabled>— select an obligation —</option>
+                  {allObligations.filter((o) => !detail.obligation_ids.includes(o.id)).map((o) => (
+                    <option key={o.id} value={o.id}>{o.title} ({o.article_ref || o.id})</option>
+                  ))}
+                </select>
+              )}
+              {detailObligations.length === 0 ? (
+                <div className="text-[13px] text-muted-foreground">—</div>
+              ) : (
+                <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
+                  <li key={o.id} className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[13px] text-foreground">{o.title}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} />
+                      {mayWrite && (
+                        <Button variant="ghost" size="sm" className="h-6 px-1.5 text-muted-foreground hover:text-destructive" onClick={() => unlinkObligation(o.id)}>
+                          <Unlink className="size-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                ))}</ul>
               )}
             </DetailSection>
           )}

@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone, date, timedelta
 
@@ -29,7 +30,7 @@ from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.alert_rule import AlertRule
 from ai_trust_persistence.models.control import Control, control_obligations
-from ai_trust_persistence.models.evidence import Evidence, evidence_controls
+from ai_trust_persistence.models.evidence import Evidence, evidence_ai_systems, evidence_controls
 from ai_trust_persistence.models.obligation import Obligation
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = get_logger(__name__)
@@ -380,7 +381,7 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
     today = date.today()
     async with SessionLocal() as session:
         rows = (await session.execute(
-            select(Evidence.id, Evidence.title, Evidence.ai_system_id)
+            select(Evidence.id, Evidence.title)
             .where(Evidence.validity_until.is_not(None))
             .where(Evidence.validity_until < today)
             .where(Evidence.status == "approved")
@@ -389,12 +390,16 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
         if not rows:
             return []
 
-        sys_ids = [r.ai_system_id for r in rows if r.ai_system_id]
-        sys_map: dict[str, str] = {}
-        if sys_ids:
-            sys_map = {r.id: r.name for r in (await session.execute(
-                select(AISystem.id, AISystem.name).where(AISystem.id.in_(sys_ids))
-            )).all()}
+        evd_ids = [r.id for r in rows]
+        # N:M: one query for all (evidence_id → system names)
+        sys_link_rows = (await session.execute(
+            select(evidence_ai_systems.c.evidence_id, AISystem.name)
+            .join(AISystem, AISystem.id == evidence_ai_systems.c.ai_system_id)
+            .where(evidence_ai_systems.c.evidence_id.in_(evd_ids))
+        )).all()
+        evd_sys_names: defaultdict[str, list[str]] = defaultdict(list)
+        for link in sys_link_rows:
+            evd_sys_names[link.evidence_id].append(link.name)
 
         # Collect all linked control IDs in one query before any status mutations.
         evd_ids = [r.id for r in rows]
@@ -464,10 +469,11 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
                         obl.status = "in_progress"
                     await session.flush()
 
-            sys_name = sys_map.get(evd.ai_system_id, "") if evd.ai_system_id else ""
+            # empty string if evidence has no linked systems (defaultdict returns [])
+            sys_names = ", ".join(evd_sys_names[evd.id])
             desc = f"Evidence expired: '{evd.title}'"
-            if sys_name:
-                desc += f" — {sys_name}"
+            if sys_names:
+                desc += f" — {sys_names}"
             results.append(EvalResult(
                 triggered=True, value=1.0, description=desc,
                 entity_id=evd.id, entity_type="evidence",
@@ -485,7 +491,7 @@ async def _eval_evidence_expiring(min_days: int, max_days: int) -> list[EvalResu
 
     async with SessionLocal() as session:
         rows = (await session.execute(
-            select(Evidence.id, Evidence.title, Evidence.ai_system_id, Evidence.validity_until)
+            select(Evidence.id, Evidence.title, Evidence.validity_until)
             .where(Evidence.status == "approved")
             .where(Evidence.validity_until.is_not(None))
             .where(Evidence.validity_until >= cutoff_far)
@@ -495,20 +501,24 @@ async def _eval_evidence_expiring(min_days: int, max_days: int) -> list[EvalResu
         if not rows:
             return []
 
-        sys_ids = [r.ai_system_id for r in rows if r.ai_system_id]
-        sys_map: dict[str, str] = {}
-        if sys_ids:
-            sys_map = {r.id: r.name for r in (await session.execute(
-                select(AISystem.id, AISystem.name).where(AISystem.id.in_(sys_ids))
-            )).all()}
+        evd_ids = [r.id for r in rows]
+        # N:M: one query for all linked system names, mirroring eval_evidence_expired.
+        sys_link_rows = (await session.execute(
+            select(evidence_ai_systems.c.evidence_id, AISystem.name)
+            .join(AISystem, AISystem.id == evidence_ai_systems.c.ai_system_id)
+            .where(evidence_ai_systems.c.evidence_id.in_(evd_ids))
+        )).all()
+        evd_sys_names: defaultdict[str, list[str]] = defaultdict(list)
+        for link in sys_link_rows:
+            evd_sys_names[link.evidence_id].append(link.name)
 
     results: list[EvalResult] = []
     for evd in rows:
         days_left = (evd.validity_until - today).days
-        sys_name = sys_map.get(evd.ai_system_id, "") if evd.ai_system_id else ""
+        sys_names = evd_sys_names.get(evd.id, [])
         desc = f"Evidence expiring in {days_left} day(s): '{evd.title}'"
-        if sys_name:
-            desc += f" — {sys_name}"
+        if sys_names:
+            desc += f" — {', '.join(sys_names)}"
         results.append(EvalResult(
             triggered=True, value=float(days_left), description=desc,
             entity_id=evd.id, entity_type="evidence",
