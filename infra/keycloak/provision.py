@@ -29,6 +29,12 @@ APP_ADMIN_PASSWORD           = os.environ["APP_ADMIN_PASSWORD"]
 REALM = "ai-trust"
 KEYCLOAK_PUBLIC_URL = os.environ.get("KEYCLOAK_PUBLIC_URL", "")
 
+DEV_USERS = [
+    {"username": "dev-owner",      "firstName": "Dev", "lastName": "Business Owner"},
+    {"username": "dev-engineer",   "firstName": "Dev", "lastName": "AI Engineer"},
+    {"username": "dev-compliance", "firstName": "Dev", "lastName": "Compliance Officer"},
+]
+
 
 def get_admin_token(client: httpx.Client) -> str:
     resp = client.post(
@@ -67,7 +73,6 @@ def ensure_realm(client: httpx.Client) -> None:
         client.post(f"{KEYCLOAK_URL}/admin/realms", json=realm_config).raise_for_status()
 
 
-
 def ensure_client(client: httpx.Client) -> None:
     existing = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients", params={"clientId": "oauth2-proxy"}).json()
 
@@ -93,7 +98,6 @@ def ensure_client(client: httpx.Client) -> None:
     else:
         print("Creating oauth2-proxy client...")
         client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients", json=config).raise_for_status()
-
 
 
 def ensure_users_backend_client(client: httpx.Client) -> None:
@@ -188,6 +192,29 @@ def ensure_admin_user(client: httpx.Client) -> None:
     }).raise_for_status()
 
 
+def ensure_dev_users(client: httpx.Client) -> None:
+    if os.environ.get("SEED_DEV_USERS", "").lower() != "true":
+        return
+    for user in DEV_USERS:
+        existing = client.get(
+            f"{KEYCLOAK_URL}/admin/realms/{REALM}/users",
+            params={"username": user["username"]},
+        ).json()
+        if existing:
+            print(f"Dev user '{user['username']}' already exists, skipping.")
+            continue
+        print(f"Creating dev user '{user['username']}'...")
+        client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", json={
+            "username":      user["username"],
+            "email":         f"{user['username']}@local.dev",
+            "firstName":     user["firstName"],
+            "lastName":      user["lastName"],
+            "enabled":       True,
+            "emailVerified": True,
+            "credentials":   [{"type": "password", "value": "password", "temporary": False}],
+        }).raise_for_status()
+
+
 def main() -> None:
     with httpx.Client(timeout=10) as client:
         token = get_admin_token(client)
@@ -197,6 +224,7 @@ def main() -> None:
         ensure_client(client)
         ensure_users_backend_client(client)
         ensure_admin_user(client)
+        ensure_dev_users(client)
 
     print("Keycloak provisioning complete.")
 
