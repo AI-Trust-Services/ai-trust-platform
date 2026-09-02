@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from typing import Any
+
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
@@ -19,6 +22,11 @@ class AISystem(Base):
     org_role: Mapped[str] = mapped_column(String(30), default="provider")
     description: Mapped[str] = mapped_column(Text, default="")
     intended_purpose: Mapped[str] = mapped_column(Text, default="")
+    # AI-assisted registration descriptive fields (human_involvement maps to autonomy_level).
+    department: Mapped[str | None] = mapped_column(Text, nullable=True)
+    use_case: Mapped[str | None] = mapped_column(Text, nullable=True)
+    people_affected: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decision_context: Mapped[str | None] = mapped_column(Text, nullable=True)
     system_type: Mapped[str] = mapped_column(String(30), default="application")
     autonomy_level: Mapped[str] = mapped_column(String(50), default="decision_support")
     application_url: Mapped[str] = mapped_column(String(500), default="")
@@ -27,13 +35,15 @@ class AISystem(Base):
     tier: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     basis: Mapped[str] = mapped_column(Text, default="")
     annex_iii_area: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Per-flag LLM rationale + confidence from AI-assisted registration:
+    # a JSON array of {flag, value, rationale, confidence}.
+    classification_rationale: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    # Per-field confirmation state from engineer AI-assisted review:
+    # {"version": true, "provider": false, ...} — merged via PATCH, never replaced wholesale.
+    field_confirmations: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
 
     lifecycle: Mapped[str] = mapped_column(String(30), default="development", index=True)
     compliance: Mapped[float] = mapped_column(Float, default=0.0)  # 0.0–100.0 percentage
-
-    model_id: Mapped[str | None] = mapped_column(
-        String(20), ForeignKey("model_cards.id", ondelete="SET NULL"), nullable=True
-    )
 
     subliminal_manipulation: Mapped[bool] = mapped_column(Boolean, default=False)
     exploits_vulnerability: Mapped[bool] = mapped_column(Boolean, default=False)

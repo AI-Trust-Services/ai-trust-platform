@@ -13,6 +13,7 @@ spec:
       labels:
         {{- include "ai-trust.labels" (dict "name" "otel-rmq-bridge") | nindent 8 }}
     spec:
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         # mirrors compose: otel-rmq-bridge depends_on rabbitmq (service_healthy)
         {{- include "ai-trust.waitForTcp" (dict "name" "rabbitmq" "port" 5672 "image" .Values.waitImages.busybox) | nindent 8 }}
@@ -41,13 +42,15 @@ kind: Service
 metadata:
   name: otel-rmq-bridge
 spec:
-  type: NodePort
+  type: {{ .Values.otel.serviceType | default "ClusterIP" }}
   selector:
     {{- include "ai-trust.labels" (dict "name" "otel-rmq-bridge") | nindent 4 }}
   ports:
     - port: 8002
       targetPort: 8002
+      {{- if ne (.Values.otel.serviceType | default "ClusterIP") "ClusterIP" }}
       nodePort: {{ .Values.otel.rmqBridgeNodePort }}
+      {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -86,18 +89,22 @@ kind: Service
 metadata:
   name: otel-collector
 spec:
-  type: NodePort
+  type: {{ .Values.otel.serviceType | default "ClusterIP" }}
   selector:
     {{- include "ai-trust.labels" (dict "name" "otel-collector") | nindent 4 }}
   ports:
     - name: grpc
       port: 4317
       targetPort: 4317
+      {{- if ne (.Values.otel.serviceType | default "ClusterIP") "ClusterIP" }}
       nodePort: {{ .Values.otel.collectorGrpcNodePort }}
+      {{- end }}
     - name: http
       port: 4318
       targetPort: 4318
+      {{- if ne (.Values.otel.serviceType | default "ClusterIP") "ClusterIP" }}
       nodePort: {{ .Values.otel.collectorHttpNodePort }}
+      {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -114,6 +121,7 @@ spec:
         {{- include "ai-trust.labels" (dict "name" "otel-clickhouse-consumer") | nindent 8 }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         # mirrors compose: depends_on rabbitmq (service_healthy) + clickhouse-migrate (completed)
         {{- include "ai-trust.waitForTcp" (dict "name" "rabbitmq" "port" 5672 "image" .Values.waitImages.busybox) | nindent 8 }}

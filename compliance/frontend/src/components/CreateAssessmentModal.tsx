@@ -1,8 +1,19 @@
 import { useState, useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { ASSESSMENT_TYPES, humanize } from "../utils";
 import type { AISystem, Framework } from "../types";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 interface Props {
   open: boolean;
@@ -43,8 +54,7 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess }: Prop
 
   if (!open) return null;
 
-  const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+  const setVal = (k: keyof FormState) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   async function handleSubmit() {
     if (!form.ai_system_id) { showToast("Select an AI system", true); return; }
@@ -64,55 +74,59 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess }: Prop
   }
 
   return (
-    <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
-        <div className="modal-header">
-          <h2>New Assessment</h2>
-          <button className="btn-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <div className="form-grid single">
-            <div className="form-group">
-              <label className="required">AI System</label>
-              <select className="form-select" value={form.ai_system_id} onChange={set("ai_system_id")}>
-                <option value="">Select a system…</option>
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="gap-0 p-0 sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>New Assessment</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4 p-6">
+          <div className="flex flex-col gap-1.5">
+            <Label>AI System <span className="text-destructive">*</span></Label>
+            <Select value={form.ai_system_id} onValueChange={setVal("ai_system_id")}>
+              <SelectTrigger><SelectValue placeholder="Select a system…" /></SelectTrigger>
+              <SelectContent>
                 {systems.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.id}) — {s.tier}</option>
+                  <SelectItem key={s.id} value={s.id}>{s.name} ({s.id}) — {s.tier}</SelectItem>
                 ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="required">Framework</label>
-              <select className="form-select" value={form.framework_id} onChange={set("framework_id")}>
-                <option value="">Select a framework…</option>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Framework <span className="text-destructive">*</span></Label>
+            <Select value={form.framework_id} onValueChange={setVal("framework_id")}>
+              <SelectTrigger><SelectValue placeholder="Select a framework…" /></SelectTrigger>
+              <SelectContent>
                 {frameworks.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name} — {f.version}</option>
+                  <SelectItem key={f.id} value={f.id}>{f.name} — {f.version}</SelectItem>
                 ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="required">Title</label>
-              <input type="text" value={form.title} onChange={set("title")} placeholder="e.g. EU AI Act High-Risk Compliance" />
-            </div>
-            <div className="form-group">
-              <label>Type</label>
-              <select className="form-select" value={form.type} onChange={set("type")}>
-                {ASSESSMENT_TYPES.map((t) => <option key={t} value={t}>{humanize(t)}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Notes</label>
-              <textarea value={form.notes} onChange={set("notes")} placeholder="Optional context…" />
-            </div>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ca-title">Title <span className="text-destructive">*</span></Label>
+            <Input id="ca-title" value={form.title} onChange={(e) => setVal("title")(e.target.value)} placeholder="e.g. EU AI Act High-Risk Compliance" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Type</Label>
+            <Select value={form.type} onValueChange={setVal("type")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {ASSESSMENT_TYPES.map((t) => <SelectItem key={t} value={t}>{humanize(t)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ca-notes">Notes</Label>
+            <Textarea id="ca-notes" value={form.notes} onChange={(e) => setVal("notes")(e.target.value)} placeholder="Optional context…" />
           </div>
         </div>
-        <div className="modal-footer">
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
-            {loading && <span className="spinner" />} Create
-          </button>
-        </div>
-      </div>
-    </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={loading}>
+            {loading && <Loader2 className="animate-spin" />} Create
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

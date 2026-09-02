@@ -132,10 +132,12 @@ celerybeat.pid
 
 # Environments
 .env
+!k8s/env/**/.env
+!k8s/gardener_init/env/**/.env
 .venv
-env/
+/env/
 venv/
-ENV/
+/ENV/
 env.bak/
 venv.bak/
 
@@ -194,3 +196,8 @@ dist/
 # Local Polish notes — not for GitHub
 risk-management/NOTATKI.md
 risk-management/ODPOWIEDZI_RECENZJA.md
+
+# internal deployment notes — kept locally, not for the public repo
+docs/infrastructure_mt.md
+updategit.md
+

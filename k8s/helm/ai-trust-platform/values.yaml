@@ -1,22 +1,52 @@
-# Local kind deployment. Service names are intentionally NOT prefixed with the
-# release name - shell/nginx.conf and every backend's env vars hardcode plain
-# docker-compose service names (e.g. "postgres", "ai-system-registry-backend")
+# Default values for any cluster. Service names are intentionally NOT prefixed
+# with the release name - shell/nginx.conf and every backend's env vars hardcode
+# plain docker-compose service names (e.g. "postgres", "ai-system-registry-backend")
 # and are baked into images at build time. Only ever install one release of
 # this chart per cluster.
+#
+# Deployment overlays:
+#   kind (local dev)  — apply values-kind.yaml on top: sets serviceType: NodePort
+#                       and nodePort numbers so kind's extraPortMappings expose
+#                       infra services on localhost. See Makefile install/upgrade.
+#   Gardener (prod)   — apply values-gardener.yaml on top: enables Ingress,
+#                       sets TLS + public hostnames. ClusterIP is already the
+#                       default here so no serviceType overrides are needed.
 
 image:
   repository: ai-trust # images are tagged ai-trust/<service>:<tag>, see k8s/scripts/build-and-load-images.sh
   tag: local
   pullPolicy: IfNotPresent # required for images loaded via `kind load docker-image` (not in any registry)
 
+# Only needed against a real registry (e.g. ghcr.io on Gardener) when the
+# repository's packages are private. Empty for kind - see values-gardener.yaml
+# and .github/workflows/deploy-gardener.yml.
+imagePullSecrets: []
+
 # Public URLs oauth2-proxy needs as literal CLI args (not secrets - safe to keep here).
 # Keep in sync with APP_PUBLIC_URL / KEYCLOAK_PUBLIC_URL in .env if you change the defaults.
 appPublicUrl: http://localhost:8080
 keycloakPublicUrl: http://localhost:8180
 
+# Ingress is off by default. Turned on for Gardener via values-gardener.yaml,
+# with host/keycloakHost supplied at deploy time (they depend on the target
+# environment's DNS). On kind, NodePort + kind-config.yaml extraPortMappings
+# handle routing instead (see values-kind.yaml).
+ingress:
+  enabled: false
+  className: nginx
+  host: "" # e.g. ai-trust.example.com -> oauth2-proxy (the same single entry point as :8080 locally)
+  keycloakHost: "" # e.g. auth.example.com -> keycloak (browser login, same as :8180 locally)
+  minioHost: "" # e.g. minio.example.com -> minio API (presigned URL downloads from the browser)
+  tls:
+    enabled: false
+    selfSigned: false  # true = cert-manager self-signed issuer; false = external/pre-provisioned cert
+    secretName: "ai-trust-tls"  # on Gardener: provisioned by shoot-cluster-init.sh; on kind: cert-manager
+  annotations: {}
+
 waitImages:
   busybox: busybox:1.36 # TCP/HTTP "wait for dependency" initContainers
   kubectl: rancher/kubectl:v1.31.0 # "wait for job completion" initContainers
+  postgres: postgres:16-alpine # psql one-off queries
 
 serviceAccount:
   jobWaiter: job-waiter # created by k8s/scripts/bootstrap.sh
@@ -24,30 +54,32 @@ serviceAccount:
 secretName: ai-trust-env # created by k8s/scripts/bootstrap.sh (from .env)
 
 # ── backing stores ──
+# serviceType defaults to ClusterIP (safe for any real cluster - no ports exposed
+# on node IPs). On kind, values-kind.yaml overrides these to NodePort so
+# kind-config.yaml extraPortMappings can bind them to localhost.
 postgres:
   image: postgres:16-alpine
   storageSize: 2Gi
-  nodePort: 30432
+  serviceType: ClusterIP
 
 rabbitmq:
   image: rabbitmq:3.13-management-alpine
-  nodePort: 30672
+  serviceType: ClusterIP
 
 clickhouse:
   image: clickhouse/clickhouse-server:24.5-alpine
   storageSize: 5Gi
-  nodePort: 30123
+  serviceType: ClusterIP
 
 minio:
   image: minio/minio:RELEASE.2025-09-07T16-13-09Z
   mcImage: minio/mc:RELEASE.2025-08-13T08-35-41Z
   storageSize: 5Gi
-  apiNodePort: 30900
-  consoleNodePort: 30901
+  serviceType: ClusterIP
 
 keycloak:
   image: quay.io/keycloak/keycloak:25.0
-  nodePort: 30180
+  serviceType: ClusterIP # NodePort on kind (values-kind.yaml); reached via Ingress on Gardener
 
 openfga:
   image: openfga/openfga:v1.18.1
@@ -55,16 +87,27 @@ openfga:
 
 oauthProxy:
   image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
-  nodePort: 30080
+  serviceType: ClusterIP # NodePort on kind (values-kind.yaml); reached via Ingress on Gardener
+  cookieSecure: false # true on Gardener - Ingress terminates TLS in front of it
 
 otel:
   collectorImage: otel/opentelemetry-collector-contrib:0.102.0
-  collectorGrpcNodePort: 30317
-  collectorHttpNodePort: 30318
-  rmqBridgeNodePort: 30802
+  serviceType: ClusterIP # NodePort on kind (values-kind.yaml) for external OTLP ingestion
 
 policyChecker:
   pollInterval: "10"
+
+# ── Ollama (optional local LLM for AI-assisted registration) ──
+# Disabled by default: the registry backend defaults to the offline `stub`
+# provider. To use a real model, set enabled: true here AND LLM_PROVIDER=ollama
+# in .env (flows into the ai-trust-env Secret). The model is swappable via
+# LLM_MODEL / LLM_VISION_MODEL in that Secret — the ollama-pull Job reads the
+# same vars, so the puller and the backend always agree.
+ollama:
+  enabled: false
+  image: ollama/ollama:latest
+  storageSize: 20Gi # model blobs live here; qwen2.5:7b + a vision model easily exceed 10Gi
+  serviceType: ClusterIP # NodePort on kind (values-kind.yaml)
 
 # ── the 7 near-identical backend+frontend MFE pairs ──
 # dependsOnJobs: Job names that must Complete before this backend starts

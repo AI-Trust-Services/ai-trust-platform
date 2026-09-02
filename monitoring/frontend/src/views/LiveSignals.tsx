@@ -2,13 +2,31 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts";
+import { AlertTriangle, Copy, Download, Loader2, RotateCw } from "lucide-react";
 import { api } from "../api/client";
 import type { ServiceInfo, SignalsData, TimeseriesPoint } from "../api/client";
 import { useToast } from "../App";
 import { fmtDateTime } from "../utils";
 import ExportModal from "../components/ExportModal";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from "@/components/ui/table";
+import {
+  Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious,
+} from "@/components/ui/pagination";
+import { ChartTooltip, chartClass } from "@/components/ui/chart";
 
 const STORAGE_KEY = "ai_trust_monitoring_filters_v1";
+// Radix Select forbids empty-string item values — use a sentinel for "All Systems"
+// and map it back to "" so the persisted filter + API calls stay byte-for-byte identical.
+const ALL_SERVICES = "__all__";
+// Second metric keeps its own categorical hue — never collapsed into the brand blue.
+const LATENCY_COLOR = "#e05c00";
 const WINDOWS = [
   { value: "15m", label: "Last 15 min" },
   { value: "1h",  label: "Last 1 hour" },
@@ -100,15 +118,14 @@ export default function LiveSignals() {
     loadSignals(selectedService, selectedWindow);
   }, [selectedService, selectedWindow, loadSignals]);
 
-  function handleServiceChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const v = e.target.value;
-    setSelectedService(v);
+  function handleServiceChange(v: string) {
+    const val = v === ALL_SERVICES ? "" : v;
+    setSelectedService(val);
     setPage(0);
-    saveFilters({ service: v, window: selectedWindow });
+    saveFilters({ service: val, window: selectedWindow });
   }
 
-  function handleWindowChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const v = e.target.value;
+  function handleWindowChange(v: string) {
     setSelectedWindow(v);
     setPage(0);
     saveFilters({ service: selectedService, window: v });
@@ -126,154 +143,199 @@ export default function LiveSignals() {
     navigator.clipboard.writeText(tsv).then(() => showToast("Copied to clipboard")).catch(() => showToast("Failed to copy to clipboard", true));
   }
 
+  const pagedRows = [...timeseries].reverse().slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
+
   return (
     <>
-      <div className="toolbar">
-        <select className="filter-select" value={selectedService} onChange={handleServiceChange}>
-          <option value="">All Systems</option>
-          {services.map((s) => (
-            <option key={s.system_id ?? s.service_name} value={s.system_id ?? s.service_name}>
-              {s.display_name ?? s.service_name}
-            </option>
-          ))}
-        </select>
-        <select className="filter-select" value={selectedWindow} onChange={handleWindowChange}>
-          {WINDOWS.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
-        </select>
-        <div className="toolbar-spacer" />
-        <button className="btn-ghost" onClick={() => setShowExport(true)} disabled={timeseries.length === 0}>
-          ↓ Export
-        </button>
-        <button className="btn-ghost" onClick={() => loadSignals(selectedService, selectedWindow)} disabled={loading}>
-          {loading ? <span className="spinner" /> : "↺"} Refresh
-        </button>
-      </div>
-
-      {stale && (
-        <div className="stale-banner">
-          ⚠ Signal data may be stale — last datapoint was more than {staleThresholdMin} minutes ago.
-        </div>
-      )}
-
-      <div className="content">
-        <div className="kpi-grid">
-          <div className="kpi-card">
-            <div className="kpi-label">Total Inferences</div>
-            <div className="kpi-value">{k?.total_inferences != null ? k.total_inferences.toLocaleString() : "—"}</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Avg Latency</div>
-            <div className="kpi-value">{k?.avg_latency_ms != null ? `${k.avg_latency_ms.toFixed(0)} ms` : "—"}</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Input Tokens</div>
-            <div className="kpi-value">{k?.total_input_tokens != null ? k.total_input_tokens.toLocaleString() : "—"}</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Output Tokens</div>
-            <div className="kpi-value">{k?.total_output_tokens != null ? k.total_output_tokens.toLocaleString() : "—"}</div>
-          </div>
-        </div>
-
-        <div className="chart-grid">
-          <div className="chart-card">
-            <div className="chart-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              Inference Count over Time
-              <button className="btn-ghost" style={{ fontSize: 12, padding: "2px 8px" }} onClick={() => copyChartData("inference_count", "Time\tInference Count")}>⎘ Copy</button>
-            </div>
-            <ResponsiveContainer width="100%" height={140}>
-              <LineChart data={timeseries}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" />
-                <XAxis dataKey="time" tickFormatter={fmt} tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 11 }} width={40} />
-                <Tooltip labelFormatter={fmt} />
-                <Line type="monotone" dataKey="inference_count" name="Inference Count" stroke="#0a6ed1" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="chart-card">
-            <div className="chart-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              Avg Latency (ms) over Time
-              <button className="btn-ghost" style={{ fontSize: 12, padding: "2px 8px" }} onClick={() => copyChartData("avg_latency_ms", "Time\tAvg Latency (ms)")}>⎘ Copy</button>
-            </div>
-            <ResponsiveContainer width="100%" height={140}>
-              <LineChart data={timeseries}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" />
-                <XAxis dataKey="time" tickFormatter={fmt} tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 11 }} width={40} />
-                <Tooltip labelFormatter={fmt} />
-                <Line type="monotone" dataKey="avg_latency_ms" name="Avg Latency (ms)" stroke="#e05c00" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="section-title">Inference Breakdown</div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Time Bucket</th>
-                <th>Service</th>
-                <th>Inferences</th>
-                <th>Avg Latency (ms)</th>
-                <th>Input Tokens</th>
-                <th>Output Tokens</th>
-              </tr>
-            </thead>
-            <tbody>
-              {timeseries.length === 0 ? (
-                <tr className="empty-row"><td colSpan={6}>No inference data for this window.</td></tr>
-              ) : [...timeseries].reverse().slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map((row, i) => (
-                <tr key={i}>
-                  <td style={{ fontWeight: 500 }}>{row.time}</td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{selectedService || "All"}</td>
-                  <td style={{ fontSize: 13 }}>{row.inference_count?.toLocaleString()}</td>
-                  <td style={{ fontSize: 13 }}>{row.avg_latency_ms != null ? `${Number(row.avg_latency_ms).toFixed(0)} ms` : "—"}</td>
-                  <td style={{ fontSize: 13 }}>{row.input_tokens?.toLocaleString()}</td>
-                  <td style={{ fontSize: 13 }}>{row.output_tokens?.toLocaleString()}</td>
-                </tr>
+      <div className="flex flex-col gap-4 p-6">
+        {/* ── Toolbar ── */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={selectedService || ALL_SERVICES} onValueChange={handleServiceChange}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_SERVICES}>All Systems</SelectItem>
+              {services.map((s) => (
+                <SelectItem key={s.system_id ?? s.service_name} value={s.system_id ?? s.service_name}>
+                  {s.display_name ?? s.service_name}
+                </SelectItem>
               ))}
-            </tbody>
-          </table>
+            </SelectContent>
+          </Select>
+          <Select value={selectedWindow} onValueChange={handleWindowChange}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {WINDOWS.map((w) => <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <div className="flex-1" />
+          <Button variant="outline" size="sm" onClick={() => setShowExport(true)} disabled={timeseries.length === 0}>
+            <Download /> Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => loadSignals(selectedService, selectedWindow)} disabled={loading}>
+            {loading ? <Loader2 className="animate-spin" /> : <RotateCw />} Refresh
+          </Button>
+        </div>
+
+        {stale && (
+          <div className="flex items-center gap-2 rounded-md border border-[color-mix(in_srgb,var(--warning)_35%,transparent)] bg-[var(--warning-bg)] px-4 py-2.5 text-[13px] text-[var(--warning-fg)]">
+            <AlertTriangle className="size-4 shrink-0" />
+            <span>Signal data may be stale — last datapoint was more than {staleThresholdMin} minutes ago.</span>
+          </div>
+        )}
+
+        {/* ── KPI grid ── */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Card className="p-4">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total Inferences</div>
+            <div className="mt-1.5 text-2xl font-semibold tabular-nums">{k?.total_inferences != null ? k.total_inferences.toLocaleString() : "—"}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Avg Latency</div>
+            <div className="mt-1.5 text-2xl font-semibold tabular-nums">{k?.avg_latency_ms != null ? `${k.avg_latency_ms.toFixed(0)} ms` : "—"}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Input Tokens</div>
+            <div className="mt-1.5 text-2xl font-semibold tabular-nums">{k?.total_input_tokens != null ? k.total_input_tokens.toLocaleString() : "—"}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Output Tokens</div>
+            <div className="mt-1.5 text-2xl font-semibold tabular-nums">{k?.total_output_tokens != null ? k.total_output_tokens.toLocaleString() : "—"}</div>
+          </Card>
+        </div>
+
+        {/* ── Charts ── */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="flex flex-col gap-3 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">Inference Count over Time</span>
+              <Button variant="ghost" size="sm" onClick={() => copyChartData("inference_count", "Time\tInference Count")}>
+                <Copy /> Copy
+              </Button>
+            </div>
+            <div className={chartClass}>
+              <ResponsiveContainer width="100%" height={140}>
+                <LineChart data={timeseries}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
+                  <XAxis dataKey="time" tickFormatter={fmt} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
+                  <Tooltip cursor={{ stroke: "var(--border)" }} content={<ChartTooltip labelFormatter={(l) => fmt(String(l))} />} />
+                  <Line type="monotone" dataKey="inference_count" name="Inference Count" stroke="var(--brand)" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+          <Card className="flex flex-col gap-3 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">Avg Latency (ms) over Time</span>
+              <Button variant="ghost" size="sm" onClick={() => copyChartData("avg_latency_ms", "Time\tAvg Latency (ms)")}>
+                <Copy /> Copy
+              </Button>
+            </div>
+            <div className={chartClass}>
+              <ResponsiveContainer width="100%" height={140}>
+                <LineChart data={timeseries}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
+                  <XAxis dataKey="time" tickFormatter={fmt} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
+                  <Tooltip cursor={{ stroke: "var(--border)" }} content={<ChartTooltip labelFormatter={(l) => fmt(String(l))} />} />
+                  <Line type="monotone" dataKey="avg_latency_ms" name="Avg Latency (ms)" stroke={LATENCY_COLOR} strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </div>
+
+        {/* ── Inference Breakdown ── */}
+        <Card className="overflow-hidden">
+          <div className="border-b border-border px-4 py-3 text-sm font-semibold">Inference Breakdown</div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Time Bucket</TableHead>
+                <TableHead>Service</TableHead>
+                <TableHead>Inferences</TableHead>
+                <TableHead>Avg Latency (ms)</TableHead>
+                <TableHead>Input Tokens</TableHead>
+                <TableHead>Output Tokens</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {timeseries.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">No inference data for this window.</TableCell>
+                </TableRow>
+              ) : pagedRows.map((row, i) => (
+                <TableRow key={i}>
+                  <TableCell className="font-medium">{row.time}</TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{selectedService || "All"}</TableCell>
+                  <TableCell className="text-[13px] tabular-nums">{row.inference_count?.toLocaleString()}</TableCell>
+                  <TableCell className="text-[13px] tabular-nums">{row.avg_latency_ms != null ? `${Number(row.avg_latency_ms).toFixed(0)} ms` : "—"}</TableCell>
+                  <TableCell className="text-[13px] tabular-nums">{row.input_tokens?.toLocaleString()}</TableCell>
+                  <TableCell className="text-[13px] tabular-nums">{row.output_tokens?.toLocaleString()}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
           {timeseries.length > ROWS_PER_PAGE && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 4px", fontSize: 13, color: "var(--text-secondary)" }}>
+            <div className="flex items-center justify-between border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
               <span>{page * ROWS_PER_PAGE + 1}–{Math.min((page + 1) * ROWS_PER_PAGE, timeseries.length)} of {timeseries.length}</span>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn-ghost" onClick={() => setPage(p => p - 1)} disabled={page === 0}>← Prev</button>
-                <button className="btn-ghost" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * ROWS_PER_PAGE >= timeseries.length}>Next →</button>
-              </div>
+              <Pagination className="mx-0 w-auto justify-end">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => { if (page > 0) setPage((p) => p - 1); }}
+                      aria-disabled={page === 0}
+                      className={page === 0 ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => { if ((page + 1) * ROWS_PER_PAGE < timeseries.length) setPage((p) => p + 1); }}
+                      aria-disabled={(page + 1) * ROWS_PER_PAGE >= timeseries.length}
+                      className={(page + 1) * ROWS_PER_PAGE >= timeseries.length ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
             </div>
           )}
-        </div>
+        </Card>
 
-        <div className="section-title">Services</div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>System</th>
-                <th>Total Spans</th>
-                <th>Last Seen</th>
-              </tr>
-            </thead>
-            <tbody>
+        {/* ── Services ── */}
+        <Card className="overflow-hidden">
+          <div className="border-b border-border px-4 py-3 text-sm font-semibold">Services</div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>System</TableHead>
+                <TableHead>Total Spans</TableHead>
+                <TableHead>Last Seen</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {services.length === 0 ? (
-                <tr className="empty-row"><td colSpan={3}>No registered systems with telemetry yet.</td></tr>
+                <TableRow>
+                  <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">No registered systems with telemetry yet.</TableCell>
+                </TableRow>
               ) : services.map((s) => (
-                <tr key={s.system_id ?? s.service_name}>
-                  <td style={{ fontWeight: 500 }}>
+                <TableRow key={s.system_id ?? s.service_name}>
+                  <TableCell className="font-medium">
                     {s.display_name ?? s.service_name}
-                    <span style={{ fontSize: 11, color: "var(--text-secondary)", marginLeft: 6 }}>{s.service_name}</span>
-                  </td>
-                  <td style={{ fontSize: 13 }}>{s.total_spans?.toLocaleString()}</td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{fmtDateTime(s.last_seen)}</td>
-                </tr>
+                    <span className="ml-1.5 text-[11px] text-muted-foreground">{s.service_name}</span>
+                  </TableCell>
+                  <TableCell className="text-[13px] tabular-nums">{s.total_spans?.toLocaleString()}</TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{fmtDateTime(s.last_seen)}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       </div>
+
       {showExport && (
         <ExportModal
           onClose={() => setShowExport(false)}

@@ -1,6 +1,21 @@
 import { useState, useEffect, useCallback } from "react";
+import { Download, Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import type { TimeseriesPoint, Kpis } from "../api/client";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from "@/components/ui/table";
 
 const COLUMNS = [
   { key: "time",            label: "Time Bucket" },
@@ -147,56 +162,51 @@ export default function ExportModal({ onClose, currentService, currentWindow }: 
   const exportCount = limit != null ? Math.min(limit, totalRows) : totalRows;
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-header">
-          <h2>Export Data</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-3xl gap-0 p-0">
+        <DialogHeader>
+          <DialogTitle>Export Data</DialogTitle>
+        </DialogHeader>
 
-        <div className="modal-body">
+        <div className="grid gap-6 p-6 sm:grid-cols-[220px_1fr]">
           {/* ── Controls ── */}
-          <div className="modal-controls">
-            <div className="modal-control-group">
-              <div className="modal-control-label">Columns</div>
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <Label>Columns</Label>
               {COLUMNS.map((c) => (
-                <label key={c.key} className="modal-checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={selectedCols.has(c.key)}
-                    onChange={() => toggleCol(c.key)}
-                  />
+                <label key={c.key} className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox checked={selectedCols.has(c.key)} onCheckedChange={() => toggleCol(c.key)} />
                   {c.label}
                 </label>
               ))}
             </div>
 
-            <div className="modal-control-group">
-              <div className="modal-toggle-row">
-                <span>Include Summary</span>
-                <label className="modal-toggle">
-                  <input type="checkbox" checked={includeSummary} onChange={(e) => setIncludeSummary(e.target.checked)} />
-                  <span className="modal-toggle-slider" />
-                </label>
-              </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Include Summary</span>
+              <Switch checked={includeSummary} onCheckedChange={setIncludeSummary} />
             </div>
 
-            <div className="modal-control-group">
-              <div className="modal-control-label">Format</div>
-              <select className="modal-select" value={format} onChange={(e) => setFormat(e.target.value as "csv" | "json")}>
-                <option value="csv">CSV</option>
-                <option value="json">JSON</option>
-              </select>
+            <div className="flex flex-col gap-1.5">
+              <Label>Format</Label>
+              <Select value={format} onValueChange={(v) => setFormat(v as "csv" | "json")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="csv">CSV</SelectItem>
+                  <SelectItem value="json">JSON</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            <div className="modal-control-group">
-              <div className="modal-control-label">Rows</div>
-              <select className="modal-select" value={rowPreset} onChange={(e) => setRowPreset(e.target.value)}>
-                {ROW_PRESETS.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
+            <div className="flex flex-col gap-1.5">
+              <Label>Rows</Label>
+              <Select value={rowPreset} onValueChange={setRowPreset}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ROW_PRESETS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
               {rowPreset === "Custom" && (
-                <input
-                  className="modal-custom-input"
+                <Input
                   type="number"
                   min={1}
                   placeholder="Enter number of rows"
@@ -206,46 +216,51 @@ export default function ExportModal({ onClose, currentService, currentWindow }: 
               )}
             </div>
 
-            <div className="modal-control-group">
-              <div className="modal-control-label">Time Window</div>
-              <select className="modal-select" value={timeWindow} onChange={(e) => setTimeWindow(e.target.value)}>
-                {WINDOWS.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
-              </select>
+            <div className="flex flex-col gap-1.5">
+              <Label>Time Window</Label>
+              <Select value={timeWindow} onValueChange={setTimeWindow}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {WINDOWS.map((w) => <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
           {/* ── Preview ── */}
-          <div className="modal-preview">
-            <div className="modal-preview-title">Preview</div>
+          <div className="flex min-w-0 flex-col gap-2">
+            <div className="text-sm font-semibold">Preview</div>
             {previewLoading ? (
-              <div className="modal-preview-loading">
-                <span className="spinner" /> Loading…
+              <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> Loading…
               </div>
             ) : previewError ? (
-              <div className="modal-preview-loading" style={{ color: "var(--danger, #bb0000)" }}>
+              <div className="py-6 text-sm text-[var(--danger-fg)]">
                 {previewError}
               </div>
             ) : cols.length === 0 ? (
-              <div className="modal-preview-loading">Select at least one column.</div>
+              <div className="py-6 text-sm text-muted-foreground">Select at least one column.</div>
             ) : (
               <>
-                <div className="table-wrap" style={{ marginBottom: 0 }}>
-                  <table>
-                    <thead>
-                      <tr>{cols.map((c) => <th key={c.key}>{c.label}</th>)}</tr>
-                    </thead>
-                    <tbody>
+                <div className="overflow-hidden rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>{cols.map((c) => <TableHead key={c.key}>{c.label}</TableHead>)}</TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {previewRows.length === 0 ? (
-                        <tr className="empty-row"><td colSpan={cols.length}>No data for this window.</td></tr>
+                        <TableRow>
+                          <TableCell colSpan={cols.length} className="py-6 text-center text-muted-foreground">No data for this window.</TableCell>
+                        </TableRow>
                       ) : previewRows.map((row, i) => (
-                        <tr key={i}>
-                          {(row as unknown[]).map((cell, j) => <td key={j} style={{ fontSize: 12 }}>{String(cell)}</td>)}
-                        </tr>
+                        <TableRow key={i}>
+                          {(row as unknown[]).map((cell, j) => <TableCell key={j} className="text-xs">{String(cell)}</TableCell>)}
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
-                <div className="modal-preview-note">
+                <div className="text-xs text-muted-foreground">
                   Showing first {Math.min(PREVIEW_ROWS, exportCount)} of {exportCount} rows to export
                   {includeSummary && " + summary"}.
                 </div>
@@ -254,17 +269,16 @@ export default function ExportModal({ onClose, currentService, currentWindow }: 
           </div>
         </div>
 
-        <div className="modal-footer">
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button
-            className="btn-primary"
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
             onClick={download}
             disabled={cols.length === 0 || previewLoading || !!previewError}
           >
-            ↓ Download {format.toUpperCase()}
-          </button>
-        </div>
-      </div>
-    </div>
+            <Download /> Download {format.toUpperCase()}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

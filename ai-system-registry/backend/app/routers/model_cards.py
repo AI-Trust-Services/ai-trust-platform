@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,15 +9,15 @@ from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.models.ai_system import AISystem
+from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.model_card import ModelCard
+from app.ids import new_id
 from app.schemas import ModelCardCreate, ModelCardResponse, ModelCardUpdate
+from app.schemas.system_model import ModelSystemResponse
 
 router = APIRouter(tags=["model-cards"])
 logger = get_logger(__name__)
-
-
-def _new_id() -> str:
-    return "MDL-" + uuid.uuid4().hex[:8].upper()
 
 
 @router.get("/model-cards", response_model=list[ModelCardResponse], dependencies=[Depends(require_permission(SYSTEMS_READ))])
@@ -46,7 +45,7 @@ async def get_model_card(model_id: str) -> ModelCardResponse:
 @router.post("/model-cards", response_model=ModelCardResponse, status_code=201, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
 async def create_model_card(body: ModelCardCreate) -> ModelCardResponse:
     async with SessionLocal() as session:
-        row = ModelCard(id=_new_id(), **body.model_dump())
+        row = ModelCard(id=new_id("MDL"), **body.model_dump())
         session.add(row)
         await session.commit()
         await session.refresh(row)
@@ -89,3 +88,19 @@ async def delete_model_card(model_id: str) -> dict:
         await session.commit()
     logger.info("model_card.deleted", extra={"model_id": model_id, "model_name": name})
     return {"status": "deleted", "id": model_id, "name": name}
+
+
+@router.get("/model-cards/{model_id}/systems", response_model=list[ModelSystemResponse], dependencies=[Depends(require_permission(SYSTEMS_READ))])
+async def list_model_systems(model_id: str) -> list[ModelSystemResponse]:
+    async with SessionLocal() as session:
+        model_result = await session.execute(select(ModelCard).where(ModelCard.id == model_id))
+        if not model_result.scalar_one_or_none():
+            raise HTTPException(404, f"Model card {model_id} not found")
+
+        result = await session.execute(
+            select(AISystem, AISystemModelCard.__table__.c.role)
+            .join(AISystemModelCard.__table__, AISystem.id == AISystemModelCard.__table__.c.system_id)
+            .where(AISystemModelCard.__table__.c.model_card_id == model_id)
+            .order_by(AISystem.name)
+        )
+        return [ModelSystemResponse.from_system(sys, role) for sys, role in result.all()]

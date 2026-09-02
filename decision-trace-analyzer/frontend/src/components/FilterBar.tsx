@@ -1,10 +1,16 @@
-import "@ui5/webcomponents-icons/dist/filter.js";
-import "@ui5/webcomponents-icons/dist/reset.js";
-import "@ui5/webcomponents-icons/dist/error.js";
-import { Button, Icon, Option, Select, ToggleButton } from "@ui5/webcomponents-react";
+import { Filter, CircleAlert, RotateCcw } from "lucide-react";
 import { type TraceFilters } from "../api/traces";
 import { TimeframePicker } from "./TimeframePicker";
 import { TraceIdSearch } from "./TraceIdSearch";
+import { Button } from "@/components/ui/button";
+import { Toggle } from "@/components/ui/toggle";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Props {
   filters: TraceFilters;
@@ -13,7 +19,12 @@ interface Props {
   onChange: (filters: TraceFilters) => void;
 }
 
-function Ui5Select({
+// Radix Select disallows an empty-string item value, so the "all" option uses
+// a sentinel that maps back to "" (cleared) in the change handler — preserving
+// the original contract where selecting the placeholder clears the filter.
+const ALL = "__all__";
+
+function KitSelect({
   value,
   options,
   placeholder,
@@ -26,13 +37,18 @@ function Ui5Select({
 }) {
   return (
     <Select
-      style={{ minWidth: 140 }}
-      onChange={(e) => onChange(e.detail.selectedOption.value ?? "")}
+      value={value || ALL}
+      onValueChange={(v) => onChange(v === ALL ? "" : v)}
     >
-      <Option value="" selected={!value}>{placeholder}</Option>
-      {options.map((o) => (
-        <Option key={o} value={o} selected={value === o}>{o}</Option>
-      ))}
+      <SelectTrigger className="h-8" style={{ minWidth: 140 }}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL}>{placeholder}</SelectItem>
+        {options.map((o) => (
+          <SelectItem key={o} value={o}>{o}</SelectItem>
+        ))}
+      </SelectContent>
     </Select>
   );
 }
@@ -49,7 +65,7 @@ export function FilterBar({ filters, services, models, onChange }: Props) {
 
   return (
     <div style={styles.bar}>
-      <Icon name="filter" style={styles.icon} />
+      <Filter style={styles.icon} />
 
       <TraceIdSearch
         value={filters.trace_id}
@@ -65,34 +81,37 @@ export function FilterBar({ filters, services, models, onChange }: Props) {
 
       <div style={styles.divider} />
 
-      <Ui5Select
+      <KitSelect
         value={filters.service_name}
         options={services}
         placeholder="All services"
         onChange={(val) => onChange({ ...filters, service_name: val || undefined })}
       />
 
-      <Ui5Select
+      <KitSelect
         value={filters.model}
         options={models}
         placeholder="All models"
         onChange={(val) => onChange({ ...filters, model: val || undefined })}
       />
 
-      <ToggleButton
-        icon="error"
-        design={filters.errors_only ? "Negative" : "Default"}
+      <Toggle
+        variant="outline"
+        size="sm"
         pressed={!!filters.errors_only}
-        onClick={() =>
+        onPressedChange={() =>
           onChange({ ...filters, errors_only: filters.errors_only ? undefined : true })
         }
+        className="data-[state=on]:bg-[var(--danger-bg)] data-[state=on]:text-[var(--danger-fg)] data-[state=on]:border-[var(--danger-border)]"
         title="Show only traces with at least one errored span"
       >
+        <CircleAlert />
         Errors only
-      </ToggleButton>
+      </Toggle>
 
       {hasFilters && (
-        <Button design="Transparent" icon="reset" onClick={() => onChange({})}>
+        <Button variant="ghost" size="sm" onClick={() => onChange({})}>
+          <RotateCcw />
           Reset
         </Button>
       )}
@@ -105,13 +124,13 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: 10,
-    background: "var(--color-surface)",
-    border: "1px solid var(--color-border)",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
     borderRadius: 8,
     padding: "8px 16px",
     marginBottom: 16,
     flexWrap: "wrap" as const,
   },
-  icon: { color: "var(--color-text-secondary)", width: 16, height: 16 } as React.CSSProperties,
-  divider: { width: 1, height: 20, background: "var(--color-border)" },
+  icon: { color: "var(--text-secondary)", width: 16, height: 16 } as React.CSSProperties,
+  divider: { width: 1, height: 20, background: "var(--border)" },
 };

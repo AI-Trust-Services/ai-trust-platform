@@ -27,6 +27,7 @@ APP_ADMIN_USERNAME           = os.environ["APP_ADMIN_USERNAME"]
 APP_ADMIN_PASSWORD           = os.environ["APP_ADMIN_PASSWORD"]
 
 REALM = "ai-trust"
+KEYCLOAK_PUBLIC_URL = os.environ.get("KEYCLOAK_PUBLIC_URL", "")
 
 
 def get_admin_token(client: httpx.Client) -> str:
@@ -48,7 +49,6 @@ def ensure_realm(client: httpx.Client) -> None:
         "realm": REALM,
         "enabled": True,
         "displayName": "AI Trust Platform",
-        # "none" is fine for local dev (HTTP). Use "external" or "all" in production.
         "sslRequired": "none",
         "registrationAllowed": False,
         "loginWithEmailAllowed": False,
@@ -56,6 +56,8 @@ def ensure_realm(client: httpx.Client) -> None:
         "ssoSessionIdleTimeout": 28800,
         "ssoSessionMaxLifespan": 28800,
     }
+    if KEYCLOAK_PUBLIC_URL:
+        realm_config["attributes"] = {"frontendUrl": KEYCLOAK_PUBLIC_URL}
     resp = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}")
     if resp.status_code == 200:
         print(f"Realm '{REALM}' already exists, updating...")

@@ -101,7 +101,11 @@ def test_row_keys_match_columns_constant():
     from ai_trust_clickhouse import COLUMNS
     body = _payload([_span([_attr("gen_ai.operation.name", "chat")])])
     rows = _process_payload(body)
-    assert list(rows[0].keys()) == COLUMNS
+    # `_route_tenant` is a routing key (which tenant database to write to), not a table
+    # column — insert_routed pops it before building values. The remaining keys, in order,
+    # must match the COLUMNS constant.
+    keys = [k for k in rows[0].keys() if k != "_route_tenant"]
+    assert keys == COLUMNS
 
 
 def test_openinference_span_without_gen_ai_operation_is_kept():

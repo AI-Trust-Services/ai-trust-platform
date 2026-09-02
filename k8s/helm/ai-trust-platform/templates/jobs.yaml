@@ -11,6 +11,7 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         {{- include "ai-trust.waitForTcp" (dict "name" "postgres" "port" 5432 "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:
@@ -29,6 +30,7 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         {{- include "ai-trust.waitForHttp" (dict "name" "clickhouse" "port" 8123 "path" "/ping" "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:
@@ -70,13 +72,54 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
+  name: keycloak-ssl-patch
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: keycloak-restarter
+      initContainers:
+        {{- include "ai-trust.waitForHttp" (dict "name" "keycloak" "port" 8080 "path" "/realms/master" "image" .Values.waitImages.busybox) | nindent 8 }}
+        # Patch ssl_required=NONE in Postgres using psql
+        - name: patch-db
+          image: {{ .Values.waitImages.postgres }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} }
+          command:
+            - sh
+            - -c
+            - |
+              PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U "$POSTGRES_USER" -d keycloak \
+                -c "UPDATE realm SET ssl_required='NONE' WHERE name='master' AND ssl_required != 'NONE';"
+              echo "ssl_required patched."
+      containers:
+        # Restart Keycloak so it reloads ssl_required=NONE from DB
+        - name: restart-keycloak
+          image: {{ .Values.waitImages.kubectl }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+          args:
+            - rollout
+            - restart
+            - deployment/keycloak
+            - -n
+            - $(POD_NAMESPACE)
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
   name: keycloak-provision
 spec:
   backoffLimit: 6
   template:
     spec:
       restartPolicy: OnFailure
+      serviceAccountName: job-waiter
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
+        {{- include "ai-trust.waitForJob" (dict "job" "keycloak-ssl-patch" "image" .Values.waitImages.kubectl) | nindent 8 }}
         {{- include "ai-trust.waitForHttp" (dict "name" "keycloak" "port" 8080 "path" "/realms/master" "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:
         - name: keycloak-provision
@@ -120,6 +163,7 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         {{- include "ai-trust.waitForTcp" (dict "name" "openfga" "port" 8081 "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:
@@ -140,3 +184,31 @@ spec:
         - name: openfga-config
           persistentVolumeClaim:
             claimName: openfga-config
+{{- if .Values.ollama.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ollama-pull
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        {{- include "ai-trust.waitForHttp" (dict "name" "ollama" "port" 11434 "path" "/" "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: ollama-pull
+          image: {{ .Values.ollama.image }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # LLM_MODEL / LLM_VISION_MODEL
+          env:
+            - name: OLLAMA_HOST
+              value: http://ollama:11434
+          command:
+            - /bin/sh
+            - -c
+            - |
+              ollama pull "${LLM_MODEL:-llama3.2}" &&
+              ollama pull "${LLM_VISION_MODEL:-llama3.2-vision}"
+{{- end }}

@@ -1,0 +1,38 @@
+# One-time setup, applied to the GARDEN cluster (not the shoot) - see k8s/README.md
+# "Deploying to Gardener via GitHub Actions" for the full walkthrough.
+#
+# Implements https://gardener.cloud/docs/guides/applications/app-ci-cd/#configure-github-actions:
+# trusts GitHub's OIDC issuer so GitHub Actions runs in AI-Trust-Services/ai-trust-platform can
+# authenticate directly against the shoot's kube-apiserver - no kubeconfig secret needed.
+#
+# CHANGE metadata.namespace below to your Gardener project namespace (garden-$MY_PROJECT_NAME).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-trust-platform-github-actions-auth
+  namespace: garden-ai-trust
+data:
+  config.yaml: |
+    apiVersion: apiserver.config.k8s.io/v1beta1
+    kind: AuthenticationConfiguration
+    jwt:
+      - issuer:
+          url: https://token.actions.githubusercontent.com
+          audiences:
+            - ai-trust-platform-ci # must match GARDENER_OIDC_AUDIENCE repo variable
+          audienceMatchPolicy: MatchAny
+        claimMappings:
+          username:
+            # Deliberately repo-scoped, not ref-scoped (no claims.sub) - deploy-gardener.yml is
+            # workflow_dispatch and gets run from feature branches during testing as well as main,
+            # and this keeps a single stable identity/RoleBinding working across all of them. Add
+            # `+ ':' + claims.sub` back and a matching claims.ref validation rule below once you
+            # want to lock this down to main-only deploys.
+            expression: "'github.com:' + claims.repository_owner_id + ':' + claims.repository_id"
+        claimValidationRules:
+          - expression: 'claims.repository_owner_id == "284992593"'
+            message: "the repository owner must be the AI-Trust-Services GitHub organization"
+          - expression: 'claims.repository_id == "1285188431"'
+            message: "the repository must be AI-Trust-Services/ai-trust-platform"
+          - expression: 'claims.exp - claims.iat <= 7200'
+            message: "total token lifetime must not exceed 2 hours"

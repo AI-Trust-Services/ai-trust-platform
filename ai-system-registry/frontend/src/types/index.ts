@@ -23,7 +23,6 @@ export interface AISystem {
   basis: string;
   annex_iii_area: number | null;
   compliance: number;
-  model_id: string | null;
   created_at: string;
   updated_at: string;
   workflow_status: string;
@@ -50,6 +49,7 @@ export interface AISystem {
   is_law_enforcement: boolean;
   is_migration: boolean;
   is_judicial_admin: boolean;
+  field_confirmations: Record<string, boolean> | null;
 }
 
 export interface WorkflowStep {
@@ -67,6 +67,7 @@ export interface UserSummary {
   lastName: string;
 }
 
+
 export interface ModelCard {
   id: string;
   name: string;
@@ -78,10 +79,60 @@ export interface ModelCard {
   open_weights: boolean;
 }
 
+export interface SystemModelResponse extends ModelCard {
+  role: string | null;
+}
+
+export interface ModelSystemResponse {
+  id: string;
+  name: string;
+  tier: string;
+  lifecycle: string;
+  compliance: number;
+  role: string | null;
+}
+
 export interface PreviewResult {
   tier: TierKey;
   basis: string;
   obligations: string[];
+}
+
+// ── AI-assisted registration ──────────────────────────────────────────────
+export type ChatRole = "user" | "assistant" | "system";
+
+export interface ChatMessage {
+  role: ChatRole;
+  content: string;
+}
+
+export interface RationaleItem {
+  flag: string;
+  value: boolean | number;
+  rationale: string;
+  confidence: number;
+}
+
+export interface ClassificationResult {
+  tier: TierKey;
+  basis: string;
+  obligations: string[];
+  annex_iii_area: number | null;
+}
+
+export interface AssistTurnResponse {
+  message: string;
+  extracted_fields: Record<string, unknown>;
+  next_field: string | null;
+  complete: boolean;
+  degraded: boolean;
+  inferred_flags: RationaleItem[] | null;
+  classification: ClassificationResult | null;
+}
+
+export interface AssistExtractResponse {
+  extracted_fields: Record<string, unknown>;
+  notes: string | null;
 }
 
 export interface AISystemFormData {

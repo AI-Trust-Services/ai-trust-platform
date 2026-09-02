@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+} from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
 
 interface DetailPanelProps {
+  open?: boolean;
   title: string;
   subtitle?: string;
   badge?: string;
@@ -8,30 +13,31 @@ interface DetailPanelProps {
   children: ReactNode;
 }
 
-export default function DetailPanel({ title, subtitle, badge, onClose, children }: DetailPanelProps) {
+export default function DetailPanel({ open = true, title, subtitle, badge, onClose, children }: DetailPanelProps) {
   return (
-    <div className="detail-panel-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="detail-panel">
-        <div className="detail-panel-header">
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="detail-panel-title">{title}</div>
-            {subtitle && <div className="detail-panel-subtitle">{subtitle}</div>}
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-lg">
+        <SheetHeader className="pr-12">
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <SheetTitle className="break-words">{title}</SheetTitle>
+              {subtitle && <SheetDescription className="mt-1 font-medium text-primary">{subtitle}</SheetDescription>}
+            </div>
+            {badge && <Badge variant="secondary" className="rounded-full font-medium">{badge}</Badge>}
           </div>
-          {badge && <span className="detail-panel-badge">{badge}</span>}
-          <button className="btn-close" onClick={onClose}>×</button>
-        </div>
-        <div className="detail-panel-body">{children}</div>
-      </div>
-    </div>
+        </SheetHeader>
+        <div className="flex-1 overflow-y-auto pb-6">{children}</div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
 interface DetailFieldProps { label: string; children: ReactNode; }
 export function DetailField({ label, children }: DetailFieldProps) {
   return (
-    <div className="dp-field">
-      <span className="dp-label">{label}</span>
-      <span className="dp-value">{children}</span>
+    <div className="flex items-start gap-3 py-1.5">
+      <span className="w-[120px] shrink-0 pt-px text-xs text-muted-foreground">{label}</span>
+      <span className="break-words text-[13px] text-foreground">{children}</span>
     </div>
   );
 }
@@ -39,8 +45,8 @@ export function DetailField({ label, children }: DetailFieldProps) {
 interface DetailSectionProps { title: string; children: ReactNode; }
 export function DetailSection({ title, children }: DetailSectionProps) {
   return (
-    <div className="dp-section">
-      <div className="dp-section-title">{title}</div>
+    <div className="px-5 pt-4">
+      <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</div>
       {children}
     </div>
   );

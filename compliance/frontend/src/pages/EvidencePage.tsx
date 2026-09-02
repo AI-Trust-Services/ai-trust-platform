@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { Plus, RotateCw, Download, Upload, Check, X, Paperclip, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { StatusBadge } from "../components/Badges";
@@ -9,6 +10,19 @@ import UploadVersionModal from "../components/UploadVersionModal";
 import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, OBLIGATION_STATUS_META, fmtDate, humanize } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import type { AISystem, Control, Evidence, EvidenceDetail, EvidenceVersion, Obligation } from "../types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+
+// Radix Select disallows an empty-string item value — sentinel for "All".
+const ALL = "__all__";
 
 export default function EvidencePage() {
   const [evidence, setEvidence] = useState<Evidence[]>([]);
@@ -123,116 +137,151 @@ export default function EvidencePage() {
 
   return (
     <>
-      <div className="page-header">
-        <h1>Evidence</h1>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn-ghost" onClick={load}>↺ Refresh</button>
-          <button
-            className="btn-primary"
+      <div className="flex items-center justify-between border-b border-border px-5 py-2.5">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
+            <Paperclip className="size-5" />
+          </span>
+          <h1 className="text-lg font-semibold text-foreground">Evidence</h1>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={load}><RotateCw /> Refresh</Button>
+          <Button
+            size="sm"
             disabled={!mayWrite}
             title={mayWrite ? undefined : noWriteTitle}
             onClick={() => setUploadOpen(true)}
-          >+ Upload Evidence</button>
+          ><Plus /> Upload Evidence</Button>
         </div>
       </div>
 
-      <div className="kpi-row">
-        <KpiCard label="Total" value={kpis.total} />
-        <KpiCard label="Approved" value={kpis.approved} sub={`${kpis.total ? Math.round(kpis.approved / kpis.total * 100) : 0}% of total`} />
-        <KpiCard label="Pending Review" value={kpis.pending} />
-        <KpiCard label="Expired / Rejected" value={kpis.expired} />
+      <div className="flex flex-wrap gap-3 px-5 pt-4">
+        <KpiCard label="Total" value={kpis.total} icon={Paperclip} color="#71717a" sub="all evidence items" />
+        <KpiCard label="Approved" value={kpis.approved} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.approved / kpis.total * 100) : 0}% of total`} />
+        <KpiCard label="Pending Review" value={kpis.pending} icon={Clock} color="#1147E9" sub="awaiting decision" />
+        <KpiCard label="Expired / Rejected" value={kpis.expired} icon={AlertTriangle} color="#e05c00" sub="require attention" />
       </div>
 
-      <div className="toolbar" style={{ marginTop: 12 }}>
-        <input className="search-input" placeholder="Search by title, file, uploader…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">All Statuses</option>
-          {Object.entries(EVIDENCE_STATUS_META).map(([v, m]) => <option key={v} value={v}>{m.label}</option>)}
-        </select>
-        <select className="filter-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-          <option value="">All Types</option>
-          {EVIDENCE_TYPES.map((t) => <option key={t} value={t}>{humanize(t)}</option>)}
-        </select>
-        <select className="filter-select" value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
-          <option value="">All Systems</option>
-          {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <select className="filter-select" value={uploaderFilter} onChange={(e) => setUploaderFilter(e.target.value)}>
-          <option value="">All Uploaders</option>
-          {uploaders.map((u) => <option key={u} value={u}>{u}</option>)}
-        </select>
-        <select className="filter-select" value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value as "all" | "expiring" | "expired")}>
-          <option value="all">All Expiry</option>
-          <option value="expiring">Expiring Soon (≤30d)</option>
-          <option value="expired">Expired</option>
-        </select>
-        <div className="toolbar-spacer" />
+      <div className="flex flex-wrap items-center gap-2 px-5 pt-3">
+        <Input className="max-w-xs" placeholder="Search by title, file, uploader…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Select value={statusFilter || ALL} onValueChange={(v) => setStatusFilter(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Statuses</SelectItem>
+            {Object.entries(EVIDENCE_STATUS_META).map(([v, m]) => <SelectItem key={v} value={v}>{m.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={typeFilter || ALL} onValueChange={(v) => setTypeFilter(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Types</SelectItem>
+            {EVIDENCE_TYPES.map((t) => <SelectItem key={t} value={t}>{humanize(t)}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={systemFilter || ALL} onValueChange={(v) => setSystemFilter(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Systems</SelectItem>
+            {systems.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={uploaderFilter || ALL} onValueChange={(v) => setUploaderFilter(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Uploaders</SelectItem>
+            {uploaders.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={expiryFilter} onValueChange={(v) => setExpiryFilter(v as "all" | "expiring" | "expired")}>
+          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Expiry</SelectItem>
+            <SelectItem value="expiring">Expiring Soon (≤30d)</SelectItem>
+            <SelectItem value="expired">Expired</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="content">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Evidence</th>
-                <th>Type</th>
-                <th>AI System</th>
-                <th>Version</th>
-                <th>Status</th>
-                <th>File</th>
-                <th>Valid Until</th>
-                <th>Uploaded</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+      <div className="px-5 py-4">
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Evidence</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>AI System</TableHead>
+                <TableHead>Version</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>File</TableHead>
+                <TableHead>Valid Until</TableHead>
+                <TableHead>Uploaded by</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filtered.length === 0 ? (
-                <tr className="empty-row"><td colSpan={9}>No evidence yet. Click "Upload Evidence" to add proof.</td></tr>
+                <TableRow><TableCell colSpan={9} className="py-8 text-center text-muted-foreground">No evidence yet. Click "Upload Evidence" to add proof.</TableCell></TableRow>
               ) : filtered.map((e) => (
-                <tr key={e.id} className={`clickable${selected === e.id ? " selected" : ""}`} onClick={() => openDetail(e)}>
-                  <td><div className="row-name">{e.title}</div><div className="row-sub">{e.id}</div></td>
-                  <td style={{ fontSize: 13 }}>{humanize(e.evidence_type)}</td>
-                  <td>{e.ai_system_id ? (systemsById[e.ai_system_id]?.name ?? e.ai_system_id) : "—"}</td>
-                  <td><span className="chip">v{e.version_label}</span></td>
-                  <td><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></td>
-                  <td>{e.file_name ? <span className="chip">{e.file_name}</span> : "—"}</td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{fmtDate(e.validity_until)}</td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{fmtDate(e.created_at)}</td>
-                  <td onClick={(ev) => ev.stopPropagation()}>
-                    <div className="actions">
+                <TableRow key={e.id} data-state={selected === e.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(e)}>
+                  <TableCell><div className="font-medium text-foreground">{e.title}</div><div className="text-xs text-muted-foreground">{e.id}</div></TableCell>
+                  <TableCell className="text-[13px]">{humanize(e.evidence_type)}</TableCell>
+                  <TableCell>{e.ai_system_id ? (systemsById[e.ai_system_id]?.name ?? e.ai_system_id) : "—"}</TableCell>
+                  <TableCell><Badge variant="secondary" className="rounded-full font-medium">v{e.version_label}</Badge></TableCell>
+                  <TableCell><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></TableCell>
+                  <TableCell>{e.file_name ? <Badge variant="secondary" className="max-w-[160px] truncate rounded-full font-medium">{e.file_name}</Badge> : "—"}</TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{fmtDate(e.validity_until)}</TableCell>
+                  <TableCell>
+                    {e.uploaded_by ? (
+                      <div className="flex items-center gap-2">
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+                          {e.uploaded_by.slice(0, 2).toUpperCase()}
+                        </span>
+                        <div>
+                          <div className="text-[13px] text-foreground">{e.uploaded_by}</div>
+                          <div className="text-xs text-muted-foreground">{fmtDate(e.created_at)}</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-[13px] text-muted-foreground">{fmtDate(e.created_at)}</span>
+                    )}
+                  </TableCell>
+                  <TableCell onClick={(ev) => ev.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-2">
                       {e.status !== "approved" && (
-                        <button className="btn-ghost btn-sm" data-tip="Mark as approved — triggers compliance cascade"
-                          disabled={!mayApprove} title={mayApprove ? undefined : noApproveTitle}
-                          onClick={() => act(api.approveEvidence, e.id, "Approved")}>Approve</button>
+                        <Button variant="ghost" size="sm"
+                          disabled={!mayApprove} title={mayApprove ? "Mark as approved — triggers compliance cascade" : noApproveTitle}
+                          onClick={() => act(api.approveEvidence, e.id, "Approved")}>Approve</Button>
                       )}
                       {e.status !== "rejected" && (
-                        <button className="btn-ghost btn-sm" data-tip="Mark as rejected"
-                          disabled={!mayApprove} title={mayApprove ? undefined : noApproveTitle}
-                          onClick={() => act(api.rejectEvidence, e.id, "Rejected")}>Reject</button>
+                        <Button variant="ghost" size="sm"
+                          disabled={!mayApprove} title={mayApprove ? "Mark as rejected" : noApproveTitle}
+                          onClick={() => act(api.rejectEvidence, e.id, "Rejected")}>Reject</Button>
                       )}
-                      <button className="btn-ghost btn-sm btn-danger" data-tip="Delete evidence and remove file"
-                        disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"
+                        disabled={!mayWrite} title={mayWrite ? "Delete evidence and remove file" : noWriteTitle}
                         onClick={async () => {
                           if (!confirm(`Delete "${e.title}"?`)) return;
                           try { await api.deleteEvidence(e.id); showToast("Deleted"); load(); closePanel(); }
                           catch (err) { showToast((err as Error).message, true); }
-                        }}>Delete</button>
+                        }}>Delete</Button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       </div>
 
-      {detail && (
-        <DetailPanel
-          title={detail.title}
-          subtitle={humanize(detail.evidence_type)}
-          badge={EVIDENCE_STATUS_META[detail.status]?.label}
-          onClose={closePanel}
-        >
+      <DetailPanel
+        open={!!detail}
+        title={detail?.title ?? ""}
+        subtitle={detail ? humanize(detail.evidence_type) : undefined}
+        badge={detail ? EVIDENCE_STATUS_META[detail.status]?.label : undefined}
+        onClose={closePanel}
+      >
+        {detail && (
+          <>
           <DetailSection title="General Information">
             <DetailField label="ID">{detail.id}</DetailField>
             <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : "—"}</DetailField>
@@ -252,24 +301,24 @@ export default function EvidencePage() {
           )}
           {detail.description && (
             <DetailSection title="Description">
-              <p className="dp-description">{detail.description}</p>
+              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
             </DetailSection>
           )}
           {(detailControls.length > 0 || detailObligations.length > 0 || detail.assessment_id) && (
             <DetailSection title="Linked To">
               {detailControls.length > 0 && (
                 <>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", padding: "4px 0 2px" }}>Controls</div>
-                  <ul className="dp-list">{detailControls.map((c) => (
-                    <li key={c.id}><span className="dp-list-name">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
+                  <div className="pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">Controls</div>
+                  <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
+                    <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
                   ))}</ul>
                 </>
               )}
               {detailObligations.length > 0 && (
                 <>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", padding: "8px 0 2px" }}>Obligations</div>
-                  <ul className="dp-list">{detailObligations.map((o) => (
-                    <li key={o.id}><span className="dp-list-name">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
+                  <div className="pb-0.5 pt-2 text-xs font-semibold text-muted-foreground">Obligations</div>
+                  <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
+                    <li key={o.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
                   ))}</ul>
                 </>
               )}
@@ -278,55 +327,56 @@ export default function EvidencePage() {
               )}
             </DetailSection>
           )}
-          <div className="dp-actions">
+          <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
             {detail.file_name && (
-              <button className="btn-ghost btn-sm" onClick={() => copyDownloadUrl(detail.id)}>⬇ Download URL</button>
+              <Button variant="outline" size="sm" onClick={() => copyDownloadUrl(detail.id)}><Download /> Download URL</Button>
             )}
-            <button className="btn-ghost btn-sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-              onClick={() => setVersionOpen(true)}>↑ New Version</button>
+            <Button variant="outline" size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+              onClick={() => setVersionOpen(true)}><Upload /> New Version</Button>
             {detail.status !== "approved" && (
-              <button className="btn-primary btn-sm" disabled={!mayApprove} title={mayApprove ? undefined : noApproveTitle}
-                onClick={() => act(api.approveEvidence, detail.id, "Approved")}>✓ Approve</button>
+              <Button size="sm" disabled={!mayApprove} title={mayApprove ? undefined : noApproveTitle}
+                onClick={() => act(api.approveEvidence, detail.id, "Approved")}><Check /> Approve</Button>
             )}
             {detail.status !== "rejected" && (
-              <button className="btn-ghost btn-sm" disabled={!mayApprove} title={mayApprove ? undefined : noApproveTitle}
-                onClick={() => act(api.rejectEvidence, detail.id, "Rejected")}>✗ Reject</button>
+              <Button variant="outline" size="sm" disabled={!mayApprove} title={mayApprove ? undefined : noApproveTitle}
+                onClick={() => act(api.rejectEvidence, detail.id, "Rejected")}><X /> Reject</Button>
             )}
           </div>
 
           {/* Version history */}
           {detail.version_label && (
             <DetailSection title="Evidence History">
-              <ul className="dp-list">
+              <ul className="flex flex-col gap-2.5">
                 {/* Current version at top with green dot */}
-                <li style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#16a34a", flexShrink: 0 }} />
-                    <span className="dp-list-name" style={{ fontWeight: 600 }}>v{detail.version_label} — {detail.file_name} <span className="chip" style={{ fontSize: 10 }}>current</span></span>
-                    <span style={{ fontSize: 11, color: "var(--text-secondary)", marginLeft: "auto" }}>{fmtDate(detail.updated_at)}</span>
+                <li className="flex flex-col items-start gap-0.5">
+                  <div className="flex w-full items-center gap-2">
+                    <span className="size-2 shrink-0 rounded-full bg-[var(--success)]" />
+                    <span className="text-[13px] font-semibold text-foreground">v{detail.version_label} — {detail.file_name} <Badge variant="secondary" className="rounded-full text-[10px] font-medium">current</Badge></span>
+                    <span className="ml-auto text-[11px] text-muted-foreground">{fmtDate(detail.updated_at)}</span>
                   </div>
                   {detail.uploaded_by && (
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)", paddingLeft: 16 }}>{detail.uploaded_by}</div>
+                    <div className="pl-4 text-[11px] text-muted-foreground">{detail.uploaded_by}</div>
                   )}
                 </li>
                 {/* Previous versions, newest first */}
                 {[...versions].reverse().map((v) => (
-                  <li key={v.id} style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--text-secondary)", flexShrink: 0 }} />
-                      <span className="dp-list-name">v{v.version_label} — {v.file_name}</span>
-                      <span style={{ fontSize: 11, color: "var(--text-secondary)", marginLeft: "auto" }}>{fmtDate(v.created_at)}</span>
+                  <li key={v.id} className="flex flex-col items-start gap-0.5">
+                    <div className="flex w-full items-center gap-2">
+                      <span className="size-2 shrink-0 rounded-full bg-muted-foreground" />
+                      <span className="text-[13px] text-foreground">v{v.version_label} — {v.file_name}</span>
+                      <span className="ml-auto text-[11px] text-muted-foreground">{fmtDate(v.created_at)}</span>
                     </div>
                     {v.uploaded_by && (
-                      <div style={{ fontSize: 11, color: "var(--text-secondary)", paddingLeft: 16 }}>{v.uploaded_by}</div>
+                      <div className="pl-4 text-[11px] text-muted-foreground">{v.uploaded_by}</div>
                     )}
                   </li>
                 ))}
               </ul>
             </DetailSection>
           )}
-        </DetailPanel>
-      )}
+          </>
+        )}
+      </DetailPanel>
 
       <UploadEvidenceModal open={uploadOpen} onClose={() => setUploadOpen(false)} onSuccess={load} />
       <UploadVersionModal

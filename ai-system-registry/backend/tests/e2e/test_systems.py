@@ -127,6 +127,32 @@ async def test_get_system_returns_correct_record(client: httpx.AsyncClient):
     assert r.json()["id"] == system_id
 
 
+async def test_get_system_returns_classifier_flags_set_at_intake(client: httpx.AsyncClient):
+    """Flags saved during AI-assisted intake are returned by GET so the engineer
+    flow can pre-seed the risk checkboxes from the existing system data."""
+    r = await client.post(
+        "/v1/intake",
+        json={
+            "name": "Flag Test System",
+            "assignee_username": "engineer1",
+            "is_employment_related": True,
+            "is_credit_scoring": False,
+            "is_gpai": True,
+            "training_compute_flops": 1e24,
+        },
+        headers={"x-forwarded-preferred-username": "engineer1"},
+    )
+    assert r.status_code == 201
+    system_id = r.json()["system"]["id"]
+
+    r = await client.get(f"/v1/systems/{system_id}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["is_employment_related"] is True
+    assert body["is_credit_scoring"] is False
+    assert body["is_gpai"] is True
+
+
 async def test_get_system_404_on_missing(client: httpx.AsyncClient):
     r = await client.get("/v1/systems/SYS-NOTFOUND")
     assert r.status_code == 404
@@ -185,24 +211,24 @@ async def test_delete_system_404_on_missing(client: httpx.AsyncClient):
 
 
 # ---------------------------------------------------------------------------
-# PUT /systems/{id}/model — link model card
+# POST /systems/{id}/models — link model card (N:M)
 # ---------------------------------------------------------------------------
 
 async def test_link_model_card_to_system(client: httpx.AsyncClient):
     system_id = (await _create_system(client))["system"]["id"]
     model_id = (await _create_model_card(client))["id"]
-    r = await client.put(f"/v1/systems/{system_id}/model?model_id={model_id}")
+    r = await client.post(f"/v1/systems/{system_id}/models", json={"model_card_id": model_id})
     assert r.status_code == 200
-    assert r.json()["model_id"] == model_id
+    assert r.json()["id"] == model_id
 
 
 async def test_link_model_card_404_on_missing_system(client: httpx.AsyncClient):
     model_id = (await _create_model_card(client))["id"]
-    r = await client.put(f"/v1/systems/SYS-NOTFOUND/model?model_id={model_id}")
+    r = await client.post("/v1/systems/SYS-NOTFOUND/models", json={"model_card_id": model_id})
     assert r.status_code == 404
 
 
 async def test_link_model_card_404_on_missing_model(client: httpx.AsyncClient):
     system_id = (await _create_system(client))["system"]["id"]
-    r = await client.put(f"/v1/systems/{system_id}/model?model_id=MDL-NOTFOUND")
+    r = await client.post(f"/v1/systems/{system_id}/models", json={"model_card_id": "MDL-NOTFOUND"})
     assert r.status_code == 404
