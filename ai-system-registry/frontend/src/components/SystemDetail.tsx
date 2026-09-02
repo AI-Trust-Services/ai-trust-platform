@@ -102,12 +102,24 @@ const WF_PHASES = [
   { key: "outcome",     label: "Outcome" },
 ];
 
+const WF_PHASES_MANUAL = [
+  { key: "registered",  label: "Registered" },
+  { key: "compliance",  label: "Compliance Review" },
+  { key: "outcome",     label: "Outcome" },
+];
+
 function workflowPhase(status: string): number {
   if (status === "approved" || status === "rejected") return 5;
   // info_requested is part of the compliance-review loop (CO sent it back for detail).
   if (status === "pending_review" || status === "info_requested") return 4;
   if (status === "technical_pending") return 3;
   if (status === "business_pending") return 2;
+  return 1;
+}
+
+function workflowPhaseManual(status: string): number {
+  if (status === "approved" || status === "rejected") return 3;
+  if (status === "pending_review" || status === "info_requested") return 2;
   return 1;
 }
 
@@ -126,6 +138,7 @@ function WorkflowProgress({
   const [note, setNote] = useState("");
   const [rejectSendTo, setRejectSendTo] = useState<"business" | "technical">("business");
   const [approveTier, setApproveTier] = useState<string>(system.tier);
+  const [approveOrgRole, setApproveOrgRole] = useState<string>(system.org_role || "provider");
   const [infoContributor, setInfoContributor] = useState("");
   const [resubmitNote, setResubmitNote] = useState("");
   const [acting, setActing] = useState(false);
@@ -191,9 +204,10 @@ function WorkflowProgress({
   async function handleApprove() {
     setActing(true);
     try {
-      // Only send a tier override when the CO actually changed it.
+      // Only send overrides when the CO actually changed the value.
       const tierOverride = approveTier && approveTier !== system.tier ? approveTier : undefined;
-      await api.approveSystem(system.id, note.trim() || undefined, tierOverride);
+      const roleOverride = approveOrgRole && approveOrgRole !== system.org_role ? approveOrgRole : undefined;
+      await api.approveSystem(system.id, note.trim() || undefined, tierOverride, roleOverride);
       onSystemUpdate(await api.getSystem(system.id));
       closePanel();
       showToast("System approved");
@@ -269,12 +283,14 @@ function WorkflowProgress({
     } finally { setActing(false); }
   }
 
-  const phase = workflowPhase(system.workflow_status);
+  const isFullManual = system.registration_mode === "full_manual";
+  const phases = isFullManual ? WF_PHASES_MANUAL : WF_PHASES;
+  const phase = isFullManual ? workflowPhaseManual(system.workflow_status) : workflowPhase(system.workflow_status);
 
   return (
     <div>
       <div className="flex items-center">
-        {WF_PHASES.map((p, i) => {
+        {phases.map((p, i) => {
           const phaseNum = i + 1;
           const isDone = phase > phaseNum;
           const isActive = phase === phaseNum;
@@ -300,7 +316,7 @@ function WorkflowProgress({
                   {isOutcome ? outcomeLabel : p.label}
                 </div>
               </div>
-              {i < WF_PHASES.length - 1 && (
+              {i < phases.length - 1 && (
                 <div className={cn("mx-1 mb-5 h-0.5 flex-1", lineDone ? "bg-[var(--brand)]" : "bg-border")} />
               )}
             </Fragment>
@@ -404,7 +420,7 @@ function WorkflowProgress({
 
       {canAct && panel === "" && (
         <div className="mt-4 flex gap-2">
-          <Button onClick={() => { setPanel("approve"); setApproveTier(system.tier); setNote(""); }} disabled={acting}>
+          <Button onClick={() => { setPanel("approve"); setApproveTier(system.tier); setApproveOrgRole(system.org_role || "provider"); setNote(""); }} disabled={acting}>
             Approve…
           </Button>
           <Button variant="outline" onClick={() => { setPanel("requestInfo"); setInfoContributor(""); setNote(""); }} disabled={acting}>
@@ -439,8 +455,23 @@ function WorkflowProgress({
                   .map(([v, meta]) => <option key={v} value={v}>{meta.label}</option>)}
               </select>
               <span className="text-xs text-muted-foreground">
-                Override the inferred tier before approving. You hold liability for the final classification.
+                {system.registration_mode === "ai"
+                  ? "AI-inferred tier — override if incorrect. You hold liability for the final classification."
+                  : system.registration_mode === "full_manual"
+                    ? "Manually assigned tier — you hold liability for the final classification."
+                    : "Override the questionnaire-derived tier before approving. You hold liability for the final classification."}
               </span>
+            </div>
+            <div className="mb-3 flex flex-col gap-1.5">
+              <Label htmlFor="approve_org_role">Organisational Role</Label>
+              <select className={SELECT_CLASS} id="approve_org_role" value={approveOrgRole} onChange={(e) => setApproveOrgRole(e.target.value)}>
+                <option value="provider">Provider (Art. 3(3))</option>
+                <option value="deployer">Deployer (Art. 3(4))</option>
+                <option value="both">Both Provider and Deployer</option>
+                <option value="importer">Importer</option>
+                <option value="distributor">Distributor</option>
+              </select>
+              <span className="text-xs text-muted-foreground">Override the organisation's role before approving.</span>
             </div>
             <div className="mb-3 flex flex-col gap-1.5">
               <Label htmlFor="approve_note">Note</Label>
@@ -820,10 +851,23 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
 }) {
   const [tab, setTab] = useState("overview");
   const [system, setSystem] = useState<AISystem | null>(initialSystem);
+  const [rceSummary, setRceSummary] = useState<{
+    tier: string | null; org_role: string | null; registration_mode: string | null;
+    obligations: Array<{ title: string; article_ref: string; description: string }>;
+  } | null>(null);
   const showToast = useToast();
   const { mayRegister, username } = useModalControls();
 
-  useEffect(() => { setSystem(initialSystem); setTab("overview"); }, [initialSystem]);
+  useEffect(() => { setSystem(initialSystem); setTab("overview"); setRceSummary(null); }, [initialSystem]);
+
+  // Load the RCE summary when the CO is viewing a pending_review system.
+  useEffect(() => {
+    if (!system || system.workflow_status !== "pending_review" || system.compliance_officer_username !== username) {
+      setRceSummary(null);
+      return;
+    }
+    api.getRceSummary(system.id).then(setRceSummary).catch(() => setRceSummary(null));
+  }, [system?.id, system?.workflow_status, system?.compliance_officer_username, username]);
 
   function handleSystemUpdate(updated: AISystem) {
     setSystem(updated);
@@ -854,6 +898,15 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                 <span>{system.id} · v{system.version}</span>
                 <TierBadge tier={system.tier} workflowStatus={system.workflow_status} />
                 <LifecycleBadge lc={system.lifecycle} />
+                {system.registration_mode === "ai" && (
+                  <span className="rounded-full border border-[var(--brand)]/30 bg-[var(--brand)]/10 px-2 py-0.5 text-[11px] font-medium text-[var(--brand)]">AI-assisted</span>
+                )}
+                {system.registration_mode === "manual_questionnaire" && (
+                  <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Manual questionnaire</span>
+                )}
+                {system.registration_mode === "full_manual" && (
+                  <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Full manual</span>
+                )}
               </div>
             </SheetHeader>
 
@@ -877,10 +930,55 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                     />
                   </Section>
                   {system.classification_rationale != null
-                    && !Array.isArray(system.classification_rationale)
                     && system.compliance_officer_username === username && (
                     <Section>
-                      <ClassificationRationalePanel rationale={system.classification_rationale} />
+                      {Array.isArray(system.classification_rationale) ? (
+                        <div className="rounded-md border border-border bg-muted/30 p-4">
+                          <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                            <Sparkles className="size-4" /> Classification Flags
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            {(system.classification_rationale as Array<{ flag: string; value: boolean | number; rationale: string }>).map((f, i) => (
+                              <div key={i} className="flex items-start gap-2 text-[13px]">
+                                <span className={cn("mt-0.5 rounded px-1.5 py-0.5 text-xs font-medium", f.value ? "bg-[var(--brand)]/15 text-[var(--brand)]" : "bg-muted text-muted-foreground")}>
+                                  {typeof f.value === "boolean" ? (f.value ? "Yes" : "No") : String(f.value)}
+                                </span>
+                                <div>
+                                  <span className="font-medium">{f.flag}</span>
+                                  {f.rationale && <span className="ml-1 text-muted-foreground">— {f.rationale}</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <ClassificationRationalePanel rationale={system.classification_rationale} />
+                      )}
+                    </Section>
+                  )}
+                  {rceSummary && system.compliance_officer_username === username && (
+                    <Section title="RCE Summary — Applicable Obligations">
+                      <div className="mb-2 flex flex-wrap items-center gap-2 text-[13px]">
+                        <span className="font-medium">Role:</span>
+                        <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs capitalize">{rceSummary.org_role ?? "provider"}</span>
+                        <span className="font-medium">Tier:</span>
+                        <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs">{rceSummary.tier ?? "—"}</span>
+                      </div>
+                      {rceSummary.obligations.length === 0 ? (
+                        <p className="text-[13px] text-muted-foreground">No applicable obligations for this tier and role.</p>
+                      ) : (
+                        <div className="divide-y divide-border rounded-md border border-border">
+                          {rceSummary.obligations.map((o) => (
+                            <div key={o.article_ref} className="px-3 py-2 text-[13px]">
+                              <div className="flex items-center gap-2">
+                                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground">{o.article_ref}</span>
+                                <span className="font-medium">{o.title}</span>
+                              </div>
+                              <p className="mt-0.5 text-xs text-muted-foreground">{o.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </Section>
                   )}
                   {system.registration_mode === "full_manual" && (system.registration_documents?.length ?? 0) > 0 && (

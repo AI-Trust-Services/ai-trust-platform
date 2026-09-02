@@ -233,6 +233,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system, mode 
         registration_mode: mode,
         name: form.name,
         description: form.description,
+        org_role: form.org_role,
         ...systemFields,
       });
       if (Object.keys(answerFields).length > 0) {
@@ -377,6 +378,32 @@ export default function RegisterWizard({ open, onClose, onSuccess, system, mode 
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="reg_name">System Name <span className="text-[var(--danger-fg)]">*</span></Label>
                     <Input type="text" id="reg_name" value={form.name} onChange={set("name")} placeholder="e.g. Fraud Detection Model" />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label>Organisational Role <span className="text-[var(--danger-fg)]">*</span></Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        ["provider", "Provider", "Designs and develops the AI system (Art. 3(3))"],
+                        ["deployer", "Deployer", "Deploys the system in own operations (Art. 3(4))"],
+                        ["both", "Both", "Acts as both provider and deployer"],
+                      ] as [string, string, string][]).map(([value, label, hint]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setForm((f) => ({ ...f, org_role: value as AISystemFormData["org_role"] }))}
+                          className={cn(
+                            "flex flex-col gap-0.5 rounded-md border p-3 text-left text-xs transition-colors",
+                            form.org_role === value
+                              ? "border-[var(--brand)] bg-[var(--brand)]/5 text-foreground"
+                              : "border-border text-muted-foreground hover:border-muted-foreground",
+                          )}
+                        >
+                          <span className="font-semibold text-[13px] text-foreground">{label}</span>
+                          <span>{hint}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   {isAIMode && (

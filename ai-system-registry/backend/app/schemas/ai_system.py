@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 VALID_LIFECYCLES = frozenset({
     "development", "testing", "conformity", "market", "post-market", "decommissioned",
 })
-VALID_ROLES = frozenset({"provider", "deployer", "importer", "distributor"})
+VALID_ROLES = frozenset({"provider", "deployer", "both", "importer", "distributor"})
 # The six canonical EU AI Act tiers — enforced by ck_ai_systems_tier at the DB layer.
 # Validated in the API layer for CO overrides / full-manual entry so a bad value
 # returns 422 instead of 500-ing on commit.
@@ -91,6 +91,7 @@ class AISystemCreate(BaseModel):
     classification_rationale: list[RationaleItem] | ClassificationRationale | None = None
 
     registration_mode: Literal["ai", "manual_questionnaire", "full_manual"] = "ai"
+    org_role: str = "provider"
     # Full-manual override: creator supplies the tier directly (validated against VALID_TIERS
     # in the router) and names the compliance officer.
     tier: str | None = None
@@ -104,6 +105,13 @@ class AISystemCreate(BaseModel):
     def name_not_whitespace(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("name must not be blank")
+        return v
+
+    @field_validator("org_role")
+    @classmethod
+    def org_role_valid(cls, v: str) -> str:
+        if v not in VALID_ROLES:
+            raise ValueError(f"org_role must be one of {sorted(VALID_ROLES)}")
         return v
 
 
@@ -154,6 +162,13 @@ class AISystemUpdate(BaseModel):
     def name_not_whitespace(cls, v: str | None) -> str | None:
         if v is not None and not v.strip():
             raise ValueError("name must not be blank")
+        return v
+
+    @field_validator("org_role")
+    @classmethod
+    def org_role_valid(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_ROLES:
+            raise ValueError(f"org_role must be one of {sorted(VALID_ROLES)}")
         return v
 
 

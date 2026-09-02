@@ -1,9 +1,6 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 pydantic==2.10.3
-fastapi==0.115.6
-uvicorn[standard]==0.32.1
-pydantic==2.10.3
 httpx==0.28.1
 PyJWT[crypto]==2.9.0
 aiosmtplib==3.0.2

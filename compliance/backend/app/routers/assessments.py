@@ -131,7 +131,7 @@ async def _generate_obligations_in_session(
     Returns (created_obligations, prior_prefilled) where prior_prefilled is True
     if any owner/not_applicable values were carried forward from a prior assessment.
     """
-    templates = obligations_for(assessment.framework_id, system.tier)
+    templates = obligations_for(assessment.framework_id, system.tier, getattr(system, "org_role", "provider") or "provider")
 
     prior = (await session.execute(
         select(Assessment)

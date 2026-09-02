@@ -26,6 +26,7 @@ _DESCRIPTIVE_FIELDS = (
 # New questionnaire-specific fields.
 _QUESTIONNAIRE_FIELDS = (
     "business_assignee_username", "technical_assignee_username", "questionnaire_answers",
+    "org_role",
 )
 
 

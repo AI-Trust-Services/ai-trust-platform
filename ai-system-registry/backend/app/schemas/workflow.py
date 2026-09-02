@@ -27,6 +27,8 @@ class WorkflowApproveRequest(BaseModel):
     note: str | None = None
     # Optional CO tier override applied at approve time; validated against VALID_TIERS.
     tier: str | None = None
+    # Optional CO role override — corrects the provider/deployer/both assignment.
+    org_role: str | None = None
 
 
 class WorkflowRejectRequest(BaseModel):

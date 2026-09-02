@@ -121,11 +121,11 @@ export const api = {
       body: JSON.stringify({ assignee_username: assigneeUsername, note: note ?? null }),
     }),
 
-  approveSystem: (systemId: string, note?: string, tier?: string) =>
+  approveSystem: (systemId: string, note?: string, tier?: string, orgRole?: string) =>
     request<WorkflowStep[]>(`/systems/${systemId}/workflow/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: note ?? null, tier: tier ?? null }),
+      body: JSON.stringify({ note: note ?? null, tier: tier ?? null, org_role: orgRole ?? null }),
     }),
 
   rejectSystem: (systemId: string, note: string, assigneeUsername: string, sendTo: "business" | "technical" = "business") =>
@@ -220,5 +220,14 @@ export const api = {
 
   getDocumentDownloadUrl: (systemId: string, docIndex: number) =>
     request<{ url: string }>(`/systems/${encodeURIComponent(systemId)}/documents/${docIndex}/download-url`),
+
+  getRceSummary: (systemId: string) =>
+    request<{
+      tier: string | null;
+      org_role: string | null;
+      registration_mode: string | null;
+      classification_rationale: unknown;
+      obligations: Array<{ title: string; article_ref: string; description: string }>;
+    }>(`/systems/${encodeURIComponent(systemId)}/workflow/rce-summary`),
 };
 
