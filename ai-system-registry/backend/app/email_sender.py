@@ -65,3 +65,25 @@ async def notify(to_username: str, subject: str, body: str) -> None:
         logger.info("notification.sent", extra={"to": email, "subject": subject})
     except Exception as exc:
         logger.warning("notification.send_failed", extra={"to": email, "subject": subject, "error": str(exc)})
+
+
+async def notify_question_assigned(
+    assignee_username: str,
+    system_name: str,
+    system_id: str,
+    question_label: str,
+    assigned_by: str,
+) -> None:
+    """Notify a user that a specific questionnaire question has been assigned to them."""
+    await notify(
+        to_username=assignee_username,
+        subject=f"[AI Trust] Question assigned to you for '{system_name}'",
+        body=(
+            f"Hi,\n\n"
+            f"{assigned_by} has asked you to answer a specific question for the AI system "
+            f"'{system_name}' ({system_id}).\n\n"
+            f"Question: {question_label}\n\n"
+            f"Please log in and open the system to provide your answer.\n\n"
+            f"AI Trust Platform: {REGISTRY_URL}"
+        ),
+    )

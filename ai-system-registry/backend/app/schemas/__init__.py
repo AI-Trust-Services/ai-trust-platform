@@ -38,6 +38,10 @@ from app.schemas.workflow import (
     WorkflowSubAssignRequest,
     WorkflowSubReclaimRequest,
     WorkflowRequestInfoRequest,
+    QuestionAssignRequest,
+    QuestionUnassignRequest,
+    QuestionAnswerRequest,
+    QuestionAssignmentResponse,
 )
 
 __all__ = [
@@ -73,4 +77,8 @@ __all__ = [
     "WorkflowSubAssignRequest",
     "WorkflowSubReclaimRequest",
     "WorkflowRequestInfoRequest",
+    "QuestionAssignRequest",
+    "QuestionUnassignRequest",
+    "QuestionAnswerRequest",
+    "QuestionAssignmentResponse",
 ]

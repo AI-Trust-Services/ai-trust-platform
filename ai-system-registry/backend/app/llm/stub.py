@@ -189,7 +189,7 @@ def _infer_flags(messages: list[dict]) -> dict:
 
 
 def _classify_questionnaire(messages: list[dict]) -> dict:
-    """AI-mode authoritative classification: infer flags + reasoning + missing_info + confidence."""
+    """AI-mode authoritative classification: infer flags + reasoning + missing_info + confidence + org_role."""
     blob = " ".join(
         m["content"] for m in messages if m["role"] == "user" and isinstance(m["content"], str)
     ).lower()
@@ -210,6 +210,17 @@ def _classify_questionnaire(messages: list[dict]) -> dict:
         reasoning = "No Annex III, prohibited, GPAI, or transparency triggers were evident in the answers; the system appears minimal risk."
         missing_info = ["Confirmation of the deployment context and the population affected."]
         confidence = 0.6
+
+    if any(kw in blob for kw in ("built", "develop", "train", "created", "we built", "our model")):
+        org_role = "provider"
+        org_role_rationale = "The organisation developed or trained the AI system, placing it on the market under its own name."
+    elif any(kw in blob for kw in ("third-party", "third party", "purchased", "vendor", "use an existing")):
+        org_role = "deployer"
+        org_role_rationale = "The organisation deploys a third-party AI system in a professional context without being the original developer."
+    else:
+        org_role = "provider"
+        org_role_rationale = "Defaulting to provider as the system appears to be developed by the organisation itself."
+
     return _result(
         json.dumps(
             {
@@ -217,6 +228,8 @@ def _classify_questionnaire(messages: list[dict]) -> dict:
                 "reasoning": reasoning,
                 "missing_info": missing_info,
                 "confidence": confidence,
+                "org_role": org_role,
+                "org_role_rationale": org_role_rationale,
             }
         )
     )

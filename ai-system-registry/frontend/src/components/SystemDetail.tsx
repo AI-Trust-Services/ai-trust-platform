@@ -4,7 +4,7 @@ import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS, TIER_META } from "../utils";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary } from "../types";
+import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary, QuestionAssignment } from "../types";
 import {
   BUSINESS_QUESTIONS,
   AI_TECHNICAL_QUESTIONS,
@@ -143,6 +143,7 @@ function WorkflowProgress({
   const [resubmitNote, setResubmitNote] = useState("");
   const [acting, setActing] = useState(false);
   const [steps, setSteps] = useState<WorkflowStep[]>([]);
+  const [questionAssignments, setQuestionAssignments] = useState<QuestionAssignment[]>([]);
   const [delegateUser, setDelegateUser] = useState("");
   const [delegatePool, setDelegatePool] = useState<UserSummary[]>([]);
   const { username } = useModalControls();
@@ -163,9 +164,13 @@ function WorkflowProgress({
   const activeSub = pendingSection ? activeSubAssignee(steps, pendingSection) : null;
   const isSectionOwner = !!sectionOwner && username === sectionOwner;
   const isDelegate = !!activeSub && username === activeSub;
+  const iAmQuestionAssignee = !!pendingSection && questionAssignments.some(
+    (a) => a.section === pendingSection && a.assignee_username === username,
+  );
   // The owner may fill only while holding the token (no active delegate); the delegate
-  // may fill while it holds the token. This mirrors the backend section edit-lock.
-  const canFillSection = !!pendingSection && ((isSectionOwner && !activeSub) || isDelegate);
+  // may fill while it holds the token. Question assignees may always open their section.
+  // This mirrors the backend section edit-lock.
+  const canFillSection = !!pendingSection && ((isSectionOwner && !activeSub) || isDelegate || iAmQuestionAssignee);
 
   // The CO cannot approve until every required question is answered (backend enforces a
   // 422 as the safety net). Booleans/numbers and full_manual systems never contribute gaps.
@@ -179,8 +184,10 @@ function WorkflowProgress({
   useEffect(() => {
     if (system.workflow_status === "business_pending" || system.workflow_status === "technical_pending") {
       api.getWorkflow(system.id).then(setSteps).catch(() => setSteps([]));
+      api.getQuestionAssignments(system.id).then(setQuestionAssignments).catch(() => setQuestionAssignments([]));
     } else {
       setSteps([]);
+      setQuestionAssignments([]);
     }
   }, [system.id, system.workflow_status]);
 
@@ -343,7 +350,9 @@ function WorkflowProgress({
           <div className="flex flex-wrap items-center gap-2">
             {canFillSection && onFillSection && (
               <Button onClick={() => onFillSection(pendingSection)}>
-                Fill {pendingSection === "business" ? "Business" : "Technical"} Section
+                {iAmQuestionAssignee && !isSectionOwner && !isDelegate
+                  ? "Answer My Questions"
+                  : `Fill ${pendingSection === "business" ? "Business" : "Technical"} Section`}
               </Button>
             )}
             {isSectionOwner && !activeSub && panel !== "delegate" && (
@@ -773,6 +782,15 @@ function ClassificationRationalePanel({ rationale }: { rationale: Classification
       <DetailGrid rows={[
         ["Confidence", pct(rationale.confidence)],
       ]} />
+      {rationale.org_role && (
+        <div className="mt-3">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Inferred Role</div>
+          <div className="flex flex-wrap items-start gap-2 text-[13px]">
+            <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-xs capitalize">{rationale.org_role}</span>
+            {rationale.org_role_rationale && <span className="text-muted-foreground">{rationale.org_role_rationale}</span>}
+          </div>
+        </div>
+      )}
       {rationale.missing_info.length > 0 && (
         <div className="mt-3">
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Missing Information</div>

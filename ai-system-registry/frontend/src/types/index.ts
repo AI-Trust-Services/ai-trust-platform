@@ -79,6 +79,16 @@ export interface WorkflowStep {
   created_at: string;
 }
 
+export interface QuestionAssignment {
+  id: string;
+  section: string;
+  question_key: string;
+  assignee_username: string;
+  assigned_by_username: string;
+  assigned_at: string;
+  answered_at: string | null;
+}
+
 export interface UserSummary {
   username: string;
   firstName: string;
@@ -124,6 +134,8 @@ export interface ClassificationRationale {
   confidence: number | null;
   reasoning: string | null;
   missing_info: string[];
+  org_role?: string;
+  org_role_rationale?: string;
 }
 
 // One supporting document uploaded in the full-manual override flow.

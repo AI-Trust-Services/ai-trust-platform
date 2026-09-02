@@ -66,3 +66,35 @@ class WorkflowRequestInfoRequest(BaseModel):
     """CO sends a system back to a specific contributor for more information."""
     contributor_username: str
     note: str
+
+
+class QuestionAssignRequest(BaseModel):
+    """Section owner assigns a single questionnaire question to another user."""
+    section: Literal["business", "technical"]
+    question_key: str
+    assignee_username: str
+    note: str | None = None
+
+
+class QuestionUnassignRequest(BaseModel):
+    """Section owner removes a per-question assignment."""
+    section: Literal["business", "technical"]
+    question_key: str
+
+
+class QuestionAnswerRequest(BaseModel):
+    """Assignee marks their assigned question as answered."""
+    section: Literal["business", "technical"]
+    question_key: str
+
+
+class QuestionAssignmentResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: str
+    section: str
+    question_key: str
+    assignee_username: str
+    assigned_by_username: str
+    assigned_at: datetime
+    answered_at: datetime | None
