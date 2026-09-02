@@ -387,9 +387,9 @@ def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id):
          f"'Scheduled 6-month re-assessment due (Art. 9(1)).',"
          f"NOW()-INTERVAL '1 month',false);")
 
-    # Customer Support: 2 versions — 6mo, 3mo ago
+    # Customer Support: 2 versions — 12mo, 9mo ago → most recent >6mo → Overdue badge, Reopen button
     cs_regs = [r["id"] for r in _req(RISK_BASE, f"/v1/systems/{cs_id}/registers")]
-    for reg_id, offset in zip(sorted(cs_regs), ["6 months", "3 months"]):
+    for reg_id, offset in zip(sorted(cs_regs), ["12 months", "9 months"]):
         psql(f"UPDATE risk_registers SET created_at=NOW()-INTERVAL '{offset}', "
              f"approved_at=NOW()-INTERVAL '{offset}', "
              f"last_assessment_completed_at=NOW()-INTERVAL '{offset}', "

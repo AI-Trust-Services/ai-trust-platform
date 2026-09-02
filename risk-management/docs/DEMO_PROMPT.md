@@ -46,7 +46,8 @@ Work through these steps in order. For each step:
 ### Step 1 — Systems list overview
 Navigate to Risk Management in the sidebar (warning icon). 
 Show me: the KPI row, status dots, action button colours (Open / Resume / Reopen / Start), trigger badges with tooltips, overdue badges with tooltips. 
-Explain: which systems need action and why.
+Point out: Credit Risk has a **Reopen** button because of an unacknowledged re-assessment trigger; Customer Support Chatbot shows **Overdue (>6 months)** because its last assessment was 9 months ago with no trigger.
+Explain: which systems need action and why — and the difference between the two paths to reassessment_needed.
 
 ### Step 2 — Explore a completed HIGH-risk assessment (HR Screening or Credit Risk)
 Click "Open" on HR Candidate Screening AI.

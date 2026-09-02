@@ -27,8 +27,8 @@ The seed exits automatically when done. Open [http://localhost:8080](http://loca
 | System | EU AI Act Tier | Assessment versions | Status |
 |---|---|---|---|
 | HR Candidate Screening AI | **HIGH** (employment) | 4 | ✓ Up to date |
-| Credit Risk Assessment Model | **HIGH** (credit scoring) | 3 | ⚠ Reopen due |
-| Customer Support Chatbot | **LIMITED** (chatbot) | 2 | ✓ Up to date |
+| Credit Risk Assessment Model | **HIGH** (credit scoring) | 3 | ⚠ Reopen due (unacknowledged trigger) |
+| Customer Support Chatbot | **LIMITED** (chatbot) | 2 | ⚠ Overdue (>6 months) |
 | Medical Image Diagnosis Assistant | MINIMAL | 2 approved + 1 in progress | Resume |
 | Social Scoring Pilot | **PROHIBITED** (Art. 5(1)(c)) | 1 | ✓ Approved (not acceptable) |
 
