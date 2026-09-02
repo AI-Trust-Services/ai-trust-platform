@@ -1,6 +1,6 @@
 export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal" | "pending";
 export type LifecycleKey = "development" | "testing" | "conformity" | "market" | "post-market" | "decommissioned";
-export type OrgRole = "provider" | "deployer" | "importer" | "distributor";
+export type OrgRole = "provider" | "deployer" | "both" | "importer" | "distributor";
 export type SystemType = "application" | "model" | "component" | "service";
 export type AutonomyLevel = "decision_support" | "human_in_the_loop" | "human_on_the_loop" | "fully_automated";
 export type ModelType = "llm" | "embedding" | "multimodal" | "classifier";
