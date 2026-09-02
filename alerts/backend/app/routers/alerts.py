@@ -5,8 +5,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text, select
 
-from ai_trust_authorization import require_permission
+from ai_trust_authorization import require_permission, get_current_user
 from ai_trust_authorization.constants import ALERTS_READ, ALERTS_HANDLE, ALERTS_MANAGE_RULES
+from ai_trust_authorization import openfga_client
 from ai_trust_clickhouse import ch_command, ch_query
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
@@ -15,6 +16,76 @@ from ai_trust_persistence.models.alert_rule import AlertRule
 
 router = APIRouter(tags=["alerts"])
 logger = get_logger(__name__)
+
+# Roles that see all alerts without restriction.
+_UNRESTRICTED_ROLES = {"platform_administrator", "auditor"}
+
+# condition_types visible per restricted built-in role.
+_ROLE_CONDITION_TYPES: dict[str, list[str]] = {
+    "ai_compliance_officer": [
+        "prohibited_exists",
+        "avg_compliance_below",
+        "high_risk_on_market_low_compliance",
+        "market_system_no_model_card",
+        "gpai_no_compliance",
+        "evidence_expired",
+        "evidence_expiring_30d",
+        "evidence_expiring_7d",
+    ],
+    "business_owner": [
+        "prohibited_exists",
+        "high_risk_on_market_low_compliance",
+        "market_system_no_model_card",
+        "gpai_no_compliance",
+        "model_diverged",
+        "evidence_expired",
+        "evidence_expiring_30d",
+        "evidence_expiring_7d",
+    ],
+    "ai_engineer": [
+        "no_signals",
+        "high_latency",
+        "model_diverged",
+        "evidence_expired",
+        "evidence_expiring_30d",
+        "evidence_expiring_7d",
+    ],
+}
+
+
+async def _allowed_rule_ids(username: str) -> list[str] | None:
+    """Return the set of rule IDs the user may see, or None for unrestricted access.
+
+    Custom rules are always included for any authenticated user.
+    Any unrecognised / custom role is treated as unrestricted.
+    On OpenFGA failure we fail open (return None) so the page stays usable.
+    """
+    try:
+        role_objects = await openfga_client.read_user_roles(f"user:{username}")
+    except Exception:
+        logger.warning("alerts.role_lookup_failed", extra={"username": username})
+        return None
+
+    roles = {r.removeprefix("role:") for r in role_objects}
+
+    # Any unrestricted or unrecognised (custom) role → no filter.
+    if roles & _UNRESTRICTED_ROLES:
+        return None
+    known_restricted = set(_ROLE_CONDITION_TYPES)
+    if not roles or not (roles <= known_restricted):
+        return None
+
+    visible_types: set[str] = set()
+    for role in roles:
+        visible_types.update(_ROLE_CONDITION_TYPES.get(role, []))
+
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(AlertRule.id).where(
+                (AlertRule.condition_type.in_(visible_types)) | (AlertRule.is_custom.is_(True))
+            )
+        )
+        return [row.id for row in result]
 
 
 async def _resolve_display_names(entity_ids: list[str]) -> dict[str, str]:
@@ -36,20 +107,33 @@ def _enrich(rows: list[dict], name_map: dict[str, str]) -> list[dict]:
 
 
 @router.get("/active", dependencies=[Depends(require_permission(ALERTS_READ))])
-async def get_active_alerts() -> list[dict]:
-    # Isolation is by per-tenant database — ch_query routes to the current tenant's ClickHouse
-    # database, so the WHERE only carries the domain filter.
-    rows = await ch_query("""
-        SELECT
-            id, rule_id, rule_name, category, severity, alert_type, description,
-            value_at_trigger, toString(triggered_at) AS triggered_at,
-            handled_at, entity_id, entity_type, entity_model
-        FROM alert_events
-        WHERE resolved_at IS NULL AND handled_at IS NULL
-        ORDER BY
-            multiIf(severity='error', 0, severity='warning', 1, 2) ASC,
-            triggered_at DESC
-    """)
+async def get_active_alerts(username: str = Depends(get_current_user)) -> list[dict]:
+    rule_ids = await _allowed_rule_ids(username)
+    if rule_ids is not None and not rule_ids:
+        return []
+    if rule_ids is not None:
+        rows = await ch_query(
+            "SELECT id, rule_id, rule_name, category, severity, alert_type, description,"
+            " value_at_trigger, toString(triggered_at) AS triggered_at,"
+            " handled_at, entity_id, entity_type, entity_model"
+            " FROM alert_events"
+            " WHERE resolved_at IS NULL AND handled_at IS NULL"
+            " AND rule_id IN {ids:Array(String)}"
+            " ORDER BY multiIf(severity='error', 0, severity='warning', 1, 2) ASC, triggered_at DESC",
+            {"ids": rule_ids},
+        )
+    else:
+        rows = await ch_query("""
+            SELECT
+                id, rule_id, rule_name, category, severity, alert_type, description,
+                value_at_trigger, toString(triggered_at) AS triggered_at,
+                handled_at, entity_id, entity_type, entity_model
+            FROM alert_events
+            WHERE resolved_at IS NULL AND handled_at IS NULL
+            ORDER BY
+                multiIf(severity='error', 0, severity='warning', 1, 2) ASC,
+                triggered_at DESC
+        """)
     entity_ids = [r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"]
     name_map = await _resolve_display_names(entity_ids)
     logger.info("alerts.active_fetched", extra={"count": len(rows)})
@@ -57,20 +141,38 @@ async def get_active_alerts() -> list[dict]:
 
 
 @router.get("/history", dependencies=[Depends(require_permission(ALERTS_READ))])
-async def get_alert_history() -> list[dict]:
-    rows = await ch_query("""
-        SELECT
-            id, rule_id, rule_name, category, severity, alert_type, description,
-            value_at_trigger,
-            toString(triggered_at) AS triggered_at,
-            toString(resolved_at)  AS resolved_at,
-            toString(handled_at)   AS handled_at,
-            entity_id, entity_type, entity_model
-        FROM alert_events
-        WHERE (resolved_at IS NOT NULL OR handled_at IS NOT NULL)
-        ORDER BY triggered_at DESC
-        LIMIT 100
-    """)
+async def get_alert_history(username: str = Depends(get_current_user)) -> list[dict]:
+    rule_ids = await _allowed_rule_ids(username)
+    if rule_ids is not None and not rule_ids:
+        return []
+    if rule_ids is not None:
+        rows = await ch_query(
+            "SELECT id, rule_id, rule_name, category, severity, alert_type, description,"
+            " value_at_trigger,"
+            " toString(triggered_at) AS triggered_at,"
+            " toString(resolved_at)  AS resolved_at,"
+            " toString(handled_at)   AS handled_at,"
+            " entity_id, entity_type, entity_model"
+            " FROM alert_events"
+            " WHERE (resolved_at IS NOT NULL OR handled_at IS NOT NULL)"
+            " AND rule_id IN {ids:Array(String)}"
+            " ORDER BY triggered_at DESC LIMIT 100",
+            {"ids": rule_ids},
+        )
+    else:
+        rows = await ch_query("""
+            SELECT
+                id, rule_id, rule_name, category, severity, alert_type, description,
+                value_at_trigger,
+                toString(triggered_at) AS triggered_at,
+                toString(resolved_at)  AS resolved_at,
+                toString(handled_at)   AS handled_at,
+                entity_id, entity_type, entity_model
+            FROM alert_events
+            WHERE (resolved_at IS NOT NULL OR handled_at IS NOT NULL)
+            ORDER BY triggered_at DESC
+            LIMIT 100
+        """)
     entity_ids = [r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"]
     name_map = await _resolve_display_names(entity_ids)
     logger.info("alerts.history_fetched", extra={"count": len(rows)})
@@ -78,11 +180,13 @@ async def get_alert_history() -> list[dict]:
 
 
 @router.get("/rules", dependencies=[Depends(require_permission(ALERTS_READ))])
-async def get_alert_rules() -> list[dict]:
+async def get_alert_rules(username: str = Depends(get_current_user)) -> list[dict]:
+    rule_ids = await _allowed_rule_ids(username)
     async with SessionLocal() as session:
-        rules = (await session.execute(
-            select(AlertRule).order_by(AlertRule.category, AlertRule.name)
-        )).scalars().all()
+        query = select(AlertRule).order_by(AlertRule.category, AlertRule.name)
+        if rule_ids is not None:
+            query = query.where(AlertRule.id.in_(rule_ids))
+        rules = (await session.execute(query)).scalars().all()
     return [
         {
             "id": r.id,
@@ -103,13 +207,24 @@ async def get_alert_rules() -> list[dict]:
 
 
 @router.get("/count", dependencies=[Depends(require_permission(ALERTS_READ))])
-async def get_alert_count() -> dict:
+async def get_alert_count(username: str = Depends(get_current_user)) -> dict:
     """Fast endpoint for bell badge — returns count of active unhandled alerts."""
-    rows = await ch_query("""
-        SELECT count() AS n
-        FROM alert_events
-        WHERE resolved_at IS NULL AND handled_at IS NULL
-    """)
+    rule_ids = await _allowed_rule_ids(username)
+    if rule_ids is not None and not rule_ids:
+        return {"count": 0}
+    if rule_ids is not None:
+        rows = await ch_query(
+            "SELECT count() AS n FROM alert_events"
+            " WHERE resolved_at IS NULL AND handled_at IS NULL"
+            " AND rule_id IN {ids:Array(String)}",
+            {"ids": rule_ids},
+        )
+    else:
+        rows = await ch_query("""
+            SELECT count() AS n
+            FROM alert_events
+            WHERE resolved_at IS NULL AND handled_at IS NULL
+        """)
     count = int(rows[0]["n"]) if rows else 0
     logger.info("alerts.count_fetched", extra={"count": count})
     return {"count": count}
