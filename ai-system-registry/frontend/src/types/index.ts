@@ -4,7 +4,8 @@ export type OrgRole = "provider" | "deployer" | "importer" | "distributor";
 export type SystemType = "application" | "model" | "component" | "service";
 export type AutonomyLevel = "decision_support" | "human_in_the_loop" | "human_on_the_loop" | "fully_automated";
 export type ModelType = "llm" | "embedding" | "multimodal" | "classifier";
-export type WorkflowStatus = "draft" | "business_pending" | "technical_pending" | "pending_review" | "approved" | "rejected";
+export type WorkflowStatus = "draft" | "business_pending" | "technical_pending" | "pending_review" | "info_requested" | "approved" | "rejected";
+export type RegistrationMode = "ai" | "manual_questionnaire" | "full_manual";
 
 export interface AISystem {
   id: string;
@@ -32,11 +33,19 @@ export interface AISystem {
   created_at: string;
   updated_at: string;
   workflow_status: WorkflowStatus;
+  registration_mode: RegistrationMode;
   assignee_username: string | null;
   compliance_officer_username: string | null;
   business_assignee_username: string | null;
   technical_assignee_username: string | null;
-  questionnaire_answers: Record<string, string> | null;
+  // Business answers live at the top level; technical free-text answers (AI mode)
+  // are nested under the "technical" key. Values are strings except that nesting.
+  questionnaire_answers: Record<string, unknown> | null;
+  registration_documents: RegistrationDocument[] | null;
+  // Two shapes: legacy bare RationaleItem[] (AI-assisted intake) or the extended
+  // ClassificationRationale object (questionnaire workflow, CO-only). Discriminate
+  // with Array.isArray().
+  classification_rationale: RationaleItem[] | ClassificationRationale | null;
   is_gpai: boolean;
   training_compute_flops: number;
   is_chatbot: boolean;
@@ -106,6 +115,22 @@ export interface RationaleItem {
   value: boolean | number;
   rationale: string;
   confidence: number;
+}
+
+// Extended classification output from the questionnaire workflow — visible only
+// to the compliance officer. Distinct from the legacy bare RationaleItem[].
+export interface ClassificationRationale {
+  flags: RationaleItem[];
+  confidence: number | null;
+  reasoning: string | null;
+  missing_info: string[];
+}
+
+// One supporting document uploaded in the full-manual override flow.
+export interface RegistrationDocument {
+  filename: string;
+  minio_key: string;
+  uploaded_at: string;
 }
 
 export interface ClassificationResult {

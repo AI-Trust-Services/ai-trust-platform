@@ -35,8 +35,10 @@ class AISystem(Base):
     tier: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     basis: Mapped[str] = mapped_column(Text, default="")
     annex_iii_area: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Per-flag LLM rationale + confidence from AI-assisted registration:
-    # a JSON array of {flag, value, rationale, confidence}.
+    # Classification rationale. Two shapes coexist (readers discriminate list vs dict):
+    #   - legacy AI-assisted intake: a JSON array of {flag, value, rationale, confidence}
+    #   - questionnaire workflow: an object {flags, confidence, reasoning, missing_info}
+    #     produced at submit-technical / submit-info, visible only to the compliance officer.
     classification_rationale: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
     # Per-field confirmation state from engineer AI-assisted review:
     # {"version": true, "provider": false, ...} — merged via PATCH, never replaced wholesale.
@@ -75,11 +77,15 @@ class AISystem(Base):
     generates_synthetic_content: Mapped[bool] = mapped_column(Boolean, default=False)
 
     workflow_status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+    # Top-level registration mode: "ai" | "manual_questionnaire" | "full_manual".
+    registration_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="ai")
     assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
     compliance_officer_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
     business_assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
     technical_assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
     questionnaire_answers: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    # Full-manual supporting docs: a JSON array of {filename, minio_key, uploaded_at}.
+    registration_documents: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

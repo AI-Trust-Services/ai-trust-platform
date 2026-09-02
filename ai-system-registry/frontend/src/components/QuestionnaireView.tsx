@@ -2,14 +2,18 @@ import { useState, useEffect, useRef } from "react";
 import { Bot, Loader2, Paperclip, SendHorizonal, User } from "lucide-react";
 import { TierBadge } from "./Badges";
 import { api } from "../api/client";
-import { useToast } from "../App";
-import type { AISystem, ChatMessage, ClassificationResult } from "../types";
+import { useToast, useModalControls } from "../App";
+import type { AISystem, ChatMessage, ClassificationResult, WorkflowStep } from "../types";
 import type { SectionKey } from "../config/questionnaire";
 import {
   BUSINESS_QUESTIONS,
   TECHNICAL_QUESTIONS,
+  AI_TECHNICAL_QUESTIONS,
+  technicalQuestionsForMode,
   getBusinessFieldValues,
   getTechnicalFieldValues,
+  getAITechnicalFieldValues,
+  activeSubAssignee,
 } from "../config/questionnaire";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -45,12 +49,26 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
   const [classification, setClassification] = useState<ClassificationResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [steps, setSteps] = useState<WorkflowStep[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const showToast = useToast();
+  const { username } = useModalControls();
 
-  const questions = section === "business" ? BUSINESS_QUESTIONS : TECHNICAL_QUESTIONS;
+  const isAIMode = system.registration_mode === "ai";
+  const questions = section === "business" ? BUSINESS_QUESTIONS : technicalQuestionsForMode(system.registration_mode);
+  // The AI chat assistant is only offered in AI mode; manual-questionnaire mode is form-only.
+  const showChat = isAIMode;
+
+  // Delegation state: only the token-holder (the section owner, or the active delegate)
+  // may edit. The delegate returns the section to the owner rather than submitting onward.
+  const owner = section === "business" ? system.business_assignee_username : system.technical_assignee_username;
+  const sub = activeSubAssignee(steps, section);
+  const isDelegate = !!sub && username === sub;
+  const isOwner = !!owner && username === owner;
+  const editable = isDelegate || (isOwner && !sub) || !owner;
+  const lockedForOwner = isOwner && !!sub && !isDelegate;
 
   useEffect(() => {
     if (!open) return;
@@ -63,7 +81,10 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
     setClassification(null);
     setFields(section === "business"
       ? getBusinessFieldValues(system) as Record<string, unknown>
-      : getTechnicalFieldValues(system));
+      : isAIMode
+        ? getAITechnicalFieldValues(system) as Record<string, unknown>
+        : getTechnicalFieldValues(system));
+    api.getWorkflow(system.id).then(setSteps).catch(() => setSteps([]));
   }, [open, system.id, section]);
 
   useEffect(() => {
@@ -134,6 +155,17 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
           Object.keys(systemFields).length > 0 ? api.updateSystem(system.id, systemFields as never) : null,
           Object.keys(answerFields).length > 0 ? api.patchQuestionnaireAnswers(system.id, answerFields) : null,
         ].filter(Boolean));
+      } else if (isAIMode) {
+        // AI mode: technical answers are free-text, stored under questionnaire_answers["technical"].
+        const answerFields: Record<string, string> = {};
+        for (const q of AI_TECHNICAL_QUESTIONS) {
+          const val = fields[q.key];
+          if (val == null || val === "") continue;
+          answerFields[q.key] = String(val);
+        }
+        if (Object.keys(answerFields).length > 0) {
+          await api.patchQuestionnaireAnswers(system.id, answerFields, "technical");
+        }
       } else {
         const flagFields: Record<string, unknown> = {};
         for (const q of TECHNICAL_QUESTIONS) {
@@ -171,6 +203,21 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
     }
   }
 
+  // A delegate fills the section and returns it to the owner (who submits it onward).
+  async function handleMarkComplete() {
+    setSubmitting(true);
+    try {
+      await handleSave();
+      await api.subComplete(system.id, section);
+      showToast("Section returned to the owner for review");
+      onSuccess();
+    } catch (e) {
+      showToast(`Return failed: ${(e as Error).message}`, true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const sectionTitle = section === "business" ? "Use Case & Context" : "AI Risk Classification";
 
   return (
@@ -181,12 +228,15 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
             {sectionTitle} — {system.name}
           </DialogTitle>
           <p className="text-xs text-muted-foreground">
-            Chat with the AI assistant or fill the form directly. Save your progress before submitting.
+            {showChat
+              ? "Chat with the AI assistant or fill the form directly. Save your progress before submitting."
+              : "Fill the form below. Save your progress before submitting."}
           </p>
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1">
           {/* Chat pane */}
+          {showChat && (
           <div className="flex w-1/2 flex-col border-r border-border">
             <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
               {transcript.map((m, i) => (
@@ -263,9 +313,10 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
               </div>
             </div>
           </div>
+          )}
 
           {/* Form pane */}
-          <div className="w-1/2 overflow-y-auto px-5 py-4">
+          <div className={cn("overflow-y-auto px-5 py-4", showChat ? "w-1/2" : "w-full")}>
             <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Current Values
             </div>
@@ -333,13 +384,27 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
 
         <DialogFooter className="shrink-0 sm:justify-start">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="outline" onClick={handleSave} disabled={saving || submitting}>
-            {saving && <Loader2 className="animate-spin" />} Save Progress
-          </Button>
-          <Button onClick={handleSubmit} disabled={saving || submitting}>
-            {submitting && <Loader2 className="animate-spin" />}
-            Submit {section === "business" ? "Business" : "Technical"} Section
-          </Button>
+          {lockedForOwner ? (
+            <span className="self-center text-[13px] text-muted-foreground">
+              Delegated to <strong className="text-foreground">{sub}</strong> — reclaim from the system detail panel to edit.
+            </span>
+          ) : (
+            <>
+              <Button variant="outline" onClick={handleSave} disabled={saving || submitting || !editable}>
+                {saving && <Loader2 className="animate-spin" />} Save Progress
+              </Button>
+              {isDelegate ? (
+                <Button onClick={handleMarkComplete} disabled={saving || submitting}>
+                  {submitting && <Loader2 className="animate-spin" />} Mark Complete &amp; Return
+                </Button>
+              ) : (
+                <Button onClick={handleSubmit} disabled={saving || submitting || !editable}>
+                  {submitting && <Loader2 className="animate-spin" />}
+                  Submit {section === "business" ? "Business" : "Technical"} Section
+                </Button>
+              )}
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

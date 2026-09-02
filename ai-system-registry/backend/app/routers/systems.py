@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from sqlalchemy import select
 
 from ai_trust_authorization import require_permission
@@ -11,11 +12,15 @@ from app.classifier import classify, CLASSIFIER_INPUTS
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.model_card import ModelCard
+from app import minio_client
+from app.routers.workflow import _active_sub_assignment, _get_steps
 from app.schemas import (
     AISystemResponse,
     AISystemUpdate,
+    DownloadUrlResponse,
     IntakeResponse,
     QuestionnaireAnswersPatch,
+    RegistrationDocument,
     VALID_LIFECYCLES,
     VALID_ROLES,
 )
@@ -24,6 +29,30 @@ router = APIRouter(tags=["systems"])
 logger = get_logger(__name__)
 
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
+
+# Supporting documents accepted for full-manual registration (extension allowlist).
+_ALLOWED_DOC_EXTENSIONS = frozenset({
+    ".pdf", ".doc", ".docx", ".txt", ".md", ".ppt", ".pptx",
+    ".xls", ".xlsx", ".csv", ".png", ".jpg", ".jpeg",
+})
+
+# The pending status each questionnaire section may be edited in, plus the assignee
+# column that owns it.
+_SECTION_STATUS = {"business": "business_pending", "technical": "technical_pending"}
+
+
+async def _assert_can_edit_section(session, row: AISystem, section: str, current_user: str) -> None:
+    """Enforce the section edit-lock: while a sub-assignment is active, only the
+    contributor holding the token may edit; otherwise only the section owner may.
+
+    A ``None`` holder (e.g. an unassigned draft) imposes no restriction so the
+    creator can still fill things in before assigning."""
+    steps = await _get_steps(session, row.id)
+    holder = _active_sub_assignment(steps, section)
+    if holder is None:
+        holder = row.business_assignee_username if section == "business" else row.technical_assignee_username
+    if holder and current_user != holder:
+        raise HTTPException(403, f"The '{section}' section is currently assigned to {holder}")
 
 
 @router.get("/systems", response_model=list[AISystemResponse], dependencies=[Depends(require_permission(SYSTEMS_READ))])
@@ -68,12 +97,19 @@ async def update_system(system_id: str, body: AISystemUpdate, request: Request) 
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
 
-        if row.assignee_username and current_user != row.assignee_username:
+        flag_updates = CLASSIFIER_INPUTS & updates.keys()
+        technical_section_edit = bool(flag_updates) and row.workflow_status == "technical_pending"
+
+        if technical_section_edit:
+            # Manual-questionnaire mode: the technical section is a checkbox form. Who may
+            # fill it is governed by the section edit-lock (owner, or the active
+            # sub-assignee) — this supersedes the plain workflow-level assignee guard.
+            await _assert_can_edit_section(session, row, "technical", current_user)
+        elif row.assignee_username and current_user != row.assignee_username:
             raise HTTPException(403, "Only the assigned user may update this system")
 
-        flag_updates = CLASSIFIER_INPUTS & updates.keys()
-        if flag_updates and row.workflow_status not in ("draft", "rejected"):
-            raise HTTPException(422, "Risk flags can only be changed while the system is in draft or rejected state")
+        if flag_updates and row.workflow_status not in ("draft", "rejected", "technical_pending"):
+            raise HTTPException(422, "Risk flags can only be changed while the system is in draft, rejected, or technical_pending state")
 
         for field, value in updates.items():
             setattr(row, field, value)
@@ -185,19 +221,101 @@ async def patch_questionnaire_answers(system_id: str, body: QuestionnaireAnswers
         row = result.scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
-        if row.workflow_status not in ("draft", "business_pending"):
-            raise HTTPException(422, "Questionnaire answers can only be updated while the system is in draft or business_pending state")
-        if row.business_assignee_username and current_user != row.business_assignee_username:
-            # Also allow the original creator (assignee_username may be unset in draft).
-            pass  # creator check would require a DB lookup; defer to workflow status guard above
 
-        existing = dict(row.questionnaire_answers or {})
-        existing.update(body.answers)
-        row.questionnaire_answers = existing
+        # Business answers are editable in draft (creator pre-fill) or business_pending;
+        # technical answers only in technical_pending. The section edit-lock then decides
+        # who (owner vs active sub-assignee) may actually write.
+        allowed_states = ("draft", "business_pending") if body.section == "business" else ("technical_pending",)
+        if row.workflow_status not in allowed_states:
+            raise HTTPException(
+                422,
+                f"The '{body.section}' section can only be updated while the system is in "
+                f"{' or '.join(allowed_states)} state",
+            )
+        await _assert_can_edit_section(session, row, body.section, current_user)
+
+        answers = dict(row.questionnaire_answers or {})
+        if body.section == "technical":
+            technical = dict(answers.get("technical") or {})
+            technical.update(body.answers)
+            answers["technical"] = technical
+        else:
+            answers.update(body.answers)
+        row.questionnaire_answers = answers
         row.updated_at = datetime.now(timezone.utc)
         await session.commit()
         await session.refresh(row)
 
-    logger.info("system.questionnaire_updated", extra={"system_id": system_id, "keys": sorted(body.answers.keys())})
+    logger.info("system.questionnaire_updated", extra={
+        "system_id": system_id, "section": body.section, "keys": sorted(body.answers.keys()),
+    })
     return AISystemResponse.model_validate(row)
+
+
+@router.post("/systems/{system_id}/documents", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+async def upload_registration_document(
+    system_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+) -> AISystemResponse:
+    """Attach a supporting document to a full-manual registration.
+
+    Stored in the ``registration-docs`` MinIO bucket; a metadata entry is appended to
+    the system's ``registration_documents`` JSONB array."""
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
+
+    filename = os.path.basename(file.filename or "").strip()
+    if not filename:
+        raise HTTPException(422, "A filename is required")
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in _ALLOWED_DOC_EXTENSIONS:
+        raise HTTPException(422, f"Unsupported file type '{ext}'. Allowed: {sorted(_ALLOWED_DOC_EXTENSIONS)}")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(422, "The uploaded file is empty")
+
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+        if row.registration_mode != "full_manual":
+            raise HTTPException(422, "Supporting documents may only be uploaded for full-manual registrations")
+
+        key = await minio_client.upload_file(system_id, filename, data, file.content_type or "application/octet-stream")
+
+        docs = list(row.registration_documents or [])
+        docs.append(RegistrationDocument(
+            filename=filename,
+            minio_key=key,
+            uploaded_at=datetime.now(timezone.utc),
+        ).model_dump(mode="json"))
+        row.registration_documents = docs
+        row.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+        await session.refresh(row)
+
+    logger.info("system.document_uploaded", extra={
+        "system_id": system_id, "file_name": filename, "by": current_user,
+    })
+    return AISystemResponse.model_validate(row)
+
+
+@router.get("/systems/{system_id}/documents/{doc_index}/download-url", response_model=DownloadUrlResponse, dependencies=[Depends(require_permission(SYSTEMS_READ))])
+async def get_document_download_url(system_id: str, doc_index: int) -> DownloadUrlResponse:
+    """Return a short-lived presigned GET URL for a registration document by array index."""
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+
+        docs = row.registration_documents or []
+        if doc_index < 0 or doc_index >= len(docs):
+            raise HTTPException(404, f"Document {doc_index} not found for system {system_id}")
+        key = docs[doc_index]["minio_key"]
+
+    url = await minio_client.get_presigned_url(key)
+    return DownloadUrlResponse(url=url)
 

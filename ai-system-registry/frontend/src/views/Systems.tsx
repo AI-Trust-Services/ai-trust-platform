@@ -1,18 +1,18 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Eye, Trash2, RefreshCw } from "lucide-react";
+import { Eye, Trash2, RefreshCw, Sparkles, ClipboardList, FileText } from "lucide-react";
 import { TierBadge, LifecycleBadge, ComplianceBar, FormattedDate } from "../components/Badges";
 import SystemDetail from "../components/SystemDetail";
 import type { UserMap } from "../components/SystemDetail";
 import RegisterWizard from "../components/RegisterWizard";
 import RegisterModeChooser from "../components/RegisterModeChooser";
-import AssistedRegistration from "../components/AssistedRegistration";
+import FullManualRegistration from "../components/FullManualRegistration";
 import EngineerAssistedRegistration from "../components/EngineerAssistedRegistration";
 import QuestionnaireView from "../components/QuestionnaireView";
 import type { SectionKey } from "../config/questionnaire";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import { SELECT_CLASS } from "../utils";
-import type { AISystem, ModelCard } from "../types";
+import type { AISystem, ModelCard, RegistrationMode } from "../types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ const WORKFLOW_STATUS_LABELS: Record<string, string> = {
   business_pending: "Business Review",
   technical_pending: "Technical Review",
   pending_review: "Compliance Review",
+  info_requested: "Information Requested",
   approved: "Approved",
   rejected: "Rejected",
 };
@@ -42,7 +43,7 @@ export default function Systems() {
   const [fillInSystem, setFillInSystem] = useState<AISystem | undefined>(undefined);
   const [questionnaireSystem, setQuestionnaireSystem] = useState<AISystem | null>(null);
   const [questionnaireSection, setQuestionnaireSection] = useState<SectionKey>("business");
-  const [ownerStage, setOwnerStage] = useState<"chooser" | "manual" | "assisted">("chooser");
+  const [ownerStage, setOwnerStage] = useState<"chooser" | RegistrationMode>("chooser");
   const [engineerStage, setEngineerStage] = useState<"chooser" | "manual" | "assisted">("chooser");
   const { wizardOpen, setWizardOpen, mayRegister, username } = useModalControls();
   const showToast = useToast();
@@ -112,29 +113,6 @@ export default function Systems() {
   }
 
   async function openSystem(s: AISystem) {
-    // Questionnaire assignee: open section view directly
-    const isBusinessAssignee = username && s.business_assignee_username === username;
-    const isTechnicalAssignee = username && s.technical_assignee_username === username;
-    if (isBusinessAssignee && s.workflow_status === "business_pending") {
-      try {
-        const fresh = await api.getSystem(s.id);
-        setQuestionnaireSystem(fresh);
-        setQuestionnaireSection("business");
-      } catch (e) {
-        showToast(`Failed to load system: ${(e as Error).message}`, true);
-      }
-      return;
-    }
-    if (isTechnicalAssignee && s.workflow_status === "technical_pending") {
-      try {
-        const fresh = await api.getSystem(s.id);
-        setQuestionnaireSystem(fresh);
-        setQuestionnaireSection("technical");
-      } catch (e) {
-        showToast(`Failed to load system: ${(e as Error).message}`, true);
-      }
-      return;
-    }
     // Legacy engineer fill-in (rejected systems)
     const isAssignee = username && s.assignee_username === username;
     if (isAssignee && s.workflow_status === "rejected") {
@@ -147,7 +125,8 @@ export default function Systems() {
       }
       return;
     }
-    // Otherwise open the detail panel
+    // Everyone else (including section assignees and delegates) opens the detail panel,
+    // which is the hub for filling a section, delegating it, or acting as the CO.
     try {
       const fresh = await api.getSystem(s.id);
       setSelectedSystem(fresh);
@@ -166,6 +145,7 @@ export default function Systems() {
       business_pending: "bg-[#7b5ea7]",
       technical_pending: "bg-[#2980b9]",
       pending_review: "bg-[#e67e22]",
+      info_requested: "bg-[#d35400]",
       approved: "bg-[#27ae60]",
       rejected: "bg-[#c0392b]",
     };
@@ -204,6 +184,7 @@ export default function Systems() {
           <option value="business_pending">Business Review</option>
           <option value="technical_pending">Technical Review</option>
           <option value="pending_review">Compliance Review</option>
+          <option value="info_requested">Information Requested</option>
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </select>
@@ -301,11 +282,24 @@ export default function Systems() {
       <RegisterModeChooser
         open={wizardOpen && !!fillInSystem && engineerStage === "chooser"}
         onClose={closeWizard}
-        onAssisted={() => setEngineerStage("assisted")}
-        onManual={() => setEngineerStage("manual")}
         title="Complete Technical Registration"
-        assistedDescription="Upload a model card or technical spec and let the assistant extract the details. Review and confirm each field before submitting."
-        manualDescription="Fill in the technical details and risk flags manually using the step-by-step form."
+        options={[
+          {
+            key: "assisted",
+            icon: <Sparkles className="size-5" />,
+            iconClass: "bg-[var(--brand)]/10 text-[var(--brand)]",
+            title: "AI-Assisted",
+            description: "Upload a model card or technical spec and let the assistant extract the details. Review and confirm each field before submitting.",
+            onClick: () => setEngineerStage("assisted"),
+          },
+          {
+            key: "manual",
+            icon: <ClipboardList className="size-5" />,
+            title: "Manual",
+            description: "Fill in the technical details and risk flags manually using the step-by-step form.",
+            onClick: () => setEngineerStage("manual"),
+          },
+        ]}
       />
 
       {/* Engineer: AI-assisted technical flow */}
@@ -324,26 +318,57 @@ export default function Systems() {
         onSuccess={() => { loadSystems(); loadModels(); }}
       />
 
-      {/* Owner: choose manual vs AI-assisted */}
+      {/* Owner: choose registration mode */}
       <RegisterModeChooser
         open={wizardOpen && !fillInSystem && ownerStage === "chooser"}
         onClose={closeWizard}
-        onManual={() => setOwnerStage("manual")}
-        onAssisted={() => setOwnerStage("assisted")}
+        options={[
+          {
+            key: "ai",
+            icon: <Sparkles className="size-5" />,
+            iconClass: "bg-[var(--brand)]/10 text-[var(--brand)]",
+            title: "AI-Assisted",
+            description: "Describe the system in plain language. An assistant guides the business and technical questionnaires and infers the risk tier for the compliance officer to confirm.",
+            onClick: () => setOwnerStage("ai"),
+          },
+          {
+            key: "manual_questionnaire",
+            icon: <ClipboardList className="size-5" />,
+            title: "Manual Questionnaire",
+            description: "Answer the same business and technical questionnaires yourself, including the risk-classification flags — no AI involved.",
+            onClick: () => setOwnerStage("manual_questionnaire"),
+          },
+          {
+            key: "full_manual",
+            icon: <FileText className="size-5" />,
+            title: "Full Manual Override",
+            description: "Declare the risk tier by hand and attach supporting documents. Skips the questionnaire and goes straight to a named compliance officer.",
+            onClick: () => setOwnerStage("full_manual"),
+          },
+        ]}
       />
 
-      {/* Owner: classic manual stub */}
+      {/* Owner: AI-assisted questionnaire wizard (document prefill, no chat, no manual flags) */}
       <RegisterWizard
-        open={wizardOpen && !fillInSystem && ownerStage === "manual"}
+        open={wizardOpen && !fillInSystem && ownerStage === "ai"}
+        mode="ai"
         onClose={closeWizard}
         onSuccess={() => { loadSystems(); loadModels(); }}
       />
 
-      {/* Owner: conversational AI-assisted flow */}
-      <AssistedRegistration
-        open={wizardOpen && !fillInSystem && ownerStage === "assisted"}
+      {/* Owner: manual questionnaire wizard (flags shown, no AI) */}
+      <RegisterWizard
+        open={wizardOpen && !fillInSystem && ownerStage === "manual_questionnaire"}
+        mode="manual_questionnaire"
         onClose={closeWizard}
         onSuccess={() => { loadSystems(); loadModels(); }}
+      />
+
+      {/* Owner: full manual override */}
+      <FullManualRegistration
+        open={wizardOpen && !fillInSystem && ownerStage === "full_manual"}
+        onClose={closeWizard}
+        onSuccess={() => { loadSystems(); loadModels(); closeWizard(); }}
       />
 
       <SystemDetail

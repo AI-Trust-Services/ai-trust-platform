@@ -94,7 +94,10 @@ components:
       OPENFGA_URL: http://openfga:8080
       KEYCLOAK_URL: http://keycloak:8080
     dependsOnJobs: [db-migrate, openfga-provision]
-    dependsOnServices: []
+    dependsOnServices:
+      - name: minio
+        port: 9000
+        httpPath: /minio/health/live
     openfgaConfig: true
 
   - name: monitoring

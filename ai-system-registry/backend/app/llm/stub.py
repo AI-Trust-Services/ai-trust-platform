@@ -23,7 +23,7 @@ _CANNED_FIELDS = {
     "department": "HR",
     "technologies": "Large language model (LLM), Python, REST API",
     "use_case_status": "New AI use case",
-    "use_case": "Automated candidate shortlisting and CV screening for open positions.",
+    "use_case": "Automated shortlisting and CV screening of job applicants for open recruiting positions.",
     "planned_modifications": "N/A",
     "entity_role": "Provider — we develop this AI system and make it available internally or externally",
     "additional_entity_roles": "N/A",
@@ -144,7 +144,7 @@ def _doc_extract(_messages: list[dict]) -> dict:
                     "use_case_owner": "Jane Smith",
                     "department": "HR",
                     "technologies": "Large language model (LLM), Python, REST API",
-                    "use_case": "Automated candidate shortlisting and CV screening for open positions.",
+                    "use_case": "Automated shortlisting and CV screening of job applicants for open recruiting positions.",
                     "entity_role": "Provider — we develop this AI system and make it available internally or externally",
                     "used_in_eu": "yes",
                 },
@@ -188,6 +188,40 @@ def _infer_flags(messages: list[dict]) -> dict:
     return _result(json.dumps({"inferred_flags": flags}))
 
 
+def _classify_questionnaire(messages: list[dict]) -> dict:
+    """AI-mode authoritative classification: infer flags + reasoning + missing_info + confidence."""
+    blob = " ".join(
+        m["content"] for m in messages if m["role"] == "user" and isinstance(m["content"], str)
+    ).lower()
+    flags = []
+    if any(kw in blob for kw in ("recruit", "employment", "applicant", "hiring")):
+        flags.append(
+            {
+                "flag": "is_employment_related",
+                "value": True,
+                "rationale": "The system screens and ranks job applicants, an Annex III employment use case.",
+                "confidence": 0.9,
+            }
+        )
+        reasoning = "The answers describe automated candidate screening, an Annex III employment use case, so the system is high-risk."
+        missing_info: list[str] = []
+        confidence = 0.9
+    else:
+        reasoning = "No Annex III, prohibited, GPAI, or transparency triggers were evident in the answers; the system appears minimal risk."
+        missing_info = ["Confirmation of the deployment context and the population affected."]
+        confidence = 0.6
+    return _result(
+        json.dumps(
+            {
+                "inferred_flags": flags,
+                "reasoning": reasoning,
+                "missing_info": missing_info,
+                "confidence": confidence,
+            }
+        )
+    )
+
+
 def chat(messages: list[dict], *, task: str = "chat") -> dict:
     """Synchronous stub dispatch, keyed by task."""
     if task == "turn":
@@ -196,6 +230,8 @@ def chat(messages: list[dict], *, task: str = "chat") -> dict:
         return _doc_extract(messages)
     if task == "infer_flags":
         return _infer_flags(messages)
+    if task == "classify_questionnaire":
+        return _classify_questionnaire(messages)
     if task == "questionnaire_turn_business":
         return _questionnaire_business_turn(messages)
     if task == "questionnaire_turn_technical":

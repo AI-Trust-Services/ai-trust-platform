@@ -1,4 +1,4 @@
-import type { AISystem } from "../types";
+import type { AISystem, WorkflowStep } from "../types";
 
 export type SectionKey = "business" | "technical";
 
@@ -9,6 +9,8 @@ export interface QuestionDef {
   type: "text" | "textarea" | "boolean" | "number" | "select";
   storage: "system" | "answers";
   options?: string[];
+  /** Genuinely optional free-text question — never counted as a completeness gap. */
+  optional?: boolean;
 }
 
 // ─── General Information ──────────────────────────────────────────────────────
@@ -31,6 +33,7 @@ export const BUSINESS_QUESTIONS: QuestionDef[] = [
     hint: "If your system is already tracked in an external register or ticketing system, provide the ID here. Leave blank if not applicable.",
     type: "text",
     storage: "answers",
+    optional: true,
   },
   {
     key: "use_case_owner",
@@ -113,6 +116,7 @@ export const BUSINESS_QUESTIONS: QuestionDef[] = [
     hint: "If your organisation also acts as Distributor, Importer, Product Manufacturer, Authorised Representative, or Operator, describe that role here.",
     type: "textarea",
     storage: "answers",
+    optional: true,
   },
   {
     key: "used_in_eu",
@@ -314,12 +318,89 @@ export function getBusinessFieldValues(system: AISystem): Record<string, string>
   const result: Record<string, string> = {};
   for (const q of BUSINESS_QUESTIONS) {
     if (q.storage === "system") {
-      const v = (system as Record<string, unknown>)[q.key];
+      const v = (system as unknown as Record<string, unknown>)[q.key];
       if (v != null && v !== "") result[q.key] = String(v);
     } else {
-      const v = system.questionnaire_answers?.[q.key];
+      const v = (system.questionnaire_answers as Record<string, unknown> | null)?.[q.key];
       if (v != null && v !== "") result[q.key] = String(v);
     }
+  }
+  return result;
+}
+
+// ─── AI-mode Risk Classification (free-text) ───────────────────────────────────
+// In AI mode the classifier flags are hidden. The technical assignee answers these
+// open questions instead; their free-text answers are stored under
+// questionnaire_answers["technical"] and the LLM infers the hidden flags from them
+// at submit-technical. Deterministic classify() then produces the tier.
+
+export const AI_TECHNICAL_QUESTIONS: QuestionDef[] = [
+  {
+    key: "data_and_inputs",
+    label: "Data & Inputs",
+    hint: "What data does the system process? Does it include biometric, health, or other sensitive personal data?",
+    type: "textarea",
+    storage: "answers",
+  },
+  {
+    key: "decision_domain",
+    label: "Domain of Use",
+    hint: "In what domain does the system operate — e.g. employment, credit/insurance, healthcare, law enforcement, education, migration, critical infrastructure, justice?",
+    type: "textarea",
+    storage: "answers",
+  },
+  {
+    key: "automation_and_oversight",
+    label: "Autonomy & Human Oversight",
+    hint: "How autonomous is the system, and what human oversight exists over its outputs before they take effect?",
+    type: "textarea",
+    storage: "answers",
+  },
+  {
+    key: "affected_people",
+    label: "Impact on People",
+    hint: "Who is affected by the system's outputs, and how significant are the consequences for them?",
+    type: "textarea",
+    storage: "answers",
+  },
+  {
+    key: "model_nature",
+    label: "Model Nature",
+    hint: "Is this a general-purpose AI model (e.g. an LLM)? If so, roughly what training compute (FLOPs) was used?",
+    type: "textarea",
+    storage: "answers",
+  },
+  {
+    key: "user_interaction",
+    label: "User Interaction & Content",
+    hint: "Does the system interact directly with people (chatbot) or generate synthetic media (text, images, audio, video, deepfakes)?",
+    type: "textarea",
+    storage: "answers",
+  },
+  {
+    key: "prohibited_practices",
+    label: "Prohibited Practices Check",
+    hint: "Does the system involve any of: subliminal manipulation, social scoring, real-time public biometric identification, emotion recognition at work/school, untargeted facial scraping, or predictive policing?",
+    type: "textarea",
+    storage: "answers",
+  },
+];
+
+/** Technical question set for a given registration mode. */
+export function technicalQuestionsForMode(mode: string | undefined): QuestionDef[] {
+  return mode === "ai" ? AI_TECHNICAL_QUESTIONS : TECHNICAL_QUESTIONS;
+}
+
+/** Extract current AI-mode technical answers (nested under "technical"). */
+export function getAITechnicalFieldValues(system: AISystem): Record<string, string> {
+  const technical = (system.questionnaire_answers as Record<string, unknown> | null)?.technical as
+    | Record<string, unknown>
+    | undefined;
+  const result: Record<string, string> = {};
+  if (!technical) return result;
+  for (const q of AI_TECHNICAL_QUESTIONS) {
+    const v = technical[q.key];
+    if (v != null && v !== "") result[q.key] = String(v);
   }
   return result;
 }
@@ -328,8 +409,44 @@ export function getBusinessFieldValues(system: AISystem): Record<string, string>
 export function getTechnicalFieldValues(system: AISystem): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const q of TECHNICAL_QUESTIONS) {
-    const v = (system as Record<string, unknown>)[q.key];
+    const v = (system as unknown as Record<string, unknown>)[q.key];
     if (v != null) result[q.key] = v;
   }
   return result;
+}
+
+// ─── Completeness helpers ──────────────────────────────────────────────────────
+// The compliance officer cannot approve until every required question is answered.
+// Boolean/number inputs are always considered answered (an unchecked box / 0 is valid),
+// and questions flagged `optional` never count as a gap.
+
+export function requiredQuestions(questions: QuestionDef[]): QuestionDef[] {
+  return questions.filter((q) => !q.optional && q.type !== "boolean" && q.type !== "number");
+}
+
+/** Required questions with no non-empty value in `fields`. */
+export function missingRequired(
+  questions: QuestionDef[],
+  fields: Record<string, unknown>,
+): QuestionDef[] {
+  return requiredQuestions(questions).filter((q) => {
+    const v = fields[q.key];
+    return v == null || (typeof v === "string" && v.trim() === "");
+  });
+}
+
+// ─── Sub-assignment (delegation) state ─────────────────────────────────────────
+// Delegation is encoded as workflow steps (no DB column), so the active contributor
+// is derived from the ordered step history — mirroring the backend's
+// _active_sub_assignment(). Steps arrive ordered oldest-first (by created_at).
+
+export function activeSubAssignee(steps: WorkflowStep[], section: SectionKey): string | null {
+  const suffix = `_${section}`;
+  const kinds = ["sub_assigned", "sub_completed", "sub_reclaimed"];
+  const rel = steps.filter(
+    (s) => s.step.endsWith(suffix) && kinds.includes(s.step.slice(0, -suffix.length)),
+  );
+  if (!rel.length) return null;
+  const latest = rel[rel.length - 1];
+  return latest.step === `sub_assigned${suffix}` ? latest.assignee_username ?? null : null;
 }

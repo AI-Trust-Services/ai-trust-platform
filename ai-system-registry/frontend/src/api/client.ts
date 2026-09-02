@@ -76,12 +76,14 @@ export const api = {
       body: JSON.stringify({ confirmations }),
     }),
 
-  // Merge questionnaire answers — only the keys sent are merged.
-  patchQuestionnaireAnswers: (systemId: string, answers: Record<string, string>) =>
+  // Merge questionnaire answers — only the keys sent are merged. section="business"
+  // merges at the top level; section="technical" merges into the nested "technical"
+  // sub-object (AI-mode free-text technical answers).
+  patchQuestionnaireAnswers: (systemId: string, answers: Record<string, string>, section: SectionKey = "business") =>
     request<AISystem>(`/systems/${encodeURIComponent(systemId)}/questionnaire`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers }),
+      body: JSON.stringify({ answers, section }),
     }),
 
   linkModel: (systemId: string, modelId: string) =>
@@ -119,11 +121,11 @@ export const api = {
       body: JSON.stringify({ assignee_username: assigneeUsername, note: note ?? null }),
     }),
 
-  approveSystem: (systemId: string, note?: string) =>
+  approveSystem: (systemId: string, note?: string, tier?: string) =>
     request<WorkflowStep[]>(`/systems/${systemId}/workflow/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: note ?? null }),
+      body: JSON.stringify({ note: note ?? null, tier: tier ?? null }),
     }),
 
   rejectSystem: (systemId: string, note: string, assigneeUsername: string, sendTo: "business" | "technical" = "business") =>
@@ -168,5 +170,55 @@ export const api = {
     fd.append("file", file);
     return request<AssistExtractResponse>(`/intake/assist/questionnaire/${encodeURIComponent(systemId)}/extract?section=${section}`, { method: "POST", body: fd });
   },
+
+  // CO sends a system back to a specific contributor for more information.
+  requestInfo: (systemId: string, contributorUsername: string, note: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/request-info`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contributor_username: contributorUsername, note }),
+    }),
+
+  // Contributor returns an info-requested system to the CO.
+  submitInfo: (systemId: string, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-info`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note ?? null }),
+    }),
+
+  // Section owner hands a section to a contributor (task handoff).
+  subAssign: (systemId: string, section: SectionKey, subAssigneeUsername: string, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/sub-assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ section, sub_assignee_username: subAssigneeUsername, note: note ?? null }),
+    }),
+
+  // Contributor marks a sub-assigned section complete, returning it to the owner.
+  subComplete: (systemId: string, section: SectionKey, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/sub-complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ section, note: note ?? null }),
+    }),
+
+  // Section owner cancels an active sub-assignment and reclaims editing.
+  subReclaim: (systemId: string, section: SectionKey, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/sub-reclaim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ section, note: note ?? null }),
+    }),
+
+  // Full-manual supporting documents.
+  uploadDocument: (systemId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<AISystem>(`/systems/${encodeURIComponent(systemId)}/documents`, { method: "POST", body: fd });
+  },
+
+  getDocumentDownloadUrl: (systemId: string, docIndex: number) =>
+    request<{ url: string }>(`/systems/${encodeURIComponent(systemId)}/documents/${docIndex}/download-url`),
 };
 

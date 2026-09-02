@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -9,6 +10,13 @@ VALID_LIFECYCLES = frozenset({
     "development", "testing", "conformity", "market", "post-market", "decommissioned",
 })
 VALID_ROLES = frozenset({"provider", "deployer", "importer", "distributor"})
+# The six canonical EU AI Act tiers — enforced by ck_ai_systems_tier at the DB layer.
+# Validated in the API layer for CO overrides / full-manual entry so a bad value
+# returns 422 instead of 500-ing on commit.
+VALID_TIERS = frozenset({
+    "prohibited", "gpai-systemic", "gpai-standard", "high", "limited", "minimal",
+})
+VALID_REGISTRATION_MODES = frozenset({"ai", "manual_questionnaire", "full_manual"})
 
 
 class RationaleItem(BaseModel):
@@ -17,6 +25,29 @@ class RationaleItem(BaseModel):
     value: bool | float
     rationale: str
     confidence: float = Field(ge=0.0, le=1.0)
+
+
+class ClassificationRationale(BaseModel):
+    """Extended classification output from the questionnaire workflow — visible only to the CO.
+
+    Distinct from the legacy bare ``list[RationaleItem]`` written by AI-assisted intake;
+    readers discriminate the two shapes with ``isinstance``/``Array.isArray``.
+    """
+    flags: list[RationaleItem] = []
+    confidence: float | None = None
+    reasoning: str | None = None
+    missing_info: list[str] = []
+
+
+class RegistrationDocument(BaseModel):
+    """One supporting document uploaded in the full-manual override flow."""
+    filename: str
+    minio_key: str
+    uploaded_at: datetime
+
+
+class DownloadUrlResponse(BaseModel):
+    url: str
 
 
 class AISystemCreate(BaseModel):
@@ -57,7 +88,12 @@ class AISystemCreate(BaseModel):
     is_chatbot: bool | None = None
     generates_synthetic_content: bool | None = None
 
-    classification_rationale: list[RationaleItem] | None = None
+    classification_rationale: list[RationaleItem] | ClassificationRationale | None = None
+
+    registration_mode: Literal["ai", "manual_questionnaire", "full_manual"] = "ai"
+    # Full-manual override: creator supplies the tier directly (validated against VALID_TIERS
+    # in the router) and names the compliance officer.
+    tier: str | None = None
 
     business_assignee_username: str | None = None
     technical_assignee_username: str | None = None
@@ -148,7 +184,7 @@ class AISystemResponse(BaseModel):
     tier: str
     basis: str
     annex_iii_area: int | None
-    classification_rationale: list[RationaleItem] | None
+    classification_rationale: list[RationaleItem] | ClassificationRationale | None
     field_confirmations: dict[str, bool] | None
     lifecycle: str
     compliance: float
@@ -177,11 +213,13 @@ class AISystemResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     workflow_status: str
+    registration_mode: str
     assignee_username: str | None
     compliance_officer_username: str | None
     business_assignee_username: str | None
     technical_assignee_username: str | None
     questionnaire_answers: dict | None
+    registration_documents: list[RegistrationDocument] | None = None
 
     model_config = {"from_attributes": True}
 
@@ -197,5 +235,10 @@ class FieldConfirmationPatch(BaseModel):
 
 
 class QuestionnaireAnswersPatch(BaseModel):
-    """Merge-patch update for business-section questionnaire answers."""
+    """Merge-patch update for questionnaire answers.
+
+    ``section="business"`` merges into the top level of ``questionnaire_answers``;
+    ``section="technical"`` merges into the nested ``"technical"`` sub-object (kept
+    separate so the AI-mode flag-inference prompt can read the two sets apart)."""
     answers: dict[str, str]
+    section: Literal["business", "technical"] = "business"

@@ -319,11 +319,20 @@ services:
       AI_API_VERSION: ${AI_API_VERSION:-bedrock-2023-05-31}
       ASSIST_TURN_CAP: ${ASSIST_TURN_CAP:-12}
       ASSIST_MAX_TEXT_LENGTH: ${ASSIST_MAX_TEXT_LENGTH:-15000}
+      # Full-manual registration document storage (MinIO).
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_SECURE: ${MINIO_SECURE}
+      MINIO_REGION: ${MINIO_REGION}
     volumes:
       - openfga-config:/config:ro
     depends_on:
       db-migrate:
         condition: service_completed_successfully
+      minio:
+        condition: service_healthy
       openfga-provision:
         condition: service_completed_successfully
     healthcheck:

@@ -82,9 +82,14 @@ async def test_intake_rejects_missing_name(client: httpx.AsyncClient):
     assert r.status_code == 422
 
 
-async def test_intake_rejects_missing_assignee(client: httpx.AsyncClient):
+async def test_intake_allows_missing_assignee(client: httpx.AsyncClient):
+    # Assignees are no longer set at intake — the creator assigns sections later
+    # via /workflow/assign, so an owner may register with just a name.
     r = await client.post("/v1/intake", json={"name": "No Assignee"}, headers=_HEADERS)
-    assert r.status_code == 422
+    assert r.status_code == 201
+    body = r.json()
+    assert body["system"]["workflow_status"] == "draft"
+    assert body["system"]["assignee_username"] is None
 
 
 async def test_update_system_lifecycle(client: httpx.AsyncClient):

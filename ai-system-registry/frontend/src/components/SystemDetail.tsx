@@ -1,10 +1,18 @@
 import { useState, useEffect, Fragment } from "react";
-import { Loader2, ChevronDown, ChevronRight, Copy } from "lucide-react";
+import { Loader2, ChevronDown, ChevronRight, Copy, FileText, Download, Sparkles } from "lucide-react";
 import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
-import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS } from "../utils";
+import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS, TIER_META } from "../utils";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, ModelCard, WorkflowStep } from "../types";
+import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary } from "../types";
+import {
+  BUSINESS_QUESTIONS,
+  AI_TECHNICAL_QUESTIONS,
+  missingRequired,
+  activeSubAssignee,
+  getBusinessFieldValues,
+  getAITechnicalFieldValues,
+} from "../config/questionnaire";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -68,14 +76,22 @@ function FlagPanel({ title, flags }: { title: string; flags: [unknown, string][]
 }
 
 const STEP_LABELS: Record<string, string> = {
-  registered:           "System Registered",
-  section_assigned:     "Sections Assigned",
-  business_submitted:   "Business Section Submitted",
-  technical_submitted:  "Technical Section Submitted",
-  assigned_engineer:    "Engineer Assigned",
-  details_submitted:    "Submitted for Review",
-  approved:             "Approved",
-  rejected:             "Rejected",
+  registered:            "System Registered",
+  section_assigned:      "Sections Assigned",
+  business_submitted:    "Business Section Submitted",
+  technical_submitted:   "Technical Section Submitted",
+  assigned_engineer:     "Engineer Assigned",
+  details_submitted:     "Submitted for Review",
+  sub_assigned_business: "Business Section Delegated",
+  sub_assigned_technical:"Technical Section Delegated",
+  sub_completed_business:"Business Delegation Completed",
+  sub_completed_technical:"Technical Delegation Completed",
+  sub_reclaimed_business: "Business Delegation Reclaimed",
+  sub_reclaimed_technical:"Technical Delegation Reclaimed",
+  info_requested:        "Information Requested",
+  info_submitted:        "Information Provided",
+  approved:              "Approved",
+  rejected:              "Rejected",
 };
 
 const WF_PHASES = [
@@ -88,7 +104,8 @@ const WF_PHASES = [
 
 function workflowPhase(status: string): number {
   if (status === "approved" || status === "rejected") return 5;
-  if (status === "pending_review") return 4;
+  // info_requested is part of the compliance-review loop (CO sent it back for detail).
+  if (status === "pending_review" || status === "info_requested") return 4;
   if (status === "technical_pending") return 3;
   if (status === "business_pending") return 2;
   return 1;
@@ -105,22 +122,80 @@ function WorkflowProgress({
   onFillSection?: (section: "business" | "technical") => void;
   userMap?: UserMap;
 }) {
-  const [rejectNote, setRejectNote] = useState("");
+  const [panel, setPanel] = useState<"" | "approve" | "reject" | "requestInfo" | "delegate">("");
+  const [note, setNote] = useState("");
   const [rejectSendTo, setRejectSendTo] = useState<"business" | "technical">("business");
-  const [rejectOpen, setRejectOpen] = useState(false);
+  const [approveTier, setApproveTier] = useState<string>(system.tier);
+  const [infoContributor, setInfoContributor] = useState("");
+  const [resubmitNote, setResubmitNote] = useState("");
   const [acting, setActing] = useState(false);
+  const [steps, setSteps] = useState<WorkflowStep[]>([]);
+  const [delegateUser, setDelegateUser] = useState("");
+  const [delegatePool, setDelegatePool] = useState<UserSummary[]>([]);
   const { username } = useModalControls();
   const showToast = useToast();
 
   const canAct = system.workflow_status === "pending_review" && system.assignee_username === username;
-  const canFillBusiness = system.workflow_status === "business_pending" && system.business_assignee_username === username;
-  const canFillTechnical = system.workflow_status === "technical_pending" && system.technical_assignee_username === username;
+  // Contributor the CO sent the system back to for more information.
+  const canResubmitInfo = system.workflow_status === "info_requested" && system.assignee_username === username;
+
+  // The section currently open for editing (if any), its owner, and the active delegate.
+  const pendingSection: "business" | "technical" | null =
+    system.workflow_status === "business_pending" ? "business"
+    : system.workflow_status === "technical_pending" ? "technical"
+    : null;
+  const sectionOwner = pendingSection
+    ? (pendingSection === "business" ? system.business_assignee_username : system.technical_assignee_username)
+    : null;
+  const activeSub = pendingSection ? activeSubAssignee(steps, pendingSection) : null;
+  const isSectionOwner = !!sectionOwner && username === sectionOwner;
+  const isDelegate = !!activeSub && username === activeSub;
+  // The owner may fill only while holding the token (no active delegate); the delegate
+  // may fill while it holds the token. This mirrors the backend section edit-lock.
+  const canFillSection = !!pendingSection && ((isSectionOwner && !activeSub) || isDelegate);
+
+  // The CO cannot approve until every required question is answered (backend enforces a
+  // 422 as the safety net). Booleans/numbers and full_manual systems never contribute gaps.
+  const bizMissing = missingRequired(BUSINESS_QUESTIONS, getBusinessFieldValues(system));
+  const techMissing = system.registration_mode === "ai"
+    ? missingRequired(AI_TECHNICAL_QUESTIONS, getAITechnicalFieldValues(system))
+    : [];
+  const approvalMissing = system.registration_mode === "full_manual" ? [] : [...bizMissing, ...techMissing];
+
+  // Load workflow steps (delegation is derived from them) while a section is open.
+  useEffect(() => {
+    if (system.workflow_status === "business_pending" || system.workflow_status === "technical_pending") {
+      api.getWorkflow(system.id).then(setSteps).catch(() => setSteps([]));
+    } else {
+      setSteps([]);
+    }
+  }, [system.id, system.workflow_status]);
+
+  // Load the delegation pool (same role as the section) when the owner opens the panel.
+  useEffect(() => {
+    if (panel === "delegate" && pendingSection) {
+      api.getUsersByRole(pendingSection === "business" ? "business_owner" : "ai_engineer")
+        .then(setDelegatePool)
+        .catch(() => setDelegatePool([]));
+    }
+  }, [panel, pendingSection, system.id]);
+
+  // Contributors the CO can bounce the system to for more information.
+  const infoContributors = [
+    system.business_assignee_username ? ["business", system.business_assignee_username] as const : null,
+    system.technical_assignee_username ? ["technical", system.technical_assignee_username] as const : null,
+  ].filter(Boolean) as (readonly ["business" | "technical", string])[];
+
+  function closePanel() { setPanel(""); setNote(""); }
 
   async function handleApprove() {
     setActing(true);
     try {
-      await api.approveSystem(system.id);
+      // Only send a tier override when the CO actually changed it.
+      const tierOverride = approveTier && approveTier !== system.tier ? approveTier : undefined;
+      await api.approveSystem(system.id, note.trim() || undefined, tierOverride);
       onSystemUpdate(await api.getSystem(system.id));
+      closePanel();
       showToast("System approved");
     } catch (e) {
       showToast(`Approve failed: ${(e as Error).message}`, true);
@@ -128,15 +203,69 @@ function WorkflowProgress({
   }
 
   async function handleReject() {
-    if (!rejectNote.trim()) { showToast("Rejection note is required", true); return; }
+    if (!note.trim()) { showToast("Rejection note is required", true); return; }
     setActing(true);
     try {
-      await api.rejectSystem(system.id, rejectNote, system.assignee_username || "", rejectSendTo);
+      await api.rejectSystem(system.id, note, system.assignee_username || "", rejectSendTo);
       onSystemUpdate(await api.getSystem(system.id));
-      setRejectOpen(false); setRejectNote("");
+      closePanel();
       showToast("System rejected");
     } catch (e) {
       showToast(`Reject failed: ${(e as Error).message}`, true);
+    } finally { setActing(false); }
+  }
+
+  async function handleRequestInfo() {
+    if (!infoContributor) { showToast("Select who should provide the information", true); return; }
+    if (!note.trim()) { showToast("Describe what information is needed", true); return; }
+    setActing(true);
+    try {
+      await api.requestInfo(system.id, infoContributor, note);
+      onSystemUpdate(await api.getSystem(system.id));
+      closePanel();
+      showToast("Information requested — contributor notified");
+    } catch (e) {
+      showToast(`Request failed: ${(e as Error).message}`, true);
+    } finally { setActing(false); }
+  }
+
+  async function handleResubmitInfo() {
+    setActing(true);
+    try {
+      await api.submitInfo(system.id, resubmitNote.trim() || undefined);
+      onSystemUpdate(await api.getSystem(system.id));
+      setResubmitNote("");
+      showToast("Returned to compliance officer for review");
+    } catch (e) {
+      showToast(`Resubmit failed: ${(e as Error).message}`, true);
+    } finally { setActing(false); }
+  }
+
+  async function handleDelegate() {
+    if (!pendingSection) return;
+    if (!delegateUser) { showToast("Select who to delegate to", true); return; }
+    setActing(true);
+    try {
+      await api.subAssign(system.id, pendingSection, delegateUser, note.trim() || undefined);
+      onSystemUpdate(await api.getSystem(system.id));
+      setSteps(await api.getWorkflow(system.id).catch(() => []));
+      setPanel(""); setDelegateUser(""); setNote("");
+      showToast("Section delegated — contributor notified");
+    } catch (e) {
+      showToast(`Delegation failed: ${(e as Error).message}`, true);
+    } finally { setActing(false); }
+  }
+
+  async function handleReclaim() {
+    if (!pendingSection) return;
+    setActing(true);
+    try {
+      await api.subReclaim(system.id, pendingSection);
+      onSystemUpdate(await api.getSystem(system.id));
+      setSteps(await api.getWorkflow(system.id).catch(() => []));
+      showToast("Delegation reclaimed");
+    } catch (e) {
+      showToast(`Reclaim failed: ${(e as Error).message}`, true);
     } finally { setActing(false); }
   }
 
@@ -193,34 +322,176 @@ function WorkflowProgress({
         </div>
       )}
 
-      {(canFillBusiness || canFillTechnical) && onFillSection && (
-        <div className="mt-4">
-          <Button onClick={() => onFillSection(canFillBusiness ? "business" : "technical")}>
-            Fill {canFillBusiness ? "Business" : "Technical"} Section
-          </Button>
+      {pendingSection && (
+        <div className="mt-4 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {canFillSection && onFillSection && (
+              <Button onClick={() => onFillSection(pendingSection)}>
+                Fill {pendingSection === "business" ? "Business" : "Technical"} Section
+              </Button>
+            )}
+            {isSectionOwner && !activeSub && panel !== "delegate" && (
+              <Button variant="outline" onClick={() => { setPanel("delegate"); setDelegateUser(""); setNote(""); }} disabled={acting}>
+                Delegate…
+              </Button>
+            )}
+            {isSectionOwner && activeSub && (
+              <>
+                <span className="text-[13px] text-muted-foreground">
+                  Delegated to <strong className="text-foreground">{userName(activeSub, userMap)}</strong>
+                </span>
+                <Button variant="ghost" onClick={handleReclaim} disabled={acting}>
+                  {acting && <Loader2 className="animate-spin" />} Reclaim
+                </Button>
+              </>
+            )}
+          </div>
+
+          {isSectionOwner && !activeSub && panel === "delegate" && (
+            <div className="overflow-hidden rounded-md border border-border">
+              <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">
+                Delegate {pendingSection === "business" ? "Business" : "Technical"} Section
+              </div>
+              <div className="p-4">
+                <p className="mb-3 text-[13px] text-muted-foreground">
+                  Hand this section to another {pendingSection === "business" ? "business owner" : "engineer"} to fill in.
+                  You remain the owner and can reclaim it at any time; only you submit it onward once it is returned.
+                </p>
+                <div className="mb-3 flex flex-col gap-1.5">
+                  <Label htmlFor="delegate_user">Delegate to <span className="text-[var(--danger-fg)]">*</span></Label>
+                  <select className={SELECT_CLASS} id="delegate_user" value={delegateUser} onChange={(e) => setDelegateUser(e.target.value)}>
+                    <option value="">— select contributor —</option>
+                    {delegatePool
+                      .filter((u) => u.username !== username)
+                      .map((u) => (
+                        <option key={u.username} value={u.username}>{userName(u.username, userMap)}</option>
+                      ))}
+                  </select>
+                </div>
+                <div className="mb-3 flex flex-col gap-1.5">
+                  <Label htmlFor="delegate_note">Note</Label>
+                  <Textarea id="delegate_note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional context for the contributor…" />
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="ghost" onClick={() => { setPanel(""); setDelegateUser(""); setNote(""); }}>Cancel</Button>
+                  <Button onClick={handleDelegate} disabled={acting}>
+                    {acting && <Loader2 className="animate-spin" />} Delegate Section
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {canAct && !rejectOpen && (
+      {canResubmitInfo && (
+        <div className="mt-4 overflow-hidden rounded-md border border-border">
+          <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Information Requested by Compliance</div>
+          <div className="p-4">
+            <p className="mb-3 text-[13px] text-muted-foreground">
+              The compliance officer sent this system back for more information. Add a note and return it for review.
+            </p>
+            <div className="mb-3 flex flex-col gap-1.5">
+              <Label htmlFor="resubmit_note">Response Note</Label>
+              <Textarea id="resubmit_note" rows={3} value={resubmitNote} onChange={(e) => setResubmitNote(e.target.value)} placeholder="Summarise the information you added…" />
+            </div>
+            <Button onClick={handleResubmitInfo} disabled={acting}>
+              {acting && <Loader2 className="animate-spin" />} Resubmit to Compliance
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {canAct && panel === "" && (
         <div className="mt-4 flex gap-2">
-          <Button onClick={handleApprove} disabled={acting}>
-            {acting && <Loader2 className="animate-spin" />} Approve
+          <Button onClick={() => { setPanel("approve"); setApproveTier(system.tier); setNote(""); }} disabled={acting}>
+            Approve…
+          </Button>
+          <Button variant="outline" onClick={() => { setPanel("requestInfo"); setInfoContributor(""); setNote(""); }} disabled={acting}>
+            Request Info…
           </Button>
           <Button variant="ghost" className="text-[var(--danger-fg)] hover:text-[var(--danger-fg)]"
-            onClick={() => { setRejectOpen(true); setRejectSendTo("business"); }}
+            onClick={() => { setPanel("reject"); setRejectSendTo("business"); setNote(""); }}
             disabled={acting}>
             Reject…
           </Button>
         </div>
       )}
 
-      {canAct && rejectOpen && (
+      {canAct && panel === "approve" && (
+        <div className="mt-4 overflow-hidden rounded-md border border-border">
+          <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Approve System</div>
+          <div className="p-4">
+            {approvalMissing.length > 0 && (
+              <Alert variant="warning" className="mb-3 flex-col items-start">
+                <div className="font-medium">Cannot approve yet — {approvalMissing.length} required question{approvalMissing.length === 1 ? "" : "s"} unanswered:</div>
+                <ul className="mt-1 list-disc pl-5">
+                  {approvalMissing.map((q) => <li key={q.key}>{q.label}</li>)}
+                </ul>
+                <div className="mt-1.5">Use <strong>Request Info</strong> to have a contributor complete them.</div>
+              </Alert>
+            )}
+            <div className="mb-3 flex flex-col gap-1.5">
+              <Label htmlFor="approve_tier">Risk Tier</Label>
+              <select className={SELECT_CLASS} id="approve_tier" value={approveTier} onChange={(e) => setApproveTier(e.target.value)}>
+                {Object.entries(TIER_META)
+                  .filter(([v]) => v !== "pending")
+                  .map(([v, meta]) => <option key={v} value={v}>{meta.label}</option>)}
+              </select>
+              <span className="text-xs text-muted-foreground">
+                Override the inferred tier before approving. You hold liability for the final classification.
+              </span>
+            </div>
+            <div className="mb-3 flex flex-col gap-1.5">
+              <Label htmlFor="approve_note">Note</Label>
+              <Textarea id="approve_note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional approval note…" />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={closePanel}>Cancel</Button>
+              <Button onClick={handleApprove} disabled={acting || approvalMissing.length > 0}>
+                {acting && <Loader2 className="animate-spin" />} Confirm Approval
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canAct && panel === "requestInfo" && (
+        <div className="mt-4 overflow-hidden rounded-md border border-border">
+          <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Request More Information</div>
+          <div className="p-4">
+            <div className="mb-3 flex flex-col gap-1.5">
+              <Label htmlFor="info_contributor">Ask <span className="text-[var(--danger-fg)]">*</span></Label>
+              <select className={SELECT_CLASS} id="info_contributor" value={infoContributor} onChange={(e) => setInfoContributor(e.target.value)}>
+                <option value="">— select contributor —</option>
+                {infoContributors.map(([section, uname]) => (
+                  <option key={uname} value={uname}>
+                    {userName(uname, userMap)} ({section === "business" ? "Business" : "Technical"})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="mb-3 flex flex-col gap-1.5">
+              <Label htmlFor="info_note">What is needed <span className="text-[var(--danger-fg)]">*</span></Label>
+              <Textarea id="info_note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Describe the information the contributor should provide…" />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={closePanel}>Cancel</Button>
+              <Button onClick={handleRequestInfo} disabled={acting}>
+                {acting && <Loader2 className="animate-spin" />} Send Request
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canAct && panel === "reject" && (
         <div className="mt-4 overflow-hidden rounded-md border border-border">
           <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Reject System</div>
           <div className="p-4">
             <div className="mb-3 flex flex-col gap-1.5">
               <Label htmlFor="reject_note">Rejection Note <span className="text-[var(--danger-fg)]">*</span></Label>
-              <Textarea id="reject_note" rows={3} value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} placeholder="Explain what needs to be changed…" />
+              <Textarea id="reject_note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Explain what needs to be changed…" />
             </div>
             <div className="mb-3 flex flex-col gap-1.5">
               <Label>Return to</Label>
@@ -241,7 +512,7 @@ function WorkflowProgress({
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => { setRejectOpen(false); setRejectNote(""); }}>Cancel</Button>
+              <Button variant="ghost" onClick={closePanel}>Cancel</Button>
               <Button variant="destructive" onClick={handleReject} disabled={acting}>
                 {acting && <Loader2 className="animate-spin" />} Confirm Rejection
               </Button>
@@ -454,6 +725,89 @@ function ModelTab({ system, models, onSystemUpdate }: { system: AISystem; models
   );
 }
 
+// CO-only view of the AI-inferred classification: reasoning, confidence, gaps, and per-flag detail.
+function ClassificationRationalePanel({ rationale }: { rationale: ClassificationRationale }) {
+  const pct = (c: number | null) => (c == null ? "—" : `${Math.round(c * 100)}%`);
+  return (
+    <div className="rounded-md border border-[var(--brand)]/30 bg-[var(--brand)]/5 p-4">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--brand)]">
+        <Sparkles className="size-4" /> AI Classification Rationale
+      </div>
+      <div className="mb-3 text-xs text-muted-foreground">
+        Inferred from the questionnaire answers. Visible only to you as the compliance officer — you decide the final tier.
+      </div>
+      {rationale.reasoning && (
+        <div className="mb-3 text-[13px] leading-relaxed text-foreground">{rationale.reasoning}</div>
+      )}
+      <DetailGrid rows={[
+        ["Confidence", pct(rationale.confidence)],
+      ]} />
+      {rationale.missing_info.length > 0 && (
+        <div className="mt-3">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Missing Information</div>
+          <ul className="list-disc pl-5 text-[13px] text-foreground">
+            {rationale.missing_info.map((m, i) => <li key={i}>{m}</li>)}
+          </ul>
+        </div>
+      )}
+      {rationale.flags.length > 0 && (
+        <div className="mt-3">
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Inferred Flags</div>
+          <div className="flex flex-col gap-2">
+            {rationale.flags.map((f, i) => (
+              <div key={i} className="rounded-md border border-border bg-card p-2.5 text-[13px]">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{f.flag}</span>
+                  <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className={cn("rounded px-1.5 py-0.5 font-medium", f.value ? "bg-[var(--brand)]/15 text-[var(--brand)]" : "bg-muted text-muted-foreground")}>
+                      {typeof f.value === "boolean" ? (f.value ? "Yes" : "No") : String(f.value)}
+                    </span>
+                    <span>conf. {pct(f.confidence)}</span>
+                  </span>
+                </div>
+                {f.rationale && <div className="mt-1 text-muted-foreground">{f.rationale}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Supporting documents attached in the full-manual override flow, with presigned download.
+function RegistrationDocuments({ system }: { system: AISystem }) {
+  const [downloading, setDownloading] = useState<number | null>(null);
+  const showToast = useToast();
+  const docs = system.registration_documents ?? [];
+
+  async function handleDownload(index: number) {
+    setDownloading(index);
+    try {
+      const { url } = await api.getDocumentDownloadUrl(system.id, index);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      showToast(`Download failed: ${(e as Error).message}`, true);
+    } finally { setDownloading(null); }
+  }
+
+  if (docs.length === 0) return null;
+  return (
+    <div className="divide-y divide-border rounded-md border border-border">
+      {docs.map((doc, i) => (
+        <div key={doc.minio_key} className="flex items-center gap-2.5 px-3 py-2.5 text-[13px]">
+          <FileText className="size-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">{doc.filename}</span>
+          <span className="ml-auto shrink-0 text-xs text-muted-foreground">{fmtDateTime(doc.uploaded_at)}</span>
+          <Button variant="ghost" size="sm" disabled={downloading === i} onClick={() => handleDownload(i)}>
+            {downloading === i ? <Loader2 className="animate-spin" /> : <Download />} Download
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function SystemDetail({ system: initialSystem, models, open, onClose, onDelete, onUpdate, onFillSection, userMap }: {
   system: AISystem | null;
   models: ModelCard[];
@@ -467,7 +821,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
   const [tab, setTab] = useState("overview");
   const [system, setSystem] = useState<AISystem | null>(initialSystem);
   const showToast = useToast();
-  const { mayRegister } = useModalControls();
+  const { mayRegister, username } = useModalControls();
 
   useEffect(() => { setSystem(initialSystem); setTab("overview"); }, [initialSystem]);
 
@@ -522,6 +876,18 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                       userMap={userMap}
                     />
                   </Section>
+                  {system.classification_rationale != null
+                    && !Array.isArray(system.classification_rationale)
+                    && system.compliance_officer_username === username && (
+                    <Section>
+                      <ClassificationRationalePanel rationale={system.classification_rationale} />
+                    </Section>
+                  )}
+                  {system.registration_mode === "full_manual" && (system.registration_documents?.length ?? 0) > 0 && (
+                    <Section title="Supporting Documents">
+                      <RegistrationDocuments system={system} />
+                    </Section>
+                  )}
                   <Section title="Identity">
                     <DetailGrid rows={[
                       ["Name", system.name],
