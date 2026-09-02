@@ -1,161 +1,72 @@
 import type {
-  DemoSummary, DemoSystem, LLMStatus, Risk, RiskClassification,
-  VulnerableGroupAssessment, RelatedIncident, Mitigation, ResidualRiskArgument,
+  SystemRiskSummary,
+  RiskRegister,
+  RiskEntry,
+  MisuseScenario,
+  MitigationMeasure,
+  ReassessmentTrigger,
 } from "../types";
 
-const API_BASE = import.meta.env.VITE_RISK_MANAGEMENT_API_BASE as string;
-export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
+const BASE = import.meta.env.VITE_RISK_MANAGEMENT_API_BASE ?? "/api/risk-management/v1";
 
-function formatDetail(detail: unknown): string {
-  if (!detail) return "";
-  if (typeof detail === "string") return detail;
-  if (Array.isArray(detail)) {
-    return detail
-      .map((e: { loc?: unknown[]; msg?: string }) => {
-        const field = Array.isArray(e.loc) ? String(e.loc[e.loc.length - 1]) : "";
-        return field ? `${field}: ${e.msg ?? ""}` : (e.msg ?? "");
-      })
-      .join("; ");
-  }
-  return String(detail);
-}
-
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, options);
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { detail?: unknown };
-    throw new Error(formatDetail(err.detail) || `HTTP ${res.status}`);
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      if (body.detail) detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+    } catch { /* ignore */ }
+    throw new Error(`${res.status}: ${detail}`);
   }
-  return res.status === 204 ? (null as unknown as T) : (res.json() as Promise<T>);
+  if (res.status === 204) return undefined as T;
+  return res.json();
 }
 
-function json(method: string, body: unknown): RequestInit {
-  return {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  };
-}
-
-export interface IdentifyResponse {
-  backend_used: string;
-  risks: Risk[];
-  raw_output: Record<string, unknown>;
-}
-
-export interface EvaluateResponse {
-  risks: Risk[];
-  risk_classification: RiskClassification;
-  vulnerable_group_assessments: VulnerableGroupAssessment[];
-  related_incidents: RelatedIncident[];
-}
-
-export interface MitigateResponse {
-  mitigations: Mitigation[];
-  residual_risk_argument: ResidualRiskArgument;
-}
-
-export interface ExportResponse {
-  json_output: string;
-  markdown_output: string;
-  instructions_for_use: string;
-}
-
-export interface DPIAResponse {
-  dpia_id: string;
-  overall_risk_level: string;
-  sa_consultation_required: boolean;
-  markdown_output: string;
-  dpia: Record<string, unknown>;
-}
-
-export interface QuestionnaireQuestion {
-  id: string;
-  category: string;
-  question: string;
-  hint: string;
-  default_severity: string;
-  default_likelihood: string;
-  default_mitigation: string;
-}
-
-export interface QuestionnaireAnswer {
-  question_id: string;
-  answer: boolean;
-  justification: string;
-  confidence: string;
-  severity_override: string | null;
-  likelihood_override: string | null;
-  mitigation_override: string | null;
-}
-
-export interface QuestionnaireFillResponse {
-  questions: QuestionnaireQuestion[];
-  answers: QuestionnaireAnswer[];
+function json(body: unknown): RequestInit {
+  return { body: JSON.stringify(body) };
 }
 
 export const api = {
-  getDemos: (): Promise<{ demos: DemoSummary[] }> =>
-    request("/demos"),
+  // Systems list
+  getSystems: () => request<SystemRiskSummary[]>("/systems"),
 
-  getDemo: (id: string): Promise<DemoSystem> =>
-    request(`/demos/${id}`),
+  // Registers
+  getRegisters: (systemId: string) => request<RiskRegister[]>(`/systems/${systemId}/registers`),
+  getRegister: (registerId: string) => request<RiskRegister>(`/registers/${registerId}`),
+  createRegister: (systemId: string, body: { assessment_scope?: string; notes?: string }) =>
+    request<RiskRegister>(`/systems/${systemId}/registers`, { method: "POST", ...json(body) }),
+  patchRegister: (registerId: string, body: Partial<RiskRegister>) =>
+    request<RiskRegister>(`/registers/${registerId}`, { method: "PATCH", ...json(body) }),
+  approveRegister: (registerId: string, body: { residual_risk_acceptable: boolean; residual_risk_argument: string }) =>
+    request<RiskRegister>(`/registers/${registerId}/approve`, { method: "POST", ...json(body) }),
 
-  getLLMStatus: (): Promise<LLMStatus> =>
-    request("/llm/status"),
+  // Risks
+  getRisks: (registerId: string) => request<RiskEntry[]>(`/registers/${registerId}/risks`),
+  createRisk: (registerId: string, body: Partial<RiskEntry>) =>
+    request<RiskEntry>(`/registers/${registerId}/risks`, { method: "POST", ...json(body) }),
+  patchRisk: (riskId: string, body: Partial<RiskEntry>) =>
+    request<RiskEntry>(`/risks/${riskId}`, { method: "PATCH", ...json(body) }),
+  deleteRisk: (riskId: string) => request<void>(`/risks/${riskId}`, { method: "DELETE" }),
 
-  identifyRisks: (body: {
-    system_description: string;
-    source_code?: string;
-    metadata: Record<string, unknown>;
-    use_llm: boolean;
-    use_stub: boolean;
-    use_risk_atlas_nexus?: boolean;
-    use_questionnaire?: boolean;
-    questionnaire_answers?: QuestionnaireAnswer[];
-  }): Promise<IdentifyResponse> =>
-    request("/assessments/identify", json("POST", body)),
+  // Misuse scenarios
+  addMisuseScenario: (riskId: string, body: Omit<MisuseScenario, "id">) =>
+    request<MisuseScenario>(`/risks/${riskId}/misuse-scenarios`, { method: "POST", ...json(body) }),
+  deleteMisuseScenario: (scenarioId: string) =>
+    request<void>(`/misuse-scenarios/${scenarioId}`, { method: "DELETE" }),
 
-  getQuestionnaire: (): Promise<QuestionnaireFillResponse> =>
-    request("/assessments/questionnaire"),
+  // Mitigations
+  addMitigation: (riskId: string, body: Omit<MitigationMeasure, "id">) =>
+    request<MitigationMeasure>(`/risks/${riskId}/mitigations`, { method: "POST", ...json(body) }),
+  patchMitigation: (mitId: string, body: Partial<MitigationMeasure>) =>
+    request<MitigationMeasure>(`/mitigations/${mitId}`, { method: "PATCH", ...json(body) }),
+  deleteMitigation: (mitId: string) => request<void>(`/mitigations/${mitId}`, { method: "DELETE" }),
 
-  answerOneQuestion: (body: {
-    question_id: string;
-    system_description: string;
-    source_code?: string;
-    metadata: Record<string, unknown>;
-  }): Promise<{ answer: QuestionnaireAnswer }> =>
-    request("/assessments/questionnaire/answer-one", json("POST", body)),
-
-  fillQuestionnaire: (body: {
-    system_description: string;
-    source_code?: string;
-    metadata: Record<string, unknown>;
-  }): Promise<QuestionnaireFillResponse> =>
-    request("/assessments/questionnaire/ai-fill", json("POST", body)),
-
-  evaluateRisks: (body: {
-    system_description: string;
-    metadata: Record<string, unknown>;
-    risks: Risk[];
-    use_llm: boolean;
-  }): Promise<EvaluateResponse> =>
-    request("/assessments/evaluate", json("POST", body)),
-
-  assignMitigations: (body: {
-    metadata: Record<string, unknown>;
-    risks: Risk[];
-    use_llm: boolean;
-  }): Promise<MitigateResponse> =>
-    request("/assessments/mitigate", json("POST", body)),
-
-  exportRegister: (body: {
-    register: Record<string, unknown>;
-  }): Promise<ExportResponse> =>
-    request("/assessments/export", json("POST", body)),
-
-  generateDpia: (body: {
-    register: Record<string, unknown>;
-  }): Promise<DPIAResponse> =>
-    request("/dpia", json("POST", body)),
+  // Triggers
+  getTriggers: (systemId: string) => request<ReassessmentTrigger[]>(`/systems/${systemId}/triggers`),
+  acknowledgeTrigger: (triggerId: string) =>
+    request<ReassessmentTrigger>(`/triggers/${triggerId}/acknowledge`, { method: "POST" }),
 };

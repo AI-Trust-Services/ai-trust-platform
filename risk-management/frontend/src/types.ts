@@ -1,104 +1,91 @@
-export interface DemoSummary {
-  id: string;
-  name: string;
-  description: string;
-  annex_iii_point: string;
-  annex_iii_category: string;
-}
-
-export interface DemoSystem extends DemoSummary {
-  system_description: string;
-  metadata: Record<string, unknown>;
-}
-
-export interface LLMStatus {
-  available: boolean;
-  model: string;
-  base_url: string;
-}
-
-export interface Risk {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  source: string;
-  default_severity: string;
-  severity: string;
-  likelihood: string;
-  affects_vulnerable_groups: boolean;
-  vulnerable_groups: string[];
-  article_9_step: string;
-  confirmed: boolean;
-  dismissed: boolean;
-  review_notes: string;
-  misuse_scenarios: MisuseScenario[];
-  taxonomy_mappings: TaxonomyMapping[];
-  suggested_mitigation_id: string;
-  questionnaire_question_id: string;
+export interface SystemRiskSummary {
+  system_id: string;
+  system_name: string;
+  system_tier: string;
+  system_lifecycle: string;
+  active_register_id: string | null;
+  active_register_status: string | null;
+  last_assessment_completed_at: string | null;
+  unacknowledged_triggers: number;
+  reassessment_needed: boolean;
 }
 
 export interface MisuseScenario {
   id: string;
-  description: string;
+  risk_id?: string;
   actor: string;
-  vulnerable_group: string | null;
+  description: string;
   likelihood: string;
   consequence: string;
+  vulnerable_group: string | null;
+  created_at?: string;
 }
 
-export interface TaxonomyMapping {
-  taxonomy: string;
-  category: string;
-  identifier: string | null;
-}
-
-export interface RiskClassification {
-  risk_level: string;
-  confidence: string;
-  annex_iii_match: boolean;
-  annex_iii_point: string | null;
-  rationale: string;
-  source: string;
-}
-
-export interface VulnerableGroupAssessment {
-  group: string;
-  affected: boolean;
-  confidence: string;
-  evidence: string;
-  recommended_safeguards: string[];
-  source: string;
-}
-
-export interface RelatedIncident {
-  aiid_id: string;
-  title: string;
-  summary: string;
-  relevance: string;
-  url: string;
-}
-
-export interface Mitigation {
+export interface MitigationMeasure {
   id: string;
+  risk_id?: string;
   title: string;
   description: string;
   hierarchy_level: string;
-  applicable_risk_categories: string[];
   implementation_guidance: string;
-  source: string;
-  assigned_to_risk_ids: string[];
-  user_override: boolean;
+  status: string;
+  assigned_to: string | null;
+  due_date: string | null;
   override_notes: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface ResidualRiskArgument {
-  claim: string;
-  evidence: string[];
-  assumptions: string[];
-  open_issues: string[];
-  overall_verdict: string;
+export interface RiskEntry {
+  id: string;
+  register_id: string;
+  title: string;
+  description: string;
+  category: string;
+  article_9_step: string;
+  risk_type: string;
+  severity: string;
+  likelihood: string;
+  status: string;
+  review_notes: string;
+  affects_vulnerable_groups: boolean;
+  vulnerable_groups: string; // JSON list string
+  closure_justification: string;
   source: string;
+  taxonomy_mappings: string; // JSON list string
+  misuse_scenarios: MisuseScenario[];
+  mitigations: MitigationMeasure[];
+  created_at: string;
+  updated_at: string;
 }
 
-export type Step = "demo" | "identify" | "evaluate" | "mitigate" | "export";
+export interface RiskRegister {
+  id: string;
+  ai_system_id: string;
+  status: string;
+  assessment_scope: string;
+  residual_risk_acceptable: boolean | null;
+  residual_risk_argument: string;
+  approver_username: string | null;
+  approved_at: string | null;
+  notes: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  last_assessment_completed_at: string | null;
+  risks: RiskEntry[];
+}
+
+export interface ReassessmentTrigger {
+  id: string;
+  ai_system_id: string;
+  trigger_type: string;
+  trigger_reason: string;
+  triggered_at: string;
+  acknowledged: boolean;
+  acknowledged_by: string | null;
+  acknowledged_at: string | null;
+  new_register_id: string | null;
+}
+
+export type WizardStep = "scope" | "identify" | "evaluate" | "mitigate" | "approve";

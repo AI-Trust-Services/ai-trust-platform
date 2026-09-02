@@ -1,17 +1,12 @@
-.PHONY: setup test-unit test lint
-
-VENV = .venv
-PYTHON = $(VENV)/bin/python
+.PHONY: setup test-unit test-e2e test
 
 setup:
-	python3 -m venv $(VENV)
-	$(PYTHON) -m pip install --upgrade pip
-	$(PYTHON) -m pip install -r requirements.txt -r requirements-test.txt
+	python -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 test-unit:
-	$(PYTHON) -m pytest tests/unit -v
+	.venv/bin/pytest tests/unit/ -v
+
+test-e2e:
+	.venv/bin/pytest tests/ -v
 
 test: test-unit
-
-lint:
-	$(PYTHON) -m ruff check app/ risk_management/ tests/ || true

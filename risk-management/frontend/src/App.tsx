@@ -1,59 +1,55 @@
-import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
-import { Outlet } from "react-router";
-import { useLuigiInit } from "./hooks/useLuigi";
-import { HEALTH_URL } from "./api/client";
+import { useState, useEffect } from "react";
+import { useLuigi } from "./hooks/useLuigi";
+import SystemsListPage from "./pages/SystemsListPage";
+import AssessmentWizardPage from "./pages/AssessmentWizardPage";
 
-type ShowToast = (msg: string, isError?: boolean) => void;
-const ToastContext = createContext<ShowToast | null>(null);
+const API_BASE = import.meta.env.VITE_RISK_MANAGEMENT_API_BASE ?? "/api/risk-management/v1";
 
-export function useToast(): ShowToast {
-  const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error("useToast must be used inside App");
-  return ctx;
-}
+type View =
+  | { type: "list" }
+  | { type: "wizard"; systemId: string; systemName: string };
 
 export default function App() {
+  useLuigi();
+
+  const [view, setView] = useState<View>({ type: "list" });
   const [backendOk, setBackendOk] = useState<boolean | null>(null);
-  const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null);
-  const healthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useLuigiInit(() => {});
-
-  const checkHealth = useCallback(async () => {
-    if (healthTimer.current) clearTimeout(healthTimer.current);
-    try {
-      const res = await fetch(HEALTH_URL, { cache: "no-store" });
-      if (!res.ok) throw new Error();
-      setBackendOk(true);
-    } catch {
-      setBackendOk(false);
-      healthTimer.current = setTimeout(checkHealth, 5000);
-    }
-  }, []);
 
   useEffect(() => {
-    checkHealth();
-    return () => { if (healthTimer.current) clearTimeout(healthTimer.current); };
-  }, [checkHealth]);
-
-  const showToast = useCallback<ShowToast>((msg, isError = false) => {
-    setToast({ msg, isError });
-    setTimeout(() => setToast(null), 3500);
+    const check = () =>
+      fetch(`${API_BASE.replace(/\/v1$/, "")}/health`)
+        .then(r => setBackendOk(r.ok))
+        .catch(() => setBackendOk(false));
+    check();
+    const id = setInterval(check, 15_000);
+    return () => clearInterval(id);
   }, []);
 
   return (
-    <ToastContext.Provider value={showToast}>
+    <div style={{ minHeight: "100vh", background: "#f8f9fa" }}>
       {backendOk === false && (
-        <div className="health-banner show">
-          <span className="spinner" style={{ borderTopColor: "#8b0000", borderColor: "#f5b8b8", width: 14, height: 14 }} />
-          <span>Backend is unavailable. Retrying in 5 s…</span>
-          <a onClick={checkHealth}>Retry now</a>
+        <div style={{
+          background: "#dc2626", color: "#fff",
+          padding: "8px 20px", fontSize: 13, textAlign: "center",
+          position: "sticky", top: 0, zIndex: 100,
+        }}>
+          Backend unavailable — retrying…
         </div>
       )}
-      <Outlet />
-      {toast && (
-        <div className={`toast show${toast.isError ? " error" : ""}`}>{toast.msg}</div>
+
+      {view.type === "list" && (
+        <SystemsListPage
+          onSelectSystem={(id, name) => setView({ type: "wizard", systemId: id, systemName: name })}
+        />
       )}
-    </ToastContext.Provider>
+
+      {view.type === "wizard" && (
+        <AssessmentWizardPage
+          systemId={view.systemId}
+          systemName={view.systemName}
+          onBack={() => setView({ type: "list" })}
+        />
+      )}
+    </div>
   );
 }

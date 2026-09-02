@@ -623,21 +623,20 @@ services:
     build:
       context: .
       dockerfile: risk-management/backend/Dockerfile
-      args:
-        INSTALL_NEXUS: ${INSTALL_NEXUS:-false}
     environment:
-      ALLOWED_ORIGINS: "http://localhost:8080"
+      <<: *db-env
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
       ROOT_PATH: "/api/risk-management"
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host-gateway:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
-    extra_hosts:
-      - "host-gateway:host-gateway"
+      REGISTRY_API_BASE: "http://ai-system-registry-backend:8001/api/v1"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "healthcheck.py"]
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     restart: on-failure
 
 volumes:

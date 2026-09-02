@@ -13,6 +13,13 @@ from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.obligation import Obligation
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
+from ai_trust_persistence.models.risk_management import (
+    RiskRegister,
+    RiskEntry,
+    MisuseScenario,
+    MitigationMeasure,
+    ReassessmentTrigger,
+)
 
 __all__ = [
     "AISystem",
@@ -26,6 +33,11 @@ __all__ = [
     "Evidence",
     "EvidenceVersion",
     "SystemWorkflowStep",
+    "RiskRegister",
+    "RiskEntry",
+    "MisuseScenario",
+    "MitigationMeasure",
+    "ReassessmentTrigger",
     "control_obligations",
     "evidence_controls",
     "evidence_obligations",

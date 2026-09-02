@@ -3,13 +3,16 @@ from __future__ import annotations
 import os
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from ai_trust_logging import correlation_id_var, get_logger
-from app.routers import assessments, demos, dpia, incidents, llm
+from ai_trust_persistence import SessionLocal
+from app.routers import registers, risks, triggers
 
 logger = get_logger(__name__)
 
@@ -21,9 +24,16 @@ if not _allowed_origins:
         "Set it to a comma-separated list of allowed origins."
     )
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+
+
 app = FastAPI(
     title="Risk Management API",
     version="1.0.0",
+    lifespan=lifespan,
     root_path=os.environ.get("ROOT_PATH", ""),
 )
 
@@ -40,35 +50,31 @@ async def logging_middleware(request: Request, call_next) -> Response:
     raw_id = request.headers.get("x-correlation-id", "").strip()
     correlation_id = raw_id if raw_id else str(uuid.uuid4())
     correlation_id_var.set(correlation_id)
-
     start = time.perf_counter()
-    try:
-        response = await call_next(request)
-    except Exception as exc:
-        logger.exception("request.failed", extra={"method": request.method, "path": request.url.path})
-        raise exc
-
-    duration_ms = round((time.perf_counter() - start) * 1000, 2)
-    status = response.status_code
-    log_extra = {"method": request.method, "path": request.url.path, "status": status, "duration_ms": duration_ms}
-    if status >= 500:
-        logger.error("request.error", extra=log_extra)
-    elif status >= 400:
-        logger.warning("request.client_error", extra=log_extra)
-    else:
-        logger.info("request.completed", extra=log_extra)
-
-    response.headers["x-correlation-id"] = correlation_id
+    response: Response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000
+    level = "info" if response.status_code < 400 else ("warning" if response.status_code < 500 else "error")
+    getattr(logger, level)(
+        "http.request",
+        extra={
+            "method": request.method,
+            "path": request.url.path,
+            "status": response.status_code,
+            "duration_ms": round(duration_ms, 1),
+            "correlation_id": correlation_id,
+        },
+    )
+    response.headers["X-Correlation-ID"] = correlation_id
     return response
 
 
-app.include_router(demos.router, prefix="/v1")
-app.include_router(assessments.router, prefix="/v1")
-app.include_router(llm.router, prefix="/v1")
-app.include_router(incidents.router, prefix="/v1")
-app.include_router(dpia.router, prefix="/v1")
-
-
 @app.get("/health")
-async def health() -> Response:
-    return JSONResponse({"status": "ok"})
+async def health():
+    async with SessionLocal() as session:
+        await session.execute(text("SELECT 1"))
+    return {"status": "ok"}
+
+
+app.include_router(registers.router, prefix="/v1")
+app.include_router(risks.router, prefix="/v1")
+app.include_router(triggers.router, prefix="/v1")
