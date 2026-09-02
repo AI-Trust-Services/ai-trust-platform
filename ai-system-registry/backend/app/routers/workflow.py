@@ -1,8 +1,9 @@
 """Workflow endpoints — submit, approve, reject, history, questionnaire section transitions."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE, SYSTEMS_APPROVE
@@ -10,6 +11,7 @@ from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
+from ai_trust_persistence.models.question_assignment import QuestionAssignment as QuestionAssignmentModel
 from app.classifier import classify, classify_ai_questionnaire
 from app.ids import new_id
 from app.questionnaire_required import missing_for_approval
@@ -24,6 +26,10 @@ from app.schemas import (
     WorkflowSubAssignRequest,
     WorkflowSubReclaimRequest,
     WorkflowRequestInfoRequest,
+    QuestionAssignRequest,
+    QuestionUnassignRequest,
+    QuestionAnswerRequest,
+    QuestionAssignmentResponse,
     ClassificationResult,
     VALID_TIERS,
     VALID_ROLES,
@@ -93,6 +99,9 @@ async def _reclassify(row: AISystem) -> ClassificationResult:
     if row.registration_mode == "ai":
         classification, rationale = await classify_ai_questionnaire(row)
         row.classification_rationale = rationale
+        inferred_role = rationale.get("org_role")
+        if inferred_role and inferred_role in VALID_ROLES:
+            row.org_role = inferred_role
     else:
         classification = classify(row)
     row.tier = classification.tier
@@ -883,3 +892,187 @@ async def get_rce_summary(
             for o in obligations
         ],
     }
+
+
+async def _get_question_assignments(session, system_id: str) -> list[QuestionAssignmentResponse]:
+    result = await session.execute(
+        select(QuestionAssignmentModel)
+        .where(QuestionAssignmentModel.system_id == system_id)
+        .order_by(QuestionAssignmentModel.assigned_at)
+    )
+    return [QuestionAssignmentResponse.model_validate(row) for row in result.scalars().all()]
+
+
+@router.get(
+    "/systems/{system_id}/workflow/question-assignments",
+    response_model=list[QuestionAssignmentResponse],
+)
+async def get_question_assignments(
+    system_id: str,
+    _: str = Depends(require_permission(SYSTEMS_READ)),
+):
+    """List all per-question assignments for a system."""
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        if not result.scalar_one_or_none():
+            raise HTTPException(404, f"System {system_id} not found")
+        return await _get_question_assignments(session, system_id)
+
+
+@router.post(
+    "/systems/{system_id}/workflow/question-assign",
+    response_model=list[QuestionAssignmentResponse],
+)
+async def question_assign(
+    system_id: str,
+    body: QuestionAssignRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    """Section owner assigns a single questionnaire question to another user."""
+    current_user = _current_user(request)
+
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+        if row.workflow_status != _SECTION_STATUS[body.section]:
+            raise HTTPException(422, f"Cannot assign questions for '{body.section}' from status '{row.workflow_status}'")
+        owner = _section_owner(row, body.section)
+        if owner and current_user != owner:
+            raise HTTPException(403, "Only the section owner may assign questions")
+
+        # Disallow per-question assignment while a section-level sub-assignment is active —
+        # the contributor holds the whole section already.
+        steps = await _get_steps(session, system_id)
+        if _active_sub_assignment(steps, body.section) is not None:
+            raise HTTPException(422, "Cannot assign individual questions while the section is sub-assigned")
+
+        # Upsert: if the same (system, section, question_key) already exists, update it.
+        existing = await session.execute(
+            select(QuestionAssignmentModel).where(
+                QuestionAssignmentModel.system_id == system_id,
+                QuestionAssignmentModel.section == body.section,
+                QuestionAssignmentModel.question_key == body.question_key,
+            )
+        )
+        qa_row = existing.scalar_one_or_none()
+        if qa_row:
+            qa_row.assignee_username = body.assignee_username
+            qa_row.assigned_by_username = current_user
+            qa_row.answered_at = None  # reset when re-assigning
+        else:
+            qa_row = QuestionAssignmentModel(
+                id=new_id("QAS"),
+                system_id=system_id,
+                section=body.section,
+                question_key=body.question_key,
+                assignee_username=body.assignee_username,
+                assigned_by_username=current_user,
+            )
+            session.add(qa_row)
+
+        system_name = row.name
+        await session.commit()
+        assignments = await _get_question_assignments(session, system_id)
+
+    logger.info("system.question_assigned", extra={
+        "system_id": system_id, "section": body.section,
+        "question_key": body.question_key, "assignee": body.assignee_username, "by": current_user,
+    })
+
+    background_tasks.add_task(
+        email_sender.notify_question_assigned,
+        assignee_username=body.assignee_username,
+        system_name=system_name,
+        system_id=system_id,
+        question_label=body.question_key,
+        assigned_by=current_user,
+    )
+
+    return assignments
+
+
+@router.delete(
+    "/systems/{system_id}/workflow/question-assign",
+    response_model=list[QuestionAssignmentResponse],
+)
+async def question_unassign(
+    system_id: str,
+    body: QuestionUnassignRequest,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    """Section owner removes a per-question assignment."""
+    current_user = _current_user(request)
+
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+        owner = _section_owner(row, body.section)
+        if owner and current_user != owner:
+            raise HTTPException(403, "Only the section owner may remove question assignments")
+
+        await session.execute(
+            delete(QuestionAssignmentModel).where(
+                QuestionAssignmentModel.system_id == system_id,
+                QuestionAssignmentModel.section == body.section,
+                QuestionAssignmentModel.question_key == body.question_key,
+            )
+        )
+        await session.commit()
+        assignments = await _get_question_assignments(session, system_id)
+
+    logger.info("system.question_unassigned", extra={
+        "system_id": system_id, "section": body.section,
+        "question_key": body.question_key, "by": current_user,
+    })
+
+    return assignments
+
+
+@router.post(
+    "/systems/{system_id}/workflow/question-answer",
+    response_model=list[QuestionAssignmentResponse],
+)
+async def question_answer(
+    system_id: str,
+    body: QuestionAnswerRequest,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    """Assignee marks their assigned question as answered after saving the value."""
+    current_user = _current_user(request)
+
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        if not result.scalar_one_or_none():
+            raise HTTPException(404, f"System {system_id} not found")
+
+        qa_result = await session.execute(
+            select(QuestionAssignmentModel).where(
+                QuestionAssignmentModel.system_id == system_id,
+                QuestionAssignmentModel.section == body.section,
+                QuestionAssignmentModel.question_key == body.question_key,
+            )
+        )
+        qa_row = qa_result.scalar_one_or_none()
+        if not qa_row:
+            raise HTTPException(404, f"No assignment found for question '{body.question_key}'")
+        if qa_row.assignee_username != current_user:
+            raise HTTPException(403, "Only the assigned user may mark this question as answered")
+
+        qa_row.answered_at = datetime.now(timezone.utc)
+        await session.commit()
+        assignments = await _get_question_assignments(session, system_id)
+
+    logger.info("system.question_answered", extra={
+        "system_id": system_id, "section": body.section,
+        "question_key": body.question_key, "by": current_user,
+    })
+
+    return assignments

@@ -38,6 +38,10 @@ from app.schemas.workflow import (
     WorkflowSubAssignRequest,
     WorkflowSubReclaimRequest,
     WorkflowRequestInfoRequest,
+    QuestionAssignRequest,
+    QuestionUnassignRequest,
+    QuestionAnswerRequest,
+    QuestionAssignmentResponse,
 )
 from app.schemas.system_model import SystemModelLinkBody, SystemModelResponse, ModelSystemResponse
 
@@ -77,4 +81,8 @@ __all__ = [
     "WorkflowSubAssignRequest",
     "WorkflowSubReclaimRequest",
     "WorkflowRequestInfoRequest",
+    "QuestionAssignRequest",
+    "QuestionUnassignRequest",
+    "QuestionAnswerRequest",
+    "QuestionAssignmentResponse",
 ]

@@ -99,26 +99,6 @@ export const BUSINESS_QUESTIONS: QuestionDef[] = [
     storage: "answers",
   },
   {
-    key: "entity_role",
-    label: "Organisation's Role",
-    hint: "How does your organisation relate to this AI system?",
-    type: "select",
-    storage: "answers",
-    options: [
-      "Provider — we develop this AI system and make it available internally or externally",
-      "Deployer — the system was developed by a third party and we operate it for our own purposes",
-      "None of the above (Distributor, Importer, Product Manufacturer, Authorised Representative, or Operator)",
-    ],
-  },
-  {
-    key: "additional_entity_roles",
-    label: "Additional Roles (if applicable)",
-    hint: "If your organisation also acts as Distributor, Importer, Product Manufacturer, Authorised Representative, or Operator, describe that role here.",
-    type: "textarea",
-    storage: "answers",
-    optional: true,
-  },
-  {
     key: "used_in_eu",
     label: "Used in the European Union",
     hint: "Is this AI system going to be used, placed on the market, or put into service in the European Union?",

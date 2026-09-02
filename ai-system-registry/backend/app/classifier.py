@@ -184,5 +184,7 @@ async def classify_ai_questionnaire(row: Any) -> tuple[ClassificationResult, dic
         "confidence": float(confidence) if isinstance(confidence, (int, float)) else None,
         "reasoning": parsed.get("reasoning"),
         "missing_info": parsed.get("missing_info") or [],
+        "org_role": parsed.get("org_role"),
+        "org_role_rationale": parsed.get("org_role_rationale"),
     }
     return classification, rationale

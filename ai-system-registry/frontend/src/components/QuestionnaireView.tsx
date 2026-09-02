@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { Bot, Loader2, Paperclip, SendHorizonal, User } from "lucide-react";
+import { Bot, Loader2, Paperclip, SendHorizonal, User, UserPlus, X } from "lucide-react";
 import { TierBadge } from "./Badges";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, ChatMessage, ClassificationResult, WorkflowStep } from "../types";
+import type { AISystem, ChatMessage, ClassificationResult, WorkflowStep, QuestionAssignment } from "../types";
 import type { SectionKey } from "../config/questionnaire";
 import {
   BUSINESS_QUESTIONS,
@@ -39,6 +39,144 @@ function technicalGreeting(name: string) {
   return `Hi! I'll help assess the EU AI Act risk classification for "${name}". I'll ask about its technical characteristics and use cases. Let's start — does this system make decisions without human review (fully automated), or does a human review the outputs?`;
 }
 
+// ── Per-question assignment pill ──────────────────────────────────────────────
+
+interface QuestionAssignPillProps {
+  assignment: QuestionAssignment;
+  isOwner: boolean;
+  onUnassign: (questionKey: string) => void;
+}
+
+function QuestionAssignPill({ assignment, isOwner, onUnassign }: QuestionAssignPillProps) {
+  const answered = !!assignment.answered_at;
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+      answered
+        ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+        : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
+    )}>
+      {answered
+        ? `Answered by ${assignment.assignee_username}`
+        : `Awaiting ${assignment.assignee_username}`}
+      {isOwner && (
+        <button
+          type="button"
+          onClick={() => onUnassign(assignment.question_key)}
+          className="ml-0.5 rounded-full hover:opacity-70"
+          title="Remove assignment"
+        >
+          <X className="size-3" />
+        </button>
+      )}
+    </span>
+  );
+}
+
+// ── Assign-question dialog ────────────────────────────────────────────────────
+
+type UserWithRole = { username: string; firstName: string; lastName: string; role: string };
+
+interface AssignQuestionDialogProps {
+  questionLabel: string;
+  users: UserWithRole[];
+  onConfirm: (assignee: string, note: string) => void;
+  onCancel: () => void;
+  busy: boolean;
+}
+
+function AssignQuestionDialog({ questionLabel, users, onConfirm, onCancel, busy }: AssignQuestionDialogProps) {
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<{ username: string } | null>(null);
+  const [note, setNote] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const filtered = search.trim()
+    ? users.filter((u) => {
+        const q = search.toLowerCase();
+        return (
+          u.username.toLowerCase().includes(q) ||
+          u.firstName.toLowerCase().includes(q) ||
+          u.lastName.toLowerCase().includes(q)
+        );
+      }).slice(0, 8)
+    : [];
+
+  function selectUser(u: UserWithRole) {
+    const display = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.username;
+    setSelected({ username: u.username });
+    setSearch(display);
+    setShowDropdown(false);
+  }
+
+  function handleSearchChange(val: string) {
+    setSearch(val);
+    setSelected(null);
+    setShowDropdown(val.trim().length > 0);
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onCancel(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm">Assign question to someone</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3 px-6 py-2 text-sm">
+          <p className="text-muted-foreground text-xs">"{questionLabel}"</p>
+          <div className="relative flex flex-col gap-1">
+            <Label className="text-xs">Assignee</Label>
+            <Input
+              autoFocus
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onFocus={() => { if (search.trim() && !selected) setShowDropdown(true); }}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+              placeholder="Type a name or username…"
+              className="text-sm"
+            />
+            {showDropdown && filtered.length > 0 && (
+              <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-background shadow-md">
+                {filtered.map((u) => (
+                  <button
+                    key={u.username}
+                    type="button"
+                    className="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-muted"
+                    onMouseDown={(e) => { e.preventDefault(); selectUser(u); }}
+                  >
+                    <span className="font-medium">{[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username}</span>
+                    <span className="text-xs text-muted-foreground">{u.username} · {u.role.replace(/_/g, " ")}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs">Note (optional)</Label>
+            <Textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Context for the assignee…"
+              rows={2}
+              className="text-sm"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
+          <Button
+            onClick={() => selected && onConfirm(selected.username, note.trim())}
+            disabled={busy || !selected}
+          >
+            {busy && <Loader2 className="animate-spin" />} Assign
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export default function QuestionnaireView({ open, system, section, onClose, onSuccess }: Props) {
   const [transcript, setTranscript] = useState<ChatMessage[]>([]);
   const [fields, setFields] = useState<Record<string, unknown>>({});
@@ -50,6 +188,10 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [steps, setSteps] = useState<WorkflowStep[]>([]);
+  const [assignments, setAssignments] = useState<QuestionAssignment[]>([]);
+  const [allUsers, setAllUsers] = useState<UserWithRole[]>([]);
+  const [assignDialog, setAssignDialog] = useState<{ questionKey: string; label: string } | null>(null);
+  const [assigning, setAssigning] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -58,17 +200,40 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
 
   const isAIMode = system.registration_mode === "ai";
   const questions = section === "business" ? BUSINESS_QUESTIONS : technicalQuestionsForMode(system.registration_mode);
-  // The AI chat assistant is only offered in AI mode; manual-questionnaire mode is form-only.
   const showChat = isAIMode;
 
-  // Delegation state: only the token-holder (the section owner, or the active delegate)
-  // may edit. The delegate returns the section to the owner rather than submitting onward.
+  // Section-level delegation state
   const owner = section === "business" ? system.business_assignee_username : system.technical_assignee_username;
   const sub = activeSubAssignee(steps, section);
   const isDelegate = !!sub && username === sub;
   const isOwner = !!owner && username === owner;
-  const editable = isDelegate || (isOwner && !sub) || !owner;
   const lockedForOwner = isOwner && !!sub && !isDelegate;
+
+  // Per-question assignment state (derived from assignments)
+  const assignmentFor = (key: string) =>
+    assignments.find((a) => a.section === section && a.question_key === key);
+  const myQuestionAssignments = assignments.filter(
+    (a) => a.section === section && a.assignee_username === username,
+  );
+  // I'm a question-level assignee when I have assigned questions and I'm not the section owner/delegate.
+  const iAmQuestionAssignee = myQuestionAssignments.length > 0 && !isOwner && !isDelegate;
+
+  const editable = isDelegate || (isOwner && !sub) || !owner || iAmQuestionAssignee;
+
+  // Questions visible to me: question assignees only see their own; everyone else sees all.
+  const visibleQuestions = iAmQuestionAssignee
+    ? questions.filter((q) => assignmentFor(q.key)?.assignee_username === username)
+    : questions;
+
+  // Owner: question is locked if assigned to someone else and not yet answered.
+  const isQuestionLockedForOwner = (key: string): boolean => {
+    if (!isOwner) return false;
+    const a = assignmentFor(key);
+    return !!a && !a.answered_at;
+  };
+
+  // Pending assignments in this section (shown as a warning before section submit).
+  const pendingAssignments = assignments.filter((a) => a.section === section && !a.answered_at);
 
   useEffect(() => {
     if (!open) return;
@@ -85,6 +250,8 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
         ? getAITechnicalFieldValues(system) as Record<string, unknown>
         : getTechnicalFieldValues(system));
     api.getWorkflow(system.id).then(setSteps).catch(() => setSteps([]));
+    api.getQuestionAssignments(system.id).then(setAssignments).catch(() => setAssignments([]));
+    api.getAllUsers().then(setAllUsers).catch(() => {});
   }, [open, system.id, section]);
 
   useEffect(() => {
@@ -143,9 +310,13 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
     setSaving(true);
     try {
       if (section === "business") {
+        // When acting as a question assignee, only save the questions assigned to me.
+        const questionsToSave = iAmQuestionAssignee
+          ? BUSINESS_QUESTIONS.filter((q) => assignmentFor(q.key)?.assignee_username === username)
+          : BUSINESS_QUESTIONS;
         const systemFields: Record<string, unknown> = {};
         const answerFields: Record<string, string> = {};
-        for (const q of BUSINESS_QUESTIONS) {
+        for (const q of questionsToSave) {
           const val = fields[q.key];
           if (val == null) continue;
           if (q.storage === "system") systemFields[q.key] = val;
@@ -156,9 +327,11 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
           Object.keys(answerFields).length > 0 ? api.patchQuestionnaireAnswers(system.id, answerFields) : null,
         ].filter(Boolean));
       } else if (isAIMode) {
-        // AI mode: technical answers are free-text, stored under questionnaire_answers["technical"].
+        const questionsToSave = iAmQuestionAssignee
+          ? AI_TECHNICAL_QUESTIONS.filter((q) => assignmentFor(q.key)?.assignee_username === username)
+          : AI_TECHNICAL_QUESTIONS;
         const answerFields: Record<string, string> = {};
-        for (const q of AI_TECHNICAL_QUESTIONS) {
+        for (const q of questionsToSave) {
           const val = fields[q.key];
           if (val == null || val === "") continue;
           answerFields[q.key] = String(val);
@@ -167,8 +340,11 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
           await api.patchQuestionnaireAnswers(system.id, answerFields, "technical");
         }
       } else {
+        const questionsToSave = iAmQuestionAssignee
+          ? TECHNICAL_QUESTIONS.filter((q) => assignmentFor(q.key)?.assignee_username === username)
+          : TECHNICAL_QUESTIONS;
         const flagFields: Record<string, unknown> = {};
-        for (const q of TECHNICAL_QUESTIONS) {
+        for (const q of questionsToSave) {
           const val = fields[q.key];
           if (val == null) continue;
           flagFields[q.key] = q.type === "number" ? Number(val) : Boolean(val);
@@ -203,7 +379,6 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
     }
   }
 
-  // A delegate fills the section and returns it to the owner (who submits it onward).
   async function handleMarkComplete() {
     setSubmitting(true);
     try {
@@ -218,195 +393,309 @@ export default function QuestionnaireView({ open, system, section, onClose, onSu
     }
   }
 
+  // Question assignee submits their answers and marks them as answered.
+  async function handleAnswerSubmit() {
+    setSubmitting(true);
+    try {
+      await handleSave();
+      for (const a of myQuestionAssignments) {
+        await api.questionAnswer(system.id, { section, question_key: a.question_key });
+      }
+      showToast("Answers submitted — section owner has been notified");
+      onSuccess();
+    } catch (e) {
+      showToast(`Submit failed: ${(e as Error).message}`, true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleAssignConfirm(assigneeUsername: string, note: string) {
+    if (!assignDialog) return;
+    setAssigning(true);
+    try {
+      const result = await api.questionAssign(system.id, {
+        section,
+        question_key: assignDialog.questionKey,
+        assignee_username: assigneeUsername,
+        note: note || undefined,
+      });
+      setAssignments(result);
+      setAssignDialog(null);
+      showToast(`Question assigned to ${assigneeUsername}`);
+    } catch (e) {
+      showToast(`Assign failed: ${(e as Error).message}`, true);
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  async function handleUnassign(questionKey: string) {
+    try {
+      const result = await api.questionUnassign(system.id, { section, question_key: questionKey });
+      setAssignments(result);
+      showToast("Assignment removed");
+    } catch (e) {
+      showToast(`Unassign failed: ${(e as Error).message}`, true);
+    }
+  }
+
   const sectionTitle = section === "business" ? "Use Case & Context" : "AI Risk Classification";
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent showCloseButton={false} className="flex max-h-[90vh] max-w-5xl flex-col gap-0 p-0">
-        <DialogHeader className="shrink-0 border-b border-border px-6 py-4">
-          <DialogTitle className="text-base">
-            {sectionTitle} — {system.name}
-          </DialogTitle>
-          <p className="text-xs text-muted-foreground">
-            {showChat
-              ? "Chat with the AI assistant or fill the form directly. Save your progress before submitting."
-              : "Fill the form below. Save your progress before submitting."}
-          </p>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+        <DialogContent showCloseButton={false} className="flex max-h-[90vh] max-w-5xl flex-col gap-0 p-0">
+          <DialogHeader className="shrink-0 border-b border-border px-6 py-4">
+            <DialogTitle className="text-base">
+              {sectionTitle} — {system.name}
+              {iAmQuestionAssignee && (
+                <span className="ml-2 rounded-full bg-[var(--brand)]/10 px-2 py-0.5 text-[11px] font-normal text-[var(--brand)]">
+                  Answering {myQuestionAssignments.length} assigned question{myQuestionAssignments.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              {showChat
+                ? "Chat with the AI assistant or fill the form directly. Save your progress before submitting."
+                : "Fill the form below. Save your progress before submitting."}
+            </p>
+          </DialogHeader>
 
-        <div className="flex min-h-0 flex-1">
-          {/* Chat pane */}
-          {showChat && (
-          <div className="flex w-1/2 flex-col border-r border-border">
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-              {transcript.map((m, i) => (
-                <div key={i} className={cn("flex gap-2.5", m.role === "user" && "flex-row-reverse")}>
-                  <span className={cn(
-                    "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-white text-[10px] font-bold",
-                    m.role === "user" ? "bg-[var(--brand)]" : "bg-muted-foreground",
-                  )}>
-                    {m.role === "user" ? <User className="size-3.5" /> : <Bot className="size-3.5" />}
-                  </span>
-                  <div className={cn(
-                    "max-w-[85%] rounded-xl px-3 py-2 text-[13px] leading-relaxed",
-                    m.role === "user"
-                      ? "bg-[var(--brand)] text-white"
-                      : "bg-muted text-foreground",
-                  )}>
-                    {m.content}
+          <div className="flex min-h-0 flex-1">
+            {/* Chat pane */}
+            {showChat && (
+            <div className="flex w-1/2 flex-col border-r border-border">
+              <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+                {transcript.map((m, i) => (
+                  <div key={i} className={cn("flex gap-2.5", m.role === "user" && "flex-row-reverse")}>
+                    <span className={cn(
+                      "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-white text-[10px] font-bold",
+                      m.role === "user" ? "bg-[var(--brand)]" : "bg-muted-foreground",
+                    )}>
+                      {m.role === "user" ? <User className="size-3.5" /> : <Bot className="size-3.5" />}
+                    </span>
+                    <div className={cn(
+                      "max-w-[85%] rounded-xl px-3 py-2 text-[13px] leading-relaxed",
+                      m.role === "user"
+                        ? "bg-[var(--brand)] text-white"
+                        : "bg-muted text-foreground",
+                    )}>
+                      {m.content}
+                    </div>
                   </div>
-                </div>
-              ))}
-              {busy && (
-                <div className="flex gap-2.5">
-                  <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted-foreground text-white text-[10px]">
-                    <Bot className="size-3.5" />
-                  </span>
-                  <div className="rounded-xl bg-muted px-3 py-2 text-[13px]">
-                    <Loader2 className="size-3.5 animate-spin" />
+                ))}
+                {busy && (
+                  <div className="flex gap-2.5">
+                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted-foreground text-white text-[10px]">
+                      <Bot className="size-3.5" />
+                    </span>
+                    <div className="rounded-xl bg-muted px-3 py-2 text-[13px]">
+                      <Loader2 className="size-3.5 animate-spin" />
+                    </div>
                   </div>
-                </div>
-              )}
-              {degraded && (
-                <Alert variant="warning" className="text-xs">
-                  Turn limit reached. Please review the form and submit manually.
-                </Alert>
-              )}
-              {classification && section === "technical" && (
-                <div className="rounded-xl border border-border bg-accent/40 px-3 py-2.5 text-[13px]">
-                  <div className="mb-1 font-semibold">Preliminary classification:</div>
-                  <div className="flex items-center gap-2">
-                    <TierBadge tier={classification.tier} />
-                    <span className="text-muted-foreground">{classification.basis}</span>
+                )}
+                {degraded && (
+                  <Alert variant="warning" className="text-xs">
+                    Turn limit reached. Please review the form and submit manually.
+                  </Alert>
+                )}
+                {classification && section === "technical" && (
+                  <div className="rounded-xl border border-border bg-accent/40 px-3 py-2.5 text-[13px]">
+                    <div className="mb-1 font-semibold">Preliminary classification:</div>
+                    <div className="flex items-center gap-2">
+                      <TierBadge tier={classification.tier} />
+                      <span className="text-muted-foreground">{classification.basis}</span>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            <div className="shrink-0 border-t border-border px-4 py-3">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  className="flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground"
-                  title="Upload document"
-                  disabled={busy}
-                >
-                  <Paperclip className="size-4" />
-                </button>
-                <input ref={fileRef} type="file" accept=".txt,.md,.pdf,.docx,.pptx,.png,.jpg,.jpeg" className="hidden" onChange={handleUpload} />
-                <Input
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTurn(input); } }}
-                  placeholder={complete ? "Section complete — submit when ready" : "Type a message…"}
-                  disabled={busy || complete}
-                  className="flex-1 text-sm"
-                />
-                <button
-                  onClick={() => sendTurn(input)}
-                  disabled={!input.trim() || busy || complete}
-                  className="flex size-8 items-center justify-center rounded-md bg-[var(--brand)] text-white disabled:opacity-40"
-                >
-                  <SendHorizonal className="size-4" />
-                </button>
+              <div className="shrink-0 border-t border-border px-4 py-3">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground"
+                    title="Upload document"
+                    disabled={busy}
+                  >
+                    <Paperclip className="size-4" />
+                  </button>
+                  <input ref={fileRef} type="file" accept=".txt,.md,.pdf,.docx,.pptx,.png,.jpg,.jpeg" className="hidden" onChange={handleUpload} />
+                  <Input
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTurn(input); } }}
+                    placeholder={complete ? "Section complete — submit when ready" : "Type a message…"}
+                    disabled={busy || complete}
+                    className="flex-1 text-sm"
+                  />
+                  <button
+                    onClick={() => sendTurn(input)}
+                    disabled={!input.trim() || busy || complete}
+                    className="flex size-8 items-center justify-center rounded-md bg-[var(--brand)] text-white disabled:opacity-40"
+                  >
+                    <SendHorizonal className="size-4" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-          )}
+            )}
 
-          {/* Form pane */}
-          <div className={cn("overflow-y-auto px-5 py-4", showChat ? "w-1/2" : "w-full")}>
-            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Current Values
-            </div>
-            <div className="flex flex-col gap-3">
-              {questions.map((q) => {
-                const val = fields[q.key];
-                if (q.type === "boolean") {
-                  return (
-                    <label key={q.key} className="flex items-start gap-2.5 rounded-md border border-border p-3 text-sm">
-                      <Checkbox
-                        checked={Boolean(val)}
-                        onCheckedChange={(c) => setFields((f) => ({ ...f, [q.key]: c === true }))}
-                        className="mt-0.5 shrink-0"
+            {/* Form pane */}
+            <div className={cn("overflow-y-auto px-5 py-4", showChat ? "w-1/2" : "w-full")}>
+              <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Current Values
+              </div>
+              <div className="flex flex-col gap-3">
+                {visibleQuestions.map((q) => {
+                  const val = fields[q.key];
+                  const assignment = assignmentFor(q.key);
+                  const lockedInput = isQuestionLockedForOwner(q.key);
+
+                  // Assign button / pill shown only to the section owner when not section-locked.
+                  const assignControl = (isOwner && !lockedForOwner) ? (
+                    assignment ? (
+                      <QuestionAssignPill
+                        assignment={assignment}
+                        isOwner={isOwner}
+                        onUnassign={handleUnassign}
                       />
-                      <div>
-                        <div className="font-medium">{q.label}</div>
-                        <div className="text-xs text-muted-foreground">{q.hint}</div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAssignDialog({ questionKey: q.key, label: q.label })}
+                        className="inline-flex items-center gap-1 rounded text-[11px] text-muted-foreground hover:text-foreground"
+                        title="Assign this question to someone"
+                      >
+                        <UserPlus className="size-3" /> Assign…
+                      </button>
+                    )
+                  ) : null;
+
+                  if (q.type === "boolean") {
+                    return (
+                      <label key={q.key} className="flex items-start gap-2.5 rounded-md border border-border p-3 text-sm">
+                        <Checkbox
+                          checked={Boolean(val)}
+                          onCheckedChange={(c) => setFields((f) => ({ ...f, [q.key]: c === true }))}
+                          className="mt-0.5 shrink-0"
+                          disabled={!editable || lockedInput}
+                        />
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{q.label}</span>
+                            {assignControl}
+                          </div>
+                          <div className="text-xs text-muted-foreground">{q.hint}</div>
+                        </div>
+                      </label>
+                    );
+                  }
+                  if (q.type === "number") {
+                    return (
+                      <div key={q.key} className="flex flex-col gap-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Label className="text-xs font-medium">{q.label}</Label>
+                          {assignControl}
+                        </div>
+                        <Input
+                          type="number"
+                          value={val != null ? String(val) : ""}
+                          onChange={(e) => setFields((f) => ({ ...f, [q.key]: parseFloat(e.target.value) || 0 }))}
+                          placeholder={q.hint}
+                          className="text-sm"
+                          disabled={!editable || lockedInput}
+                        />
                       </div>
-                    </label>
-                  );
-                }
-                if (q.type === "number") {
+                    );
+                  }
+                  if (q.type === "textarea") {
+                    return (
+                      <div key={q.key} className="flex flex-col gap-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Label className="text-xs font-medium">{q.label}</Label>
+                          {assignControl}
+                        </div>
+                        <Textarea
+                          value={val != null ? String(val) : ""}
+                          onChange={(e) => setFields((f) => ({ ...f, [q.key]: e.target.value }))}
+                          placeholder={q.hint}
+                          rows={2}
+                          className="text-sm"
+                          disabled={!editable || lockedInput}
+                        />
+                      </div>
+                    );
+                  }
                   return (
                     <div key={q.key} className="flex flex-col gap-1">
-                      <Label className="text-xs font-medium">{q.label}</Label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Label className="text-xs font-medium">{q.label}</Label>
+                        {assignControl}
+                      </div>
                       <Input
-                        type="number"
-                        value={val != null ? String(val) : ""}
-                        onChange={(e) => setFields((f) => ({ ...f, [q.key]: parseFloat(e.target.value) || 0 }))}
-                        placeholder={q.hint}
-                        className="text-sm"
-                      />
-                    </div>
-                  );
-                }
-                if (q.type === "textarea") {
-                  return (
-                    <div key={q.key} className="flex flex-col gap-1">
-                      <Label className="text-xs font-medium">{q.label}</Label>
-                      <Textarea
                         value={val != null ? String(val) : ""}
                         onChange={(e) => setFields((f) => ({ ...f, [q.key]: e.target.value }))}
                         placeholder={q.hint}
-                        rows={2}
                         className="text-sm"
+                        disabled={!editable || lockedInput}
                       />
                     </div>
                   );
-                }
-                return (
-                  <div key={q.key} className="flex flex-col gap-1">
-                    <Label className="text-xs font-medium">{q.label}</Label>
-                    <Input
-                      value={val != null ? String(val) : ""}
-                      onChange={(e) => setFields((f) => ({ ...f, [q.key]: e.target.value }))}
-                      placeholder={q.hint}
-                      className="text-sm"
-                    />
-                  </div>
-                );
-              })}
+                })}
+              </div>
             </div>
           </div>
-        </div>
 
-        <DialogFooter className="shrink-0 sm:justify-start">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          {lockedForOwner ? (
-            <span className="self-center text-[13px] text-muted-foreground">
-              Delegated to <strong className="text-foreground">{sub}</strong> — reclaim from the system detail panel to edit.
-            </span>
-          ) : (
-            <>
-              <Button variant="outline" onClick={handleSave} disabled={saving || submitting || !editable}>
-                {saving && <Loader2 className="animate-spin" />} Save Progress
-              </Button>
-              {isDelegate ? (
-                <Button onClick={handleMarkComplete} disabled={saving || submitting}>
-                  {submitting && <Loader2 className="animate-spin" />} Mark Complete &amp; Return
+          <DialogFooter className="shrink-0 sm:justify-start">
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            {lockedForOwner ? (
+              <span className="self-center text-[13px] text-muted-foreground">
+                Delegated to <strong className="text-foreground">{sub}</strong> — reclaim from the system detail panel to edit.
+              </span>
+            ) : (
+              <>
+                <Button variant="outline" onClick={handleSave} disabled={saving || submitting || !editable}>
+                  {saving && <Loader2 className="animate-spin" />} Save Progress
                 </Button>
-              ) : (
-                <Button onClick={handleSubmit} disabled={saving || submitting || !editable}>
-                  {submitting && <Loader2 className="animate-spin" />}
-                  Submit {section === "business" ? "Business" : "Technical"} Section
-                </Button>
-              )}
-            </>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+                {iAmQuestionAssignee ? (
+                  <Button onClick={handleAnswerSubmit} disabled={saving || submitting}>
+                    {submitting && <Loader2 className="animate-spin" />} Submit Answers
+                  </Button>
+                ) : isDelegate ? (
+                  <Button onClick={handleMarkComplete} disabled={saving || submitting}>
+                    {submitting && <Loader2 className="animate-spin" />} Mark Complete &amp; Return
+                  </Button>
+                ) : (
+                  <>
+                    {pendingAssignments.length > 0 && (
+                      <span className="self-center text-[12px] text-yellow-600 dark:text-yellow-400">
+                        {pendingAssignments.length} question{pendingAssignments.length !== 1 ? "s" : ""} pending — you may still submit
+                      </span>
+                    )}
+                    <Button onClick={handleSubmit} disabled={saving || submitting || !editable}>
+                      {submitting && <Loader2 className="animate-spin" />}
+                      Submit {section === "business" ? "Business" : "Technical"} Section
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {assignDialog && (
+        <AssignQuestionDialog
+          questionLabel={assignDialog.label}
+          users={allUsers}
+          onConfirm={handleAssignConfirm}
+          onCancel={() => setAssignDialog(null)}
+          busy={assigning}
+        />
+      )}
+    </>
   );
 }
