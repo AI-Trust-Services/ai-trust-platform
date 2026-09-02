@@ -176,7 +176,7 @@ def ensure_users_backend_client(client: httpx.Client) -> None:
 
 
 def ensure_admin_user(client: httpx.Client) -> None:
-    existing = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", params={"username": APP_ADMIN_USERNAME}).json()
+    existing = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", params={"username": APP_ADMIN_USERNAME, "exact": "true"}).json()
     if existing:
         print(f"Admin user '{APP_ADMIN_USERNAME}' already exists, skipping.")
         return
@@ -198,7 +198,7 @@ def ensure_dev_users(client: httpx.Client) -> None:
     for user in DEV_USERS:
         existing = client.get(
             f"{KEYCLOAK_URL}/admin/realms/{REALM}/users",
-            params={"username": user["username"]},
+            params={"username": user["username"], "exact": "true"},
         ).json()
         if existing:
             print(f"Dev user '{user['username']}' already exists, skipping.")
