@@ -657,6 +657,35 @@ services:
     restart: on-failure
 
   # ---------------------------------------------------------------------------
+  # Risk Management demo seed (opt-in, profile: demo).
+  # Registers 5 diverse AI systems and fully populates their risk registers
+  # so the module is ready to demonstrate on a fresh install.
+  #
+  # Usage:
+  #   docker compose --profile demo up risk-management-demo-seed
+  #
+  # Or together with the full stack:
+  #   docker compose --profile demo up -d
+  #
+  # Set SEED_ADMIN_USERNAME in .env if your admin account has a different name
+  # (default: admin). The seed is idempotent — safe to re-run.
+  # ---------------------------------------------------------------------------
+  risk-management-demo-seed:
+    build:
+      context: ./risk-management/demo-seed
+    profiles: ["demo"]
+    environment:
+      REGISTRY_API_BASE: "http://ai-system-registry-backend:8001"
+      RISK_API_BASE: "http://risk-management-backend:8009"
+      SEED_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:-admin}
+    depends_on:
+      ai-system-registry-backend:
+        condition: service_healthy
+      risk-management-backend:
+        condition: service_healthy
+    restart: on-failure
+
+  # ---------------------------------------------------------------------------
   # Ollama — local LLM backend for AI-assisted registration (opt-in).
   # Only starts under the `ollama` profile so stub/CI users aren't forced to
   # download multi-GB models. To use, set LLM_PROVIDER=ollama in .env and run:

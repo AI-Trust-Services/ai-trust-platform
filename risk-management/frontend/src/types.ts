@@ -53,6 +53,15 @@ export interface RiskEntry {
   closure_justification: string;
   source: string;
   taxonomy_mappings: string; // JSON list string
+  // VerifyWise-equivalent fields
+  risk_owner: string | null;
+  ai_lifecycle_phase: string | null;
+  impact: string;
+  risk_level_autocalculated: string | null;
+  residual_likelihood: string | null;
+  residual_severity: string | null;
+  final_risk_level: string | null;
+  date_of_assessment: string | null;
   misuse_scenarios: MisuseScenario[];
   mitigations: MitigationMeasure[];
   created_at: string;

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
@@ -88,6 +88,21 @@ class RiskEntry(Base):
 
     # Completeness check: risk cannot be closed without mitigation or justification
     closure_justification: Mapped[str] = mapped_column(Text, default="")
+
+    # VerifyWise-equivalent fields
+    risk_owner: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Username of the person responsible for this risk
+    ai_lifecycle_phase: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # "development" | "testing" | "deployment" | "operation" | "decommissioning"
+    impact: Mapped[str] = mapped_column(Text, default="")
+    # Human-readable description of business/user impact
+    risk_level_autocalculated: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Auto-calculated from severity × likelihood: "critical"|"high"|"medium"|"low"
+    residual_likelihood: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    residual_severity: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    final_risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Auto-calculated from residual_likelihood × residual_severity
+    date_of_assessment: Mapped[datetime | None] = mapped_column(Date, nullable=True)
 
     # Source metadata
     source: Mapped[str] = mapped_column(String(50), default="manual")

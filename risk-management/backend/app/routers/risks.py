@@ -15,6 +15,7 @@ from app.ids import new_id
 from app.schemas import (
     RiskEntryIn,
     RiskEntryOut,
+    RiskEntryPatch,
     MisuseScenarioIn,
     MisuseScenarioOut,
     MitigationMeasureIn,
@@ -74,6 +75,14 @@ async def create_risk(
         closure_justification=body.closure_justification,
         source=body.source,
         taxonomy_mappings=body.taxonomy_mappings,
+        risk_owner=body.risk_owner,
+        ai_lifecycle_phase=body.ai_lifecycle_phase,
+        impact=body.impact,
+        risk_level_autocalculated=body.risk_level_autocalculated,
+        residual_likelihood=body.residual_likelihood,
+        residual_severity=body.residual_severity,
+        final_risk_level=body.final_risk_level,
+        date_of_assessment=body.date_of_assessment,
     )
     session.add(risk)
     await session.flush()
@@ -145,7 +154,7 @@ async def get_risk(risk_id: str, session: AsyncSession = Depends(get_session)):
 @router.patch("/risks/{risk_id}", response_model=RiskEntryOut)
 async def patch_risk(
     risk_id: str,
-    body: RiskEntryIn,
+    body: RiskEntryPatch,
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(select(RiskEntry).where(RiskEntry.id == risk_id))
@@ -155,7 +164,9 @@ async def patch_risk(
 
     for field in ("title", "description", "category", "article_9_step", "risk_type",
                   "severity", "likelihood", "status", "review_notes", "affects_vulnerable_groups",
-                  "vulnerable_groups", "closure_justification", "source", "taxonomy_mappings"):
+                  "vulnerable_groups", "closure_justification", "source", "taxonomy_mappings",
+                  "risk_owner", "ai_lifecycle_phase", "impact", "risk_level_autocalculated",
+                  "residual_likelihood", "residual_severity", "final_risk_level", "date_of_assessment"):
         val = getattr(body, field, None)
         if val is not None:
             setattr(risk, field, val)

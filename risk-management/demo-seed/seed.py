@@ -1,0 +1,417 @@
+"""
+Risk Management demo seed.
+
+Creates 5 diverse AI systems in the registry and fully populates their risk
+registers (risks, mitigations, residual risk, approval) so the module is
+ready to demonstrate on a fresh install.
+
+Run via docker compose:
+  docker compose --profile demo up risk-management-demo-seed
+
+Or directly (requires REGISTRY_API_BASE and RISK_API_BASE env vars):
+  python seed.py
+"""
+
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+from datetime import datetime, timedelta, timezone
+
+REGISTRY_BASE = os.environ.get("REGISTRY_API_BASE", "http://ai-system-registry-backend:8001")
+RISK_BASE = os.environ.get("RISK_API_BASE", "http://risk-management-backend:8009")
+ADMIN = os.environ.get("SEED_ADMIN_USERNAME", "admin")
+
+HEADERS = {
+    "X-Forwarded-Preferred-Username": ADMIN,
+    "Content-Type": "application/json",
+}
+
+
+def _req(base, path, method="GET", body=None, *, retries=5, delay=3):
+    url = f"{base}{path}"
+    data = json.dumps(body).encode() if body is not None else None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, data=data, method=method, headers=HEADERS)
+            with urllib.request.urlopen(req, timeout=10) as r:
+                if r.status == 204:
+                    return {}
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:300]
+            # 409 Conflict on duplicate — treat as success
+            if e.code == 409:
+                return {}
+            print(f"  HTTP {e.code} {method} {url}: {err}", file=sys.stderr)
+            raise
+        except Exception as e:
+            if attempt < retries - 1:
+                print(f"  Retrying {url} ({e})…", file=sys.stderr)
+                time.sleep(delay)
+            else:
+                raise
+
+
+def wait_for_services():
+    print("Waiting for registry and risk-management backends…")
+    for base, path in [
+        (REGISTRY_BASE, "/health"),
+        (RISK_BASE, "/health"),
+    ]:
+        for _ in range(30):
+            try:
+                _req(base, path)
+                print(f"  {base} ✓")
+                break
+            except Exception:
+                time.sleep(3)
+        else:
+            print(f"  ERROR: {base} did not become healthy", file=sys.stderr)
+            sys.exit(1)
+
+
+def register_system(payload) -> str:
+    result = _req(REGISTRY_BASE, "/v1/intake", "POST", payload)
+    sys_id = result["system"]["id"]
+    print(f"  Registered {sys_id} ({result['system']['tier'].upper()}) — {result['system']['name']}")
+    return sys_id
+
+
+def reclassify(sys_id, flags: dict):
+    _req(REGISTRY_BASE, f"/v1/systems/{sys_id}", "PUT",
+         {**_req(REGISTRY_BASE, f"/v1/systems/{sys_id}"), **flags,
+          **{k: None for k in ("id","tier","basis","annex_iii_area","classification_rationale",
+                               "created_at","updated_at","field_confirmations")}})
+
+
+def create_register(sys_id, scope, notes="") -> str:
+    reg = _req(RISK_BASE, f"/v1/systems/{sys_id}/registers", "POST",
+               {"assessment_scope": scope, "notes": notes})
+    return reg["id"]
+
+
+def add_risk(reg_id, **fields) -> str:
+    r = _req(RISK_BASE, f"/v1/registers/{reg_id}/risks", "POST", fields)
+    return r["id"]
+
+
+def confirm_risk(risk_id, residual_likelihood="unlikely", residual_severity="low"):
+    _req(RISK_BASE, f"/v1/risks/{risk_id}", "PATCH", {
+        "status": "confirmed",
+        "residual_likelihood": residual_likelihood,
+        "residual_severity": residual_severity,
+        "final_risk_level": "low",
+    })
+
+
+def add_mitigation(risk_id, hierarchy_level, title, description=""):
+    _req(RISK_BASE, f"/v1/risks/{risk_id}/mitigations", "POST", {
+        "title": title, "description": description,
+        "hierarchy_level": hierarchy_level,
+        "implementation_guidance": "", "status": "planned",
+        "assigned_to": None, "due_date": None, "override_notes": "",
+    })
+
+
+def approve_register(reg_id, acceptable, argument):
+    _req(RISK_BASE, f"/v1/registers/{reg_id}/approve", "POST", {
+        "residual_risk_acceptable": acceptable,
+        "residual_risk_argument": argument,
+    })
+
+
+def set_dates_sql(commands: list[str]):
+    """Run raw SQL via psql inside the postgres container via docker exec."""
+    sql = " ".join(commands)
+    os.system(f'docker exec ai-trust-git-postgres-1 psql -U postgres -d ai_trust -c "{sql}" 2>/dev/null')
+
+
+def main():
+    wait_for_services()
+
+    print("\n── Registering AI systems ──")
+
+    hr_id = register_system({
+        "name": "HR Candidate Screening AI",
+        "description": "Automated CV screening and candidate ranking for recruitment.",
+        "assignee_username": ADMIN, "lifecycle": "operation",
+        "intended_purpose": "Screen and rank job applicants based on CV content and job requirements",
+        "department": "Human Resources",
+        "is_employment_related": True,
+        "annex_iii_flags": [], "art_5_flags": [],
+        "is_gpai": False, "is_chatbot": False, "generates_synthetic_content": False,
+        "training_compute_flops": 0,
+    })
+    # Reclassify with correct flag name
+    sys_hr = _req(REGISTRY_BASE, f"/v1/systems/{hr_id}")
+    sys_hr.update({"is_employment_related": True})
+    for k in ("id","tier","basis","annex_iii_area","classification_rationale","created_at","updated_at","field_confirmations"):
+        sys_hr.pop(k, None)
+    _req(REGISTRY_BASE, f"/v1/systems/{hr_id}", "PUT", sys_hr)
+
+    cr_id = register_system({
+        "name": "Credit Risk Assessment Model",
+        "description": "Scores loan applicants and determines creditworthiness for retail banking.",
+        "assignee_username": ADMIN, "lifecycle": "operation",
+        "intended_purpose": "Evaluate credit risk and approve/reject loan applications automatically",
+        "department": "Risk Management",
+        "is_credit_scoring": True,
+        "annex_iii_flags": [], "art_5_flags": [],
+        "is_gpai": False, "is_chatbot": False, "generates_synthetic_content": False,
+        "training_compute_flops": 0,
+    })
+    sys_cr = _req(REGISTRY_BASE, f"/v1/systems/{cr_id}")
+    sys_cr.update({"is_credit_scoring": True})
+    for k in ("id","tier","basis","annex_iii_area","classification_rationale","created_at","updated_at","field_confirmations"):
+        sys_cr.pop(k, None)
+    _req(REGISTRY_BASE, f"/v1/systems/{cr_id}", "PUT", sys_cr)
+
+    cs_id = register_system({
+        "name": "Customer Support Chatbot",
+        "description": "LLM-powered chatbot handling tier-1 customer support queries 24/7.",
+        "assignee_username": ADMIN, "lifecycle": "operation",
+        "intended_purpose": "Answer customer questions and resolve common issues without human intervention",
+        "department": "Customer Experience",
+        "annex_iii_flags": [], "art_5_flags": [],
+        "is_gpai": False, "is_chatbot": True, "generates_synthetic_content": False,
+        "training_compute_flops": 0,
+    })
+
+    md_id = register_system({
+        "name": "Medical Image Diagnosis Assistant",
+        "description": "Assists radiologists in detecting anomalies in chest X-rays and CT scans.",
+        "assignee_username": ADMIN, "lifecycle": "testing",
+        "intended_purpose": "Flag potential pathologies in medical images to support radiologist review",
+        "department": "MedTech R&D",
+        "annex_iii_flags": [], "art_5_flags": [],
+        "is_gpai": False, "is_chatbot": False, "generates_synthetic_content": False,
+        "training_compute_flops": 0,
+    })
+
+    ss_id = register_system({
+        "name": "Social Scoring Pilot",
+        "description": "Pilot evaluating citizen behaviour scores for municipal service prioritisation.",
+        "assignee_username": ADMIN, "lifecycle": "development",
+        "intended_purpose": "Score citizens based on behavioural data to prioritise public service access",
+        "department": "Public Sector Innovation",
+        "annex_iii_flags": [], "art_5_flags": [],
+        "is_gpai": False, "is_chatbot": False, "generates_synthetic_content": False,
+        "training_compute_flops": 0,
+    })
+    sys_ss = _req(REGISTRY_BASE, f"/v1/systems/{ss_id}")
+    sys_ss.update({"social_scoring_public": True})
+    for k in ("id","tier","basis","annex_iii_area","classification_rationale","created_at","updated_at","field_confirmations"):
+        sys_ss.pop(k, None)
+    _req(REGISTRY_BASE, f"/v1/systems/{ss_id}", "PUT", sys_ss)
+
+    print("\n── Creating risk registers ──")
+
+    # ── HR Screening — 4 versions ─────────────────────────────────────────────
+    print("\nHR Screening (4 versions)…")
+    SCOPE_HR = ("Assessment covers automated CV screening and candidate ranking for HR recruitment "
+                "across all business units. Scope includes: training data bias, impact on protected "
+                "characteristics (age, gender, ethnicity), transparency of scoring, human oversight, "
+                "and Art. 9/10 EU AI Act compliance.")
+    ARG_HR = ("Residual risk is acceptable after implementation of bias audit and explainability "
+              "controls. Monthly monitoring ensures ongoing compliance.")
+
+    for v in range(1, 5):
+        scope = SCOPE_HR if v == 4 else f"Assessment cycle {v}: {SCOPE_HR}"
+        reg = create_register(hr_id, scope)
+        r1 = add_risk(reg, title="Discriminatory screening based on protected characteristics",
+                      category="bias", severity="high", likelihood="likely", risk_type="foreseeable",
+                      risk_owner="hr.director@company.com",
+                      impact="Systematic exclusion of candidates based on gender, age or ethnicity.")
+        confirm_risk(r1, "unlikely", "low")
+        add_mitigation(r1, "eliminate", "Exclude protected attributes from model inputs",
+                       "Remove name, gender, age, address from all training data and inference inputs.")
+        add_mitigation(r1, "mitigate", "Monthly bias audit with demographic parity testing",
+                       "Run monthly fairness checks; reject model versions failing >5% parity gap.")
+        r2 = add_risk(reg, title="Lack of explainability for rejected candidates",
+                      category="legal", severity="medium", likelihood="likely", risk_type="known",
+                      impact="Candidates denied without explanation, violating GDPR Art. 22.")
+        confirm_risk(r2, "unlikely", "low")
+        add_mitigation(r2, "mitigate", "SHAP-based per-decision explanation report",
+                       "Generate SHAP feature importance report for every rejection; store 3 years.")
+        approve_register(reg, True, ARG_HR)
+        print(f"  v{v} approved ({reg})")
+
+    # ── Credit Risk — 3 versions ──────────────────────────────────────────────
+    print("\nCredit Risk (3 versions)…")
+    SCOPE_CR = ("Assessment covers automated creditworthiness scoring for retail lending: training "
+                "data quality and representativeness, demographic bias risks, model accuracy and "
+                "misclassification rates, impact on customers denied credit, human oversight of "
+                "rejection decisions, and compliance with EU AI Act Art. 9 and Art. 10 obligations.")
+    ARG_CR = ("Residual credit risk is acceptable. Fairness constraints, mandatory human review, "
+              "and drift monitoring reduce residual likelihood materially.")
+
+    for v in range(1, 4):
+        reg = create_register(cr_id, f"Cycle {v}: {SCOPE_CR}" if v < 3 else SCOPE_CR)
+        r1 = add_risk(reg, title="Demographic bias in credit scoring leading to discriminatory decisions",
+                      category="bias", severity="high", likelihood="likely", risk_type="foreseeable",
+                      risk_owner="risk.owner@company.com",
+                      impact="Customers from protected groups systematically denied credit.")
+        confirm_risk(r1, "unlikely", "medium")
+        add_mitigation(r1, "reduce", "Fairness constraints in model training",
+                       "Apply demographic parity constraints; retrain quarterly.")
+        add_mitigation(r1, "mitigate", "Human review mandatory for all rejections",
+                       "All automated rejections require secondary human review.")
+        r2 = add_risk(reg, title="Model drift leading to inaccurate credit scores",
+                      category="performance", severity="medium", likelihood="possible", risk_type="known",
+                      impact="Unreliable credit scores increasing default rates.")
+        confirm_risk(r2, "rare", "low")
+        add_mitigation(r2, "mitigate", "Automated drift detection with monthly retraining trigger",
+                       "Monitor PSI and KS statistics monthly; trigger retraining if PSI > 0.2.")
+        approve_register(reg, True, ARG_CR)
+        print(f"  v{v} approved ({reg})")
+
+    # ── Customer Support Chatbot — 2 versions ─────────────────────────────────
+    print("\nCustomer Support Chatbot (2 versions)…")
+    SCOPE_CS = ("Assessment covers LLM-powered customer support chatbot on web and mobile. Scope: "
+                "hallucination risks, harmful content generation, data privacy, user manipulation, "
+                "and Art. 50 EU AI Act transparency obligations.")
+    ARG_CS = "All material risks mitigated. RAG grounding reduces hallucination; Art. 50 disclosure satisfied."
+
+    for v in range(1, 3):
+        reg = create_register(cs_id, f"Cycle {v}: {SCOPE_CS}" if v < 2 else SCOPE_CS)
+        r1 = add_risk(reg, title="Hallucination producing incorrect product or policy information",
+                      category="performance", severity="medium", likelihood="possible", risk_type="foreseeable",
+                      impact="Factually incorrect answers leading to mis-selling liability.")
+        confirm_risk(r1, "unlikely", "low")
+        add_mitigation(r1, "reduce", "RAG grounding against product knowledge base",
+                       "All responses grounded via RAG from authoritative product KB.")
+        r2 = add_risk(reg, title="Failure to disclose AI identity to users",
+                      category="legal", severity="low", likelihood="rare", risk_type="known",
+                      impact="Violates EU AI Act Art. 50 obligation to disclose AI interaction.")
+        confirm_risk(r2, "rare", "low")
+        add_mitigation(r2, "eliminate", "Mandatory AI disclosure banner at conversation start",
+                       "Display AI disclosure at session start; log acknowledgement.")
+        approve_register(reg, True, ARG_CS)
+        print(f"  v{v} approved ({reg})")
+
+    # ── Medical Imaging — 2 approved + 1 in-progress ──────────────────────────
+    print("\nMedical Image Diagnosis (2 approved + 1 in progress)…")
+    SCOPE_MD = ("Preliminary risk assessment of AI-assisted medical image analysis tool. "
+                "Scope covers testing environment risks and advisory-only deployment.")
+    ARG_MD = ("System is advisory only and in testing phase. Independent review protocol "
+              "ensures no patient harm pathway. Acceptable under testing scope.")
+
+    for v in range(1, 3):
+        reg = create_register(md_id, f"Cycle {v}: {SCOPE_MD}" if v < 2 else SCOPE_MD)
+        r1 = add_risk(reg, title="Over-reliance on AI recommendations by radiologists",
+                      category="safety", severity="high", likelihood="possible", risk_type="foreseeable",
+                      impact="Reduced diagnostic vigilance, potentially missing pathologies.")
+        confirm_risk(r1, "unlikely", "medium")
+        add_mitigation(r1, "mitigate", "Mandatory independent radiologist review before AI output shown",
+                       "Radiologists complete independent review before viewing AI output.")
+        approve_register(reg, True, ARG_MD)
+        print(f"  v{v} approved ({reg})")
+
+    # v3 — in progress (draft, risks identified but not confirmed)
+    reg3 = create_register(md_id,
+        "Assessment cycle 3: Re-assessment following expansion to CT and MRI modalities. "
+        "Scope includes updated risk profile for multi-modal imaging and new deployment sites.",
+        notes="In progress — scope agreed, risks being identified.")
+    add_risk(reg3, title="Over-reliance on AI recommendations by radiologists",
+             category="safety", severity="high", likelihood="possible", risk_type="foreseeable",
+             impact="Reduced diagnostic vigilance across CT/MRI modalities.",
+             risk_owner="medtech.lead@company.com")
+    add_risk(reg3, title="Training data bias towards specific scanner manufacturers",
+             category="bias", severity="medium", likelihood="possible", risk_type="known",
+             impact="Reduced accuracy at new sites using different scanner hardware.",
+             risk_owner="medtech.lead@company.com")
+    print(f"  v3 in progress / draft ({reg3})")
+
+    # ── Social Scoring — 1 version, PROHIBITED ────────────────────────────────
+    print("\nSocial Scoring Pilot (1 version, PROHIBITED)…")
+    reg = create_register(ss_id,
+        "Assessment of proposed social scoring pilot. This system has been flagged as "
+        "PROHIBITED under EU AI Act Art. 5(1)(c).")
+    r1 = add_risk(reg, title="System constitutes prohibited social scoring under EU AI Act Art. 5(1)(c)",
+                  category="legal", severity="critical", likelihood="certain", risk_type="known",
+                  impact="Deployment would constitute a prohibited AI practice under Art. 5(1)(c).",
+                  closure_justification=(
+                      "SYSTEM MUST NOT BE DEPLOYED. Art. 5(1)(c) prohibition is absolute — "
+                      "no mitigation is possible. Recommend immediate project termination."))
+    _req(RISK_BASE, f"/v1/risks/{r1}", "PATCH", {"status": "confirmed"})
+    approve_register(reg, False,
+        "Residual risk is NOT acceptable. This system is categorically prohibited under "
+        "EU AI Act Art. 5(1)(c). Project must be terminated. No deployment path exists.")
+    print(f"  v1 approved ({reg})")
+
+    print("\n── Setting realistic historical dates ──")
+    print("  (Requires direct DB access via docker exec — skipping if not available)")
+    _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id)
+
+    print("\n✅ Demo seed complete. 5 systems registered, risk registers populated.")
+    print("   Open http://localhost:8080/risk-management/ to explore.")
+
+
+def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id):
+    """Back-date registers and triggers to simulate a realistic history."""
+    import subprocess
+
+    def psql(sql):
+        result = subprocess.run(
+            ["docker", "exec", "ai-trust-git-postgres-1",
+             "psql", "-U", "postgres", "-d", "ai_trust", "-c", sql],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            print(f"  SQL warning: {result.stderr.strip()[:100]}", file=sys.stderr)
+
+    # HR: 4 versions — 14mo, 8mo, 2mo ago, 1 week ago
+    hr_regs = [r["id"] for r in _req(RISK_BASE, f"/v1/systems/{hr_id}/registers")]
+    offsets_hr = ["14 months", "8 months", "2 months", "1 week"]
+    for reg_id, offset in zip(sorted(hr_regs), offsets_hr):
+        psql(f"UPDATE risk_registers SET created_at=NOW()-INTERVAL '{offset}', "
+             f"approved_at=NOW()-INTERVAL '{offset}', "
+             f"last_assessment_completed_at=NOW()-INTERVAL '{offset}', "
+             f"updated_at=NOW()-INTERVAL '{offset}' WHERE id='{reg_id}';")
+
+    # Credit Risk: 3 versions — 12mo, 6mo, 5mo ago
+    cr_regs = [r["id"] for r in _req(RISK_BASE, f"/v1/systems/{cr_id}/registers")]
+    for reg_id, offset in zip(sorted(cr_regs), ["12 months", "6 months", "5 months"]):
+        psql(f"UPDATE risk_registers SET created_at=NOW()-INTERVAL '{offset}', "
+             f"approved_at=NOW()-INTERVAL '{offset}', "
+             f"last_assessment_completed_at=NOW()-INTERVAL '{offset}', "
+             f"updated_at=NOW()-INTERVAL '{offset}' WHERE id='{reg_id}';")
+    # Credit Risk trigger: 6-month trigger fired 1 month ago, unacknowledged → REOPEN
+    psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{cr_id}';")
+    psql(f"INSERT INTO reassessment_triggers "
+         f"(id,ai_system_id,trigger_type,trigger_reason,triggered_at,acknowledged) VALUES "
+         f"('TRG-DEMO-CR01','{cr_id}','scheduled_6_month',"
+         f"'Scheduled 6-month re-assessment due (Art. 9(1)).',"
+         f"NOW()-INTERVAL '1 month',false);")
+
+    # Customer Support: 2 versions — 6mo, 3mo ago
+    cs_regs = [r["id"] for r in _req(RISK_BASE, f"/v1/systems/{cs_id}/registers")]
+    for reg_id, offset in zip(sorted(cs_regs), ["6 months", "3 months"]):
+        psql(f"UPDATE risk_registers SET created_at=NOW()-INTERVAL '{offset}', "
+             f"approved_at=NOW()-INTERVAL '{offset}', "
+             f"last_assessment_completed_at=NOW()-INTERVAL '{offset}', "
+             f"updated_at=NOW()-INTERVAL '{offset}' WHERE id='{reg_id}';")
+    psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{cs_id}';")
+
+    # Medical Imaging: 2 approved — 13mo, 1mo ago; v3 draft stays recent
+    md_regs = _req(RISK_BASE, f"/v1/systems/{md_id}/registers")
+    approved = [r["id"] for r in md_regs if r["status"] == "approved"]
+    for reg_id, offset in zip(sorted(approved), ["13 months", "1 month"]):
+        psql(f"UPDATE risk_registers SET created_at=NOW()-INTERVAL '{offset}', "
+             f"approved_at=NOW()-INTERVAL '{offset}', "
+             f"last_assessment_completed_at=NOW()-INTERVAL '{offset}', "
+             f"updated_at=NOW()-INTERVAL '{offset}' WHERE id='{reg_id}';")
+    psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{md_id}';")
+
+    # Social Scoring: acknowledge all triggers
+    psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{ss_id}';")
+    psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{hr_id}';")
+
+    print("  Dates updated.")
+
+
+if __name__ == "__main__":
+    main()

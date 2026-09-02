@@ -61,6 +61,103 @@ function ErrorMsg({ msg }: { msg: string }) {
   return <div style={{ background: "#ffd5d5", color: "#8b0000", borderRadius: 6, padding: "8px 12px", fontSize: 12, marginTop: 8 }}>{msg}</div>;
 }
 
+function ApprovedBanner({ register }: { register: { approver_username?: string | null; approved_at?: string | null } }) {
+  return (
+    <div style={{ background: "#d5f5e3", border: "1px solid #9cdcb8", borderRadius: 8, padding: "10px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
+      <span style={{ fontSize: 18 }}>✅</span>
+      <span style={{ color: "#1a5c35", fontWeight: 700 }}>
+        Approved by {register.approver_username ?? "—"} on {register.approved_at ? new Date(register.approved_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+      </span>
+      <span style={{ color: "#1a5c35", marginLeft: 4 }}>— viewing in read-only mode 🔒</span>
+    </div>
+  );
+}
+
+function exportReport(systemName: string, register: RiskRegister, risks: RiskEntry[]) {
+  const confirmed = risks.filter(r => r.status === "confirmed");
+  const fmtDate = (d?: string | null) => d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+  const levelBadge = (l?: string | null) => {
+    const colors: Record<string, string> = { critical: "#ffd5d5", high: "#fde8d0", medium: "#fff3c4", low: "#d5f5e3" };
+    return l ? `<span style="background:${colors[l] ?? "#eef1f4"};padding:2px 8px;border-radius:10px;font-weight:700;font-size:11px;text-transform:uppercase">${l}</span>` : "—";
+  };
+
+  const risksHtml = confirmed.map(r => `
+    <div style="border:1px solid #e4e4e7;border-radius:8px;padding:16px;margin-bottom:12px;page-break-inside:avoid">
+      <div style="font-weight:700;font-size:14px;margin-bottom:6px">${r.title}</div>
+      <div style="font-size:12px;color:#556b82;margin-bottom:8px">
+        Category: ${r.category} · Type: ${r.risk_type} · Severity: ${levelBadge(r.severity)} · Likelihood: ${r.likelihood} · Risk level: ${levelBadge(r.risk_level_autocalculated)}
+        ${r.risk_owner ? ` · Owner: ${r.risk_owner}` : ""}
+      </div>
+      ${r.description ? `<div style="font-size:13px;margin-bottom:8px">${r.description}</div>` : ""}
+      ${r.impact ? `<div style="font-size:12px;color:#374151;margin-bottom:8px"><strong>Impact:</strong> ${r.impact}</div>` : ""}
+      ${r.affects_vulnerable_groups ? `<div style="font-size:12px;color:#8b3a00;margin-bottom:8px">⚠ Affects vulnerable groups: ${r.vulnerable_groups}</div>` : ""}
+      ${r.mitigations.length > 0 ? `
+        <div style="margin-top:8px">
+          <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Mitigations (${r.mitigations.length})</div>
+          ${r.mitigations.map(m => `
+            <div style="background:#f8f9fa;border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:12px">
+              <span style="font-weight:600">[${m.hierarchy_level.toUpperCase()}]</span> ${m.title}
+              ${m.description ? `<div style="color:#556b82;margin-top:3px">${m.description}</div>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      ` : r.closure_justification ? `<div style="background:#fffbeb;border-radius:6px;padding:8px 12px;font-size:12px;color:#92400e"><strong>No mitigation:</strong> ${r.closure_justification}</div>` : ""}
+      ${(r.residual_likelihood || r.residual_severity) ? `
+        <div style="margin-top:8px;font-size:12px;color:#1147E9">
+          <strong>Residual risk:</strong> likelihood: ${r.residual_likelihood ?? "—"} · severity: ${r.residual_severity ?? "—"} · level: ${levelBadge(r.final_risk_level)}
+          ${r.date_of_assessment ? ` · assessed: ${fmtDate(r.date_of_assessment)}` : ""}
+        </div>
+      ` : ""}
+    </div>
+  `).join("");
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Risk Assessment Report — ${systemName}</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 900px; margin: 40px auto; color: #111827; }
+      @media print { body { margin: 20px; } .no-print { display: none; } }
+      h1 { font-size: 22px; margin-bottom: 4px; }
+      .meta { font-size: 12px; color: #556b82; margin-bottom: 24px; }
+      .approved-badge { background: #d5f5e3; border: 1px solid #9cdcb8; border-radius: 8px; padding: 10px 16px; margin-bottom: 20px; font-size: 13px; color: #1a5c35; font-weight: 700; }
+      .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #556b82; margin: 20px 0 10px; border-bottom: 1px solid #e4e4e7; padding-bottom: 6px; }
+      .scope-box { background: #f8f9fa; border-radius: 8px; padding: 14px 16px; font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
+      .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+      .stat { background: #f8f9fa; border-radius: 8px; padding: 12px; text-align: center; }
+      .stat-val { font-size: 24px; font-weight: 700; color: #1147E9; }
+      .stat-lbl { font-size: 11px; color: #556b82; margin-top: 3px; }
+      .footer { margin-top: 32px; font-size: 11px; color: #9ca3af; border-top: 1px solid #e4e4e7; padding-top: 12px; }
+    </style>
+  </head><body>
+    <div class="no-print" style="margin-bottom:16px">
+      <button onclick="window.print()" style="background:#1147E9;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;margin-right:8px">🖨 Print / Save as PDF</button>
+      <button onclick="window.close()" style="background:#f4f4f5;color:#374151;border:none;border-radius:6px;padding:8px 16px;font-size:13px;cursor:pointer">Close</button>
+    </div>
+    <h1>Risk Assessment Report</h1>
+    <div class="meta">System: <strong>${systemName}</strong> · Register: ${register.id} · Generated: ${fmtDate(new Date().toISOString())}</div>
+    ${register.status === "approved" ? `
+      <div class="approved-badge">✅ APPROVED — by ${register.approver_username ?? "—"} on ${fmtDate(register.approved_at)} · Residual risk: ${register.residual_risk_acceptable ? "Acceptable" : "Not acceptable"}</div>
+    ` : `<div style="background:#fff3c4;border-radius:8px;padding:10px 16px;margin-bottom:20px;font-size:13px;color:#92400e">⚠ Status: ${register.status.toUpperCase()} — not yet approved</div>`}
+    <div class="section-title">Assessment scope</div>
+    <div class="scope-box">${register.assessment_scope || "—"}</div>
+    <div class="stats">
+      <div class="stat"><div class="stat-val">${confirmed.length}</div><div class="stat-lbl">Confirmed risks</div></div>
+      <div class="stat"><div class="stat-val">${confirmed.reduce((a, r) => a + r.mitigations.length, 0)}</div><div class="stat-lbl">Mitigations</div></div>
+      <div class="stat"><div class="stat-val">${confirmed.filter(r => r.affects_vulnerable_groups).length}</div><div class="stat-lbl">Vulnerable group risks</div></div>
+      <div class="stat"><div class="stat-val">${confirmed.reduce((a, r) => a + r.misuse_scenarios.length, 0)}</div><div class="stat-lbl">Misuse scenarios</div></div>
+    </div>
+    <div class="section-title">Confirmed risks (${confirmed.length})</div>
+    ${risksHtml || "<p style='color:#9ca3af;font-size:13px'>No confirmed risks.</p>"}
+    ${register.residual_risk_argument ? `
+      <div class="section-title">Residual risk argument (Art. 9(5))</div>
+      <div class="scope-box">${register.residual_risk_argument}</div>
+    ` : ""}
+    <div class="footer">Generated by AI Trust Platform · EU AI Act Art. 9 Risk Management · ${new Date().getFullYear()}</div>
+  </body></html>`;
+
+  const w = window.open("", "_blank");
+  if (w) { w.document.write(html); w.document.close(); }
+}
+
 // ── Step 1: Scope ─────────────────────────────────────────────────────────────
 function ScopeStep({ register, onNext, onPatch }: {
   register: RiskRegister | null;
@@ -126,6 +223,36 @@ const RISK_CATEGORIES = [
   "Other",
 ];
 
+const RISK_LEVEL_MATRIX: Record<string, Record<string, string>> = {
+  critical: { very_likely: "critical", likely: "critical", possible: "high",   unlikely: "medium" },
+  high:     { very_likely: "critical", likely: "high",     possible: "high",   unlikely: "medium" },
+  medium:   { very_likely: "high",     likely: "medium",   possible: "medium", unlikely: "low"    },
+  low:      { very_likely: "medium",   likely: "low",      possible: "low",    unlikely: "low"    },
+};
+
+function calcRiskLevel(severity: string, likelihood: string): string {
+  return RISK_LEVEL_MATRIX[severity]?.[likelihood] ?? "medium";
+}
+
+function RiskLevelBadge({ level }: { level: string }) {
+  const c = SEV_COLORS[level] ?? "#556b82";
+  const bg = SEV_BG[level] ?? "#eef1f4";
+  return (
+    <span style={{ fontSize: 11, background: bg, color: c, padding: "2px 10px", borderRadius: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+      {level}
+    </span>
+  );
+}
+
+const LIFECYCLE_PHASES = [
+  { value: "", label: "— select —" },
+  { value: "development", label: "Development" },
+  { value: "testing", label: "Testing" },
+  { value: "deployment", label: "Deployment" },
+  { value: "operation", label: "Operation" },
+  { value: "decommissioning", label: "Decommissioning" },
+];
+
 interface DraftRisk {
   title: string;
   description: string;
@@ -135,12 +262,16 @@ interface DraftRisk {
   vulnerable_groups: string;
   severity: string;
   likelihood: string;
+  risk_owner: string;
+  ai_lifecycle_phase: string;
+  impact: string;
 }
 
 const emptyDraft = (): DraftRisk => ({
   title: "", description: "", category: "Discrimination / unfair treatment",
   risk_type: "known", affects_vulnerable_groups: false, vulnerable_groups: "",
   severity: "medium", likelihood: "possible",
+  risk_owner: "", ai_lifecycle_phase: "", impact: "",
 });
 
 function IdentifyStep({ register, risks, onRisksChange, onNext }: {
@@ -167,6 +298,7 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
         vulnerable_groups: JSON.stringify(
           draft.vulnerable_groups ? draft.vulnerable_groups.split(",").map(s => s.trim()).filter(Boolean) : []
         ),
+        risk_level_autocalculated: calcRiskLevel(draft.severity, draft.likelihood),
       });
       onRisksChange([...risks, created]);
       setDraft(emptyDraft());
@@ -192,9 +324,12 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
             <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid #e4e4e7" }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
-                <div style={{ fontSize: 12, color: "#556b82", marginTop: 2 }}>
-                  {r.category} · {r.risk_type} · severity: {r.severity}
-                  {r.affects_vulnerable_groups && <span style={{ color: "#8b3a00", marginLeft: 8 }}>⚠ vulnerable groups</span>}
+                <div style={{ fontSize: 12, color: "#556b82", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span>{r.category} · {r.risk_type}</span>
+                  {r.risk_level_autocalculated && <RiskLevelBadge level={r.risk_level_autocalculated} />}
+                  {r.ai_lifecycle_phase && <span style={{ background: "#eef1f4", padding: "1px 6px", borderRadius: 8, fontSize: 11 }}>{r.ai_lifecycle_phase}</span>}
+                  {r.risk_owner && <span style={{ fontSize: 11, color: "#9ca3af" }}>owner: {r.risk_owner}</span>}
+                  {r.affects_vulnerable_groups && <span style={{ color: "#8b3a00" }}>⚠ vulnerable groups</span>}
                 </div>
               </div>
               <button onClick={() => removeRisk(r.id)}
@@ -238,6 +373,25 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
                 { value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" },
                 { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" },
               ]} />
+          </div>
+          <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Risk level (auto):</span>
+            <RiskLevelBadge level={calcRiskLevel(draft.severity, draft.likelihood)} />
+          </div>
+          <div>
+            <Label>Risk owner</Label>
+            <Input value={draft.risk_owner} onChange={v => setDraft(d => ({ ...d, risk_owner: v }))}
+              placeholder="e.g. jane.doe@company.com" />
+          </div>
+          <div>
+            <Label>AI lifecycle phase</Label>
+            <Select value={draft.ai_lifecycle_phase} onChange={v => setDraft(d => ({ ...d, ai_lifecycle_phase: v }))}
+              options={LIFECYCLE_PHASES} />
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <Label>Impact description</Label>
+            <Textarea value={draft.impact} onChange={v => setDraft(d => ({ ...d, impact: v }))} rows={2}
+              placeholder="Describe the business, operational, or user impact if this risk materialises…" />
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <Label>Description</Label>
@@ -485,9 +639,29 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [addMit, setAddMit] = useState<Record<string, boolean>>({});
   const [mitDraft, setMitDraft] = useState<Record<string, Partial<MitigationMeasure>>>({});
+  const [residualDraft, setResidualDraft] = useState<Record<string, { residual_likelihood: string; residual_severity: string; date_of_assessment: string }>>({});
+  const [residualSaving, setResidualSaving] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [closureNote, setClosureNote] = useState<Record<string, string>>({});
   const [err, setErr] = useState<Record<string, string>>({});
+
+  async function saveResidual(riskId: string) {
+    const d = residualDraft[riskId] ?? {};
+    const rl = d.residual_likelihood ?? "";
+    const rs = d.residual_severity ?? "";
+    setResidualSaving(s => ({ ...s, [riskId]: true }));
+    try {
+      const updated = await api.patchRisk(riskId, {
+        residual_likelihood: rl || null,
+        residual_severity: rs || null,
+        final_risk_level: (rl && rs) ? calcRiskLevel(rs, rl) : null,
+        date_of_assessment: d.date_of_assessment || null,
+      });
+      onRisksChange(risks.map(r => r.id === riskId ? { ...r, ...updated, mitigations: r.mitigations } : r));
+    } finally {
+      setResidualSaving(s => ({ ...s, [riskId]: false }));
+    }
+  }
 
   async function saveMitigation(riskId: string) {
     const d = mitDraft[riskId] ?? {};
@@ -625,6 +799,61 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                     </button>
                   </div>
                 )}
+
+                {/* Residual risk (post-mitigation) */}
+                <div style={{ marginTop: 14, padding: "12px 14px", background: "#f0f4ff", borderRadius: 6, border: "1px solid #c7d3f5" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#1147E9", marginBottom: 8 }}>
+                    Residual risk (post-mitigation) — Art. 9(2)(d)
+                    {risk.final_risk_level && (
+                      <span style={{ marginLeft: 10 }}><RiskLevelBadge level={risk.final_risk_level} /></span>
+                    )}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                    <div>
+                      <Label>Residual likelihood</Label>
+                      <Select
+                        value={residualDraft[risk.id]?.residual_likelihood ?? risk.residual_likelihood ?? ""}
+                        onChange={v => setResidualDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { residual_severity: "", date_of_assessment: "" }, residual_likelihood: v } }))}
+                        options={[
+                          { value: "", label: "— select —" },
+                          { value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" },
+                          { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" },
+                        ]} />
+                    </div>
+                    <div>
+                      <Label>Residual severity</Label>
+                      <Select
+                        value={residualDraft[risk.id]?.residual_severity ?? risk.residual_severity ?? ""}
+                        onChange={v => setResidualDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { residual_likelihood: "", date_of_assessment: "" }, residual_severity: v } }))}
+                        options={[
+                          { value: "", label: "— select —" },
+                          { value: "critical", label: "Critical" }, { value: "high", label: "High" },
+                          { value: "medium", label: "Medium" }, { value: "low", label: "Low" },
+                        ]} />
+                    </div>
+                    <div>
+                      <Label>Date of assessment</Label>
+                      <input type="date"
+                        value={residualDraft[risk.id]?.date_of_assessment ?? (risk.date_of_assessment ? risk.date_of_assessment.substring(0, 10) : "")}
+                        onChange={e => setResidualDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { residual_likelihood: "", residual_severity: "" }, date_of_assessment: e.target.value } }))}
+                        style={{ width: "100%", border: "1px solid #e4e4e7", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
+                    </div>
+                  </div>
+                  {(() => {
+                    const rl = residualDraft[risk.id]?.residual_likelihood ?? risk.residual_likelihood ?? "";
+                    const rs = residualDraft[risk.id]?.residual_severity ?? risk.residual_severity ?? "";
+                    return (rl && rs) ? (
+                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 12, color: "#374151" }}>Residual risk level (auto):</span>
+                        <RiskLevelBadge level={calcRiskLevel(rs, rl)} />
+                      </div>
+                    ) : null;
+                  })()}
+                  <button onClick={() => saveResidual(risk.id)} disabled={residualSaving[risk.id]}
+                    style={{ marginTop: 10, fontSize: 12, background: "#1147E9", color: "#fff", border: "none", borderRadius: 4, padding: "5px 14px", cursor: "pointer" }}>
+                    {residualSaving[risk.id] ? "Saving…" : "Save residual risk"}
+                  </button>
+                </div>
               </div>
             )}
           </Card>
@@ -760,6 +989,54 @@ function ApproveStep({ register, risks, onApprove }: {
   );
 }
 
+// ── Archived register summary card ───────────────────────────────────────────
+function ArchivedRegisterCard({ reg }: { reg: RiskRegister }) {
+  const [open, setOpen] = useState(false);
+  const confirmed = reg.risks.filter(r => r.status === "confirmed");
+  const fmtDate = (d?: string | null) => d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+  return (
+    <div style={{ border: "1px solid #e4e4e7", borderRadius: 10, marginBottom: 12, overflow: "hidden", opacity: 0.85 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", background: "#f8f9fa", cursor: "pointer" }}
+        onClick={() => setOpen(o => !o)}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#556b82" }}>v{reg.id}</span>
+        <span style={{ fontSize: 11, background: "#d5f5e3", color: "#1a5c35", padding: "2px 8px", borderRadius: 8, fontWeight: 600 }}>
+          ✓ APPROVED
+        </span>
+        <span style={{ fontSize: 12, color: "#556b82" }}>
+          Approved: {fmtDate(reg.approved_at)} · {confirmed.length} risk(s) · {confirmed.reduce((a, r) => a + r.mitigations.length, 0)} mitigation(s)
+        </span>
+        {reg.residual_risk_acceptable !== null && (
+          <span style={{ fontSize: 11, color: reg.residual_risk_acceptable ? "#1a5c35" : "#8b0000", fontWeight: 600 }}>
+            Residual: {reg.residual_risk_acceptable ? "Acceptable" : "Not acceptable"}
+          </span>
+        )}
+        <span style={{ marginLeft: "auto", color: "#9ca3af" }}>{open ? "▲" : "▼"}</span>
+      </div>
+      {open && (
+        <div style={{ padding: "14px 18px" }}>
+          <div style={{ fontSize: 12, color: "#374151", marginBottom: 10 }}>
+            <strong>Scope:</strong> {reg.assessment_scope || "—"}
+          </div>
+          {confirmed.map(r => (
+            <div key={r.id} style={{ padding: "8px 0", borderBottom: "1px solid #f4f4f5", fontSize: 12 }}>
+              <span style={{ fontWeight: 600 }}>{r.title}</span>
+              <span style={{ marginLeft: 8, color: "#556b82" }}>{r.category} · {r.severity}</span>
+              {r.mitigations.length > 0 && (
+                <span style={{ marginLeft: 8, color: "#1a5c35" }}>{r.mitigations.length} mitigation(s)</span>
+              )}
+            </div>
+          ))}
+          {reg.residual_risk_argument && (
+            <div style={{ marginTop: 10, fontSize: 12, color: "#374151" }}>
+              <strong>Residual risk argument:</strong> {reg.residual_risk_argument}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main wizard ───────────────────────────────────────────────────────────────
 export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
   systemId: string;
@@ -768,19 +1045,24 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
 }) {
   const [step, setStep] = useState<WizardStep>("scope");
   const [register, setRegister] = useState<RiskRegister | null>(null);
+  const [archivedRegisters, setArchivedRegisters] = useState<RiskRegister[]>([]);
   const [risks, setRisks] = useState<RiskEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reopening, setReopening] = useState(false);
   const [err, setErr] = useState("");
 
-  // Load latest active register on mount
+  // Load all registers on mount
   useEffect(() => {
     api.getRegisters(systemId)
       .then(regs => {
         const active = regs.find(r => r.status !== "archived");
+        const archived = regs.filter(r => r.status === "archived").sort((a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        setArchivedRegisters(archived);
         if (active) {
           setRegister(active);
           setRisks(active.risks);
-          // Jump to correct step based on status
           if (active.status === "approved") setStep("approve");
           else if (active.risks.some(r => r.mitigations.length > 0)) setStep("mitigate");
           else if (active.risks.some(r => r.status === "confirmed")) setStep("evaluate");
@@ -793,7 +1075,7 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
   }, [systemId]);
 
   async function handleScopeNext(scope: string, notes: string) {
-    if (register) {
+    if (register && register.status !== "approved") {
       const updated = await api.patchRegister(register.id, { assessment_scope: scope, notes });
       setRegister(updated);
     } else {
@@ -816,6 +1098,53 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
     });
     setRegister(updated);
     setStep("approve");
+  }
+
+  async function handleReopen() {
+    if (!register) return;
+    setReopening(true);
+    setErr("");
+    try {
+      // Archive current register by creating new one (backend archives the old one automatically)
+      const prev = register;
+      const created = await api.createRegister(systemId, {
+        assessment_scope: prev.assessment_scope,
+        notes: prev.notes,
+      });
+      // Pre-fill risks from previous register
+      for (const r of prev.risks.filter(r => r.status === "confirmed")) {
+        await api.createRisk(created.id, {
+          title: r.title,
+          description: r.description,
+          category: r.category,
+          risk_type: r.risk_type,
+          severity: r.severity,
+          likelihood: r.likelihood,
+          risk_owner: r.risk_owner ?? undefined,
+          ai_lifecycle_phase: r.ai_lifecycle_phase ?? undefined,
+          impact: r.impact,
+          affects_vulnerable_groups: r.affects_vulnerable_groups,
+          vulnerable_groups: r.vulnerable_groups,
+          risk_level_autocalculated: r.risk_level_autocalculated ?? undefined,
+        });
+      }
+      // Reload all registers
+      const allRegs = await api.getRegisters(systemId);
+      const newActive = allRegs.find(r => r.status !== "archived");
+      const archived = allRegs.filter(r => r.status === "archived").sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      setArchivedRegisters(archived);
+      if (newActive) {
+        setRegister(newActive);
+        setRisks(newActive.risks);
+      }
+      setStep("scope");
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setReopening(false);
+    }
   }
 
   if (loading) return (
@@ -847,24 +1176,46 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
             {register.id} · {register.status}
           </span>
         )}
+        {register && (
+          <button onClick={() => exportReport(systemName, register, risks)}
+            style={{ background: "#fff", border: "1px solid #e4e4e7", borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+            📄 Export report
+          </button>
+        )}
+        {register?.status === "approved" && (
+          <button onClick={handleReopen} disabled={reopening}
+            style={{ background: reopening ? "#9ca3af" : "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: reopening ? "not-allowed" : "pointer" }}>
+            {reopening ? "Opening…" : "🔄 Reopen"}
+          </button>
+        )}
       </div>
 
       {/* Stepper */}
       <div style={{ display: "flex", gap: 4, marginBottom: 24 }}>
-        {STEPS.map((s, i) => (
-          <div key={s.key} style={{
-            flex: 1, textAlign: "center", padding: "8px 4px", fontSize: 12, fontWeight: 600, borderRadius: 6,
-            background: step === s.key ? "#1147E9" : i < currentIdx ? "#d5f5e3" : "#f4f4f5",
-            color: step === s.key ? "#fff" : i < currentIdx ? "#1a5c35" : "#9ca3af",
-            cursor: i < currentIdx && register ? "pointer" : "default",
-          }}
-          onClick={() => { if (i < currentIdx && register) setStep(s.key); }}>
-            {i < currentIdx ? "✓ " : ""}{s.label}
-          </div>
-        ))}
+        {STEPS.map((s, i) => {
+          const isApproved = register?.status === "approved";
+          const isActive = step === s.key;
+          const isPast = i < currentIdx;
+          const clickable = (isPast || isApproved) && !!register;
+          return (
+            <div key={s.key} style={{
+              flex: 1, textAlign: "center", padding: "8px 4px", fontSize: 12, fontWeight: 600, borderRadius: 6,
+              background: isActive ? "#1147E9" : (isPast || isApproved) ? "#d5f5e3" : "#f4f4f5",
+              color: isActive ? "#fff" : (isPast || isApproved) ? "#1a5c35" : "#9ca3af",
+              cursor: clickable ? "pointer" : "default",
+            }}
+            onClick={() => { if (clickable) setStep(s.key); }}>
+              {(isPast || (isApproved && !isActive)) ? "✓ " : ""}{s.label}
+            </div>
+          );
+        })}
       </div>
 
       {err && <ErrorMsg msg={err} />}
+
+      {register?.status === "approved" && step !== "approve" && (
+        <ApprovedBanner register={register} />
+      )}
 
       {step === "scope" && (
         <ScopeStep register={register} onNext={handleScopeNext} onPatch={handlePatchScope} />
@@ -880,6 +1231,16 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
       )}
       {step === "approve" && register && (
         <ApproveStep register={register} risks={risks} onApprove={handleApprove} />
+      )}
+
+      {/* Previous assessment versions */}
+      {archivedRegisters.length > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#556b82", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12, borderTop: "1px solid #e4e4e7", paddingTop: 20 }}>
+            Previous assessment versions ({archivedRegisters.length})
+          </div>
+          {archivedRegisters.map(r => <ArchivedRegisterCard key={r.id} reg={r} />)}
+        </div>
       )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

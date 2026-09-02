@@ -3,12 +3,12 @@ import { api } from "../api/client";
 import type { SystemRiskSummary } from "../types";
 
 const TIER_COLORS: Record<string, { bg: string; color: string; border: string }> = {
-  high:           { bg: "#fde8d0", color: "#8b3a00", border: "#f5c890" },
+  high:            { bg: "#fde8d0", color: "#8b3a00", border: "#f5c890" },
   "gpai-systemic": { bg: "#fde8d0", color: "#8b3a00", border: "#f5c890" },
   "gpai-standard": { bg: "#fff3c4", color: "#7a5900", border: "#f5df84" },
-  limited:        { bg: "#fff3c4", color: "#7a5900", border: "#f5df84" },
-  minimal:        { bg: "#d5f5e3", color: "#1a5c35", border: "#9cdcb8" },
-  prohibited:     { bg: "#ffd5d5", color: "#8b0000", border: "#f5b8b8" },
+  limited:         { bg: "#fff3c4", color: "#7a5900", border: "#f5df84" },
+  minimal:         { bg: "#d5f5e3", color: "#1a5c35", border: "#9cdcb8" },
+  prohibited:      { bg: "#ffd5d5", color: "#8b0000", border: "#f5b8b8" },
 };
 
 function Badge({ text, style }: { text: string; style?: React.CSSProperties }) {
@@ -41,6 +41,49 @@ function StatusDot({ reassessmentNeeded }: { reassessmentNeeded: boolean }) {
       display: "inline-block",
     }} title={reassessmentNeeded ? "Re-assessment needed" : "Assessment up to date"} />
   );
+}
+
+function InfoTooltip({ text }: { text: string }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span style={{ position: "relative", display: "inline-flex", alignItems: "center", marginLeft: 4, verticalAlign: "middle" }}
+      onMouseEnter={() => setVisible(true)} onMouseLeave={() => setVisible(false)}>
+      <span style={{
+        width: 14, height: 14, borderRadius: "50%", background: "#6b7280", color: "#fff",
+        fontSize: 9, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center",
+        cursor: "default", userSelect: "none", flexShrink: 0,
+      }}>i</span>
+      {visible && (
+        <span style={{
+          position: "absolute", bottom: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)",
+          background: "#1f2937", color: "#fff", borderRadius: 6, padding: "8px 12px",
+          fontSize: 11, lineHeight: 1.5, width: 260, zIndex: 100, whiteSpace: "normal",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+          pointerEvents: "none",
+        }}>
+          {text}
+          <span style={{
+            position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)",
+            border: "5px solid transparent", borderTopColor: "#1f2937",
+          }} />
+        </span>
+      )}
+    </span>
+  );
+}
+
+function actionBtn(sys: SystemRiskSummary): { label: string; color: string } {
+  if (!sys.active_register_id) {
+    return { label: "Start assessment", color: "#1147E9" };
+  }
+  const status = sys.active_register_status ?? "";
+  if (status === "approved") {
+    return sys.reassessment_needed
+      ? { label: "Reopen", color: "#dc2626" }
+      : { label: "Open", color: "#1147E9" };
+  }
+  // draft / submitted / anything in-progress
+  return { label: "Resume", color: "#d97706" };
 }
 
 export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (id: string, name: string) => void }) {
@@ -101,9 +144,7 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
 
       {/* Search */}
       <input
-        type="text"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
+        type="text" value={search} onChange={e => setSearch(e.target.value)}
         placeholder="Filter systems…"
         style={{ width: "100%", border: "1px solid #e4e4e7", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 16, boxSizing: "border-box" }}
       />
@@ -130,6 +171,8 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
             )}
             {filtered.map(sys => {
               const isHighRisk = sys.system_tier === "high" || sys.system_tier === "prohibited";
+              const btn = actionBtn(sys);
+              const triggerTooltip = `Re-assessment triggers are events that require a new risk assessment cycle. They are created automatically when: (1) 6 months have passed since the last approved assessment (Art. 9(1)), or (2) a significant change was detected in the AI system. Unacknowledged triggers indicate a new assessment is overdue.`;
               return (
                 <tr key={sys.system_id} style={{
                   borderBottom: "1px solid #e4e4e7",
@@ -152,8 +195,10 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
                   <td style={{ padding: "12px 14px", color: "#556b82" }}>
                     {formatDate(sys.last_assessment_completed_at)}
                     {sys.reassessment_needed && (
-                      <div style={{ fontSize: 11, color: "#dc2626", marginTop: 2 }}>
-                        {sys.unacknowledged_triggers > 0 ? `${sys.unacknowledged_triggers} trigger(s)` : "Overdue (>6 months)"}
+                      <div style={{ fontSize: 11, color: "#dc2626", marginTop: 2, display: "flex", alignItems: "center" }}>
+                        {sys.unacknowledged_triggers > 0
+                          ? <><span>{sys.unacknowledged_triggers} trigger(s)</span><InfoTooltip text={triggerTooltip} /></>
+                          : <><span>Overdue (&gt;6 months)</span><InfoTooltip text="EU AI Act Art. 9(1) requires iterative risk management. An assessment is overdue when more than 6 months have passed since the last approved assessment with no new cycle started. A new assessment must be initiated to maintain compliance." /></>}
                       </div>
                     )}
                   </td>
@@ -168,13 +213,11 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
                     <button
                       onClick={() => onSelectSystem(sys.system_id, sys.system_name)}
                       style={{
-                        background: sys.reassessment_needed ? "#dc2626" : "#1147E9",
-                        color: "#fff", border: "none", borderRadius: 6,
-                        padding: "6px 14px", fontSize: 12, fontWeight: 600,
-                        cursor: "pointer",
+                        background: btn.color, color: "#fff", border: "none", borderRadius: 6,
+                        padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
                       }}
                     >
-                      {sys.active_register_id ? "Open" : "Start assessment"}
+                      {btn.label}
                     </button>
                   </td>
                 </tr>
@@ -184,9 +227,7 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
         </table>
       </div>
 
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

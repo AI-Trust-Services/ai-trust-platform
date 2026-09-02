@@ -56,6 +56,15 @@ class RiskEntryIn(BaseModel):
     closure_justification: str = ""
     source: str = "manual"
     taxonomy_mappings: str = ""  # JSON list
+    # VerifyWise-equivalent fields
+    risk_owner: Optional[str] = None
+    ai_lifecycle_phase: Optional[str] = None
+    impact: str = ""
+    risk_level_autocalculated: Optional[str] = None
+    residual_likelihood: Optional[str] = None
+    residual_severity: Optional[str] = None
+    final_risk_level: Optional[str] = None
+    date_of_assessment: Optional[str] = None  # ISO date string
     misuse_scenarios: list[MisuseScenarioIn] = []
     mitigations: list[MitigationMeasureIn] = []
 
@@ -77,12 +86,46 @@ class RiskEntryOut(BaseModel):
     closure_justification: str
     source: str
     taxonomy_mappings: str
+    # VerifyWise-equivalent fields
+    risk_owner: Optional[str]
+    ai_lifecycle_phase: Optional[str]
+    impact: str
+    risk_level_autocalculated: Optional[str]
+    residual_likelihood: Optional[str]
+    residual_severity: Optional[str]
+    final_risk_level: Optional[str]
+    date_of_assessment: Optional[datetime]
     misuse_scenarios: list[MisuseScenarioOut] = []
     mitigations: list[MitigationMeasureOut] = []
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class RiskEntryPatch(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    article_9_step: Optional[str] = None
+    risk_type: Optional[str] = None
+    severity: Optional[str] = None
+    likelihood: Optional[str] = None
+    status: Optional[str] = None
+    review_notes: Optional[str] = None
+    affects_vulnerable_groups: Optional[bool] = None
+    vulnerable_groups: Optional[str] = None
+    closure_justification: Optional[str] = None
+    source: Optional[str] = None
+    taxonomy_mappings: Optional[str] = None
+    risk_owner: Optional[str] = None
+    ai_lifecycle_phase: Optional[str] = None
+    impact: Optional[str] = None
+    risk_level_autocalculated: Optional[str] = None
+    residual_likelihood: Optional[str] = None
+    residual_severity: Optional[str] = None
+    final_risk_level: Optional[str] = None
+    date_of_assessment: Optional[str] = None
 
 
 class RiskRegisterIn(BaseModel):
