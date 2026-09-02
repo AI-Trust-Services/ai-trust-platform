@@ -4,23 +4,37 @@
 
 The platform ships with an optional demo seed that registers 5 diverse AI systems and fully populates their risk registers so the Risk Management module is ready to demonstrate immediately after install.
 
-### Run the demo seed
+### 1. Clone the repository
 
 ```bash
-# Start the full platform first
+git clone https://github.com/AI-Trust-Services/ai-trust-platform.git
+cd ai-trust-platform
+git checkout jw-poc-risk-management
+```
+
+### 2. Create `.env`
+
+Copy the example file — all defaults work for a local demo install:
+
+```bash
+cp .env.example .env
+```
+
+The only values you may want to change are `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` (the login you'll use at `http://localhost:8080`). Everything else works as-is.
+
+### 3. Start the platform and seed demo data
+
+```bash
+# Start everything
 docker compose up -d
 
-# Then run the seed (one-off, safe to re-run)
+# Seed 5 demo AI systems with full risk registers (safe to re-run)
 docker compose --profile demo up risk-management-demo-seed
 ```
 
-Or start everything including the seed in one command:
+Wait for the seed container to exit (`Exited (0)`), then open [http://localhost:8080](http://localhost:8080) and log in with `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` from your `.env` (defaults: `admin` / `password`).
 
-```bash
-docker compose --profile demo up -d
-```
-
-The seed exits automatically when done. Open [http://localhost:8080](http://localhost:8080) and navigate to **Risk Management**.
+Navigate to **Risk Management** in the sidebar.
 
 ### What the seed creates
 
