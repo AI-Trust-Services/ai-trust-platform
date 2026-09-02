@@ -4,6 +4,7 @@ Waterfall: Art. 5 (prohibited) → GPAI → Annex III (high-risk) → Art. 50 (l
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 from app.schemas import ClassificationResult
@@ -118,3 +119,70 @@ def classify(body: Any) -> ClassificationResult:
         basis="Minimal risk — no mandatory obligations under EU AI Act",
         obligations=[],
     )
+
+
+def _classify_from_flags(flags: list[Any]) -> ClassificationResult:
+    """Run the deterministic classifier over a list of inferred flags.
+
+    Each item needs ``.flag`` (name) and ``.value`` attributes. Builds a synthetic
+    namespace with every classifier input defaulted false / 0.0, applies the flags,
+    then calls ``classify()``. Shared by the AI-assisted intake turn and the
+    questionnaire workflow so both take the exact same path into ``classify()``.
+    """
+    obj = SimpleNamespace(**{name: False for name in CLASSIFIER_INPUTS})
+    obj.training_compute_flops = 0.0
+    for f in flags:
+        if f.flag in CLASSIFIER_INPUTS:
+            setattr(obj, f.flag, f.value)
+    return classify(obj)
+
+
+async def classify_ai_questionnaire(row: Any) -> tuple[ClassificationResult, dict]:
+    """AI-mode classification from a system's stored questionnaire answers.
+
+    Infers the hidden classifier flags from the free-text business + technical
+    answers via the LLM, runs the deterministic ``classify()`` over them, and
+    returns ``(ClassificationResult, extended_rationale)`` where the rationale is
+    the ``ClassificationRationale`` shape ``{flags, confidence, reasoning,
+    missing_info}`` — visible only to the compliance officer.
+
+    Called identically by submit-technical and submit-info. The LLM call happens
+    *before* any status mutation in the router, so an ``LLMParseError`` leaves the
+    row untouched and the router can return 502 without corrupting workflow state.
+
+    Imports from ``app.llm`` are deferred to avoid a circular import
+    (``app.llm.prompts`` imports ``CLASSIFIER_INPUTS`` from this module at import time).
+    """
+    from app.llm import (
+        build_classify_questionnaire_messages,
+        chat,
+        parse_json_response,
+    )
+    from app.schemas import InferredFlag
+
+    answers = dict(row.questionnaire_answers or {})
+    technical_answers = answers.pop("technical", {}) or {}
+    business_answers = {
+        "intended_purpose": row.intended_purpose or "",
+        "department": row.department or "",
+        "use_case": row.use_case or "",
+        "people_affected": row.people_affected or "",
+        "decision_context": row.decision_context or "",
+        **answers,
+    }
+
+    messages = build_classify_questionnaire_messages(business_answers, technical_answers)
+    result = await chat(messages, json_mode=True, task="classify_questionnaire")
+    parsed = await parse_json_response(result["text"], task="classify_questionnaire")
+
+    inferred = [InferredFlag(**f) for f in parsed.get("inferred_flags", [])]
+    classification = _classify_from_flags(inferred)
+
+    confidence = parsed.get("confidence")
+    rationale = {
+        "flags": [f.model_dump() for f in inferred],
+        "confidence": float(confidence) if isinstance(confidence, (int, float)) else None,
+        "reasoning": parsed.get("reasoning"),
+        "missing_info": parsed.get("missing_info") or [],
+    }
+    return classification, rationale

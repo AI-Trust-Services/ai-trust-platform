@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import os
 from typing import Any, Literal
-from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
@@ -25,7 +24,7 @@ from ai_trust_authorization.constants import SYSTEMS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
-from app.classifier import CLASSIFIER_INPUTS, classify
+from app.classifier import CLASSIFIER_INPUTS, _classify_from_flags
 from app.documents import DocumentParseError, is_supported, parse_document
 from app.llm import (
     LLM_VISION_MODEL,
@@ -44,7 +43,6 @@ from app.schemas import (
     AssistExtractResponse,
     AssistTurnRequest,
     AssistTurnResponse,
-    ClassificationResult,
     InferredFlag,
 )
 
@@ -60,15 +58,6 @@ class QuestionnaireTurnRequest(BaseModel):
     section: Literal["business", "technical"]
     transcript: list[Any] = []
     fields: dict[str, Any] = {}
-
-
-def _classify_from_flags(flags: list[InferredFlag]) -> ClassificationResult:
-    obj = SimpleNamespace(**{name: False for name in CLASSIFIER_INPUTS})
-    obj.training_compute_flops = 0.0
-    for f in flags:
-        if f.flag in CLASSIFIER_INPUTS:
-            setattr(obj, f.flag, f.value)
-    return classify(obj)
 
 
 async def _run_assist_turn(

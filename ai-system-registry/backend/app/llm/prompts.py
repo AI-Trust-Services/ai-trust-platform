@@ -433,3 +433,47 @@ def build_questionnaire_extract_messages(
     else:
         messages.append({"role": "user", "content": f"{user_text}:\n\n{parsed_text or ''}"})
     return messages
+
+
+# ---------------------------------------------------------------------------
+# AI-mode authoritative classification (submit-technical / submit-info)
+# ---------------------------------------------------------------------------
+
+_CLASSIFY_SYSTEM = """You are an EU AI Act classification analyst. You are given the free-text answers a \
+business owner and a technical owner provided about an AI system. Your job is to (1) infer which boolean \
+classifier flags apply, (2) explain your overall reasoning, (3) list any information still missing that \
+would change or firm up the classification, and (4) give an overall confidence.
+
+Do NOT decide the risk tier — a deterministic classifier derives the tier from your flags.
+
+Only set a flag when the evidence supports it. Boolean flags default to false; \
+training_compute_flops is a number (0 if unknown).
+
+Available classifier flags:
+{flag_names}
+
+You MUST respond with a SINGLE JSON object and nothing else, in this exact shape:
+{{"inferred_flags": [{{"flag": "<flag name>", "value": <true|false|number>, "rationale": "<one sentence>", "confidence": <0.0-1.0>}}], "reasoning": "<2-3 sentences explaining the overall classification>", "missing_info": ["<information that would improve confidence>", ...], "confidence": <0.0-1.0 overall confidence>}}
+
+Include an entry in "inferred_flags" ONLY for flags you are setting to true (or, for training_compute_flops, \
+a non-zero number). Use the exact flag names shown above."""
+
+
+def build_classify_questionnaire_messages(
+    business_answers: dict[str, Any],
+    technical_answers: dict[str, Any],
+) -> list[dict]:
+    """Messages for AI-mode authoritative classification from questionnaire answers.
+
+    Combines the business + technical free-text answers into one inference call
+    that returns inferred flags plus reasoning / missing_info / confidence — the
+    extended rationale shown only to the compliance officer.
+    """
+    system = _CLASSIFY_SYSTEM.format(flag_names="\n".join(f"- {n}" for n in _FLAG_NAMES))
+    user = (
+        "Business owner answers:\n"
+        + json.dumps(business_answers, indent=2, ensure_ascii=False)
+        + "\n\nTechnical owner answers:\n"
+        + json.dumps(technical_answers, indent=2, ensure_ascii=False)
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]

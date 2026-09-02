@@ -4,12 +4,17 @@ from app.schemas.ai_system import (
     AISystemUpdate,
     AISystemResponse,
     ClassificationResult,
+    ClassificationRationale,
     RationaleItem,
+    RegistrationDocument,
+    DownloadUrlResponse,
     IntakeResponse,
     FieldConfirmationPatch,
     QuestionnaireAnswersPatch,
     VALID_LIFECYCLES,
     VALID_ROLES,
+    VALID_TIERS,
+    VALID_REGISTRATION_MODES,
 )
 from app.schemas.intake_assist import (
     ChatMessage,
@@ -30,6 +35,9 @@ from app.schemas.workflow import (
     WorkflowRejectRequest,
     WorkflowAssignRequest,
     WorkflowSubmitSectionRequest,
+    WorkflowSubAssignRequest,
+    WorkflowSubReclaimRequest,
+    WorkflowRequestInfoRequest,
 )
 from app.schemas.system_model import SystemModelLinkBody, SystemModelResponse, ModelSystemResponse
 
@@ -38,12 +46,17 @@ __all__ = [
     "AISystemUpdate",
     "AISystemResponse",
     "ClassificationResult",
+    "ClassificationRationale",
     "RationaleItem",
+    "RegistrationDocument",
+    "DownloadUrlResponse",
     "IntakeResponse",
     "FieldConfirmationPatch",
     "QuestionnaireAnswersPatch",
     "VALID_LIFECYCLES",
     "VALID_ROLES",
+    "VALID_TIERS",
+    "VALID_REGISTRATION_MODES",
     "ChatMessage",
     "AssistTurnRequest",
     "AssistTurnResponse",
@@ -61,4 +74,7 @@ __all__ = [
     "ModelSystemResponse",
     "WorkflowAssignRequest",
     "WorkflowSubmitSectionRequest",
+    "WorkflowSubAssignRequest",
+    "WorkflowSubReclaimRequest",
+    "WorkflowRequestInfoRequest",
 ]

@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, Fragment } from "react";
-import { Check, Loader2, X, ChevronDown, ChevronRight, Copy } from "lucide-react";
+import { Check, Loader2, X, ChevronDown, ChevronRight, Copy, Paperclip } from "lucide-react";
 import { TierBadge } from "./Badges";
 import { previewClassify, copyToClipboard, SELECT_CLASS } from "../utils";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, AISystemFormData, UserSummary } from "../types";
+import type { AISystem, AISystemFormData, RegistrationMode, UserSummary } from "../types";
 import { BUSINESS_QUESTIONS, TECHNICAL_QUESTIONS } from "../config/questionnaire";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -65,10 +65,15 @@ interface Props {
   onClose: () => void;
   onSuccess: () => void;
   system?: AISystem;
+  /** Owner-flow registration mode. "ai" hides classifier flags at creation
+   * (the LLM infers them later); "manual_questionnaire" keeps them as checkboxes.
+   * Ignored in engineer mode. */
+  mode?: RegistrationMode;
 }
 
-export default function RegisterWizard({ open, onClose, onSuccess, system }: Props) {
+export default function RegisterWizard({ open, onClose, onSuccess, system, mode = "ai" }: Props) {
   const isEngineerMode = !!system;
+  const isAIMode = mode === "ai";
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<AISystemFormData>(EMPTY_FORM);
   const [businessFields, setBusinessFields] = useState<Record<string, unknown>>({});
@@ -81,6 +86,8 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
   const [complianceOfficers, setComplianceOfficers] = useState<UserSummary[]>([]);
   const [techSectionOpen, setTechSectionOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [flagsConfirmed, setFlagsConfirmed] = useState(false);
   const submitting = useRef(false);
   const [doneId, setDoneId] = useState<string | null>(null);
@@ -173,6 +180,29 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
     setStep((s) => Math.min(s + 1, maxStep));
   }
 
+  async function handlePrefill(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setExtracting(true);
+    try {
+      const resp = await api.assistExtract(file);
+      const extracted = resp.extracted_fields ?? {};
+      if (Object.keys(extracted).length === 0) {
+        showToast("No fields could be extracted from that document", true);
+        return;
+      }
+      // Extracted keys align with BUSINESS_QUESTIONS keys — merge into the
+      // questionnaire fields. Any key not in the questionnaire is ignored at submit.
+      setBusinessFields((f) => ({ ...f, ...extracted }));
+      showToast(`Pre-filled ${Object.keys(extracted).length} field(s) from "${file.name}"`);
+    } catch (err) {
+      showToast(`Prefill failed: ${(err as Error).message}`, true);
+    } finally {
+      setExtracting(false);
+    }
+  }
+
   async function handleOwnerSubmit() {
     if (!form.name.trim()) { showToast("System name is required", true); return; }
     if (!businessAssigneeUsername) { showToast("Please assign a Business Assignee", true); return; }
@@ -190,12 +220,21 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
         if (q.storage === "system") systemFields[q.key] = val;
         else answerFields[q.key] = String(val);
       }
-      for (const q of TECHNICAL_QUESTIONS) {
-        const val = businessFields[q.key];
-        if (val == null) continue;
-        systemFields[q.key] = q.type === "number" ? Number(val) : Boolean(val);
+      // Classifier flags are only collected at creation in manual-questionnaire mode.
+      // In AI mode they stay hidden — the LLM infers them at submit-technical.
+      if (!isAIMode) {
+        for (const q of TECHNICAL_QUESTIONS) {
+          const val = businessFields[q.key];
+          if (val == null) continue;
+          systemFields[q.key] = q.type === "number" ? Number(val) : Boolean(val);
+        }
       }
-      const result = await api.intake({ ...EMPTY_FORM, name: form.name, description: form.description, ...systemFields } as AISystemFormData);
+      const { system: result } = await api.intakeAssisted({
+        registration_mode: mode,
+        name: form.name,
+        description: form.description,
+        ...systemFields,
+      });
       if (Object.keys(answerFields).length > 0) {
         await api.patchQuestionnaireAnswers(result.id, answerFields);
       }
@@ -340,6 +379,24 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     <Input type="text" id="reg_name" value={form.name} onChange={set("name")} placeholder="e.g. Fraud Detection Model" />
                   </div>
 
+                  {isAIMode && (
+                    <div className="rounded-md border border-dashed border-border bg-muted/30 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-[13px] font-medium">Pre-fill with AI</div>
+                          <div className="text-xs text-muted-foreground">
+                            Upload a document (model card, spec, or brief) and the AI will pre-fill the questionnaire below.
+                          </div>
+                        </div>
+                        <Button variant="outline" size="sm" className="shrink-0" onClick={() => fileRef.current?.click()} disabled={extracting}>
+                          {extracting ? <Loader2 className="animate-spin" /> : <Paperclip />}
+                          {extracting ? "Extracting…" : "Upload"}
+                        </Button>
+                      </div>
+                      <input ref={fileRef} type="file" accept=".txt,.md,.pdf,.docx,.pptx,.png,.jpg,.jpeg" className="hidden" onChange={handlePrefill} />
+                    </div>
+                  )}
+
                   <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     General Information (optional)
                   </div>
@@ -372,7 +429,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     );
                   })}
 
-                  <Collapsible open={techSectionOpen} onOpenChange={setTechSectionOpen}>
+                  <Collapsible open={techSectionOpen} onOpenChange={setTechSectionOpen} className={cn(isAIMode && "hidden")}>
                     <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       <span>AI Risk Classification (optional)</span>
                       {techSectionOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
@@ -438,25 +495,34 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     <div>
                       <div className="mb-1.5 flex items-center justify-between">
                         <span className="text-sm font-semibold">AI Risk Classification</span>
-                        <Badge variant="outline" className="text-xs">{techAnswered.length}/{TECHNICAL_QUESTIONS.length} flagged</Badge>
+                        {!isAIMode && (
+                          <Badge variant="outline" className="text-xs">{techAnswered.length}/{TECHNICAL_QUESTIONS.length} flagged</Badge>
+                        )}
                       </div>
-                      <Collapsible>
-                        <CollapsibleTrigger className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-                          <ChevronRight className="size-3" /> Show all flags
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="mb-3 divide-y divide-border rounded-md border border-border">
-                          {TECHNICAL_QUESTIONS.map((q) => {
-                            const v = businessFields[q.key];
-                            const answered = q.type === "boolean" ? v === true : (q.type === "number" ? (typeof v === "number" && v > 0) : (v != null && v !== ""));
-                            return (
-                              <div key={q.key} className="flex items-center gap-2.5 px-3 py-2 text-[13px]">
-                                {answered ? <Check className="size-3.5 shrink-0 text-[var(--success)]" /> : <span className="inline-block size-3.5 shrink-0 rounded-full border border-muted-foreground" />}
-                                <span className={answered ? "" : "text-muted-foreground"}>{q.label}</span>
-                              </div>
-                            );
-                          })}
-                        </CollapsibleContent>
-                      </Collapsible>
+                      {isAIMode ? (
+                        <p className="mb-3 text-xs text-muted-foreground">
+                          The technical assignee answers the risk questionnaire; the risk tier is inferred
+                          automatically and reviewed by the compliance officer.
+                        </p>
+                      ) : (
+                        <Collapsible>
+                          <CollapsibleTrigger className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+                            <ChevronRight className="size-3" /> Show all flags
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mb-3 divide-y divide-border rounded-md border border-border">
+                            {TECHNICAL_QUESTIONS.map((q) => {
+                              const v = businessFields[q.key];
+                              const answered = q.type === "boolean" ? v === true : (q.type === "number" ? (typeof v === "number" && v > 0) : (v != null && v !== ""));
+                              return (
+                                <div key={q.key} className="flex items-center gap-2.5 px-3 py-2 text-[13px]">
+                                  {answered ? <Check className="size-3.5 shrink-0 text-[var(--success)]" /> : <span className="inline-block size-3.5 shrink-0 rounded-full border border-muted-foreground" />}
+                                  <span className={answered ? "" : "text-muted-foreground"}>{q.label}</span>
+                                </div>
+                              );
+                            })}
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
                       <div className="flex flex-col gap-1">
                         <Label htmlFor="reg_technical">Technical Assignee <span className="text-[var(--danger-fg)]">*</span> <span className="font-normal text-muted-foreground text-xs">— will complete risk classification</span></Label>
                         <select className={SELECT_CLASS} id="reg_technical" value={technicalAssigneeUsername} onChange={(e) => setTechnicalAssigneeUsername(e.target.value)}>
