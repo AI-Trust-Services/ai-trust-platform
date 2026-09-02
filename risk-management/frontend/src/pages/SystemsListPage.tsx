@@ -44,28 +44,31 @@ function StatusDot({ reassessmentNeeded }: { reassessmentNeeded: boolean }) {
 }
 
 function InfoTooltip({ text }: { text: string }) {
-  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   return (
     <span style={{ position: "relative", display: "inline-flex", alignItems: "center", marginLeft: 4, verticalAlign: "middle" }}
-      onMouseEnter={() => setVisible(true)} onMouseLeave={() => setVisible(false)}>
+      onMouseEnter={e => {
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        setPos({ x: r.left + r.width / 2, y: r.top });
+      }}
+      onMouseLeave={() => setPos(null)}>
       <span style={{
         width: 14, height: 14, borderRadius: "50%", background: "#6b7280", color: "#fff",
         fontSize: 9, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center",
         cursor: "default", userSelect: "none", flexShrink: 0,
       }}>i</span>
-      {visible && (
+      {pos && (
         <span style={{
-          position: "absolute", bottom: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)",
+          position: "fixed",
+          left: Math.min(pos.x - 130, window.innerWidth - 280),
+          top: pos.y - 8,
+          transform: "translateY(-100%)",
           background: "#1f2937", color: "#fff", borderRadius: 6, padding: "8px 12px",
-          fontSize: 11, lineHeight: 1.5, width: 260, zIndex: 100, whiteSpace: "normal",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+          fontSize: 11, lineHeight: 1.5, width: 260, zIndex: 9999, whiteSpace: "normal",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
           pointerEvents: "none",
         }}>
           {text}
-          <span style={{
-            position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)",
-            border: "5px solid transparent", borderTopColor: "#1f2937",
-          }} />
         </span>
       )}
     </span>
