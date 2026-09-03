@@ -136,6 +136,14 @@ def set_dates_sql(commands: list[str]):
 def main():
     wait_for_services()
 
+    # Idempotency guard — if demo systems already exist, skip seeding
+    existing = _req(REGISTRY_BASE, "/v1/systems?limit=1")
+    count = len(existing) if isinstance(existing, list) else existing.get("total", existing.get("count", 0))
+    if count > 0:
+        print("\n⚠ Systems already exist in the registry — skipping seed to avoid duplicates.")
+        print("  To re-seed: run the cleanup SQL first (see DEMO_GUIDE.md).")
+        return
+
     print("\n── Registering AI systems ──")
 
     hr_id = register_system({
@@ -515,13 +523,16 @@ def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_
     import subprocess
 
     def psql(sql):
-        result = subprocess.run(
-            ["docker", "exec", "ai-trust-git-postgres-1",
-             "psql", "-U", "postgres", "-d", "ai_trust", "-c", sql],
-            capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            print(f"  SQL warning: {result.stderr.strip()[:100]}", file=sys.stderr)
+        try:
+            result = subprocess.run(
+                ["docker", "exec", "ai-trust-git-postgres-1",
+                 "psql", "-U", "postgres", "-d", "ai_trust", "-c", sql],
+                capture_output=True, text=True
+            )
+            if result.returncode != 0:
+                print(f"  SQL warning: {result.stderr.strip()[:100]}", file=sys.stderr)
+        except FileNotFoundError:
+            pass  # docker not available inside container — skip date backdating
 
     # HR: 4 versions — 14mo, 8mo, 2mo ago, 1 week ago
     hr_regs = [r["id"] for r in _req(RISK_BASE, f"/v1/systems/{hr_id}/registers")]
