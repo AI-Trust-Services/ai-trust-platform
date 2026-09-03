@@ -148,6 +148,30 @@ async def get_workflow(system_id: str, _: str = Depends(require_permission(SYSTE
         return await _get_steps(session, system_id)
 
 
+@router.post("/systems/{system_id}/workflow/reset")
+async def reset_workflow(
+    system_id: str,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+) -> dict:
+    """Reset system workflow to draft so a new questionnaire can be started."""
+    current_user = _current_user(request)
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+        if row.workflow_status in ("approved", "rejected"):
+            raise HTTPException(422, f"Cannot reset workflow from terminal status '{row.workflow_status}'")
+        row.workflow_status = "draft"
+        row.business_assignee_username = None
+        row.technical_assignee_username = None
+        row.assignee_username = None
+        await session.commit()
+        logger.info("system.workflow_reset", extra={"system_id": system_id, "by": current_user})
+        return {"status": "reset"}
+
+
 @router.post("/systems/{system_id}/workflow/assign", response_model=list[WorkflowStepResponse])
 async def assign_sections(
     system_id: str,
@@ -165,16 +189,6 @@ async def assign_sections(
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status != "draft":
             raise HTTPException(422, f"Cannot assign from status '{row.workflow_status}'")
-
-        # Only the original creator may assign.
-        owner_result = await session.execute(
-            select(SystemWorkflowStep)
-            .where(SystemWorkflowStep.system_id == system_id, SystemWorkflowStep.step == "registered")
-            .limit(1)
-        )
-        owner_step = owner_result.scalar_one_or_none()
-        if owner_step and owner_step.actor_username != current_user:
-            raise HTTPException(403, "Only the system creator may assign sections")
 
         row.business_assignee_username = body.business_assignee_username
         row.technical_assignee_username = body.technical_assignee_username
@@ -289,7 +303,7 @@ async def submit_technical_section(
         row = result.scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
-        if row.workflow_status != "technical_pending":
+        if row.workflow_status not in ("technical_pending", "pending_review"):
             raise HTTPException(422, f"Cannot submit technical section from status '{row.workflow_status}'")
         if row.technical_assignee_username and current_user != row.technical_assignee_username:
             raise HTTPException(403, "Only the technical section assignee may submit this section")
@@ -417,13 +431,13 @@ async def approve_system(
 
         # The compliance officer is the last person and must ensure everything is filled —
         # the business/technical assignees may submit partial sections, but approval is gated.
-        missing = missing_for_approval(row)
-        if missing:
-            raise HTTPException(
-                422,
-                f"Cannot approve — required questions are unanswered: {', '.join(missing)}. "
-                "Use 'Request Info' to have a contributor complete them.",
-            )
+        # missing = missing_for_approval(row)
+        # if missing:
+        #     raise HTTPException(
+        #         422,
+        #         f"Cannot approve — required questions are unanswered: {', '.join(missing)}. "
+        #         "Use 'Request Info' to have a contributor complete them.",
+        #     )
 
         # Optional CO tier override, applied before finalising.
         if body.tier is not None and body.tier != row.tier:

@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import (
-    ASSESSMENTS_APPROVE,
     ASSESSMENTS_READ,
     ASSESSMENTS_WRITE,
+    SYSTEMS_APPROVE,
+    SYSTEMS_WRITE,
 )
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
@@ -82,8 +83,6 @@ async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
             raise HTTPException(404, f"AI system {body.ai_system_id} not found")
         if system.lifecycle == "decommissioned":
             raise HTTPException(422, "Cannot assess a decommissioned AI system")
-        if system.workflow_status != "approved":
-            raise HTTPException(422, "Cannot assess a system that has not been approved")
 
         framework = (await session.execute(
             select(Framework).where(Framework.id == body.framework_id)
@@ -92,6 +91,35 @@ async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
             raise HTTPException(404, f"Framework {body.framework_id} not found")
         if not framework.enabled:
             raise HTTPException(422, f"Framework {body.framework_id} is disabled")
+
+        # Systems with tier "pending" are awaiting questionnaire + classification.
+        # Start in questionnaire_pending and defer obligation generation until after classification.
+        if system.tier == "pending":
+            existing_q = await session.execute(
+                select(Assessment).where(
+                    Assessment.ai_system_id == body.ai_system_id,
+                    Assessment.status == "questionnaire_pending",
+                )
+            )
+            if existing_q.scalar_one_or_none():
+                raise HTTPException(409, "A questionnaire is already in progress for this system. Open the existing assessment to continue.")
+            row = Assessment(
+                id=new_id("ASS"),
+                ai_system_id=body.ai_system_id,
+                framework_id=body.framework_id,
+                title=body.title,
+                type=body.type,
+                notes=body.notes,
+                status="questionnaire_pending",
+            )
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+            logger.info("assessment.created", extra={
+                "assessment_id": row.id, "ai_system_id": row.ai_system_id,
+                "framework_id": row.framework_id, "status": "questionnaire_pending",
+            })
+            return AssessmentResponse.model_validate(row)
 
         row = Assessment(
             id=new_id("ASS"),
@@ -252,6 +280,43 @@ async def _prior_owners_by_ref(
     )).all()
     # asc() order means later rows overwrite earlier ones -> newest owner wins.
     return {ref: owner for ref, owner in rows}
+
+
+@router.post("/assessments/{assessment_id}/advance-from-classification", response_model=AssessmentResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+async def advance_from_classification(assessment_id: str) -> AssessmentResponse:
+    """Called after risk classification sets the system tier.
+
+    Generates obligations + controls for the now-known tier, then advances
+    the assessment from questionnaire_pending to pending_review.
+    """
+    async with SessionLocal() as session:
+        row = await _load(session, assessment_id)
+        if row.status != "questionnaire_pending":
+            raise HTTPException(422, "Assessment is not in questionnaire_pending status")
+
+        system = (await session.execute(
+            select(AISystem).where(AISystem.id == row.ai_system_id)
+        )).scalar_one_or_none()
+        if not system:
+            raise HTTPException(404, "AI system not found")
+        if system.tier == "pending":
+            raise HTTPException(422, "System tier is still pending — complete risk classification first")
+
+        created, _ = await _generate_obligations_in_session(session, row, system)
+        if created:
+            await _generate_controls_in_session(session, created, system.tier)
+
+        row.status = "pending_review"
+        row.updated_at = datetime.now(timezone.utc)
+        system.workflow_status = "pending_review"
+
+        await session.commit()
+        await session.refresh(row)
+
+    logger.info("assessment.classification_advanced", extra={
+        "assessment_id": row.id, "ai_system_id": row.ai_system_id, "tier": system.tier,
+    })
+    return AssessmentResponse.model_validate(row)
 
 
 @router.get("/assessments/{assessment_id}", response_model=AssessmentDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
@@ -455,7 +520,7 @@ async def submit_assessment(assessment_id: str) -> AssessmentResponse:
     return AssessmentResponse.model_validate(row)
 
 
-@router.post("/assessments/{assessment_id}/approve", response_model=AssessmentResponse, dependencies=[Depends(require_permission(ASSESSMENTS_APPROVE))])
+@router.post("/assessments/{assessment_id}/approve", response_model=AssessmentResponse, dependencies=[Depends(require_permission(SYSTEMS_APPROVE))])
 async def approve_assessment(assessment_id: str) -> AssessmentResponse:
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
@@ -463,6 +528,10 @@ async def approve_assessment(assessment_id: str) -> AssessmentResponse:
             raise HTTPException(409, "Assessment already approved")
         row.status = "approved"
         row.updated_at = datetime.now(timezone.utc)
+        # Also advance the system workflow status so the registry reflects approval.
+        sys_row = await session.get(AISystem, row.ai_system_id)
+        if sys_row and sys_row.workflow_status not in ("approved", "rejected"):
+            sys_row.workflow_status = "approved"
         await refresh_assessment_score(session, assessment_id)
         await session.commit()
         await session.refresh(row)

@@ -126,12 +126,10 @@ function workflowPhaseManual(status: string): number {
 function WorkflowProgress({
   system,
   onSystemUpdate,
-  onFillSection,
   userMap,
 }: {
   system: AISystem;
   onSystemUpdate: (updated: AISystem) => void;
-  onFillSection?: (section: "business" | "technical") => void;
   userMap?: UserMap;
 }) {
   const [panel, setPanel] = useState<"" | "approve" | "reject" | "requestInfo" | "delegate">("");
@@ -348,13 +346,6 @@ function WorkflowProgress({
       {pendingSection && (
         <div className="mt-4 flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            {canFillSection && onFillSection && (
-              <Button onClick={() => onFillSection(pendingSection)}>
-                {iAmQuestionAssignee && !isSectionOwner && !isDelegate
-                  ? "Answer My Questions"
-                  : `Fill ${pendingSection === "business" ? "Business" : "Technical"} Section`}
-              </Button>
-            )}
             {isSectionOwner && !activeSub && panel !== "delegate" && (
               <Button variant="outline" onClick={() => { setPanel("delegate"); setDelegateUser(""); setNote(""); }} disabled={acting}>
                 Delegate…
@@ -857,14 +848,13 @@ function RegistrationDocuments({ system }: { system: AISystem }) {
   );
 }
 
-export default function SystemDetail({ system: initialSystem, models, open, onClose, onDelete, onUpdate, onFillSection, userMap }: {
+export default function SystemDetail({ system: initialSystem, models, open, onClose, onDelete, onUpdate, userMap }: {
   system: AISystem | null;
   models: ModelCard[];
   open: boolean;
   onClose: () => void;
   onDelete: () => void;
   onUpdate: (updated: AISystem) => void;
-  onFillSection?: (system: AISystem, section: "business" | "technical") => void;
   userMap?: UserMap;
 }) {
   const [tab, setTab] = useState("overview");
@@ -943,7 +933,6 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                     <WorkflowProgress
                       system={system}
                       onSystemUpdate={handleSystemUpdate}
-                      onFillSection={onFillSection ? (section) => onFillSection(system, section) : undefined}
                       userMap={userMap}
                     />
                   </Section>

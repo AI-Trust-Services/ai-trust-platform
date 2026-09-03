@@ -8,9 +8,11 @@ export function fmtDate(iso: string | null | undefined): string {
 }
 
 export const ASSESSMENT_STATUS_META: Record<string, BadgeMeta> = {
+  questionnaire_pending: { label: "Questionnaire Pending", cls: "st-applicable" },
   draft:        { label: "Draft",        cls: "st-draft" },
   submitted:    { label: "Submitted",    cls: "st-submitted" },
   under_review: { label: "Under Review", cls: "st-review" },
+  pending_review: { label: "Pending Review", cls: "st-review" },
   approved:     { label: "Approved",     cls: "st-approved" },
 };
 

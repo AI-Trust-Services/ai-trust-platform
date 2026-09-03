@@ -14,7 +14,7 @@ VALID_ROLES = frozenset({"provider", "deployer", "both", "importer", "distributo
 # Validated in the API layer for CO overrides / full-manual entry so a bad value
 # returns 422 instead of 500-ing on commit.
 VALID_TIERS = frozenset({
-    "prohibited", "gpai-systemic", "gpai-standard", "high", "limited", "minimal",
+    "prohibited", "gpai-systemic", "gpai-standard", "high", "limited", "minimal", "pending",
 })
 VALID_REGISTRATION_MODES = frozenset({"ai", "manual_questionnaire", "full_manual"})
 

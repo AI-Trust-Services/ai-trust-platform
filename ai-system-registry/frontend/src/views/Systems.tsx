@@ -1,18 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Eye, Trash2, RefreshCw, Sparkles, ClipboardList, FileText } from "lucide-react";
+import { Eye, Trash2, RefreshCw, Sparkles, ClipboardList } from "lucide-react";
 import { TierBadge, LifecycleBadge, ComplianceBar, FormattedDate } from "../components/Badges";
 import SystemDetail from "../components/SystemDetail";
 import type { UserMap } from "../components/SystemDetail";
 import RegisterWizard from "../components/RegisterWizard";
 import RegisterModeChooser from "../components/RegisterModeChooser";
-import FullManualRegistration from "../components/FullManualRegistration";
 import EngineerAssistedRegistration from "../components/EngineerAssistedRegistration";
-import QuestionnaireView from "../components/QuestionnaireView";
-import type { SectionKey } from "../config/questionnaire";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import { SELECT_CLASS } from "../utils";
-import type { AISystem, ModelCard, RegistrationMode } from "../types";
+import type { AISystem, ModelCard } from "../types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,23 +38,17 @@ export default function Systems() {
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [fillInSystem, setFillInSystem] = useState<AISystem | undefined>(undefined);
-  const [questionnaireSystem, setQuestionnaireSystem] = useState<AISystem | null>(null);
-  const [questionnaireSection, setQuestionnaireSection] = useState<SectionKey>("business");
-  const [ownerStage, setOwnerStage] = useState<"chooser" | RegistrationMode>("chooser");
   const [engineerStage, setEngineerStage] = useState<"chooser" | "manual" | "assisted">("chooser");
   const { wizardOpen, setWizardOpen, mayRegister, username } = useModalControls();
   const showToast = useToast();
 
-  // Owner flow always starts at the mode chooser; engineer fill-in also starts at chooser.
   useEffect(() => {
-    if (wizardOpen && !fillInSystem) setOwnerStage("chooser");
     if (wizardOpen && fillInSystem) setEngineerStage("chooser");
   }, [wizardOpen, fillInSystem]);
 
   function closeWizard() {
     setWizardOpen(false);
     setFillInSystem(undefined);
-    setOwnerStage("chooser");
     setEngineerStage("chooser");
   }
 
@@ -113,7 +104,6 @@ export default function Systems() {
   }
 
   async function openSystem(s: AISystem) {
-    // Legacy engineer fill-in (rejected systems)
     const isAssignee = username && s.assignee_username === username;
     if (isAssignee && s.workflow_status === "rejected") {
       try {
@@ -125,8 +115,6 @@ export default function Systems() {
       }
       return;
     }
-    // Everyone else (including section assignees and delegates) opens the detail panel,
-    // which is the hub for filling a section, delegating it, or acting as the CO.
     try {
       const fresh = await api.getSystem(s.id);
       setSelectedSystem(fresh);
@@ -136,9 +124,6 @@ export default function Systems() {
     }
   }
 
-  // Workflow-state pill. The four states encode workflow meaning (like the tier
-  // and lifecycle identity maps), so they keep their existing hues rather than
-  // moving onto the governed status ramp.
   function workflowStatusBadge(status: string) {
     const colors: Record<string, string> = {
       draft: "bg-[#8a9bb0]",
@@ -168,6 +153,7 @@ export default function Systems() {
           <option value="gpai-standard">GPAI Standard</option>
           <option value="limited">Limited</option>
           <option value="minimal">Minimal</option>
+          <option value="pending">Pending</option>
         </select>
         <select className={cn(SELECT_CLASS, "w-auto")} value={lifecycleFilter} onChange={(e) => setLifecycleFilter(e.target.value)}>
           <option value="">All Lifecycle States</option>
@@ -278,6 +264,13 @@ export default function Systems() {
         </Card>
       </div>
 
+      {/* Owner: simple registration wizard (name + description only) */}
+      <RegisterWizard
+        open={wizardOpen && !fillInSystem}
+        onClose={closeWizard}
+        onSuccess={() => { loadSystems(); loadModels(); }}
+      />
+
       {/* Engineer: choose AI-assisted vs manual */}
       <RegisterModeChooser
         open={wizardOpen && !!fillInSystem && engineerStage === "chooser"}
@@ -318,59 +311,6 @@ export default function Systems() {
         onSuccess={() => { loadSystems(); loadModels(); }}
       />
 
-      {/* Owner: choose registration mode */}
-      <RegisterModeChooser
-        open={wizardOpen && !fillInSystem && ownerStage === "chooser"}
-        onClose={closeWizard}
-        options={[
-          {
-            key: "ai",
-            icon: <Sparkles className="size-5" />,
-            iconClass: "bg-[var(--brand)]/10 text-[var(--brand)]",
-            title: "AI-Assisted",
-            description: "The technical section uses open-ended questions; the AI reads your answers to infer risk flags, organisational role, and confidence score. The compliance officer sees the reasoning and can override before approving.",
-            onClick: () => setOwnerStage("ai"),
-          },
-          {
-            key: "manual_questionnaire",
-            icon: <ClipboardList className="size-5" />,
-            title: "Manual Questionnaire",
-            description: "The technical section shows the EU AI Act classification flags directly — you toggle them yourself. The risk tier is derived deterministically from your selections. No AI inference involved.",
-            onClick: () => setOwnerStage("manual_questionnaire"),
-          },
-          {
-            key: "full_manual",
-            icon: <FileText className="size-5" />,
-            title: "Full Manual Override",
-            description: "Bypass the questionnaire entirely. Upload supporting documents and assign a compliance officer who sets the risk tier and organisational role manually.",
-            onClick: () => setOwnerStage("full_manual"),
-          },
-        ]}
-      />
-
-      {/* Owner: AI-assisted questionnaire wizard (document prefill, no chat, no manual flags) */}
-      <RegisterWizard
-        open={wizardOpen && !fillInSystem && ownerStage === "ai"}
-        mode="ai"
-        onClose={closeWizard}
-        onSuccess={() => { loadSystems(); loadModels(); }}
-      />
-
-      {/* Owner: manual questionnaire wizard (flags shown, no AI) */}
-      <RegisterWizard
-        open={wizardOpen && !fillInSystem && ownerStage === "manual_questionnaire"}
-        mode="manual_questionnaire"
-        onClose={closeWizard}
-        onSuccess={() => { loadSystems(); loadModels(); }}
-      />
-
-      {/* Owner: full manual override */}
-      <FullManualRegistration
-        open={wizardOpen && !fillInSystem && ownerStage === "full_manual"}
-        onClose={closeWizard}
-        onSuccess={() => { loadSystems(); loadModels(); closeWizard(); }}
-      />
-
       <SystemDetail
         open={detailOpen}
         system={selectedSystem}
@@ -382,22 +322,7 @@ export default function Systems() {
           setSelectedSystem(updated);
           loadSystems();
         }}
-        onFillSection={(sys, section) => {
-          setDetailOpen(false);
-          setQuestionnaireSystem(sys);
-          setQuestionnaireSection(section);
-        }}
       />
-
-      {questionnaireSystem && (
-        <QuestionnaireView
-          open={!!questionnaireSystem}
-          system={questionnaireSystem}
-          section={questionnaireSection}
-          onClose={() => setQuestionnaireSystem(null)}
-          onSuccess={() => { setQuestionnaireSystem(null); loadSystems(); }}
-        />
-      )}
     </>
   );
 }
