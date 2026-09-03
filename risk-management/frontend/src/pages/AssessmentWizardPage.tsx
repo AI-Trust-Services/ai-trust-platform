@@ -80,41 +80,105 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
     const colors: Record<string, string> = { critical: "#ffd5d5", high: "#fde8d0", medium: "#fff3c4", low: "#d5f5e3" };
     return l ? `<span style="background:${colors[l] ?? "#eef1f4"};padding:2px 8px;border-radius:10px;font-weight:700;font-size:11px;text-transform:uppercase">${l}</span>` : "—";
   };
+  const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : "—";
 
-  const risksHtml = confirmed.map(r => `
-    <div style="border:1px solid #e4e4e7;border-radius:8px;padding:16px;margin-bottom:12px;page-break-inside:avoid">
-      <div style="font-weight:700;font-size:14px;margin-bottom:6px">${r.title}</div>
-      <div style="font-size:12px;color:#556b82;margin-bottom:8px">
-        Category: ${r.category} · Type: ${r.risk_type} · Severity: ${levelBadge(r.severity)} · Likelihood: ${r.likelihood} · Risk level: ${levelBadge(r.risk_level_autocalculated)}
-        ${r.risk_owner ? ` · Owner: ${r.risk_owner}` : ""}
-      </div>
-      ${r.description ? `<div style="font-size:13px;margin-bottom:8px">${r.description}</div>` : ""}
-      ${r.impact ? `<div style="font-size:12px;color:#374151;margin-bottom:8px"><strong>Impact:</strong> ${r.impact}</div>` : ""}
-      ${r.affects_vulnerable_groups ? `<div style="font-size:12px;color:#8b3a00;margin-bottom:8px">⚠ Affects vulnerable groups: ${r.vulnerable_groups}</div>` : ""}
+  const risksHtml = confirmed.map((r, idx) => `
+    <div style="border:1px solid #e4e4e7;border-radius:8px;padding:18px 20px;margin-bottom:16px;page-break-inside:avoid">
+      <div style="font-weight:700;font-size:15px;margin-bottom:10px">${idx + 1}. ${r.title}</div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
+        <tr>
+          <td style="padding:4px 8px 4px 0;color:#556b82;width:140px">Category</td>
+          <td style="padding:4px 0">${cap(r.category)}</td>
+          <td style="padding:4px 8px 4px 16px;color:#556b82;width:140px">Risk type</td>
+          <td style="padding:4px 0">${cap(r.risk_type)}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 8px 4px 0;color:#556b82">Likelihood</td>
+          <td style="padding:4px 0">${cap(r.likelihood)}</td>
+          <td style="padding:4px 8px 4px 16px;color:#556b82">Severity</td>
+          <td style="padding:4px 0">${cap(r.severity)}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 8px 4px 0;color:#556b82">Risk level</td>
+          <td style="padding:4px 0">${levelBadge(r.risk_level_autocalculated)}</td>
+          <td style="padding:4px 8px 4px 16px;color:#556b82">AI lifecycle phase</td>
+          <td style="padding:4px 0">${cap(r.ai_lifecycle_phase ?? "")}</td>
+        </tr>
+        ${r.risk_owner ? `<tr>
+          <td style="padding:4px 8px 4px 0;color:#556b82">Risk owner</td>
+          <td style="padding:4px 0" colspan="3"><strong>${r.risk_owner}</strong></td>
+        </tr>` : ""}
+      </table>
+
+      ${r.description ? `<div style="font-size:13px;margin-bottom:8px;line-height:1.5">${r.description}</div>` : ""}
+      ${r.impact ? `<div style="font-size:12px;margin-bottom:8px"><strong>Impact:</strong> ${r.impact}</div>` : ""}
+      ${r.affects_vulnerable_groups ? `
+        <div style="background:#fef3c7;border-radius:6px;padding:8px 12px;font-size:12px;color:#92400e;margin-bottom:8px">
+          ⚠ <strong>Affects vulnerable groups</strong> (Art. 9(9)):
+          ${(() => { try { const g = JSON.parse(r.vulnerable_groups); return Array.isArray(g) ? g.join(", ") : r.vulnerable_groups; } catch { return r.vulnerable_groups; } })()}
+        </div>` : ""}
+
+      ${r.misuse_scenarios.length > 0 ? `
+        <div style="margin-top:10px">
+          <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Misuse scenarios — Art. 9(2)(a) (${r.misuse_scenarios.length})</div>
+          ${r.misuse_scenarios.map(ms => `
+            <div style="background:#fff5f5;border-left:3px solid #fca5a5;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px;font-size:12px">
+              <div><strong>Actor:</strong> ${ms.actor || "—"} · <strong>Likelihood:</strong> ${cap(ms.likelihood)}</div>
+              <div style="margin-top:3px">${ms.description}</div>
+              ${ms.consequence ? `<div style="margin-top:3px;color:#556b82"><strong>Consequence:</strong> ${ms.consequence}</div>` : ""}
+              ${ms.vulnerable_group ? `<div style="margin-top:3px;color:#92400e"><strong>Vulnerable group:</strong> ${ms.vulnerable_group}</div>` : ""}
+            </div>
+          `).join("")}
+        </div>` : ""}
+
       ${r.mitigations.length > 0 ? `
-        <div style="margin-top:8px">
-          <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Risk management measures (${r.mitigations.length})</div>
+        <div style="margin-top:10px">
+          <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Risk management measures — Art. 9(2)(b)+(c) (${r.mitigations.length})</div>
           ${r.mitigations.map(m => `
-            <div style="background:#f8f9fa;border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:12px">
-              <span style="font-weight:600">[${m.hierarchy_level.toUpperCase()}]</span> ${m.title}
-              ${m.description ? `<div style="color:#556b82;margin-top:3px">${m.description}</div>` : ""}
+            <div style="background:#f0f4ff;border-left:3px solid #93c5fd;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px;font-size:12px">
+              <div>
+                <span style="background:#dbeafe;color:#1e40af;padding:1px 7px;border-radius:8px;font-weight:700;font-size:10px;text-transform:uppercase;margin-right:8px">${m.hierarchy_level}</span>
+                <strong>${m.title}</strong>
+                ${m.status ? ` · <span style="color:#556b82">${cap(m.status)}</span>` : ""}
+              </div>
+              ${m.description ? `<div style="color:#374151;margin-top:4px">${m.description}</div>` : ""}
+              ${m.implementation_guidance ? `<div style="color:#556b82;margin-top:3px"><strong>Guidance:</strong> ${m.implementation_guidance}</div>` : ""}
+              ${m.assigned_to ? `<div style="color:#556b82;margin-top:3px"><strong>Assigned to:</strong> ${m.assigned_to}${m.due_date ? ` · Due: ${fmtDate(m.due_date)}` : ""}</div>` : ""}
+              ${m.override_notes ? `<div style="color:#92400e;margin-top:3px"><strong>Notes:</strong> ${m.override_notes}</div>` : ""}
             </div>
           `).join("")}
         </div>
-      ` : r.closure_justification ? `<div style="background:#fffbeb;border-radius:6px;padding:8px 12px;font-size:12px;color:#92400e"><strong>No measure:</strong> ${r.closure_justification}</div>` : ""}
-      ${(r.residual_likelihood || r.residual_severity) ? `
-        <div style="margin-top:8px;font-size:12px;color:#1147E9">
-          <strong>Residual risk:</strong> likelihood: ${r.residual_likelihood ?? "—"} · severity: ${r.residual_severity ?? "—"} · level: ${levelBadge(r.final_risk_level)}
-          ${r.date_of_assessment ? ` · assessed: ${fmtDate(r.date_of_assessment)}` : ""}
-        </div>
-      ` : ""}
+      ` : r.closure_justification ? `
+        <div style="background:#fffbeb;border-radius:6px;padding:8px 12px;font-size:12px;color:#92400e;margin-top:10px">
+          <strong>No risk management measure applied</strong> — justification: ${r.closure_justification}
+        </div>` : ""}
+
+      <div style="margin-top:10px;background:#f8f9fa;border-radius:6px;padding:10px 14px;font-size:12px">
+        <div style="font-size:11px;font-weight:700;color:#556b82;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px">Residual risk — Art. 9(2)(d)</div>
+        <table style="width:100%;border-collapse:collapse">
+          <tr>
+            <td style="padding:3px 8px 3px 0;color:#556b82;width:140px">Residual likelihood</td>
+            <td style="padding:3px 0">${cap(r.residual_likelihood ?? "")}</td>
+            <td style="padding:3px 8px 3px 16px;color:#556b82;width:140px">Residual severity</td>
+            <td style="padding:3px 0">${cap(r.residual_severity ?? "")}</td>
+          </tr>
+          <tr>
+            <td style="padding:3px 8px 3px 0;color:#556b82">Residual level</td>
+            <td style="padding:3px 0">${levelBadge(r.final_risk_level)}</td>
+            <td style="padding:3px 8px 3px 16px;color:#556b82">Date of assessment</td>
+            <td style="padding:3px 0">${fmtDate(r.date_of_assessment)}</td>
+          </tr>
+        </table>
+        ${r.review_notes ? `<div style="margin-top:6px;color:#374151"><strong>Justification:</strong> ${r.review_notes}</div>` : ""}
+      </div>
     </div>
   `).join("");
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Risk Management Report — ${systemName}</title>
     <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 900px; margin: 40px auto; color: #111827; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 960px; margin: 40px auto; color: #111827; }
       @media print { body { margin: 20px; } .no-print { display: none; } }
       h1 { font-size: 22px; margin-bottom: 4px; }
       .meta { font-size: 12px; color: #556b82; margin-bottom: 24px; }
@@ -141,6 +205,7 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
     ` : `<div style="background:#fff3c4;border-radius:8px;padding:10px 16px;margin-bottom:20px;font-size:13px;color:#92400e">⚠ Status: ${register.status.toUpperCase()} — not yet approved</div>`}
     <div class="section-title">Assessment scope</div>
     <div class="scope-box">${register.assessment_scope || "—"}</div>
+    ${register.notes ? `<div class="section-title">Assessment notes</div><div class="scope-box">${register.notes}</div>` : ""}
     <div class="stats">
       <div class="stat"><div class="stat-val">${confirmed.length}</div><div class="stat-lbl">Confirmed risks</div></div>
       <div class="stat"><div class="stat-val">${confirmed.reduce((a, r) => a + r.mitigations.length, 0)}</div><div class="stat-lbl">Measures</div></div>
@@ -150,7 +215,7 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
     <div class="section-title">Confirmed risks (${confirmed.length})</div>
     ${risksHtml || "<p style='color:#9ca3af;font-size:13px'>No confirmed risks.</p>"}
     ${register.residual_risk_argument ? `
-      <div class="section-title">Residual risk argument (Art. 9(5))</div>
+      <div class="section-title">Overall residual risk argument (Art. 9(5))</div>
       <div class="scope-box">${register.residual_risk_argument}</div>
     ` : ""}
     <div class="footer">Generated by AI Trust Platform · EU AI Act Art. 9 Risk Management · ${new Date().getFullYear()}</div>
