@@ -98,21 +98,25 @@ def add_risk(reg_id, **fields) -> str:
     return r["id"]
 
 
-def confirm_risk(risk_id, residual_likelihood="unlikely", residual_severity="low"):
+def confirm_risk(risk_id, residual_likelihood="unlikely", residual_severity="low", review_notes=""):
     _req(RISK_BASE, f"/v1/risks/{risk_id}", "PATCH", {
         "status": "confirmed",
         "residual_likelihood": residual_likelihood,
         "residual_severity": residual_severity,
         "final_risk_level": "low",
+        "review_notes": review_notes,
     })
 
 
-def add_mitigation(risk_id, hierarchy_level, title, description=""):
+def add_mitigation(risk_id, hierarchy_level, title, description="", implementation_guidance="", assigned_to=None, due_date=None):
     _req(RISK_BASE, f"/v1/risks/{risk_id}/mitigations", "POST", {
         "title": title, "description": description,
         "hierarchy_level": hierarchy_level,
-        "implementation_guidance": "", "status": "planned",
-        "assigned_to": None, "due_date": None, "override_notes": "",
+        "implementation_guidance": implementation_guidance,
+        "status": "planned",
+        "assigned_to": assigned_to,
+        "due_date": due_date,
+        "override_notes": "",
     })
 
 
@@ -278,18 +282,32 @@ def main():
         r1 = add_risk(reg, title="Discriminatory screening based on protected characteristics",
                       category="bias", severity="high", likelihood="likely", risk_type="foreseeable",
                       risk_owner="hr.director@company.com",
-                      impact="Systematic exclusion of candidates based on gender, age or ethnicity.")
-        confirm_risk(r1, "unlikely", "low")
+                      ai_lifecycle_phase="operation",
+                      affects_vulnerable_groups=True,
+                      vulnerable_groups='["women","ethnic minorities","older workers"]',
+                      impact="Systematic exclusion of candidates based on gender, age or ethnicity.",
+                      misuse_scenarios=[{"actor": "Recruiter", "description": "Manually override AI score for candidates from specific demographic groups", "likelihood": "possible", "consequence": "Amplifies rather than reduces discriminatory outcomes", "vulnerable_group": "ethnic minorities"}])
+        confirm_risk(r1, "unlikely", "low",
+                     review_notes="Residual risk acceptable: protected attributes excluded from inputs and monthly parity audits in place. Likelihood reduced from Likely to Unlikely.")
         add_mitigation(r1, "eliminate", "Exclude protected attributes from model inputs",
-                       "Remove name, gender, age, address from all training data and inference inputs.")
+                       "Remove name, gender, age, address from all training data and inference inputs.",
+                       implementation_guidance="Remove name, gender, age, postcode, and any proxy attributes (school name, address) from training data pipeline and inference inputs. Validated by data audit.",
+                       assigned_to="hr.director@company.com")
         add_mitigation(r1, "mitigate", "Monthly bias audit with demographic parity testing",
-                       "Run monthly fairness checks; reject model versions failing >5% parity gap.")
+                       "Run monthly fairness checks; reject model versions failing >5% parity gap.",
+                       implementation_guidance="Monthly fairness report comparing acceptance rates across gender, age band, ethnicity. Model version rejected if demographic parity gap >5%.",
+                       assigned_to="hr.director@company.com")
         r2 = add_risk(reg, title="Lack of explainability for rejected candidates",
                       category="legal", severity="medium", likelihood="likely", risk_type="known",
-                      impact="Candidates denied without explanation, violating GDPR Art. 22.")
-        confirm_risk(r2, "unlikely", "low")
+                      ai_lifecycle_phase="operation",
+                      impact="Candidates denied without explanation, violating GDPR Art. 22.",
+                      misuse_scenarios=[{"actor": "Candidate", "description": "Deliberately omit personal details to game the scoring algorithm", "likelihood": "possible", "consequence": "Circumvents intended screening, unfair advantage", "vulnerable_group": None}])
+        confirm_risk(r2, "unlikely", "low",
+                     review_notes="Residual risk acceptable: SHAP explanations satisfy GDPR Art. 22 requirement. All rejections include per-decision report.")
         add_mitigation(r2, "mitigate", "SHAP-based per-decision explanation report",
-                       "Generate SHAP feature importance report for every rejection; store 3 years.")
+                       "Generate SHAP feature importance report for every rejection; store 3 years.",
+                       implementation_guidance="SHAP feature importance computed per inference call. Report stored in candidate record for 3 years. Accessible to candidates on request.",
+                       assigned_to="hr.director@company.com")
         approve_register(reg, True, ARG_HR)
         print(f"  v{v} approved ({reg})")
 
@@ -307,18 +325,32 @@ def main():
         r1 = add_risk(reg, title="Demographic bias in credit scoring leading to discriminatory decisions",
                       category="bias", severity="high", likelihood="likely", risk_type="foreseeable",
                       risk_owner="risk.owner@company.com",
-                      impact="Customers from protected groups systematically denied credit.")
-        confirm_risk(r1, "unlikely", "medium")
+                      ai_lifecycle_phase="operation",
+                      affects_vulnerable_groups=True,
+                      vulnerable_groups='["people in financial difficulty","ethnic minorities"]',
+                      impact="Customers from protected groups systematically denied credit.",
+                      misuse_scenarios=[{"actor": "Loan officer", "description": "Use AI score to justify pre-determined rejection without review", "likelihood": "unlikely", "consequence": "Human oversight bypassed; discriminatory lending", "vulnerable_group": "people in financial difficulty"}])
+        confirm_risk(r1, "unlikely", "medium",
+                     review_notes="Residual risk acceptable with mandatory human review for all rejections and quarterly bias audit. Demographic parity constraints limit model-level bias.")
         add_mitigation(r1, "reduce", "Fairness constraints in model training",
-                       "Apply demographic parity constraints; retrain quarterly.")
+                       "Apply demographic parity constraints; retrain quarterly.",
+                       implementation_guidance="Demographic parity constraint applied during model training via reweighting. Retrained quarterly with updated data.",
+                       assigned_to="risk.owner@company.com")
         add_mitigation(r1, "mitigate", "Human review mandatory for all rejections",
-                       "All automated rejections require secondary human review.")
+                       "All automated rejections require secondary human review.",
+                       implementation_guidance="Automated rejection flagged for secondary human review within 24h. Reviewer documents decision rationale.",
+                       assigned_to="risk.owner@company.com")
         r2 = add_risk(reg, title="Model drift leading to inaccurate credit scores",
                       category="performance", severity="medium", likelihood="possible", risk_type="known",
-                      impact="Unreliable credit scores increasing default rates.")
-        confirm_risk(r2, "rare", "low")
+                      ai_lifecycle_phase="operation",
+                      impact="Unreliable credit scores increasing default rates.",
+                      misuse_scenarios=[{"actor": "External attacker", "description": "Adversarial inputs designed to obtain artificially high credit scores", "likelihood": "unlikely", "consequence": "Fraudulent credit approvals; financial loss", "vulnerable_group": None}])
+        confirm_risk(r2, "rare", "low",
+                     review_notes="Residual risk acceptable: automated drift monitoring with PSI threshold triggers retraining before material accuracy degradation.")
         add_mitigation(r2, "mitigate", "Automated drift detection with monthly retraining trigger",
-                       "Monitor PSI and KS statistics monthly; trigger retraining if PSI > 0.2.")
+                       "Monitor PSI and KS statistics monthly; trigger retraining if PSI > 0.2.",
+                       implementation_guidance="PSI and KS statistics computed monthly on live score distribution vs training baseline. Retraining triggered if PSI >0.2 or accuracy drops >3%.",
+                       assigned_to="risk.owner@company.com")
         approve_register(reg, True, ARG_CR)
         print(f"  v{v} approved ({reg})")
 
@@ -333,16 +365,25 @@ def main():
         reg = create_register(cs_id, f"Cycle {v}: {SCOPE_CS}" if v < 2 else SCOPE_CS)
         r1 = add_risk(reg, title="Hallucination producing incorrect product or policy information",
                       category="performance", severity="medium", likelihood="possible", risk_type="foreseeable",
-                      impact="Factually incorrect answers leading to mis-selling liability.")
-        confirm_risk(r1, "unlikely", "low")
+                      ai_lifecycle_phase="operation",
+                      impact="Factually incorrect answers leading to mis-selling liability.",
+                      misuse_scenarios=[{"actor": "Customer", "description": "Prompt injection to extract internal system prompts or customer data", "likelihood": "possible", "consequence": "Data breach; reputational damage", "vulnerable_group": None}])
+        confirm_risk(r1, "unlikely", "low",
+                     review_notes="Residual risk acceptable: RAG grounding reduces hallucination rate to <2% in testing. Human escalation available.")
         add_mitigation(r1, "reduce", "RAG grounding against product knowledge base",
-                       "All responses grounded via RAG from authoritative product KB.")
+                       "All responses grounded via RAG from authoritative product KB.",
+                       implementation_guidance="RAG pipeline queries authoritative product knowledge base for every response. Responses failing retrieval confidence threshold escalated to human agent.",
+                       assigned_to="ops.lead@company.com")
         r2 = add_risk(reg, title="Failure to disclose AI identity to users",
                       category="legal", severity="low", likelihood="rare", risk_type="known",
+                      ai_lifecycle_phase="operation",
                       impact="Violates EU AI Act Art. 50 obligation to disclose AI interaction.")
-        confirm_risk(r2, "rare", "low")
+        confirm_risk(r2, "rare", "low",
+                     review_notes="Risk eliminated at source: disclosure banner mandatory at session start, acknowledgement logged.")
         add_mitigation(r2, "eliminate", "Mandatory AI disclosure banner at conversation start",
-                       "Display AI disclosure at session start; log acknowledgement.")
+                       "Display AI disclosure at session start; log acknowledgement.",
+                       implementation_guidance="AI disclosure banner shown at conversation start with mandatory acknowledgement click. Interaction logged with timestamp.",
+                       assigned_to="ops.lead@company.com")
         approve_register(reg, True, ARG_CS)
         print(f"  v{v} approved ({reg})")
 
@@ -357,10 +398,17 @@ def main():
         reg = create_register(md_id, f"Cycle {v}: {SCOPE_MD}" if v < 2 else SCOPE_MD)
         r1 = add_risk(reg, title="Over-reliance on AI recommendations by radiologists",
                       category="safety", severity="high", likelihood="possible", risk_type="foreseeable",
-                      impact="Reduced diagnostic vigilance, potentially missing pathologies.")
-        confirm_risk(r1, "unlikely", "medium")
+                      ai_lifecycle_phase="operation",
+                      affects_vulnerable_groups=True,
+                      vulnerable_groups='["elderly","people with disabilities"]',
+                      impact="Reduced diagnostic vigilance, potentially missing pathologies.",
+                      misuse_scenarios=[{"actor": "Radiologist", "description": "Use AI output as sole diagnostic basis without independent review", "likelihood": "possible", "consequence": "Missed diagnosis; patient harm", "vulnerable_group": "elderly"}])
+        confirm_risk(r1, "unlikely", "medium",
+                     review_notes="Residual risk acceptable in testing scope: mandatory independent review protocol ensures no patient harm pathway.")
         add_mitigation(r1, "mitigate", "Mandatory independent radiologist review before AI output shown",
-                       "Radiologists complete independent review before viewing AI output.")
+                       "Radiologists complete independent review before viewing AI output.",
+                       implementation_guidance="Radiologists complete independent written assessment before viewing AI output. Deviation from AI output documented in patient record.",
+                       assigned_to="medtech.lead@company.com")
         approve_register(reg, True, ARG_MD)
         print(f"  v{v} approved ({reg})")
 
@@ -371,10 +419,14 @@ def main():
         notes="In progress — scope agreed, risks being identified.")
     add_risk(reg3, title="Over-reliance on AI recommendations by radiologists",
              category="safety", severity="high", likelihood="possible", risk_type="foreseeable",
+             ai_lifecycle_phase="operation",
+             affects_vulnerable_groups=True,
+             vulnerable_groups='["elderly","people with disabilities"]',
              impact="Reduced diagnostic vigilance across CT/MRI modalities.",
              risk_owner="medtech.lead@company.com")
     add_risk(reg3, title="Training data bias towards specific scanner manufacturers",
              category="bias", severity="medium", likelihood="possible", risk_type="known",
+             ai_lifecycle_phase="operation",
              impact="Reduced accuracy at new sites using different scanner hardware.",
              risk_owner="medtech.lead@company.com")
     print(f"  v3 in progress / draft ({reg3})")
@@ -386,7 +438,11 @@ def main():
         "PROHIBITED under EU AI Act Art. 5(1)(c).")
     r1 = add_risk(reg, title="System constitutes prohibited social scoring under EU AI Act Art. 5(1)(c)",
                   category="legal", severity="critical", likelihood="certain", risk_type="known",
+                  ai_lifecycle_phase="design",
+                  affects_vulnerable_groups=True,
+                  vulnerable_groups='["minorities","people in financial difficulty","elderly"]',
                   impact="Deployment would constitute a prohibited AI practice under Art. 5(1)(c).",
+                  misuse_scenarios=[{"actor": "Government authority", "description": "Expand scoring criteria beyond initial pilot to cover entire population", "likelihood": "certain", "consequence": "Mass surveillance and social control — prohibited under Art. 5(1)(c)", "vulnerable_group": "minorities"}],
                   closure_justification=(
                       "SYSTEM MUST NOT BE DEPLOYED. Art. 5(1)(c) prohibition is absolute — "
                       "no mitigation is possible. Recommend immediate project termination."))
@@ -405,10 +461,17 @@ def main():
     r1 = add_risk(reg, title="Biased loan rejections based on protected demographic characteristics",
                   category="bias", severity="high", likelihood="likely", risk_type="foreseeable",
                   risk_owner="risk.management@company.com",
-                  impact="Systematic denial of credit to protected groups; regulatory and reputational risk.")
-    confirm_risk(r1, "unlikely", "low")
+                  ai_lifecycle_phase="operation",
+                  affects_vulnerable_groups=True,
+                  vulnerable_groups='["people in financial difficulty","ethnic minorities"]',
+                  impact="Systematic denial of credit to protected groups; regulatory and reputational risk.",
+                  misuse_scenarios=[{"actor": "Loan officer", "description": "Use automated score to deny loan without mandatory human review", "likelihood": "possible", "consequence": "Discriminatory lending; regulatory violation", "vulnerable_group": "people in financial difficulty"}])
+    confirm_risk(r1, "unlikely", "low",
+                 review_notes="Residual bias risk acceptable after fairness constraints and mandatory human review. Third-party audit conducted quarterly.")
     add_mitigation(r1, "reduce", "Fairness constraints and quarterly bias audit",
-                   "Demographic parity constraints in training; quarterly third-party bias audit.")
+                   "Demographic parity constraints in training; quarterly third-party bias audit.",
+                   implementation_guidance="Demographic parity constraints embedded in training objective. Quarterly third-party bias audit with findings reported to risk committee.",
+                   assigned_to="risk.management@company.com")
     approve_register(reg, True,
         "Fairness controls and mandatory human review reduce residual bias risk to acceptable level.")
     print(f"  v1 approved ({reg})")
@@ -424,10 +487,16 @@ def main():
     r1 = add_risk(reg, title="Personal data in meeting recordings processed without explicit consent",
                   category="privacy", severity="medium", likelihood="possible", risk_type="known",
                   risk_owner="privacy.officer@company.com",
-                  impact="Recordings may contain sensitive personal data; GDPR compliance risk.")
-    confirm_risk(r1, "unlikely", "low")
+                  ai_lifecycle_phase="operation",
+                  affects_vulnerable_groups=False,
+                  impact="Recordings may contain sensitive personal data; GDPR compliance risk.",
+                  misuse_scenarios=[{"actor": "Manager", "description": "Use transcription to monitor employee conversations without consent", "likelihood": "possible", "consequence": "Privacy violation; breach of employment law", "vulnerable_group": None}])
+    confirm_risk(r1, "unlikely", "low",
+                 review_notes="Residual privacy risk acceptable: consent controls implemented, opt-out available, deletion on request within 72h.")
     add_mitigation(r1, "mitigate", "Participant consent banner and opt-out mechanism",
-                   "Notify all participants at recording start; provide opt-out; delete on request.")
+                   "Notify all participants at recording start; provide opt-out; delete on request.",
+                   implementation_guidance="Consent banner displayed in calendar invite and at recording start. Participants can opt out via link; recordings deleted within 72h on request.",
+                   assigned_to="privacy.officer@company.com")
     approve_register(reg, True,
         "Residual privacy risk is acceptable after consent controls. "
         "This voluntary record documents due diligence beyond EU AI Act requirements for minimal risk systems.")
