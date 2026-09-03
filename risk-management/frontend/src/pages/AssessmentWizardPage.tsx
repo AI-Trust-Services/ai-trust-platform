@@ -750,8 +750,14 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                 {/* Add mitigation */}
                 {!addMit[risk.id] ? (
                   <button onClick={() => setAddMit(a => ({ ...a, [risk.id]: true }))}
-                    style={{ fontSize: 12, color: "#1147E9", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
-                    + Add mitigation measure
+                    style={{
+                      fontSize: 12, fontWeight: 600, cursor: "pointer", borderRadius: 6,
+                      padding: "7px 16px", border: "none",
+                      ...(hasMit
+                        ? { background: "#f0f4ff", color: "#1147E9" }
+                        : { background: "#1147E9", color: "#fff" }),
+                    }}>
+                    + Add mitigation
                   </button>
                 ) : (
                   <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -803,8 +809,8 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                 )}
 
                 {/* Residual risk (post-mitigation) */}
-                <div style={{ marginTop: 14, padding: "12px 14px", background: "#f0f4ff", borderRadius: 6, border: "1px solid #c7d3f5" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#1147E9", marginBottom: 8 }}>
+                <div style={{ marginTop: 14, padding: "10px 14px", background: "#f8f9fa", borderRadius: 6, border: "1px solid #e4e4e7" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#556b82", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.4px" }}>
                     Residual risk (post-mitigation) — Art. 9(2)(d)
                     {risk.final_risk_level && (
                       <span style={{ marginLeft: 10 }}><RiskLevelBadge level={risk.final_risk_level} /></span>
@@ -852,7 +858,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                     ) : null;
                   })()}
                   <button onClick={() => saveResidual(risk.id)} disabled={residualSaving[risk.id]}
-                    style={{ marginTop: 10, fontSize: 12, background: "#1147E9", color: "#fff", border: "none", borderRadius: 4, padding: "5px 14px", cursor: "pointer" }}>
+                    style={{ marginTop: 10, fontSize: 11, background: "transparent", color: "#556b82", border: "1px solid #d1d5db", borderRadius: 4, padding: "4px 12px", cursor: "pointer" }}>
                     {residualSaving[risk.id] ? "Saving…" : "Save residual risk"}
                   </button>
                 </div>
