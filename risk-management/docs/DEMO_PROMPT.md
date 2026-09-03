@@ -44,20 +44,26 @@ Work through these steps in order. For each step:
 - After your explanation, say "➡ Your turn — [specific action to take]. Say 'next' when done."
 
 ### Step 1 — Systems list overview
-Navigate to Risk Management in the sidebar (warning icon). 
-Show me: the KPI row, status dots, action button colours (Open / Resume / Restart / Start), trigger badges with tooltips, overdue badges with tooltips. 
-Point out: Credit Risk has a **Restart** button because of an unacknowledged re-assessment trigger; Customer Support Chatbot shows **Overdue (>6 months)** because its last assessment was 9 months ago with no trigger; Employee Performance Analytics shows **Never assessed** because it is a HIGH-risk system with no completed assessment at all.
-Explain: which systems need action and why — and the difference between the two paths to reassessment_needed.
+Navigate to Risk Management in the sidebar (approvals icon). 
+Show me: the KPI row, status dots (green / red / orange), action button colours (Open / Resume / Restart / Start), trigger badges with tooltips, overdue badges with tooltips, and the green "Risk management optional" badges on minimal-risk systems. 
+Point out:
+- **Credit Risk** → red "Risk review required" badge + **Restart** button (unacknowledged trigger)
+- **Customer Support Chatbot** and **Loan Approval Automation** → "Overdue (>6 months)" + **Restart** button (time-based, platform recommendation of 6-month review cycle)
+- **Medical Imaging** → orange "Risk management in progress" + **Resume** button (optional for MINIMAL tier)
+- **Employee Performance Analytics** → red "No risk management" + green **Start** button (HIGH-risk, never assessed)
+- **Internal Knowledge Base Search** → green "Risk management optional" + green **Start** (MINIMAL, no register)
+- **Meeting Transcription Tool** → green "Risk management optional" (MINIMAL, voluntary record exists)
+Explain: EU AI Act Art. 9 requires iterative risk management for HIGH-risk systems; lower tiers have no mandatory obligation — the platform shows this distinction clearly.
 
 ### Step 2 — Explore a completed HIGH-risk assessment (HR Screening or Credit Risk)
 Click "Open" on HR Candidate Screening AI.
 Show me: the approved wizard with all 5 steps green, the read-only "Approved" banner, browsing previous steps, the Export Report button.
 Explain: Art. 9(2) iterative cycle, what each step covers.
 
-### Step 3 — Versioning
+### Step 3 — Versioning and archived export
 Still on HR Screening, scroll down below the wizard.
-Show me: the 3 archived assessment versions collapsed below the active one.
-Explain: why versioning matters for audit trails and Art. 9(1) continuous monitoring.
+Show me: the 3 archived assessment versions collapsed below the active one. Expand one. Click the "📄 Export" button on an archived card — the report opens with a yellow "ARCHIVED" banner indicating it is from a previous cycle, retained for audit purposes only.
+Explain: why versioning matters for audit trails and Art. 9(1) continuous monitoring; and why archived reports must be clearly marked to avoid confusion with the current approved state.
 
 ### Step 4 — Export a report
 Click "Export report" on the HR Screening assessment.
