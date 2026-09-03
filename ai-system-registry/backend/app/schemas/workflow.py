@@ -41,7 +41,7 @@ class WorkflowAssignRequest(BaseModel):
     # Optional so the same schema serves full_manual (which has no section assignees).
     business_assignee_username: str | None = None
     technical_assignee_username: str | None = None
-    compliance_officer_username: str
+    compliance_officer_username: str | None = None
     note: str | None = None
 
 

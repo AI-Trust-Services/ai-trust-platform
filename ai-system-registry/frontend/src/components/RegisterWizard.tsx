@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, Fragment } from "react";
-import { Check, Loader2, X, ChevronDown, ChevronRight, Copy, Paperclip } from "lucide-react";
+import { Check, Loader2, X, ChevronDown, ChevronRight, Copy } from "lucide-react";
 import { TierBadge } from "./Badges";
 import { previewClassify, copyToClipboard, SELECT_CLASS } from "../utils";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, AISystemFormData, RegistrationMode, UserSummary } from "../types";
-import { BUSINESS_QUESTIONS, TECHNICAL_QUESTIONS } from "../config/questionnaire";
-import { Badge } from "@/components/ui/badge";
+import type { AISystem, AISystemFormData } from "../types";
+import { TECHNICAL_QUESTIONS } from "../config/questionnaire";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,10 +34,7 @@ const EMPTY_FORM: AISystemFormData = {
 };
 
 const ENGINEER_STEPS = ["Purpose & Lifecycle", "Risk Flags", "Review"];
-const OWNER_STEPS = ["Fill Questionnaire", "Assign & Submit"];
 
-// Re-themed "panel" — a bordered card with a muted header. No shadcn primitive
-// maps to this collapsible section, so it stays styled markup on the new tokens.
 function CollapsiblePanel({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
   return (
@@ -65,34 +61,20 @@ interface Props {
   onClose: () => void;
   onSuccess: () => void;
   system?: AISystem;
-  /** Owner-flow registration mode. "ai" hides classifier flags at creation
-   * (the LLM infers them later); "manual_questionnaire" keeps them as checkboxes.
-   * Ignored in engineer mode. */
-  mode?: RegistrationMode;
 }
 
-export default function RegisterWizard({ open, onClose, onSuccess, system, mode = "ai" }: Props) {
+export default function RegisterWizard({ open, onClose, onSuccess, system }: Props) {
   const isEngineerMode = !!system;
-  const isAIMode = mode === "ai";
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<AISystemFormData>(EMPTY_FORM);
-  const [businessFields, setBusinessFields] = useState<Record<string, unknown>>({});
-  const [businessOwners, setBusinessOwners] = useState<UserSummary[]>([]);
-  const [businessAssigneeUsername, setBusinessAssigneeUsername] = useState("");
-  const [assigneeUsername, setAssigneeUsername] = useState(""); // CO for engineer mode
-  const [technicalAssigneeUsername, setTechnicalAssigneeUsername] = useState("");
-  const [complianceOfficerUsername, setComplianceOfficerUsername] = useState("");
-  const [engineers, setEngineers] = useState<UserSummary[]>([]);
-  const [complianceOfficers, setComplianceOfficers] = useState<UserSummary[]>([]);
-  const [techSectionOpen, setTechSectionOpen] = useState(false);
+  const [assigneeUsername, setAssigneeUsername] = useState("");
+  const [complianceOfficers, setComplianceOfficers] = useState<Array<{ username: string; firstName?: string; lastName?: string }>>([]);
   const [loading, setLoading] = useState(false);
-  const [extracting, setExtracting] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
   const [flagsConfirmed, setFlagsConfirmed] = useState(false);
   const submitting = useRef(false);
   const [doneId, setDoneId] = useState<string | null>(null);
   const showToast = useToast();
-  const { username } = useModalControls();
+  useModalControls();
 
   useEffect(() => {
     if (!open) return;
@@ -136,27 +118,13 @@ export default function RegisterWizard({ open, onClose, onSuccess, system, mode 
         is_chatbot: system.is_chatbot,
         generates_synthetic_content: system.generates_synthetic_content,
       });
-      setComplianceOfficerUsername(system.compliance_officer_username || "");
+      setAssigneeUsername(system.compliance_officer_username || "");
       api.getUsersByRole("ai_compliance_officer")
         .then(setComplianceOfficers)
         .catch(() => {});
     } else {
       setForm(EMPTY_FORM);
-      setBusinessFields({});
-      setBusinessAssigneeUsername("");
       setAssigneeUsername("");
-      setTechnicalAssigneeUsername("");
-      setComplianceOfficerUsername("");
-      setTechSectionOpen(false);
-      Promise.all([
-        api.getUsersByRole("business_owner"),
-        api.getUsersByRole("ai_engineer"),
-        api.getUsersByRole("ai_compliance_officer"),
-      ]).then(([biz, eng, co]) => {
-        setBusinessOwners(biz);
-        setEngineers(eng);
-        setComplianceOfficers(co);
-      }).catch(() => {});
     }
   }, [open, isEngineerMode, system]);
 
@@ -173,84 +141,21 @@ export default function RegisterWizard({ open, onClose, onSuccess, system, mode 
     setFlagsConfirmed(false);
   };
 
-  const maxStep = isEngineerMode ? 2 : 1;
+  const maxStep = isEngineerMode ? 2 : 0;
 
   function handleNext() {
-    if (!isEngineerMode && step === 0 && !form.name.trim()) { showToast("System name is required", true); return; }
     setStep((s) => Math.min(s + 1, maxStep));
-  }
-
-  async function handlePrefill(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-    setExtracting(true);
-    try {
-      const resp = await api.assistExtract(file);
-      const extracted = resp.extracted_fields ?? {};
-      if (Object.keys(extracted).length === 0) {
-        showToast("No fields could be extracted from that document", true);
-        return;
-      }
-      // Extracted keys align with BUSINESS_QUESTIONS keys — merge into the
-      // questionnaire fields. Any key not in the questionnaire is ignored at submit.
-      setBusinessFields((f) => ({ ...f, ...extracted }));
-      showToast(`Pre-filled ${Object.keys(extracted).length} field(s) from "${file.name}"`);
-    } catch (err) {
-      showToast(`Prefill failed: ${(err as Error).message}`, true);
-    } finally {
-      setExtracting(false);
-    }
   }
 
   async function handleOwnerSubmit() {
     if (!form.name.trim()) { showToast("System name is required", true); return; }
-    if (!businessAssigneeUsername) { showToast("Please assign a Business Assignee", true); return; }
-    if (!technicalAssigneeUsername) { showToast("Please assign a Technical Assignee", true); return; }
-    if (!complianceOfficerUsername) { showToast("Please assign a Compliance Officer", true); return; }
     if (submitting.current) return;
     submitting.current = true;
     setLoading(true);
     try {
-      const systemFields: Record<string, unknown> = {};
-      const answerFields: Record<string, string> = {};
-      for (const q of BUSINESS_QUESTIONS) {
-        const val = businessFields[q.key];
-        if (val == null || val === "") continue;
-        if (q.storage === "system") systemFields[q.key] = val;
-        else answerFields[q.key] = String(val);
-      }
-      // Classifier flags are only collected at creation in manual-questionnaire mode.
-      // In AI mode they stay hidden — the LLM infers them at submit-technical.
-      if (!isAIMode) {
-        for (const q of TECHNICAL_QUESTIONS) {
-          const val = businessFields[q.key];
-          if (val == null) continue;
-          systemFields[q.key] = q.type === "number" ? Number(val) : Boolean(val);
-        }
-      }
-      const { system: result } = await api.intakeAssisted({
-        registration_mode: mode,
-        name: form.name,
-        description: form.description,
-        org_role: form.org_role,
-        ...systemFields,
-      });
-      if (Object.keys(answerFields).length > 0) {
-        await api.patchQuestionnaireAnswers(result.id, answerFields);
-      }
-      await api.assignWorkflow(result.id, {
-        business_assignee_username: businessAssigneeUsername,
-        technical_assignee_username: technicalAssigneeUsername,
-        compliance_officer_username: complianceOfficerUsername,
-      });
-      if (businessAssigneeUsername === username) {
-        await api.submitBusinessSection(result.id);
-      }
+      const result = await api.intake(form);
       setDoneId(result.id);
-      showToast(businessAssigneeUsername === username
-        ? "System registered — technical assignee notified"
-        : "System registered — business assignee notified");
+      showToast("System registered — complete risk classification in Assessments");
       onSuccess();
     } catch (e) {
       showToast(`Registration failed: ${(e as Error).message}`, true);
@@ -287,16 +192,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system, mode 
 
   const preview = previewClassify(form, form.training_compute_flops);
 
-  const bizAnswered = BUSINESS_QUESTIONS.filter(q => {
-    const v = businessFields[q.key];
-    return q.type === "boolean" ? v === true : (v != null && v !== "");
-  });
-  const techAnswered = TECHNICAL_QUESTIONS.filter(q => {
-    const v = businessFields[q.key];
-    return q.type === "boolean" ? v === true : (q.type === "number" ? (typeof v === "number" && v > 0) : (v != null && v !== ""));
-  });
-
-  function displayName(u: UserSummary) {
+  function displayName(u: { username: string; firstName?: string; lastName?: string }) {
     const full = [u.firstName, u.lastName].filter(Boolean).join(" ");
     return full ? `${full} (${u.username})` : u.username;
   }
@@ -316,7 +212,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system, mode 
             <Alert variant="info" className="mb-4">
               {isEngineerMode
                 ? "System details saved and submitted for review. The compliance officer has been notified."
-                : "AI system registered. The assigned engineer has been notified by email."}
+                : "AI system registered. Open Assessments to complete risk classification and start the compliance workflow."}
             </Alert>
             {!isEngineerMode && (
               <div className="overflow-hidden rounded-md border border-border">
@@ -354,194 +250,23 @@ export default function RegisterWizard({ open, onClose, onSuccess, system, mode 
                 ))}
               </div>
             )}
-            {!isEngineerMode && (
-              <div className="flex flex-wrap gap-4 border-b border-border px-6 py-3">
-                {OWNER_STEPS.map((label, i) => (
-                  <div key={i} className={cn(
-                    "flex items-center gap-2 text-sm",
-                    i === step ? "font-semibold text-[var(--brand)]" : i < step ? "text-foreground" : "text-muted-foreground",
-                  )}>
-                    <span className={cn(
-                      "flex size-5 items-center justify-center rounded-full text-xs font-semibold",
-                      i === step ? "bg-[var(--brand)] text-white" : i < step ? "bg-[var(--success)] text-white" : "bg-muted text-muted-foreground",
-                    )}>{i + 1}</span>
-                    {label}
-                  </div>
-                ))}
-              </div>
-            )}
 
             <div className="overflow-y-auto px-6 py-5">
-              {/* OWNER MODE step 0: Full questionnaire */}
-              {!isEngineerMode && step === 0 && (
-                <div className="flex flex-col gap-3">
+              {/* OWNER MODE: name + description only */}
+              {!isEngineerMode && (
+                <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="reg_name">System Name <span className="text-[var(--danger-fg)]">*</span></Label>
-                    <Input type="text" id="reg_name" value={form.name} onChange={set("name")} placeholder="e.g. Fraud Detection Model" />
+                    <Input type="text" id="reg_name" value={form.name} onChange={set("name")} placeholder="e.g. Fraud Detection Model" autoFocus />
                   </div>
-
-                  {(isAIMode || mode === "manual_questionnaire") && (
-                    <div className="rounded-md border border-dashed border-border bg-muted/30 p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-[13px] font-medium">Pre-fill with AI</div>
-                          <div className="text-xs text-muted-foreground">
-                            Upload a document (model card, spec, or brief) and the AI will pre-fill the questionnaire below.
-                          </div>
-                        </div>
-                        <Button variant="outline" size="sm" className="shrink-0" onClick={() => fileRef.current?.click()} disabled={extracting}>
-                          {extracting ? <Loader2 className="animate-spin" /> : <Paperclip />}
-                          {extracting ? "Extracting…" : "Upload"}
-                        </Button>
-                      </div>
-                      <input ref={fileRef} type="file" accept=".txt,.md,.pdf,.docx,.pptx,.png,.jpg,.jpeg" className="hidden" onChange={handlePrefill} />
-                    </div>
-                  )}
-
-                  <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    General Information (optional)
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="reg_desc">Description</Label>
+                    <Textarea id="reg_desc" rows={3} value={form.description} onChange={set("description")} placeholder="Brief description of the AI system…" />
                   </div>
-                  {BUSINESS_QUESTIONS.map((q) => {
-                    const val = businessFields[q.key];
-                    if (q.type === "select") {
-                      return (
-                        <div key={q.key} className="flex flex-col gap-1">
-                          <Label className="text-xs font-medium">{q.label}</Label>
-                          <select className={SELECT_CLASS} value={val != null ? String(val) : ""} onChange={(e) => setBusinessFields((f) => ({ ...f, [q.key]: e.target.value }))}>
-                            <option value="">— select —</option>
-                            {q.options?.map(o => <option key={o} value={o}>{o}</option>)}
-                          </select>
-                        </div>
-                      );
-                    }
-                    if (q.type === "textarea") {
-                      return (
-                        <div key={q.key} className="flex flex-col gap-1">
-                          <Label className="text-xs font-medium">{q.label}</Label>
-                          <Textarea value={val != null ? String(val) : ""} onChange={(e) => setBusinessFields((f) => ({ ...f, [q.key]: e.target.value }))} placeholder={q.hint} rows={2} className="text-sm" />
-                        </div>
-                      );
-                    }
-                    return (
-                      <div key={q.key} className="flex flex-col gap-1">
-                        <Label className="text-xs font-medium">{q.label}</Label>
-                        <Input value={val != null ? String(val) : ""} onChange={(e) => setBusinessFields((f) => ({ ...f, [q.key]: e.target.value }))} placeholder={q.hint} className="text-sm" />
-                      </div>
-                    );
-                  })}
-
-                  <Collapsible open={techSectionOpen} onOpenChange={setTechSectionOpen} className={cn(isAIMode && "hidden")}>
-                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      <span>AI Risk Classification (optional)</span>
-                      {techSectionOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="mt-2 flex flex-col gap-2">
-                      {TECHNICAL_QUESTIONS.map((q) => {
-                        const val = businessFields[q.key];
-                        if (q.type === "number") {
-                          return (
-                            <div key={q.key} className="flex flex-col gap-1">
-                              <Label className="text-xs font-medium">{q.label}</Label>
-                              <Input type="number" value={val != null ? String(val) : ""} onChange={(e) => setBusinessFields((f) => ({ ...f, [q.key]: parseFloat(e.target.value) || 0 }))} placeholder={q.hint} className="text-sm" />
-                            </div>
-                          );
-                        }
-                        return (
-                          <label key={q.key} className="flex items-start gap-2.5 rounded-md border border-border p-2.5 text-sm">
-                            <Checkbox checked={Boolean(val)} onCheckedChange={(c: boolean | "indeterminate") => setBusinessFields((f) => ({ ...f, [q.key]: c === true }))} className="mt-0.5 shrink-0" />
-                            <div>
-                              <div className="font-medium text-[13px]">{q.label}</div>
-                              <div className="text-xs text-muted-foreground">{q.hint}</div>
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </CollapsibleContent>
-                  </Collapsible>
+                  <p className="text-xs text-muted-foreground">
+                    Risk classification and compliance workflow are completed in Assessments after registration.
+                  </p>
                 </div>
-              )}
-
-              {/* OWNER MODE step 1: Assign & Submit */}
-              {!isEngineerMode && step === 1 && (
-                  <div className="flex flex-col gap-5">
-                    {/* Business summary */}
-                    <div>
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="text-sm font-semibold">General Information</span>
-                        <Badge variant="outline" className="text-xs">{bizAnswered.length}/{BUSINESS_QUESTIONS.length} answered</Badge>
-                      </div>
-                      <div className="mb-3 divide-y divide-border rounded-md border border-border">
-                        {BUSINESS_QUESTIONS.map((q) => {
-                          const v = businessFields[q.key];
-                          const answered = v != null && v !== "";
-                          return (
-                            <div key={q.key} className="flex items-center gap-2.5 px-3 py-2 text-[13px]">
-                              {answered ? <Check className="size-3.5 shrink-0 text-[var(--success)]" /> : <span className="inline-block size-3.5 shrink-0 rounded-full border border-muted-foreground" />}
-                              <span className={answered ? "" : "text-muted-foreground"}>{q.label}</span>
-                              {answered && <span className="ml-auto max-w-[180px] truncate text-xs text-muted-foreground">{String(v)}</span>}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <Label htmlFor="reg_biz">Business Assignee <span className="text-[var(--danger-fg)]">*</span> <span className="font-normal text-muted-foreground text-xs">— will complete unanswered questions</span></Label>
-                        <select className={SELECT_CLASS} id="reg_biz" value={businessAssigneeUsername} onChange={(e) => setBusinessAssigneeUsername(e.target.value)}>
-                          <option value="">Choose Business Assignee</option>
-                          {businessOwners.map((u) => <option key={u.username} value={u.username}>{displayName(u)}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Technical summary */}
-                    <div>
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="text-sm font-semibold">AI Risk Classification</span>
-                        {!isAIMode && (
-                          <Badge variant="outline" className="text-xs">{techAnswered.length}/{TECHNICAL_QUESTIONS.length} flagged</Badge>
-                        )}
-                      </div>
-                      {isAIMode ? (
-                        <p className="mb-3 text-xs text-muted-foreground">
-                          The technical assignee answers the risk questionnaire; the risk tier is inferred
-                          automatically and reviewed by the compliance officer.
-                        </p>
-                      ) : (
-                        <Collapsible>
-                          <CollapsibleTrigger className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-                            <ChevronRight className="size-3" /> Show all flags
-                          </CollapsibleTrigger>
-                          <CollapsibleContent className="mb-3 divide-y divide-border rounded-md border border-border">
-                            {TECHNICAL_QUESTIONS.map((q) => {
-                              const v = businessFields[q.key];
-                              const answered = q.type === "boolean" ? v === true : (q.type === "number" ? (typeof v === "number" && v > 0) : (v != null && v !== ""));
-                              return (
-                                <div key={q.key} className="flex items-center gap-2.5 px-3 py-2 text-[13px]">
-                                  {answered ? <Check className="size-3.5 shrink-0 text-[var(--success)]" /> : <span className="inline-block size-3.5 shrink-0 rounded-full border border-muted-foreground" />}
-                                  <span className={answered ? "" : "text-muted-foreground"}>{q.label}</span>
-                                </div>
-                              );
-                            })}
-                          </CollapsibleContent>
-                        </Collapsible>
-                      )}
-                      <div className="flex flex-col gap-1">
-                        <Label htmlFor="reg_technical">Technical Assignee <span className="text-[var(--danger-fg)]">*</span> <span className="font-normal text-muted-foreground text-xs">— will complete risk classification</span></Label>
-                        <select className={SELECT_CLASS} id="reg_technical" value={technicalAssigneeUsername} onChange={(e) => setTechnicalAssigneeUsername(e.target.value)}>
-                          <option value="">Choose Technical Assignee</option>
-                          {engineers.map((u) => <option key={u.username} value={u.username}>{displayName(u)}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* CO */}
-                    <div className="flex flex-col gap-1">
-                      <Label htmlFor="reg_co">Compliance Officer <span className="text-[var(--danger-fg)]">*</span></Label>
-                      <select className={SELECT_CLASS} id="reg_co" value={complianceOfficerUsername} onChange={(e) => setComplianceOfficerUsername(e.target.value)}>
-                        <option value="">Choose Compliance Officer</option>
-                        {complianceOfficers.map((u) => <option key={u.username} value={u.username}>{displayName(u)}</option>)}
-                      </select>
-                    </div>
-                  </div>
               )}
 
               {/* ENGINEER MODE step 0: Purpose & Lifecycle */}
@@ -742,11 +467,8 @@ export default function RegisterWizard({ open, onClose, onSuccess, system, mode 
               {step > 0 && (
                 <Button variant="ghost" onClick={() => setStep((s) => s - 1)}>← Back</Button>
               )}
-              {/* Owner: next until last step, then register */}
-              {!isEngineerMode && step < maxStep && (
-                <Button onClick={handleNext}>Next →</Button>
-              )}
-              {!isEngineerMode && step === maxStep && (
+              {/* Owner: single step */}
+              {!isEngineerMode && (
                 <Button onClick={handleOwnerSubmit} disabled={loading}>
                   {loading && <Loader2 className="animate-spin" />} Register System
                 </Button>

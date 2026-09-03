@@ -109,6 +109,70 @@ export interface AISystem {
   lifecycle: string;
   compliance: number;
   workflow_status: string;
+  registration_mode: string;
+  org_role: string;
+  assignee_username: string | null;
+  business_assignee_username: string | null;
+  technical_assignee_username: string | null;
+  compliance_officer_username: string | null;
+  classification_rationale: ClassificationRationale | Array<{ flag: string; value: boolean | number; rationale: string }> | null;
+  questionnaire_answers: Record<string, unknown> | null;
+  // Risk classification flags
+  subliminal_manipulation: boolean;
+  exploits_vulnerability: boolean;
+  social_scoring_public: boolean;
+  real_time_biometric_public: boolean;
+  emotion_recognition_workplace: boolean;
+  untargeted_facial_scraping: boolean;
+  predictive_policing: boolean;
+  biometric_categorisation_sensitive: boolean;
+  is_biometric_identification: boolean;
+  is_critical_infrastructure: boolean;
+  is_education_related: boolean;
+  is_employment_related: boolean;
+  is_credit_scoring: boolean;
+  is_public_service: boolean;
+  is_law_enforcement: boolean;
+  is_migration: boolean;
+  is_judicial_admin: boolean;
+  is_gpai: boolean;
+  training_compute_flops: number;
+  is_chatbot: boolean;
+  generates_synthetic_content: boolean;
+}
+
+export interface ClassificationRationale {
+  reasoning: string | null;
+  confidence: number | null;
+  org_role: string | null;
+  org_role_rationale: string | null;
+  missing_info: string[];
+  flags: Array<{
+    flag: string;
+    value: boolean | number;
+    confidence: number | null;
+    rationale: string | null;
+  }>;
+}
+
+export interface WorkflowStep {
+  id: string;
+  system_id: string;
+  step: string;
+  actor_username: string;
+  assignee_username: string | null;
+  created_at: string;
+}
+
+export interface QuestionAssignment {
+  id: string;
+  system_id: string;
+  section: string;
+  question_key: string;
+  assignee_username: string;
+  assigned_by_username: string;
+  assigned_at: string;
+  answered_at: string | null;
 }
 
 export interface GenerateObligationsResponse {
