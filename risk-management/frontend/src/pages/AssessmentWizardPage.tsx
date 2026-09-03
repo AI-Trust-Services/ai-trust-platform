@@ -222,7 +222,7 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
   </body></html>`;
 
   const w = window.open("", "_blank");
-  if (w) { w.document.write(html); w.document.close(); }
+  if (w) { w.document.write(html); w.document.close(); w.focus(); }
 }
 
 // ── Step 1: Scope ─────────────────────────────────────────────────────────────
