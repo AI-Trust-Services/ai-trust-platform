@@ -38,11 +38,12 @@ Navigate to **Risk Management** in the sidebar.
 
 ### What the seed creates
 
-| System | EU AI Act Tier | Assessment versions | Status |
+| System | EU AI Act Tier | Risk management versions | Status |
 |---|---|---|---|
 | HR Candidate Screening AI | **HIGH** (employment) | 4 | ✓ Up to date |
-| Credit Risk Assessment Model | **HIGH** (credit scoring) | 3 | ⚠ Restart due (unacknowledged trigger) |
+| Credit Risk Assessment Model | **HIGH** (credit scoring) | 3 | ⚠ Re-assessment required (trigger) |
 | Customer Support Chatbot | **LIMITED** (chatbot) | 2 | ⚠ Overdue (>6 months) |
+| Loan Approval Automation | **HIGH** (credit scoring) | 1 | ⚠ Overdue (>6 months) |
 | Medical Image Diagnosis Assistant | MINIMAL | 2 approved + 1 in progress | Risk management in progress (optional) |
 | Social Scoring Pilot | **PROHIBITED** (Art. 5(1)(c)) | 1 | ✓ Approved (not acceptable) |
 | Employee Performance Analytics | **HIGH** (employment) | — | No risk management (Start) |

@@ -124,7 +124,7 @@
       {
         pathSegment: "risk-management",
         label: "Risk Management",
-        icon: "shield",
+        icon: "locked",
         viewUrl: "http://localhost:8080/risk-management/",
         navigationContext: "risk-management",
       },

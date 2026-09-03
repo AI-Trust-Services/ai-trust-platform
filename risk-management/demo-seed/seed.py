@@ -220,6 +220,23 @@ def main():
     })
     # No risk register created — demonstrates green "Start" button
 
+    la_id = register_system({
+        "name": "Loan Approval Automation",
+        "description": "Automates approval and rejection of retail loan applications using ML scoring.",
+        "assignee_username": ADMIN, "lifecycle": "operation",
+        "intended_purpose": "Speed up loan decisioning for retail banking customers",
+        "department": "Retail Banking",
+        "is_credit_scoring": True,
+        "annex_iii_flags": [], "art_5_flags": [],
+        "is_gpai": False, "is_chatbot": False, "generates_synthetic_content": False,
+        "training_compute_flops": 0,
+    })
+    sys_la = _req(REGISTRY_BASE, f"/v1/systems/{la_id}")
+    sys_la.update({"is_credit_scoring": True})
+    for k in ("id","tier","basis","annex_iii_area","classification_rationale","created_at","updated_at","field_confirmations"):
+        sys_la.pop(k, None)
+    _req(REGISTRY_BASE, f"/v1/systems/{la_id}", "PUT", sys_la)
+
     kb_id = register_system({
         "name": "Internal Knowledge Base Search",
         "description": "AI-powered semantic search over internal company documents and wikis.",
@@ -379,6 +396,23 @@ def main():
         "EU AI Act Art. 5(1)(c). Project must be terminated. No deployment path exists.")
     print(f"  v1 approved ({reg})")
 
+    # ── Loan Approval Automation — 1 version, HIGH, Overdue ──────────────────
+    print("\nLoan Approval Automation (1 version, Overdue)…")
+    reg = create_register(la_id,
+        "Risk management for automated loan approval system covering retail lending decisions. "
+        "Scope includes model bias, explainability of rejections, regulatory compliance with "
+        "EU AI Act Art. 9 and EBA guidelines on ML in credit decisions.")
+    r1 = add_risk(reg, title="Biased loan rejections based on protected demographic characteristics",
+                  category="bias", severity="high", likelihood="likely", risk_type="foreseeable",
+                  risk_owner="risk.management@company.com",
+                  impact="Systematic denial of credit to protected groups; regulatory and reputational risk.")
+    confirm_risk(r1, "unlikely", "low")
+    add_mitigation(r1, "reduce", "Fairness constraints and quarterly bias audit",
+                   "Demographic parity constraints in training; quarterly third-party bias audit.")
+    approve_register(reg, True,
+        "Fairness controls and mandatory human review reduce residual bias risk to acceptable level.")
+    print(f"  v1 approved ({reg})")
+
     # ── Meeting Transcription Tool — 1 voluntary version ─────────────────────
     print("\nMeeting Transcription Tool (1 voluntary version)…")
     reg = create_register(mtt_id,
@@ -401,13 +435,13 @@ def main():
 
     print("\n── Setting realistic historical dates ──")
     print("  (Requires direct DB access via docker exec — skipping if not available)")
-    _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_id)
+    _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_id, la_id)
 
-    print("\n✅ Demo seed complete. 8 systems registered, risk registers populated.")
+    print("\n✅ Demo seed complete. 9 systems registered, risk registers populated.")
     print("   Open http://localhost:8080/risk-management/ to explore.")
 
 
-def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_id):
+def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_id, la_id):
     """Back-date registers and triggers to simulate a realistic history."""
     import subprocess
 
@@ -471,6 +505,14 @@ def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_
     # Minimal risk systems: acknowledge all triggers (risk management is optional)
     psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{kb_id}';")
     psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{mtt_id}';")
+    # Loan Approval: 1 version — 8 months ago → Overdue (>6 months)
+    la_regs = [r["id"] for r in _req(RISK_BASE, f"/v1/systems/{la_id}/registers")]
+    for reg_id in la_regs:
+        psql(f"UPDATE risk_registers SET created_at=NOW()-INTERVAL '8 months', "
+             f"approved_at=NOW()-INTERVAL '8 months', "
+             f"last_assessment_completed_at=NOW()-INTERVAL '8 months', "
+             f"updated_at=NOW()-INTERVAL '8 months' WHERE id='{reg_id}';")
+    psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{la_id}';")
 
     print("  Dates updated.")
 

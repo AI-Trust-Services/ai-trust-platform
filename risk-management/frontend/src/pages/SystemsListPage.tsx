@@ -178,7 +178,10 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
             {filtered.map(sys => {
               const isHighRisk = sys.system_tier === "high" || sys.system_tier === "prohibited";
               const btn = actionBtn(sys);
-              const triggerTooltip = `Re-assessment triggers are events that require a new risk assessment cycle. They are created automatically when: (1) 6 months have passed since the last approved assessment (Art. 9(1)), or (2) a significant change was detected in the AI system. Unacknowledged triggers indicate a new assessment is overdue.`;
+              const triggerTooltip = `Re-assessment triggers are events that require a new risk management cycle under EU AI Act Art. 9(1). They are created automatically when: (1) 6 months have passed since the last approved cycle, or (2) a significant change was detected in the AI system. Each unacknowledged trigger must be addressed by starting a new risk management cycle.`;
+              const triggerLabel = sys.unacknowledged_triggers === 1
+                ? "Re-assessment required"
+                : `${sys.unacknowledged_triggers} re-assessments required`;
               return (
                 <tr key={sys.system_id} style={{
                   borderBottom: "1px solid #e4e4e7",
@@ -203,7 +206,7 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
                     {sys.reassessment_needed && isHighRisk && (
                       <div style={{ fontSize: 11, color: "#dc2626", marginTop: 2, display: "flex", alignItems: "center" }}>
                         {sys.unacknowledged_triggers > 0
-                          ? <><span>{sys.unacknowledged_triggers} trigger(s)</span><InfoTooltip text={triggerTooltip} /></>
+                          ? <><span>{triggerLabel}</span><InfoTooltip text={triggerTooltip} /></>
                           : sys.last_assessment_completed_at
                             ? <><span>Overdue (&gt;6 months)</span><InfoTooltip text="EU AI Act Art. 9(1) requires iterative risk management. An assessment is overdue when more than 6 months have passed since the last approved assessment with no new cycle started. A new assessment must be initiated to maintain compliance." /></>
                             : sys.active_register_id
