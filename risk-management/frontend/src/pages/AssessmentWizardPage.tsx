@@ -6,7 +6,7 @@ const STEPS: { key: WizardStep; label: string }[] = [
   { key: "scope",    label: "1. Scope" },
   { key: "identify", label: "2. Identify" },
   { key: "evaluate", label: "3. Evaluate" },
-  { key: "mitigate", label: "4. Mitigate" },
+  { key: "mitigate", label: "4. Manage risks" },
   { key: "approve",  label: "5. Approve" },
 ];
 
@@ -93,7 +93,7 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
       ${r.affects_vulnerable_groups ? `<div style="font-size:12px;color:#8b3a00;margin-bottom:8px">⚠ Affects vulnerable groups: ${r.vulnerable_groups}</div>` : ""}
       ${r.mitigations.length > 0 ? `
         <div style="margin-top:8px">
-          <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Mitigations (${r.mitigations.length})</div>
+          <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Risk management measures (${r.mitigations.length})</div>
           ${r.mitigations.map(m => `
             <div style="background:#f8f9fa;border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:12px">
               <span style="font-weight:600">[${m.hierarchy_level.toUpperCase()}]</span> ${m.title}
@@ -101,7 +101,7 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
             </div>
           `).join("")}
         </div>
-      ` : r.closure_justification ? `<div style="background:#fffbeb;border-radius:6px;padding:8px 12px;font-size:12px;color:#92400e"><strong>No mitigation:</strong> ${r.closure_justification}</div>` : ""}
+      ` : r.closure_justification ? `<div style="background:#fffbeb;border-radius:6px;padding:8px 12px;font-size:12px;color:#92400e"><strong>No measure:</strong> ${r.closure_justification}</div>` : ""}
       ${(r.residual_likelihood || r.residual_severity) ? `
         <div style="margin-top:8px;font-size:12px;color:#1147E9">
           <strong>Residual risk:</strong> likelihood: ${r.residual_likelihood ?? "—"} · severity: ${r.residual_severity ?? "—"} · level: ${levelBadge(r.final_risk_level)}
@@ -143,7 +143,7 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
     <div class="scope-box">${register.assessment_scope || "—"}</div>
     <div class="stats">
       <div class="stat"><div class="stat-val">${confirmed.length}</div><div class="stat-lbl">Confirmed risks</div></div>
-      <div class="stat"><div class="stat-val">${confirmed.reduce((a, r) => a + r.mitigations.length, 0)}</div><div class="stat-lbl">Mitigations</div></div>
+      <div class="stat"><div class="stat-val">${confirmed.reduce((a, r) => a + r.mitigations.length, 0)}</div><div class="stat-lbl">Measures</div></div>
       <div class="stat"><div class="stat-val">${confirmed.filter(r => r.affects_vulnerable_groups).length}</div><div class="stat-lbl">Vulnerable group risks</div></div>
       <div class="stat"><div class="stat-val">${confirmed.reduce((a, r) => a + r.misuse_scenarios.length, 0)}</div><div class="stat-lbl">Misuse scenarios</div></div>
     </div>
@@ -618,7 +618,7 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
 
       <button onClick={onNext} disabled={confirmed === 0}
         style={{ background: confirmed === 0 ? "#9ca3af" : "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: confirmed === 0 ? "not-allowed" : "pointer" }}>
-        Next: Assign mitigations ({confirmed} confirmed) →
+        Next: Add risk management measures ({confirmed} confirmed) →
       </button>
     </div>
   );
@@ -667,7 +667,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
 
   async function saveMitigation(riskId: string) {
     const d = mitDraft[riskId] ?? {};
-    if (!d.title?.trim()) { setErr(e => ({ ...e, [riskId]: "Mitigation title is required." })); return; }
+    if (!d.title?.trim()) { setErr(e => ({ ...e, [riskId]: "Measure title is required." })); return; }
     if (!d.hierarchy_level) { setErr(e => ({ ...e, [riskId]: "Hierarchy level is required (Art. 9(2)(c))." })); return; }
     setSaving(s => ({ ...s, [riskId]: true }));
     setErr(e => ({ ...e, [riskId]: "" }));
@@ -692,7 +692,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
 
   async function saveClosureJustification(riskId: string) {
     const note = closureNote[riskId] ?? "";
-    if (!note.trim()) { setErr(e => ({ ...e, [riskId]: "Closure justification is required when no mitigation is provided." })); return; }
+    if (!note.trim()) { setErr(e => ({ ...e, [riskId]: "Closure justification is required when no risk management measure is provided." })); return; }
     await api.patchRisk(riskId, { closure_justification: note });
     onRisksChange(risks.map(r => r.id === riskId ? { ...r, closure_justification: note } : r));
     setErr(e => ({ ...e, [riskId]: "" }));
@@ -704,9 +704,9 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
   return (
     <div>
       <div style={{ background: "#eef1f4", borderRadius: 8, padding: "12px 16px", marginBottom: 16, fontSize: 12, color: "#374151" }}>
-        <strong>Art. 9(2)(b)+(c) — Mitigation hierarchy:</strong> Apply measures in order: <strong>Eliminate</strong> (preferred) →
+        <strong>Art. 9(2)(b)+(c) — Risk management measures:</strong> Apply measures in order: <strong>Eliminate</strong> (preferred) →
         <strong> Reduce</strong> → <strong>Mitigate</strong> → <strong>Inform</strong>. Every confirmed risk must have at least one measure
-        or a documented justification for not mitigating.
+        or a documented justification for not applying any.
       </div>
 
       {confirmedRisks.map(risk => {
@@ -721,7 +721,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                 <span style={{ fontWeight: 600, fontSize: 13 }}>{risk.title}</span>
                 <span style={{ marginLeft: 10, fontSize: 11, color: "#9ca3af" }}>{risk.mitigations.length} measure(s)</span>
                 {complete && <span style={{ marginLeft: 8, fontSize: 11, color: "#16a34a", fontWeight: 600 }}>✓</span>}
-                {!complete && <span style={{ marginLeft: 8, fontSize: 11, color: "#f59e0b", fontWeight: 600 }}>⚠ needs mitigation</span>}
+                {!complete && <span style={{ marginLeft: 8, fontSize: 11, color: "#f59e0b", fontWeight: 600 }}>⚠ needs risk management measure</span>}
               </div>
               <span style={{ color: "#9ca3af" }}>{open[risk.id] ? "▲" : "▼"}</span>
             </div>
@@ -757,7 +757,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                         ? { background: "#f0f4ff", color: "#1147E9" }
                         : { background: "#1147E9", color: "#fff" }),
                     }}>
-                    + Add mitigation
+                    + Add measure
                   </button>
                 ) : (
                   <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -768,7 +768,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                         options={[{ value: "", label: "Select…" }, ...HIERARCHY_LEVELS.map(l => ({ value: l.value, label: `${l.label} — ${l.desc}` }))]} />
                     </div>
                     <div style={{ gridColumn: "1 / -1" }}>
-                      <Label required>Mitigation title</Label>
+                      <Label required>Measure title</Label>
                       <Input value={mitDraft[risk.id]?.title ?? ""} onChange={v => setMitDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], title: v } }))}
                         placeholder="e.g. Implement fairness-aware post-processing" />
                     </div>
@@ -796,7 +796,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                 {!hasMit && (
                   <div style={{ marginTop: 12, padding: "10px 14px", background: "#fffbeb", borderRadius: 6, border: "1px solid #fde68a" }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: "#92400e", marginBottom: 6 }}>
-                      No mitigation provided — document justification (completeness check)
+                      No measure provided — document justification (completeness check)
                     </div>
                     <Textarea value={closureNote[risk.id] ?? risk.closure_justification ?? ""}
                       onChange={v => setClosureNote(n => ({ ...n, [risk.id]: v }))}
@@ -870,7 +870,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
 
       {incomplete.length > 0 && (
         <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#92400e" }}>
-          ⚠ {incomplete.length} risk(s) still need a mitigation or documented justification before you can approve.
+          ⚠ {incomplete.length} risk(s) still need a risk management measure or documented justification before you can approve.
         </div>
       )}
 
@@ -938,7 +938,7 @@ function ApproveStep({ register, risks, onApprove }: {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10, marginBottom: 14 }}>
           {[
             { label: "Confirmed risks", value: confirmedRisks.length },
-            { label: "Mitigations", value: totalMitigations },
+            { label: "Measures", value: totalMitigations },
             { label: "Vulnerable group risks", value: vulnerableGroupRisks.length },
             { label: "Misuse scenarios", value: confirmedRisks.reduce((a, r) => a + r.misuse_scenarios.length, 0) },
           ].map(k => (
@@ -1011,7 +1011,7 @@ function ArchivedRegisterCard({ reg, systemName }: { reg: RiskRegister; systemNa
           ✓ APPROVED
         </span>
         <span style={{ fontSize: 12, color: "#556b82" }}>
-          Approved: {fmtDate(reg.approved_at)} · {confirmed.length} risk(s) · {confirmed.reduce((a, r) => a + r.mitigations.length, 0)} mitigation(s)
+          Approved: {fmtDate(reg.approved_at)} · {confirmed.length} risk(s) · {confirmed.reduce((a, r) => a + r.mitigations.length, 0)} measure(s)
         </span>
         {reg.residual_risk_acceptable !== null && (
           <span style={{ fontSize: 11, color: reg.residual_risk_acceptable ? "#1a5c35" : "#8b0000", fontWeight: 600 }}>
@@ -1036,7 +1036,7 @@ function ArchivedRegisterCard({ reg, systemName }: { reg: RiskRegister; systemNa
               <span style={{ fontWeight: 600 }}>{r.title}</span>
               <span style={{ marginLeft: 8, color: "#556b82" }}>{r.category} · {r.severity}</span>
               {r.mitigations.length > 0 && (
-                <span style={{ marginLeft: 8, color: "#1a5c35" }}>{r.mitigations.length} mitigation(s)</span>
+                <span style={{ marginLeft: 8, color: "#1a5c35" }}>{r.mitigations.length} measure(s)</span>
               )}
             </div>
           ))}
