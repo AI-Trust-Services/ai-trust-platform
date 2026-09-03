@@ -1,0 +1,64 @@
+:root {
+  --bg: #ffffff;
+  --fg: #18181b;
+  --muted: #71717a;
+  --border: #e4e4e7;
+  --card: #fafafa;
+  --accent: #2563eb;
+  --accent-fg: #ffffff;
+  --danger: #dc2626;
+  --ok: #16a34a;
+  --warn: #d97706;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--fg); background: var(--bg); }
+
+.wrap { padding: 24px; max-width: 1100px; margin: 0 auto; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+.sub { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.card h3 { margin: 0; font-size: 16px; }
+.card .url { font-size: 12px; color: var(--muted); word-break: break-all; }
+.card .row { display: flex; gap: 8px; margin-top: auto; align-items: center; }
+
+.badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; }
+.badge.running { background: #dcfce7; color: var(--ok); }
+.badge.pending { background: #f4f4f5; color: var(--muted); }
+.badge.deploying { background: #fef3c7; color: var(--warn); }
+.badge.failed { background: #fee2e2; color: var(--danger); }
+.badge.external { background: #e0e7ff; color: var(--accent); }
+
+button {
+  font: inherit;
+  border: 1px solid var(--border);
+  background: #fff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button.danger { color: var(--danger); border-color: #f1c4c4; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+.form { border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 24px; background: var(--card); }
+.form h2 { font-size: 15px; margin: 0 0 12px; }
+.form .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.form input, .form select { padding: 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+.form .actions { margin-top: 12px; }
+.error { color: var(--danger); font-size: 13px; margin-top: 8px; }
+.empty { color: var(--muted); padding: 40px; text-align: center; border: 1px dashed var(--border); border-radius: 10px; }
+
+.embed { position: fixed; inset: 0; border: 0; width: 100%; height: 100%; }

@@ -189,6 +189,10 @@ services:
         condition: service_started
       users-backend:
         condition: service_healthy
+      marketplace-frontend:
+        condition: service_started
+      marketplace-backend:
+        condition: service_healthy
     restart: on-failure
 
   ai-system-registry-frontend:
@@ -272,6 +276,49 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    restart: on-failure
+
+  marketplace-frontend:
+    build:
+      context: ./marketplace/frontend
+      args:
+        VITE_MARKETPLACE_API_BASE: ${VITE_MARKETPLACE_API_BASE:-/api/marketplace/v1}
+    restart: on-failure
+
+  marketplace-backend:
+    build:
+      context: .
+      dockerfile: marketplace/backend/Dockerfile
+    environment:
+      <<: *db-env
+      ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/marketplace"
+      OPENFGA_URL: http://openfga:8080
+      # Local docker-compose deploy path: create per-service nginx containers via the Docker
+      # socket. The compose network is auto-detected from this container at runtime, so no
+      # MARKETPLACE_DOCKER_NETWORK is needed unless overriding.
+      DEPLOY_TARGET: docker
+      # Optional git auth for internal hosts that require a token even for "public" repos
+      # (e.g. github.tools.sap behind SSO). Token file is mounted read-only below; injected
+      # into clone URLs for GIT_TOKEN_HOST only, never persisted. Leave GIT_TOKEN_HOST empty
+      # to disable (anonymous clone).
+      GIT_TOKEN_FILE: ${GIT_TOKEN_FILE:-/run/secrets/git_token}
+      GIT_TOKEN_HOST: ${GIT_TOKEN_HOST:-}
+    volumes:
+      - openfga-config:/config:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${GIT_TOKEN_HOST_FILE:-./.env.example}:/run/secrets/git_token:ro
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      openfga-provision:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: on-failure
 
   db-migrate:

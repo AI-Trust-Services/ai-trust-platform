@@ -11,6 +11,7 @@ from ai_trust_persistence.models.evidence import (
     evidence_obligations,
 )
 from ai_trust_persistence.models.framework import Framework
+from ai_trust_persistence.models.marketplace import MarketplaceService
 from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.obligation import Obligation
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
@@ -22,6 +23,7 @@ __all__ = [
     "CustomRole",
     "ModelCard",
     "Framework",
+    "MarketplaceService",
     "Assessment",
     "Obligation",
     "Control",

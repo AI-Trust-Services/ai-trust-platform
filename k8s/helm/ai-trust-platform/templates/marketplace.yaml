@@ -1,0 +1,151 @@
+{{/* Marketplace: dedicated template (NOT part of the generic `components` loop) because the
+     backend acts as an in-cluster controller — it needs its OWN ServiceAccount + RBAC to
+     create/delete Deployments & Services for the apps a user deploys from a Git URL. The
+     generic components.yaml pins serviceAccountName to the job-waiter SA, which has no such
+     rights, so marketplace lives here instead. DEPLOY_TARGET=kubernetes selects app/k8s_client. */}}
+{{- $backend := "marketplace-backend" }}
+{{- $frontend := "marketplace-frontend" }}
+{{- $sa := "marketplace" }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $sa }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: marketplace-deployer
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: marketplace-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: marketplace-deployer
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $backend }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" $backend) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" $backend) | nindent 8 }}
+    spec:
+      {{- include "ai-trust.imagePullSecrets" $ | nindent 6 }}
+      serviceAccountName: {{ $sa }}
+      initContainers:
+        {{- include "ai-trust.waitForJob" (dict "job" "db-migrate" "image" $.Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "openfga-provision" "image" $.Values.waitImages.kubectl) | nindent 8 }}
+      containers:
+        - name: {{ $backend }}
+          image: {{ $.Values.image.repository }}/{{ $backend }}:{{ $.Values.image.tag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ $.Values.secretName }} }
+          env:
+            - name: ALLOWED_ORIGINS
+              value: {{ $.Values.appPublicUrl | quote }}
+            - name: ROOT_PATH
+              value: "/api/marketplace"
+            - name: OPENFGA_URL
+              value: http://openfga:8080
+            - name: DEPLOY_TARGET
+              value: kubernetes
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - containerPort: 8009
+          volumeMounts:
+            - name: openfga-config
+              mountPath: /config
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8009
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8009
+            initialDelaySeconds: 20
+            periodSeconds: 15
+      volumes:
+        - name: openfga-config
+          persistentVolumeClaim:
+            claimName: openfga-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $backend }}
+spec:
+  selector:
+    {{- include "ai-trust.labels" (dict "name" $backend) | nindent 4 }}
+  ports:
+    - port: 8009
+      targetPort: 8009
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $frontend }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" $frontend) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" $frontend) | nindent 8 }}
+    spec:
+      {{- include "ai-trust.imagePullSecrets" $ | nindent 6 }}
+      containers:
+        - name: {{ $frontend }}
+          image: {{ $.Values.image.repository }}/{{ $frontend }}:{{ $.Values.image.tag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $frontend }}
+spec:
+  selector:
+    {{- include "ai-trust.labels" (dict "name" $frontend) | nindent 4 }}
+  ports:
+    - port: 80
+      targetPort: 80

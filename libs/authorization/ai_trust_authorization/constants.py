@@ -32,6 +32,9 @@ MONITORING_READ = "monitoring:read"
 # IAM
 IAM_MANAGE = "iam:manage"
 
+# Marketplace (deploy services from a Git URL)
+MARKETPLACE_MANAGE = "marketplace:manage"
+
 # All permissions, in matrix order. Used by /me/permissions to enumerate checks.
 ALL_PERMISSIONS = [
     SYSTEMS_READ,
@@ -48,6 +51,7 @@ ALL_PERMISSIONS = [
     ALERTS_MANAGE_RULES,
     MONITORING_READ,
     IAM_MANAGE,
+    MARKETPLACE_MANAGE,
 ]
 
 # Permission string → OpenFGA relation name on platform:global.
@@ -66,6 +70,7 @@ RELATION_BY_PERMISSION = {
     ALERTS_MANAGE_RULES: "can_manage_alert_rules",
     MONITORING_READ: "can_read_monitoring",
     IAM_MANAGE: "can_manage_iam",
+    MARKETPLACE_MANAGE: "can_manage_marketplace",
 }
 
 # The singleton resource all Phase 2 checks run against.
@@ -73,6 +78,8 @@ PLATFORM_OBJECT = "platform:global"
 
 # Built-in roles and the permissions each grants. Seeded by openfga-provision.
 ROLE_PERMISSIONS = {
+    # ALL_PERMISSIONS includes MARKETPLACE_MANAGE, so only the platform administrator
+    # may add/deploy/delete Marketplace services.
     "platform_administrator": ALL_PERMISSIONS,
     "ai_engineer": [
         SYSTEMS_READ, SYSTEMS_WRITE,

@@ -44,6 +44,7 @@ build overview-backend . overview/backend/Dockerfile
 build alerts-backend . alerts/backend/Dockerfile
 build compliance-backend . compliance/backend/Dockerfile
 build decision-trace-analyzer-backend . decision-trace-analyzer/backend/Dockerfile
+build marketplace-backend . marketplace/backend/Dockerfile
 build policy-checker-worker . policy-checker-worker/Dockerfile
 build otel-clickhouse-consumer . consumers/clickhouse-consumer/Dockerfile
 build openfga-provision . infra/openfga-provision/Dockerfile
@@ -89,6 +90,9 @@ build users-frontend ./users/frontend ./users/frontend/Dockerfile \
 
 build decision-trace-analyzer-frontend ./decision-trace-analyzer/frontend ./decision-trace-analyzer/frontend/Dockerfile \
   --build-arg "VITE_DTA_API_BASE=${VITE_DTA_API_BASE}"
+
+build marketplace-frontend ./marketplace/frontend ./marketplace/frontend/Dockerfile \
+  --build-arg "VITE_MARKETPLACE_API_BASE=${VITE_MARKETPLACE_API_BASE:-/api/marketplace/v1}"
 
 echo "==> loading ${#images[@]} images into kind cluster '${CLUSTER_NAME}'"
 kind load docker-image "${images[@]}" --name "$CLUSTER_NAME"

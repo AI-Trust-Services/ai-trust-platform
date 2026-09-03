@@ -36,9 +36,38 @@
     "controls": ["assessments:read", "assessments:write", "assessments:approve"],
     "evidence": ["evidence:read", "evidence:write", "evidence:approve"],
     "users": ["iam:manage"],
+    "marketplace": ["marketplace:manage"],
   };
   const canSee = (seg) =>
     !PAGE_PERMISSIONS[seg] || PAGE_PERMISSIONS[seg].some((p) => permissions.includes(p));
+
+  // Marketplace-deployed services become nav children dynamically. Internal (we-deployed-it)
+  // services open SAME-WINDOW embedded (viewUrl → the marketplace embed page, served
+  // same-origin so CSP frame-ancestors 'self' allows the iframe). External services open in a
+  // NEW TAB via Luigi's stock externalLink. Failure here must not break the rest of the nav.
+  let serviceChildren = [];
+  try {
+    const svcRes = await fetch("/api/marketplace/v1/services?status=running", { cache: "no-store" });
+    if (svcRes.ok) {
+      const running = await svcRes.json();
+      serviceChildren = (running || []).map((s) =>
+        s.source === "external"
+          ? {
+              pathSegment: s.name,
+              label: s.label,
+              externalLink: { url: s.service_host || s.git_url, sameWindow: false },
+            }
+          : {
+              pathSegment: s.name,
+              label: s.label,
+              viewUrl: "/marketplace/#/embed/" + s.name,
+              navigationContext: "service-" + s.name,
+            }
+      );
+    }
+  } catch (e) {
+    serviceChildren = [];
+  }
 
   const base = window.location.origin;
   const children = [
@@ -120,7 +149,25 @@
         navigationContext: "users",
         viewGroup: "users",
       },
+      {
+        pathSegment: "marketplace",
+        label: "Marketplace",
+        icon: "cart",
+        viewUrl: "/marketplace/",
+        navigationContext: "marketplace",
+      },
   ].filter((node) => canSee(node.pathSegment));
+
+  // "Services" parent lists the running Marketplace services. Shown only when at least one
+  // service is running, so the menu stays clean on a fresh install.
+  if (serviceChildren.length > 0) {
+    children.push({
+      pathSegment: "services",
+      label: "Services",
+      icon: "grid",
+      children: serviceChildren,
+    });
+  }
 
   Luigi.setConfig({
   navigation: {
