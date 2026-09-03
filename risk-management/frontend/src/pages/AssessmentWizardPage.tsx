@@ -73,7 +73,7 @@ function ApprovedBanner({ register }: { register: { approver_username?: string |
   );
 }
 
-function exportReport(systemName: string, register: RiskRegister, risks: RiskEntry[]) {
+function exportReport(systemName: string, register: RiskRegister, risks: RiskEntry[], archived = false) {
   const confirmed = risks.filter(r => r.status === "confirmed");
   const fmtDate = (d?: string | null) => d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
   const levelBadge = (l?: string | null) => {
@@ -112,12 +112,13 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
   `).join("");
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>Risk Assessment Report — ${systemName}</title>
+    <title>Risk Management Report — ${systemName}</title>
     <style>
       body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 900px; margin: 40px auto; color: #111827; }
       @media print { body { margin: 20px; } .no-print { display: none; } }
       h1 { font-size: 22px; margin-bottom: 4px; }
       .meta { font-size: 12px; color: #556b82; margin-bottom: 24px; }
+      .archived-banner { background: #fef9c3; border: 2px solid #fde047; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #713f12; font-weight: 700; }
       .approved-badge { background: #d5f5e3; border: 1px solid #9cdcb8; border-radius: 8px; padding: 10px 16px; margin-bottom: 20px; font-size: 13px; color: #1a5c35; font-weight: 700; }
       .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #556b82; margin: 20px 0 10px; border-bottom: 1px solid #e4e4e7; padding-bottom: 6px; }
       .scope-box { background: #f8f9fa; border-radius: 8px; padding: 14px 16px; font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
@@ -132,8 +133,9 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
       <button onclick="window.print()" style="background:#1147E9;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;margin-right:8px">🖨 Print / Save as PDF</button>
       <button onclick="window.close()" style="background:#f4f4f5;color:#374151;border:none;border-radius:6px;padding:8px 16px;font-size:13px;cursor:pointer">Close</button>
     </div>
-    <h1>Risk Assessment Report</h1>
+    <h1>Risk Management Report</h1>
     <div class="meta">System: <strong>${systemName}</strong> · Register: ${register.id} · Generated: ${fmtDate(new Date().toISOString())}</div>
+    ${archived ? `<div class="archived-banner">⚠ ARCHIVED — This report is from a previous risk management cycle. It is retained for audit purposes only and does not reflect the current state of risk management for this system.</div>` : ""}
     ${register.status === "approved" ? `
       <div class="approved-badge">✅ APPROVED — by ${register.approver_username ?? "—"} on ${fmtDate(register.approved_at)} · Residual risk: ${register.residual_risk_acceptable ? "Acceptable" : "Not acceptable"}</div>
     ` : `<div style="background:#fff3c4;border-radius:8px;padding:10px 16px;margin-bottom:20px;font-size:13px;color:#92400e">⚠ Status: ${register.status.toUpperCase()} — not yet approved</div>`}
@@ -990,7 +992,7 @@ function ApproveStep({ register, risks, onApprove }: {
 }
 
 // ── Archived register summary card ───────────────────────────────────────────
-function ArchivedRegisterCard({ reg }: { reg: RiskRegister }) {
+function ArchivedRegisterCard({ reg, systemName }: { reg: RiskRegister; systemName: string }) {
   const [open, setOpen] = useState(false);
   const confirmed = reg.risks.filter(r => r.status === "confirmed");
   const fmtDate = (d?: string | null) => d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
@@ -1010,7 +1012,13 @@ function ArchivedRegisterCard({ reg }: { reg: RiskRegister }) {
             Residual: {reg.residual_risk_acceptable ? "Acceptable" : "Not acceptable"}
           </span>
         )}
-        <span style={{ marginLeft: "auto", color: "#9ca3af" }}>{open ? "▲" : "▼"}</span>
+        <button
+          onClick={e => { e.stopPropagation(); exportReport(systemName, reg, reg.risks, true); }}
+          style={{ marginLeft: "auto", background: "#f4f4f5", color: "#374151", border: "1px solid #e4e4e7", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+        >
+          📄 Export
+        </button>
+        <span style={{ color: "#9ca3af" }}>{open ? "▲" : "▼"}</span>
       </div>
       {open && (
         <div style={{ padding: "14px 18px" }}>
@@ -1239,7 +1247,7 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
           <div style={{ fontSize: 12, fontWeight: 700, color: "#556b82", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12, borderTop: "1px solid #e4e4e7", paddingTop: 20 }}>
             Previous assessment versions ({archivedRegisters.length})
           </div>
-          {archivedRegisters.map(r => <ArchivedRegisterCard key={r.id} reg={r} />)}
+          {archivedRegisters.map(r => <ArchivedRegisterCard key={r.id} reg={r} systemName={systemName} />)}
         </div>
       )}
 
