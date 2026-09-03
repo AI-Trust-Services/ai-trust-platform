@@ -83,6 +83,7 @@ Explain: Art. 5 prohibited practices — no mitigation path exists, documentatio
 ### Step 8 — Start a brand new assessment
 Go back to the list. Click "Start" (green) on Employee Performance Analytics — this system has no risk assessment yet.
 Walk me through: filling in the scope, adding the first risk, confirming it, adding a mitigation, setting residual risk, approving.
+Explain: Art. 9(2) requires that a risk management system be established before a high-risk AI system is put into service. A HIGH-tier system with no assessment is non-compliant from day one.
 
 ## After the walkthrough
 

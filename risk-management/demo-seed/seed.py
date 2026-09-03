@@ -357,13 +357,13 @@ def main():
 
     print("\n── Setting realistic historical dates ──")
     print("  (Requires direct DB access via docker exec — skipping if not available)")
-    _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id)
+    _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id)
 
-    print("\n✅ Demo seed complete. 5 systems registered, risk registers populated.")
+    print("\n✅ Demo seed complete. 6 systems registered, risk registers populated.")
     print("   Open http://localhost:8080/risk-management/ to explore.")
 
 
-def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id):
+def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id):
     """Back-date registers and triggers to simulate a realistic history."""
     import subprocess
 
@@ -422,6 +422,8 @@ def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id):
     # Social Scoring: acknowledge all triggers
     psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{ss_id}';")
     psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{hr_id}';")
+    # Employee Performance Analytics: no register, acknowledge any auto-created triggers
+    psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{epa_id}';")
 
     print("  Dates updated.")
 
