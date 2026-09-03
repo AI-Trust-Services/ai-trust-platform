@@ -43,7 +43,7 @@ Navigate to **Risk Management** in the sidebar.
 | HR Candidate Screening AI | **HIGH** (employment) | 4 | ✓ Up to date |
 | Credit Risk Assessment Model | **HIGH** (credit scoring) | 3 | ⚠ Restart due (unacknowledged trigger) |
 | Customer Support Chatbot | **LIMITED** (chatbot) | 2 | ⚠ Overdue (>6 months) |
-| Medical Image Diagnosis Assistant | MINIMAL | 2 approved + 1 in progress | Resume |
+| Medical Image Diagnosis Assistant | MINIMAL | 2 approved + 1 in progress | Assessment not completed (Resume) |
 | Social Scoring Pilot | **PROHIBITED** (Art. 5(1)(c)) | 1 | ✓ Approved (not acceptable) |
 | Employee Performance Analytics | **HIGH** (employment) | — | Never assessed |
 
@@ -71,7 +71,8 @@ Open **Risk Management** in the sidebar. You'll see:
   - 🔴 **Restart** — re-assessment triggered (>6 months or system changed)
 - **Trigger badge** — "1 trigger(s)" with ⓘ tooltip explaining what triggers are
 - **Overdue badge** — ">6 months" with ⓘ tooltip citing Art. 9(1)
-- **Never assessed badge** — shown for high-risk systems with no completed assessment, citing Art. 9(2)
+- **Never assessed badge** — shown for high-risk systems with no register at all, citing Art. 9(2)
+- **Assessment not completed badge** — shown when a register exists but was never approved
 
 ### Assessment wizard (5 steps)
 
