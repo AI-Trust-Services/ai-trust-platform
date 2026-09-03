@@ -201,7 +201,9 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
                       <div style={{ fontSize: 11, color: "#dc2626", marginTop: 2, display: "flex", alignItems: "center" }}>
                         {sys.unacknowledged_triggers > 0
                           ? <><span>{sys.unacknowledged_triggers} trigger(s)</span><InfoTooltip text={triggerTooltip} /></>
-                          : <><span>Overdue (&gt;6 months)</span><InfoTooltip text="EU AI Act Art. 9(1) requires iterative risk management. An assessment is overdue when more than 6 months have passed since the last approved assessment with no new cycle started. A new assessment must be initiated to maintain compliance." /></>}
+                          : sys.last_assessment_completed_at
+                            ? <><span>Overdue (&gt;6 months)</span><InfoTooltip text="EU AI Act Art. 9(1) requires iterative risk management. An assessment is overdue when more than 6 months have passed since the last approved assessment with no new cycle started. A new assessment must be initiated to maintain compliance." /></>
+                            : <><span>Never assessed</span><InfoTooltip text="EU AI Act Art. 9(2) requires that a risk management system be established before a high-risk AI system is put into service. This system has no completed risk assessment." /></>}
                       </div>
                     )}
                   </td>

@@ -46,7 +46,7 @@ Work through these steps in order. For each step:
 ### Step 1 — Systems list overview
 Navigate to Risk Management in the sidebar (warning icon). 
 Show me: the KPI row, status dots, action button colours (Open / Resume / Restart / Start), trigger badges with tooltips, overdue badges with tooltips. 
-Point out: Credit Risk has a **Restart** button because of an unacknowledged re-assessment trigger; Customer Support Chatbot shows **Overdue (>6 months)** because its last assessment was 9 months ago with no trigger.
+Point out: Credit Risk has a **Restart** button because of an unacknowledged re-assessment trigger; Customer Support Chatbot shows **Overdue (>6 months)** because its last assessment was 9 months ago with no trigger; Employee Performance Analytics shows **Never assessed** because it is a HIGH-risk system with no completed assessment at all.
 Explain: which systems need action and why — and the difference between the two paths to reassessment_needed.
 
 ### Step 2 — Explore a completed HIGH-risk assessment (HR Screening or Credit Risk)
