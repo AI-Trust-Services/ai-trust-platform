@@ -567,14 +567,18 @@ def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_
              f"updated_at=NOW()-INTERVAL '{offset}' WHERE id='{reg_id}';")
     psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{cs_id}';")
 
-    # Medical Imaging: 2 approved — 13mo, 1mo ago; v3 draft stays recent
+    # Medical Imaging: 2 approved/archived — 13mo, 1mo ago; v3 draft stays recent
     md_regs = _req(RISK_BASE, f"/v1/systems/{md_id}/registers")
-    approved = [r["id"] for r in md_regs if r["status"] == "approved"]
-    for reg_id, offset in zip(sorted(approved), ["13 months", "1 month"]):
+    completed = [r["id"] for r in md_regs if r["status"] in ("approved", "archived")]
+    for reg_id, offset in zip(sorted(completed), ["13 months", "1 month"]):
         psql(f"UPDATE risk_registers SET created_at=NOW()-INTERVAL '{offset}', "
              f"approved_at=NOW()-INTERVAL '{offset}', "
              f"last_assessment_completed_at=NOW()-INTERVAL '{offset}', "
              f"updated_at=NOW()-INTERVAL '{offset}' WHERE id='{reg_id}';")
+    # Set draft register's last_assessment_completed_at to the most recent completed cycle
+    # so reassessment_needed stays False while the new cycle is in progress
+    psql(f"UPDATE risk_registers SET last_assessment_completed_at=NOW()-INTERVAL '1 month' "
+         f"WHERE ai_system_id='{md_id}' AND status='draft';")
     psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{md_id}';")
 
     # Social Scoring: acknowledge all triggers
