@@ -207,6 +207,19 @@ def main():
         sys_ss.pop(k, None)
     _req(REGISTRY_BASE, f"/v1/systems/{ss_id}", "PUT", sys_ss)
 
+    epa_id = register_system({
+        "name": "Employee Performance Analytics",
+        "description": "Analyses employee productivity metrics and flags underperformers for HR review.",
+        "assignee_username": ADMIN, "lifecycle": "development",
+        "intended_purpose": "Support HR decisions on performance reviews and promotions",
+        "department": "Human Resources",
+        "is_employment_related": True,
+        "annex_iii_flags": [], "art_5_flags": [],
+        "is_gpai": False, "is_chatbot": False, "generates_synthetic_content": False,
+        "training_compute_flops": 0,
+    })
+    # No risk register created — demonstrates green "Start" button
+
     print("\n── Creating risk registers ──")
 
     # ── HR Screening — 4 versions ─────────────────────────────────────────────

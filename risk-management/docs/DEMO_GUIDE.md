@@ -45,6 +45,7 @@ Navigate to **Risk Management** in the sidebar.
 | Customer Support Chatbot | **LIMITED** (chatbot) | 2 | ⚠ Overdue (>6 months) |
 | Medical Image Diagnosis Assistant | MINIMAL | 2 approved + 1 in progress | Resume |
 | Social Scoring Pilot | **PROHIBITED** (Art. 5(1)(c)) | 1 | ✓ Approved (not acceptable) |
+| Employee Performance Analytics | **HIGH** (employment) | — | Start (no assessment yet) |
 
 ### Configuration
 

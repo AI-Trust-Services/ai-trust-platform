@@ -81,8 +81,8 @@ Show me: the approved register with residual risk marked "Not acceptable", the c
 Explain: Art. 5 prohibited practices — no mitigation path exists, documentation of the decision is still required.
 
 ### Step 8 — Start a brand new assessment
-Go back to the list. If any system shows "Start assessment", click it and walk through the full wizard from scratch.
-Otherwise, register a new system in the Registry module first, then come back.
+Go back to the list. Click "Start" (green) on Employee Performance Analytics — this system has no risk assessment yet.
+Walk me through: filling in the scope, adding the first risk, confirming it, adding a mitigation, setting residual risk, approving.
 
 ## After the walkthrough
 
