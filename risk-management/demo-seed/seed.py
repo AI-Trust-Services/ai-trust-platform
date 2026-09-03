@@ -220,6 +220,30 @@ def main():
     })
     # No risk register created — demonstrates green "Start" button
 
+    kb_id = register_system({
+        "name": "Internal Knowledge Base Search",
+        "description": "AI-powered semantic search over internal company documents and wikis.",
+        "assignee_username": ADMIN, "lifecycle": "operation",
+        "intended_purpose": "Help employees find relevant internal documentation faster",
+        "department": "IT",
+        "annex_iii_flags": [], "art_5_flags": [],
+        "is_gpai": False, "is_chatbot": False, "generates_synthetic_content": False,
+        "training_compute_flops": 0,
+    })
+    # No risk register — demonstrates green "Risk management optional" badge
+
+    mtt_id = register_system({
+        "name": "Meeting Transcription Tool",
+        "description": "Transcribes and summarises recorded internal meetings using speech-to-text AI.",
+        "assignee_username": ADMIN, "lifecycle": "operation",
+        "intended_purpose": "Automatically generate meeting notes and action items from recordings",
+        "department": "Operations",
+        "annex_iii_flags": [], "art_5_flags": [],
+        "is_gpai": False, "is_chatbot": False, "generates_synthetic_content": False,
+        "training_compute_flops": 0,
+    })
+    # Voluntary risk register created below — demonstrates "Voluntary — risk management optional" badge
+
     print("\n── Creating risk registers ──")
 
     # ── HR Screening — 4 versions ─────────────────────────────────────────────
@@ -355,15 +379,35 @@ def main():
         "EU AI Act Art. 5(1)(c). Project must be terminated. No deployment path exists.")
     print(f"  v1 approved ({reg})")
 
+    # ── Meeting Transcription Tool — 1 voluntary version ─────────────────────
+    print("\nMeeting Transcription Tool (1 voluntary version)…")
+    reg = create_register(mtt_id,
+        "Voluntary risk management record for AI-powered meeting transcription tool. "
+        "Scope covers: audio data privacy, transcription accuracy, PII handling in meeting content, "
+        "and retention of recordings. Risk management is performed on a voluntary basis as the system "
+        "falls under the minimal risk tier of the EU AI Act.",
+        notes="Voluntary — system is minimal risk under EU AI Act.")
+    r1 = add_risk(reg, title="Personal data in meeting recordings processed without explicit consent",
+                  category="privacy", severity="medium", likelihood="possible", risk_type="known",
+                  risk_owner="privacy.officer@company.com",
+                  impact="Recordings may contain sensitive personal data; GDPR compliance risk.")
+    confirm_risk(r1, "unlikely", "low")
+    add_mitigation(r1, "mitigate", "Participant consent banner and opt-out mechanism",
+                   "Notify all participants at recording start; provide opt-out; delete on request.")
+    approve_register(reg, True,
+        "Residual privacy risk is acceptable after consent controls. "
+        "This voluntary record documents due diligence beyond EU AI Act requirements for minimal risk systems.")
+    print(f"  v1 approved ({reg})")
+
     print("\n── Setting realistic historical dates ──")
     print("  (Requires direct DB access via docker exec — skipping if not available)")
-    _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id)
+    _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_id)
 
-    print("\n✅ Demo seed complete. 6 systems registered, risk registers populated.")
+    print("\n✅ Demo seed complete. 8 systems registered, risk registers populated.")
     print("   Open http://localhost:8080/risk-management/ to explore.")
 
 
-def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id):
+def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_id):
     """Back-date registers and triggers to simulate a realistic history."""
     import subprocess
 
@@ -424,6 +468,9 @@ def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id):
     psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{hr_id}';")
     # Employee Performance Analytics: no register, acknowledge any auto-created triggers
     psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{epa_id}';")
+    # Minimal risk systems: acknowledge all triggers (risk management is optional)
+    psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{kb_id}';")
+    psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{mtt_id}';")
 
     print("  Dates updated.")
 

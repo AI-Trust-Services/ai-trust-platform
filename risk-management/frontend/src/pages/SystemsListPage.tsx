@@ -217,6 +217,18 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
                         <InfoTooltip text="Risk management is optional for this tier under EU AI Act. A process has been started but not yet approved." />
                       </div>
                     )}
+                    {!isHighRisk && !sys.active_register_id && (
+                      <div style={{ fontSize: 11, color: "#16a34a", marginTop: 2, display: "flex", alignItems: "center" }}>
+                        <span>Risk management optional</span>
+                        <InfoTooltip text="EU AI Act does not require formal risk management for this tier. Starting a voluntary risk management process is good practice and can support internal governance." />
+                      </div>
+                    )}
+                    {!isHighRisk && sys.last_assessment_completed_at && (
+                      <div style={{ fontSize: 11, color: "#16a34a", marginTop: 2, display: "flex", alignItems: "center" }}>
+                        <span>Voluntary — risk management optional</span>
+                        <InfoTooltip text="EU AI Act does not require formal risk management for this tier. This record was created voluntarily as a good governance practice." />
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: "12px 14px" }}>
                     {sys.active_register_status ? (
