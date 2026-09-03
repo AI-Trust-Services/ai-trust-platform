@@ -225,7 +225,7 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
                     )}
                     {!isHighRisk && sys.last_assessment_completed_at && (
                       <div style={{ fontSize: 11, color: "#16a34a", marginTop: 2, display: "flex", alignItems: "center" }}>
-                        <span>Voluntary — risk management optional</span>
+                        <span>Risk management optional</span>
                         <InfoTooltip text="EU AI Act does not require formal risk management for this tier. This record was created voluntarily as a good governance practice." />
                       </div>
                     )}

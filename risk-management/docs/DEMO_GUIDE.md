@@ -47,7 +47,7 @@ Navigate to **Risk Management** in the sidebar.
 | Social Scoring Pilot | **PROHIBITED** (Art. 5(1)(c)) | 1 | ✓ Approved (not acceptable) |
 | Employee Performance Analytics | **HIGH** (employment) | — | No risk management (Start) |
 | Internal Knowledge Base Search | MINIMAL | — | Risk management optional |
-| Meeting Transcription Tool | MINIMAL | 1 voluntary | ✓ Voluntary — risk management optional |
+| Meeting Transcription Tool | MINIMAL | 1 voluntary | ✓ Risk management optional |
 
 ### Configuration
 
