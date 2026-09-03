@@ -16,7 +16,7 @@ function Badge({ text, style }: { text: string; style?: React.CSSProperties }) {
     <span style={{
       display: "inline-flex", alignItems: "center", padding: "2px 8px",
       borderRadius: 10, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap",
-      background: "#eef1f4", color: "#556b82", ...style,
+      background: "#eef1f4", color: "var(--text-secondary)", ...style,
     }}>
       {text}
     </span>
@@ -24,7 +24,7 @@ function Badge({ text, style }: { text: string; style?: React.CSSProperties }) {
 }
 
 function TierBadge({ tier }: { tier: string }) {
-  const c = TIER_COLORS[tier] ?? { bg: "#eef1f4", color: "#556b82", border: "#dde0e4" };
+  const c = TIER_COLORS[tier] ?? { bg: "#eef1f4", color: "var(--text-secondary)", border: "#dde0e4" };
   return <Badge text={tier.toUpperCase()} style={{ background: c.bg, color: c.color, border: `1px solid ${c.border}` }} />;
 }
 
@@ -114,8 +114,8 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
   const highRisk = systems.filter(s => s.system_tier === "high" || s.system_tier === "prohibited").length;
 
   if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, gap: 12, color: "#556b82" }}>
-      <span style={{ width: 20, height: 20, border: "2px solid #1147E9", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, gap: 12, color: "var(--text-secondary)" }}>
+      <span style={{ width: 20, height: 20, border: "2px solid var(--brand)", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />
       Loading systems…
     </div>
   );
@@ -129,8 +129,8 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
   return (
     <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", maxWidth: 1100, margin: "0 auto", padding: "24px 20px" }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>Risk Management</h1>
-        <p style={{ fontSize: 13, color: "#556b82", marginTop: 4 }}>Art. 9 EU AI Act — iterative risk assessment for all registered AI systems</p>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", margin: 0 }}>Risk Management</h1>
+        <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 4 }}>Art. 9 EU AI Act — iterative risk assessment for all registered AI systems</p>
       </div>
 
       {/* KPI row */}
@@ -141,9 +141,9 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
           { label: "Re-assessment needed", value: needsReassessment, color: "#f59e0b" },
           { label: "Up to date", value: systems.length - needsReassessment, color: "#16a34a" },
         ].map(kpi => (
-          <div key={kpi.label} style={{ flex: 1, minWidth: 120, background: "#f8f9fa", borderRadius: 8, padding: "12px 16px", textAlign: "center" }}>
+          <div key={kpi.label} style={{ flex: 1, minWidth: 120, background: "var(--bg)", borderRadius: 8, padding: "12px 16px", textAlign: "center" }}>
             <div style={{ fontSize: 24, fontWeight: 700, color: kpi.color }}>{kpi.value}</div>
-            <div style={{ fontSize: 11, color: "#556b82", marginTop: 3, fontWeight: 500 }}>{kpi.label}</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3, fontWeight: 500 }}>{kpi.label}</div>
           </div>
         ))}
       </div>
@@ -152,16 +152,16 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
       <input
         type="text" value={search} onChange={e => setSearch(e.target.value)}
         placeholder="Filter systems…"
-        style={{ width: "100%", border: "1px solid #e4e4e7", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 16, boxSizing: "border-box" }}
+        style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 16, boxSizing: "border-box" }}
       />
 
       {/* Systems table */}
-      <div style={{ background: "#fff", border: "1px solid #e4e4e7", borderRadius: 10, overflow: "hidden" }}>
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr style={{ background: "#f8f9fa" }}>
+            <tr style={{ background: "var(--bg)" }}>
               {["", "System", "Tier", "Lifecycle", "Last assessment", "Status", "Action"].map(h => (
-                <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#556b82", textTransform: "uppercase", letterSpacing: "0.5px", borderBottom: "2px solid #e4e4e7" }}>
+                <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", borderBottom: "2px solid var(--border)" }}>
                   {h}
                 </th>
               ))}
@@ -170,7 +170,7 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ padding: "32px", textAlign: "center", color: "#556b82" }}>
+                <td colSpan={7} style={{ padding: "32px", textAlign: "center", color: "var(--text-secondary)" }}>
                   {search ? "No systems match the filter." : "No AI systems registered yet."}
                 </td>
               </tr>
@@ -184,7 +184,7 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
                 : `${sys.unacknowledged_triggers} risk reviews required`;
               return (
                 <tr key={sys.system_id} style={{
-                  borderBottom: "1px solid #e4e4e7",
+                  borderBottom: "1px solid var(--border)",
                   background: isHighRisk && sys.reassessment_needed ? "#fff5f5" : "#fff",
                   transition: "background 0.1s",
                 }}>
@@ -192,16 +192,16 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
                     <StatusDot reassessmentNeeded={sys.reassessment_needed} tier={sys.system_tier} />
                   </td>
                   <td style={{ padding: "12px 14px" }}>
-                    <div style={{ fontWeight: 600, color: "#111827" }}>{sys.system_name}</div>
-                    <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{sys.system_id}</div>
+                    <div style={{ fontWeight: 600, color: "var(--text)" }}>{sys.system_name}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>{sys.system_id}</div>
                   </td>
                   <td style={{ padding: "12px 14px" }}>
                     <TierBadge tier={sys.system_tier} />
                   </td>
-                  <td style={{ padding: "12px 14px", color: "#556b82" }}>
+                  <td style={{ padding: "12px 14px", color: "var(--text-secondary)" }}>
                     {sys.system_lifecycle}
                   </td>
-                  <td style={{ padding: "12px 14px", color: "#556b82" }}>
+                  <td style={{ padding: "12px 14px", color: "var(--text-secondary)" }}>
                     {formatDate(sys.last_assessment_completed_at)}
                     {sys.reassessment_needed && isHighRisk && (
                       <div style={{ fontSize: 11, color: "#dc2626", marginTop: 2, display: "flex", alignItems: "center" }}>

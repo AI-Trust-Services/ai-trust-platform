@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLuigi } from "./hooks/useLuigi";
+import { useTheme } from "./hooks/useTheme";
 import SystemsListPage from "./pages/SystemsListPage";
 import AssessmentWizardPage from "./pages/AssessmentWizardPage";
 
@@ -11,6 +12,7 @@ type View =
 
 export default function App() {
   useLuigi();
+  useTheme();
 
   const [view, setView] = useState<View>({ type: "list" });
   const [backendOk, setBackendOk] = useState<boolean | null>(null);
@@ -26,7 +28,7 @@ export default function App() {
   }, []);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8f9fa" }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
       {backendOk === false && (
         <div style={{
           background: "#dc2626", color: "#fff",

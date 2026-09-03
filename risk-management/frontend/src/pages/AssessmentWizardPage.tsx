@@ -20,7 +20,7 @@ const SEV_BG: Record<string, string> = {
 function Select({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
   return (
     <select value={value} onChange={e => onChange(e.target.value)}
-      style={{ width: "100%", border: "1px solid #e4e4e7", borderRadius: 6, padding: "6px 8px", fontSize: 13 }}>
+      style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 8px", fontSize: 13 }}>
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   );
@@ -29,20 +29,20 @@ function Select({ value, onChange, options }: { value: string; onChange: (v: str
 function Textarea({ value, onChange, placeholder, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
   return (
     <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows}
-      style={{ width: "100%", border: "1px solid #e4e4e7", borderRadius: 6, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }} />
+      style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }} />
   );
 }
 
 function Input({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <input type="text" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-      style={{ width: "100%", border: "1px solid #e4e4e7", borderRadius: 6, padding: "6px 10px", fontSize: 13, boxSizing: "border-box" }} />
+      style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, boxSizing: "border-box" }} />
   );
 }
 
 function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
+    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", display: "block", marginBottom: 4 }}>
       {children}{required && <span style={{ color: "#dc2626" }}> *</span>}
     </label>
   );
@@ -50,7 +50,7 @@ function Label({ children, required }: { children: React.ReactNode; required?: b
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid #e4e4e7", borderRadius: 10, padding: "20px 24px", marginBottom: 16, ...style }}>
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "20px 24px", marginBottom: 16, ...style }}>
       {children}
     </div>
   );
@@ -257,7 +257,7 @@ function ScopeStep({ register, onNext, onPatch }: {
           <Label required>Scope description</Label>
           <Textarea value={scope} onChange={setScope} rows={4}
             placeholder="Describe what is in scope for this risk assessment: intended purpose, deployment context, data inputs, affected populations, operational environment…" />
-          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
             Include both known risks (already documented) and foreseeable risks (reasonably anticipatable misuse or failure modes).
           </div>
         </div>
@@ -268,7 +268,7 @@ function ScopeStep({ register, onNext, onPatch }: {
       </Card>
       <ErrorMsg msg={err} />
       <button onClick={handleNext} disabled={saving}
-        style={{ background: "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
+        style={{ background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
         {saving ? "Saving…" : "Next: Identify risks →"}
       </button>
     </div>
@@ -388,19 +388,19 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
         <Card>
           <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700 }}>Identified risks ({risks.length})</h3>
           {risks.map(r => (
-            <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid #e4e4e7" }}>
+            <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
-                <div style={{ fontSize: 12, color: "#556b82", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   <span>{r.category} · {r.risk_type}</span>
                   {r.risk_level_autocalculated && <RiskLevelBadge level={r.risk_level_autocalculated} />}
-                  {r.ai_lifecycle_phase && <span style={{ background: "#eef1f4", padding: "1px 6px", borderRadius: 8, fontSize: 11 }}>{r.ai_lifecycle_phase}</span>}
-                  {r.risk_owner && <span style={{ fontSize: 11, color: "#9ca3af" }}>owner: {r.risk_owner}</span>}
+                  {r.ai_lifecycle_phase && <span style={{ background: "var(--bg)", padding: "1px 6px", borderRadius: 8, fontSize: 11 }}>{r.ai_lifecycle_phase}</span>}
+                  {r.risk_owner && <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>owner: {r.risk_owner}</span>}
                   {r.affects_vulnerable_groups && <span style={{ color: "#8b3a00" }}>⚠ vulnerable groups</span>}
                 </div>
               </div>
               <button onClick={() => removeRisk(r.id)}
-                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 16 }}>×</button>
+                style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: 16 }}>×</button>
             </div>
           ))}
         </Card>
@@ -442,7 +442,7 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
               ]} />
           </div>
           <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Risk level (auto):</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>Risk level (auto):</span>
             <RiskLevelBadge level={calcRiskLevel(draft.severity, draft.likelihood)} />
           </div>
           <div>
@@ -476,7 +476,7 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
                 <Label required>Vulnerable groups affected</Label>
                 <Input value={draft.vulnerable_groups} onChange={v => setDraft(d => ({ ...d, vulnerable_groups: v }))}
                   placeholder="e.g. Children, elderly persons, people with disabilities (comma-separated)" />
-                <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
                   Mandatory per Art. 9(9) — EU AI Act requires special attention for these groups.
                 </div>
               </div>
@@ -485,7 +485,7 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
         </div>
         <ErrorMsg msg={err} />
         <button onClick={addRisk} disabled={saving}
-          style={{ background: "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
+          style={{ background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
           {saving ? "Adding…" : "+ Add risk"}
         </button>
       </Card>
@@ -547,12 +547,12 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
         {[
           { label: "Total", value: risks.length, color: "#1147E9" },
           { label: "Confirmed", value: confirmed, color: "#16a34a" },
-          { label: "Dismissed", value: risks.filter(r => r.status === "dismissed").length, color: "#9ca3af" },
+          { label: "Dismissed", value: risks.filter(r => r.status === "dismissed").length, color: "var(--text-secondary)" },
           { label: "Pending", value: risks.filter(r => r.status === "identified").length, color: "#f59e0b" },
         ].map(k => (
-          <div key={k.label} style={{ flex: 1, minWidth: 90, background: "#f8f9fa", borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
+          <div key={k.label} style={{ flex: 1, minWidth: 90, background: "var(--bg)", borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 11, color: "#556b82", marginTop: 2 }}>{k.label}</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>{k.label}</div>
           </div>
         ))}
       </div>
@@ -583,7 +583,7 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
                 )}
                 {risk.status !== "dismissed" && (
                   <button onClick={e => { e.stopPropagation(); dismissRisk(risk); }}
-                    style={{ fontSize: 11, padding: "4px 10px", background: "#f4f4f5", color: "#556b82", border: "none", borderRadius: 4, cursor: "pointer" }}>
+                    style={{ fontSize: 11, padding: "4px 10px", background: "var(--bg)", color: "var(--text-secondary)", border: "none", borderRadius: 4, cursor: "pointer" }}>
                     Dismiss
                   </button>
                 )}
@@ -591,21 +591,21 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
                   <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 600 }}>✓ confirmed</span>
                 )}
               </div>
-              <span style={{ color: "#9ca3af" }}>{open[risk.id] ? "▲" : "▼"}</span>
+              <span style={{ color: "var(--text-secondary)" }}>{open[risk.id] ? "▲" : "▼"}</span>
             </div>
 
             {open[risk.id] && (
               <div style={{ padding: "0 20px 16px", borderTop: "1px solid #f4f4f5" }}>
-                {risk.description && <p style={{ fontSize: 13, color: "#374151", marginTop: 12 }}>{risk.description}</p>}
+                {risk.description && <p style={{ fontSize: 13, color: "var(--text)", marginTop: 12 }}>{risk.description}</p>}
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-                  <span style={{ fontSize: 11, background: "#eef1f4", color: "#556b82", padding: "2px 8px", borderRadius: 10 }}>
+                  <span style={{ fontSize: 11, background: "var(--bg)", color: "var(--text-secondary)", padding: "2px 8px", borderRadius: 10 }}>
                     {risk.risk_type === "foreseeable" ? "⚡ Foreseeable" : "📋 Known"} (Art. 9(2)(a))
                   </span>
-                  <span style={{ fontSize: 11, background: "#eef1f4", color: "#556b82", padding: "2px 8px", borderRadius: 10 }}>
+                  <span style={{ fontSize: 11, background: "var(--bg)", color: "var(--text-secondary)", padding: "2px 8px", borderRadius: 10 }}>
                     Likelihood: {risk.likelihood}
                   </span>
                   {risk.category && (
-                    <span style={{ fontSize: 11, background: "#eef1f4", color: "#556b82", padding: "2px 8px", borderRadius: 10 }}>
+                    <span style={{ fontSize: 11, background: "var(--bg)", color: "var(--text-secondary)", padding: "2px 8px", borderRadius: 10 }}>
                       {risk.category}
                     </span>
                   )}
@@ -613,7 +613,7 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
 
                 {/* Misuse scenarios */}
                 <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#556b82", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
                     Misuse scenarios (Art. 9(2)(a))
                   </div>
                   {risk.misuse_scenarios.map(ms => (
@@ -664,11 +664,11 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
                       </div>
                       <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
                         <button onClick={() => addMisuseScenario(risk.id)} disabled={saving[risk.id]}
-                          style={{ fontSize: 12, background: "#1147E9", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                          style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
                           Save
                         </button>
                         <button onClick={() => setAddMisuse(a => ({ ...a, [risk.id]: false }))}
-                          style={{ fontSize: 12, background: "transparent", color: "#556b82", border: "1px solid #e4e4e7", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                          style={{ fontSize: 12, background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
                           Cancel
                         </button>
                       </div>
@@ -769,7 +769,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
 
   return (
     <div>
-      <div style={{ background: "#eef1f4", borderRadius: 8, padding: "12px 16px", marginBottom: 16, fontSize: 12, color: "#374151" }}>
+      <div style={{ background: "var(--bg)", borderRadius: 8, padding: "12px 16px", marginBottom: 16, fontSize: 12, color: "var(--text)" }}>
         <strong>Art. 9(2)(b)+(c) — Risk management measures:</strong> Apply measures in order: <strong>Eliminate</strong> (preferred) →
         <strong> Reduce</strong> → <strong>Mitigate</strong> → <strong>Inform</strong>. Every confirmed risk must have at least one measure
         or a documented justification for not applying any.
@@ -785,11 +785,11 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
               onClick={() => setOpen(o => ({ ...o, [risk.id]: !o[risk.id] }))}>
               <div style={{ flex: 1 }}>
                 <span style={{ fontWeight: 600, fontSize: 13 }}>{risk.title}</span>
-                <span style={{ marginLeft: 10, fontSize: 11, color: "#9ca3af" }}>{risk.mitigations.length} measure(s)</span>
+                <span style={{ marginLeft: 10, fontSize: 11, color: "var(--text-secondary)" }}>{risk.mitigations.length} measure(s)</span>
                 {complete && <span style={{ marginLeft: 8, fontSize: 11, color: "#16a34a", fontWeight: 600 }}>✓</span>}
                 {!complete && <span style={{ marginLeft: 8, fontSize: 11, color: "#f59e0b", fontWeight: 600 }}>⚠ needs risk management measure</span>}
               </div>
-              <span style={{ color: "#9ca3af" }}>{open[risk.id] ? "▲" : "▼"}</span>
+              <span style={{ color: "var(--text-secondary)" }}>{open[risk.id] ? "▲" : "▼"}</span>
             </div>
 
             {open[risk.id] && (
@@ -806,7 +806,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                       {items.map(m => (
                         <div key={m.id} style={{ fontSize: 12, padding: "6px 0 4px", borderBottom: "1px solid #f4f4f5" }}>
                           <div style={{ fontWeight: 600 }}>{m.title}</div>
-                          {m.implementation_guidance && <div style={{ color: "#556b82", marginTop: 2 }}>{m.implementation_guidance}</div>}
+                          {m.implementation_guidance && <div style={{ color: "var(--text-secondary)", marginTop: 2 }}>{m.implementation_guidance}</div>}
                         </div>
                       ))}
                     </div>
@@ -821,7 +821,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                       padding: "7px 16px", border: "none",
                       ...(hasMit
                         ? { background: "#f0f4ff", color: "#1147E9" }
-                        : { background: "#1147E9", color: "#fff" }),
+                        : { background: "var(--brand)", color: "#fff" }),
                     }}>
                     + Add risk management measure
                   </button>
@@ -847,11 +847,11 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                     <ErrorMsg msg={err[risk.id] ?? ""} />
                     <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
                       <button onClick={() => saveMitigation(risk.id)} disabled={saving[risk.id]}
-                        style={{ fontSize: 12, background: "#1147E9", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                        style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
                         Save
                       </button>
                       <button onClick={() => setAddMit(a => ({ ...a, [risk.id]: false }))}
-                        style={{ fontSize: 12, background: "transparent", color: "#556b82", border: "1px solid #e4e4e7", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                        style={{ fontSize: 12, background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
                         Cancel
                       </button>
                     </div>
@@ -875,8 +875,8 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                 )}
 
                 {/* Residual risk (post-mitigation) */}
-                <div style={{ marginTop: 14, padding: "10px 14px", background: "#f8f9fa", borderRadius: 6, border: "1px solid #e4e4e7" }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "#556b82", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.4px" }}>
+                <div style={{ marginTop: 14, padding: "10px 14px", background: "var(--bg)", borderRadius: 6, border: "1px solid var(--border)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.4px" }}>
                     Residual risk (post-mitigation) — Art. 9(2)(d)
                     {risk.final_risk_level && (
                       <span style={{ marginLeft: 10 }}><RiskLevelBadge level={risk.final_risk_level} /></span>
@@ -910,7 +910,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                       <input type="date"
                         value={residualDraft[risk.id]?.date_of_assessment ?? (risk.date_of_assessment ? risk.date_of_assessment.substring(0, 10) : "")}
                         onChange={e => setResidualDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { residual_likelihood: "", residual_severity: "" }, date_of_assessment: e.target.value } }))}
-                        style={{ width: "100%", border: "1px solid #e4e4e7", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
+                        style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
                     </div>
                   </div>
                   {(() => {
@@ -918,7 +918,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                     const rs = residualDraft[risk.id]?.residual_severity ?? risk.residual_severity ?? "";
                     return (rl && rs) ? (
                       <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 12, color: "#374151" }}>Residual risk level (auto):</span>
+                        <span style={{ fontSize: 12, color: "var(--text)" }}>Residual risk level (auto):</span>
                         <RiskLevelBadge level={calcRiskLevel(rs, rl)} />
                       </div>
                     ) : null;
@@ -932,7 +932,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                       placeholder="Explain why the residual risk level is acceptable (Art. 9(2)(d))…" />
                   </div>
                   <button onClick={() => saveResidual(risk.id)} disabled={residualSaving[risk.id]}
-                    style={{ marginTop: 10, fontSize: 11, background: "transparent", color: "#556b82", border: "1px solid #d1d5db", borderRadius: 4, padding: "4px 12px", cursor: "pointer" }}>
+                    style={{ marginTop: 10, fontSize: 11, background: "transparent", color: "var(--text-secondary)", border: "1px solid #d1d5db", borderRadius: 4, padding: "4px 12px", cursor: "pointer" }}>
                     {residualSaving[risk.id] ? "Saving…" : "Save residual risk"}
                   </button>
                 </div>
@@ -995,8 +995,8 @@ function ApproveStep({ register, risks, onApprove }: {
           <div style={{ marginTop: 8, fontSize: 13, color: "#1a5c35" }}>
             Residual risk: <strong>{register.residual_risk_acceptable ? "Acceptable" : "Not acceptable"}</strong>
           </div>
-          <div style={{ marginTop: 4, fontSize: 12, color: "#374151" }}>{register.residual_risk_argument}</div>
-          <div style={{ marginTop: 10, fontSize: 12, color: "#556b82" }}>
+          <div style={{ marginTop: 4, fontSize: 12, color: "var(--text)" }}>{register.residual_risk_argument}</div>
+          <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-secondary)" }}>
             Next re-assessment scheduled in 6 months (automatic trigger created — Art. 9(1)).
           </div>
         </Card>
@@ -1016,14 +1016,14 @@ function ApproveStep({ register, risks, onApprove }: {
             { label: "Vulnerable group risks", value: vulnerableGroupRisks.length },
             { label: "Misuse scenarios", value: confirmedRisks.reduce((a, r) => a + r.misuse_scenarios.length, 0) },
           ].map(k => (
-            <div key={k.label} style={{ background: "#f8f9fa", borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
+            <div key={k.label} style={{ background: "var(--bg)", borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
               <div style={{ fontSize: 22, fontWeight: 700, color: "#1147E9" }}>{k.value}</div>
-              <div style={{ fontSize: 11, color: "#556b82", marginTop: 3 }}>{k.label}</div>
+              <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3 }}>{k.label}</div>
             </div>
           ))}
         </div>
 
-        <h4 style={{ fontSize: 13, fontWeight: 700, margin: "0 0 10px", color: "#556b82", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+        <h4 style={{ fontSize: 13, fontWeight: 700, margin: "0 0 10px", color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
           Confirmed risks
         </h4>
         {confirmedRisks.map(r => (
@@ -1062,7 +1062,7 @@ function ApproveStep({ register, risks, onApprove }: {
             style={{ background: saving ? "#9ca3af" : "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
             {saving ? "Approving…" : "Approve register"}
           </button>
-          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
             Approving creates a 6-month re-assessment trigger (Art. 9(1)).
           </div>
         </div>
@@ -1077,14 +1077,14 @@ function ArchivedRegisterCard({ reg, systemName }: { reg: RiskRegister; systemNa
   const confirmed = reg.risks.filter(r => r.status === "confirmed");
   const fmtDate = (d?: string | null) => d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
   return (
-    <div style={{ border: "1px solid #e4e4e7", borderRadius: 10, marginBottom: 12, overflow: "hidden", opacity: 0.85 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", background: "#f8f9fa", cursor: "pointer" }}
+    <div style={{ border: "1px solid var(--border)", borderRadius: 10, marginBottom: 12, overflow: "hidden", opacity: 0.85 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", background: "var(--bg)", cursor: "pointer" }}
         onClick={() => setOpen(o => !o)}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: "#556b82" }}>v{reg.id}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>v{reg.id}</span>
         <span style={{ fontSize: 11, background: "#d5f5e3", color: "#1a5c35", padding: "2px 8px", borderRadius: 8, fontWeight: 600 }}>
           ✓ APPROVED
         </span>
-        <span style={{ fontSize: 12, color: "#556b82" }}>
+        <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
           Approved: {fmtDate(reg.approved_at)} · {confirmed.length} risk(s) · {confirmed.reduce((a, r) => a + r.mitigations.length, 0)} measure(s)
         </span>
         {reg.residual_risk_acceptable !== null && (
@@ -1094,28 +1094,28 @@ function ArchivedRegisterCard({ reg, systemName }: { reg: RiskRegister; systemNa
         )}
         <button
           onClick={e => { e.stopPropagation(); exportReport(systemName, reg, reg.risks, true); }}
-          style={{ marginLeft: "auto", background: "#f4f4f5", color: "#374151", border: "1px solid #e4e4e7", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+          style={{ marginLeft: "auto", background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
         >
           📄 Export
         </button>
-        <span style={{ color: "#9ca3af" }}>{open ? "▲" : "▼"}</span>
+        <span style={{ color: "var(--text-secondary)" }}>{open ? "▲" : "▼"}</span>
       </div>
       {open && (
         <div style={{ padding: "14px 18px" }}>
-          <div style={{ fontSize: 12, color: "#374151", marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 10 }}>
             <strong>Scope:</strong> {reg.assessment_scope || "—"}
           </div>
           {confirmed.map(r => (
             <div key={r.id} style={{ padding: "8px 0", borderBottom: "1px solid #f4f4f5", fontSize: 12 }}>
               <span style={{ fontWeight: 600 }}>{r.title}</span>
-              <span style={{ marginLeft: 8, color: "#556b82" }}>{r.category} · {r.severity}</span>
+              <span style={{ marginLeft: 8, color: "var(--text-secondary)" }}>{r.category} · {r.severity}</span>
               {r.mitigations.length > 0 && (
                 <span style={{ marginLeft: 8, color: "#1a5c35" }}>{r.mitigations.length} measure(s)</span>
               )}
             </div>
           ))}
           {reg.residual_risk_argument && (
-            <div style={{ marginTop: 10, fontSize: 12, color: "#374151" }}>
+            <div style={{ marginTop: 10, fontSize: 12, color: "var(--text)" }}>
               <strong>Residual risk argument:</strong> {reg.residual_risk_argument}
             </div>
           )}
@@ -1236,7 +1236,7 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
   }
 
   if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, gap: 12, color: "#556b82", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, gap: 12, color: "var(--text-secondary)", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <span style={{ width: 20, height: 20, border: "2px solid #1147E9", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />
       Loading…
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -1254,19 +1254,19 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
           ← All systems
         </button>
         <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: "#111827" }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: "var(--text)" }}>
             Risk Assessment — {systemName}
           </h1>
-          <p style={{ fontSize: 12, color: "#9ca3af", margin: "2px 0 0" }}>Art. 9 EU AI Act</p>
+          <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "2px 0 0" }}>Art. 9 EU AI Act</p>
         </div>
         {register && (
-          <span style={{ fontSize: 11, background: "#eef1f4", color: "#556b82", padding: "4px 10px", borderRadius: 8 }}>
+          <span style={{ fontSize: 11, background: "var(--bg)", color: "var(--text-secondary)", padding: "4px 10px", borderRadius: 8 }}>
             {register.id} · {register.status}
           </span>
         )}
         {register && (
           <button onClick={() => exportReport(systemName, register, risks)}
-            style={{ background: "#fff", border: "1px solid #e4e4e7", borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+            style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, color: "var(--text)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
             📄 Export report
           </button>
         )}
@@ -1324,7 +1324,7 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
       {/* Previous assessment versions */}
       {archivedRegisters.length > 0 && (
         <div style={{ marginTop: 32 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#556b82", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12, borderTop: "1px solid #e4e4e7", paddingTop: 20 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12, borderTop: "1px solid var(--border)", paddingTop: 20 }}>
             Previous assessment versions ({archivedRegisters.length})
           </div>
           {archivedRegisters.map(r => <ArchivedRegisterCard key={r.id} reg={r} systemName={systemName} />)}
