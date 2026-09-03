@@ -33,13 +33,16 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function StatusDot({ reassessmentNeeded }: { reassessmentNeeded: boolean }) {
+function StatusDot({ reassessmentNeeded, tier }: { reassessmentNeeded: boolean; tier: string }) {
+  const isHigh = tier === "high" || tier === "prohibited";
+  const color = !reassessmentNeeded ? "#16a34a" : isHigh ? "#dc2626" : "#d97706";
+  const label = !reassessmentNeeded ? "Risk management up to date"
+    : isHigh ? "Action required" : "Risk management in progress (optional)";
   return (
     <span style={{
       width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
-      background: reassessmentNeeded ? "#dc2626" : "#16a34a",
-      display: "inline-block",
-    }} title={reassessmentNeeded ? "Re-assessment needed" : "Assessment up to date"} />
+      background: color, display: "inline-block",
+    }} title={label} />
   );
 }
 
@@ -183,7 +186,7 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
                   transition: "background 0.1s",
                 }}>
                   <td style={{ padding: "12px 14px" }}>
-                    <StatusDot reassessmentNeeded={sys.reassessment_needed} />
+                    <StatusDot reassessmentNeeded={sys.reassessment_needed} tier={sys.system_tier} />
                   </td>
                   <td style={{ padding: "12px 14px" }}>
                     <div style={{ fontWeight: 600, color: "#111827" }}>{sys.system_name}</div>
@@ -197,15 +200,21 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
                   </td>
                   <td style={{ padding: "12px 14px", color: "#556b82" }}>
                     {formatDate(sys.last_assessment_completed_at)}
-                    {sys.reassessment_needed && (
+                    {sys.reassessment_needed && isHighRisk && (
                       <div style={{ fontSize: 11, color: "#dc2626", marginTop: 2, display: "flex", alignItems: "center" }}>
                         {sys.unacknowledged_triggers > 0
                           ? <><span>{sys.unacknowledged_triggers} trigger(s)</span><InfoTooltip text={triggerTooltip} /></>
                           : sys.last_assessment_completed_at
                             ? <><span>Overdue (&gt;6 months)</span><InfoTooltip text="EU AI Act Art. 9(1) requires iterative risk management. An assessment is overdue when more than 6 months have passed since the last approved assessment with no new cycle started. A new assessment must be initiated to maintain compliance." /></>
                             : sys.active_register_id
-                              ? <><span>Assessment not completed</span><InfoTooltip text="A risk assessment has been started but not yet approved. Complete and approve the assessment to fulfil EU AI Act Art. 9(2) obligations before putting this system into service." /></>
-                              : <><span>Never assessed</span><InfoTooltip text="EU AI Act Art. 9(2) requires that a risk management system be established before a high-risk AI system is put into service. This system has no completed risk assessment." /></>}
+                              ? <><span>Risk management not completed</span><InfoTooltip text="A risk management process has been started but not yet approved. Complete and approve it to fulfil EU AI Act Art. 9(2) obligations before putting this system into service." /></>
+                              : <><span>No risk management</span><InfoTooltip text="EU AI Act Art. 9(2) requires that a risk management system be established before a high-risk AI system is put into service. This system has no completed risk management record." /></>}
+                      </div>
+                    )}
+                    {!isHighRisk && sys.active_register_id && !sys.last_assessment_completed_at && (
+                      <div style={{ fontSize: 11, color: "#d97706", marginTop: 2, display: "flex", alignItems: "center" }}>
+                        <span>Risk management in progress</span>
+                        <InfoTooltip text="Risk management is optional for this tier under EU AI Act. A process has been started but not yet approved." />
                       </div>
                     )}
                   </td>

@@ -43,7 +43,7 @@ Navigate to **Risk Management** in the sidebar.
 | HR Candidate Screening AI | **HIGH** (employment) | 4 | ✓ Up to date |
 | Credit Risk Assessment Model | **HIGH** (credit scoring) | 3 | ⚠ Restart due (unacknowledged trigger) |
 | Customer Support Chatbot | **LIMITED** (chatbot) | 2 | ⚠ Overdue (>6 months) |
-| Medical Image Diagnosis Assistant | MINIMAL | 2 approved + 1 in progress | Assessment not completed (Resume) |
+| Medical Image Diagnosis Assistant | MINIMAL | 2 approved + 1 in progress | Risk management in progress (optional) |
 | Social Scoring Pilot | **PROHIBITED** (Art. 5(1)(c)) | 1 | ✓ Approved (not acceptable) |
 | Employee Performance Analytics | **HIGH** (employment) | — | Never assessed |
 
@@ -63,7 +63,7 @@ Set in `.env` if your admin account has a different name.
 
 Open **Risk Management** in the sidebar. You'll see:
 
-- **Status dot** — green = up to date, red = action needed
+- **Status dot** — green = up to date, red = action required (HIGH/PROHIBITED only), orange = in progress (optional tiers)
 - **Action button** colours:
   - 🟢 **Start** — no assessment exists yet
   - 🔵 **Open** — assessment exists and is current
@@ -71,8 +71,9 @@ Open **Risk Management** in the sidebar. You'll see:
   - 🔴 **Restart** — re-assessment triggered (>6 months or system changed)
 - **Trigger badge** — "1 trigger(s)" with ⓘ tooltip explaining what triggers are
 - **Overdue badge** — ">6 months" with ⓘ tooltip citing Art. 9(1)
-- **Never assessed badge** — shown for high-risk systems with no register at all, citing Art. 9(2)
-- **Assessment not completed badge** — shown when a register exists but was never approved
+- **Never assessed / No risk management badge** — shown for HIGH-risk systems with no completed risk management record, citing Art. 9(2)
+- **Risk management not completed badge** — shown for HIGH-risk systems with a register in progress but not yet approved
+- **Risk management in progress badge** — shown (orange) for non-HIGH systems where risk management is optional
 
 ### Assessment wizard (5 steps)
 
