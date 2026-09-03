@@ -77,12 +77,12 @@ function InfoTooltip({ text }: { text: string }) {
 
 function actionBtn(sys: SystemRiskSummary): { label: string; color: string } {
   if (!sys.active_register_id) {
-    return { label: "Start assessment", color: "#1147E9" };
+    return { label: "Start", color: "#16a34a" };
   }
   const status = sys.active_register_status ?? "";
   if (status === "approved") {
     return sys.reassessment_needed
-      ? { label: "Reopen", color: "#dc2626" }
+      ? { label: "Restart", color: "#dc2626" }
       : { label: "Open", color: "#1147E9" };
   }
   // draft / submitted / anything in-progress

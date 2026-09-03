@@ -45,8 +45,8 @@ Work through these steps in order. For each step:
 
 ### Step 1 — Systems list overview
 Navigate to Risk Management in the sidebar (warning icon). 
-Show me: the KPI row, status dots, action button colours (Open / Resume / Reopen / Start), trigger badges with tooltips, overdue badges with tooltips. 
-Point out: Credit Risk has a **Reopen** button because of an unacknowledged re-assessment trigger; Customer Support Chatbot shows **Overdue (>6 months)** because its last assessment was 9 months ago with no trigger.
+Show me: the KPI row, status dots, action button colours (Open / Resume / Restart / Start), trigger badges with tooltips, overdue badges with tooltips. 
+Point out: Credit Risk has a **Restart** button because of an unacknowledged re-assessment trigger; Customer Support Chatbot shows **Overdue (>6 months)** because its last assessment was 9 months ago with no trigger.
 Explain: which systems need action and why — and the difference between the two paths to reassessment_needed.
 
 ### Step 2 — Explore a completed HIGH-risk assessment (HR Screening or Credit Risk)
@@ -70,8 +70,8 @@ Show me: the wizard reopens at the Identify step with 2 risks already added but 
 Walk me through: confirming a risk, adding a mitigation, setting residual risk, approving.
 Explain: Art. 9(2)(a) identify known/foreseeable risks, Art. 9(2)(b)+(c) mitigation hierarchy, Art. 9(2)(d) residual risk.
 
-### Step 6 — Reopen for reassessment (Credit Risk)
-Go back to the list. Click "Reopen" on Credit Risk Assessment Model (red button).
+### Step 6 — Restart for reassessment (Credit Risk)
+Go back to the list. Click "Restart" on Credit Risk Assessment Model (red button).
 Show me: the new draft register created with pre-filled scope and risks from the previous cycle; the previous cycle appears as archived version below.
 Explain: Art. 9(1) requires iterative reassessment; pre-filling saves time while ensuring the new cycle is reviewed.
 

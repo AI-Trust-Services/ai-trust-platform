@@ -41,7 +41,7 @@ Navigate to **Risk Management** in the sidebar.
 | System | EU AI Act Tier | Assessment versions | Status |
 |---|---|---|---|
 | HR Candidate Screening AI | **HIGH** (employment) | 4 | ✓ Up to date |
-| Credit Risk Assessment Model | **HIGH** (credit scoring) | 3 | ⚠ Reopen due (unacknowledged trigger) |
+| Credit Risk Assessment Model | **HIGH** (credit scoring) | 3 | ⚠ Restart due (unacknowledged trigger) |
 | Customer Support Chatbot | **LIMITED** (chatbot) | 2 | ⚠ Overdue (>6 months) |
 | Medical Image Diagnosis Assistant | MINIMAL | 2 approved + 1 in progress | Resume |
 | Social Scoring Pilot | **PROHIBITED** (Art. 5(1)(c)) | 1 | ✓ Approved (not acceptable) |
@@ -64,10 +64,10 @@ Open **Risk Management** in the sidebar. You'll see:
 
 - **Status dot** — green = up to date, red = action needed
 - **Action button** colours:
+  - 🟢 **Start** — no assessment exists yet
   - 🔵 **Open** — assessment exists and is current
   - 🟠 **Resume** — assessment started but not yet approved
-  - 🔴 **Reopen** — re-assessment triggered (>6 months or system changed)
-  - 🔵 **Start assessment** — no assessment exists yet
+  - 🔴 **Restart** — re-assessment triggered (>6 months or system changed)
 - **Trigger badge** — "1 trigger(s)" with ⓘ tooltip explaining what triggers are
 - **Overdue badge** — ">6 months" with ⓘ tooltip citing Art. 9(1)
 
@@ -82,7 +82,7 @@ Open **Risk Management** in the sidebar. You'll see:
 After approval:
 - All steps remain browsable in read-only mode (green "Approved" banner)
 - **Export report** button generates a printable HTML report
-- **Reopen** button (when reassessment is due) starts a new cycle pre-filled from the previous one
+- **Restart** button (when reassessment is due) starts a new cycle pre-filled from the previous one
 
 ### Versioning
 

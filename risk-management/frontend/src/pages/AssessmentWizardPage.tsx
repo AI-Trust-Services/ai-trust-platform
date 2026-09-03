@@ -1185,7 +1185,7 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
         {register?.status === "approved" && (
           <button onClick={handleReopen} disabled={reopening}
             style={{ background: reopening ? "#9ca3af" : "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: reopening ? "not-allowed" : "pointer" }}>
-            {reopening ? "Opening…" : "🔄 Reopen"}
+            {reopening ? "Opening…" : "🔄 Restart"}
           </button>
         )}
       </div>
