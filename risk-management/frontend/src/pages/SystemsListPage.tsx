@@ -180,8 +180,8 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
               const btn = actionBtn(sys);
               const triggerTooltip = `Re-assessment triggers are events that require a new risk management cycle under EU AI Act Art. 9(1). They are created automatically when: (1) 6 months have passed since the last approved cycle, or (2) a significant change was detected in the AI system. Each unacknowledged trigger must be addressed by starting a new risk management cycle.`;
               const triggerLabel = sys.unacknowledged_triggers === 1
-                ? "Re-assessment required"
-                : `${sys.unacknowledged_triggers} re-assessments required`;
+                ? "Risk review required"
+                : `${sys.unacknowledged_triggers} risk reviews required`;
               return (
                 <tr key={sys.system_id} style={{
                   borderBottom: "1px solid #e4e4e7",
@@ -208,7 +208,7 @@ export default function SystemsListPage({ onSelectSystem }: { onSelectSystem: (i
                         {sys.unacknowledged_triggers > 0
                           ? <><span>{triggerLabel}</span><InfoTooltip text={triggerTooltip} /></>
                           : sys.last_assessment_completed_at
-                            ? <><span>Overdue (&gt;6 months)</span><InfoTooltip text="EU AI Act Art. 9(1) requires iterative risk management. An assessment is overdue when more than 6 months have passed since the last approved assessment with no new cycle started. A new assessment must be initiated to maintain compliance." /></>
+                            ? <><span>Overdue (&gt;6 months)</span><InfoTooltip text="EU AI Act Art. 9(1) requires iterative risk management throughout the AI system lifecycle, but does not specify a fixed interval. This platform recommends reviewing risk management at least every 6 months as good practice. The last completed cycle was more than 6 months ago — a risk review is recommended." /></>
                             : sys.active_register_id
                               ? <><span>Risk management not completed</span><InfoTooltip text="A risk management process has been started but not yet approved. Complete and approve it to fulfil EU AI Act Art. 9(2) obligations before putting this system into service." /></>
                               : <><span>No risk management</span><InfoTooltip text="EU AI Act Art. 9(2) requires that a risk management system be established before a high-risk AI system is put into service. This system has no completed risk management record." /></>}
