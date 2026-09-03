@@ -641,7 +641,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [addMit, setAddMit] = useState<Record<string, boolean>>({});
   const [mitDraft, setMitDraft] = useState<Record<string, Partial<MitigationMeasure>>>({});
-  const [residualDraft, setResidualDraft] = useState<Record<string, { residual_likelihood: string; residual_severity: string; date_of_assessment: string }>>({});
+  const [residualDraft, setResidualDraft] = useState<Record<string, { residual_likelihood: string; residual_severity: string; date_of_assessment: string; review_notes: string }>>({});
   const [residualSaving, setResidualSaving] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [closureNote, setClosureNote] = useState<Record<string, string>>({});
@@ -658,6 +658,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
         residual_severity: rs || null,
         final_risk_level: (rl && rs) ? calcRiskLevel(rs, rl) : null,
         date_of_assessment: d.date_of_assessment || null,
+        review_notes: d.review_notes ?? undefined,
       });
       onRisksChange(risks.map(r => r.id === riskId ? { ...r, ...updated, mitigations: r.mitigations } : r));
     } finally {
@@ -757,7 +758,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                         ? { background: "#f0f4ff", color: "#1147E9" }
                         : { background: "#1147E9", color: "#fff" }),
                     }}>
-                    + Add measure
+                    + Add risk management measure
                   </button>
                 ) : (
                   <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -857,6 +858,14 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                       </div>
                     ) : null;
                   })()}
+                  <div style={{ marginTop: 8 }}>
+                    <Label>Justification / notes</Label>
+                    <Textarea
+                      value={residualDraft[risk.id]?.review_notes ?? risk.review_notes ?? ""}
+                      onChange={v => setResidualDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { residual_likelihood: "", residual_severity: "", date_of_assessment: "" }, review_notes: v } }))}
+                      rows={2}
+                      placeholder="Explain why the residual risk level is acceptable (Art. 9(2)(d))…" />
+                  </div>
                   <button onClick={() => saveResidual(risk.id)} disabled={residualSaving[risk.id]}
                     style={{ marginTop: 10, fontSize: 11, background: "transparent", color: "#556b82", border: "1px solid #d1d5db", borderRadius: 4, padding: "4px 12px", cursor: "pointer" }}>
                     {residualSaving[risk.id] ? "Saving…" : "Save residual risk"}
