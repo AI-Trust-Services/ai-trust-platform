@@ -91,7 +91,8 @@ flowchart TD
 
         subgraph Storage["Storage"]
             direction LR
-            PG[("PostgreSQL\nai_systems\nmodel_cards\nalert_rules\nservice_model_baselines\nframeworks\nassessments\nobligations\ncontrols\nevidence\naudit_events (buffer)")]
+            PG[("PostgreSQL")]
+            AuditBuf[("audit_events\n(write-ahead buffer)")]
             subgraph CH["ClickHouse"]
                 direction TB
                 Hot[("Hot Disk\nnew data")]
@@ -120,14 +121,17 @@ flowchart TD
         PG --> Alerts
         PG --> Compliance
         PG -->|"rules + baselines"| AlertWorker
-        PG -->|"audit buffer"| AuditFlush
+
+        Registry -->|"log event (atomic)"| AuditBuf
+        Compliance -->|"log event (atomic)"| AuditBuf
+        AuditFlush -->|"batch flush → insert then delete"| AuditBuf
+        AuditFlush -->|"insert"| Hot
 
         CH --> Monitoring
         CH --> Alerts
         CH --> AlertWorker
         CH --> Audit
         AlertWorker -->|writes events| CH
-        AuditFlush -->|"insert + delete buffer"| CH
         Compliance -->|"evidence files"| MinIO
     end
 
