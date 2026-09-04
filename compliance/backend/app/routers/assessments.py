@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ from ai_trust_authorization.constants import (
 )
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models import (
     AISystem,
     Assessment,
@@ -73,7 +74,8 @@ async def list_assessments(
 
 
 @router.post("/assessments", response_model=AssessmentResponse, status_code=201, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
+async def create_assessment(body: AssessmentCreate, request: Request) -> AssessmentResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         system = (await session.execute(
             select(AISystem).where(AISystem.id == body.ai_system_id)
@@ -111,6 +113,15 @@ async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
             })
         else:
             await _generate_controls_in_session(session, created, system.tier)
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="assessment.created",
+            resource_type="assessment",
+            resource_id=row.id,
+            ai_system_id=body.ai_system_id,
+            ai_system_name=system.name,
+        )
         await session.commit()
         await session.refresh(row)
 
@@ -436,7 +447,8 @@ async def generate_controls(assessment_id: str) -> GenerateControlsResponse:
 
 
 @router.post("/assessments/{assessment_id}/submit", response_model=AssessmentResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def submit_assessment(assessment_id: str) -> AssessmentResponse:
+async def submit_assessment(assessment_id: str, request: Request) -> AssessmentResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
         if row.status == "approved":
@@ -447,8 +459,18 @@ async def submit_assessment(assessment_id: str) -> AssessmentResponse:
         )).scalar_one()
         if obligation_count == 0:
             raise HTTPException(422, "Cannot submit — generate or add at least one obligation first")
+        before_status = row.status
         row.status = "submitted"
         row.updated_at = datetime.now(timezone.utc)
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="assessment.submitted",
+            resource_type="assessment",
+            resource_id=assessment_id,
+            ai_system_id=row.ai_system_id,
+            changes={"status": {"before": before_status, "after": "submitted"}},
+        )
         await session.commit()
         await session.refresh(row)
     logger.info("assessment.submitted", extra={"assessment_id": assessment_id})
@@ -456,14 +478,25 @@ async def submit_assessment(assessment_id: str) -> AssessmentResponse:
 
 
 @router.post("/assessments/{assessment_id}/approve", response_model=AssessmentResponse, dependencies=[Depends(require_permission(ASSESSMENTS_APPROVE))])
-async def approve_assessment(assessment_id: str) -> AssessmentResponse:
+async def approve_assessment(assessment_id: str, request: Request) -> AssessmentResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
         if row.status == "approved":
             raise HTTPException(409, "Assessment already approved")
+        before_status = row.status
         row.status = "approved"
         row.updated_at = datetime.now(timezone.utc)
         await refresh_assessment_score(session, assessment_id)
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="assessment.approved",
+            resource_type="assessment",
+            resource_id=assessment_id,
+            ai_system_id=row.ai_system_id,
+            changes={"status": {"before": before_status, "after": "approved"}},
+        )
         await session.commit()
         await session.refresh(row)
     logger.info("assessment.approved", extra={"assessment_id": assessment_id, "score": row.score})
