@@ -194,3 +194,12 @@ components:
     dependsOnJobs: [db-migrate, keycloak-provision, openfga-provision]
     dependsOnServices: []
     openfgaConfig: true
+
+  - name: audit
+    backendPort: 8009
+    rootPath: /api/audit
+    extraEnv:
+      OPENFGA_URL: http://openfga:8080
+    dependsOnJobs: [clickhouse-migrate, openfga-provision]
+    dependsOnServices: []
+    openfgaConfig: true

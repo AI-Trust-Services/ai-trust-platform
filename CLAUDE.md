@@ -72,8 +72,8 @@ All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports 
 |---|---|
 | Luigi shell / entry point | http://localhost:8080 |
 | Keycloak (browser login) | http://localhost:8180 |
-| Frontends | `/registry/`, `/overview/`, `/monitoring/`, `/alerts/`, `/dta/`, `/compliance/`, `/iam/` under `:8080` |
-| Backend APIs | `/api/{registry,overview,monitoring,alerts,dta,compliance}/v1` under `:8080` (health at `/api/*/health`, docs at `/api/registry/docs`) |
+| Frontends | `/registry/`, `/overview/`, `/monitoring/`, `/alerts/`, `/dta/`, `/compliance/`, `/iam/`, `/audit/` under `:8080` |
+| Backend APIs | `/api/{registry,overview,monitoring,alerts,dta,compliance,audit}/v1` under `:8080` (health at `/api/*/health`, docs at `/api/registry/docs`) |
 | IAM / roles API | `/api/users/v1/iam` · current-user permissions `/api/users/v1/me/permissions` |
 | PostgreSQL | localhost:5432 / db `ai_trust` |
 | OTel Collector | gRPC localhost:4317 · HTTP localhost:4318 |
@@ -267,6 +267,23 @@ Three alert rules seeded in migration `0004` drive evidence expiry:
 - `evidence_expired` — marks approved evidence past `validity_until` as `expired`, cascades control effectiveness + obligation status, fires alert
 - `evidence_expiring_30d` — fires warning for approved evidence expiring in 8–30 days
 - `evidence_expiring_7d` — fires warning for approved evidence expiring in 1–7 days; replaces the 30-day alert when evidence enters the 7-day window (auto-resolves the 30-day alert)
+
+### audit/ (port 8008, `/api/audit/`)
+Immutable audit trail — records who did what and when across all platform actions. Write-ahead buffer in Postgres, queryable archive in ClickHouse.
+
+**Data flow** — `log_audit_event()` in `libs/persistence/ai_trust_persistence/audit.py` adds an `AuditEvent` row to the caller's session (committed atomically with the business action). `audit-flush-worker/` polls Postgres every `AUDIT_FLUSH_INTERVAL` seconds (default 5), batch-inserts rows into ClickHouse `otel.audit_events`, then deletes them from Postgres. Postgres is a transient buffer only — presence means unflushed.
+
+**Instrumented actions** — `system.registered`, `system.deleted`, `system.reclassified` (registry); `assessment.created`, `assessment.submitted`, `assessment.approved` (compliance); `evidence.uploaded`, `evidence.approved`, `evidence.rejected`, `evidence.deleted` (compliance). Changes stored only for meaningful diffs: tier change on reclassify, status transition on submit/approve/reject.
+
+**Backend** (`audit/backend/app/routers/events.py`):
+- `GET /v1/events` — paginated list with filters: `ai_system_id`, `action`, `actor`, `resource_type`, `from`, `to`, `search` (case-insensitive across action/actor/system name), `limit`/`offset`/`sort`
+- `GET /v1/events/{id}` — full detail including `changes` dict
+- `GET /v1/systems` — distinct AI systems present in audit log, filtered by same params as list (used to populate the UI dropdown)
+- `GET /v1/stats` — KPI counts with trend vs. previous equal-length window: `total`, `system_events` (resource_type=ai_system), `risk_and_compliance` (assessment/evidence/control/obligation)
+
+**Authorization** — all endpoints require `audit:read` (OpenFGA). Assigned to `platform_administrator`, `ai_compliance_officer`, `auditor`, `ai_engineer`.
+
+**audit-flush-worker/** — standalone asyncio worker (no HTTP port). `AUDIT_FLUSH_INTERVAL` (default 5s), `AUDIT_FLUSH_BATCH_SIZE` (default 500). On ClickHouse failure the exception is caught in the main loop, logged, and retried next cycle — rows stay in Postgres safely.
 
 ## Environment variables
 

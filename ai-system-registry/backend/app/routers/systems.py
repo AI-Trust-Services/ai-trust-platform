@@ -10,6 +10,7 @@ from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE, SYSTEM
 from ai_trust_logging import get_logger
 from app.classifier import classify, CLASSIFIER_INPUTS
 from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
@@ -96,7 +97,8 @@ async def update_system(system_id: str, body: AISystemUpdate, request: Request) 
 
 
 @router.delete("/systems/{system_id}", dependencies=[Depends(require_permission(SYSTEMS_APPROVE))])
-async def delete_system(system_id: str) -> dict:
+async def delete_system(system_id: str, request: Request) -> dict:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
         row = result.scalar_one_or_none()
@@ -104,13 +106,23 @@ async def delete_system(system_id: str) -> dict:
             raise HTTPException(404, f"System {system_id} not found")
         name = row.name
         await session.delete(row)
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="system.deleted",
+            resource_type="ai_system",
+            resource_id=system_id,
+            ai_system_id=system_id,
+            ai_system_name=name,
+        )
         await session.commit()
     logger.info("system.deleted", extra={"system_id": system_id, "system_name": name})
     return {"status": "deleted", "id": system_id, "name": name}
 
 
 @router.post("/systems/{system_id}/reclassify", response_model=IntakeResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
-async def reclassify_system(system_id: str) -> IntakeResponse:
+async def reclassify_system(system_id: str, request: Request) -> IntakeResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
         row = result.scalar_one_or_none()
@@ -125,6 +137,16 @@ async def reclassify_system(system_id: str) -> IntakeResponse:
         row.annex_iii_area = classification.annex_iii_area
         row.updated_at = datetime.now(timezone.utc)
 
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="system.reclassified",
+            resource_type="ai_system",
+            resource_id=system_id,
+            ai_system_id=system_id,
+            ai_system_name=row.name,
+            changes={"tier": {"before": old_tier, "after": classification.tier}},
+        )
         await session.commit()
         await session.refresh(row)
 
