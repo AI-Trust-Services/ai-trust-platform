@@ -22,9 +22,8 @@ class AuditEvent(Base):
     ai_system_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     changes: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     source: Mapped[str] = mapped_column(String(20), nullable=False, server_default="ui")
-    flushed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        Index("ix_audit_events_flushed_created", "flushed_at", "created_at"),
+        Index("ix_audit_events_created", "created_at"),
         Index("ix_audit_events_ai_system_created", "ai_system_id", "created_at"),
     )

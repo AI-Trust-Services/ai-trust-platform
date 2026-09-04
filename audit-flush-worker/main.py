@@ -1,9 +1,9 @@
 """Audit Flush Worker — drains the Postgres audit_events buffer into ClickHouse.
 
 Every FLUSH_INTERVAL seconds:
-  1. SELECT up to BATCH_SIZE rows WHERE flushed_at IS NULL ORDER BY created_at
+  1. SELECT up to BATCH_SIZE rows ORDER BY created_at
   2. Batch-insert into ClickHouse otel.audit_events
-  3. Mark those rows flushed_at = now()
+  3. DELETE those rows from Postgres
 
 Postgres is the write-ahead log (atomic with business actions).
 ClickHouse is the queryable archive with TTL → MinIO cold storage.
@@ -12,9 +12,8 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from ai_trust_clickhouse import AUDIT_EVENTS, AUDIT_EVENTS_COLUMNS, get_client
@@ -57,7 +56,6 @@ async def flush_once(ch_client) -> int:
     async with SessionLocal() as session:
         rows = (await session.execute(
             select(AuditEvent)
-            .where(AuditEvent.flushed_at.is_(None))
             .order_by(AuditEvent.created_at)
             .limit(BATCH_SIZE)
         )).scalars().all()
@@ -69,9 +67,7 @@ async def flush_once(ch_client) -> int:
 
         ids = [r.id for r in rows]
         await session.execute(
-            update(AuditEvent)
-            .where(AuditEvent.id.in_(ids))
-            .values(flushed_at=datetime.now(timezone.utc))
+            delete(AuditEvent).where(AuditEvent.id.in_(ids))
         )
         await session.commit()
 

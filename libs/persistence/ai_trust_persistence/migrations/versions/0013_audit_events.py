@@ -27,13 +27,12 @@ def upgrade() -> None:
         sa.Column("ai_system_name", sa.String(200), nullable=True),
         sa.Column("changes", postgresql.JSONB(), nullable=False, server_default="{}"),
         sa.Column("source", sa.String(20), nullable=False, server_default="ui"),
-        sa.Column("flushed_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.create_index("ix_audit_events_flushed_created", "audit_events", ["flushed_at", "created_at"])
+    op.create_index("ix_audit_events_created", "audit_events", ["created_at"])
     op.create_index("ix_audit_events_ai_system_created", "audit_events", ["ai_system_id", "created_at"])
 
 
 def downgrade() -> None:
     op.drop_index("ix_audit_events_ai_system_created", table_name="audit_events")
-    op.drop_index("ix_audit_events_flushed_created", table_name="audit_events")
+    op.drop_index("ix_audit_events_created", table_name="audit_events")
     op.drop_table("audit_events")
