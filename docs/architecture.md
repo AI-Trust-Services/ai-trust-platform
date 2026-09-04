@@ -91,8 +91,10 @@ flowchart TD
 
         subgraph Storage["Storage"]
             direction LR
-            PG[("PostgreSQL")]
-            AuditBuf[("audit_events\n(write-ahead buffer)")]
+            subgraph PG["PostgreSQL"]
+                PGMain[("primary store")]
+                AuditBuf[("⚡ audit_events\nwrite-ahead buffer")]
+            end
             subgraph CH["ClickHouse"]
                 direction TB
                 Hot[("Hot Disk\nnew data")]
@@ -115,17 +117,14 @@ flowchart TD
 
         Consumer -->|insert| Hot
 
-        PG --> Registry
-        PG --> Overview
-        PG --> Monitoring
-        PG --> Alerts
-        PG --> Compliance
-        PG -->|"rules + baselines"| AlertWorker
-
-        Registry -->|"log event (atomic)"| AuditBuf
-        Compliance -->|"log event (atomic)"| AuditBuf
-        AuditFlush -->|"batch flush → insert then delete"| AuditBuf
-        AuditFlush -->|"insert"| Hot
+        PGMain --> Registry
+        PGMain --> Overview
+        PGMain --> Monitoring
+        PGMain --> Alerts
+        PGMain --> Compliance
+        PGMain -->|"rules + baselines"| AlertWorker
+        PGMain -->|"audit buffer"| AuditFlush
+        AuditFlush -->|"insert then delete"| Hot
 
         CH --> Monitoring
         CH --> Alerts
