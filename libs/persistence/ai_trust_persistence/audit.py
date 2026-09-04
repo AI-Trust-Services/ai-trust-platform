@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,5 +32,4 @@ def log_audit_event(
         ai_system_name=ai_system_name,
         changes=changes or {},
         source=source,
-        flushed_at=None,
     ))
