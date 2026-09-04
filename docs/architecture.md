@@ -29,7 +29,7 @@ ai-trust-platform/
 │   └── logging/                  ← shared structured JSON logging package
 ├── shell/                        ← Luigi host (nginx + luigi-config.js); reverse proxy for all MFEs and APIs
 ├── ai-system-registry/           ← EU AI Act registry component
-│   ├── frontend/                 ← React 18 + Vite SPA (nginx, internal port 80, served at /registry/)
+│   ├── frontend/                 ← React 19 + Vite SPA (nginx, internal port 80, served at /registry/)
 │   └── backend/                  ← FastAPI + SQLAlchemy async (internal port 8001, served at /api/registry/)
 ├── overview/                     ← Compliance overview MFE
 │   ├── frontend/                 ← static HTML + Chart.js (nginx, internal port 80, served at /overview/)
@@ -38,11 +38,15 @@ ai-trust-platform/
 │   ├── frontend/                 ← static HTML + Chart.js (nginx, internal port 80, served at /monitoring/)
 │   └── backend/                  ← FastAPI (internal port 8003, served at /api/monitoring/), reads Postgres + ClickHouse
 ├── alerts/                       ← Alerts MFE
-│   ├── frontend/                 ← React 18 + TypeScript + Vite SPA (nginx, internal port 80, served at /alerts/)
+│   ├── frontend/                 ← React 19 + TypeScript + Vite SPA (nginx, internal port 80, served at /alerts/)
 │   └── backend/                  ← FastAPI (internal port 8005, served at /api/alerts/), reads Postgres (rules) + ClickHouse (events)
 ├── compliance/                   ← Governance chain MFE (assessments, obligations, controls, evidence)
-│   ├── frontend/                 ← React 18 + TypeScript + Vite SPA (nginx, internal port 80, served at /compliance/)
+│   ├── frontend/                 ← React 19 + TypeScript + Vite SPA (nginx, internal port 80, served at /compliance/)
 │   └── backend/                  ← FastAPI (internal port 8007, served at /api/compliance/), reads/writes Postgres + MinIO (evidence files)
+├── audit/                        ← Audit Trail MFE
+│   ├── frontend/                 ← React 19 + TypeScript + Vite SPA (nginx, internal port 80, served at /audit/)
+│   └── backend/                  ← FastAPI (internal port 8008, served at /api/audit/), reads ClickHouse only
+├── audit-flush-worker/           ← Standalone asyncio worker; drains Postgres audit_events buffer into ClickHouse then deletes
 ├── policy-checker-worker/                 ← Background job, evaluates alert rules every N seconds
 │   └── main.py                   ← reads Postgres rules, writes ClickHouse events
 ├── otel-pipeline/                ← GenAI observability pipeline
@@ -87,7 +91,7 @@ flowchart TD
 
         subgraph Storage["Storage"]
             direction LR
-            PG[("PostgreSQL\nai_systems\nmodel_cards\nalert_rules\nservice_model_baselines\nframeworks\nassessments\nobligations\ncontrols\nevidence")]
+            PG[("PostgreSQL\nai_systems\nmodel_cards\nalert_rules\nservice_model_baselines\nframeworks\nassessments\nobligations\ncontrols\nevidence\naudit_events (buffer)")]
             subgraph CH["ClickHouse"]
                 direction TB
                 Hot[("Hot Disk\nnew data")]
@@ -103,6 +107,8 @@ flowchart TD
             Monitoring["Monitoring"]
             Alerts["Alerts"]
             Compliance["Compliance"]
+            Audit["Audit Trail"]
+            AuditFlush["Audit Flush Worker"]
             AlertWorker["Policy Checker Worker"]
         end
 
@@ -114,11 +120,14 @@ flowchart TD
         PG --> Alerts
         PG --> Compliance
         PG -->|"rules + baselines"| AlertWorker
+        PG -->|"audit buffer"| AuditFlush
 
         CH --> Monitoring
         CH --> Alerts
         CH --> AlertWorker
+        CH --> Audit
         AlertWorker -->|writes events| CH
+        AuditFlush -->|"insert + delete buffer"| CH
         Compliance -->|"evidence files"| MinIO
     end
 
@@ -162,6 +171,9 @@ flowchart TD
     AlertWorker["policy-checker-worker\n(restart: on-failure)"]
     CompBackend["compliance-backend\n(healthy)"]
     CompFrontend["compliance-frontend\n(service_started)"]
+    AuditBackend["audit-backend\n(healthy)"]
+    AuditFrontend["audit-frontend\n(service_started)"]
+    AuditFlushWorker["audit-flush-worker\n(restart: on-failure)"]
     DTABackend["decision-trace-analyzer-backend\n(healthy)"]
     DTAFrontend["decision-trace-analyzer-frontend\n(service_started)"]
     KC["keycloak :8180\n(healthy)"]
@@ -188,6 +200,11 @@ flowchart TD
     Migrate --> AlertBackend
     Migrate --> AlertWorker
     Migrate --> CompBackend
+    Migrate --> AuditBackend
+    Migrate --> AuditFlushWorker
+    CH --> AuditBackend
+    CHMigrate --> AuditBackend
+    CHMigrate --> AuditFlushWorker
     MinIO --> MinIOInit
     MinIOInit --> CH
     MinIOInit --> CompBackend
@@ -205,6 +222,8 @@ flowchart TD
     OvFrontend --> Shell
     CompBackend --> Shell
     CompFrontend --> Shell
+    AuditBackend --> Shell
+    AuditFrontend --> Shell
     AlertFrontend --> Shell
     DTABackend --> Shell
     DTAFrontend --> Shell
