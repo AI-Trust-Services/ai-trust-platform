@@ -62,41 +62,50 @@
   --danger-border: #fecaca;
 }
 
-.dark {
-  --background: #09090b;
-  --foreground: #fafafa;
-  --card: #18181b;
-  --card-foreground: #fafafa;
-  --popover: #18181b;
-  --popover-foreground: #fafafa;
-  --primary: #1147E9;
+/* ── Dark theme ──
+   Activated when html.dark class is set (by Luigi shell theme toggle).
+   Matches the dark mockup: slate/navy backgrounds, light text, preserved blue accent. */
+html.dark {
+  --background: #0f172a;
+  --foreground: #f1f5f9;
+  --card: #1e293b;
+  --card-foreground: #f1f5f9;
+  --popover: #1e293b;
+  --popover-foreground: #f1f5f9;
+  --primary: #3b82f6;
   --primary-foreground: #ffffff;
-  --secondary: #27272a;
-  --secondary-foreground: #fafafa;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #1e3a8a;
-  --accent-foreground: #93c5fd;
+  --secondary: #334155;
+  --secondary-foreground: #f1f5f9;
+  --muted: #334155;
+  --muted-foreground: #94a3b8;
+  --accent: #1e3a5f;
+  --accent-foreground: #60a5fa;
   --destructive: #ef4444;
-  --destructive-foreground: #fafafa;
-  --border: #27272a;
-  --input: #27272a;
+  --destructive-foreground: #ffffff;
+  --border: #334155;
+  --input: #334155;
   --ring: #3b82f6;
-  --brand: #1147E9;
-  --brand-hover: #0d39c4;
-  --bg: #09090b;
-  --surface: #18181b;
-  --text: #fafafa;
-  --text-secondary: #a1a1aa;
-  --danger: #ef4444;
-  --shadow-xs: 0 1px 2px 0 rgba(0,0,0,0.4);
-  --shadow-md: 0 4px 12px -2px rgba(0,0,0,0.5), 0 2px 6px -2px rgba(0,0,0,0.3);
+
+  /* Legacy tokens for dark mode */
+  --brand: #3b82f6;
+  --brand-hover: #2563eb;
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --text: #f1f5f9;
+  --text-secondary: #94a3b8;
+
+  /* Elevation in dark mode — subtle glow instead of shadow */
+  --shadow-xs: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 2px 6px -2px rgba(0, 0, 0, 0.3);
+
+  /* Semantic colors for dark mode */
   --success: #22c55e;
   --success-fg: #4ade80;
-  --success-bg: #052e16;
+  --success-bg: #14532d;
   --warning: #f59e0b;
   --warning-fg: #fbbf24;
-  --warning-bg: #1c0f00;
+  --warning-bg: #451a03;
+  --danger: #ef4444;
   --danger-fg: #f87171;
   --danger-bg: #450a0a;
   --danger-border: #7f1d1d;

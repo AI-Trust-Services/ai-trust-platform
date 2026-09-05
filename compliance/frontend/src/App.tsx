@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { Outlet } from "react-router";
 import { Loader2 } from "lucide-react";
-import { useLuigiInit } from "./hooks/useLuigi";
-import { useTheme } from './hooks/useTheme';
+import { useLuigiInit, useLuigiThemeSync } from "./hooks/useLuigi";
 import { HEALTH_URL } from "./api/client";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +21,7 @@ export default function App() {
   const healthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useLuigiInit(() => {});
-  useTheme();
+  useLuigiThemeSync();
 
   const checkHealth = useCallback(async () => {
     if (healthTimer.current) clearTimeout(healthTimer.current);

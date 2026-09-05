@@ -191,6 +191,8 @@ services:
         condition: service_started
       users-backend:
         condition: service_healthy
+      admin-frontend:
+        condition: service_started
     restart: on-failure
 
   ai-system-registry-frontend:
@@ -244,6 +246,17 @@ services:
       context: ./users/frontend
       args:
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
+    restart: on-failure
+
+  admin-frontend:
+    build:
+      context: ./admin/frontend
+      args:
+        VITE_ADMIN_API_BASE: ${VITE_ADMIN_API_BASE:-/api/users/v1/admin}
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
+    depends_on:
+      users-backend:
+        condition: service_healthy
     restart: on-failure
 
   users-backend:
