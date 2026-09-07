@@ -145,7 +145,7 @@ async def reclassify_system(system_id: str, request: Request) -> IntakeResponse:
             resource_id=system_id,
             ai_system_id=system_id,
             ai_system_name=row.name,
-            changes={"tier": {"before": old_tier, "after": classification.tier}},
+            changes={"tier": {"before": old_tier, "after": classification.tier}} if old_tier != classification.tier else None,
         )
         await session.commit()
         await session.refresh(row)

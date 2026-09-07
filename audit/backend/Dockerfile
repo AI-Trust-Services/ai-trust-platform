@@ -11,4 +11,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY audit/backend/ .
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8009", "--no-access-log"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8008", "--no-access-log"]

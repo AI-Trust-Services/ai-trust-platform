@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import AUDIT_READ
-from ai_trust_clickhouse import AUDIT_EVENTS, get_client
+from ai_trust_clickhouse import AUDIT_EVENTS, AUDIT_EVENTS_COLUMNS, get_client
 from ai_trust_logging import get_logger
 
 router = APIRouter(tags=["audit"])
@@ -157,8 +157,9 @@ def list_events(
     )
     total = total_result.result_rows[0][0] if total_result.result_rows else 0
 
+    _cols = ", ".join(AUDIT_EVENTS_COLUMNS)
     rows_result = ch.query(
-        f"SELECT * FROM {AUDIT_EVENTS} FINAL WHERE {where} "
+        f"SELECT {_cols} FROM {AUDIT_EVENTS} FINAL WHERE {where} "
         f"ORDER BY created_at {order} "
         f"LIMIT {{limit:UInt32}} OFFSET {{offset:UInt32}}",
         parameters={**params, "limit": limit, "offset": offset},
@@ -171,8 +172,9 @@ def list_events(
 @router.get("/events/{event_id}", response_model=AuditEventDetail, dependencies=[Depends(require_permission(AUDIT_READ))])
 def get_event(event_id: str) -> AuditEventDetail:
     ch = get_client(database="otel")
+    _cols = ", ".join(AUDIT_EVENTS_COLUMNS)
     result = ch.query(
-        f"SELECT * FROM {AUDIT_EVENTS} FINAL WHERE id = {{event_id:String}} LIMIT 1",
+        f"SELECT {_cols} FROM {AUDIT_EVENTS} FINAL WHERE id = {{event_id:String}} LIMIT 1",
         parameters={"event_id": event_id},
     )
     if not result.result_rows:
@@ -215,8 +217,9 @@ def list_systems(
 
     where = " AND ".join(conditions)
     result = ch.query(
-        f"SELECT DISTINCT ai_system_id, ai_system_name FROM {AUDIT_EVENTS} FINAL "
-        f"WHERE {where} ORDER BY ai_system_name",
+        f"SELECT ai_system_id, argMax(ai_system_name, created_at) "
+        f"FROM {AUDIT_EVENTS} FINAL "
+        f"WHERE {where} GROUP BY ai_system_id ORDER BY ai_system_id",
         parameters=params,
     )
     return [AuditSystem(id=r[0], name=r[1]) for r in result.result_rows]
