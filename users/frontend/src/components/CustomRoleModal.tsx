@@ -1,7 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useToast } from "../App";
 import { api } from "../api/client";
 import type { CustomRole, CustomRoleCreate } from "../types";
+import { PERMISSION_LABELS } from "../constants";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const PERMISSION_GROUPS: { label: string; permissions: string[] }[] = [
   { label: "AI Systems", permissions: ["systems:read", "systems:write"] },
@@ -11,22 +19,6 @@ const PERMISSION_GROUPS: { label: string; permissions: string[] }[] = [
   { label: "Monitoring", permissions: ["monitoring:read"] },
   { label: "User Management", permissions: ["iam:manage"] },
 ];
-
-const PERMISSION_LABELS: Record<string, string> = {
-  "systems:read": "View AI systems",
-  "systems:write": "Create & edit AI systems",
-  "assessments:read": "View assessments",
-  "assessments:write": "Create & edit assessments",
-  "assessments:approve": "Approve assessments",
-  "evidence:read": "View evidence",
-  "evidence:write": "Upload & edit evidence",
-  "evidence:approve": "Approve evidence",
-  "alerts:read": "View alerts",
-  "alerts:handle": "Handle & resolve alerts",
-  "alerts:manage_rules": "Manage alert rules",
-  "monitoring:read": "View monitoring data",
-  "iam:manage": "Manage users & roles",
-};
 
 interface Props {
   role?: CustomRole;
@@ -42,11 +34,6 @@ export function CustomRoleModal({ role, onClose, onSaved }: Props) {
   const [permissions, setPermissions] = useState<Set<string>>(
     new Set(role?.permissions ?? [])
   );
-
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
-  }, []);
 
   function togglePermission(p: string) {
     setPermissions(prev => {
@@ -95,74 +82,74 @@ export function CustomRoleModal({ role, onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal custom-role-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">{role ? "Edit Role" : "Create Custom Role"}</span>
-          <button className="panel-close" onClick={onClose} aria-label="Close">×</button>
-        </div>
-        <form onSubmit={submit}>
-          <div className="modal-body">
-            <div className="field">
-              <label>Role name *</label>
-              <input
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-[560px]">
+        <DialogHeader className="border-b border-border px-6 py-4">
+          <DialogTitle>{role ? "Edit Role" : "Create Custom Role"}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={submit} className="flex min-h-0 flex-col">
+          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-6">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="role-name">Role name *</Label>
+              <Input
+                id="role-name"
                 required
                 value={name}
                 onChange={e => setName(e.target.value)}
                 disabled={!!role}
                 placeholder="e.g. data_reviewer"
               />
-              {role && <div className="field-hint">Role names cannot be changed after creation.</div>}
+              {role && <div className="text-xs text-muted-foreground">Role names cannot be changed after creation.</div>}
             </div>
-            <div className="field">
-              <label>Description</label>
-              <input
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="role-desc">Description</Label>
+              <Input
+                id="role-desc"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="What is this role for?"
               />
             </div>
-            <div className="field">
-              <label>Permissions *</label>
-              <div className="perm-groups">
+            <div className="flex flex-col gap-1.5">
+              <Label>Permissions *</Label>
+              <div className="flex flex-col gap-3">
                 {PERMISSION_GROUPS.map(group => {
                   const allSelected = group.permissions.every(p => permissions.has(p));
                   const someSelected = group.permissions.some(p => permissions.has(p));
                   return (
-                    <div key={group.label} className="perm-group">
-                      <div
-                        className="perm-group-header"
-                        onClick={() => toggleGroup(group.permissions)}
-                      >
-                        <span className={`perm-group-check ${allSelected ? "checked" : someSelected ? "partial" : ""}`}>
-                          {allSelected ? "▣" : someSelected ? "▪" : "□"}
-                        </span>
-                        <span className="perm-group-label">{group.label}</span>
+                    <div key={group.label} className="rounded-md border border-border p-3">
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <Checkbox
+                          checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                          onCheckedChange={() => toggleGroup(group.permissions)}
+                        />
+                        <span className="text-sm font-semibold text-foreground">{group.label}</span>
+                      </label>
+                      <div className="mt-2 flex flex-col gap-2 pl-6">
+                        {group.permissions.map(p => (
+                          <label key={p} className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                            <Checkbox
+                              checked={permissions.has(p)}
+                              onCheckedChange={() => togglePermission(p)}
+                            />
+                            <span>{PERMISSION_LABELS[p] ?? p}</span>
+                          </label>
+                        ))}
                       </div>
-                      {group.permissions.map(p => (
-                        <label key={p} className="perm-checkbox-row">
-                          <input
-                            type="checkbox"
-                            checked={permissions.has(p)}
-                            onChange={() => togglePermission(p)}
-                          />
-                          <span>{PERMISSION_LABELS[p] ?? p}</span>
-                        </label>
-                      ))}
                     </div>
                   );
                 })}
               </div>
             </div>
           </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
+          <DialogFooter className="border-t border-border px-6 py-4">
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={saving}>
               {saving ? "Saving…" : role ? "Save changes" : "Create role"}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

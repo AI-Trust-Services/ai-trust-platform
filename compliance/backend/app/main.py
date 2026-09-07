@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from ai_trust_logging import correlation_id_var, get_logger
+from ai_trust_tenancy import install_tenant_middleware
 from ai_trust_persistence import SessionLocal
 from app import minio_client
 from app.routers import assessments, controls, evidence, frameworks, obligations
@@ -41,6 +42,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Multi-tenancy: resolve the tenant per request (no-op when TENANCY_MODE=single).
+install_tenant_middleware(app)
 
 
 @app.middleware("http")

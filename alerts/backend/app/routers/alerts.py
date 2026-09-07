@@ -37,12 +37,14 @@ def _enrich(rows: list[dict], name_map: dict[str, str]) -> list[dict]:
 
 @router.get("/active", dependencies=[Depends(require_permission(ALERTS_READ))])
 async def get_active_alerts() -> list[dict]:
+    # Isolation is by per-tenant database — ch_query routes to the current tenant's ClickHouse
+    # database, so the WHERE only carries the domain filter.
     rows = await ch_query("""
         SELECT
             id, rule_id, rule_name, category, severity, alert_type, description,
             value_at_trigger, toString(triggered_at) AS triggered_at,
             handled_at, entity_id, entity_type, entity_model
-        FROM otel.alert_events
+        FROM alert_events
         WHERE resolved_at IS NULL AND handled_at IS NULL
         ORDER BY
             multiIf(severity='error', 0, severity='warning', 1, 2) ASC,
@@ -64,8 +66,8 @@ async def get_alert_history() -> list[dict]:
             toString(resolved_at)  AS resolved_at,
             toString(handled_at)   AS handled_at,
             entity_id, entity_type, entity_model
-        FROM otel.alert_events
-        WHERE resolved_at IS NOT NULL OR handled_at IS NOT NULL
+        FROM alert_events
+        WHERE (resolved_at IS NOT NULL OR handled_at IS NOT NULL)
         ORDER BY triggered_at DESC
         LIMIT 100
     """)
@@ -105,7 +107,7 @@ async def get_alert_count() -> dict:
     """Fast endpoint for bell badge — returns count of active unhandled alerts."""
     rows = await ch_query("""
         SELECT count() AS n
-        FROM otel.alert_events
+        FROM alert_events
         WHERE resolved_at IS NULL AND handled_at IS NULL
     """)
     count = int(rows[0]["n"]) if rows else 0
@@ -118,7 +120,7 @@ async def handle_alert_event(event_id: str) -> dict:
     """Mark an event-based alert as handled — moves to history permanently."""
     now = datetime.now(timezone.utc)
     await ch_command(
-        "ALTER TABLE otel.alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
+        "ALTER TABLE alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
         "WHERE id = {id:String} AND handled_at IS NULL "
         "SETTINGS mutations_sync = 1",
         params={"ts": now, "id": event_id},
@@ -146,7 +148,7 @@ async def toggle_alert_rule(rule_id: str) -> dict:
 async def approve_model_change(event_id: str) -> dict:
     """Approve a model change — marks event as handled and updates the service baseline."""
     rows = await ch_query(
-        "SELECT entity_id, entity_model FROM otel.alert_events WHERE id = {id:String}",
+        "SELECT entity_id, entity_model FROM alert_events WHERE id = {id:String}",
         {"id": event_id},
     )
     if not rows:
@@ -160,7 +162,7 @@ async def approve_model_change(event_id: str) -> dict:
 
     now = datetime.now(timezone.utc)
     await ch_command(
-        "ALTER TABLE otel.alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
+        "ALTER TABLE alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
         "WHERE id = {id:String} AND handled_at IS NULL "
         "SETTINGS mutations_sync = 1",
         params={"ts": now, "id": event_id},
@@ -186,7 +188,7 @@ async def reject_model_change(event_id: str) -> dict:
     """Reject a model change — marks event as handled, baseline unchanged."""
     now = datetime.now(timezone.utc)
     await ch_command(
-        "ALTER TABLE otel.alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
+        "ALTER TABLE alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
         "WHERE id = {id:String} AND handled_at IS NULL "
         "SETTINGS mutations_sync = 1",
         params={"ts": now, "id": event_id},

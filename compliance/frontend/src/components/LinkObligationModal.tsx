@@ -1,7 +1,19 @@
 import { useState, useEffect, useCallback } from "react";
+import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import type { AISystem, Assessment, Control, Obligation } from "../types";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 
 interface Props {
   open: boolean;
@@ -82,76 +94,77 @@ export default function LinkObligationModal({ open, control, onClose, onSuccess 
   const orgWide = !control.ai_system_id;
 
   return (
-    <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
-        <div className="modal-header">
-          <h2>Link Obligations — {control.title}</h2>
-          <button className="btn-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body" style={{ padding: 0 }}>
-          <div className="msg-strip info" style={{ margin: "16px 20px 0" }}>
-            Linking a control marks its obligations "In Progress". When the control becomes Effective (via approved evidence), they become "Fulfilled".
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="gap-0 p-0 sm:max-w-[640px]">
+        <DialogHeader>
+          <DialogTitle>Link Obligations — {control.title}</DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[70vh] overflow-y-auto">
+          <div className="px-6 pt-4">
+            <div className="rounded-md border border-[var(--info-border,var(--border))] bg-[var(--info-bg,var(--muted))] px-3 py-2 text-[13px] text-foreground">
+              Linking a control marks its obligations "In Progress". When the control becomes Effective (via approved evidence), they become "Fulfilled".
+            </div>
           </div>
-          <div style={{ padding: "16px 20px 0" }}>
-            <label className="form-label" style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>
-              Assessment
-            </label>
-            <select className="filter-select" style={{ width: "100%" }} value={assessmentId} onChange={(e) => setAssessmentId(e.target.value)}>
-              <option value="">Select an assessment…</option>
-              {assessments.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {orgWide ? `${systemsById[a.ai_system_id]?.name ?? a.ai_system_id} — ${a.title}` : a.title}
-                </option>
-              ))}
-            </select>
+          <div className="px-6 pt-4">
+            <Label className="mb-1.5 block">Assessment</Label>
+            <Select value={assessmentId} onValueChange={setAssessmentId}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select an assessment…" /></SelectTrigger>
+              <SelectContent>
+                {assessments.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {orgWide ? `${systemsById[a.ai_system_id]?.name ?? a.ai_system_id} — ${a.title}` : a.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           {!assessmentId ? (
-            <div style={{ padding: 24, textAlign: "center", color: "var(--text-secondary)" }}>
-              Select an assessment to see its obligations.
-            </div>
+            <div className="p-6 text-center text-sm text-muted-foreground">Select an assessment to see its obligations.</div>
           ) : obligations.length === 0 ? (
-            <div style={{ padding: 24, textAlign: "center", color: "var(--text-secondary)" }}>
-              This assessment has no obligations.
-            </div>
+            <div className="p-6 text-center text-sm text-muted-foreground">This assessment has no obligations.</div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
-              <thead>
-                <tr>
-                  <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, color: "var(--text-secondary)", borderBottom: "2px solid var(--border)" }}>Obligation</th>
-                  <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, color: "var(--text-secondary)", borderBottom: "2px solid var(--border)" }}>Ref</th>
-                  <th style={{ padding: "10px 16px", textAlign: "right", fontSize: 12, color: "var(--text-secondary)", borderBottom: "2px solid var(--border)" }}>Link</th>
-                </tr>
-              </thead>
-              <tbody>
-                {obligations.map((o) => {
-                  const isLinked = linked.has(o.id);
-                  return (
-                    <tr key={o.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "10px 16px" }}>
-                        <div style={{ fontWeight: 500, fontSize: 13 }}>{o.title}</div>
-                        <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{o.id}</div>
-                      </td>
-                      <td style={{ padding: "10px 16px", fontSize: 12 }}>{o.article_ref || "—"}</td>
-                      <td style={{ padding: "10px 16px", textAlign: "right" }}>
-                        <button
-                          className={isLinked ? "btn-ghost btn-sm" : "btn-primary btn-sm"}
-                          disabled={busy === o.id}
-                          onClick={() => toggle(o.id, isLinked)}
-                        >
-                          {isLinked ? "Unlink" : "Link"}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="mt-3 px-2">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Obligation</TableHead>
+                    <TableHead>Ref</TableHead>
+                    <TableHead className="text-right">Link</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {obligations.map((o) => {
+                    const isLinked = linked.has(o.id);
+                    return (
+                      <TableRow key={o.id}>
+                        <TableCell>
+                          <div className="text-[13px] font-medium text-foreground">{o.title}</div>
+                          <div className="text-[11px] text-muted-foreground">{o.id}</div>
+                        </TableCell>
+                        <TableCell className="text-xs">{o.article_ref || "—"}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant={isLinked ? "outline" : "default"}
+                            disabled={busy === o.id}
+                            onClick={() => toggle(o.id, isLinked)}
+                          >
+                            {busy === o.id && <Loader2 className="animate-spin" />}
+                            {isLinked ? "Unlink" : "Link"}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </div>
-        <div className="modal-footer">
-          <button className="btn-primary" onClick={onClose}>Done</button>
-        </div>
-      </div>
-    </div>
+        <DialogFooter>
+          <Button onClick={onClose}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

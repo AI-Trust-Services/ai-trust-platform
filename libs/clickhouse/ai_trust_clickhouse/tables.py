@@ -1,4 +1,9 @@
-GEN_AI_SPANS = "otel.gen_ai_spans"
+# Table names are UNQUALIFIED (no database prefix) so they resolve against the connection's
+# database — which is the tenant's own database (tenant_<org>) on the per-tenant clients, or the
+# legacy 'otel' database on a plain client. This is what makes database-per-tenant isolation work
+# without rewriting every query. (Provisioning/migrations create these tables in each tenant db.)
+GEN_AI_SPANS = "gen_ai_spans"
+ALERT_EVENTS = "alert_events"
 
 # Order matters: must match the on-disk column order in ClickHouse. ALTER ADD
 # COLUMN appends at the end, so columns from 0002+ are listed after the

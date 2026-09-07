@@ -1,9 +1,4 @@
-import "@ui5/webcomponents-icons/dist/performance.js";
-import "@ui5/webcomponents-icons/dist/number-sign.js";
-import "@ui5/webcomponents-icons/dist/ai.js";
-import "@ui5/webcomponents-icons/dist/machine.js";
-import "@ui5/webcomponents-icons/dist/error.js";
-import { Icon } from "@ui5/webcomponents-react";
+import { Timer, Hash, Sparkles, Server, CircleAlert, type LucideIcon } from "lucide-react";
 import { type Span } from "../api/traces";
 import { CopyButton } from "./CopyButton";
 import { ToolCalls } from "./ToolCalls";
@@ -26,34 +21,34 @@ function StatBar({ span }: { span: Span }) {
 
   return (
     <div style={styles.statBar}>
-      <StatItem icon="performance" value={`${span.duration_ms.toFixed(0)}ms`} />
+      <StatItem icon={Timer} value={`${span.duration_ms.toFixed(0)}ms`} />
       {tokens && (
         <>
           <div style={styles.statDivider} />
-          <StatItem icon="number-sign" value={`${tokens.input ?? 0} in`} />
-          <StatItem icon="number-sign" value={`${tokens.output ?? 0} out`} />
+          <StatItem icon={Hash} value={`${tokens.input ?? 0} in`} />
+          <StatItem icon={Hash} value={`${tokens.output ?? 0} out`} />
         </>
       )}
       {model && (
         <>
           <div style={styles.statDivider} />
-          <StatItem icon="ai" value={model} />
+          <StatItem icon={Sparkles} value={model} />
         </>
       )}
       {system && (
         <>
           <div style={styles.statDivider} />
-          <StatItem icon="machine" value={system} />
+          <StatItem icon={Server} value={system} />
         </>
       )}
     </div>
   );
 }
 
-function StatItem({ icon, value }: { icon: string; value: string }) {
+function StatItem({ icon: Icon, value }: { icon: LucideIcon; value: string }) {
   return (
     <div style={styles.statItem}>
-      <Icon name={icon} style={styles.statIcon} />
+      <Icon style={styles.statIcon} />
       <span style={styles.statValue}>{value}</span>
     </div>
   );
@@ -95,7 +90,7 @@ function StatusBanner({ span }: { span: Span }) {
   if (span.status_code !== 2) return null;
   return (
     <div style={styles.errorBanner}>
-      <Icon name="error" style={{ width: 14, height: 14 } as React.CSSProperties} />
+      <CircleAlert style={{ width: 14, height: 14 } as React.CSSProperties} />
       <span style={{ fontWeight: 600 }}>Error</span>
       {span.status_message && <span>· {span.status_message}</span>}
     </div>

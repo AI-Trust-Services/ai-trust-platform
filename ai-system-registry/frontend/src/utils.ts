@@ -1,5 +1,15 @@
 import type { TierKey, LifecycleKey, AISystemFormData, PreviewResult } from "./types";
 
+/**
+ * Shared class for native <select> elements, re-themed to match the shadcn
+ * SelectTrigger look. Native selects are kept (rather than the Radix Select
+ * primitive) because these controls use an empty-string sentinel value for
+ * their placeholder option and rely on the native onChange/value data flow —
+ * both of which Radix Select cannot express without changing behavior.
+ */
+export const SELECT_CLASS =
+  "h-9 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
+
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });

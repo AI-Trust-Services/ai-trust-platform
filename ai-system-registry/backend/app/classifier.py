@@ -62,6 +62,7 @@ _PROHIBITED_FLAGS = [
     ("biometric_categorisation_sensitive", "Art. 5(1)(g) biometric categorisation (sensitive)"),
 ]
 
+
 # Single source of truth for the fields the classifier reads. Importers (e.g.
 # systems.py) use this to decide when an update must trigger reclassification —
 # keep it derived from the structures above so it can't drift out of sync.
@@ -70,6 +71,7 @@ CLASSIFIER_INPUTS = frozenset(
     | set(_ANNEX_III_AREAS)
     | {"is_gpai", "training_compute_flops", "is_chatbot", "generates_synthetic_content"}
 )
+
 
 
 def classify(body: Any) -> ClassificationResult:

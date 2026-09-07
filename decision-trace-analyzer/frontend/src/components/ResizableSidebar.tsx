@@ -1,5 +1,4 @@
-import "@ui5/webcomponents-icons/dist/vertical-grip.js";
-import { Icon } from "@ui5/webcomponents-react";
+import { GripVertical } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface Props {
@@ -66,7 +65,7 @@ export function ResizableSidebar({
         role="separator"
         aria-orientation="vertical"
       >
-        <Icon name="vertical-grip" style={styles.handleIcon as React.CSSProperties} />
+        <GripVertical style={styles.handleIcon as React.CSSProperties} />
       </div>
     </div>
   );

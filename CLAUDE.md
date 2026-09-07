@@ -86,6 +86,25 @@ All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports 
 
 **Hard separation:** **Keycloak** = authentication only (who you are). **OpenFGA** = authorization only (what you can do). The two are independent — never use Keycloak realm roles to gate application features. See [docs/auth-flow.md](docs/auth-flow.md) and [docs/rbac-design.md](docs/rbac-design.md).
 
+### Tenancy mode (single vs multi-tenant)
+
+The platform is a **single codebase** that runs in one of two tenancy modes, selected by the
+`TENANCY_MODE` env var (default `single`). The whole tenancy layer (`libs/tenancy`) is a no-op in
+`single` mode, so there is nothing to strip out for a single-org deployment.
+
+- **`single`** (default) — one organization. The tenant middleware is not registered, Postgres uses
+  the plain `public` schema, one fixed Keycloak realm, no per-tenant scoping of ClickHouse/MinIO. This
+  is the mode for docker-compose, the local kind install (`k8s/`), and any standalone single-org deploy.
+- **`jwt`** — multi-tenant. Each request's tenant is resolved from a `tenant_id` OIDC claim
+  (`TENANT_CLAIM`), verified against `TENANCY_JWKS_ISSUER_BASE`. Data is isolated per tenant:
+  schema-per-tenant Postgres (`tenant_<org>`) + a per-tenant role, a per-tenant Keycloak realm, and
+  per-tenant ClickHouse DB / MinIO bucket. This mode is normally provisioned by the MSP operator
+  bundle, which stamps the per-tenant realm and wiring — selecting `jwt` alone is not enough.
+
+The kind installer (`cd k8s && make up`) **prompts** for the mode and writes `TENANCY_MODE` into
+`.env`. Set it non-interactively with `TENANCY_MODE=<single|jwt> make up`.
+
+
 ### Authentication (Keycloak + oauth2-proxy)
 All traffic enters through **oauth2-proxy** at port 8080; nothing else is browser-reachable. No session → redirect to Keycloak login (`KEYCLOAK_PUBLIC_URL`, port 8180) → code exchanged for JWT stored in an encrypted session cookie → subsequent requests forwarded to the shell with `Authorization: Bearer <JWT>` added server-side. The browser only ever sees the cookie.
 
@@ -243,7 +262,26 @@ Backend (`compliance/backend/app/`):
 
 **Evidence** — `POST /api/v1/evidence` accepts `control_ids` and `obligation_ids` as repeated form fields (multi-value, one M2M row each); at least one of `control_ids`/`obligation_ids`/`ai_system_id`/`assessment_id` required. Versioned: `/upload-version` snapshots current file metadata to `evidence_versions` before replacing (old MinIO file deleted, snapshot retained); `/versions` returns history oldest-first; `version_label` tracks the current label. Stored in MinIO bucket `evidence-files`, key `evidence/{evidence_id}/{filename}`.
 
-**Evidence expiry** (policy-checker-worker, seeded in migration `0004`): `evidence_expired` (marks approved evidence past `validity_until` as `expired`, cascades, fires), `evidence_expiring_30d` (8–30 days), `evidence_expiring_7d` (1–7 days; replaces and auto-resolves the 30-day alert when evidence enters the 7-day window).
+#### Evidence expiry (policy-checker-worker)
+Three alert rules seeded in migration `0004` drive evidence expiry:
+- `evidence_expired` — marks approved evidence past `validity_until` as `expired`, cascades control effectiveness + obligation status, fires alert
+- `evidence_expiring_30d` — fires warning for approved evidence expiring in 8–30 days
+- `evidence_expiring_7d` — fires warning for approved evidence expiring in 1–7 days; replaces the 30-day alert when evidence enters the 7-day window (auto-resolves the 30-day alert)
+
+## Environment variables
+
+All credentials load from `.env` (gitignored; copy from `.env.example`, never commit). All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code. **Exception:** SMTP settings are optional — when `SMTP_HOST` is unset, the registry backend skips email and starts normally.
+
+See `.env.example` for the full list, defaults, and per-service mapping. Notable groups:
+- **Infra creds** — `POSTGRES_*`, `RABBITMQ_*`, `CLICKHOUSE_*`, `MINIO_ROOT_*`, `DATABASE_URL`.
+- **Tenancy** — `TENANCY_MODE` (`single` default / `jwt`), `TENANCY_JWKS_ISSUER_BASE` (required if `jwt`), `TENANT_CLAIM` (`tenant_id`).
+- **`ALLOWED_ORIGINS`** (all backends) — comma-separated CORS origins; the app refuses to start if unset.
+- **`VITE_*`** (frontend build-time) — API base URLs and cross-MFE deep-link URLs baked into bundles.
+- **Auth** — `KEYCLOAK_*`, `USERS_BACKEND_CLIENT_SECRET`, `APP_PUBLIC_URL`, `APP_ADMIN_*`, `OAUTH2_PROXY_COOKIE_SECRET` (exactly 16/24/32 chars).
+- **compliance MinIO** — `MINIO_ENDPOINT` (in-cluster, uploads), `MINIO_PUBLIC_ENDPOINT` (presigned URLs), `MINIO_SECURE`, `MINIO_REGION`.
+- **alerts** — `ALERT_POLL_INTERVAL` (10 dev, 60+ prod).
+- **registry SMTP** — `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/SSL/STARTTLS`, `USERS_BACKEND_URL`.
+- **registry LLM** — `LLM_PROVIDER` (`stub`/`ollama`/`external`), `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_VISION_MODEL`; external provider `AI_CLIENT_ID/SECRET`, `AI_AUTH_URL`, `AI_API_URL`, `AI_RESOURCE_GROUP`, `AI_DEPLOYMENT_ID`, `AI_API_VERSION`; `ASSIST_TURN_CAP` (12), `ASSIST_MAX_TEXT_LENGTH` (15000).
 
 ## otel-pipeline/
 
@@ -259,25 +297,3 @@ Receives OTLP from any app, routes through RabbitMQ, stores in ClickHouse.
 One sub-directory per RabbitMQ consumer — standalone Python worker (no FastAPI, `asyncio.run(main())`, no HTTP port). Each binds a named durable queue to the `otel.traces` fanout exchange, so messages queue while a consumer is down. To add one, use the `/add-consumer` skill.
 
 **`clickhouse-consumer/`** — parses OTLP JSON, skips spans without `gen_ai.operation.name`, batch-inserts into `otel.gen_ai_spans`. Hybrid batching: flush at `BATCH_SIZE` rows (default 100) or `BATCH_TIMEOUT` seconds (default 5). On ClickHouse failure retries 3× (1s/2s/4s backoff) then acks and drops the batch. Flushes on shutdown. Reads `RABBITMQ_URL`, `CLICKHOUSE_*` (fail-fast).
-
-## Conventions & config
-
-### docker-compose.yml
-- Credentials via YAML anchors (`x-db-env`, `x-rmq-env`, `x-ch-env`, `x-minio-env`) merged into each service — never copy-paste connection strings.
-- Backend build context is always the repo root (so the Dockerfile can `COPY libs/...`).
-- New backends: `depends_on: db-migrate: condition: service_completed_successfully`, a `healthcheck.py` + `healthcheck: CMD python healthcheck.py`, no `ports:`. Shell depends on backends via `condition: service_healthy`.
-- YAML forbids two `<<:` merge keys in one mapping — expand env vars inline when a service needs multiple anchors (see `otel-clickhouse-consumer`).
-
-### Dependency pinning
-Each service pins versions directly in its own `requirements.txt` (e.g. `fastapi==0.115.6`). To change: edit the version, then `docker compose up --build -d <service>`.
-
-### Environment variables
-All credentials load from `.env` (gitignored; copy from `.env.example`, never commit). All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code. See `.env.example` for the full list and defaults; notable groups:
-- **Infra creds** — `POSTGRES_*`, `RABBITMQ_*`, `CLICKHOUSE_*`, `MINIO_ROOT_*`, `DATABASE_URL`.
-- **`ALLOWED_ORIGINS`** (all backends) — comma-separated CORS origins; the app refuses to start if unset.
-- **`VITE_*`** (frontend build-time) — API base URLs and cross-MFE deep-link URLs baked into bundles.
-- **Auth** — `KEYCLOAK_*`, `USERS_BACKEND_CLIENT_SECRET`, `APP_PUBLIC_URL`, `APP_ADMIN_*`, `OAUTH2_PROXY_COOKIE_SECRET` (exactly 16/24/32 chars).
-- **compliance MinIO** — `MINIO_ENDPOINT` (in-cluster, uploads), `MINIO_PUBLIC_ENDPOINT` (presigned URLs), `MINIO_SECURE`, `MINIO_REGION`.
-- **alerts** — `ALERT_POLL_INTERVAL` (10 dev, 60+ prod).
-- **registry SMTP** — `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/SSL/STARTTLS`, `USERS_BACKEND_URL`.
-- **registry LLM** — `LLM_PROVIDER` (`stub`/`ollama`/`external`), `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_VISION_MODEL`; external provider `AI_CLIENT_ID/SECRET`, `AI_AUTH_URL`, `AI_API_URL`, `AI_RESOURCE_GROUP`, `AI_DEPLOYMENT_ID`, `AI_API_VERSION`; `ASSIST_TURN_CAP` (12), `ASSIST_MAX_TEXT_LENGTH` (15000).

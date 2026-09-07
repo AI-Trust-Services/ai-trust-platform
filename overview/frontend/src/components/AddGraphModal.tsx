@@ -1,6 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { DashboardCard, OverviewStats, RecommendedChart } from "../types";
 import DashCard from "./DashCard";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 interface AddGraphModalProps {
   activeIds: Set<string>;
@@ -25,63 +31,73 @@ const REGISTRY_CHARTS: RecommendedChart[] = [
 export default function AddGraphModal({ activeIds, stats, onAdd, onRemove, onClose }: AddGraphModalProps) {
   const [preview, setPreview] = useState<RecommendedChart | null>(REGISTRY_CHARTS[0]);
 
-  // Disable background scroll while modal is open
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
-  }, []);
-
   function handleClick(rc: RecommendedChart) {
     if (activeIds.has(rc.id)) onRemove(rc.id);
     else onAdd(rc);
   }
 
   return (
-    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal add-graph-modal">
-        <div className="modal-header">
-          <h2>Add Graph</h2>
-          <button className="btn-close" onClick={onClose}>×</button>
-        </div>
-        <div className="add-graph-body">
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-h-[85vh] gap-0 overflow-hidden p-0 sm:max-w-4xl">
+        <DialogHeader className="border-b border-border px-6 py-4">
+          <DialogTitle>Add Graph</DialogTitle>
+        </DialogHeader>
+
+        <div className="grid grid-cols-[280px_1fr] overflow-hidden">
           {/* Left: card list */}
-          <div className="add-graph-list">
-            <div className="rec-section-title">Registry</div>
+          <div className="max-h-[60vh] overflow-auto border-r border-border p-3">
+            <div className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Registry
+            </div>
             {REGISTRY_CHARTS.map((rc) => {
               const added = activeIds.has(rc.id);
+              const focused = preview?.id === rc.id;
               return (
                 <div
                   key={rc.id}
-                  className={`rec-list-item${added ? " added" : ""}${preview?.id === rc.id ? " focused" : ""}`}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 transition-colors",
+                    focused ? "bg-accent" : "hover:bg-accent/60",
+                  )}
                   onMouseEnter={() => setPreview(rc)}
                   onClick={() => handleClick(rc)}
                 >
-                  <div style={{ flex: 1 }}>
-                    <div className="rec-list-title">{rc.title}</div>
-                    <div className="rec-list-desc">{rc.desc}</div>
+                  <div className="flex-1">
+                    <div className="text-[13px] font-medium">{rc.title}</div>
+                    <div className="text-[11px] text-muted-foreground">{rc.desc}</div>
                   </div>
-                  <span className="rec-card-badge">{added ? "✓" : rc.badge}</span>
+                  <Badge
+                    variant={added ? "default" : "secondary"}
+                    className={cn("shrink-0", added && "bg-[#1a7a3c]")}
+                  >
+                    {added ? "✓" : rc.badge}
+                  </Badge>
                 </div>
               );
             })}
           </div>
 
           {/* Right: preview pane */}
-          <div className="add-graph-preview">
+          <div className="max-h-[60vh] overflow-auto bg-background p-4">
             {preview && stats ? (
               <>
-                <div className="rec-section-title" style={{ marginBottom: 8 }}>Preview</div>
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Preview
+                </div>
                 <DashCard card={preview} stats={stats} onRemove={() => {}} />
               </>
             ) : (
-              <div className="add-graph-preview-empty">Hover a card to preview</div>
+              <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">
+                Hover a card to preview
+              </div>
             )}
           </div>
         </div>
-        <div className="modal-footer">
-          <button className="btn-ghost" onClick={onClose}>Done</button>
-        </div>
-      </div>
-    </div>
+
+        <DialogFooter className="border-t border-border px-6 py-4">
+          <Button variant="outline" onClick={onClose}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

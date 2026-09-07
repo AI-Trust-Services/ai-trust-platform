@@ -3,11 +3,17 @@ import {
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend, LabelList,
 } from "recharts";
+import { Pencil, X, GripVertical, BarChart3, PieChart as PieChartIcon, Table as TableIcon, Hash } from "lucide-react";
 import type { DashboardCard, OverviewStats, RecentSystem } from "../types";
 import { TierBadge, FormattedDate } from "./Badges";
 import {
-  TIER_COLORS, LIFECYCLE_COLORS, PALETTE, HIST_COLORS,
+  TIER_COLORS, LIFECYCLE_COLORS, PALETTE, HIST_COLORS, statusColor,
 } from "../utils";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ChartTooltip, chartClass } from "@/components/ui/chart";
+import { cn } from "@/lib/utils";
 
 interface Props {
   card: DashboardCard;
@@ -16,7 +22,12 @@ interface Props {
   onRemove: (id: string) => void;
 }
 
-function colorFor(dataKey: string | undefined, label: string, index: number): string {
+const KPI_COLORS: Record<string, string> = {
+  red: "var(--destructive)", orange: "var(--warning)", green: "var(--success)", blue: "var(--brand)",
+};
+
+function colorFor(dataKey: string | undefined, label: string, index: number, value: number): string {
+  if (dataKey === "compliance_by_tier") return statusColor(value);
   if (dataKey === "by_tier") return TIER_COLORS[label as keyof typeof TIER_COLORS] ?? PALETTE[index % PALETTE.length];
   if (dataKey === "by_lifecycle") return LIFECYCLE_COLORS[label] ?? PALETTE[index % PALETTE.length];
   if (dataKey === "compliance_histogram") return HIST_COLORS[index % HIST_COLORS.length];
@@ -30,11 +41,14 @@ function KpiCardBody({ card, stats }: { card: DashboardCard; stats: OverviewStat
     kpi_avg_compliance: { val: `${stats.avg_compliance}%`, color: stats.avg_compliance >= 80 ? "green" : stats.avg_compliance >= 50 ? "orange" : "red", sub: "avg compliance" },
     kpi_total_models:   { val: stats.total_models, color: "blue", sub: "model cards" },
   };
-  const kpi = map[card.id] ?? { val: "—", color: "", sub: "" };
+  const kpi = map[card.id] ?? { val: "—", color: "blue", sub: "" };
   return (
-    <div className="dash-card-body">
-      <div className={`dash-kpi-value ${kpi.color}`}>{kpi.val}</div>
-      <div className="dash-kpi-sub">{kpi.sub}</div>
+    <div className="flex flex-1 flex-col p-4">
+      <div className="text-[28px] font-semibold leading-none tabular-nums text-foreground">{kpi.val}</div>
+      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="size-1.5 shrink-0 rounded-full" style={{ background: KPI_COLORS[kpi.color] }} />
+        {kpi.sub}
+      </div>
     </div>
   );
 }
@@ -43,10 +57,12 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rawData = card.dataKey ? ((stats as any)[card.dataKey] as Record<string, number> | undefined) ?? {} : {};
   const entries = Object.entries(rawData);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   if (!entries.length) {
     return (
-      <div className="dash-card-body" style={{ alignItems: "center", justifyContent: "center", color: "var(--text-secondary)", fontSize: 13 }}>
+      <div className="flex flex-1 items-center justify-center p-4 text-[13px] text-muted-foreground">
         No data yet
       </div>
     );
@@ -55,14 +71,11 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
   const chartData = entries.map(([name, value]) => ({ name: name.replace(/_/g, " "), value }));
   const isCompliance = card.dataKey === "compliance_by_tier";
   const isPie = card.type === "pie" || card.type === "doughnut";
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-
   const total = entries.reduce((acc, [, v]) => acc + v, 0);
 
   return (
-    <div className="dash-card-body">
-      <div className="chart-wrap">
+    <div className="flex flex-1 flex-col p-4">
+      <div className={cn("min-h-[220px] flex-1", chartClass)}>
         {mounted && (
         <ResponsiveContainer width="100%" height={240}>
           {isPie ? (
@@ -73,14 +86,16 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
                 nameKey="name"
                 cx="50%" cy="50%"
                 outerRadius="60%"
+                stroke="var(--card)"
+                strokeWidth={2}
                 label={({ value }) => `${((value / total) * 100).toFixed(0)}%`}
                 labelLine={true}
               >
                 {chartData.map((entry, i) => (
-                  <Cell key={entry.name} fill={colorFor(card.dataKey, entries[i][0], i)} />
+                  <Cell key={entry.name} fill={colorFor(card.dataKey, entries[i][0], i, entries[i][1])} />
                 ))}
               </Pie>
-              <Tooltip formatter={(val: number) => [val.toLocaleString(), ""]} />
+              <Tooltip cursor={false} content={<ChartTooltip hideLabel valueFormatter={(v) => v.toLocaleString()} />} />
               <Legend
                 iconType="circle"
                 iconSize={8}
@@ -91,17 +106,19 @@ function ChartCardBody({ card, stats }: { card: DashboardCard; stats: OverviewSt
             </PieChart>
           ) : (
             <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 40, top: 4, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e4e6e8" horizontal={false} />
+              <CartesianGrid stroke="var(--border)" horizontal={false} />
               <XAxis
                 type="number"
                 tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
                 tickFormatter={isCompliance ? (v: number) => `${v}%` : undefined}
               />
-              <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={110} />
-              <Tooltip formatter={(val: number) => isCompliance ? `${val}%` : val.toLocaleString()} />
-              <Bar dataKey="value" radius={[0, 3, 3, 0]}>
+              <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={110} tickLine={false} axisLine={false} />
+              <Tooltip cursor={false} content={<ChartTooltip valueFormatter={(v) => (isCompliance ? `${v}%` : v.toLocaleString())} />} />
+              <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={28}>
                 {chartData.map((entry, i) => (
-                  <Cell key={entry.name} fill={colorFor(card.dataKey, entries[i][0], i)} />
+                  <Cell key={entry.name} fill={colorFor(card.dataKey, entries[i][0], i, entries[i][1])} />
                 ))}
                 <LabelList
                   dataKey="value"
@@ -123,34 +140,34 @@ function TableCardBody({ stats }: { stats: OverviewStats }) {
   const rows: RecentSystem[] = (stats.recent ?? []).slice(0, 5);
   if (!rows.length) {
     return (
-      <div className="dash-card-body" style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+      <div className="flex flex-1 flex-col p-4 text-[13px] text-muted-foreground">
         No systems yet
       </div>
     );
   }
   return (
-    <div className="dash-card-body" style={{ padding: 0, overflow: "auto", flex: 1 }}>
-      <table>
-        <thead>
-          <tr>
-            <th>System</th>
-            <th>Tier</th>
-            <th>Registered</th>
-          </tr>
-        </thead>
-        <tbody>
+    <div className="flex flex-1 overflow-auto">
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead>System</TableHead>
+            <TableHead>Tier</TableHead>
+            <TableHead>Registered</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((r) => (
-            <tr key={r.id}>
-              <td>
-                <div style={{ fontWeight: 500 }}>{r.name}</div>
-                <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{r.id}</div>
-              </td>
-              <td><TierBadge tier={r.tier} /></td>
-              <td style={{ color: "var(--text-secondary)" }}><FormattedDate iso={r.created_at} /></td>
-            </tr>
+            <TableRow key={r.id}>
+              <TableCell>
+                <div className="font-medium">{r.name}</div>
+                <div className="text-[11px] text-muted-foreground">{r.id}</div>
+              </TableCell>
+              <TableCell><TierBadge tier={r.tier} /></TableCell>
+              <TableCell className="text-muted-foreground"><FormattedDate iso={r.created_at} /></TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -158,23 +175,43 @@ function TableCardBody({ stats }: { stats: OverviewStats }) {
 export default function DashCard({ card, stats, onEdit, onRemove }: Props) {
   const isKpi   = card.type === "kpi";
   const isTable = card.type === "table";
-  const cls     = isKpi ? "kpi" : "chart"; // table uses chart height, not its own class
+  const HeadIcon = isKpi ? Hash
+    : isTable ? TableIcon
+    : (card.type === "pie" || card.type === "doughnut") ? PieChartIcon
+    : BarChart3;
 
   return (
-    <div className={`dash-card ${cls}`} data-card-id={card.id}>
-      <div className="dash-card-header">
-        <span className="dash-card-title">{card.title}</span>
-        <div className="dash-card-actions">
+    <Card
+      className={cn(
+        "dash-card flex break-inside-avoid flex-col overflow-hidden p-0",
+        isKpi ? "min-h-[100px]" : "min-h-[300px]",
+      )}
+      data-card-id={card.id}
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/30 px-4 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+            <HeadIcon className="size-3.5" />
+          </span>
+          <span className="truncate text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">{card.title}</span>
+        </div>
+        <div className="flex gap-1 print:hidden">
           {!isKpi && onEdit && (
-            <button className="btn-icon" title="Edit" onClick={() => onEdit(card.id)}>✎</button>
+            <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" title="Edit" onClick={() => onEdit(card.id)}>
+              <Pencil />
+            </Button>
           )}
-          <span className="drag-handle">⠿</span>
-          <button className="btn-icon" title="Remove" onClick={() => onRemove(card.id)}>✕</button>
+          <span className="drag-handle flex cursor-grab items-center px-1 text-muted-foreground opacity-40 hover:opacity-100">
+            <GripVertical className="size-4" />
+          </span>
+          <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" title="Remove" onClick={() => onRemove(card.id)}>
+            <X />
+          </Button>
         </div>
       </div>
       {isKpi   && <KpiCardBody   card={card} stats={stats} />}
       {isTable && <TableCardBody stats={stats} />}
       {!isKpi && !isTable && <ChartCardBody card={card} stats={stats} />}
-    </div>
+    </Card>
   );
 }

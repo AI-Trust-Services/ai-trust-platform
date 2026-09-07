@@ -2,6 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+COPY libs/tenancy /app/libs/tenancy
 COPY libs/clickhouse /app/libs/clickhouse
 COPY libs/logging /app/libs/logging
 COPY decision-trace-analyzer/backend/requirements.txt .

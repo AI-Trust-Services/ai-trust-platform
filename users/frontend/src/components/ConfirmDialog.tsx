@@ -1,3 +1,8 @@
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+
 interface Props {
   message: string;
   confirmLabel?: string;
@@ -7,16 +12,19 @@ interface Props {
 
 export function ConfirmDialog({ message, confirmLabel = "Delete", onConfirm, onCancel }: Props) {
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal confirm-dialog" onClick={e => e.stopPropagation()}>
-        <div className="modal-body" style={{ padding: "28px 24px 20px" }}>
-          <p style={{ fontSize: 14, color: "#1d2d3e", lineHeight: 1.5 }}>{message}</p>
+    <Dialog open onOpenChange={(o) => { if (!o) onCancel(); }}>
+      <DialogContent className="gap-0 p-0 sm:max-w-[360px]" showCloseButton={false}>
+        <DialogHeader className="border-b-0 px-6 pb-2 pt-6">
+          <DialogTitle className="sr-only">Confirm</DialogTitle>
+        </DialogHeader>
+        <div className="px-6 pb-5 pt-1">
+          <p className="text-sm leading-relaxed text-foreground">{message}</p>
         </div>
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-danger" onClick={onConfirm}>{confirmLabel}</button>
-        </div>
-      </div>
-    </div>
+        <DialogFooter className="px-6 py-3.5">
+          <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+          <Button variant="destructive" onClick={onConfirm}>{confirmLabel}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

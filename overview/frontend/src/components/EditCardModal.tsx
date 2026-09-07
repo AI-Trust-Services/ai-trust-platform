@@ -1,5 +1,14 @@
 import { useState } from "react";
 import type { DashboardCard, ChartType, DataKey } from "../types";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 interface Props {
   card: DashboardCard;
@@ -23,38 +32,43 @@ export default function EditCardModal({ card, onSave, onClose }: Props) {
   const [dataKey, setDataKey] = useState<DataKey>(card.dataKey ?? "by_tier");
 
   return (
-    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ maxWidth: 480 }}>
-        <div className="modal-header">
-          <h2>Edit Graph</h2>
-          <button className="btn-close" onClick={onClose}>×</button>
-        </div>
-        <div style={{ padding: 24 }}>
-          <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
-            <div className="form-group">
-              <label>Title</label>
-              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Chart Type</label>
-              <select className="form-select" value={type} onChange={(e) => setType(e.target.value as ChartType)}>
-                <option value="bar">Bar Chart</option>
-                <option value="pie">Pie Chart</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Data Source</label>
-              <select className="form-select" value={dataKey} onChange={(e) => setDataKey(e.target.value as DataKey)}>
-                {DATA_KEYS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
-              </select>
-            </div>
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="gap-0 p-0 sm:max-w-[480px]">
+        <DialogHeader className="border-b border-border px-6 py-4">
+          <DialogTitle>Edit Graph</DialogTitle>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-4 p-6">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="edit-title">Title</Label>
+            <Input id="edit-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Chart Type</Label>
+            <Select value={type} onValueChange={(v) => setType(v as ChartType)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bar">Bar Chart</SelectItem>
+                <SelectItem value="pie">Pie Chart</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Data Source</Label>
+            <Select value={dataKey} onValueChange={(v) => setDataKey(v as DataKey)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {DATA_KEYS.map((d) => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </div>
-        <div className="modal-footer">
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={() => onSave({ ...card, title: title.trim() || card.title, type, dataKey })}>Save</button>
-        </div>
-      </div>
-    </div>
+
+        <DialogFooter className="border-t border-border px-6 py-4">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => onSave({ ...card, title: title.trim() || card.title, type, dataKey })}>Save</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -42,6 +42,12 @@ STORE_NAME = os.environ.get("OPENFGA_STORE_NAME", "ai-trust")
 STORE_ID_FILE = os.environ.get("OPENFGA_STORE_ID_FILE", "/config/store_id")
 INITIAL_ADMIN_USER = os.environ.get("INITIAL_ADMIN_USER", "").strip()
 
+DEV_USER_ROLES = [
+    ("dev-owner",      "business_owner"),
+    ("dev-engineer",   "ai_engineer"),
+    ("dev-compliance", "ai_compliance_officer"),
+]
+
 # platform:global split into (type, id) for tuple objects.
 PLATFORM_TYPE, PLATFORM_ID = PLATFORM_OBJECT.split(":", 1)
 
@@ -183,6 +189,16 @@ async def seed_admin_users(client: OpenFgaClient) -> None:
     print(f"Seeded platform_administrator for: {INITIAL_ADMIN_USER}")
 
 
+async def ensure_dev_users(client: OpenFgaClient) -> None:
+    if os.environ.get("SEED_DEV_USERS", "").lower() != "true":
+        return
+    tuples = [
+        ClientTuple(user=f"user:{username}", relation="member", object=f"role:{role}")
+        for username, role in DEV_USER_ROLES
+    ]
+    await _write_tuples_idempotent(client, tuples, label="dev user assignment")
+
+
 async def _write_tuples_idempotent(
     client: OpenFgaClient, tuples: list[ClientTuple], label: str
 ) -> None:
@@ -217,6 +233,7 @@ async def main() -> None:
         await write_model_if_needed(client)
         await seed_role_tuples(client)
         await seed_admin_users(client)
+        await ensure_dev_users(client)
 
     write_store_id_file(store_id)
     print("OpenFGA provisioning complete.")

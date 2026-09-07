@@ -1,8 +1,17 @@
 import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import type { ModelCard, ModelCardFormData, ModelSystemResponse } from "../types";
 import { TierBadge, LifecycleBadge, ModelTypeBadge } from "./Badges";
 import { useToast, useModalControls } from "../App";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SELECT_CLASS } from "../utils";
 
 const EMPTY: ModelCardFormData = { name: "", provider: "", version: "", model_type: "llm", description: "", inference_url: "", open_weights: false };
 
@@ -15,7 +24,6 @@ export default function ModelDetail({ modelId, open, onClose, onUpdate }: {
   const [model, setModel] = useState<ModelCard | null>(null);
   const [systems, setSystems] = useState<ModelSystemResponse[]>([]);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState("overview");
   const [form, setForm] = useState<ModelCardFormData>(EMPTY);
   const [saving, setSaving] = useState(false);
   const showToast = useToast();
@@ -24,7 +32,6 @@ export default function ModelDetail({ modelId, open, onClose, onUpdate }: {
   useEffect(() => {
     if (!modelId) return;
     let cancelled = false;
-    setTab("overview");
     setLoading(true);
     Promise.all([api.getModelCard(modelId), api.getModelSystems(modelId)])
       .then(([m, s]) => { if (!cancelled) { setModel(m); setSystems(s); setForm({ ...EMPTY, ...m }); } })
@@ -54,141 +61,136 @@ export default function ModelDetail({ modelId, open, onClose, onUpdate }: {
   }
 
   return (
-    <>
-      <div className={`detail-overlay${open ? " open" : ""}`} onClick={onClose} />
-      <div className={`detail-panel${open ? " open" : ""}`}>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent className="w-[480px] overflow-y-auto sm:max-w-[480px]">
         {loading || !model ? (
-          <div style={{ padding: 32, color: "var(--text-secondary)", fontSize: 13 }}>
-            {loading ? "Loading…" : null}
+          <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
+            {loading ? <><Loader2 className="mr-2 size-4 animate-spin" />Loading…</> : null}
           </div>
         ) : (
           <>
-            <div className="modal-header">
-              <div>
-                <h2>{model.name}</h2>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
-                  {model.id} &nbsp;
-                  <ModelTypeBadge type={model.model_type} />
-                  {model.open_weights && <span className="badge badge-info" style={{ marginLeft: 4 }}>Open weights</span>}
-                </div>
+            <SheetHeader className="mb-4">
+              <SheetTitle>{model.name}</SheetTitle>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>{model.id}</span>
+                <ModelTypeBadge type={model.model_type} />
+                {model.open_weights && (
+                  <span className="rounded bg-blue-50 px-1.5 py-0.5 font-medium text-blue-700">Open weights</span>
+                )}
               </div>
-              <button className="btn-close" onClick={onClose}>×</button>
-            </div>
+            </SheetHeader>
 
-            <div className="tab-bar">
-              {(mayWrite ? ["overview", "edit"] : ["overview"]).map((t) => (
-                <div key={t} className={`tab${tab === t ? " active" : ""}`} onClick={() => setTab(t)}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </div>
-              ))}
-            </div>
+            <Tabs defaultValue="overview">
+              <TabsList className="mb-4 w-full">
+                <TabsTrigger value="overview" className="flex-1">Overview</TabsTrigger>
+                {mayWrite && <TabsTrigger value="edit" className="flex-1">Edit</TabsTrigger>}
+              </TabsList>
 
-            <div className="modal-body">
-            {tab === "overview" && (
-              <div className="tab-panel active">
-                <div className="detail-section">
-                  <h3>Model Details</h3>
-                  <div className="detail-grid">
-                    <span className="detail-label">Provider</span>
-                    <span className="detail-value">{model.provider || "—"}</span>
-                    <span className="detail-label">Version</span>
-                    <span className="detail-value">{model.version || "—"}</span>
-                    <span className="detail-label">Type</span>
-                    <span className="detail-value"><ModelTypeBadge type={model.model_type} /></span>
-                    <span className="detail-label">Weights</span>
-                    <span className="detail-value">
+              <TabsContent value="overview" className="space-y-6">
+                <section>
+                  <h3 className="mb-3 text-sm font-semibold">Model Details</h3>
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                    <dt className="text-muted-foreground">Provider</dt><dd>{model.provider || "—"}</dd>
+                    <dt className="text-muted-foreground">Version</dt><dd>{model.version || "—"}</dd>
+                    <dt className="text-muted-foreground">Type</dt><dd><ModelTypeBadge type={model.model_type} /></dd>
+                    <dt className="text-muted-foreground">Weights</dt>
+                    <dd>
                       {model.open_weights
-                        ? <span style={{ color: "#1a5c35", fontWeight: 500 }}>Open</span>
-                        : <span style={{ color: "var(--text-secondary)" }}>Proprietary</span>}
-                    </span>
+                        ? <span className="font-medium text-[#1a5c35]">Open</span>
+                        : <span className="text-muted-foreground">Proprietary</span>}
+                    </dd>
                     {model.inference_url && <>
-                      <span className="detail-label">Inference URL</span>
-                      <span className="detail-value">
-                        <a href={model.inference_url} target="_blank" rel="noreferrer" style={{ color: "var(--brand)" }}>
+                      <dt className="text-muted-foreground">Inference URL</dt>
+                      <dd>
+                        <a href={model.inference_url} target="_blank" rel="noreferrer"
+                          className="text-primary underline-offset-4 hover:underline">
                           {model.inference_url}
                         </a>
-                      </span>
+                      </dd>
                     </>}
                     {model.description && <>
-                      <span className="detail-label">Description</span>
-                      <span className="detail-value">{model.description}</span>
+                      <dt className="text-muted-foreground">Description</dt>
+                      <dd>{model.description}</dd>
                     </>}
-                  </div>
-                </div>
+                  </dl>
+                </section>
 
-                <div className="detail-section">
-                  <h3>Linked AI Systems</h3>
+                <section>
+                  <h3 className="mb-3 text-sm font-semibold">Linked AI Systems</h3>
                   {systems.length === 0 ? (
-                    <div className="msg-strip info">No systems linked to this model.</div>
+                    <p className="rounded-md border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                      No systems linked to this model.
+                    </p>
                   ) : (
-                    systems.map((s) => (
-                      <div key={s.id} className="model-link-box linked">
-                        <div className="model-link-name">{s.name}</div>
-                        <div className="model-link-meta">
-                          {s.id} &nbsp;
-                          <TierBadge tier={s.tier as any} /> <LifecycleBadge lc={s.lifecycle as any} />
-                          {s.role && <> · <span style={{ color: "var(--brand)" }}>{s.role}</span></>}
-                          &nbsp; {Math.round(s.compliance)}% compliance
+                    <div className="space-y-2">
+                      {systems.map((s) => (
+                        <div key={s.id} className="rounded-md border border-border bg-card px-4 py-3 text-sm">
+                          <div className="font-medium">{s.name}</div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                            <span>{s.id}</span>
+                            <TierBadge tier={s.tier as any} />
+                            <LifecycleBadge lc={s.lifecycle as any} />
+                            {s.role && <span className="text-primary">{s.role}</span>}
+                            <span>{Math.round(s.compliance)}% compliance</span>
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   )}
-                </div>
-              </div>
-            )}
+                </section>
+              </TabsContent>
 
-            {tab === "edit" && (
-              <div className="tab-panel active">
-                <div className="detail-section">
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label className="required" htmlFor="mc_name">Model Name</label>
-                      <input type="text" id="mc_name" value={form.name} onChange={set("name")} placeholder="e.g. GPT-4o" />
+              {mayWrite && (
+                <TabsContent value="edit" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="md_name">Model Name <span className="text-[var(--danger-fg)]">*</span></Label>
+                      <Input id="md_name" value={form.name} onChange={set("name")} placeholder="e.g. GPT-4o" />
                     </div>
-                    <div className="form-group">
-                      <label className="required" htmlFor="mc_provider">Provider</label>
-                      <input type="text" id="mc_provider" value={form.provider} onChange={set("provider")} placeholder="e.g. openai" />
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="md_provider">Provider <span className="text-[var(--danger-fg)]">*</span></Label>
+                      <Input id="md_provider" value={form.provider} onChange={set("provider")} placeholder="e.g. openai" />
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="mc_version">Version</label>
-                      <input type="text" id="mc_version" value={form.version} onChange={set("version")} placeholder="e.g. 2024-08" />
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="md_version">Version</Label>
+                      <Input id="md_version" value={form.version} onChange={set("version")} placeholder="e.g. 2024-08" />
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="mc_model_type">Type</label>
-                      <select className="form-select" id="mc_model_type" value={form.model_type} onChange={set("model_type")}>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="md_model_type">Type</Label>
+                      <select className={SELECT_CLASS} id="md_model_type" value={form.model_type} onChange={set("model_type")}>
                         <option value="llm">LLM</option>
                         <option value="embedding">Embedding</option>
                         <option value="multimodal">Multimodal</option>
                         <option value="classifier">Classifier</option>
                       </select>
                     </div>
-                    <div className="form-group span2">
-                      <label htmlFor="mc_description">Description</label>
-                      <textarea id="mc_description" rows={2} value={form.description} onChange={set("description")} placeholder="Brief description…" />
+                    <div className="col-span-2 flex flex-col gap-1.5">
+                      <Label htmlFor="md_description">Description</Label>
+                      <Textarea id="md_description" rows={2} value={form.description} onChange={set("description")} placeholder="Brief description…" />
                     </div>
-                    <div className="form-group span2">
-                      <label htmlFor="mc_inference_url">Inference URL (optional)</label>
-                      <input type="url" id="mc_inference_url" value={form.inference_url} onChange={set("inference_url")} placeholder="https://api.example.com/v1" />
+                    <div className="col-span-2 flex flex-col gap-1.5">
+                      <Label htmlFor="md_inference_url">Inference URL (optional)</Label>
+                      <Input type="url" id="md_inference_url" value={form.inference_url} onChange={set("inference_url")} placeholder="https://api.example.com/v1" />
                     </div>
-                    <div className="form-group span2">
-                      <label className="check-item" style={{ fontWeight: 400 }}>
-                        <input type="checkbox" id="mc_open_weights" checked={form.open_weights} onChange={set("open_weights")} style={{ marginTop: 0, accentColor: "var(--brand)" }} />
-                        <span style={{ fontSize: 14 }}>Open weights (publicly available model weights)</span>
+                    <div className="col-span-2">
+                      <label className="flex items-center gap-2 text-sm">
+                        <Checkbox id="md_open_weights" checked={form.open_weights}
+                          onCheckedChange={(c) => setForm((f) => ({ ...f, open_weights: c === true }))} />
+                        <span>Open weights (publicly available model weights)</span>
                       </label>
                     </div>
                   </div>
-                </div>
-                <div style={{ padding: "0 24px 24px", display: "flex", justifyContent: "flex-end" }}>
-                  <button className="btn-primary" onClick={handleSave} disabled={saving}>
-                    {saving && <span className="spinner" />} Save Changes
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </>
+                  <div className="flex justify-end">
+                    <Button onClick={handleSave} disabled={saving}>
+                      {saving && <Loader2 className="animate-spin" />} Save Changes
+                    </Button>
+                  </div>
+                </TabsContent>
+              )}
+            </Tabs>
+          </>
         )}
-      </div>
-    </>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -18,13 +18,15 @@ logger = get_logger(__name__)
 
 @router.get("/services", dependencies=[Depends(require_permission(MONITORING_READ))])
 async def get_services() -> list[dict]:
-    # Step 1: get distinct service names + stats from ClickHouse
+    # Step 1: get distinct service names + stats from ClickHouse. Isolation is by
+    # per-tenant database (the connection already points at tenant_<org>), so no in-row
+    # tenant filter is needed.
     ch_rows = await ch_query("""
         SELECT
             service_name,
             count() AS total_spans,
             toString(max(received_at)) AS last_seen
-        FROM otel.gen_ai_spans
+        FROM gen_ai_spans
         GROUP BY service_name
         ORDER BY total_spans DESC
     """)
@@ -106,6 +108,8 @@ async def get_signals(
         service_filter = "AND service_name IN {ids:Array(String)}"
         params = {"ids": list(registered_ids)}
 
+    # Isolation is by per-tenant database (the ch_query connection points at tenant_<org>),
+    # so no in-row tenant filter is added here.
     timeseries, totals = await asyncio.gather(
         ch_query(f"""
             SELECT
@@ -114,7 +118,7 @@ async def get_signals(
                 round(avg(duration_ms), 2)       AS avg_latency_ms,
                 sum(input_tokens)                AS input_tokens,
                 sum(output_tokens)               AS output_tokens
-            FROM otel.gen_ai_spans
+            FROM gen_ai_spans
             WHERE received_at >= now() - INTERVAL {interval}
             {service_filter}
             GROUP BY time
@@ -126,7 +130,7 @@ async def get_signals(
                 round(avg(duration_ms), 2) AS avg_latency_ms,
                 sum(input_tokens)          AS total_input_tokens,
                 sum(output_tokens)         AS total_output_tokens
-            FROM otel.gen_ai_spans
+            FROM gen_ai_spans
             WHERE received_at >= now() - INTERVAL {interval}
             {service_filter}
         """, params),

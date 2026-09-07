@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ai_trust_logging import correlation_id_var, get_logger
+from ai_trust_tenancy import install_tenant_middleware
 from app.routers import traces
 
 app = FastAPI(title="Decision Trace Analyzer", version="1.0.0", root_path=os.environ.get("ROOT_PATH", ""))
@@ -23,6 +24,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Multi-tenancy: resolve the tenant per request (no-op when TENANCY_MODE=single).
+install_tenant_middleware(app)
 
 
 @app.middleware("http")

@@ -1,5 +1,6 @@
-import { Button, DateTimePicker } from "@ui5/webcomponents-react";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export interface TimeframeValue {
   /** Backend format: "YYYY-MM-DD HH:mm:ss", interpreted as UTC by the API. */
@@ -18,12 +19,6 @@ const QUICK = [
   { label: "7D", hours: 24 * 7 },
   { label: "1M", hours: 24 * 30 },
 ];
-
-/**
- * Format pattern for `<DateTimePicker>`. Uses 24-hour clock so users can
- * type the value directly without an AM/PM ambiguity.
- */
-const PICKER_FORMAT = "yyyy-MM-dd HH:mm";
 
 /** Format a Date as the backend's UTC "YYYY-MM-DD HH:mm:ss". */
 function toBackendUtc(d: Date): string {
@@ -175,11 +170,11 @@ export function TimeframePicker({ value, onChange }: Props) {
             placeholder="To"
             onChange={(v) => setDraft((d) => ({ ...d, to: v }))}
           />
-          <Button design="Emphasized" disabled={!canApply} onClick={applyCustom}>
+          <Button size="sm" disabled={!canApply} onClick={applyCustom}>
             Apply
           </Button>
           {isCustomActive && (
-            <Button design="Transparent" onClick={() => onChange({})}>
+            <Button variant="ghost" size="sm" onClick={() => onChange({})}>
               Clear
             </Button>
           )}
@@ -193,8 +188,10 @@ export function TimeframePicker({ value, onChange }: Props) {
 }
 
 /**
- * React wrapper around `<DateTimePicker>`. UI5 emits `change` with
- * `{ value, valid }`; we forward only valid values upstream.
+ * Native `<input type="datetime-local">` styled as the kit Input. The picker
+ * works in "yyyy-MM-dd HH:mm" (space-separated) everywhere else in this file,
+ * but datetime-local uses a "T" separator — so we swap the separator on the way
+ * in and out, preserving the exact from/to change contract the parent expects.
  */
 function DateTimePickerField({
   value,
@@ -205,15 +202,16 @@ function DateTimePickerField({
   placeholder: string;
   onChange: (val: string) => void;
 }) {
+  const inputValue = value ? value.replace(" ", "T") : "";
   return (
-    <DateTimePicker
-      value={value}
+    <Input
+      type="datetime-local"
+      value={inputValue}
       placeholder={placeholder}
-      formatPattern={PICKER_FORMAT}
       style={{ minWidth: 200 }}
       onChange={(e) => {
-        const { value: v, valid } = e.detail;
-        if (valid || v === "") onChange(v);
+        const v = e.target.value;
+        onChange(v ? v.replace("T", " ") : "");
       }}
     />
   );
@@ -224,17 +222,17 @@ const styles: Record<string, React.CSSProperties> = {
   quickGroup: { display: "flex", gap: 4 },
   quickBtn: {
     background: "none",
-    border: "1px solid var(--color-border)",
+    border: "1px solid var(--border)",
     borderRadius: 4,
     padding: "3px 10px",
-    fontSize: "var(--font-size-sm)",
-    fontFamily: "var(--font-family)",
-    color: "var(--color-text)",
+    fontSize: "0.75rem",
+    fontFamily: "'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    color: "var(--foreground)",
     cursor: "pointer",
   },
   quickBtnActive: {
-    background: "var(--color-brand)",
-    borderColor: "var(--color-brand)",
+    background: "var(--brand)",
+    borderColor: "var(--brand)",
     color: "#fff",
   },
   customRow: {
@@ -243,10 +241,10 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     flexWrap: "wrap" as const,
   },
-  dash: { color: "var(--color-text-secondary)", fontSize: "var(--font-size)" },
+  dash: { color: "var(--text-secondary)", fontSize: "0.875rem" },
   tzHint: {
-    fontSize: "var(--font-size-sm)",
-    color: "var(--color-text-secondary)",
+    fontSize: "0.75rem",
+    color: "var(--text-secondary)",
     marginLeft: 4,
   },
 };

@@ -72,6 +72,7 @@ services:
       USERS_BACKEND_CLIENT_SECRET: ${USERS_BACKEND_CLIENT_SECRET}
       APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD}
+      SEED_DEV_USERS: ${SEED_DEV_USERS:-false}
     depends_on:
       keycloak:
         condition: service_healthy
@@ -115,6 +116,7 @@ services:
     environment:
       <<: *openfga-env
       INITIAL_ADMIN_USER: ${APP_ADMIN_USERNAME}
+      SEED_DEV_USERS: ${SEED_DEV_USERS:-false}
     volumes:
       - openfga-config:/config
     depends_on:

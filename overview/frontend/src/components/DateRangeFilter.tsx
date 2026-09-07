@@ -1,4 +1,5 @@
 import type { DateRange } from "../types";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   value: DateRange;
@@ -13,15 +14,16 @@ const PRESETS: { preset: DateRange["preset"]; days: number; label: string }[] = 
 
 export default function DateRangeFilter({ value, onChange }: Props) {
   return (
-    <div className="date-range-filter">
+    <div className="flex gap-1">
       {PRESETS.map((p) => (
-        <button
+        <Button
           key={p.preset}
-          className={`date-range-btn${value.preset === p.preset ? " active" : ""}`}
+          size="sm"
+          variant={value.preset === p.preset ? "default" : "outline"}
           onClick={() => onChange({ preset: p.preset, days: p.days })}
         >
           {p.label}
-        </button>
+        </Button>
       ))}
     </div>
   );

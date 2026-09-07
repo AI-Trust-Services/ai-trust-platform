@@ -24,9 +24,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="toast-container">
+      <div className="fixed bottom-6 left-1/2 z-[9999] flex -translate-x-1/2 flex-col items-center gap-2">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast${t.isError ? " error" : ""}`}>
+          <div
+            key={t.id}
+            className="flex items-center gap-2.5 rounded-xl bg-foreground px-5 py-3 text-[13px] text-background shadow-[var(--shadow-md)] animate-in fade-in slide-in-from-bottom-2"
+          >
+            <span
+              className="size-1.5 shrink-0 rounded-full"
+              style={{ background: t.isError ? "var(--destructive)" : "var(--success)" }}
+            />
             {t.message}
           </div>
         ))}
