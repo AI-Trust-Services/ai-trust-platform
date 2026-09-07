@@ -152,13 +152,13 @@ def list_events(
     order = "DESC" if sort == "desc" else "ASC"
 
     total_result = ch.query(
-        f"SELECT count() FROM {AUDIT_EVENTS} WHERE {where}",
+        f"SELECT count() FROM {AUDIT_EVENTS} FINAL WHERE {where}",
         parameters=params,
     )
     total = total_result.result_rows[0][0] if total_result.result_rows else 0
 
     rows_result = ch.query(
-        f"SELECT * FROM {AUDIT_EVENTS} WHERE {where} "
+        f"SELECT * FROM {AUDIT_EVENTS} FINAL WHERE {where} "
         f"ORDER BY created_at {order} "
         f"LIMIT {{limit:UInt32}} OFFSET {{offset:UInt32}}",
         parameters={**params, "limit": limit, "offset": offset},
@@ -172,7 +172,7 @@ def list_events(
 def get_event(event_id: str) -> AuditEventDetail:
     ch = get_client(database="otel")
     result = ch.query(
-        f"SELECT * FROM {AUDIT_EVENTS} WHERE id = {{event_id:String}} LIMIT 1",
+        f"SELECT * FROM {AUDIT_EVENTS} FINAL WHERE id = {{event_id:String}} LIMIT 1",
         parameters={"event_id": event_id},
     )
     if not result.result_rows:
@@ -215,7 +215,7 @@ def list_systems(
 
     where = " AND ".join(conditions)
     result = ch.query(
-        f"SELECT DISTINCT ai_system_id, ai_system_name FROM {AUDIT_EVENTS} "
+        f"SELECT DISTINCT ai_system_id, ai_system_name FROM {AUDIT_EVENTS} FINAL "
         f"WHERE {where} ORDER BY ai_system_name",
         parameters=params,
     )
@@ -254,7 +254,7 @@ def get_stats(
             for i, rt in enumerate(resource_types):
                 params[f"rt{i}"] = rt
         where = " AND ".join(conditions)
-        r = ch.query(f"SELECT count() FROM {AUDIT_EVENTS} WHERE {where}", parameters=params)
+        r = ch.query(f"SELECT count() FROM {AUDIT_EVENTS} FINAL WHERE {where}", parameters=params)
         return r.result_rows[0][0] if r.result_rows else 0
 
     def _stat(resource_types: list[str] | None = None) -> CategoryStat:

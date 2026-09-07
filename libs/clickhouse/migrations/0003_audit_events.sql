@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS otel.audit_events
     ai_system_name   String       DEFAULT '',
     changes          String       DEFAULT '{}',
     source           String       DEFAULT 'ui'
-) ENGINE = MergeTree()
+) ENGINE = ReplacingMergeTree()
 PARTITION BY toYYYYMM(created_at)
-ORDER BY (created_at, ai_system_id, action)
+ORDER BY (created_at, id)
 TTL created_at + INTERVAL 7 DAY TO DISK 'minio'
 SETTINGS storage_policy = 'tiered';
