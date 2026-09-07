@@ -4,7 +4,7 @@ pydantic==2.10.3
 httpx==0.28.1
 PyJWT[crypto]==2.13.0
 aiosmtplib==3.0.2
-python-multipart==0.0.20
+python-multipart==0.0.30
 openai==1.51.0
 pypdf==5.1.0
 python-docx==1.1.2
