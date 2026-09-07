@@ -41,36 +41,61 @@
   const canSee = (seg) =>
     !PAGE_PERMISSIONS[seg] || PAGE_PERMISSIONS[seg].some((p) => permissions.includes(p));
 
-  // Marketplace-deployed services become nav children dynamically. Internal (we-deployed-it)
-  // services open SAME-WINDOW embedded (viewUrl → the marketplace embed page, served
-  // same-origin so CSP frame-ancestors 'self' allows the iframe). External services open in a
-  // NEW TAB via Luigi's stock externalLink. Failure here must not break the rest of the nav.
-  let serviceChildren = [];
-  try {
-    const svcRes = await fetch("/api/marketplace/v1/services?status=running", { cache: "no-store" });
-    if (svcRes.ok) {
+  // Marketplace-deployed services become nav children dynamically. Internal (we-deployed-it) and
+  // proxy-federated external_discovered apps (auth_mode bearer/header_map/none) open SAME-WINDOW
+  // embedded (viewUrl → the marketplace embed page, served same-origin so CSP frame-ancestors 'self'
+  // allows the iframe; the proxy federates auth for discovered apps).
+  // Two cases open in a NEW TAB via Luigi's stock externalLink:
+  //   - legacy source="external" services (URL in service_host);
+  //   - external_discovered apps with auth_mode="oidc_federation": the app runs its OWN OIDC login
+  //     (federated to the platform ai-trust realm as an upstream IdP), which cannot survive a
+  //     same-origin iframe proxy (its IdP redirects to the app's real origin + sets cookies there),
+  //     so we open the app first-party at external_url and its login completes silently via the
+  //     shared realm — real SSO transfer, zero app code.
+  // The backend already scopes discovered apps per user (only enabled ones come back), so the client
+  // stays simple. Failure here must not break the rest of the nav. Wrapped in a function so the nav
+  // can be rebuilt live (see the custom-message listener below) after a Deploy/Delete/Enable/Disable.
+  async function fetchServiceChildren() {
+    try {
+      const svcRes = await fetch("/api/marketplace/v1/services?status=running", { cache: "no-store" });
+      if (!svcRes.ok) return [];
       const running = await svcRes.json();
-      serviceChildren = (running || []).map((s) =>
-        s.source === "external"
+      // Each running service is a direct child of "home" tagged with the same collapsible
+      // "Services" category. Luigi groups all nodes sharing a category under one collapsible
+      // header in the left nav — clicking the header expands/collapses in place (no navigation),
+      // which is the desired behaviour. (A viewless parent node instead navigates to nowhere.)
+      const SERVICES_CATEGORY = { label: "Services", icon: "grid", collapsible: true };
+      const isNewTab = (s) =>
+        s.source === "external" || s.auth_mode === "oidc_federation";
+      return (running || []).map((s) =>
+        isNewTab(s)
           ? {
               pathSegment: s.name,
               label: s.label,
-              externalLink: { url: s.service_host || s.git_url, sameWindow: false },
+              category: SERVICES_CATEGORY,
+              // oidc_federation → external_url (the app's own origin); legacy external → service_host.
+              externalLink: {
+                url: s.external_url || s.service_host || s.git_url,
+                sameWindow: false,
+              },
             }
           : {
+              // internal + proxy-federated external_discovered: embed same-origin through the proxy.
               pathSegment: s.name,
               label: s.label,
+              category: SERVICES_CATEGORY,
               viewUrl: "/marketplace/#/embed/" + s.name,
               navigationContext: "service-" + s.name,
             }
       );
+    } catch (e) {
+      return [];
     }
-  } catch (e) {
-    serviceChildren = [];
   }
+  let serviceChildren = await fetchServiceChildren();
 
   const base = window.location.origin;
-  const children = [
+  const baseChildren = [
       {
         pathSegment: "overview",
         label: "Overview",
@@ -158,18 +183,17 @@
       },
   ].filter((node) => canSee(node.pathSegment));
 
-  // "Services" parent lists the running Marketplace services. Shown only when at least one
-  // service is running, so the menu stays clean on a fresh install.
-  if (serviceChildren.length > 0) {
-    children.push({
-      pathSegment: "services",
-      label: "Services",
-      icon: "grid",
-      children: serviceChildren,
-    });
+  // Assemble the full child list = static pages + one child per running Marketplace service.
+  // Service children are tagged with a collapsible "Services" category (see fetchServiceChildren),
+  // so Luigi renders them under a single "Services" header that expands/collapses in the sidebar
+  // in place — clicking the header stays on the current page. Called at init AND on the
+  // "marketplace-services-changed" custom message so Deploy/Delete updates the menu live.
+  function buildChildren(svcChildren) {
+    return baseChildren.concat(svcChildren);
   }
+  let children = buildChildren(serviceChildren);
 
-  Luigi.setConfig({
+  const luigiConfig = {
   navigation: {
     nodes: [
       {
@@ -180,6 +204,25 @@
         children: children,
       },
     ],
+  },
+
+  // Rebuild the "Services" menu live when the marketplace deploys or deletes a service.
+  // The marketplace MFE fires LuigiClient.sendCustomMessage({id:"marketplace-services-changed"})
+  // after a successful Deploy/Delete; we re-fetch the running services, rebuild the home node's
+  // children, and tell Luigi to re-render the nav — no full page reload needed. Registered via
+  // the config's communication block (the supported core API) — NOT a runtime Luigi.* call.
+  communication: {
+    customMessagesListeners: {
+      "marketplace-services-changed": async () => {
+        try {
+          const fresh = await fetchServiceChildren();
+          luigiConfig.navigation.nodes[0].children = buildChildren(fresh);
+          Luigi.configChanged("navigation.nodes");
+        } catch (e) {
+          /* best-effort menu refresh; ignore */
+        }
+      },
+    },
   },
 
   routing: {
@@ -204,7 +247,10 @@
       // registry "Copy ID" button) with a permissions-policy violation.
       // Deliberately NOT granting clipboard-read: no MFE reads the clipboard, and
       // read access would let an MFE silently exfiltrate whatever the user copied.
-      iframe.setAttribute("allow", "downloads; clipboard-write");
+      // NB: downloads is a *sandbox* flag (allow-downloads, added below), NOT a
+      // Permissions-Policy feature — listing it in allow= only produces a console
+      // "Unrecognized feature: 'downloads'" warning and is ignored, so omit it.
+      iframe.setAttribute("allow", "clipboard-write");
       iframe.sandbox.add("allow-downloads");
       // Luigi sets iframe.title = "MFE" synchronously after this interceptor returns.
       // One tick deferred so the removal happens after Luigi finishes setting properties.
@@ -963,5 +1009,7 @@
       }, 200);
     },
   },
-  });
+  };
+
+  Luigi.setConfig(luigiConfig);
 })();

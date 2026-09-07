@@ -1,0 +1,33 @@
+{{/* Background job, no HTTP port - probes discovered apps' health_url every MARKETPLACE_HEALTH_INTERVAL seconds. */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marketplace-health-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "marketplace-health-worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "marketplace-health-worker") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        # mirrors compose: depends_on db-migrate (completed)
+        {{- include "ai-trust.waitForJob" (dict "job" "db-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
+      containers:
+        - name: marketplace-health-worker
+          image: {{ .Values.image.repository }}/marketplace-health-worker:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # DATABASE_URL
+          env:
+            - name: MARKETPLACE_HEALTH_INTERVAL
+              value: {{ .Values.marketplaceHealth.pollInterval | quote }}
+            {{/* Discovered apps live on the private cluster network — allow probing RFC-1918
+                 addresses. Loopback/link-local/metadata IPs stay blocked. */}}
+            - name: MARKETPLACE_ALLOW_PRIVATE_DISCOVERY
+              value: "true"

@@ -45,6 +45,7 @@ build alerts-backend . alerts/backend/Dockerfile
 build compliance-backend . compliance/backend/Dockerfile
 build decision-trace-analyzer-backend . decision-trace-analyzer/backend/Dockerfile
 build marketplace-backend . marketplace/backend/Dockerfile
+build marketplace-health-worker . marketplace-health-worker/Dockerfile
 build policy-checker-worker . policy-checker-worker/Dockerfile
 build otel-clickhouse-consumer . consumers/clickhouse-consumer/Dockerfile
 build openfga-provision . infra/openfga-provision/Dockerfile

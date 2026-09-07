@@ -33,12 +33,17 @@ h1 { font-size: 20px; margin: 0 0 4px; }
 .card .url { font-size: 12px; color: var(--muted); word-break: break-all; }
 .card .row { display: flex; gap: 8px; margin-top: auto; align-items: center; }
 
-.badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; }
+.badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; background: #f4f4f5; color: var(--muted); margin-right: 6px; }
 .badge.running { background: #dcfce7; color: var(--ok); }
 .badge.pending { background: #f4f4f5; color: var(--muted); }
 .badge.deploying { background: #fef3c7; color: var(--warn); }
 .badge.failed { background: #fee2e2; color: var(--danger); }
 .badge.external { background: #e0e7ff; color: var(--accent); }
+
+/* Discovered-app liveness dot (marketplace-health-worker probes health_url). */
+.health-dot { font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.health-dot.up { color: var(--ok); }
+.health-dot.down { color: var(--danger); }
 
 button {
   font: inherit;
@@ -57,8 +62,26 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .form .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .form input, .form select { padding: 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
-.form .actions { margin-top: 12px; }
+.form .actions { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
+.form .hint { margin: 10px 0 0; font-size: 12px; }
+.form .hint code { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
 .error { color: var(--danger); font-size: 13px; margin-top: 8px; }
 .empty { color: var(--muted); padding: 40px; text-align: center; border: 1px dashed var(--border); border-radius: 10px; }
+
+/* Discover Applications section */
+.discover { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--border); }
+.discover h2 { font-size: 17px; margin: 0 0 4px; }
+.form .row { display: flex; gap: 16px; align-items: center; margin-bottom: 12px; }
+.form label.radio { flex-direction: row; align-items: center; gap: 6px; }
+.card select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; flex: 1; }
+
+/* Federation setup panel (operator-only, oidc_federation apps) */
+.fed-setup { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.fed-setup .hint { margin: 0 0 10px; font-size: 12px; }
+.fed-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.fed-table th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 8px 4px 0; white-space: nowrap; vertical-align: top; }
+.fed-table td { padding: 4px 0; }
+.fed-table code { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; word-break: break-all; }
+.fed-table .copy { margin-left: 8px; padding: 2px 8px; font-size: 11px; }
 
 .embed { position: fixed; inset: 0; border: 0; width: 100%; height: 100%; }

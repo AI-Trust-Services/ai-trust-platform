@@ -27,6 +27,15 @@ imagePullSecrets: []
 appPublicUrl: http://localhost:8080
 keycloakPublicUrl: http://localhost:8180
 
+# In-cluster image registry (registry:2) for Marketplace kind="dockerfile" apps. The host:port
+# below is injected as MARKETPLACE_REGISTRY on marketplace-backend; the node containerd must trust
+# it as an insecure (plain-HTTP) registry — see k8s/scripts. Keep in sync with docker-compose.yml
+# (localhost:5000) / .env (MARKETPLACE_REGISTRY).
+marketplaceRegistry: registry:5000
+registry:
+  image: registry:2
+  storageSize: 10Gi
+
 # Ingress is off by default. Turned on for Gardener via values-gardener.yaml,
 # with host/keycloakHost supplied at deploy time (they depend on the target
 # environment's DNS). On kind, NodePort + kind-config.yaml extraPortMappings
@@ -96,6 +105,10 @@ otel:
 
 policyChecker:
   pollInterval: "10"
+
+# marketplace-health-worker: how often (seconds) to probe discovered apps' health_url.
+marketplaceHealth:
+  pollInterval: "30"
 
 # ── Ollama (optional local LLM for AI-assisted registration) ──
 # Disabled by default: the registry backend defaults to the offline `stub`

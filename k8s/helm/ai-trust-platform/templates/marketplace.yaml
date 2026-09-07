@@ -26,6 +26,13 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list", "watch"]
+  {{/* kind="dockerfile" apps: a Kaniko build Job + the per-app OIDC client-secret Secret. */}}
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "get", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -71,6 +78,30 @@ spec:
               value: "/api/marketplace"
             - name: OPENFGA_URL
               value: http://openfga:8080
+            {{/* Keycloak admin API for lazily provisioning per-app OIDC clients (aitrust-app-<name>)
+                 on first Enable of a bearer- or oidc_federation-mode discovered app.
+                 KEYCLOAK_ADMIN/_PASSWORD arrive via the envFrom secretRef above (from the same .env). */}}
+            - name: KEYCLOAK_URL
+              value: http://keycloak:8080
+            {{/* Browser-facing issuer of the ai-trust realm — emitted verbatim in the oidc_federation
+                 "Federation setup" block (discovery URL + OIDC endpoints the app owner registers in
+                 their own IAS/BTP tenant). Must be the PUBLIC host; sourced from the same Helm value
+                 as keycloak.yaml / oauth2-proxy.yaml so it stays consistent. */}}
+            - name: KEYCLOAK_PUBLIC_URL
+              value: {{ .Values.keycloakPublicUrl | quote }}
+            {{/* Browser-facing platform origin (oauth2-proxy). For a kind="dockerfile" app with
+                 Platform SSO, the app's same-origin OIDC callback is assembled under this host
+                 (APP_PUBLIC_URL/api/marketplace/v1/proxy/<name>/oauth/callback) — see app/oidc.py. */}}
+            - name: APP_PUBLIC_URL
+              value: {{ $.Values.appPublicUrl | quote }}
+            {{/* In-cluster image registry (registry:2, insecure HTTP) that Kaniko pushes built
+                 dockerfile-app images to and the app Deployment pulls from. */}}
+            - name: MARKETPLACE_REGISTRY
+              value: {{ $.Values.marketplaceRegistry | default "registry:5000" | quote }}
+            {{/* Discovered apps live on the private cluster network — allow the manifest fetcher
+                 to reach RFC-1918 addresses. Loopback/link-local/metadata IPs stay blocked. */}}
+            - name: MARKETPLACE_ALLOW_PRIVATE_DISCOVERY
+              value: "true"
             - name: DEPLOY_TARGET
               value: kubernetes
             - name: POD_NAMESPACE

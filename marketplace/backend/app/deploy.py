@@ -19,6 +19,37 @@ async def create_static_service(name: str, git_url: str, git_ref: str) -> str:
     return await k8s_client.create_static_service(name, git_url, git_ref)
 
 
+async def build_and_deploy(name: str, git_url: str, git_ref: str, app_port: int,
+                           env: dict[str, str], secret_env: dict[str, str]) -> tuple[str, str]:
+    """Build the repo's Dockerfile into an image, push to the registry, run it. Returns
+    ``(service_host, image_ref)``. Raises DeployError (from docker_client) with a user-facing
+    message on build failure — the router records it onto the row's ``error``."""
+    if _TARGET == "docker":
+        from app import docker_client
+        return await asyncio.to_thread(
+            docker_client.build_and_run, name, git_url, git_ref, app_port, env, secret_env
+        )
+    from app import build_k8s
+    return await build_k8s.build_and_run(name, git_url, git_ref, app_port, env, secret_env)
+
+
+async def run_image(name: str, image_ref: str, app_port: int,
+                    env: dict[str, str], secret_env: dict[str, str],
+                    registry_auth: dict[str, str] | None = None) -> tuple[str, str]:
+    """Pull a prebuilt image and run it (no build). Returns ``(service_host, image_ref)``.
+    ``registry_auth`` (``{"username", "password"}`` or None) carries deploy-time private-registry
+    credentials — passed to the pull (compose ``auth_config`` / k8s dockerconfigjson pull Secret) and
+    never persisted. Raises DeployError with a user-facing message when the image can't be pulled —
+    the router records it onto the row's ``error``."""
+    if _TARGET == "docker":
+        from app import docker_client
+        return await asyncio.to_thread(
+            docker_client.run_image, name, image_ref, app_port, env, secret_env, registry_auth
+        )
+    from app import build_k8s
+    return await build_k8s.run_image(name, image_ref, app_port, env, secret_env, registry_auth)
+
+
 async def delete_service(name: str) -> None:
     if _TARGET == "docker":
         from app import docker_client

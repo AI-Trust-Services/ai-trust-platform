@@ -294,6 +294,27 @@ services:
       ALLOWED_ORIGINS: "http://localhost:8080"
       ROOT_PATH: "/api/marketplace"
       OPENFGA_URL: http://openfga:8080
+      # Keycloak admin API — used to lazily provision a per-app OIDC client (aitrust-app-<name>)
+      # on the first Enable of a bearer- or oidc_federation-mode discovered app. Master-realm
+      # admin-cli password grant.
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Browser-facing issuer of the ai-trust realm. Emitted verbatim in the oidc_federation
+      # "Federation setup" block (discovery URL + OIDC endpoints the app owner registers in their
+      # own IAS/BTP tenant), so it must be the PUBLIC host, not the in-cluster KEYCLOAK_URL.
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL}
+      # Browser-facing platform origin (oauth2-proxy). For a kind="dockerfile" app wired to
+      # Platform SSO, the app's same-origin OIDC callback is assembled under this host
+      # (APP_PUBLIC_URL/api/marketplace/v1/proxy/<name>/oauth/callback) — see marketplace/backend/app/oidc.py.
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL}
+      # Image registry (registry:2) that built kind="dockerfile" app images are pushed to / run
+      # from. On compose the daemon reaches it as localhost:5000 (published below); Docker Desktop
+      # must trust localhost:5000 as an insecure registry (see .env.example).
+      MARKETPLACE_REGISTRY: ${MARKETPLACE_REGISTRY:-localhost:5000}
+      # Discovered apps live on the private compose/cluster network, so allow the manifest
+      # fetcher to reach RFC-1918 addresses here. Loopback/link-local/metadata IPs stay blocked.
+      MARKETPLACE_ALLOW_PRIVATE_DISCOVERY: ${MARKETPLACE_ALLOW_PRIVATE_DISCOVERY:-true}
       # Local docker-compose deploy path: create per-service nginx containers via the Docker
       # socket. The compose network is auto-detected from this container at runtime, so no
       # MARKETPLACE_DOCKER_NETWORK is needed unless overriding.
@@ -319,6 +340,38 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    restart: on-failure
+
+  # Probes each discovered app's health_url on a fixed interval and writes health_status /
+  # health_checked_at back to marketplace_services. No HTTP port. Reuses the marketplace SSRF guard
+  # (loopback/link-local/metadata always blocked); allow private targets so it can reach discovered
+  # apps on the compose network, matching marketplace-backend.
+  marketplace-health-worker:
+    build:
+      context: .
+      dockerfile: marketplace-health-worker/Dockerfile
+    environment:
+      <<: *db-env
+      MARKETPLACE_HEALTH_INTERVAL: ${MARKETPLACE_HEALTH_INTERVAL:-30}
+      MARKETPLACE_ALLOW_PRIVATE_DISCOVERY: ${MARKETPLACE_ALLOW_PRIVATE_DISCOVERY:-true}
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
+
+  # from here. Published on 127.0.0.1:5000 so the local Docker daemon (which builds+runs the app
+  # containers via the mounted socket) can reach it as localhost:5000. Plain HTTP — add
+  # "localhost:5000" to Docker Desktop's insecure-registries once (see .env.example).
+  registry:
+    image: registry:2
+    environment:
+      REGISTRY_HTTP_ADDR: ":5000"
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - registry-data:/var/lib/registry
     restart: on-failure
 
   db-migrate:
@@ -716,3 +769,4 @@ volumes:
   minio_data:
   openfga-config:
   ollama_data:
+  registry-data:
