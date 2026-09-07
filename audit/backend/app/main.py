@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from ai_trust_clickhouse import get_client as get_ch_client
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_tenancy import install_tenant_middleware
 from app.routers import events
@@ -61,8 +62,7 @@ app.include_router(events.router, prefix="/v1")
 @app.get("/health")
 def health():
     try:
-        from ai_trust_clickhouse import get_client
-        ch = get_client()
+        ch = get_ch_client()
         ch.query("SELECT 1")
         return JSONResponse({"status": "ok", "clickhouse": "ok"})
     except Exception as e:
