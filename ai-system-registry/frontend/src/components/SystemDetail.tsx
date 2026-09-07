@@ -1,5 +1,6 @@
 import { useState, useEffect, Fragment } from "react";
-import { Loader2, ChevronDown, ChevronRight, Copy, FileText, Download, Sparkles } from "lucide-react";
+import LuigiClient from "@luigi-project/client";
+import { Loader2, ChevronDown, ChevronRight, Copy, FileText, Download, Sparkles, ClipboardList } from "lucide-react";
 import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS, TIER_META } from "../utils";
 import { api } from "../api/client";
@@ -23,6 +24,14 @@ import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+
+// Hands off to the Compliance MFE and asks it to open the "New assessment" modal on arrival.
+// The flag is read+cleared by the compliance AssessmentsPage; localStorage is shared because
+// both MFEs are same-origin under the shell proxy. Luigi owns the actual iframe switch.
+function startRiskClassification() {
+  localStorage.setItem("compliance.openCreateAssessment", "1");
+  LuigiClient.linkManager().navigate("/home/assessments");
+}
 
 export type UserMap = Record<string, { firstName: string; lastName: string }>;
 
@@ -126,10 +135,12 @@ function workflowPhaseManual(status: string): number {
 function WorkflowProgress({
   system,
   onSystemUpdate,
+  onStartClassification,
   userMap,
 }: {
   system: AISystem;
   onSystemUpdate: (updated: AISystem) => void;
+  onStartClassification: () => void;
   userMap?: UserMap;
 }) {
   const [panel, setPanel] = useState<"" | "approve" | "reject" | "requestInfo" | "delegate">("");
@@ -144,10 +155,11 @@ function WorkflowProgress({
   const [questionAssignments, setQuestionAssignments] = useState<QuestionAssignment[]>([]);
   const [delegateUser, setDelegateUser] = useState("");
   const [delegatePool, setDelegatePool] = useState<UserSummary[]>([]);
-  const { username } = useModalControls();
+  const { username, mayWrite } = useModalControls();
   const showToast = useToast();
 
   const canAct = system.workflow_status === "pending_review" && system.assignee_username === username;
+  const canStartClassification = system.workflow_status === "draft" && system.tier === "pending" && mayWrite;
   // Contributor the CO sent the system back to for more information.
   const canResubmitInfo = system.workflow_status === "info_requested" && system.assignee_username === username;
 
@@ -415,6 +427,17 @@ function WorkflowProgress({
               {acting && <Loader2 className="animate-spin" />} Resubmit to Compliance
             </Button>
           </div>
+        </div>
+      )}
+
+      {canStartClassification && (
+        <div className="mt-4">
+          <Button onClick={onStartClassification}>
+            <ClipboardList /> Start Risk Classification
+          </Button>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Creates a compliance assessment and assigns the questionnaire sections to the right people.
+          </p>
         </div>
       )}
 
@@ -912,6 +935,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
   }
 
   return (
+    <>
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl">
         {system && (
@@ -949,6 +973,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                     <WorkflowProgress
                       system={system}
                       onSystemUpdate={handleSystemUpdate}
+                      onStartClassification={startRiskClassification}
                       userMap={userMap}
                     />
                   </Section>
@@ -1109,5 +1134,6 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
         )}
       </SheetContent>
     </Sheet>
+    </>
   );
 }

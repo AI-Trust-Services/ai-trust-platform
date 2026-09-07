@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from "react";
+import LuigiClient from "@luigi-project/client";
 import { Check, Loader2, X, ChevronDown, ChevronRight, Copy } from "lucide-react";
 import { TierBadge } from "./Badges";
 import { previewClassify, copyToClipboard, SELECT_CLASS } from "../utils";
@@ -15,6 +16,14 @@ import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+
+// Hands off to the Compliance MFE and asks it to open the "New assessment" modal on arrival.
+// The flag is read+cleared by the compliance AssessmentsPage; localStorage is shared because
+// both MFEs are same-origin under the shell proxy. Luigi owns the actual iframe switch.
+function startRiskClassification() {
+  localStorage.setItem("compliance.openCreateAssessment", "1");
+  LuigiClient.linkManager().navigate("/home/assessments");
+}
 
 const EMPTY_FORM: AISystemFormData = {
   name: "", version: "1.0.0", provider: "", org_name: "",
@@ -198,6 +207,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o: boolean) => { if (!o && !doneId) onClose(); }}>
       <DialogContent showCloseButton={false} className="flex max-h-[90vh] max-w-2xl flex-col gap-0 p-0">
         <DialogHeader className="flex-row items-center justify-between space-y-0">
@@ -460,7 +470,14 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
 
         <DialogFooter className="sm:justify-start">
           {doneId ? (
-            <Button onClick={onClose}>Done</Button>
+            <>
+              {!isEngineerMode && (
+                <Button variant="outline" onClick={startRiskClassification}>
+                  Start Risk Classification
+                </Button>
+              )}
+              <Button onClick={onClose}>Done</Button>
+            </>
           ) : (
             <>
               <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -487,5 +504,6 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

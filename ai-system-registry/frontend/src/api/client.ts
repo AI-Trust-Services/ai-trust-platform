@@ -172,7 +172,7 @@ export const api = {
     }),
 
   // New questionnaire workflow endpoints.
-  assignWorkflow: (systemId: string, body: { business_assignee_username: string; technical_assignee_username: string; compliance_officer_username: string; note?: string }) =>
+  assignWorkflow: (systemId: string, body: { business_assignee_username: string; technical_assignee_username?: string; compliance_officer_username: string; note?: string }) =>
     request<WorkflowStep[]>(`/systems/${systemId}/workflow/assign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

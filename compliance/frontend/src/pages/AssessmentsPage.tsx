@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import LuigiClient from "@luigi-project/client";
 import { Plus, RotateCw, ClipboardList, CheckCircle2, FileText, Clock, Loader2, Sparkles, AlignJustify } from "lucide-react";
 import { api } from "../api/client";
 import { registryClient } from "../api/registryClient";
@@ -29,6 +30,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils";
 
 const ALL = "__all__";
+
+// One-shot hand-off flag set by the registry MFE's "Start Risk Classification" button.
+// Read+cleared on arrival so closing the modal or navigating back never reopens it.
+const OPEN_CREATE_FLAG = "compliance.openCreateAssessment";
+function consumeOpenCreateFlag(): boolean {
+  if (localStorage.getItem(OPEN_CREATE_FLAG) === "1") {
+    localStorage.removeItem(OPEN_CREATE_FLAG);
+    return true;
+  }
+  return false;
+}
 
 const VALID_TIERS = ["prohibited", "gpai-systemic", "gpai-standard", "high", "limited", "minimal"] as const;
 
@@ -342,10 +354,20 @@ export default function AssessmentsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<AssessmentDetail | null>(null);
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(consumeOpenCreateFlag);
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+
+  // The registry MFE hands off via a localStorage flag + Luigi navigation. A fresh iframe load
+  // is caught by the useState initializer above; when Luigi reveals a cached iframe instead,
+  // no reload happens, so we also consume the flag on Luigi context updates.
+  useEffect(() => {
+    const id = LuigiClient.addContextUpdateListener(() => {
+      if (consumeOpenCreateFlag()) setCreateOpen(true);
+    });
+    return () => { LuigiClient.removeContextUpdateListener(id); };
+  }, []);
 
   // Questionnaire phase state (used when status === "questionnaire_pending")
   const [qSection, setQSection] = useState<"business" | "technical">("business");
