@@ -109,6 +109,7 @@
         icon: "machine",
         viewUrl: base + "/registry/#/systems",
         navigationContext: "systems",
+        virtualTree: true,  // Enable deep linking to /systems/:systemId, /systems/:systemId/tasks, etc.
       },
   ];
 

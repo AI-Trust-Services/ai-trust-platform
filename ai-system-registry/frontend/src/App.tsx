@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { Outlet } from "react-router";
 import { Loader2 } from "lucide-react";
-import { useLuigiInit, useLuigiThemeSync } from "./hooks/useLuigi";
+import { useLuigiInit, useLuigiThemeSync, useLuigiUrlSync } from "./hooks/useLuigi";
 import { usePermissions } from "./hooks/usePermissions";
 import { ReviewModeProvider } from "./hooks/useReviewMode";
 import { ReviewPanel } from "./components/ReviewPanel";
@@ -40,6 +40,7 @@ export default function App() {
 
   useLuigiInit(() => {});
   useLuigiThemeSync();
+  useLuigiUrlSync();
 
   const checkHealth = useCallback(async () => {
     if (healthTimer.current) clearTimeout(healthTimer.current);

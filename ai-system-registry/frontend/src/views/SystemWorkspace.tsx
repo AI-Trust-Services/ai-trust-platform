@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link, useSearchParams } from "react-router";
 import {
   ChevronRight, ChevronLeft, MoreHorizontal, CheckCircle2,
-  Circle, Info, ArrowRight, FileText, ClipboardList, Shield, Files,
+  Circle, Info, ArrowRight, FileText, CheckSquare, Pencil, Files,
   Activity, FolderOpen, StickyNote, Database, BarChart3, Bell, Search as SearchIcon,
-  Users, Building2, Calendar, ExternalLink, Sparkles, Edit
+  Users, Building2, Calendar, ExternalLink, Sparkles, Edit, User
 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
@@ -13,7 +13,7 @@ import { getPrimarySystemAction } from "../utils/systemActions";
 import { deriveTasksFromSystem, getMyTasks } from "../utils/taskUtils";
 import type { AISystem, ModelCard } from "../types";
 import type { UserMap } from "../components/SystemDetail";
-import { AssessmentsTab, ObligationsTab, ControlsTab, EvidenceTab } from "../components/compliance";
+import { AssessmentsTab, ObligationsTab, ControlsTab } from "../components/compliance";
 import ModelPickerModal from "../components/ModelPickerModal";
 import EngineerAssistedRegistration from "../components/EngineerAssistedRegistration";
 import RegisterWizard from "../components/RegisterWizard";
@@ -38,27 +38,59 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 // Lifecycle stages
 const LIFECYCLE_STAGES = [
   { key: "register", label: "Register" },
-  { key: "review", label: "Review" },
   { key: "classify", label: "Classify" },
   { key: "comply", label: "Comply" },
   { key: "operate", label: "Operate" },
 ];
+
+// Get lifecycle state label
+function getLifecycleStateLabel(lifecycle: string): string {
+  const mapping: Record<string, string> = {
+    development: "Draft",
+    testing: "Development",
+    conformity: "Development",
+    market: "Production",
+    "post-market": "Production",
+    decommissioned: "Retired",
+  };
+  return mapping[lifecycle] || "Draft";
+}
+
+// Get lifecycle state badge color
+function getLifecycleStateBadgeClass(lifecycle: string): string {
+  const state = getLifecycleStateLabel(lifecycle);
+  const colors: Record<string, string> = {
+    Draft: "bg-gray-100 text-gray-700",
+    Development: "bg-blue-100 text-blue-700",
+    Production: "bg-green-100 text-green-700",
+    Retired: "bg-red-100 text-red-700",
+  };
+  return colors[state] || "bg-gray-100 text-gray-700";
+}
 
 // Map backend lifecycle values to our stages
 function getLifecycleStageIndex(lifecycle: string): number {
   const mapping: Record<string, number> = {
     development: 0,
     testing: 1,
-    conformity: 2,
-    market: 3,
-    "post-market": 4,
-    decommissioned: 4,
+    conformity: 1,
+    market: 2,
+    "post-market": 3,
+    decommissioned: 3,
   };
   return mapping[lifecycle] ?? 0;
 }
@@ -153,6 +185,21 @@ function StatusBanner({ system, currentUsername, onOpenTasks }: { system: AISyst
   const stageIndex = getLifecycleStageIndex(system.lifecycle);
   const stageName = LIFECYCLE_STAGES[stageIndex]?.label || "Unknown";
 
+  // Calculate completion percentage and missing fields
+  const totalFields = 14;
+  const requiredFields = ['name', 'provider', 'org_name', 'description', 'intended_purpose'];
+  const recommendedFields = ['application_url', 'version'];
+
+  const filledRequiredFields = requiredFields.filter(f => system[f as keyof AISystem]).length;
+  const filledRecommendedFields = recommendedFields.filter(f => system[f as keyof AISystem]).length;
+  const filledTotal = 11; // Mock - total filled fields
+  const completionPercent = Math.round((filledTotal / totalFields) * 100);
+
+  const missingRequired = requiredFields.filter(f => !system[f as keyof AISystem]);
+  const missingRecommended = recommendedFields.filter(f => !system[f as keyof AISystem]);
+
+  const hasMissingFields = missingRequired.length > 0 || missingRecommended.length > 0;
+
   // Derive status message from real system data
   let statusMessage = `This system is currently in the ${stageName} stage.`;
   let assigneeMessage = "";
@@ -178,24 +225,79 @@ function StatusBanner({ system, currentUsername, onOpenTasks }: { system: AISyst
   const showMyTasks = myTaskCount > 0;
 
   return (
-    <div className="mx-6 mb-6 flex items-center justify-between rounded-lg bg-accent px-5 py-4">
-      <div className="flex items-start gap-3">
-        <Info className="mt-0.5 size-5 text-primary" />
-        <div>
-          <p className="font-medium text-foreground">{statusMessage}</p>
-          {assigneeMessage && <p className="text-sm text-muted-foreground">{assigneeMessage}</p>}
+    <div className="mx-6 mb-6 rounded-lg bg-accent px-5 py-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-start gap-3">
+          <Info className="mt-0.5 size-5 text-primary" />
+          <div>
+            <p className="font-medium text-foreground">{statusMessage}</p>
+            {assigneeMessage && <p className="text-sm text-muted-foreground">{assigneeMessage}</p>}
+          </div>
         </div>
+
+        {hasMissingFields && (
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <div className="relative size-12">
+                  <svg className="size-full -rotate-90 transform">
+                    <circle
+                      cx="24"
+                      cy="24"
+                      r="20"
+                      fill="none"
+                      stroke="#e5e7eb"
+                      strokeWidth="4"
+                    />
+                    <circle
+                      cx="24"
+                      cy="24"
+                      r="20"
+                      fill="none"
+                      stroke="#3b82f6"
+                      strokeWidth="4"
+                      strokeDasharray={`${(completionPercent / 100) * 125.6} 125.6`}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xs font-bold">{completionPercent}%</span>
+                  </div>
+                </div>
+                <div className="text-sm">
+                  <div className="font-medium">{filledTotal} of {totalFields} fields</div>
+                  {missingRequired.length > 0 && (
+                    <div className="text-xs text-muted-foreground">Required: Owner</div>
+                  )}
+                  {missingRecommended.length > 0 && (
+                    <div className="text-xs text-muted-foreground">Recommended: Data Categories, Application URL</div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm">
+                <Edit className="mr-1 size-3" />
+                Edit Manually
+              </Button>
+              <Button variant="default" size="sm">
+                <Sparkles className="mr-1 size-3" />
+                Complete with AI
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {!hasMissingFields && totalTaskCount > 0 && (
+          <Button variant="outline" size="sm" onClick={onOpenTasks}>
+            {showMyTasks ? `Open my tasks (${myTaskCount})` : `View tasks (${totalTaskCount})`}
+          </Button>
+        )}
       </div>
-      {totalTaskCount > 0 && (
-        <Button variant="outline" size="sm" onClick={onOpenTasks}>
-          {showMyTasks ? `Open my tasks (${myTaskCount})` : `View tasks (${totalTaskCount})`}
-        </Button>
-      )}
     </div>
   );
 }
 
-// System summary card - truncated text
+// System description card - truncated text
 function SystemSummary({ system }: { system: AISystem }) {
   const [expanded, setExpanded] = useState(false);
   const description = system.description || system.intended_use || "No description provided.";
@@ -207,7 +309,7 @@ function SystemSummary({ system }: { system: AISystem }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">System summary</CardTitle>
+        <CardTitle className="text-base">System Description</CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-sm leading-relaxed text-muted-foreground">
@@ -251,14 +353,14 @@ function AIActCategory({ system }: { system: AISystem }) {
   );
 }
 
-// Key information card
+// Key information card - shows the 5 specified fields
 function KeyInformation({ system, onViewDetails }: { system: AISystem; onViewDetails: () => void }) {
   const items = [
-    { label: "Intended purpose", value: system.intended_use || "—" },
-    { label: "Model / Provider", value: system.provider || "—" },
-    { label: "Automation level", value: "Partially automated", extra: "Level 3/4" },
-    { label: "Human oversight", value: "Required" },
-    { label: "Data categories", value: system.data_categories || "—" },
+    { label: "Role", value: system.org_role || "—" },
+    { label: "Usage of own brand", value: "Yes" },
+    { label: "User Groups", value: "Internal employees" },
+    { label: "Finetuning", value: "No" },
+    { label: "Intended purpose", value: system.intended_purpose || "—" },
   ];
 
   return (
@@ -272,11 +374,6 @@ function KeyInformation({ system, onViewDetails }: { system: AISystem; onViewDet
             <span className="text-sm text-muted-foreground">{item.label}</span>
             <div className="text-right">
               <span className="text-sm">{item.value}</span>
-              {item.extra && (
-                <Badge variant="secondary" className="ml-2 text-xs">
-                  {item.extra}
-                </Badge>
-              )}
             </div>
           </div>
         ))}
@@ -828,31 +925,317 @@ function DetailsTab({ system, onEdit, onAIAssist }: { system: AISystem; onEdit: 
   );
 }
 
-// Governance details panel (collapsed by default) - now a Card without border-l
-function GovernancePanel({ system }: { system: AISystem }) {
+// Recent notes panel - shows latest 3 notes
+function RecentNotesPanel({ systemId, onViewAll }: { systemId: string; onViewAll: () => void }) {
+  const [notes, setNotes] = useState<Array<{ id: string; content: string; created_at: string; username: string }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.systemNotes.list(systemId)
+      .then((data) => setNotes(data.slice(0, 3)))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [systemId]);
+
+  function formatDate(iso: string): string {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  }
+
   return (
     <div className="bg-card p-6">
       <Card>
-        <CardContent className="flex flex-col items-center p-6 text-center">
-          <div className="mb-4 flex size-16 items-center justify-center rounded-xl bg-primary/10">
-            <FileText className="size-8 text-primary" />
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Recent Notes</CardTitle>
+            <Button variant="link" className="h-auto p-0 text-sm" onClick={onViewAll}>
+              View all
+            </Button>
           </div>
-          <h3 className="text-lg font-semibold">Governance & compliance details</h3>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Detailed governance information, assessments, obligations, controls and evidence are hidden to keep the overview clean.
-          </p>
-          <Button variant="link" className="mt-4">
-            Show details
-          </Button>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="py-4 text-center text-sm text-muted-foreground">Loading...</div>
+          ) : notes.length === 0 ? (
+            <div className="py-4 text-center text-sm text-muted-foreground">No notes yet</div>
+          ) : (
+            <div className="space-y-3">
+              {notes.map((note) => (
+                <div key={note.id} className="rounded-md border border-border p-3">
+                  <p className="line-clamp-3 text-sm">{note.content}</p>
+                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    <User className="size-3" />
+                    <span>{note.username}</span>
+                    <span>·</span>
+                    <span>{formatDate(note.created_at)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
 
+// Files tab with evidence marking
+function FilesTab({ systemId, systemName }: { systemId: string; systemName: string }) {
+  const [files, setFiles] = useState<Array<{ id: string; name: string; type: string; isEvidence: boolean; uploadedAt: string; uploadedBy: string }>>([]);
+  const [sortBy, setSortBy] = useState<"name" | "type" | "date">("date");
+  const [loading] = useState(false);
+
+  // Mock data for now
+  useEffect(() => {
+    // TODO: Replace with actual API call
+    setFiles([
+      { id: "1", name: "technical_documentation.pdf", type: "Documentation", isEvidence: false, uploadedAt: "2026-09-01", uploadedBy: "sarah" },
+      { id: "2", name: "model_card.json", type: "Evidence", isEvidence: true, uploadedAt: "2026-08-28", uploadedBy: "john" },
+      { id: "3", name: "risk_assessment.xlsx", type: "Evidence", isEvidence: true, uploadedAt: "2026-08-25", uploadedBy: "lena" },
+    ]);
+  }, [systemId]);
+
+  const toggleEvidence = (fileId: string) => {
+    setFiles(files.map(f => f.id === fileId ? { ...f, isEvidence: !f.isEvidence, type: !f.isEvidence ? "Evidence" : "Documentation" } : f));
+  };
+
+  const sortedFiles = [...files].sort((a, b) => {
+    if (sortBy === "name") return a.name.localeCompare(b.name);
+    if (sortBy === "type") return a.type.localeCompare(b.type);
+    return new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime();
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Files</h2>
+          <p className="text-sm text-muted-foreground">Documents and evidence files for this system</p>
+        </div>
+        <Button>
+          <FileText className="mr-2 size-4" />
+          Upload File
+        </Button>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Sort by:</span>
+        <Button variant={sortBy === "name" ? "default" : "outline"} size="sm" onClick={() => setSortBy("name")}>Name</Button>
+        <Button variant={sortBy === "type" ? "default" : "outline"} size="sm" onClick={() => setSortBy("type")}>Type</Button>
+        <Button variant={sortBy === "date" ? "default" : "outline"} size="sm" onClick={() => setSortBy("date")}>Date</Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <div className="flex-1">File Name</div>
+            <div className="w-32 shrink-0">Type</div>
+            <div className="w-32 shrink-0">Uploaded By</div>
+            <div className="w-32 shrink-0">Date</div>
+            <div className="w-24 shrink-0">Actions</div>
+          </div>
+
+          {loading ? (
+            <div className="py-8 text-center text-muted-foreground">Loading...</div>
+          ) : sortedFiles.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">No files uploaded yet</div>
+          ) : (
+            sortedFiles.map((file) => (
+              <div key={file.id} className="flex items-center gap-4 border-b border-border px-4 py-3 hover:bg-muted/30">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <FileText className="size-5 shrink-0 text-muted-foreground" />
+                  <span className="truncate font-medium">{file.name}</span>
+                </div>
+                <div className="w-32 shrink-0">
+                  <Badge className={cn("border-0", file.isEvidence ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700")}>
+                    {file.type}
+                  </Badge>
+                </div>
+                <div className="w-32 shrink-0 text-sm text-muted-foreground">{file.uploadedBy}</div>
+                <div className="w-32 shrink-0 text-sm text-muted-foreground">
+                  {new Date(file.uploadedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                </div>
+                <div className="w-24 shrink-0">
+                  <Button variant="ghost" size="sm" onClick={() => toggleEvidence(file.id)}>
+                    {file.isEvidence ? "Unmark" : "Mark Evidence"}
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Task Detail Sheet - shows task details and actions
+function TaskDetailSheet({
+  open,
+  task,
+  system,
+  onClose,
+  onStartEdit,
+  onStartAIAssist,
+  onGoToAssessments,
+}: {
+  open: boolean;
+  task: string | null;
+  system: AISystem;
+  onClose: () => void;
+  onStartEdit: () => void;
+  onStartAIAssist: () => void;
+  onGoToAssessments: () => void;
+}) {
+  if (!task) return null;
+
+  const isRegistration = task === "registration";
+  const isReview = task === "review";
+  const isCompliance = task === "compliance";
+
+  const title = isRegistration
+    ? "Complete System Registration"
+    : isReview
+      ? "Review Technical Information"
+      : isCompliance
+        ? "Complete Compliance Assessment"
+        : "Task Details";
+
+  const description = isRegistration
+    ? "Fill in the required system information to complete the registration process."
+    : isReview
+      ? "Review and verify the technical details submitted for this AI system."
+      : isCompliance
+        ? "Complete the compliance assessment for this high-risk AI system."
+        : "";
+
+  const assignee = isRegistration
+    ? system.owner_username
+    : isCompliance
+      ? system.compliance_officer_username || system.assignee_username
+      : system.assignee_username;
+  const priority = (isReview || isCompliance) ? "High" : "Medium";
+
+  return (
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent side="right" className="flex w-full flex-col sm:max-w-lg">
+        <SheetHeader className="px-6 pt-6">
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription>{description}</SheetDescription>
+        </SheetHeader>
+
+        <div className="flex-1 space-y-6 overflow-auto px-6 py-6">
+          {/* Task Info */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Status</span>
+              <Badge className="bg-blue-100 text-blue-700 border-0">In Progress</Badge>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Priority</span>
+              <Badge className={priority === "High" ? "bg-red-100 text-red-700 border-0" : "bg-orange-100 text-orange-700 border-0"}>
+                {priority}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Assigned to</span>
+              <span className="text-sm font-medium">{assignee || "Unassigned"}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">System</span>
+              <span className="text-sm font-medium">{system.name}</span>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* What needs to be done */}
+          <div>
+            <h4 className="mb-3 font-medium">What needs to be done</h4>
+            {isRegistration && (
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <CheckSquare className="mt-0.5 size-4 text-primary" />
+                  <span>Complete all required fields in the registration form</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckSquare className="mt-0.5 size-4 text-primary" />
+                  <span>Provide system description and intended purpose</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckSquare className="mt-0.5 size-4 text-primary" />
+                  <span>Submit for technical review when complete</span>
+                </li>
+              </ul>
+            )}
+            {isReview && (
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <CheckSquare className="mt-0.5 size-4 text-primary" />
+                  <span>Verify technical information accuracy</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckSquare className="mt-0.5 size-4 text-primary" />
+                  <span>Complete any missing technical fields</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckSquare className="mt-0.5 size-4 text-primary" />
+                  <span>Approve or request changes from owner</span>
+                </li>
+              </ul>
+            )}
+            {isCompliance && (
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <CheckSquare className="mt-0.5 size-4 text-primary" />
+                  <span>Review applicable obligations for this risk tier</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckSquare className="mt-0.5 size-4 text-primary" />
+                  <span>Implement required controls</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckSquare className="mt-0.5 size-4 text-primary" />
+                  <span>Upload supporting evidence</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckSquare className="mt-0.5 size-4 text-primary" />
+                  <span>Submit assessment for approval</span>
+                </li>
+              </ul>
+            )}
+          </div>
+        </div>
+
+        <SheetFooter className="flex-col gap-2 border-t px-6 py-4">
+          <Button variant="outline" className="w-full" onClick={onClose}>
+            Cancel
+          </Button>
+          {isCompliance ? (
+            <Button className="w-full" onClick={() => { onClose(); onGoToAssessments(); }}>
+              Go to Assessments
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" className="w-full" onClick={() => { onClose(); onStartEdit(); }}>
+                <Edit className="mr-2 size-4" />
+                Edit Manually
+              </Button>
+              <Button className="w-full" onClick={() => { onClose(); onStartAIAssist(); }}>
+                <Sparkles className="mr-2 size-4" />
+                Complete with AI
+              </Button>
+            </>
+          )}
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export default function SystemWorkspace() {
   const { systemId } = useParams<{ systemId: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const showToast = useToast();
   const { can, username } = usePermissions();
@@ -867,12 +1250,18 @@ export default function SystemWorkspace() {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showAIAssist, setShowAIAssist] = useState(false);
   const [showEditWizard, setShowEditWizard] = useState(false);
+  const [tabsExpanded, setTabsExpanded] = useState(false);
+  const [activeTask, setActiveTask] = useState<string | null>(null);
 
-  // Handle tab query parameter
+  // Handle tab and task query parameters
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (tab && ["overview", "tasks", "details", "assessments", "obligations", "controls", "evidence", "activity", "documents", "notes", "models"].includes(tab)) {
+    if (tab && ["overview", "tasks", "assessments", "requirements", "activity", "documents", "notes", "models"].includes(tab)) {
       setActiveTab(tab);
+    }
+    const task = searchParams.get("task");
+    if (task) {
+      setActiveTask(task);
     }
   }, [searchParams]);
 
@@ -888,13 +1277,13 @@ export default function SystemWorkspace() {
 
   const handleStartTask = useCallback((taskType: string) => {
     if (taskType === "registration") {
-      setActiveTab("details");
+      setActiveTask("registration");
     } else if (taskType === "review") {
-      setActiveTab("details");
+      setActiveTask("review");
     } else if (taskType === "compliance") {
-      window.location.href = `/compliance/#/systems/${systemId}`;
+      setActiveTask("compliance");
     }
-  }, [systemId]);
+  }, []);
 
   const loadSystem = useCallback(async () => {
     if (!systemId) return;
@@ -1012,7 +1401,12 @@ export default function SystemWorkspace() {
             👥
           </div>
           <div>
-            <h1 className="text-2xl font-semibold">{system.name}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-semibold">{system.name}</h1>
+              <Badge className={cn("border-0", getLifecycleStateBadgeClass(system.lifecycle))}>
+                {getLifecycleStateLabel(system.lifecycle)}
+              </Badge>
+            </div>
             <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-1.5">
                 <FileText className="size-4" />
@@ -1106,45 +1500,45 @@ export default function SystemWorkspace() {
                     Overview
                   </TabsTrigger>
                   <TabsTrigger value="tasks" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                    <ClipboardList className="mr-2 size-4" />
+                    <CheckSquare className="mr-2 size-4" />
                     Tasks
                   </TabsTrigger>
-                  <TabsTrigger value="details" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                    <Info className="mr-2 size-4" />
-                    Details
-                  </TabsTrigger>
                   <TabsTrigger value="assessments" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                    <ClipboardList className="mr-2 size-4" />
+                    <FileText className="mr-2 size-4" />
                     Assessments
                   </TabsTrigger>
-                  <TabsTrigger value="obligations" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                    <ClipboardList className="mr-2 size-4" />
-                    Obligations
-                  </TabsTrigger>
-                  <TabsTrigger value="controls" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                    <Shield className="mr-2 size-4" />
-                    Controls
-                  </TabsTrigger>
-                  <TabsTrigger value="evidence" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                    <Files className="mr-2 size-4" />
-                    Evidence
-                  </TabsTrigger>
-                  <TabsTrigger value="activity" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                    <Activity className="mr-2 size-4" />
-                    Activity
+                  <TabsTrigger value="requirements" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
+                    <Pencil className="mr-2 size-4" />
+                    Requirements
                   </TabsTrigger>
                   <TabsTrigger value="documents" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
                     <FolderOpen className="mr-2 size-4" />
-                    Documents
+                    Files
                   </TabsTrigger>
-                  <TabsTrigger value="notes" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                    <StickyNote className="mr-2 size-4" />
-                    Notes
-                  </TabsTrigger>
-                  <TabsTrigger value="models" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                    <Database className="mr-2 size-4" />
-                    Models
-                  </TabsTrigger>
+                  {tabsExpanded && (
+                    <>
+                      <TabsTrigger value="notes" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
+                        <StickyNote className="mr-2 size-4" />
+                        Notes
+                      </TabsTrigger>
+                      <TabsTrigger value="models" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
+                        <Database className="mr-2 size-4" />
+                        Linked Models
+                      </TabsTrigger>
+                      <TabsTrigger value="activity" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
+                        <Activity className="mr-2 size-4" />
+                        Activity
+                      </TabsTrigger>
+                    </>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-2 h-9"
+                    onClick={() => setTabsExpanded(!tabsExpanded)}
+                  >
+                    {tabsExpanded ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+                  </Button>
                 </TabsList>
               </div>
 
@@ -1152,19 +1546,26 @@ export default function SystemWorkspace() {
                 <div className="flex h-full">
                   {/* Main content area */}
                   <div className="flex-1 overflow-auto p-6">
-                    {/* System summary + AI Act info row */}
+                    {/* System Description + AI Act info row */}
                     <div className="mb-6 grid gap-6 lg:grid-cols-3">
                       <div className="lg:col-span-1">
                         <SystemSummary system={system} />
                       </div>
                       <Card className="lg:col-span-2">
-                        <CardContent className="grid gap-6 p-6 md:grid-cols-3">
+                        <CardContent className="grid gap-6 p-6 md:grid-cols-4">
                           <AIActCategory system={system} />
+                          <div className="space-y-1">
+                            <div className="text-xs text-muted-foreground">Provider / Deployer</div>
+                            <div className="flex items-center gap-2">
+                              <Building2 className="size-4 text-muted-foreground" />
+                              <span className="font-medium">{system.provider || system.org_name || "—"}</span>
+                            </div>
+                          </div>
                           <div className="space-y-1">
                             <div className="text-xs text-muted-foreground">Primary use</div>
                             <div className="flex items-center gap-2">
                               <Users className="size-4 text-muted-foreground" />
-                              <span className="font-medium">{system.use_case || "HR & Recruitment"}</span>
+                              <span className="font-medium">customer_service</span>
                             </div>
                           </div>
                           <div className="space-y-1">
@@ -1172,7 +1573,7 @@ export default function SystemWorkspace() {
                             <div className="flex items-center gap-2">
                               <Users className="size-4 text-muted-foreground" />
                               <div>
-                                <div className="font-medium">{system.people_affected || "Job applicants"}</div>
+                                <div className="font-medium">customers</div>
                                 <div className="text-xs text-muted-foreground">(EU)</div>
                               </div>
                             </div>
@@ -1189,9 +1590,9 @@ export default function SystemWorkspace() {
                     </div>
                   </div>
 
-                  {/* Governance panel (right) */}
+                  {/* Recent notes panel (right) */}
                   <aside className="hidden w-72 shrink-0 xl:block">
-                    <GovernancePanel system={system} />
+                    <RecentNotesPanel systemId={system.id} onViewAll={() => setActiveTab("notes")} />
                   </aside>
                 </div>
               </TabsContent>
@@ -1209,28 +1610,23 @@ export default function SystemWorkspace() {
                 <CurrentTasks system={system} onStartTask={handleStartTask} onViewAllTasks={handleViewAllTasks} />
               </TabsContent>
 
-              <TabsContent value="details" className="m-0 p-6">
-                <DetailsTab
-                  system={system}
-                  onEdit={() => setShowEditWizard(true)}
-                  onAIAssist={() => setShowAIAssist(true)}
-                />
-              </TabsContent>
-
               <TabsContent value="assessments" className="m-0 p-6">
                 <AssessmentsTab systemId={system.id} systemName={system.name} />
               </TabsContent>
 
-              <TabsContent value="obligations" className="m-0 p-6">
-                <ObligationsTab systemId={system.id} systemName={system.name} />
-              </TabsContent>
-
-              <TabsContent value="controls" className="m-0 p-6">
-                <ControlsTab systemId={system.id} systemName={system.name} />
-              </TabsContent>
-
-              <TabsContent value="evidence" className="m-0 p-6">
-                <EvidenceTab systemId={system.id} systemName={system.name} />
+              <TabsContent value="requirements" className="m-0 p-6">
+                <Tabs defaultValue="obligations" className="space-y-4">
+                  <TabsList>
+                    <TabsTrigger value="obligations">Obligations</TabsTrigger>
+                    <TabsTrigger value="controls">Controls</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="obligations">
+                    <ObligationsTab systemId={system.id} systemName={system.name} />
+                  </TabsContent>
+                  <TabsContent value="controls">
+                    <ControlsTab systemId={system.id} systemName={system.name} />
+                  </TabsContent>
+                </Tabs>
               </TabsContent>
 
               <TabsContent value="activity" className="m-0 p-6">
@@ -1238,11 +1634,7 @@ export default function SystemWorkspace() {
               </TabsContent>
 
               <TabsContent value="documents" className="m-0 p-6">
-                <Card>
-                  <CardContent className="p-8 text-center text-muted-foreground">
-                    Documents for this system will be displayed here.
-                  </CardContent>
-                </Card>
+                <FilesTab systemId={system.id} systemName={system.name} />
               </TabsContent>
 
               <TabsContent value="notes" className="m-0 p-6">
@@ -1376,6 +1768,23 @@ export default function SystemWorkspace() {
           loadSystem();
         }}
         system={system}
+      />
+
+      {/* Task Detail Sheet */}
+      <TaskDetailSheet
+        open={!!activeTask}
+        task={activeTask}
+        system={system}
+        onClose={() => {
+          setActiveTask(null);
+          // Clear the URL param
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete("task");
+          setSearchParams(newParams);
+        }}
+        onStartEdit={() => setShowEditWizard(true)}
+        onStartAIAssist={() => setShowAIAssist(true)}
+        onGoToAssessments={() => setActiveTab("assessments")}
       />
     </div>
   );

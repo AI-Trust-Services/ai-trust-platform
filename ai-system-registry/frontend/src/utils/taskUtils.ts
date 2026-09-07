@@ -40,7 +40,7 @@ export function deriveTasksFromSystem(system: AISystem, currentUsername: string)
       assignee: system.owner_username,
       assigneeRole: "Owner",
       stage,
-      actionHref: `/systems/${system.id}/edit`,
+      actionHref: `/systems/${system.id}?task=registration`,
     });
   }
 
@@ -57,7 +57,7 @@ export function deriveTasksFromSystem(system: AISystem, currentUsername: string)
       assignee: system.assignee_username || system.owner_username,
       assigneeRole: "Engineer",
       stage,
-      actionHref: `/systems/${system.id}/review`,
+      actionHref: `/systems/${system.id}?task=review`,
     });
   }
 

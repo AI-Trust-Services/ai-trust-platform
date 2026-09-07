@@ -2,13 +2,12 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import {
   User, Clock, RefreshCw, CheckCircle, ChevronRight,
-  FileText, MessageSquare, Code, Calendar, AlertCircle,
+  FileText, Calendar,
   Sparkles, Info
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { api } from "@/api/client";
 import type { AISystem } from "@/types";
@@ -20,11 +19,19 @@ interface SummaryCardProps {
   icon: React.ReactNode;
   iconBg: string;
   iconColor: string;
+  isActive?: boolean;
+  onClick?: () => void;
 }
 
-function SummaryCard({ count, label, subtitle, icon, iconBg, iconColor }: SummaryCardProps) {
+function SummaryCard({ count, label, subtitle, icon, iconBg, iconColor, isActive, onClick }: SummaryCardProps) {
   return (
-    <Card className="cursor-pointer transition-shadow hover:shadow-md">
+    <Card
+      className={cn(
+        "cursor-pointer transition-shadow hover:shadow-md",
+        isActive && "ring-2 ring-primary ring-offset-2"
+      )}
+      onClick={onClick}
+    >
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -38,33 +45,6 @@ function SummaryCard({ count, label, subtitle, icon, iconBg, iconColor }: Summar
             </div>
           </div>
           <ChevronRight className="size-5 text-muted-foreground" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-interface CategoryCardProps {
-  icon: React.ReactNode;
-  label: string;
-  count: number;
-  iconBg: string;
-  iconColor: string;
-}
-
-function CategoryCard({ icon, label, count, iconBg, iconColor }: CategoryCardProps) {
-  return (
-    <Card className="cursor-pointer transition-shadow hover:shadow-md">
-      <CardContent className="flex items-center justify-between p-4">
-        <div className="flex items-center gap-3">
-          <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg", iconBg, iconColor)}>
-            {icon}
-          </div>
-          <span className="text-sm font-medium">{label}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-lg font-semibold">{count}</span>
-          <ChevronRight className="size-4 text-muted-foreground" />
         </div>
       </CardContent>
     </Card>
@@ -206,6 +186,7 @@ export default function MyWork() {
 
   const summaryCards = [
     {
+      key: "needs-me",
       count: needsMeCount,
       label: "Needs me",
       subtitle: "Tasks need your action",
@@ -214,6 +195,7 @@ export default function MyWork() {
       iconColor: "text-purple-600",
     },
     {
+      key: "waiting",
       count: waitingCount,
       label: "Waiting on others",
       subtitle: "Awaiting updates",
@@ -222,6 +204,7 @@ export default function MyWork() {
       iconColor: "text-orange-600",
     },
     {
+      key: "in-progress",
       count: inProgressCount,
       label: "In progress",
       subtitle: "Active tasks",
@@ -230,41 +213,11 @@ export default function MyWork() {
       iconColor: "text-blue-600",
     },
     {
+      key: "completed",
       count: completedCount,
       label: "Completed",
       subtitle: "This month",
       icon: <CheckCircle className="size-5" />,
-      iconBg: "bg-green-50",
-      iconColor: "text-green-600",
-    },
-  ];
-
-  const categories = [
-    {
-      icon: <FileText className="size-4" />,
-      label: "Review new systems",
-      count: pendingReviewSystems.length,
-      iconBg: "bg-blue-50",
-      iconColor: "text-blue-600",
-    },
-    {
-      icon: <RefreshCw className="size-4" />,
-      label: "Continue registrations",
-      count: draftSystems.length,
-      iconBg: "bg-purple-50",
-      iconColor: "text-purple-600",
-    },
-    {
-      icon: <MessageSquare className="size-4" />,
-      label: "Answer clarifications",
-      count: 0,
-      iconBg: "bg-orange-50",
-      iconColor: "text-orange-600",
-    },
-    {
-      icon: <Code className="size-4" />,
-      label: "Review system changes",
-      count: 0,
       iconBg: "bg-green-50",
       iconColor: "text-green-600",
     },
@@ -280,6 +233,7 @@ export default function MyWork() {
       system: s.name,
       systemId: s.id,
       type: "Technical review",
+      taskParam: "review" as const,
       typeColor: "bg-blue-50 text-blue-700 border-blue-200",
       stage: getStageLabel(s.lifecycle),
       due: "Pending",
@@ -296,6 +250,7 @@ export default function MyWork() {
       system: s.name,
       systemId: s.id,
       type: "Registration",
+      taskParam: "registration" as const,
       typeColor: "bg-purple-50 text-purple-700 border-purple-200",
       stage: getStageLabel(s.lifecycle),
       due: "In progress",
@@ -332,33 +287,23 @@ export default function MyWork() {
           </div>
         </div>
 
-        {/* Summary Cards */}
+        {/* Summary Cards - Click to filter */}
         <div className="mb-6 grid gap-4 md:grid-cols-4">
-          {summaryCards.map((card, i) => (
-            <SummaryCard key={i} {...card} />
+          {summaryCards.map((card) => (
+            <SummaryCard
+              key={card.key}
+              {...card}
+              isActive={activeTab === card.key}
+              onClick={() => setActiveTab(card.key)}
+            />
           ))}
         </div>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="needs-me">Needs me</TabsTrigger>
-            <TabsTrigger value="waiting">Waiting on others</TabsTrigger>
-            <TabsTrigger value="in-progress">In progress</TabsTrigger>
-            <TabsTrigger value="completed">Completed</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="needs-me" className="space-y-4">
-            {/* Category Cards */}
-            <div className="grid gap-3 md:grid-cols-4">
-              {categories.map((cat, i) => (
-                <CategoryCard key={i} {...cat} />
-              ))}
-            </div>
-
-            {/* Tasks Table */}
-            <div>
-              <h3 className="mb-3 text-sm font-semibold">Tasks ({tasks.length})</h3>
+        {/* Filtered Tasks List */}
+        <div className="space-y-4">
+          {activeTab === "needs-me" && (
+            <>
+              <h3 className="text-sm font-semibold">Tasks ({tasks.length})</h3>
               <Card>
                 <CardContent className="p-0">
                   {/* Table Header */}
@@ -385,7 +330,7 @@ export default function MyWork() {
                       <TaskRow
                         key={i}
                         task={task}
-                        onClick={() => navigate(`/systems/${task.systemId}`)}
+                        onClick={() => navigate(`/systems/${task.systemId}?task=${task.taskParam}`)}
                       />
                     ))
                   )}
@@ -393,91 +338,97 @@ export default function MyWork() {
               </Card>
 
               {tasks.length > 0 && (
-                <div className="mt-3 text-center">
+                <div className="text-center">
                   <span className="text-sm text-muted-foreground">
                     Showing {tasks.length} of {tasks.length} tasks
                   </span>
                 </div>
               )}
-            </div>
-          </TabsContent>
+            </>
+          )}
 
-          <TabsContent value="waiting">
+          {activeTab === "waiting" && (
             <Card>
               <CardContent className="p-8 text-center text-muted-foreground">
                 No tasks waiting on others
               </CardContent>
             </Card>
-          </TabsContent>
+          )}
 
-          <TabsContent value="in-progress">
-            {draftSystems.length === 0 ? (
-              <Card>
-                <CardContent className="p-8 text-center text-muted-foreground">
-                  No tasks in progress
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <div className="flex-1">Task</div>
-                    <div className="w-40 shrink-0">AI System</div>
-                    <div className="w-32 shrink-0">Task Type</div>
-                    <div className="w-32 shrink-0">Current Stage</div>
-                    <div className="w-28 shrink-0">Due</div>
-                    <div className="w-24 shrink-0">Priority</div>
-                    <div className="w-28 shrink-0">Status</div>
-                    <div className="w-4 shrink-0"></div>
-                  </div>
-                  {tasks.filter(t => t.status === "In progress").map((task, i) => (
-                    <TaskRow
-                      key={i}
-                      task={task}
-                      onClick={() => navigate(`/systems/${task.systemId}`)}
-                    />
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="completed">
-            {approvedSystems.length === 0 ? (
-              <Card>
-                <CardContent className="p-8 text-center text-muted-foreground">
-                  No completed tasks
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <div className="flex-1">System</div>
-                    <div className="w-40 shrink-0">Status</div>
-                    <div className="w-32 shrink-0">Stage</div>
-                  </div>
-                  {approvedSystems.map((s, i) => (
-                    <div
-                      key={i}
-                      className="flex cursor-pointer items-center gap-4 border-b border-border px-4 py-3 hover:bg-muted/30"
-                      onClick={() => navigate(`/systems/${s.id}`)}
-                    >
-                      <div className="flex-1 font-medium">{s.name}</div>
-                      <div className="w-40 shrink-0">
-                        <Badge className="border-0 bg-green-100 text-green-700">Approved</Badge>
-                      </div>
-                      <div className="w-32 shrink-0 text-sm text-muted-foreground">
-                        {getStageLabel(s.lifecycle)}
-                      </div>
-                      <ChevronRight className="size-4 text-muted-foreground" />
+          {activeTab === "in-progress" && (
+            <>
+              <h3 className="text-sm font-semibold">In Progress ({tasks.filter(t => t.status === "In progress").length})</h3>
+              {draftSystems.length === 0 ? (
+                <Card>
+                  <CardContent className="p-8 text-center text-muted-foreground">
+                    No tasks in progress
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      <div className="flex-1">Task</div>
+                      <div className="w-40 shrink-0">AI System</div>
+                      <div className="w-32 shrink-0">Task Type</div>
+                      <div className="w-32 shrink-0">Current Stage</div>
+                      <div className="w-28 shrink-0">Due</div>
+                      <div className="w-24 shrink-0">Priority</div>
+                      <div className="w-28 shrink-0">Status</div>
+                      <div className="w-4 shrink-0"></div>
                     </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-        </Tabs>
+                    {tasks.filter(t => t.status === "In progress").map((task, i) => (
+                      <TaskRow
+                        key={i}
+                        task={task}
+                        onClick={() => navigate(`/systems/${task.systemId}`)}
+                      />
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+
+          {activeTab === "completed" && (
+            <>
+              <h3 className="text-sm font-semibold">Completed ({approvedSystems.length})</h3>
+              {approvedSystems.length === 0 ? (
+                <Card>
+                  <CardContent className="p-8 text-center text-muted-foreground">
+                    No completed tasks
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      <div className="flex-1">System</div>
+                      <div className="w-40 shrink-0">Status</div>
+                      <div className="w-32 shrink-0">Stage</div>
+                    </div>
+                    {approvedSystems.map((s, i) => (
+                      <div
+                        key={i}
+                        className="flex cursor-pointer items-center gap-4 border-b border-border px-4 py-3 hover:bg-muted/30"
+                        onClick={() => navigate(`/systems/${s.id}`)}
+                      >
+                        <div className="flex-1 font-medium">{s.name}</div>
+                        <div className="w-40 shrink-0">
+                          <Badge className="border-0 bg-green-100 text-green-700">Approved</Badge>
+                        </div>
+                        <div className="w-32 shrink-0 text-sm text-muted-foreground">
+                          {getStageLabel(s.lifecycle)}
+                        </div>
+                        <ChevronRight className="size-4 text-muted-foreground" />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Right Sidebar */}

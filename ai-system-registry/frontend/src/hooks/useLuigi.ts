@@ -1,4 +1,5 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
+import { useLocation } from "react-router";
 import LuigiClient from "@luigi-project/client";
 
 export function useLuigiInit(onInit: (ctx: unknown) => void): void {
@@ -79,4 +80,54 @@ export function useLuigiNavigation() {
   }, []);
 
   return { navigate };
+}
+
+/**
+ * Syncs React Router location changes with the Luigi shell URL.
+ *
+ * With virtualTree: true enabled on the Luigi node, the shell accepts any
+ * sub-path and passes it to the MFE. This hook keeps the browser URL in sync
+ * with the MFE's internal navigation state.
+ *
+ * The Luigi shell uses paths like /home/systems, and the MFE uses paths like /systems.
+ * This hook maps MFE paths to Luigi shell paths.
+ */
+export function useLuigiUrlSync(): void {
+  const location = useLocation();
+  const lastSyncedPath = useRef<string>("");
+
+  useEffect(() => {
+    // Build the full MFE path including search params
+    const mfePath = location.pathname + location.search;
+
+    // Skip if we already synced this exact path (prevents loops)
+    if (mfePath === lastSyncedPath.current) {
+      return;
+    }
+
+    // Map MFE path to Luigi shell path
+    // MFE: /systems/SYS-123 → Luigi: /home/systems/SYS-123
+    // MFE: /today → Luigi: /home/today
+    const luigiPath = "/home" + mfePath;
+    const newHash = "#" + luigiPath;
+
+    // Only update if we're in an iframe (Luigi context)
+    if (window.parent && window.parent !== window) {
+      try {
+        const currentHash = window.parent.location.hash;
+        // Only update if the hash actually differs
+        if (currentHash !== newHash) {
+          lastSyncedPath.current = mfePath;
+          // Update URL without triggering navigation - just cosmetic
+          window.parent.history.replaceState(
+            window.parent.history.state,
+            "",
+            newHash
+          );
+        }
+      } catch {
+        // Cross-origin iframe - can't access parent, silently ignore
+      }
+    }
+  }, [location.pathname, location.search]);
 }
