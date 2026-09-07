@@ -303,7 +303,7 @@ async def submit_technical_section(
         row = result.scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
-        if row.workflow_status not in ("technical_pending", "pending_review"):
+        if row.workflow_status != "technical_pending":
             raise HTTPException(422, f"Cannot submit technical section from status '{row.workflow_status}'")
         if row.technical_assignee_username and current_user != row.technical_assignee_username:
             raise HTTPException(403, "Only the technical section assignee may submit this section")

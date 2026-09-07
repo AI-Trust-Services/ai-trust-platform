@@ -36,7 +36,8 @@ const VALID_TIERS = ["prohibited", "gpai-systemic", "gpai-standard", "high", "li
 
 function QuestionnaireProgress({ workflowStatus, classificationVisible }: { workflowStatus: string; classificationVisible: boolean }) {
   const phases = ["Business", "Technical", "Classification", "Review"];
-  const currentIndex = classificationVisible || workflowStatus === "pending_review" ? 2
+  const currentIndex = workflowStatus === "pending_review" ? 3
+    : classificationVisible ? 2
     : workflowStatus === "technical_pending" ? 1
     : 0;
 
@@ -89,7 +90,9 @@ function RiskClassificationStep({ system, assessmentId, onClose, onSuccess, show
     setBusy(true);
     try {
       await registryClient.updateSystem(system.id, { registration_mode: "ai" });
-      await registryClient.submitTechnicalSection(system.id);
+      if (system.workflow_status !== "pending_review") {
+        await registryClient.submitTechnicalSection(system.id);
+      }
       await api.advanceFromClassification(assessmentId);
       showToast("Risk classification complete — obligations and controls generated");
       onSuccess();
@@ -109,7 +112,9 @@ function RiskClassificationStep({ system, assessmentId, onClose, onSuccess, show
         if (val != null) flagData[q.key] = q.type === "number" ? Number(val) : Boolean(val);
       }
       await registryClient.updateSystem(system.id, flagData);
-      await registryClient.submitTechnicalSection(system.id);
+      if (system.workflow_status !== "pending_review") {
+        await registryClient.submitTechnicalSection(system.id);
+      }
       await api.advanceFromClassification(assessmentId);
       showToast("Risk classification complete — obligations and controls generated");
       onSuccess();

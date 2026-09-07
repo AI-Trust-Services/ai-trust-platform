@@ -44,6 +44,9 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess }: Prop
   const [techSearch, setTechSearch] = useState("");
   const [techSelected, setTechSelected] = useState<string>("");
   const [techDropdown, setTechDropdown] = useState(false);
+  const [coSearch, setCoSearch] = useState("");
+  const [coSelected, setCoSelected] = useState<string>("");
+  const [coDropdown, setCoDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
   const showToast = useToast();
   const { username } = usePermissions();
@@ -58,6 +61,8 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess }: Prop
     setBizSelected("");
     setTechSearch("");
     setTechSelected("");
+    setCoSearch("");
+    setCoSelected("");
     (async () => {
       try {
         const [sys, fw] = await Promise.all([api.getSystems(), api.getFrameworks()]);
@@ -88,6 +93,13 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess }: Prop
       }).slice(0, 8)
     : [];
 
+  const coFiltered = coSearch.trim()
+    ? allUsers.filter((u) => {
+        const q = coSearch.toLowerCase();
+        return u.username.toLowerCase().includes(q) || u.firstName.toLowerCase().includes(q) || u.lastName.toLowerCase().includes(q);
+      }).slice(0, 8)
+    : [];
+
   async function handleSubmit() {
     if (!form.ai_system_id) { showToast("Select an AI system", true); return; }
     if (!form.framework_id) { showToast("Select a framework", true); return; }
@@ -96,9 +108,11 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess }: Prop
     try {
       await api.createAssessment(form);
       if (isPending && username && selectedSystem?.workflow_status === "draft") {
+        if (!coSelected) { showToast("Select a compliance officer to assign the workflow", true); setLoading(false); return; }
         await registryClient.assignWorkflow(form.ai_system_id, {
           business_assignee_username: bizSelected || username,
           technical_assignee_username: techSelected || undefined,
+          compliance_officer_username: coSelected,
         });
       }
       onClose();
@@ -206,6 +220,42 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess }: Prop
                 )}
               </div>
               <p className="text-xs text-muted-foreground">Will be assigned the technical questionnaire section. Leave blank to assign later.</p>
+            </div>
+          )}
+          {isPending && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Compliance Officer <span className="text-destructive">*</span></Label>
+              <div className="relative">
+                <Input
+                  value={coSearch}
+                  onChange={(e) => { setCoSearch(e.target.value); setCoSelected(""); setCoDropdown(e.target.value.trim().length > 0); }}
+                  onFocus={() => { if (coSearch.trim() && !coSelected) setCoDropdown(true); }}
+                  onBlur={() => setTimeout(() => setCoDropdown(false), 150)}
+                  placeholder="Search by name or username…"
+                  className="text-sm"
+                />
+                {coDropdown && coFiltered.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-background shadow-md">
+                    {coFiltered.map((u) => (
+                      <button
+                        key={u.username}
+                        type="button"
+                        className="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-muted"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setCoSelected(u.username);
+                          setCoSearch([u.firstName, u.lastName].filter(Boolean).join(" ") || u.username);
+                          setCoDropdown(false);
+                        }}
+                      >
+                        <span className="font-medium">{[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username}</span>
+                        <span className="text-xs text-muted-foreground">{u.username} · {u.role.replace(/_/g, " ")}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Will review and approve the system after both questionnaire sections are complete.</p>
             </div>
           )}
           <div className="flex flex-col gap-1.5">
