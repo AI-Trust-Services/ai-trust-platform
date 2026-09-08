@@ -39,9 +39,12 @@ const TIER_CLASSES: Record<string, string> = {
 interface TierBadgeProps { tier: string; }
 export function TierBadge({ tier }: TierBadgeProps) {
   const labels: Record<string, string> = {
-    prohibited: "Prohibited", high: "High-Risk",
-    "gpai-systemic": "GPAI Systemic", "gpai-standard": "GPAI Standard",
-    limited: "Limited", minimal: "Minimal",
+    prohibited: "Prohibited Practice",
+    high: "High Risk AI System",
+    "gpai-systemic": "GPAI with Systemic Risk",
+    "gpai-standard": "GPAI Standard",
+    limited: "Minimal or No Risk AI System",
+    minimal: "Minimal or No Risk AI System",
   };
   return (
     <Badge className={cn("rounded-full gap-1.5 font-semibold", TIER_CLASSES[tier] ?? "bg-muted text-muted-foreground")}>
