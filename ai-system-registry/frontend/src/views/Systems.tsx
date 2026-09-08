@@ -146,20 +146,21 @@ export default function Systems() {
         <Input type="text" className="w-56" placeholder="Search systems…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className={cn(SELECT_CLASS, "w-auto")} value={tierFilter} onChange={(e) => setTierFilter(e.target.value)}>
           <option value="">All Risk Tiers</option>
-          <option value="prohibited">Prohibited</option>
-          <option value="high">High-Risk</option>
-          <option value="gpai-systemic">GPAI Systemic</option>
+          <option value="prohibited">Prohibited Practice</option>
+          <option value="high">High Risk AI System</option>
+          <option value="gpai-systemic">GPAI with Systemic Risk</option>
           <option value="gpai-standard">GPAI Standard</option>
-          <option value="limited">Limited</option>
-          <option value="minimal">Minimal</option>
+          <option value="limited">Minimal or No Risk AI System</option>
+          <option value="minimal">Minimal or No Risk AI System</option>
         </select>
         <select className={cn(SELECT_CLASS, "w-auto")} value={lifecycleFilter} onChange={(e) => setLifecycleFilter(e.target.value)}>
           <option value="">All Lifecycle States</option>
           <option value="development">Development</option>
           <option value="testing">Testing</option>
-          <option value="conformity">Conformity</option>
+          <option value="prod_ready">Production Ready</option>
           <option value="market">On Market</option>
-          <option value="post-market">Post-Market</option>
+          <option value="service">In Service</option>
+          <option value="updated">Updated</option>
           <option value="decommissioned">Decommissioned</option>
         </select>
         <select className={cn(SELECT_CLASS, "w-auto")} value={workflowFilter} onChange={(e) => setWorkflowFilter(e.target.value)}>

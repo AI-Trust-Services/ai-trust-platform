@@ -23,9 +23,10 @@ export const TIER_COLORS: Record<TierKey, string> = {
 export const LIFECYCLE_COLORS: Record<string, string> = {
   development:    "#1147E9",
   testing:        "#e9a922",
-  conformity:     "#e05c00",
+  prod_ready:     "#e05c00",
   market:         "#1a7a3c",
-  "post-market":  "#0d7a3c",
+  service:        "#0d7a3c",
+  updated:        "#5a0080",
   decommissioned: "#999999",
 };
 

@@ -6,9 +6,9 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 VALID_LIFECYCLES = frozenset({
-    "development", "testing", "conformity", "market", "post-market", "decommissioned",
+    "development", "testing", "prod_ready", "market", "service", "updated", "decommissioned",
 })
-VALID_ROLES = frozenset({"provider", "deployer", "importer", "distributor"})
+VALID_ROLES = frozenset({"provider", "deployer", "importer", "distributor", "authorised_representative"})
 
 
 class RationaleItem(BaseModel):

@@ -35,9 +35,10 @@ export const TIER_META: Record<TierKey, { label: string; cls: string }> = {
 export const LIFECYCLE_LABELS: Record<LifecycleKey, string> = {
   "development":    "Development",
   "testing":        "Testing",
-  "conformity":     "Conformity",
+  "prod_ready":     "Production Ready",
   "market":         "On Market",
-  "post-market":    "Post-Market",
+  "service":        "In Service",
+  "updated":        "Updated",
   "decommissioned": "Decommissioned",
 };
 

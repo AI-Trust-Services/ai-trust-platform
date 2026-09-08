@@ -44,8 +44,10 @@ const ENUM_OPTIONS: Record<string, { value: string; label: string }[]> = {
   lifecycle: [
     { value: "development", label: "Development" },
     { value: "testing",     label: "Testing" },
-    { value: "conformity",  label: "Conformity" },
+    { value: "prod_ready",  label: "Production Ready" },
     { value: "market",      label: "On Market" },
+    { value: "service",     label: "In Service" },
+    { value: "updated",     label: "Updated" },
   ],
   autonomy_level: [
     { value: "decision_support",   label: "Decision support" },

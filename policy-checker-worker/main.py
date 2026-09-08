@@ -129,7 +129,7 @@ async def eval_high_risk_on_market_low_compliance(rule: AlertRule, ch) -> list[E
         rows = (await session.execute(
             select(AISystem.id, AISystem.name, AISystem.compliance).where(
                 AISystem.tier == "high",
-                AISystem.lifecycle.in_(["market", "post-market"]),
+                AISystem.lifecycle.in_(["market", "service"]),
             )
         )).all()
     results: list[EvalResult] = []
@@ -155,7 +155,7 @@ async def eval_no_signals(rule: AlertRule, ch) -> list[EvalResult]:
     async with SessionLocal() as session:
         systems = (await session.execute(
             select(AISystem.id, AISystem.name).where(
-                AISystem.lifecycle.in_(["market", "post-market"]),
+                AISystem.lifecycle.in_(["market", "service"]),
             )
         )).all()
     if not systems:
@@ -239,7 +239,7 @@ async def eval_market_system_no_model_card(rule: AlertRule, ch) -> list[EvalResu
 
         rows = (await session.execute(
             select(AISystem.id, AISystem.name, (~has_model).label("missing")).where(
-                AISystem.lifecycle.in_(["market", "post-market"]),
+                AISystem.lifecycle.in_(["market", "service"]),
             )
         )).all()
     results: list[EvalResult] = []

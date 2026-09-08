@@ -374,8 +374,10 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     <select className={SELECT_CLASS} id="eng_lifecycle" value={form.lifecycle} onChange={set("lifecycle")}>
                       <option value="development">Development</option>
                       <option value="testing">Testing</option>
-                      <option value="conformity">Conformity</option>
+                      <option value="prod_ready">Production Ready</option>
                       <option value="market">On Market</option>
+                      <option value="service">In Service</option>
+                      <option value="updated">Updated</option>
                     </select>
                   </div>
                   <div className="flex flex-col gap-1.5">
