@@ -23,14 +23,12 @@ export const OBLIGATION_STATUS_META: Record<string, BadgeMeta> = {
 };
 
 export const CONTROL_STATUS_META: Record<string, BadgeMeta> = {
-  not_started:       { label: "Not Started",       cls: "st-draft" },
-  planned:           { label: "Planned",           cls: "st-applicable" },
-  in_implementation: { label: "In Implementation", cls: "st-progress" },
-  implemented:       { label: "Implemented",       cls: "st-submitted" },
-  under_review:      { label: "Under Review",      cls: "st-review" },
-  effective:         { label: "Effective",         cls: "st-fulfilled" },
-  ineffective:       { label: "Ineffective",       cls: "st-overdue" },
-  deactivated:       { label: "Deactivated",       cls: "st-na" },
+  open:         { label: "Open",         cls: "st-draft" },
+  planned:      { label: "Planned",      cls: "st-applicable" },
+  under_review: { label: "Under Review", cls: "st-review" },
+  fulfilled:    { label: "Fulfilled",    cls: "st-fulfilled" },
+  ineffective:  { label: "Ineffective",  cls: "st-overdue" },
+  deactivated:  { label: "Deactivated",  cls: "st-na" },
 };
 
 export const EVIDENCE_STATUS_META: Record<string, BadgeMeta> = {
