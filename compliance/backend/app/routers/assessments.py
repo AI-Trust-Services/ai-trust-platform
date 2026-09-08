@@ -319,6 +319,10 @@ async def advance_from_classification(assessment_id: str) -> AssessmentResponse:
 
         row.status = "pending_review"
         row.updated_at = datetime.now(timezone.utc)
+        # Intentional cross-service write: both tables share the same DB and the
+        # same session, so this stays atomic. An HTTP round-trip to the registry
+        # would introduce a distributed-transaction gap where the two states could
+        # diverge on failure.
         system.workflow_status = "pending_review"
 
         await session.commit()
