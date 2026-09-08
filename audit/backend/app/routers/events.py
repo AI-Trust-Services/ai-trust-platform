@@ -64,36 +64,17 @@ class AuditStatsResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _row_to_summary(row) -> AuditEventSummary:
-    return AuditEventSummary(
-        id=row[0],
-        created_at=row[1],
-        actor_username=row[2],
-        action=row[3],
-        resource_type=row[4],
-        resource_id=row[5],
-        ai_system_id=row[6],
-        ai_system_name=row[7],
-        source=row[9],
-    )
+    r = dict(zip(AUDIT_EVENTS_COLUMNS, row))
+    return AuditEventSummary(**{k: r[k] for k in AuditEventSummary.model_fields})
 
 
 def _row_to_detail(row) -> AuditEventDetail:
+    r = dict(zip(AUDIT_EVENTS_COLUMNS, row))
     try:
-        changes = json.loads(row[8]) if row[8] else {}
+        r["changes"] = json.loads(r["changes"]) if r["changes"] else {}
     except (json.JSONDecodeError, TypeError):
-        changes = {}
-    return AuditEventDetail(
-        id=row[0],
-        created_at=row[1],
-        actor_username=row[2],
-        action=row[3],
-        resource_type=row[4],
-        resource_id=row[5],
-        ai_system_id=row[6],
-        ai_system_name=row[7],
-        source=row[9],
-        changes=changes,
-    )
+        r["changes"] = {}
+    return AuditEventDetail(**{k: r[k] for k in AuditEventDetail.model_fields})
 
 
 def _trend(current: int, previous: int) -> float | None:
