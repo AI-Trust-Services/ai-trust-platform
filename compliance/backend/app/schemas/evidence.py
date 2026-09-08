@@ -43,10 +43,17 @@ class EvidenceUpdate(BaseModel):
         return v
 
 
+class ControlRef(BaseModel):
+    id: str
+    control_ref: str | None
+    title: str
+    status: str
+
+    model_config = {"from_attributes": True}
+
+
 class EvidenceResponse(BaseModel):
     id: str
-    ai_system_id: str | None
-    assessment_id: str | None
     title: str
     description: str
     evidence_type: str
@@ -58,6 +65,7 @@ class EvidenceResponse(BaseModel):
     mime_type: str
     uploaded_by: str
     version_label: str
+    control_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -65,8 +73,7 @@ class EvidenceResponse(BaseModel):
 
 
 class EvidenceDetailResponse(EvidenceResponse):
-    control_ids: list[str] = []
-    obligation_ids: list[str] = []
+    controls: list[ControlRef] = []
 
 
 class EvidenceVersionResponse(BaseModel):

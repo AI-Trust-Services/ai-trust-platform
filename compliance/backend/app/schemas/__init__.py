@@ -18,6 +18,7 @@ from app.schemas.control import (
     VALID_EFFECTIVENESS,
 )
 from app.schemas.evidence import (
+    ControlRef,
     DownloadUrlResponse,
     EvidenceDetailResponse,
     EvidenceResponse,
@@ -60,6 +61,7 @@ __all__ = [
     "EvidenceUpdate",
     "EvidenceResponse",
     "EvidenceDetailResponse",
+    "ControlRef",
     "EvidenceVersionResponse",
     "DownloadUrlResponse",
     "VALID_EVIDENCE_TYPES",
