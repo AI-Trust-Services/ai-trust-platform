@@ -275,16 +275,14 @@ jobs:
         env:
           OWNER: ${{ needs.prepare.outputs.owner }}
           TAG: ${{ needs.prepare.outputs.tag }}
-          LATEST_TAG: ${{ needs.prepare.outputs.latest_tag }}
         run: |
           set -euo pipefail
           helm dependency update k8s/helm/ai-trust-platform
-          helm package k8s/helm/ai-trust-platform --destination dist/ --version "0.0.0-${TAG}" --app-version "${TAG}"
-          helm push dist/ai-trust-platform-0.0.0-${TAG}.tgz "oci://ghcr.io/${OWNER}/charts"
-          if [[ -n "${LATEST_TAG}" ]]; then
-            helm package k8s/helm/ai-trust-platform --destination dist-latest/ --version "0.0.0-${LATEST_TAG}" --app-version "${TAG}"
-            helm push dist-latest/ai-trust-platform-0.0.0-${LATEST_TAG}.tgz "oci://ghcr.io/${OWNER}/charts"
-          fi
+          helm package k8s/helm/ai-trust-platform \
+            --destination dist/ \
+            --version "0.0.0-${TAG}" \
+            --app-version "${TAG}"
+          helm push "dist/ai-trust-platform-0.0.0-${TAG}.tgz" "oci://ghcr.io/${OWNER}/charts"
 
   publish-ocm:
     name: Build and Push OCM Component
@@ -305,7 +303,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install OCM CLI
-        run: curl -sSfL https://ocm.software/install.sh | sudo bash
+        run: |
+          curl -sSfL \
+            "https://github.com/open-component-model/ocm/releases/download/v0.50.0/install.sh" \
+            | sudo bash
 
       - name: Build and push OCM component
         env:
@@ -327,7 +328,7 @@ jobs:
               VERSION="0.0.0-${LATEST_TAG}" \
               GITHUB_REPOSITORY_OWNER="${OWNER}" \
               IMAGE_TAG="${TAG}" \
-              CHART_TAG="0.0.0-${LATEST_TAG}"
+              CHART_TAG="0.0.0-${TAG}"
             ocm transfer commontransportarchive dist/ctf-latest "oci://ghcr.io/${OWNER}/ocm" --overwrite
           fi
 
