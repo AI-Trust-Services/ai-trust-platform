@@ -19,6 +19,24 @@ make down    # helm uninstall + kind delete cluster
 ```
 Manifests live in `k8s/helm/ai-trust-platform/`. Every k8s Service name matches the docker-compose service name (`postgres`, `ai-system-registry-backend`, etc.) so `shell/nginx.conf` and backend env vars work unmodified.
 
+### Deploy to Gardener (OCM + Flux + GitHub Actions)
+The platform is packaged as an OCM component and deployed to Gardener shoot clusters via Flux HelmRelease. See [k8s/README.md](k8s/README.md) for the full guide.
+```bash
+# Trigger a build + deploy to a specific cluster from any branch:
+gh workflow run build-push.yml \
+  --ref <branch> \
+  --field gardener_cluster=sr-test
+
+# Check deploy status on the cluster:
+kubectl get componentversion,resource,fluxdeployer -n ocm-system
+kubectl get helmrelease ai-trust -n ocm-system -o wide
+kubectl get pods -n ai-trust
+```
+- OCM component descriptor: `.ocm/component-constructor.yaml`
+- OCM CRs (ComponentVersion, Resource, FluxDeployer): `k8s/ocm/manifests.yaml`
+- Per-cluster env: `k8s/env/<cluster>/.env`
+- One-time cluster setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster>` (installs OCM controller, Flux, Traefik, DNS, TLS cert)
+
 ### Run tests (any backend)
 ```bash
 cd <component>/backend   # e.g. cd compliance/backend
@@ -175,11 +193,12 @@ Static HTML + `luigi-config.js` served by nginx (Luigi core from CDN). Nav nodes
 
 Each component has `frontend/` (nginx, internal) and `backend/` (FastAPI, internal). All traffic routes through `:8080` via the shell proxy.
 
-### Dual deployment paths (docker-compose and k8s) — keep in sync
-Both paths are fully supported; **develop and change them together**. When you touch how a service runs:
-- New service in `docker-compose.yml` → add matching Deployment+Service (or Job) to the Helm chart + its image to `k8s/scripts/build-and-load-images.sh`.
+### Dual deployment paths (docker-compose, k8s kind, and Gardener/OCM) — keep in sync
+Three paths are fully supported; **develop and change them together**. When you touch how a service runs:
+- New service in `docker-compose.yml` → add matching Deployment+Service (or Job) to the Helm chart + its image to `k8s/scripts/build-and-load-images.sh` + add it as a resource in `.ocm/component-constructor.yaml`.
 - New/changed env var or secret → add to `.env.example`; it flows to k8s via `k8s/scripts/bootstrap.sh`'s Secret (sourced from the same `.env`, no separate k8s env file).
 - New `depends_on: condition:` → add the matching `waitForTcp`/`waitForHttp`/`waitForJob` initContainer (helpers in `_helpers.tpl`).
+- New one-shot Job → add `helm.sh/hook: pre-install,pre-upgrade` and `helm.sh/hook-delete-policy: before-hook-creation` annotations (see `jobs.yaml`). Without hooks, `helm upgrade` will fail with a Job immutability error on the second deploy.
 - Renamed/moved a mounted file (e.g. `infra/*/init.sh`, `otel-pipeline/**/config`) → update both `docker-compose.yml` `volumes:` **and** `bootstrap.sh` `--from-file`. Nothing enforces this in CI — a rename on one side silently breaks the other.
 
 ### Adding a new component
@@ -193,7 +212,7 @@ Both paths are fully supported; **develop and change them together**. When you t
 8. Add proxy routes to `shell/nginx.conf` (`/new-component/`, `/api/new-component/`).
 9. Add `base: "/new-component/"` to the frontend `vite.config.ts`.
 10. Add a nav node to `shell/luigi-config.js`.
-11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh`.
+11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh` **and** as `ociImage` resources in `.ocm/component-constructor.yaml`.
 
 ### ai-system-registry/ (port 8001, `/api/registry/`)
 AI system registration and EU AI Act classification.
