@@ -1,7 +1,7 @@
 """Add registration_mode and registration_documents to ai_systems
 
-Revision ID: 0014
-Revises: 0013
+Revision ID: 0015
+Revises: 0014
 Create Date: 2026-08-31
 
 Adds the top-level registration mode discriminator (ai / manual_questionnaire /

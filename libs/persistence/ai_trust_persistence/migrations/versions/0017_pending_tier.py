@@ -1,7 +1,7 @@
 """Add 'pending' to ck_ai_systems_tier CHECK constraint
 
-Revision ID: 0016
-Revises: 0015
+Revision ID: 0017
+Revises: 0016
 Create Date: 2026-09-03
 
 Systems registered with only a name+description start with tier='pending' until
