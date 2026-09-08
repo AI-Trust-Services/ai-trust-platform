@@ -340,4 +340,5 @@ jobs:
     uses: ./.github/workflows/bootstrap-gardener.yml
     with:
       cluster: ${{ needs.images-published.outputs.cluster }}
+      ocm_version: ${{ needs.images-published.outputs.tag }}
     secrets: inherit

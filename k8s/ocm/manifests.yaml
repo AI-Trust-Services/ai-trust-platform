@@ -6,7 +6,7 @@ metadata:
 spec:
   component: github.com/ai-trust-services/ai-trust-platform
   version:
-    semver: ">=0.0.0-latest"
+    semver: ">=0.0.0-0"
   repository:
     url: ghcr.io/ai-trust-services/ocm
     secretRef:

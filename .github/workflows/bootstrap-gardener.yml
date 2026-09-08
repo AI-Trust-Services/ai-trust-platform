@@ -28,6 +28,11 @@ on:
         description: "Target cluster"
         required: true
         type: string
+      ocm_version:
+        description: "Exact OCM component version to pin (e.g. 0.0.0-sr-test-abc123)"
+        required: false
+        default: ""
+        type: string
     secrets:
       GHCR_PULL_TOKEN:
         required: false
@@ -173,3 +178,11 @@ jobs:
 
       - name: Apply OCM component CRs
         run: kubectl apply -f k8s/ocm/
+
+      - name: Pin ComponentVersion to exact built version
+        if: inputs.ocm_version != ''
+        run: |
+          kubectl patch componentversion ai-trust-platform -n ocm-system \
+            --type=merge \
+            -p "{\"spec\":{\"version\":{\"semver\":\"0.0.0-${{ inputs.ocm_version }}\"}}}"
+          echo "Pinned ComponentVersion to 0.0.0-${{ inputs.ocm_version }}"
