@@ -40,9 +40,9 @@ export const HIST_COLORS = ["#bb0000", "#e05c00", "#e9a922", "#3d9e6b", "#1a7a3c
 
 export const TIER_LABELS: Record<TierKey, string> = {
   prohibited:       "Prohibited Practice",
-  high:             "High Risk AI System",
+  high:             "High Risk",
   "gpai-systemic":  "GPAI with Systemic Risk",
   "gpai-standard":  "GPAI Standard",
-  limited:          "Minimal or No Risk AI System",
-  minimal:          "Minimal or No Risk AI System",
+  limited:          "Transparency Obligations",
+  minimal:          "Minimal or No Risk",
 };

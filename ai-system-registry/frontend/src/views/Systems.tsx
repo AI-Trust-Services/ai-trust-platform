@@ -145,13 +145,13 @@ export default function Systems() {
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-6 py-3">
         <Input type="text" className="w-56" placeholder="Search systems…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className={cn(SELECT_CLASS, "w-auto")} value={tierFilter} onChange={(e) => setTierFilter(e.target.value)}>
-          <option value="">All Risk Tiers</option>
+          <option value="">All Risk Classifications</option>
           <option value="prohibited">Prohibited Practice</option>
-          <option value="high">High Risk AI System</option>
+          <option value="high">High Risk</option>
           <option value="gpai-systemic">GPAI with Systemic Risk</option>
           <option value="gpai-standard">GPAI Standard</option>
-          <option value="limited">Minimal or No Risk AI System</option>
-          <option value="minimal">Minimal or No Risk AI System</option>
+          <option value="limited">Transparency Obligations</option>
+          <option value="minimal">Minimal or No Risk</option>
         </select>
         <select className={cn(SELECT_CLASS, "w-auto")} value={lifecycleFilter} onChange={(e) => setLifecycleFilter(e.target.value)}>
           <option value="">All Lifecycle States</option>
@@ -182,7 +182,7 @@ export default function Systems() {
                 <TableHead>System</TableHead>
                 <TableHead>Workflow</TableHead>
                 <TableHead>Assignee</TableHead>
-                <TableHead>Risk Tier</TableHead>
+                <TableHead>Risk Classification</TableHead>
                 <TableHead>Lifecycle</TableHead>
                 <TableHead>Compliance</TableHead>
                 <TableHead>Registered</TableHead>
