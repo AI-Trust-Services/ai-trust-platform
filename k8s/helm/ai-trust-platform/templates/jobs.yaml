@@ -6,6 +6,9 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: db-migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   backoffLimit: 6
   template:
@@ -25,6 +28,9 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: clickhouse-migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   backoffLimit: 6
   template:
@@ -49,6 +55,9 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: minio-init
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   backoffLimit: 6
   template:
@@ -73,6 +82,10 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: keycloak-ssl-patch
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+    helm.sh/hook-weight: "5"
 spec:
   backoffLimit: 6
   template:
@@ -111,6 +124,10 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: keycloak-provision
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+    helm.sh/hook-weight: "10"
 spec:
   backoffLimit: 6
   template:
@@ -137,6 +154,10 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: openfga-migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+    helm.sh/hook-weight: "5"
 spec:
   backoffLimit: 6
   template:
@@ -158,6 +179,10 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: openfga-provision
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+    helm.sh/hook-weight: "10"
 spec:
   backoffLimit: 6
   template:
