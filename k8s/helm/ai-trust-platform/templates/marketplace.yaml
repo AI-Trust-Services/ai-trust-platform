@@ -98,6 +98,12 @@ spec:
                  dockerfile-app images to and the app Deployment pulls from. */}}
             - name: MARKETPLACE_REGISTRY
               value: {{ $.Values.marketplaceRegistry | default "registry:5000" | quote }}
+            {{/* POST /discover/ocm/build: ocm defaults to HTTPS when it pushes the built component
+                 to the registry, but the in-cluster registry is plain HTTP — this scheme prefixes
+                 the transfer target so ocm honours HTTP. The resolved imageReference stays
+                 scheme-less. Matches MARKETPLACE_REGISTRY_SCHEME in .env.example / docker-compose. */}}
+            - name: MARKETPLACE_REGISTRY_SCHEME
+              value: {{ $.Values.marketplaceRegistryScheme | default "http" | quote }}
             {{/* Discovered apps live on the private cluster network — allow the manifest fetcher
                  to reach RFC-1918 addresses. Loopback/link-local/metadata IPs stay blocked. */}}
             - name: MARKETPLACE_ALLOW_PRIVATE_DISCOVERY

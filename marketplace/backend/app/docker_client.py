@@ -32,8 +32,31 @@ class DeployError(Exception):
 
 GIT_IMAGE = os.environ.get("MARKETPLACE_GIT_IMAGE", "alpine/git:latest")
 NGINX_IMAGE = os.environ.get("MARKETPLACE_NGINX_IMAGE", "nginx:1.27-alpine")
+# Image with the `ocm` CLI + git, used to build+transfer an OCM component from a Git repo
+# (POST /discover/ocm/build). Purpose-built (marketplace/ocm-builder/Dockerfile): alpine + git + the
+# same pinned ocm release binary the backend ships. The OCM project's own published image is
+# distroless (no /bin/sh, no git) so it can't run the clone+build shell command — hence our own.
+OCM_IMAGE = os.environ.get("MARKETPLACE_OCM_IMAGE", "marketplace-ocm-builder:latest")
 # In-cluster/local image registry (registry:2). Host:port, no scheme, e.g. "localhost:5000".
+# This is the name the *deploy-time pull* uses — on compose the pull runs on the host docker daemon,
+# where the registry is published at localhost:5000; on k8s it's the in-cluster Service "registry:5000".
 REGISTRY = os.environ.get("MARKETPLACE_REGISTRY", "localhost:5000")
+# The registry name reachable from *inside* a throwaway build container on the platform network. The
+# OCM build runs `ocm transfer` in-container, where "localhost" is the builder itself, not the
+# registry — so the transfer must target the network name (compose: "registry:5000"). Defaults to
+# REGISTRY, so k8s (registry:5000 both places) and any already-network-correct config need no change;
+# compose overrides it to "registry:5000" via .env. The two names address the SAME registry:2 store,
+# so a ref built against one is byte-identical (same digest) when pulled via the other — we rewrite
+# the resolved imageReference host from the internal name back to REGISTRY before deploy (see
+# ocm_build_and_resolve) so the host-daemon pull resolves it.
+REGISTRY_INTERNAL = os.environ.get("MARKETPLACE_REGISTRY_INTERNAL", REGISTRY)
+# URL scheme the in-container `ocm transfer`/`get` uses to reach REGISTRY_INTERNAL. The local
+# compose registry:2 (and the kind in-cluster registry) speaks plain HTTP, but the ocm CLI defaults
+# to HTTPS and fails with "server gave HTTP response to HTTPS client". Prefixing the ocm target with
+# "http://" makes ocm honour plain HTTP ("using insecure http for oci registry"). Set to "https" for
+# a TLS-fronted registry. Only scopes the ocm CLI calls; the resolved imageReference the descriptor
+# carries is scheme-less (host:port), so the deploy-time docker pull is unaffected.
+REGISTRY_SCHEME = os.environ.get("MARKETPLACE_REGISTRY_SCHEME", "http").strip()
 # The compose network the platform runs on, so the backend can resolve the container by name.
 # If unset, we auto-detect the backend's own network at runtime (robust to the compose project
 # name / directory name).
@@ -299,6 +322,122 @@ def build_and_run(name: str, git_url: str, git_ref: str, app_port: int,
         extra={"service": name, "host": service_host(name), "image": image},
     )
     return service_host(name), image
+
+
+def ocm_build_and_resolve(git_url: str, git_ref: str, registry: str,
+                          component: str | None, constructor: str) -> str:
+    """Clone a Git repo, build its OCM component from ``constructor``, transfer it to ``registry``,
+    and return the ``ocm get componentversion -o yaml`` descriptor stdout.
+
+    One throwaway container (``OCM_IMAGE``, which has git + the ocm CLI) does the whole thing so no
+    build state leaks onto the backend. The git token is handed to git via GIT_ASKPASS from the
+    container's environment (never in the clone URL/argv). ``ocm transfer`` moves any images the
+    constructor references into the platform's own registry, so the resolved ref needs no pull creds
+    at deploy time. Raises DeployError (mapped to a 4xx by the router) on any step's failure.
+
+    ``registry`` is the deploy-time pull name (REGISTRY, e.g. compose ``localhost:5000``). The
+    transfer + resolve run *inside* the build container, where that name may be unreachable
+    (``localhost`` is the builder itself), so they use ``REGISTRY_INTERNAL`` (the network name, e.g.
+    ``registry:5000``). Both address the same registry:2 store, so afterwards we rewrite the resolved
+    ``imageReference`` host from the internal name back to ``registry`` — the byte-identical image is
+    then pullable by the host docker daemon at deploy time.
+    """
+    cli = _client()
+    target = REGISTRY_INTERNAL  # what the in-container `ocm transfer`/`get` can actually reach
+    # ocm defaults to HTTPS; the local/in-cluster registry:2 is plain HTTP. Prefix the ocm target with
+    # the configured scheme so ocm uses HTTP (the resolved imageReference stays scheme-less host:port).
+    ocm_target = f"{REGISTRY_SCHEME}://{target}"
+
+    # Guard the constructor path: keep it repo-relative and traversal-free (it is interpolated into a
+    # shell command inside the build container). A leading slash or ".." is rejected up front.
+    ctor = (constructor or "component-constructor.yaml").strip()
+    if ctor.startswith("/") or ".." in ctor.split("/"):
+        raise DeployError("constructor path must be a repo-relative path without '..'")
+
+    # `ocm add componentversions --create-ctf` reads the constructor; `ocm transfer ctf` pushes the
+    # built component (and its images) to the in-cluster registry over HTTP (registry:2 is insecure
+    # HTTP locally — ocm honours that for a plain host:port target). Then resolve for the descriptor.
+    # `set -o pipefail` isn't POSIX-sh; rely on `set -e` and ordered `&&`-free statements.
+    build_cmd = (
+        gitauth.ASKPASS_PRELUDE
+        + "set -e; rm -rf /src/* /src/.git 2>/dev/null || true; "
+        f'git clone --depth 1 --branch "{git_ref}" "{git_url}" /src '
+        f'|| git clone --depth 1 "{git_url}" /src; '
+        f'if [ ! -f "/src/{ctor}" ]; then echo "MARKETPLACE_MISSING_CONSTRUCTOR" >&2; exit 42; fi; '
+        f'cd /src; '
+        # --create (re)creates the CTF at --file; the constructor is the positional arg. `ocm add
+        # componentversions` has no `--create-ctf` flag (that was a mis-name). No -V here: images stay
+        # by-reference in the CTF and are copied into the registry at transfer time. Redirect its
+        # progress to stderr (1>&2) so ONLY the final descriptor lands on stdout for the parser.
+        f'ocm add componentversions --create --file /tmp/ctf "{ctor}" 1>&2; '
+        # -V/--copy-resources pulls the constructor's referenced (external) images into the target
+        # registry by-value, so the resolved imageReference points at OUR registry (no pull creds at
+        # deploy). --overwrite lets a rebuild of the same version replace the prior push. Progress → stderr.
+        f'ocm transfer ctf --copy-resources --overwrite /tmp/ctf "{ocm_target}" 1>&2; '
+        # Resolve the component reference for the descriptor. ocm 0.49 has no "all components" mode, so
+        # we need an explicit <name>:<version>. When the caller named a component, use it; otherwise
+        # read the sole component out of the LOCAL ctf (no network) from `ocm get componentversions`'s
+        # table (header row, then "<COMPONENT> <VERSION> <PROVIDER>") — awk gives us "name:version".
+        + (f'COMP="{component}"; '
+           if component else
+           'COMP="$(ocm get componentversions /tmp/ctf 2>/dev/null '
+           '| awk \'NR==2{print $1":"$2}\')"; '
+           'if [ -z "$COMP" ]; then echo "MARKETPLACE_NO_COMPONENT" >&2; exit 43; fi; ')
+        # Emit the resolved descriptor on stdout for the backend to parse; the parser selects the
+        # ociImage resource. --repo points at our (transferred-to) registry so the imageReference is
+        # the registry-nested, digest-pinned ref.
+        + f'ocm get componentversion --repo "{ocm_target}" -o yaml "$COMP"'
+    )
+
+    run_kwargs = {
+        "entrypoint": "/bin/sh",
+        "command": ["-c", build_cmd],
+        "environment": _git_env(git_url),
+        "detach": True,
+    }
+    net = _detect_network(cli)
+    if net:
+        run_kwargs["network"] = net
+    builder = cli.containers.run(OCM_IMAGE, **run_kwargs)
+    try:
+        result = builder.wait()
+        code = result.get("StatusCode", 1) if isinstance(result, dict) else 1
+        # stdout carries the descriptor YAML we want; stderr carries ocm progress/errors. Read them
+        # separately so a clean run's descriptor isn't polluted by progress lines.
+        stdout = builder.logs(stdout=True, stderr=False).decode("utf-8", "replace")
+        stderr = builder.logs(stdout=False, stderr=True).decode("utf-8", "replace")
+    finally:
+        try:
+            builder.remove(force=True)
+        except docker.errors.APIError:
+            pass
+
+    if code != 0:
+        if "MARKETPLACE_MISSING_CONSTRUCTOR" in stderr:
+            raise DeployError(
+                f"Repository has no '{ctor}' at its root, so there is no OCM component to build. "
+                "Point the marketplace at a repo whose root contains a component-constructor.yaml."
+            )
+        if "MARKETPLACE_NO_COMPONENT" in stderr:
+            raise DeployError(
+                f"'{ctor}' built no component version, so there is nothing to resolve. "
+                "Name the component explicitly, or check the constructor defines a component."
+            )
+        raise DeployError(f"ocm build failed: {stderr.strip()[-500:] or 'unknown error'}")
+    if not stdout.strip():
+        raise DeployError("ocm build produced no component descriptor")
+    # The descriptor's imageReference points at the transfer target via the ocm scheme prefix, e.g.
+    # "http://registry:5000/…". Strip the scheme and rewrite that host back to the deploy-time pull
+    # name (REGISTRY, e.g. "localhost:5000") so the host docker daemon can pull it — same registry:2
+    # store, same digest. Handle both "<scheme>://<target>/" and a bare "<target>/" (scheme-less).
+    stdout = stdout.replace(
+        f"imageReference: {ocm_target}/", f"imageReference: {registry}/"
+    )
+    if target != registry:
+        stdout = stdout.replace(f"imageReference: {target}/", f"imageReference: {registry}/")
+    logger.info("marketplace.docker.ocm_built", extra={"git_url": git_url, "git_ref": git_ref,
+                                                        "registry": registry, "target": target})
+    return stdout
 
 
 def run_image(name: str, image_ref: str, app_port: int,

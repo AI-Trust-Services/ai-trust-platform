@@ -287,6 +287,86 @@ async def test_ocm_ingest_duplicate_name_409(client, monkeypatch):
     assert r2.status_code == 409
 
 
+# ── OCM build-from-repo: clone+build+push → resolve → register kind=image → deploy ───────────────
+
+async def test_ocm_build_registers_image(client, monkeypatch):
+    # Mock the build orchestrator: POST /discover/ocm/build builds the component from the repo, then
+    # persists through the same register path as an image row (kind="image", pending). Because the
+    # built image lands in the in-cluster registry, no pull creds are needed at deploy (no
+    # registry_private) — deploy is body-less.
+    from app import ocm
+    built_ref = "registry:5000/whether-app:1.0.0@sha256:aaaa"
+
+    async def _fake_build(git_url, git_ref, registry, component=None, resource=None,
+                          constructor="component-constructor.yaml"):
+        return ocm.ResolvedComponent(
+            image_ref=built_ref, resource_name="whether-app",
+            component="github.com/mirceacraciun/whether-app", version="1.0.0", digest="aaaa",
+        )
+
+    monkeypatch.setattr(ocm, "build_component", _fake_build)
+
+    r = await client.post("/v1/discover/ocm/build", json={
+        "name": "whether-built", "label": "Weather (built)",
+        "git_url": "https://github.com/mirceacraciun/whether-app.git", "git_ref": "main",
+        "app_port": 3000, "open_mode": "new_tab",
+    })
+    assert r.status_code == 201, r.text
+    row = r.json()
+    assert row["kind"] == "image"
+    assert row["image_ref"] == built_ref  # the freshly-built, in-cluster digest-pinned ref
+    assert row["app_port"] == 3000
+    assert row["open_mode"] == "new_tab"
+    assert row["registry_private"] is False  # in-cluster registry — no pull creds
+    assert row["source"] == "internal"
+    assert row["status"] == "pending"
+
+    # Deploys body-less through the normal image path (deploy faked in e2e_setup).
+    d = await client.post(f"/v1/services/{row['id']}/deploy")
+    assert d.status_code == 200, d.text
+    assert d.json()["status"] == "running"
+
+
+async def test_ocm_build_error_surfaces_422(client, monkeypatch):
+    # A build failure (e.g. repo with no component-constructor.yaml) raises DeployError, which the
+    # route maps to a clean 422 with no half-created row.
+    from app import ocm
+    from app.docker_client import DeployError
+
+    async def _boom(git_url, git_ref, registry, component=None, resource=None,
+                    constructor="component-constructor.yaml"):
+        raise DeployError("Repository has no 'component-constructor.yaml' at its root")
+
+    monkeypatch.setattr(ocm, "build_component", _boom)
+    r = await client.post("/v1/discover/ocm/build", json={
+        "name": "no-ctor", "label": "No Constructor",
+        "git_url": "https://github.com/acme/no-ctor.git", "app_port": 8080,
+    })
+    assert r.status_code == 422
+    assert "component-constructor.yaml" in r.json()["detail"]
+    # No half-created row: the name is still free.
+    listed = (await client.get("/v1/services")).json()
+    assert not any(s["name"] == "no-ctor" for s in listed)
+
+
+async def test_ocm_build_duplicate_name_409(client, monkeypatch):
+    from app import ocm
+
+    async def _fake_build(git_url, git_ref, registry, component=None, resource=None,
+                          constructor="component-constructor.yaml"):
+        return ocm.ResolvedComponent(
+            image_ref="registry:5000/app:1@sha256:bbbb", resource_name="app",
+            component="github.com/acme/app", version="1", digest="bbbb",
+        )
+
+    monkeypatch.setattr(ocm, "build_component", _fake_build)
+    body = {"name": "dupbuilt", "label": "Dup Built",
+            "git_url": "https://github.com/acme/app.git", "app_port": 8080}
+    r1 = await client.post("/v1/discover/ocm/build", json=body)
+    assert r1.status_code == 201, r1.text
+    r2 = await client.post("/v1/discover/ocm/build", json=body)
+    assert r2.status_code == 409
+
 
 # ── proxy gate: 403 for unenabled discovered app, then forwards after enable ────────────────────
 

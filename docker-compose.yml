@@ -312,6 +312,18 @@ services:
       # from. On compose the daemon reaches it as localhost:5000 (published below); Docker Desktop
       # must trust localhost:5000 as an insecure registry (see .env.example).
       MARKETPLACE_REGISTRY: ${MARKETPLACE_REGISTRY:-localhost:5000}
+      # For POST /discover/ocm/build: the registry name reachable from INSIDE the throwaway OCM build
+      # container (it runs `ocm transfer` on this network, where localhost is the builder, not the
+      # registry). On compose that's the "registry" service. The built imageReference host is
+      # rewritten back to MARKETPLACE_REGISTRY for the deploy-time pull.
+      MARKETPLACE_REGISTRY_INTERNAL: ${MARKETPLACE_REGISTRY_INTERNAL:-registry:5000}
+      # ocm defaults to HTTPS for `ocm transfer`; the in-cluster/compose registry is plain HTTP.
+      # Prefixing the transfer target with this scheme (http://) makes ocm honour plain HTTP. Only
+      # the ocm CLI target carries the scheme — the resolved imageReference stays scheme-less.
+      MARKETPLACE_REGISTRY_SCHEME: ${MARKETPLACE_REGISTRY_SCHEME:-http}
+      # Image (git + ocm CLI) the OCM build runs in — built locally by docker compose (see the
+      # marketplace-ocm-builder build stanza below).
+      MARKETPLACE_OCM_IMAGE: ${MARKETPLACE_OCM_IMAGE:-marketplace-ocm-builder:latest}
       # Discovered apps live on the private compose/cluster network, so allow the manifest
       # fetcher to reach RFC-1918 addresses here. Loopback/link-local/metadata IPs stay blocked.
       MARKETPLACE_ALLOW_PRIVATE_DISCOVERY: ${MARKETPLACE_ALLOW_PRIVATE_DISCOVERY:-true}
@@ -373,6 +385,18 @@ services:
     volumes:
       - registry-data:/var/lib/registry
     restart: on-failure
+
+  # Build-only image (git + ocm CLI) used by POST /discover/ocm/build. The marketplace backend runs
+  # a throwaway container from this image on the host daemon to clone a repo and build+transfer its
+  # OCM component. It has no long-running process — it builds, prints its versions, and exits, so its
+  # only job in compose is to get "marketplace-ocm-builder:latest" onto the daemon (docker compose
+  # build / up --build). MARKETPLACE_OCM_IMAGE on the backend points at this tag.
+  marketplace-ocm-builder:
+    build:
+      context: ./marketplace/ocm-builder
+    image: marketplace-ocm-builder:latest
+    entrypoint: ["/bin/sh", "-c", "ocm version && git --version"]
+    restart: "no"
 
   db-migrate:
     build: ./libs/persistence

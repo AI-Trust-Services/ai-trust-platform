@@ -21,6 +21,7 @@ from ai_trust_persistence.models.marketplace import (
 )
 
 from app import deploy, discovery, identity, keycloak, ocm, oidc
+from app.docker_client import DeployError
 from app.ids import new_id
 from app.schemas import (
     DeployRequest,
@@ -29,6 +30,7 @@ from app.schemas import (
     EnablementResponse,
     EnableRoleRequest,
     FederationSetup,
+    OcmBuildRequest,
     OcmIngestRequest,
     ServiceCreate,
     ServiceResponse,
@@ -232,6 +234,55 @@ async def ingest_ocm(body: OcmIngestRequest) -> ServiceResponse:
         "marketplace.ocm.ingested",
         extra={"id": row.id, "service": row.name, "component": body.component,
                "image_ref": resolved.image_ref},
+    )
+    return ServiceResponse.model_validate(row)
+
+
+@router.post("/discover/ocm/build", response_model=ServiceResponse, status_code=201,
+             dependencies=[Depends(require_permission(MARKETPLACE_MANAGE))])
+async def build_ocm(body: OcmBuildRequest) -> ServiceResponse:
+    """Build an OCM component from a Git repo, push it to the in-cluster registry, and register it.
+
+    The "repo → running service" path: clone ``git_url`` at ``git_ref``, run ``ocm add
+    componentversions`` from the repo's ``constructor``, transfer the built component (and its images)
+    into the platform's own registry, resolve the built ``ociImage`` ref, then persist through the same
+    ``_create_internal`` path as ``POST /services`` / ``POST /discover/ocm``. The result is an internal
+    ``kind="image"`` row at ``status="pending"`` — deploy is the normal separate
+    ``POST /services/{id}/deploy`` step, and because the built image lives in the in-cluster registry no
+    pull credentials are needed (``registry_private=False``). The git token travels to git via
+    GIT_ASKPASS env inside the build runtime, never in the URL/argv, and is never persisted or logged."""
+    # The in-cluster registry to build+push into — same env both deploy targets read (docker_client /
+    # build_k8s both default MARKETPLACE_REGISTRY), so compose and k8s resolve the same host.
+    registry = os.environ.get("MARKETPLACE_REGISTRY", "localhost:5000")
+    try:
+        resolved = await ocm.build_component(
+            body.git_url, body.git_ref, registry, body.component, body.resource, body.constructor,
+        )
+    except DeployError as exc:
+        # A clone/build/transfer failure (missing constructor, build error) — surface the friendly
+        # message as a 422 so no half-created row is left behind.
+        raise HTTPException(422, str(exc)) from exc
+    sc = ServiceCreate(
+        name=body.name,
+        label=body.label,
+        kind="image",
+        image_ref=resolved.image_ref,
+        app_port=body.app_port,
+        open_mode=body.open_mode,
+        # The built image lives in the in-cluster registry the platform reads without auth.
+        registry_private=False,
+        sso_enabled=body.sso_enabled,
+        source="internal",
+    )
+    async with SessionLocal() as session:
+        row = await _create_internal(session, sc)
+        await session.commit()
+        await session.refresh(row)
+    # image_ref is non-secret; never log the git token (it never reaches this layer anyway).
+    logger.info(
+        "marketplace.ocm.built",
+        extra={"id": row.id, "service": row.name, "git_url": body.git_url,
+               "git_ref": body.git_ref, "image_ref": resolved.image_ref},
     )
     return ServiceResponse.model_validate(row)
 

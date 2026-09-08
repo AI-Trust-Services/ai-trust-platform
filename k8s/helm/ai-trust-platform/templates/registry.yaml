@@ -1,0 +1,76 @@
+{{/* In-cluster image registry (registry:2) for Marketplace kind="dockerfile" apps.
+
+     A Kaniko build Job (spawned by marketplace-backend) pushes built app images here, and each
+     app's Deployment pulls from here. Served as PLAIN HTTP with no TLS/auth — acceptable for an
+     in-cluster/local registry; a TLS variant for Kyma/Gardener is a documented follow-up
+     (marketplace/docs/deploy-dockerfile.md). The registry host:port is MARKETPLACE_REGISTRY on the
+     marketplace-backend and MUST be trusted as an insecure registry by the node containerd (see
+     k8s/scripts) so the kubelet can pull the plain-HTTP images. */}}
+{{- $name := "registry" }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: registry-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ $.Values.registry.storageSize | default "10Gi" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # required for a ReadWriteOnce PVC
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" $name) | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ $name }}
+          image: {{ $.Values.registry.image | default "registry:2" }}
+          env:
+            - name: REGISTRY_HTTP_ADDR
+              value: ":5000"
+            - name: REGISTRY_STORAGE_DELETE_ENABLED
+              value: "true"
+          ports:
+            - containerPort: 5000
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/registry
+          readinessProbe:
+            httpGet:
+              path: /v2/
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v2/
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: registry-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+spec:
+  selector:
+    {{- include "ai-trust.labels" (dict "name" $name) | nindent 4 }}
+  ports:
+    - port: 5000
+      targetPort: 5000

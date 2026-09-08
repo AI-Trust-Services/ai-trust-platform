@@ -82,6 +82,27 @@ export interface OcmIngest {
   resolve_token?: string;
 }
 
+// Build a deployable image from an OCM component *in a Git repo*, then register it. The backend clones
+// the repo@branch, runs `ocm add componentversions` from its component-constructor.yaml, transfers the
+// built component (and its images) into the platform's in-cluster registry, resolves the built ociImage
+// ref, and registers exactly a kind="image" row (status "pending"). Deploy is the normal separate step;
+// the built image lives in the in-cluster registry, so no pull credentials are needed (no registry_private).
+export interface OcmBuild {
+  name: string;
+  label: string;
+  git_url: string; // the GitHub repo, e.g. "https://github.com/acme/app.git"
+  git_ref?: string; // branch/tag/sha to build (default "main")
+  component?: string; // optional: which built component to resolve; auto when the build produces one
+  // Path within the repo (default "component-constructor.yaml"). Named constructorPath (not
+  // "constructor") to avoid the reserved Object.prototype.constructor property; buildOcm() maps it to
+  // the backend's `constructor` field.
+  constructorPath?: string;
+  resource?: string; // optional ociImage resource name; auto when the component has exactly one
+  app_port: number; // the container's listen port
+  open_mode?: "same_window" | "new_tab";
+  sso_enabled?: boolean;
+}
+
 export type AuthMode = "bearer" | "header_map" | "none" | "oidc_federation";
 
 export interface DiscoveredAppCreate {
@@ -164,6 +185,15 @@ export const api = {
   // Resolve an OCM component to its digest-pinned image and register it as a kind="image" row.
   ingestOcm: (data: OcmIngest): Promise<MarketplaceService> =>
     request<MarketplaceService>("/discover/ocm", json("POST", data)),
+  // Build an OCM component from a Git repo (repo@branch → ocm build+push → resolve) and register it.
+  buildOcm: (data: OcmBuild): Promise<MarketplaceService> => {
+    // Map constructorPath → the backend's `constructor` field (see OcmBuild). Omit when unset so the
+    // backend default applies.
+    const { constructorPath, ...rest } = data;
+    const body: Record<string, unknown> = { ...rest };
+    if (constructorPath !== undefined) body["constructor"] = constructorPath;
+    return request<MarketplaceService>("/discover/ocm/build", json("POST", body));
+  },
   deploy: (id: string, creds?: DeployCreds): Promise<MarketplaceService> =>
     request<MarketplaceService>(
       `/services/${id}/deploy`,

@@ -1,6 +1,21 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: ai-trust
+# Trust the in-cluster Marketplace image registry (registry:2, plain HTTP, no TLS) so the kubelet
+# can pull kind="dockerfile" app images built by Kaniko. registry:5000 is the ClusterIP Service DNS
+# name; containerd on the node resolves it via the cluster CoreDNS (kind wires the node's resolv.conf
+# to the cluster), and these patches tell containerd to use http:// + skip TLS for that host.
+# NOTE: this is the in-cluster/local trust story only; a TLS-fronted registry is the Kyma/Gardener
+# follow-up documented in marketplace/docs/deploy-dockerfile.md.
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry.configs."registry:5000".tls]
+      insecure_skip_verify = true
+    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry:5000"]
+      endpoint = ["http://registry:5000"]
 nodes:
   - role: control-plane
     extraPortMappings:

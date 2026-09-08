@@ -440,6 +440,23 @@ async def run_image(name: str, image_ref: str, app_port: int,
     return service_host(name), image_ref
 
 
+async def ocm_build_and_resolve(git_url: str, git_ref: str, registry: str,
+                                component: str | None, constructor: str) -> str:
+    """Build+transfer an OCM component from a Git repo on k8s and return the resolved descriptor YAML.
+
+    NOT WIRED THIS ITERATION. The compose path (``docker_client.ocm_build_and_resolve``) is the tested
+    one; the k8s equivalent mirrors the Kaniko build-Job pattern above (a git+ocm build Job that clones,
+    runs ``ocm add componentversions`` / ``ocm transfer ctf`` to the in-cluster ``registry``, then
+    ``ocm get componentversion``), but that job is not implemented yet. Raise a clean DeployError so the
+    router surfaces a friendly 4xx instead of an AttributeError when DEPLOY_TARGET=kubernetes.
+    """
+    raise DeployError(
+        "Building an OCM component from a Git repo is not yet supported on the Kubernetes deploy "
+        "target; use the docker-compose deployment or register a published OCM component via "
+        "POST /discover/ocm instead."
+    )
+
+
 async def delete_oidc_secret(name: str) -> None:
     """Remove the per-app OIDC Secret. Called from k8s_client.delete_service for dockerfile apps."""
     await _load_config()

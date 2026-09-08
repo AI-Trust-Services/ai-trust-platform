@@ -50,6 +50,23 @@ async def run_image(name: str, image_ref: str, app_port: int,
     return await build_k8s.run_image(name, image_ref, app_port, env, secret_env, registry_auth)
 
 
+async def ocm_build_and_resolve(
+    *, git_url: str, git_ref: str, registry: str,
+    component: str | None, constructor: str,
+) -> str:
+    """Clone a Git repo, build+transfer its OCM component into ``registry``, and return the resolved
+    ``ocm get componentversion -o yaml`` descriptor stdout. Raises DeployError on clone/build failure
+    (the router maps it to a 4xx). The built image lands in the platform's own registry — no pull
+    credentials are needed at deploy time."""
+    if _TARGET == "docker":
+        from app import docker_client
+        return await asyncio.to_thread(
+            docker_client.ocm_build_and_resolve, git_url, git_ref, registry, component, constructor,
+        )
+    from app import build_k8s
+    return await build_k8s.ocm_build_and_resolve(git_url, git_ref, registry, component, constructor)
+
+
 async def delete_service(name: str) -> None:
     if _TARGET == "docker":
         from app import docker_client

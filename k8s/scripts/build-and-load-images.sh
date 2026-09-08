@@ -46,6 +46,11 @@ build compliance-backend . compliance/backend/Dockerfile
 build decision-trace-analyzer-backend . decision-trace-analyzer/backend/Dockerfile
 build marketplace-backend . marketplace/backend/Dockerfile
 build marketplace-health-worker . marketplace-health-worker/Dockerfile
+# Builder image (git + ocm CLI) for POST /discover/ocm/build. Its own context (no repo-root files
+# needed). The build-from-Git-repo path is wired for the docker-compose deploy target this iteration;
+# on the k8s target the endpoint returns a clean 422, but the image is loaded so the build-job path
+# can adopt it without a separate load step.
+build marketplace-ocm-builder marketplace/ocm-builder marketplace/ocm-builder/Dockerfile
 build policy-checker-worker . policy-checker-worker/Dockerfile
 build otel-clickhouse-consumer . consumers/clickhouse-consumer/Dockerfile
 build openfga-provision . infra/openfga-provision/Dockerfile

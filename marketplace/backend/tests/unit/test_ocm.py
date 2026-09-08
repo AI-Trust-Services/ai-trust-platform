@@ -12,7 +12,7 @@ from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from app import ocm  # noqa: E402
+from app import deploy, ocm  # noqa: E402
 
 # Real `ocm get componentversion github.com/mirceacraciun/whether-app:1.0.0 -o yaml` output.
 _REAL_DESCRIPTOR = """\
@@ -246,6 +246,109 @@ async def test_no_creds_omits_cred_argv(monkeypatch):
     monkeypatch.setattr(ocm.subprocess, "run", _fake_run)
     await ocm.resolve_component("ghcr.io/mirceacraciun", "github.com/mirceacraciun/whether-app:1.0.0")
     assert "--cred" not in captured["cmd"]
+
+
+# ── build_component (repo → ocm build+push → resolve) ────────────────────────────────────────────
+# build_component dispatches the clone+build+transfer to deploy.ocm_build_and_resolve (which runs the
+# throwaway git+ocm container / k8s job) and then parses the returned descriptor with the SAME
+# selectors as resolve_component. So the tests stub that one seam — no git, docker, or subprocess.
+
+
+@pytest.mark.asyncio
+async def test_build_component_resolves_real_descriptor(monkeypatch):
+    captured = {}
+
+    async def _fake_build(*, git_url, git_ref, registry, component, constructor):
+        captured.update(git_url=git_url, git_ref=git_ref, registry=registry,
+                        component=component, constructor=constructor)
+        return _REAL_DESCRIPTOR
+
+    monkeypatch.setattr(deploy, "ocm_build_and_resolve", _fake_build)
+    res = await ocm.build_component(
+        "https://github.com/mirceacraciun/whether-app.git", "main",
+        "registry:5000", constructor="component-constructor.yaml",
+    )
+    assert res.image_ref == _EXPECTED_REF
+    assert res.resource_name == "whether-app"
+    assert res.component == "github.com/mirceacraciun/whether-app"
+    # The clone/build inputs are threaded through to the deploy seam verbatim.
+    assert captured["git_url"] == "https://github.com/mirceacraciun/whether-app.git"
+    assert captured["git_ref"] == "main"
+    assert captured["registry"] == "registry:5000"
+    assert captured["constructor"] == "component-constructor.yaml"
+
+
+@pytest.mark.asyncio
+async def test_build_component_missing_constructor_surfaces_deploy_error(monkeypatch):
+    # A repo with no component-constructor.yaml fails in the build container; the docker/k8s layer
+    # raises DeployError, which build_component lets propagate for the router to map to a 422.
+    from app.docker_client import DeployError
+
+    async def _fake_build(**kwargs):
+        raise DeployError("Repository has no 'component-constructor.yaml' at its root")
+
+    monkeypatch.setattr(deploy, "ocm_build_and_resolve", _fake_build)
+    with pytest.raises(DeployError) as e:
+        await ocm.build_component("https://github.com/acme/no-ctor.git", "main", "registry:5000")
+    assert "component-constructor.yaml" in str(e.value)
+
+
+@pytest.mark.asyncio
+async def test_build_component_no_oci_image_raises_422(monkeypatch):
+    doc = """\
+component:
+  name: github.com/acme/chartonly
+  version: 1.0.0
+  resources:
+  - name: chart
+    type: helmChart
+    access: {type: helmChart, helmRepository: "oci://ghcr.io/acme/charts"}
+  version: 1.0.0
+meta:
+  schemaVersion: v2
+"""
+
+    async def _fake_build(**kwargs):
+        return doc
+
+    monkeypatch.setattr(deploy, "ocm_build_and_resolve", _fake_build)
+    with pytest.raises(HTTPException) as e:
+        await ocm.build_component("https://github.com/acme/chartonly.git", "main", "registry:5000")
+    assert e.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_build_component_ambiguous_images_raise_422(monkeypatch):
+    doc = """\
+component:
+  name: github.com/acme/multi
+  version: 1.0.0
+  resources:
+  - name: api
+    type: ociImage
+    access: {type: ociArtifact, imageReference: registry:5000/api:1}
+  - name: worker
+    type: ociImage
+    access: {type: ociArtifact, imageReference: registry:5000/worker:1}
+  version: 1.0.0
+meta:
+  schemaVersion: v2
+"""
+
+    async def _fake_build(**kwargs):
+        return doc
+
+    monkeypatch.setattr(deploy, "ocm_build_and_resolve", _fake_build)
+    with pytest.raises(HTTPException) as e:
+        await ocm.build_component("https://github.com/acme/multi.git", "main", "registry:5000")
+    assert e.value.status_code == 422
+    assert "api" in e.value.detail and "worker" in e.value.detail
+
+    # Naming a resource resolves it (resource is threaded through the parse).
+    res = await ocm.build_component(
+        "https://github.com/acme/multi.git", "main", "registry:5000", resource="worker",
+    )
+    assert res.image_ref == "registry:5000/worker:1"
 
 
 if __name__ == "__main__":

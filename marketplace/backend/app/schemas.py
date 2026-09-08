@@ -203,6 +203,47 @@ class OcmIngestRequest(BaseModel):
         return v
 
 
+class OcmBuildRequest(BaseModel):
+    """Build a deployable image from an OCM component *in a Git repo*, then register it.
+
+    The "repo → running service" path: the platform clones ``git_url`` at ``git_ref``, runs ``ocm add
+    componentversions`` from the repo's ``constructor`` file, transfers the built component (and its
+    images) into the platform's own in-cluster registry, resolves the built ``ociImage`` resource's
+    concrete image ref, and registers it as a ``kind="image"`` service — so the operator pastes a
+    GitHub repo + branch instead of a prebuilt image ref. Deploy is the normal separate
+    ``POST /services/{id}/deploy`` step; because the built image lands in the in-cluster registry, no
+    pull credentials are needed at deploy time (there is deliberately no ``registry_private`` here).
+    """
+
+    name: str = Field(..., min_length=1, max_length=63, description="k8s-safe slug")
+    label: str = Field(..., min_length=1, max_length=200)
+    # The GitHub repo to build, e.g. "https://github.com/acme/app.git".
+    git_url: str = Field(..., min_length=1, max_length=2000)
+    # The branch/tag/sha to build.
+    git_ref: str = Field(default="main", max_length=200)
+    # Optional: which built component to resolve; auto-picked when the build produces exactly one.
+    component: str | None = Field(default=None, max_length=2000)
+    # Path within the repo to the OCM component constructor.
+    constructor: str = Field(default="component-constructor.yaml", max_length=1000)
+    # Optional ociImage resource name; auto-picked when the component has exactly one.
+    resource: str | None = Field(default=None, max_length=255)
+    app_port: int = Field(..., ge=1, le=65535, description="port the container listens on")
+    open_mode: str = Field(default="same_window")  # same_window | new_tab
+    sso_enabled: bool = Field(default=False)
+
+    @field_validator("name")
+    @classmethod
+    def _valid_name(cls, v: str) -> str:
+        return _check_name(v)
+
+    @field_validator("open_mode")
+    @classmethod
+    def _valid_open_mode(cls, v: str) -> str:
+        if v not in ("same_window", "new_tab"):
+            raise ValueError("open_mode must be 'same_window' or 'new_tab'")
+        return v
+
+
 class DeployRequest(BaseModel):
     """Optional body for ``POST /services/{id}/deploy``.
 

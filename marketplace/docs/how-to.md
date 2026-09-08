@@ -19,6 +19,7 @@ oauth2-proxy forwards your identity header automatically.
 |---------|-----|---------------|
 | A **prebuilt image** (public or private registry) | `kind="image"` | pulls & runs it |
 | An **OCM component** (`ociImage` resource) | `/discover/ocm` | resolves the descriptor → pulls & runs the resolved image |
+| A **Git repo with a `component-constructor.yaml`** | `/discover/ocm/build` | builds the OCM component from source, pushes to the in-cluster registry, then runs it |
 | A **Git repo with a `Dockerfile`** at its root | `kind="dockerfile"` | builds, pushes to the in-cluster registry, runs it |
 | A repo of **static files** (HTML/JS/CSS) | `kind="static"` | git-clones it and serves it with nginx |
 | An app **already running on its own infra** | external (`/discover/manual`) | registers a pointer and federates SSO / proxies to it |
@@ -145,6 +146,54 @@ curl -X POST /v1/discover/ocm -H 'content-type: application/json' -d '{
 - If the `ocm` binary is missing from the image the endpoint returns `503`; a failed/timed-out resolve
   (auth denied, component not found) returns `502` with the CLI's error tail; a component with no
   `ociImage`/`ociArtifact` resource (e.g. a chart-only component) returns `422`.
+
+---
+
+## 1c. Build an OCM component from a Git repo (`POST /discover/ocm/build`)
+
+Section 1b resolves an **already-published** component. When the component **hasn't been published
+yet** — you just have the source repo — this path builds it for you: paste a **GitHub repo + branch**
+and the platform clones it, runs `ocm add componentversions` from the repo's
+`component-constructor.yaml`, transfers the built component (and any images it references) into the
+platform's **own in-cluster registry**, resolves the built `ociImage` ref, and registers it as the
+same `kind="image"` row as section 1. It's the "repo → running service" bridge for OCM.
+
+Because the built image lands in the in-cluster registry the platform reads without auth, **no pull
+credentials are needed at deploy time** — there is deliberately no `registry_private` here.
+
+**Build & register:**
+
+```bash
+curl -X POST /v1/discover/ocm/build -H 'content-type: application/json' -d '{
+  "name": "whether-app",
+  "label": "Weather App",
+  "git_url": "https://github.com/acme/whether-app.git",
+  "git_ref": "main",
+  "app_port": 3000,
+  "open_mode": "new_tab"
+}'
+```
+
+Returns `201` with the registered row — `kind="image"`, `status="pending"`, `registry_private=false`,
+and `image_ref` set to the **freshly-built, digest-pinned** ref in the in-cluster registry. Deploy is
+then the ordinary section-1 step with **no body**: `POST /v1/services/<id>/deploy`.
+
+| Field | Meaning |
+|-------|---------|
+| `git_url` | The GitHub repo to build, e.g. `https://github.com/acme/whether-app.git`. |
+| `git_ref` | *(optional, default `main`)* the branch/tag/sha to build. |
+| `constructor` | *(optional, default `component-constructor.yaml`)* path within the repo to the OCM component constructor. Must be repo-relative (no leading `/` or `..`). |
+| `component` | *(optional)* which built component to resolve; auto-picked when the constructor builds exactly one. |
+| `resource` | *(optional)* the `ociImage` resource name; auto-picked when the built component has exactly one. Required — with a clear 422 listing the names — when it has several. |
+| `app_port`, `open_mode`, `sso_enabled` | Same meaning as `kind="image"` (section 1 / section 6). |
+
+- The clone uses the platform's configured git token (via `GIT_ASKPASS` env, **never** in the clone
+  URL/argv, never logged) when the repo host matches `GIT_TOKEN_HOST`; a public repo clones anonymously.
+- A repo with **no `component-constructor.yaml`** at the given path fails cleanly with `422` and **no
+  half-created row**; a build/transfer failure surfaces the `ocm` error tail as `422`.
+- **docker-compose** is the tested deploy target for this path (the build runs in a throwaway
+  container that has both `git` and the `ocm` CLI). On the Kubernetes target this endpoint returns a
+  clean `422` explaining it isn't wired yet — use `/discover/ocm` with a published ref there instead.
 
 ---
 

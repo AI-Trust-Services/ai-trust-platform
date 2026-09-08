@@ -8,16 +8,19 @@ import {
   type DiscoveredAppCreate,
   type FederationSetup,
   type MarketplaceService,
+  type OcmBuild,
   type OcmIngest,
   type PlatformRole,
   type ServiceCreate,
 } from "./api";
 
-// What AddForm emits: either a plain internal service (git/image/static) or an OCM component to
-// resolve-then-register. The page dispatches to the matching endpoint.
+// What AddForm emits: a plain internal service (git/image/static), an OCM component to
+// resolve-then-register, or an OCM component to build-from-a-repo-then-register. The page dispatches
+// to the matching endpoint.
 type AddPayload =
   | { via: "service"; data: ServiceCreate }
-  | { via: "ocm"; data: OcmIngest };
+  | { via: "ocm"; data: OcmIngest }
+  | { via: "ocm-build"; data: OcmBuild };
 
 // A deployed server app (dockerfile/image) wired to Platform SSO is role-gated exactly like a
 // discovered app (backend `_is_gated`): hidden until enabled, proxy 403s without a matching role.
@@ -71,6 +74,7 @@ export default function MarketplacePage() {
     setError(null);
     try {
       if (payload.via === "ocm") await api.ingestOcm(payload.data);
+      else if (payload.via === "ocm-build") await api.buildOcm(payload.data);
       else await api.add(payload.data);
       await refresh();
     } catch (e) {
@@ -276,12 +280,26 @@ function ServiceCard(props: {
   );
 }
 
+// The five internal service Types the Add form can register, plus a one-line explanation of each so
+// the operator can tell them apart. Keep this copy identical to marketplace/docs/how-to.md.
+type AddKind = "static" | "dockerfile" | "image" | "ocm" | "ocm-build";
+
+const KIND_EXPLANATION: Record<AddKind, string> = {
+  static: "Serve a repo of HTML/JS/CSS with nginx (needs an index.html at the root).",
+  dockerfile: "Build the repo's Dockerfile, push to the platform registry, and run it.",
+  image: "Pull and run a prebuilt image you already have (public or private registry).",
+  ocm: "Paste a published OCM component ref; the platform resolves its exact image and runs it.",
+  "ocm-build":
+    "Paste a GitHub repo + branch; the platform builds the OCM component from its " +
+    "component-constructor.yaml, pushes to the platform registry, and runs it.",
+};
+
 function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: boolean }) {
   const [label, setLabel] = useState("");
   const [name, setName] = useState("");
   const [gitUrl, setGitUrl] = useState("");
   const [gitRef, setGitRef] = useState("main");
-  const [kind, setKind] = useState<"static" | "dockerfile" | "image" | "ocm">("static");
+  const [kind, setKind] = useState<AddKind>("static");
   const [imageRef, setImageRef] = useState("");
   const [appPort, setAppPort] = useState("8080");
   const [ssoEnabled, setSsoEnabled] = useState(false);
@@ -289,16 +307,22 @@ function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: 
   // Server apps only: open at their proxy origin in a new tab instead of the same-origin embed
   // iframe (for apps whose own routing/SSO can't run under the embed base path).
   const [openNewTab, setOpenNewTab] = useState(false);
-  // OCM only: the component reference + optional resource name and private-descriptor credentials.
+  // OCM (resolve) only: the component reference + optional resource name and private-descriptor credentials.
   const [ocmRepo, setOcmRepo] = useState("");
   const [ocmComponent, setOcmComponent] = useState("");
   const [ocmResource, setOcmResource] = useState("");
   const [ocmResolveUser, setOcmResolveUser] = useState("");
   const [ocmResolveToken, setOcmResolveToken] = useState("");
+  // OCM (build) only: path within the repo to the component constructor.
+  const [ocmConstructor, setOcmConstructor] = useState("component-constructor.yaml");
 
   const isOcm = kind === "ocm";
-  // OCM resolves to a kind="image" row, so it behaves like a server app in the form (port, SSO, tab).
-  const isServerApp = kind === "dockerfile" || kind === "image" || isOcm;
+  const isOcmBuild = kind === "ocm-build";
+  // OCM resolves/builds to a kind="image" row, so both behave like a server app in the form (port,
+  // SSO, tab). The build path clones a repo, so it also collects a Git URL + branch.
+  const isServerApp = kind === "dockerfile" || kind === "image" || isOcm || isOcmBuild;
+  // Shows the Git URL + branch inputs: static/dockerfile deploy from a repo, and so does ocm-build.
+  const needsGit = (kind !== "image" && !isOcm) || isOcmBuild;
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -321,6 +345,25 @@ function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: 
         data.resolve_token = ocmResolveToken;
       }
       onSubmit({ via: "ocm", data });
+      return;
+    }
+    if (isOcmBuild) {
+      const data: OcmBuild = {
+        name: name.trim(),
+        label: label.trim(),
+        git_url: gitUrl.trim(),
+        git_ref: gitRef.trim() || "main",
+        app_port: port,
+        open_mode: openNewTab ? "new_tab" : "same_window",
+        sso_enabled: ssoEnabled,
+      };
+      // Optional overrides — omit when the operator leaves the defaults/blanks.
+      if (ocmConstructor.trim() && ocmConstructor.trim() !== "component-constructor.yaml") {
+        data.constructorPath = ocmConstructor.trim();
+      }
+      if (ocmComponent.trim()) data.component = ocmComponent.trim();
+      if (ocmResource.trim()) data.resource = ocmResource.trim();
+      onSubmit({ via: "ocm-build", data });
       return;
     }
     const data: ServiceCreate = {
@@ -368,15 +411,17 @@ function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: 
           Type
           <select
             value={kind}
-            onChange={(e) => setKind(e.target.value as "static" | "dockerfile" | "image" | "ocm")}
+            onChange={(e) => setKind(e.target.value as AddKind)}
           >
             <option value="static">Static site (nginx serves the repo)</option>
             <option value="dockerfile">Server app (build the Dockerfile &amp; run it)</option>
             <option value="image">Server app (pull &amp; run a prebuilt image)</option>
-            <option value="ocm">Server app (resolve &amp; run an OCM component)</option>
+            <option value="ocm">Server app (resolve &amp; run a published OCM component)</option>
+            <option value="ocm-build">Server app (build &amp; run an OCM component from a Git repo)</option>
           </select>
+          <span className="sub hint">{KIND_EXPLANATION[kind]}</span>
         </label>
-        {kind !== "image" && !isOcm && (
+        {needsGit && (
           <>
             <label>
               Git URL
@@ -495,6 +540,49 @@ function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: 
             </label>
           </>
         )}
+        {isOcmBuild && (
+          <>
+            <label>
+              Constructor path (optional)
+              <input
+                value={ocmConstructor}
+                onChange={(e) => setOcmConstructor(e.target.value)}
+                placeholder="component-constructor.yaml"
+              />
+              <span className="sub hint">
+                Path within the repo to the OCM <code>component-constructor.yaml</code>. Leave as the
+                default unless it lives elsewhere in the repo.
+              </span>
+            </label>
+            <label>
+              Component name (optional)
+              <input
+                value={ocmComponent}
+                onChange={(e) => setOcmComponent(e.target.value)}
+                placeholder="(auto — leave blank when the repo builds a single component)"
+              />
+              <span className="sub hint">
+                Only needed when the constructor builds several components; pick which one to run.
+              </span>
+            </label>
+            <label>
+              Resource name (optional)
+              <input
+                value={ocmResource}
+                onChange={(e) => setOcmResource(e.target.value)}
+                placeholder="(auto — leave blank for single-image components)"
+              />
+              <span className="sub hint">
+                Only needed when the built component ships several <code>ociImage</code> resources;
+                the build error lists the available names.
+              </span>
+            </label>
+            <span className="sub hint">
+              The platform clones the repo, builds the OCM component, and pushes it to the in-cluster
+              registry — so no pull credentials are needed at Deploy time.
+            </span>
+          </>
+        )}
         {isServerApp && (
           <>
             <label>
@@ -532,7 +620,17 @@ function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: 
       </div>
       <div className="actions">
         <button className="primary" type="submit" disabled={busy}>
-          {busy ? (isOcm ? "Resolving…" : "Adding…") : isOcm ? "Resolve & add to catalog" : "Add to catalog"}
+          {busy
+            ? isOcmBuild
+              ? "Building…"
+              : isOcm
+                ? "Resolving…"
+                : "Adding…"
+            : isOcmBuild
+              ? "Build & add to catalog"
+              : isOcm
+                ? "Resolve & add to catalog"
+                : "Add to catalog"}
         </button>
       </div>
     </form>

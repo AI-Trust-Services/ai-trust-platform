@@ -32,6 +32,10 @@ keycloakPublicUrl: http://localhost:8180
 # it as an insecure (plain-HTTP) registry — see k8s/scripts. Keep in sync with docker-compose.yml
 # (localhost:5000) / .env (MARKETPLACE_REGISTRY).
 marketplaceRegistry: registry:5000
+# URL scheme ocm uses when POST /discover/ocm/build pushes the built component to the registry above.
+# The in-cluster registry is plain HTTP, so keep "http" (ocm defaults to HTTPS otherwise). Keep in
+# sync with docker-compose.yml / .env (MARKETPLACE_REGISTRY_SCHEME).
+marketplaceRegistryScheme: http
 registry:
   image: registry:2
   storageSize: 10Gi
