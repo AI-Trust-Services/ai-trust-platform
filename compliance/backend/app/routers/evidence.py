@@ -185,7 +185,7 @@ async def create_evidence(
                 title=title,
                 description=description,
                 evidence_type=evidence_type,
-                status="pending",
+                status="awaiting_review",
                 validity_from=v_from,
                 validity_until=v_until,
                 file_path=file_path,

@@ -27,7 +27,7 @@ async def test_create_evidence_linked_to_control(client: httpx.AsyncClient):
     assert r.status_code == 201
     body = r.json()
     assert body["id"].startswith("EVD-")
-    assert body["status"] == "pending"
+    assert body["status"] == "awaiting_review"
     assert ctl["id"] in body["control_ids"]
 
 
@@ -197,7 +197,7 @@ async def test_approve_evidence_promotes_linked_control_to_effective(client: htt
     await client.post(f"/v1/evidence/{evd['id']}/approve")
 
     r = await client.get(f"/v1/controls/{ctl['id']}")
-    assert r.json()["status"] == "effective"
+    assert r.json()["status"] == "fulfilled"
 
 
 async def test_approve_evidence_fulfills_obligation_via_effective_control(client: httpx.AsyncClient):
@@ -223,11 +223,11 @@ async def test_reject_evidence_demotes_control_from_effective(client: httpx.Asyn
     evd = await create_evidence(client, control_ids=[ctl["id"]])
     await client.post(f"/v1/evidence/{evd['id']}/approve")
 
-    # Now reject — control should drop from effective
+    # Now reject — control should drop from fulfilled
     await client.post(f"/v1/evidence/{evd['id']}/reject")
 
     ctl_r = await client.get(f"/v1/controls/{ctl['id']}")
-    assert ctl_r.json()["status"] != "effective"
+    assert ctl_r.json()["status"] != "fulfilled"
 
     obl_r = await client.get(f"/v1/obligations/{obl['id']}")
     assert obl_r.json()["status"] != "fulfilled"
