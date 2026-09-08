@@ -107,10 +107,11 @@ async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
         created, _ = await _generate_obligations_in_session(session, row, system)
         if not created:
             logger.warning("assessment.no_obligations", extra={
-                "assessment_id": row.id, "framework": body.framework_id, "tier": system.tier,
+                "assessment_id": row.id, "framework": body.framework_id,
+                "tier": system.tier, "org_role": system.org_role,
             })
         else:
-            await _generate_controls_in_session(session, created, system.tier)
+            await _generate_controls_in_session(session, created, system.tier, system.org_role)
         await session.commit()
         await session.refresh(row)
 
@@ -131,7 +132,19 @@ async def _generate_obligations_in_session(
     Returns (created_obligations, prior_prefilled) where prior_prefilled is True
     if any owner/not_applicable values were carried forward from a prior assessment.
     """
-    templates = obligations_for(assessment.framework_id, system.tier)
+    templates = obligations_for(assessment.framework_id, system.tier, system.org_role)
+
+    if (
+        assessment.framework_id == "FRM-EU-AI-ACT"
+        and system.tier in ("high", "limited")
+        and system.org_role not in ("provider", "deployer")
+    ):
+        # Only provider/deployer obligation sets are defined for EU high/limited;
+        # importer/distributor yield no obligations (templates is already []).
+        logger.warning("assessment.unsupported_org_role", extra={
+            "assessment_id": assessment.id, "framework": assessment.framework_id,
+            "tier": system.tier, "org_role": system.org_role,
+        })
 
     prior = (await session.execute(
         select(Assessment)
@@ -148,12 +161,13 @@ async def _generate_obligations_in_session(
             select(Obligation).where(Obligation.assessment_id == prior.id)
         )).scalars().all()
         for po in prior_obs:
-            if po.article_ref:
-                prior_by_ref[po.article_ref] = po
+            key = po.cluster_id or po.article_ref
+            if key:
+                prior_by_ref[key] = po
 
     created: list[Obligation] = []
     for t in templates:
-        carried = prior_by_ref.get(t["article_ref"])
+        carried = prior_by_ref.get(t["cluster_id"])
         obl = Obligation(
             id=new_id("OBL"),
             assessment_id=assessment.id,
@@ -161,6 +175,7 @@ async def _generate_obligations_in_session(
             framework_id=assessment.framework_id,
             title=t["title"],
             article_ref=t["article_ref"],
+            cluster_id=t["cluster_id"],
             description=t["description"],
             status=("not_applicable" if carried and carried.status == "not_applicable" else "applicable"),
             owner=carried.owner if carried else "",
@@ -176,14 +191,16 @@ async def _generate_obligations_in_session(
 
 
 async def _generate_controls_in_session(
-    session: AsyncSession, obligations: list[Obligation], tier: str
+    session: AsyncSession, obligations: list[Obligation], tier: str, org_role: str = "provider"
 ) -> list[Control]:
     """Generate + link controls for the given obligations within the caller's txn.
 
-    For each obligation, `controls_for(article_ref, tier)` yields the tier-scoped
-    control templates; each becomes a Control row (control_ref = "{article_ref}:{slug}")
-    linked to the obligation via control_obligations. Owner is carried forward from
-    the most recent prior control with the same control_ref (see _prior_owners_by_ref).
+    For each obligation, `controls_for(cluster_id, tier, org_role)` yields the
+    tier- and role-scoped control templates; each becomes a Control row linked to
+    the obligation via control_obligations. The control_ref is the template's
+    explicit Requirement ID (EU CSV sets) or, for retained sets, the derived
+    "{article_ref}:{slug}". Owner is carried forward from the most recent prior
+    control with the same control_ref (see _prior_owners_by_ref).
 
     After linking, each touched obligation is refreshed so its status reflects the
     new controls (applicable -> in_progress). If this raises, the whole transaction
@@ -197,21 +214,22 @@ async def _generate_controls_in_session(
 
     created: list[Control] = []
     for obl in obligations:
-        templates = controls_for(obl.article_ref, tier)
+        templates = controls_for(obl.cluster_id or obl.article_ref, tier, org_role)
         if not templates:
             logger.warning("assessment.control_template_missing", extra={
-                "assessment_id": obl.assessment_id, "article_ref": obl.article_ref, "tier": tier,
+                "assessment_id": obl.assessment_id, "cluster_id": obl.cluster_id,
+                "article_ref": obl.article_ref, "tier": tier, "org_role": org_role,
             })
             continue
         for t in templates:
-            control_ref = f"{obl.article_ref}:{t['slug']}"
+            control_ref = t.get("control_ref") or f"{obl.article_ref}:{t['slug']}"
             control = Control(
                 id=new_id("CTL"),
                 ai_system_id=ai_system_id,
                 control_ref=control_ref,
                 title=t["title"],
                 description=t["description"],
-                category=t["category"],
+                category=t.get("category", "general"),
                 status="not_started",
                 effectiveness="medium",
                 owner=prior_owner_by_ref.get(control_ref, ""),
@@ -412,7 +430,7 @@ async def generate_controls(assessment_id: str) -> GenerateControlsResponse:
         )).scalars().all())
         targets = [o for o in obligations if o.id not in linked_obl_ids]
 
-        created = await _generate_controls_in_session(session, targets, system.tier)
+        created = await _generate_controls_in_session(session, targets, system.tier, system.org_role)
         await session.commit()
         for r in created:
             await session.refresh(r)

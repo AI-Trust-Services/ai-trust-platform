@@ -306,10 +306,41 @@ async def test_delete_assessment_keeps_shared_controls(client: httpx.AsyncClient
 async def test_generate_obligations_creates_correct_count(client: httpx.AsyncClient):
     # Obligations are auto-generated on assessment creation.
     # The endpoint still works but returns 409 if called again.
-    system = await create_system(tier="high")
+    system = await create_system(tier="high")  # org_role defaults to provider
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    assert len(obs) == 11  # EU AI Act high-risk has 11 obligations
+    assert len(obs) == 16  # EU AI Act high-risk provider has 16 obligation clusters
+
+
+async def test_generate_obligations_deployer_high_count(client: httpx.AsyncClient):
+    system = await create_system(tier="high", org_role="deployer")
+    ass = await create_assessment(client, system["id"])
+    obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
+    assert len(obs) == 11  # deployer high-risk has 11 obligation clusters
+
+
+async def test_generate_obligations_importer_yields_none(client: httpx.AsyncClient):
+    # Only provider/deployer are supported for EU High/Limited — importer gets none.
+    system = await create_system(tier="high", org_role="importer")
+    ass = await create_assessment(client, system["id"])
+    obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
+    assert len(obs) == 0
+
+
+async def test_generated_obligations_carry_cluster_id(client: httpx.AsyncClient, db_session):
+    # cluster_id is internal (not exposed in the API) but must be persisted so
+    # carry-forward and control generation key off it.
+    from sqlalchemy import select
+    from ai_trust_persistence.models import Obligation
+
+    system = await create_system(tier="high")
+    ass = await create_assessment(client, system["id"])
+    rows = (await db_session.execute(
+        select(Obligation).where(Obligation.assessment_id == ass["id"])
+    )).scalars().all()
+    assert rows
+    assert all(o.cluster_id for o in rows)
+    assert "P-RM" in {o.cluster_id for o in rows}
 
 
 async def test_generate_obligations_minimal_tier(client: httpx.AsyncClient):
@@ -448,11 +479,11 @@ async def test_approve_updates_system_compliance(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_create_assessment_auto_generates_controls(client: httpx.AsyncClient):
-    # High-risk EU obligations (11) map to 41 tier-scoped control templates.
+    # High-risk EU provider obligations (16 clusters) map to 50 Requirement templates.
     system = await create_system(tier="high")
     await create_assessment(client, system["id"])
     controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    assert len(controls) == 41
+    assert len(controls) == 50
 
 
 async def test_generated_controls_have_control_ref(client: httpx.AsyncClient):
@@ -472,7 +503,20 @@ async def test_generated_controls_linked_to_obligations(client: httpx.AsyncClien
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
     art9 = [o for o in obs if o["article_ref"] == "Art. 9"][0]
     linked = (await client.get(f"/v1/controls?obligation_id={art9['id']}")).json()
-    assert len(linked) == 5  # Art. 9 -> 5 controls
+    assert len(linked) == 7  # P-RM cluster (Art. 9) -> 7 Requirements
+
+
+async def test_high_tier_control_ref_is_requirement_id(client: httpx.AsyncClient):
+    # EU High/Limited controls use the bare Requirement ID as control_ref (no ":"),
+    # unlike the retained sets which use "{article_ref}:{slug}".
+    system = await create_system(tier="high")
+    ass = await create_assessment(client, system["id"])
+    obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
+    art9 = [o for o in obs if o["article_ref"] == "Art. 9"][0]
+    linked = (await client.get(f"/v1/controls?obligation_id={art9['id']}")).json()
+    refs = {c["control_ref"] for c in linked}
+    assert "P-RM-01" in refs
+    assert all(":" not in r for r in refs)
 
 
 async def test_generated_controls_flip_obligations_in_progress(client: httpx.AsyncClient):

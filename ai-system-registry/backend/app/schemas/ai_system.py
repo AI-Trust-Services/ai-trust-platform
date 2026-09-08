@@ -25,6 +25,10 @@ class AISystemCreate(BaseModel):
     assignee_username: str = Field(..., min_length=1, max_length=200)
     compliance_officer_username: str | None = Field(default=None, max_length=200)
 
+    # Regulatory role of the organisation w.r.t. this system (provider/deployer/
+    # importer/distributor). Defaults to "provider" at intake when omitted.
+    org_role: str | None = None
+
     # Optional descriptive fields (populated by the AI-assisted flow; manual owner
     # mode omits them and the intake stays a minimal stub).
     intended_purpose: str | None = None

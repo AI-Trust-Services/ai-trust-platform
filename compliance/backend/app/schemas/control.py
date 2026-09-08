@@ -77,7 +77,6 @@ class ControlResponse(BaseModel):
     control_ref: str | None
     title: str
     description: str
-    category: str
     status: str
     effectiveness: str
     owner: str
