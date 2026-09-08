@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import AUDIT_READ
-from ai_trust_clickhouse import AUDIT_EVENTS, AUDIT_EVENTS_COLUMNS, get_client
+from ai_trust_clickhouse import AUDIT_EVENTS, AUDIT_EVENTS_COLUMNS, current_tenant, get_client_for_tenant
 from ai_trust_logging import get_logger
 
 router = APIRouter(tags=["audit"])
@@ -117,7 +117,7 @@ def list_events(
     offset: int = Query(default=0, ge=0),
     sort: str = Query(default="desc", pattern="^(asc|desc)$"),
 ) -> AuditEventListResponse:
-    ch = get_client(database="otel")
+    ch = get_client_for_tenant(current_tenant())
 
     conditions = ["1=1"]
     params: dict = {}
@@ -171,7 +171,7 @@ def list_events(
 
 @router.get("/events/{event_id}", response_model=AuditEventDetail, dependencies=[Depends(require_permission(AUDIT_READ))])
 def get_event(event_id: str) -> AuditEventDetail:
-    ch = get_client(database="otel")
+    ch = get_client_for_tenant(current_tenant())
     _cols = ", ".join(AUDIT_EVENTS_COLUMNS)
     result = ch.query(
         f"SELECT {_cols} FROM {AUDIT_EVENTS} FINAL WHERE id = {{event_id:String}} LIMIT 1",
@@ -190,7 +190,7 @@ def list_systems(
     to_dt: datetime | None = Query(default=None, alias="to"),
     search: str | None = Query(default=None),
 ) -> list[AuditSystem]:
-    ch = get_client(database="otel")
+    ch = get_client_for_tenant(current_tenant())
 
     conditions = ["ai_system_id != ''"]
     params: dict = {}
@@ -230,7 +230,7 @@ def get_stats(
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
 ) -> AuditStatsResponse:
-    ch = get_client(database="otel")
+    ch = get_client_for_tenant(current_tenant())
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     # Default to last 7 days if no range supplied
