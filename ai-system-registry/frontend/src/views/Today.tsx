@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import { FileText, ArrowRight, Calendar, Search, ChevronRight, ChevronUp, LayoutList, LayoutGrid, HelpCircle, ArrowUpDown, RefreshCw } from "lucide-react";
+import { FileText, ArrowRight, Calendar, Search, ChevronRight, ChevronUp, LayoutList, LayoutGrid, HelpCircle, ArrowUpDown, RefreshCw, Filter, Columns, Clock } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { api } from "@/api/client";
@@ -331,11 +333,28 @@ interface TaskTableRowProps {
     priority: "high" | "medium" | "low";
     status: string;
     statusColor: string;
+    // Additional fields for optional columns
+    isWaitingOnOthers?: boolean;
+    waitingForUser?: string | null;
+    dueDateFormatted?: string;
+    isOverdue?: boolean;
+    isDueSoon?: boolean;
   };
   onClick: () => void;
+  visibleColumns: {
+    task: boolean;
+    system: boolean;
+    type: boolean;
+    stage: boolean;
+    assignee: boolean;
+    priority: boolean;
+    status: boolean;
+    waitingFor: boolean;
+    dueDate: boolean;
+  };
 }
 
-function TaskTableRow({ task, onClick }: TaskTableRowProps) {
+function TaskTableRow({ task, onClick, visibleColumns }: TaskTableRowProps) {
   const priorityColors = {
     high: "bg-red-100 text-red-700 border-red-200",
     medium: "bg-orange-100 text-orange-700 border-orange-200",
@@ -356,39 +375,69 @@ function TaskTableRow({ task, onClick }: TaskTableRowProps) {
       </div>
 
       {/* AI System */}
-      <div className="w-40 shrink-0 text-sm text-muted-foreground">{task.system}</div>
+      {visibleColumns.system && (
+        <div className="w-40 shrink-0 text-sm text-muted-foreground">{task.system}</div>
+      )}
 
       {/* Task Type */}
-      <div className="w-32 shrink-0">
-        <Badge variant="outline" className={cn("border text-xs", task.typeColor)}>
-          {task.type}
-        </Badge>
-      </div>
+      {visibleColumns.type && (
+        <div className="w-32 shrink-0">
+          <Badge variant="outline" className={cn("border text-xs", task.typeColor)}>
+            {task.type}
+          </Badge>
+        </div>
+      )}
 
       {/* Current Stage */}
-      <div className="flex w-32 shrink-0 items-center gap-1.5 text-sm">
-        <div className="size-2 rounded-full bg-primary" />
-        <span>{task.stage}</span>
-      </div>
+      {visibleColumns.stage && (
+        <div className="flex w-32 shrink-0 items-center gap-1.5 text-sm">
+          <div className="size-2 rounded-full bg-primary" />
+          <span>{task.stage}</span>
+        </div>
+      )}
 
-      {/* Due */}
-      <div className={cn("w-28 shrink-0 text-sm", task.dueColor || "text-muted-foreground")}>
-        {task.due}
-      </div>
+      {/* Assignee */}
+      {visibleColumns.assignee && (
+        <div className={cn("w-28 shrink-0 text-sm", task.dueColor || "text-muted-foreground")}>
+          {task.due}
+        </div>
+      )}
+
+      {/* Waiting For (optional column) */}
+      {visibleColumns.waitingFor && (
+        <div className="w-28 shrink-0 text-sm text-muted-foreground">
+          {task.waitingForUser || "—"}
+        </div>
+      )}
+
+      {/* Due Date (optional column) */}
+      {visibleColumns.dueDate && (
+        <div className={cn(
+          "w-28 shrink-0 text-sm",
+          task.isOverdue ? "text-red-600 font-medium" : task.isDueSoon ? "text-orange-600" : "text-muted-foreground"
+        )}>
+          {task.dueDateFormatted}
+          {task.isOverdue && <span className="ml-1 text-xs">(Overdue)</span>}
+        </div>
+      )}
 
       {/* Priority */}
-      <div className="w-24 shrink-0">
-        <Badge className={cn("border text-xs", priorityColors[task.priority])}>
-          {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-        </Badge>
-      </div>
+      {visibleColumns.priority && (
+        <div className="w-24 shrink-0">
+          <Badge className={cn("border text-xs", priorityColors[task.priority])}>
+            {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+          </Badge>
+        </div>
+      )}
 
       {/* Status */}
-      <div className="w-28 shrink-0">
-        <Badge variant="outline" className={cn("border text-xs", task.statusColor)}>
-          {task.status}
-        </Badge>
-      </div>
+      {visibleColumns.status && (
+        <div className="w-28 shrink-0">
+          <Badge variant="outline" className={cn("border text-xs", task.statusColor)}>
+            {task.status}
+          </Badge>
+        </div>
+      )}
 
       {/* Arrow */}
       <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
@@ -428,6 +477,21 @@ export default function Today() {
   const [allTasksExpanded, setAllTasksExpanded] = useState(true);
   const [taskSort, setTaskSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
   const [systemSort, setSystemSort] = useState<string>("updated");
+  // All Tasks filters
+  const [taskDueFilter, setTaskDueFilter] = useState<string>("all");
+  const [taskWaitingFilter, setTaskWaitingFilter] = useState<boolean>(false);
+  // Column visibility for All Tasks
+  const [visibleColumns, setVisibleColumns] = useState({
+    task: true,
+    system: true,
+    type: true,
+    stage: true,
+    assignee: true,
+    priority: true,
+    status: true,
+    waitingFor: false,
+    dueDate: false,
+  });
 
   const loadSystems = useCallback(async () => {
     try {
@@ -534,6 +598,15 @@ export default function Today() {
   // Build "All Tasks" for table display (all tasks from connected systems)
   const allTasks = allConnectedTasks.map(task => {
     const system = systems.find(s => task.id.startsWith(s.id));
+    // Determine if task is waiting on someone
+    const isWaitingOnOthers = task.assignee !== username && task.assignee !== null;
+    const waitingForUser = isWaitingOnOthers ? task.assignee : null;
+    // Mock due date - in production this would come from task data
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + Math.floor(Math.random() * 14)); // Random due date within 2 weeks
+    const isOverdue = dueDate < new Date();
+    const isDueSoon = !isOverdue && dueDate.getTime() - Date.now() < 3 * 24 * 60 * 60 * 1000; // Within 3 days
+
     return {
       icon: task.type === "review" ? <FileText className="size-4" /> : <RefreshCw className="size-4" />,
       iconBg: task.type === "review" ? "bg-blue-50" : "bg-purple-50",
@@ -551,7 +624,28 @@ export default function Today() {
       priority: task.priority as "high" | "medium" | "low",
       status: task.assignee === username ? "Assigned to me" : "In progress",
       statusColor: task.assignee === username ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-purple-50 text-purple-700 border-purple-200",
+      // Additional fields for filters and optional columns
+      isWaitingOnOthers,
+      waitingForUser,
+      dueDate,
+      dueDateFormatted: dueDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+      isOverdue,
+      isDueSoon,
     };
+  });
+
+  // Filter tasks based on filter state
+  const filteredTasks = allTasks.filter(task => {
+    // Due date filter
+    if (taskDueFilter === "overdue" && !task.isOverdue) return false;
+    if (taskDueFilter === "due-soon" && !task.isDueSoon) return false;
+    if (taskDueFilter === "today") {
+      const today = new Date();
+      if (task.dueDate.toDateString() !== today.toDateString()) return false;
+    }
+    // Waiting on others filter
+    if (taskWaitingFilter && !task.isWaitingOnOthers) return false;
+    return true;
   });
 
   // Handle task sorting
@@ -565,7 +659,7 @@ export default function Today() {
   };
 
   // Sort tasks based on current sort state
-  const sortedTasks = [...allTasks].sort((a, b) => {
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
     if (!taskSort) return 0;
     const { key, direction } = taskSort;
     const multiplier = direction === "asc" ? 1 : -1;
@@ -585,6 +679,8 @@ export default function Today() {
       }
       case "status":
         return multiplier * a.status.localeCompare(b.status);
+      case "dueDate":
+        return multiplier * (a.dueDate.getTime() - b.dueDate.getTime());
       default:
         return 0;
     }
@@ -606,11 +702,16 @@ export default function Today() {
         <div className="mb-6">
           {/* Task Section Header */}
           <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold">Your Tasks</h2>
-              <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm font-medium">
-                {urgentTasks.length} tasks
-              </Badge>
+            <div>
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold">Your Tasks</h2>
+                <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm font-medium">
+                  {urgentTasks.length} tasks
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Tasks directly assigned to you that require your action.
+              </p>
             </div>
             <div className="flex items-center gap-2">
               {/* View Toggle */}
@@ -687,21 +788,102 @@ export default function Today() {
         <div className="mb-6">
           {/* Section Header */}
           <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold">All Tasks</h2>
-              <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm font-medium">
-                {sortedTasks.length} tasks
-              </Badge>
+            <div>
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold">All Tasks</h2>
+                <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm font-medium">
+                  {sortedTasks.length} tasks
+                </Badge>
+                {(taskDueFilter !== "all" || taskWaitingFilter) && (
+                  <Badge variant="outline" className="text-xs">
+                    Filtered
+                  </Badge>
+                )}
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                All tasks from AI systems you own, are assigned to, or collaborate on.
+              </p>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAllTasksExpanded(!allTasksExpanded)}
-              className="flex items-center gap-1 text-muted-foreground"
-            >
-              <ChevronUp className={cn("size-4 transition-transform", !allTasksExpanded && "rotate-180")} />
-              {allTasksExpanded ? "Collapse" : "Expand"}
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* Filters */}
+              <Select value={taskDueFilter} onValueChange={setTaskDueFilter}>
+                <SelectTrigger className="h-9 w-[140px]">
+                  <Clock className="mr-2 size-4" />
+                  <SelectValue placeholder="Due date" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All dates</SelectItem>
+                  <SelectItem value="today">Due today</SelectItem>
+                  <SelectItem value="due-soon">Due soon (3 days)</SelectItem>
+                  <SelectItem value="overdue">Overdue</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button
+                variant={taskWaitingFilter ? "default" : "outline"}
+                size="sm"
+                onClick={() => setTaskWaitingFilter(!taskWaitingFilter)}
+                className="h-9"
+              >
+                <Filter className="mr-2 size-4" />
+                Waiting on others
+              </Button>
+
+              {/* Column Visibility */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9">
+                    <Columns className="mr-2 size-4" />
+                    Columns
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuCheckboxItem
+                    checked={visibleColumns.waitingFor}
+                    onCheckedChange={(checked) => setVisibleColumns(prev => ({ ...prev, waitingFor: checked }))}
+                  >
+                    Waiting for
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={visibleColumns.dueDate}
+                    onCheckedChange={(checked) => setVisibleColumns(prev => ({ ...prev, dueDate: checked }))}
+                  >
+                    Due date
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuCheckboxItem
+                    checked={visibleColumns.type}
+                    onCheckedChange={(checked) => setVisibleColumns(prev => ({ ...prev, type: checked }))}
+                  >
+                    Task Type
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={visibleColumns.stage}
+                    onCheckedChange={(checked) => setVisibleColumns(prev => ({ ...prev, stage: checked }))}
+                  >
+                    Current Stage
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={visibleColumns.priority}
+                    onCheckedChange={(checked) => setVisibleColumns(prev => ({ ...prev, priority: checked }))}
+                  >
+                    Priority
+                  </DropdownMenuCheckboxItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAllTasksExpanded(!allTasksExpanded)}
+                className="flex items-center gap-1 text-muted-foreground"
+              >
+                <ChevronUp className={cn("size-4 transition-transform", !allTasksExpanded && "rotate-180")} />
+                {allTasksExpanded ? "Collapse" : "Expand"}
+              </Button>
+            </div>
           </div>
 
           {/* All Tasks Content */}
@@ -712,12 +894,14 @@ export default function Today() {
                   {/* Table Header with Sortable Columns */}
                   <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     <SortableHeader label="Task" sortKey="title" currentSort={taskSort} onSort={handleTaskSort} className="flex-1" />
-                    <SortableHeader label="AI System" sortKey="system" currentSort={taskSort} onSort={handleTaskSort} className="w-40 shrink-0" />
-                    <SortableHeader label="Task Type" sortKey="type" currentSort={taskSort} onSort={handleTaskSort} className="w-32 shrink-0" />
-                    <SortableHeader label="Current Stage" sortKey="stage" currentSort={taskSort} onSort={handleTaskSort} className="w-32 shrink-0" />
-                    <div className="w-28 shrink-0">Assignee</div>
-                    <SortableHeader label="Priority" sortKey="priority" currentSort={taskSort} onSort={handleTaskSort} className="w-24 shrink-0" />
-                    <SortableHeader label="Status" sortKey="status" currentSort={taskSort} onSort={handleTaskSort} className="w-28 shrink-0" />
+                    {visibleColumns.system && <SortableHeader label="AI System" sortKey="system" currentSort={taskSort} onSort={handleTaskSort} className="w-40 shrink-0" />}
+                    {visibleColumns.type && <SortableHeader label="Task Type" sortKey="type" currentSort={taskSort} onSort={handleTaskSort} className="w-32 shrink-0" />}
+                    {visibleColumns.stage && <SortableHeader label="Current Stage" sortKey="stage" currentSort={taskSort} onSort={handleTaskSort} className="w-32 shrink-0" />}
+                    {visibleColumns.assignee && <div className="w-28 shrink-0">Assignee</div>}
+                    {visibleColumns.waitingFor && <div className="w-28 shrink-0">Waiting for</div>}
+                    {visibleColumns.dueDate && <SortableHeader label="Due Date" sortKey="dueDate" currentSort={taskSort} onSort={handleTaskSort} className="w-28 shrink-0" />}
+                    {visibleColumns.priority && <SortableHeader label="Priority" sortKey="priority" currentSort={taskSort} onSort={handleTaskSort} className="w-24 shrink-0" />}
+                    {visibleColumns.status && <SortableHeader label="Status" sortKey="status" currentSort={taskSort} onSort={handleTaskSort} className="w-28 shrink-0" />}
                     <div className="w-4 shrink-0"></div>
                   </div>
 
@@ -730,6 +914,7 @@ export default function Today() {
                         key={i}
                         task={task}
                         onClick={() => navigate(`/systems/${task.systemId}?task=${task.taskParam}`)}
+                        visibleColumns={visibleColumns}
                       />
                     ))
                   )}

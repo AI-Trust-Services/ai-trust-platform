@@ -329,24 +329,38 @@ function SystemSummary({ system }: { system: AISystem }) {
   );
 }
 
-// AI Act category card
+// AI Act category card - emphasizes risk level with color coding
 function AIActCategory({ system }: { system: AISystem }) {
-  const category = system.tier === "high" || system.tier === "gpai-systemic"
-    ? "Annex III"
-    : system.tier === "prohibited"
-      ? "Article 5"
-      : "—";
+  // Risk level is the primary information
+  const getRiskInfo = () => {
+    switch (system.tier) {
+      case "prohibited":
+        return { label: "Prohibited", color: "bg-red-600 text-white", category: "Article 5" };
+      case "high":
+      case "gpai-systemic":
+        return { label: "High-Risk AI System", color: "bg-red-100 text-red-700", category: "Annex III" };
+      case "gpai-standard":
+        return { label: "GPAI Standard", color: "bg-orange-100 text-orange-700", category: "GPAI" };
+      case "limited":
+        return { label: "Limited Risk", color: "bg-yellow-100 text-yellow-700", category: "Article 50" };
+      case "minimal":
+      default:
+        return { label: "Minimal Risk", color: "bg-green-100 text-green-700", category: "—" };
+    }
+  };
+
+  const riskInfo = getRiskInfo();
 
   return (
     <div className="space-y-1">
-      <div className="text-xs text-muted-foreground">AI Act category</div>
+      <div className="text-xs text-muted-foreground">AI Act Classification</div>
       <div className="flex items-center gap-2">
         <FileText className="size-4 text-primary" />
         <div>
-          <div className="font-medium">{category}</div>
-          <div className="text-xs text-muted-foreground">
-            {system.tier === "high" ? "High-Risk AI System" : system.tier}
-          </div>
+          <Badge className={cn("border-0 font-medium", riskInfo.color)}>{riskInfo.label}</Badge>
+          {riskInfo.category !== "—" && (
+            <div className="mt-0.5 text-xs text-muted-foreground">{riskInfo.category}</div>
+          )}
         </div>
       </div>
     </div>
@@ -356,11 +370,10 @@ function AIActCategory({ system }: { system: AISystem }) {
 // Key information card - shows the 5 specified fields
 function KeyInformation({ system, onViewDetails }: { system: AISystem; onViewDetails: () => void }) {
   const items = [
-    { label: "Role", value: system.org_role || "—" },
+    { label: "Intended purpose", value: system.intended_purpose || "—" },
     { label: "Usage of own brand", value: "Yes" },
     { label: "User Groups", value: "Internal employees" },
     { label: "Finetuning", value: "No" },
-    { label: "Intended purpose", value: system.intended_purpose || "—" },
   ];
 
   return (
@@ -1552,7 +1565,10 @@ export default function SystemWorkspace() {
                         <SystemSummary system={system} />
                       </div>
                       <Card className="lg:col-span-2">
-                        <CardContent className="grid gap-6 p-6 md:grid-cols-4">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base">Regulatory Classification</CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid gap-6 pt-2 md:grid-cols-4">
                           <AIActCategory system={system} />
                           <div className="space-y-1">
                             <div className="text-xs text-muted-foreground">Provider / Deployer</div>

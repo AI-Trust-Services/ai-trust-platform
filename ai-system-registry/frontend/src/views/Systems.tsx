@@ -38,7 +38,6 @@ import { cn } from "@/lib/utils";
 // Lifecycle stage configuration
 const LIFECYCLE_STAGES = [
   { key: "register", label: "Register", color: "bg-blue-500" },
-  { key: "review", label: "Review", color: "bg-purple-500" },
   { key: "classify", label: "Classify", color: "bg-orange-500" },
   { key: "comply", label: "Comply", color: "bg-cyan-500" },
   { key: "operate", label: "Operate", color: "bg-green-500" },
@@ -48,11 +47,11 @@ const LIFECYCLE_STAGES = [
 function getLifecycleStage(lifecycle: string): { stage: string; index: number } {
   const mapping: Record<string, { stage: string; index: number }> = {
     development: { stage: "register", index: 0 },
-    testing: { stage: "review", index: 1 },
-    conformity: { stage: "classify", index: 2 },
-    market: { stage: "comply", index: 3 },
-    "post-market": { stage: "operate", index: 4 },
-    decommissioned: { stage: "operate", index: 4 },
+    testing: { stage: "register", index: 0 },
+    conformity: { stage: "classify", index: 1 },
+    market: { stage: "comply", index: 2 },
+    "post-market": { stage: "operate", index: 3 },
+    decommissioned: { stage: "operate", index: 3 },
   };
   return mapping[lifecycle] || { stage: "register", index: 0 };
 }
