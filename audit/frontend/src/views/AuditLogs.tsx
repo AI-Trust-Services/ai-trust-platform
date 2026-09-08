@@ -320,10 +320,8 @@ export function AuditLogs() {
     }
   }, [filterFrom, filterTo]);
 
-  useEffect(() => {
-    loadEvents();
-    loadStats();
-  }, [loadEvents, loadStats]);
+  useEffect(() => { loadEvents(); }, [loadEvents]);
+  useEffect(() => { loadStats(); }, [loadStats]);
 
   useEffect(() => {
     const filters: Record<string, string> = {};
