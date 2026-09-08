@@ -25,9 +25,12 @@
 #      ai-trust/ai-trust-tls Secret that the Helm Ingress references.
 #   3. Annotates the Traefik LoadBalancer Service with Gardener DNS annotations so
 #      shoot-dns-service auto-publishes A-records for all ingress hostnames.
-#   4. Installs the OCM controller via the OCM CLI, then installs Flux via the
-#      Flux CLI (`flux install`). Both are required — OCM manages component
-#      versions, Flux (source-controller + helm-controller) applies the HelmRelease.
+#   4. Installs the OCM controller (pinned to OCM_CONTROLLER_VERSION) via the OCM CLI
+#      (pinned to OCM_CLI_VERSION), then installs Flux (pinned to FLUX_VERSION) via the
+#      Flux CLI (`flux install`). Both are required — OCM manages component versions,
+#      Flux (source-controller + helm-controller) applies the HelmRelease.
+#      Re-running the script checks the running image tag and reinstalls only if the
+#      version doesn't match the pin — safe to re-run after upgrades.
 #   5. Applies rbac.yaml — grants the GitHub Actions OIDC identity the permissions
 #      needed by bootstrap-gardener.yml (ai-trust namespace + ocm-system namespace).
 #
@@ -132,26 +135,60 @@ echo "    Annotated Traefik LB Service: ${DNSNAMES}"
 
 echo ""
 echo "==> [4/5] Installing OCM controller and Flux"
+# Pinned versions — update together after testing on a non-prod cluster.
+# OCM controller (github.com/open-component-model/ocm-controller) and
+# OCM CLI (github.com/open-component-model/ocm) are versioned independently.
+OCM_CONTROLLER_VERSION="v0.33.0"
+OCM_CLI_VERSION="v0.50.0"
+FLUX_VERSION="v2.9.5"
+
+_install_ocm_cli() {
+  echo "    Installing OCM CLI ${OCM_CLI_VERSION}..."
+  curl -sSfL \
+    "https://github.com/open-component-model/ocm/releases/download/${OCM_CLI_VERSION}/install.sh" \
+    | sudo bash
+}
+
 if kubectl get deployment ocm-controller -n ocm-system &>/dev/null; then
-  echo "    OCM controller already installed — skipping."
-else
-  if ! command -v ocm &>/dev/null; then
-    echo "    Installing OCM CLI..."
-    curl -sSfL https://ocm.software/install.sh | sudo bash
+  RUNNING=$(kubectl get deployment ocm-controller -n ocm-system \
+    -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
+    | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || true)
+  if [[ "$RUNNING" == "$OCM_CONTROLLER_VERSION" ]]; then
+    echo "    OCM controller ${OCM_CONTROLLER_VERSION} already installed — skipping."
+  else
+    echo "    OCM controller running ${RUNNING:-unknown}, want ${OCM_CONTROLLER_VERSION} — reinstalling."
+    command -v ocm &>/dev/null || _install_ocm_cli
+    ocm controller install --version "${OCM_CONTROLLER_VERSION}"
+    echo "    OCM controller reinstalled at ${OCM_CONTROLLER_VERSION}."
   fi
-  ocm controller install
-  echo "    OCM controller installed."
+else
+  command -v ocm &>/dev/null || _install_ocm_cli
+  ocm controller install --version "${OCM_CONTROLLER_VERSION}"
+  echo "    OCM controller ${OCM_CONTROLLER_VERSION} installed."
 fi
 
 if kubectl get deployment source-controller -n flux-system &>/dev/null; then
-  echo "    Flux already installed — skipping."
+  RUNNING=$(kubectl get deployment source-controller -n flux-system \
+    -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
+    | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || true)
+  if [[ "$RUNNING" == "${FLUX_VERSION#v}"* ]] || kubectl get ns flux-system -o jsonpath='{.metadata.labels.app\.kubernetes\.io/version}' 2>/dev/null | grep -q "${FLUX_VERSION#v}"; then
+    echo "    Flux ${FLUX_VERSION} already installed — skipping."
+  else
+    echo "    Flux running ${RUNNING:-unknown}, want ${FLUX_VERSION} — reinstalling."
+    if ! command -v flux &>/dev/null; then
+      echo "    Installing Flux CLI ${FLUX_VERSION}..."
+      curl -s https://fluxcd.io/install.sh | sudo FLUX_VERSION="${FLUX_VERSION}" bash
+    fi
+    flux install --version="${FLUX_VERSION}"
+    echo "    Flux reinstalled at ${FLUX_VERSION}."
+  fi
 else
   if ! command -v flux &>/dev/null; then
-    echo "    Installing Flux CLI..."
-    curl -s https://fluxcd.io/install.sh | sudo bash
+    echo "    Installing Flux CLI ${FLUX_VERSION}..."
+    curl -s https://fluxcd.io/install.sh | sudo FLUX_VERSION="${FLUX_VERSION}" bash
   fi
-  flux install
-  echo "    Flux installed."
+  flux install --version="${FLUX_VERSION}"
+  echo "    Flux ${FLUX_VERSION} installed."
 fi
 
 echo ""
