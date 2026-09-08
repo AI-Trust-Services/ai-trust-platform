@@ -204,30 +204,6 @@ export interface SystemTask {
   external?: boolean;
 }
 
-// ── Review Notes (POC feedback) ───────────────────────────────────────────────
-
-export type ReviewNoteStatus = "pending" | "confirmed" | "rejected" | "done";
-
-export interface ReviewNote {
-  id: string;
-  page_path: string;
-  content: string;
-  status: ReviewNoteStatus;
-  author_username: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ReviewNoteCreate {
-  page_path: string;
-  content: string;
-}
-
-export interface ReviewNoteUpdate {
-  content?: string;
-  status?: ReviewNoteStatus;
-}
-
 // ── Compliance Types (from compliance MFE) ────────────────────────────────────
 
 export interface Framework {

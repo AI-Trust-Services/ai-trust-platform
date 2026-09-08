@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { FileText, ArrowRight, Calendar, User, Search, Grid3x3, List, ChevronRight, ChevronUp, LayoutList, LayoutGrid, HelpCircle } from "lucide-react";
+import { FileText, ArrowRight, Calendar, Search, ChevronRight, ChevronUp, LayoutList, LayoutGrid, HelpCircle, ArrowUpDown, RefreshCw } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { api } from "@/api/client";
-import { getTotalTaskCount } from "@/utils/taskUtils";
-import type { AISystem } from "@/types";
+import { deriveTasksFromSystem, getMyTasks } from "@/utils/taskUtils";
+import type { AISystem, SystemTask } from "@/types";
 
 // Map backend lifecycle to stage info
 function getLifecycleStage(lifecycle: string): { label: string; index: number } {
@@ -241,7 +241,9 @@ function SystemRow({ system, username, onClick }: { system: AISystem; username: 
   });
 
   // Get real task count using shared utility
-  const taskCount = getTotalTaskCount(system, username);
+  const allTasks = deriveTasksFromSystem(system, username);
+  const myTasks = getMyTasks(allTasks, username);
+  const taskCount = myTasks.length;
 
   return (
     <div
@@ -311,6 +313,111 @@ function SystemRow({ system, username, onClick }: { system: AISystem; username: 
   );
 }
 
+/* Task table row */
+interface TaskTableRowProps {
+  task: {
+    icon: React.ReactNode;
+    iconBg: string;
+    iconColor: string;
+    title: string;
+    system: string;
+    systemId: string;
+    type: string;
+    taskParam: "review" | "registration" | "compliance";
+    typeColor: string;
+    stage: string;
+    due: string;
+    dueColor?: string;
+    priority: "high" | "medium" | "low";
+    status: string;
+    statusColor: string;
+  };
+  onClick: () => void;
+}
+
+function TaskTableRow({ task, onClick }: TaskTableRowProps) {
+  const priorityColors = {
+    high: "bg-red-100 text-red-700 border-red-200",
+    medium: "bg-orange-100 text-orange-700 border-orange-200",
+    low: "bg-green-100 text-green-700 border-green-200",
+  };
+
+  return (
+    <div
+      className="flex cursor-pointer items-center gap-4 border-b border-border px-4 py-3 hover:bg-muted/30"
+      onClick={onClick}
+    >
+      {/* Task Icon + Title */}
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg", task.iconBg, task.iconColor)}>
+          {task.icon}
+        </div>
+        <span className="font-medium">{task.title}</span>
+      </div>
+
+      {/* AI System */}
+      <div className="w-40 shrink-0 text-sm text-muted-foreground">{task.system}</div>
+
+      {/* Task Type */}
+      <div className="w-32 shrink-0">
+        <Badge variant="outline" className={cn("border text-xs", task.typeColor)}>
+          {task.type}
+        </Badge>
+      </div>
+
+      {/* Current Stage */}
+      <div className="flex w-32 shrink-0 items-center gap-1.5 text-sm">
+        <div className="size-2 rounded-full bg-primary" />
+        <span>{task.stage}</span>
+      </div>
+
+      {/* Due */}
+      <div className={cn("w-28 shrink-0 text-sm", task.dueColor || "text-muted-foreground")}>
+        {task.due}
+      </div>
+
+      {/* Priority */}
+      <div className="w-24 shrink-0">
+        <Badge className={cn("border text-xs", priorityColors[task.priority])}>
+          {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+        </Badge>
+      </div>
+
+      {/* Status */}
+      <div className="w-28 shrink-0">
+        <Badge variant="outline" className={cn("border text-xs", task.statusColor)}>
+          {task.status}
+        </Badge>
+      </div>
+
+      {/* Arrow */}
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+    </div>
+  );
+}
+
+/* Sortable table header */
+interface SortableHeaderProps {
+  label: string;
+  sortKey: string;
+  currentSort: { key: string; direction: "asc" | "desc" } | null;
+  onSort: (key: string) => void;
+  className?: string;
+}
+
+function SortableHeader({ label, sortKey, currentSort, onSort, className }: SortableHeaderProps) {
+  const isActive = currentSort?.key === sortKey;
+  return (
+    <button
+      onClick={() => onSort(sortKey)}
+      className={cn("flex items-center gap-1 hover:text-foreground", className)}
+    >
+      {label}
+      <ArrowUpDown className={cn("size-3", isActive && "text-primary")} />
+    </button>
+  );
+}
+
 export default function Today() {
   const { username } = usePermissions();
   const navigate = useNavigate();
@@ -318,6 +425,9 @@ export default function Today() {
   const [loading, setLoading] = useState(true);
   const [taskViewMode, setTaskViewMode] = useState<"vertical" | "horizontal">("vertical");
   const [tasksExpanded, setTasksExpanded] = useState(true);
+  const [allTasksExpanded, setAllTasksExpanded] = useState(true);
+  const [taskSort, setTaskSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+  const [systemSort, setSystemSort] = useState<string>("updated");
 
   const loadSystems = useCallback(async () => {
     try {
@@ -343,72 +453,55 @@ export default function Today() {
   const displayName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
 
   // Filter systems user is involved with (owner, assignee, or has pending tasks for them)
-  // For engineers: show all draft and pending_review systems as they may need to work on them
+  // Only show systems where the current user has a role
   const mySystems = systems.filter(s => {
     // User is the owner
     if (s.owner_username === username) return true;
-    // User is assigned as engineer
-    if (s.assigned_engineer === username) return true;
-    // All draft systems (engineers help with registration)
-    if (s.workflow_status === "draft") return true;
-    // All pending review systems (engineers do technical reviews)
-    if (s.workflow_status === "pending_review") return true;
-    // Systems awaiting information from the owner
-    if (s.workflow_status === "information_requested") return true;
+    // User is assigned as engineer/reviewer
+    if (s.assignee_username === username) return true;
+    // User is assigned as compliance officer
+    if (s.compliance_officer_username === username) return true;
     return false;
   });
 
-  // Derive tasks from user's systems
-  const draftSystems = mySystems.filter(s => s.workflow_status === "draft");
-  const pendingReviewSystems = mySystems.filter(s => s.workflow_status === "pending_review");
+  // Derive tasks: "Your Tasks" = directly assigned to user, "All Tasks" = from all connected systems
+  const yourTasks: SystemTask[] = [];
+  const allConnectedTasks: SystemTask[] = [];
+
+  mySystems.forEach(s => {
+    const systemTasks = deriveTasksFromSystem(s, username);
+    // All tasks from connected systems
+    allConnectedTasks.push(...systemTasks);
+    // Only tasks directly assigned to user
+    const mySystemTasks = getMyTasks(systemTasks, username);
+    yourTasks.push(...mySystemTasks);
+  });
+
+  // Get recent systems I'm involved with
   const myRecentSystems = [...mySystems].sort((a, b) =>
     new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
-  ).slice(0, 4);
+  );
 
-  // Build ALL tasks from real data
-  const urgentTasks: TaskCardProps[] = [];
+  // Sort systems based on systemSort
+  const sortedMySystems = [...myRecentSystems].sort((a, b) => {
+    switch (systemSort) {
+      case "name":
+        return a.name.localeCompare(b.name);
+      case "risk": {
+        const riskOrder: Record<string, number> = { prohibited: 0, high: 1, "gpai-systemic": 2, "gpai-standard": 3, limited: 4, minimal: 5 };
+        return (riskOrder[a.tier] ?? 5) - (riskOrder[b.tier] ?? 5);
+      }
+      case "updated":
+      default:
+        return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
+    }
+  }).slice(0, 4);
 
-  // Add ALL pending reviews as "review" tasks
-  pendingReviewSystems.forEach(s => {
-    urgentTasks.push({
-      type: "review",
-      systemName: s.name,
-      systemId: s.id,
-      description: "Pending technical review",
-      dueInfo: "Due today",
-      actionLabel: "Start review",
-    });
-  });
-
-  // Add ALL drafts as "continue" tasks
-  draftSystems.forEach(s => {
-    urgentTasks.push({
-      type: "continue",
-      systemName: s.name,
-      systemId: s.id,
-      description: "Complete the registration",
-      dueInfo: "Due in 2 days",
-      actionLabel: "Continue",
-    });
-  });
-
-  // Add clarification tasks for systems needing attention
-  systems.filter(s => s.workflow_status === "information_requested").forEach(s => {
-    urgentTasks.push({
-      type: "clarification",
-      systemName: s.name,
-      systemId: s.id,
-      description: "Clarification needed",
-      dueInfo: "Due in 5 days",
-      actionLabel: "Respond",
-    });
-  });
-
-  // Calculate workload counts for ring chart
-  const needsMeCount = pendingReviewSystems.length;
-  const inProgressCount = draftSystems.length;
-  const waitingCount = systems.filter(s => s.workflow_status === "information_requested").length;
-  const totalWorkload = needsMeCount + inProgressCount + waitingCount;
+  // Calculate counts for workload sidebar
+  const assignedToMeCount = yourTasks.filter(t => t.status === "in_progress").length;
+  const waitingCount = yourTasks.filter(t => t.status === "waiting").length;
+  const inProgressCount = yourTasks.filter(t => t.status === "open").length;
+  const totalWorkload = yourTasks.length;
 
   // Recent activity from user's systems
   const recentActivity = myRecentSystems.slice(0, 3).map(s => {
@@ -425,6 +518,78 @@ export default function Today() {
     };
   });
 
+  // Build "Your Tasks" for card display (directly assigned to user)
+  const urgentTasks: TaskCardProps[] = yourTasks.map(task => {
+    const system = systems.find(s => task.id.startsWith(s.id));
+    return {
+      type: task.type === "review" ? "review" : task.type === "registration" ? "continue" : "clarification",
+      systemName: system?.name || "Unknown System",
+      systemId: system?.id || "",
+      description: task.description,
+      dueInfo: task.status === "in_progress" ? "In progress" : "Due in 2 days",
+      actionLabel: task.type === "review" ? "Start review" : task.type === "registration" ? "Continue" : "Open",
+    };
+  });
+
+  // Build "All Tasks" for table display (all tasks from connected systems)
+  const allTasks = allConnectedTasks.map(task => {
+    const system = systems.find(s => task.id.startsWith(s.id));
+    return {
+      icon: task.type === "review" ? <FileText className="size-4" /> : <RefreshCw className="size-4" />,
+      iconBg: task.type === "review" ? "bg-blue-50" : "bg-purple-50",
+      iconColor: task.type === "review" ? "text-blue-600" : "text-purple-600",
+      title: task.title,
+      system: system?.name || "Unknown System",
+      systemId: system?.id || "",
+      type: task.type === "review" ? "Technical review" : task.type === "registration" ? "Registration" : "Compliance",
+      taskParam: task.type as "review" | "registration" | "compliance",
+      typeColor: task.type === "review" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-purple-50 text-purple-700 border-purple-200",
+      stage: task.stage,
+      assignee: task.assignee || "Unassigned",
+      due: task.status === "in_progress" ? "In progress" : "Pending",
+      dueColor: task.status === "in_progress" ? undefined : "text-orange-600",
+      priority: task.priority as "high" | "medium" | "low",
+      status: task.assignee === username ? "Assigned to me" : "In progress",
+      statusColor: task.assignee === username ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-purple-50 text-purple-700 border-purple-200",
+    };
+  });
+
+  // Handle task sorting
+  const handleTaskSort = (key: string) => {
+    setTaskSort(prev => {
+      if (prev?.key === key) {
+        return prev.direction === "asc" ? { key, direction: "desc" } : null;
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
+  // Sort tasks based on current sort state
+  const sortedTasks = [...allTasks].sort((a, b) => {
+    if (!taskSort) return 0;
+    const { key, direction } = taskSort;
+    const multiplier = direction === "asc" ? 1 : -1;
+
+    switch (key) {
+      case "title":
+        return multiplier * a.title.localeCompare(b.title);
+      case "system":
+        return multiplier * a.system.localeCompare(b.system);
+      case "type":
+        return multiplier * a.type.localeCompare(b.type);
+      case "stage":
+        return multiplier * a.stage.localeCompare(b.stage);
+      case "priority": {
+        const priorityOrder = { high: 0, medium: 1, low: 2 };
+        return multiplier * (priorityOrder[a.priority] - priorityOrder[b.priority]);
+      }
+      case "status":
+        return multiplier * a.status.localeCompare(b.status);
+      default:
+        return 0;
+    }
+  });
+
   return (
     <div className="flex h-full">
       {/* Main Content */}
@@ -437,14 +602,14 @@ export default function Today() {
           <p className="text-sm text-muted-foreground">Here's what needs your attention today.</p>
         </div>
 
-        {/* Your Tasks Section */}
+        {/* Your Tasks Section - Tasks directly assigned to the user */}
         <div className="mb-6">
           {/* Task Section Header */}
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-semibold">Your Tasks</h2>
               <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm font-medium">
-                {urgentTasks.length} active tasks
+                {urgentTasks.length} tasks
               </Badge>
             </div>
             <div className="flex items-center gap-2">
@@ -460,7 +625,7 @@ export default function Today() {
                   )}
                 >
                   <LayoutList className="size-4" />
-                  Vertical
+                  List
                 </button>
                 <button
                   onClick={() => setTaskViewMode("horizontal")}
@@ -472,7 +637,7 @@ export default function Today() {
                   )}
                 >
                   <LayoutGrid className="size-4" />
-                  Horizontal
+                  Cards
                 </button>
               </div>
               {/* Collapse Button */}
@@ -483,12 +648,12 @@ export default function Today() {
                 className="flex items-center gap-1 text-muted-foreground"
               >
                 <ChevronUp className={cn("size-4 transition-transform", !tasksExpanded && "rotate-180")} />
-                Collapse
+                {tasksExpanded ? "Collapse" : "Expand"}
               </Button>
             </div>
           </div>
 
-          {/* Task Content */}
+          {/* Your Tasks Content */}
           {tasksExpanded && (
             urgentTasks.length > 0 ? (
               taskViewMode === "vertical" ? (
@@ -511,21 +676,74 @@ export default function Today() {
             ) : (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
-                  No tasks require your attention. You're all caught up!
+                  No tasks assigned to you. You're all caught up!
                 </CardContent>
               </Card>
             )
           )}
         </div>
 
-        {/* View All Tasks Link */}
-        <Link
-          to="/work"
-          className="mb-6 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-        >
-          View all tasks
-          <ArrowRight className="size-4" />
-        </Link>
+        {/* All Tasks Section - All tasks from connected systems */}
+        <div className="mb-6">
+          {/* Section Header */}
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold">All Tasks</h2>
+              <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm font-medium">
+                {sortedTasks.length} tasks
+              </Badge>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAllTasksExpanded(!allTasksExpanded)}
+              className="flex items-center gap-1 text-muted-foreground"
+            >
+              <ChevronUp className={cn("size-4 transition-transform", !allTasksExpanded && "rotate-180")} />
+              {allTasksExpanded ? "Collapse" : "Expand"}
+            </Button>
+          </div>
+
+          {/* All Tasks Content */}
+          {allTasksExpanded && (
+            sortedTasks.length > 0 ? (
+              <Card className="overflow-hidden">
+                <CardContent className="p-0">
+                  {/* Table Header with Sortable Columns */}
+                  <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <SortableHeader label="Task" sortKey="title" currentSort={taskSort} onSort={handleTaskSort} className="flex-1" />
+                    <SortableHeader label="AI System" sortKey="system" currentSort={taskSort} onSort={handleTaskSort} className="w-40 shrink-0" />
+                    <SortableHeader label="Task Type" sortKey="type" currentSort={taskSort} onSort={handleTaskSort} className="w-32 shrink-0" />
+                    <SortableHeader label="Current Stage" sortKey="stage" currentSort={taskSort} onSort={handleTaskSort} className="w-32 shrink-0" />
+                    <div className="w-28 shrink-0">Assignee</div>
+                    <SortableHeader label="Priority" sortKey="priority" currentSort={taskSort} onSort={handleTaskSort} className="w-24 shrink-0" />
+                    <SortableHeader label="Status" sortKey="status" currentSort={taskSort} onSort={handleTaskSort} className="w-28 shrink-0" />
+                    <div className="w-4 shrink-0"></div>
+                  </div>
+
+                  {/* Table Rows */}
+                  {loading ? (
+                    <div className="py-8 text-center text-muted-foreground">Loading...</div>
+                  ) : (
+                    sortedTasks.map((task, i) => (
+                      <TaskTableRow
+                        key={i}
+                        task={task}
+                        onClick={() => navigate(`/systems/${task.systemId}?task=${task.taskParam}`)}
+                      />
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  No tasks from your AI systems.
+                </CardContent>
+              </Card>
+            )
+          )}
+        </div>
 
         {/* Your AI Systems Preview */}
         <div className="space-y-4">
@@ -561,26 +779,35 @@ export default function Today() {
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                {/* Table Header */}
+                {/* Table Header with Sortable Columns */}
                 <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <div className="flex-1">System</div>
-                  <div className="w-24 shrink-0">Risk Level</div>
+                  <button onClick={() => setSystemSort("name")} className={cn("flex flex-1 items-center gap-1 hover:text-foreground", systemSort === "name" && "text-primary")}>
+                    System
+                    <ArrowUpDown className={cn("size-3", systemSort === "name" && "text-primary")} />
+                  </button>
+                  <button onClick={() => setSystemSort("risk")} className={cn("flex w-24 shrink-0 items-center gap-1 hover:text-foreground", systemSort === "risk" && "text-primary")}>
+                    Risk Level
+                    <ArrowUpDown className={cn("size-3", systemSort === "risk" && "text-primary")} />
+                  </button>
                   <div className="w-48 shrink-0">Current Stage</div>
                   <div className="w-40 shrink-0">Owner</div>
                   <div className="w-20 shrink-0 text-center">Open Tasks</div>
-                  <div className="w-24 shrink-0">Updated</div>
+                  <button onClick={() => setSystemSort("updated")} className={cn("flex w-24 shrink-0 items-center gap-1 hover:text-foreground", systemSort === "updated" && "text-primary")}>
+                    Updated
+                    <ArrowUpDown className={cn("size-3", systemSort === "updated" && "text-primary")} />
+                  </button>
                   <div className="w-4 shrink-0"></div>
                 </div>
 
                 {/* Table Rows */}
                 {loading ? (
                   <div className="py-8 text-center text-muted-foreground">Loading...</div>
-                ) : myRecentSystems.length === 0 ? (
+                ) : sortedMySystems.length === 0 ? (
                   <div className="py-8 text-center text-muted-foreground">
                     No AI systems you're involved with yet.
                   </div>
                 ) : (
-                  myRecentSystems.map((system) => (
+                  sortedMySystems.map((system) => (
                     <SystemRow
                       key={system.id}
                       system={system}
@@ -622,8 +849,8 @@ export default function Today() {
                     stroke="#e5e7eb"
                     strokeWidth="16"
                   />
-                  {/* Needs me segment (blue) */}
-                  {needsMeCount > 0 && (
+                  {/* Assigned to me segment (blue) */}
+                  {assignedToMeCount > 0 && (
                     <circle
                       cx="64"
                       cy="64"
@@ -631,7 +858,7 @@ export default function Today() {
                       fill="none"
                       stroke="#3b82f6"
                       strokeWidth="16"
-                      strokeDasharray={`${(needsMeCount / Math.max(totalWorkload, 1)) * 327} 327`}
+                      strokeDasharray={`${(assignedToMeCount / Math.max(totalWorkload, 1)) * 327} 327`}
                       strokeDashoffset="0"
                     />
                   )}
@@ -645,7 +872,7 @@ export default function Today() {
                       stroke="#a855f7"
                       strokeWidth="16"
                       strokeDasharray={`${(inProgressCount / Math.max(totalWorkload, 1)) * 327} 327`}
-                      strokeDashoffset={`${-(needsMeCount / Math.max(totalWorkload, 1)) * 327}`}
+                      strokeDashoffset={`${-(assignedToMeCount / Math.max(totalWorkload, 1)) * 327}`}
                     />
                   )}
                   {/* Waiting segment (orange) */}
@@ -658,7 +885,7 @@ export default function Today() {
                       stroke="#f97316"
                       strokeWidth="16"
                       strokeDasharray={`${(waitingCount / Math.max(totalWorkload, 1)) * 327} 327`}
-                      strokeDashoffset={`${-((needsMeCount + inProgressCount) / Math.max(totalWorkload, 1)) * 327}`}
+                      strokeDashoffset={`${-((assignedToMeCount + inProgressCount) / Math.max(totalWorkload, 1)) * 327}`}
                     />
                   )}
                 </svg>
@@ -674,9 +901,9 @@ export default function Today() {
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <div className="size-2.5 rounded-full bg-blue-500" />
-                  <span>Needs me</span>
+                  <span>Assigned to me</span>
                 </div>
-                <span className="font-semibold">{needsMeCount}</span>
+                <span className="font-semibold">{assignedToMeCount}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
@@ -701,7 +928,7 @@ export default function Today() {
           <CardContent className="p-4">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-sm font-semibold">Recent activity</h3>
-              <Link to="/work" className="text-xs font-medium text-primary hover:underline">
+              <Link to="/systems" className="text-xs font-medium text-primary hover:underline">
                 View all
               </Link>
             </div>

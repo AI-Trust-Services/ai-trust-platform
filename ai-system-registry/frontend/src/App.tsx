@@ -3,8 +3,6 @@ import { Outlet } from "react-router";
 import { Loader2 } from "lucide-react";
 import { useLuigiInit, useLuigiThemeSync, useLuigiUrlSync } from "./hooks/useLuigi";
 import { usePermissions } from "./hooks/usePermissions";
-import { ReviewModeProvider } from "./hooks/useReviewMode";
-import { ReviewPanel } from "./components/ReviewPanel";
 import { CommandMenu } from "./components/CommandMenu";
 import { HEALTH_URL } from "./api/client";
 import { cn } from "@/lib/utils";
@@ -67,7 +65,6 @@ export default function App() {
   return (
     <ToastContext.Provider value={showToast}>
       <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen, mayWrite, mayRegister, username }}>
-        <ReviewModeProvider>
           <div className="flex h-full flex-col">
             {/* Backend health banner */}
             {backendOk === false && (
@@ -93,12 +90,9 @@ export default function App() {
               </div>
             )}
 
-            <ReviewPanel />
-
             {/* Command menu (Ctrl+K) */}
             <CommandMenu open={commandOpen} onOpenChange={setCommandOpen} />
           </div>
-        </ReviewModeProvider>
       </ModalContext.Provider>
     </ToastContext.Provider>
   );

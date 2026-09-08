@@ -96,7 +96,7 @@ def _truncate() -> None:
     )
     conn.autocommit = True
     cur = conn.cursor()
-    cur.execute("TRUNCATE ai_systems, model_cards, review_notes RESTART IDENTITY CASCADE")
+    cur.execute("TRUNCATE ai_systems, model_cards, system_notes RESTART IDENTITY CASCADE")
     cur.close()
     conn.close()
 

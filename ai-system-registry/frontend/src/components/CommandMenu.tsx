@@ -5,23 +5,14 @@
  * (shell/public/luigi-config.js). This component is kept for cases where
  * the frontend needs to open a command menu programmatically, but the
  * keyboard shortcut is handled by the shell.
- *
- * DEV ONLY: Review Mode feature for POC feedback collection.
- * - Enable/Disable Review Mode is in the shell's command palette
- * - See ReviewPanel.tsx and useReviewMode.tsx for implementation
- * - Database table: review_notes (migration 0013_review_notes.py)
- * - Backend router: routers/review_notes.py
  */
 
-import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
   LayoutDashboard,
   ClipboardList,
   Box,
   CreditCard,
-  MessageSquarePlus,
-  MessageSquareOff,
   Plus,
 } from "lucide-react";
 import {
@@ -33,7 +24,6 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { useReviewMode } from "@/hooks/useReviewMode";
 
 interface CommandMenuProps {
   open: boolean;
@@ -42,7 +32,6 @@ interface CommandMenuProps {
 
 export function CommandMenu({ open, onOpenChange }: CommandMenuProps) {
   const navigate = useNavigate();
-  const { enabled: reviewEnabled, setEnabled: setReviewEnabled } = useReviewMode();
 
   // NOTE: Keyboard shortcut (Ctrl+K) is handled by the Luigi shell.
   // This component only responds to programmatic open/close.
@@ -88,19 +77,6 @@ export function CommandMenu({ open, onOpenChange }: CommandMenuProps) {
             <Plus className="mr-2" />
             Register new AI System
           </CommandItem>
-
-          {/* DEV ONLY: Review Mode for POC feedback collection */}
-          {reviewEnabled ? (
-            <CommandItem onSelect={() => runCommand(() => setReviewEnabled(false))}>
-              <MessageSquareOff className="mr-2" />
-              Disable Review Mode (DEV ONLY)
-            </CommandItem>
-          ) : (
-            <CommandItem onSelect={() => runCommand(() => setReviewEnabled(true))}>
-              <MessageSquarePlus className="mr-2" />
-              Enable Review Mode (DEV ONLY)
-            </CommandItem>
-          )}
         </CommandGroup>
       </CommandList>
     </CommandDialog>

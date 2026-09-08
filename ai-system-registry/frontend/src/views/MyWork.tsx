@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { api } from "@/api/client";
-import type { AISystem } from "@/types";
+import { usePermissions } from "@/hooks/usePermissions";
+import { deriveTasksFromSystem, getMyTasks, getLifecycleStageLabel } from "@/utils/taskUtils";
+import type { AISystem, SystemTask } from "@/types";
 
 interface SummaryCardProps {
   count: number;
@@ -49,26 +51,6 @@ function SummaryCard({ count, label, subtitle, icon, iconBg, iconColor, isActive
       </CardContent>
     </Card>
   );
-}
-
-// Get lifecycle stage label from backend value
-function getStageLabel(lifecycle: string): string {
-  const mapping: Record<string, string> = {
-    development: "Register",
-    testing: "Review",
-    conformity: "Classify",
-    market: "Comply",
-    "post-market": "Operate",
-    decommissioned: "Operate",
-  };
-  return mapping[lifecycle] || "Register";
-}
-
-// Get risk level from tier
-function getRiskLevel(tier: string): "high" | "medium" | "low" {
-  if (["high", "gpai-systemic", "prohibited"].includes(tier)) return "high";
-  if (["limited", "gpai-standard"].includes(tier)) return "medium";
-  return "low";
 }
 
 interface TaskRowProps {
@@ -154,6 +136,7 @@ function TaskRow({ task, onClick }: TaskRowProps) {
 
 export default function MyWork() {
   const navigate = useNavigate();
+  const { username } = usePermissions();
   const [activeTab, setActiveTab] = useState("needs-me");
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -173,16 +156,24 @@ export default function MyWork() {
     loadSystems();
   }, [loadSystems]);
 
-  // Derive work items from systems
-  const draftSystems = systems.filter(s => s.workflow_status === "draft");
-  const pendingReviewSystems = systems.filter(s => s.workflow_status === "pending_review");
+  // Derive ALL tasks from ALL systems, then filter to MY tasks
+  const allMyTasks: SystemTask[] = [];
+  systems.forEach(s => {
+    const systemTasks = deriveTasksFromSystem(s, username);
+    const mySystemTasks = getMyTasks(systemTasks, username);
+    allMyTasks.push(...mySystemTasks);
+  });
+
+  // Get approved systems for "Completed" tab
   const approvedSystems = systems.filter(s => s.workflow_status === "approved");
 
-  // Calculate counts
-  const needsMeCount = draftSystems.length + pendingReviewSystems.length;
-  const waitingCount = 0; // No real "waiting" status yet
-  const inProgressCount = systems.filter(s => s.workflow_status === "draft").length;
-  const completedCount = approvedSystems.length;
+  // Calculate counts based on MY tasks only
+  const needsMeCount = allMyTasks.filter(t => t.status === "in_progress").length;
+  const waitingCount = allMyTasks.filter(t => t.status === "waiting").length;
+  const inProgressCount = allMyTasks.filter(t => t.status === "open").length;
+  const completedCount = approvedSystems.filter(s =>
+    s.owner_username === username || s.assignee_username === username
+  ).length;
 
   const summaryCards = [
     {
@@ -223,42 +214,27 @@ export default function MyWork() {
     },
   ];
 
-  // Build tasks from real systems
-  const tasks = [
-    ...pendingReviewSystems.map(s => ({
-      icon: <FileText className="size-4" />,
-      iconBg: "bg-blue-50",
-      iconColor: "text-blue-600",
-      title: "Review technical information",
-      system: s.name,
-      systemId: s.id,
-      type: "Technical review",
-      taskParam: "review" as const,
-      typeColor: "bg-blue-50 text-blue-700 border-blue-200",
-      stage: getStageLabel(s.lifecycle),
-      due: "Pending",
-      dueColor: "text-orange-600",
-      priority: (getRiskLevel(s.tier) === "high" ? "high" : "medium") as "high" | "medium" | "low",
-      status: "Needs me",
-      statusColor: "bg-blue-50 text-blue-700 border-blue-200",
-    })),
-    ...draftSystems.map(s => ({
-      icon: <RefreshCw className="size-4" />,
-      iconBg: "bg-purple-50",
-      iconColor: "text-purple-600",
-      title: "Complete registration",
-      system: s.name,
-      systemId: s.id,
-      type: "Registration",
-      taskParam: "registration" as const,
-      typeColor: "bg-purple-50 text-purple-700 border-purple-200",
-      stage: getStageLabel(s.lifecycle),
-      due: "In progress",
-      priority: "medium" as const,
-      status: "In progress",
-      statusColor: "bg-purple-50 text-purple-700 border-purple-200",
-    })),
-  ];
+  // Build tasks for table display from the filtered task list
+  const tasks = allMyTasks.map(task => {
+    const system = systems.find(s => task.id.startsWith(s.id));
+    return {
+      icon: task.type === "review" ? <FileText className="size-4" /> : <RefreshCw className="size-4" />,
+      iconBg: task.type === "review" ? "bg-blue-50" : "bg-purple-50",
+      iconColor: task.type === "review" ? "text-blue-600" : "text-purple-600",
+      title: task.title,
+      system: system?.name || "Unknown System",
+      systemId: system?.id || "",
+      type: task.type === "review" ? "Technical review" : task.type === "registration" ? "Registration" : "Compliance",
+      taskParam: task.type as "review" | "registration" | "compliance",
+      typeColor: task.type === "review" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-purple-50 text-purple-700 border-purple-200",
+      stage: task.stage,
+      due: task.status === "in_progress" ? "In progress" : "Pending",
+      dueColor: task.status === "in_progress" ? undefined : "text-orange-600",
+      priority: task.priority as "high" | "medium" | "low",
+      status: task.status === "in_progress" ? "Needs me" : "In progress",
+      statusColor: task.status === "in_progress" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-purple-50 text-purple-700 border-purple-200",
+    };
+  });
 
   // Upcoming due dates from real data
   const upcomingDueDates = tasks.slice(0, 4).map((t, i) => ({
@@ -289,12 +265,12 @@ export default function MyWork() {
 
         {/* Summary Cards - Click to filter */}
         <div className="mb-6 grid gap-4 md:grid-cols-4">
-          {summaryCards.map((card) => (
+          {summaryCards.map(({ key, ...cardProps }) => (
             <SummaryCard
-              key={card.key}
-              {...card}
-              isActive={activeTab === card.key}
-              onClick={() => setActiveTab(card.key)}
+              key={key}
+              {...cardProps}
+              isActive={activeTab === key}
+              onClick={() => setActiveTab(key)}
             />
           ))}
         </div>
@@ -358,7 +334,7 @@ export default function MyWork() {
           {activeTab === "in-progress" && (
             <>
               <h3 className="text-sm font-semibold">In Progress ({tasks.filter(t => t.status === "In progress").length})</h3>
-              {draftSystems.length === 0 ? (
+              {tasks.filter(t => t.status === "In progress").length === 0 ? (
                 <Card>
                   <CardContent className="p-8 text-center text-muted-foreground">
                     No tasks in progress
@@ -418,7 +394,7 @@ export default function MyWork() {
                           <Badge className="border-0 bg-green-100 text-green-700">Approved</Badge>
                         </div>
                         <div className="w-32 shrink-0 text-sm text-muted-foreground">
-                          {getStageLabel(s.lifecycle)}
+                          {getLifecycleStageLabel(s.lifecycle)}
                         </div>
                         <ChevronRight className="size-4 text-muted-foreground" />
                       </div>

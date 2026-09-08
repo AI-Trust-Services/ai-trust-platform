@@ -22,11 +22,6 @@ from app.schemas.model_card import (
     ModelCardUpdate,
     ModelCardResponse,
 )
-from app.schemas.review_note import (
-    ReviewNoteCreate,
-    ReviewNoteUpdate,
-    ReviewNoteResponse,
-)
 from app.schemas.system_note import (
     SystemNoteCreate,
     SystemNoteUpdate,
@@ -58,9 +53,6 @@ __all__ = [
     "ModelCardCreate",
     "ModelCardUpdate",
     "ModelCardResponse",
-    "ReviewNoteCreate",
-    "ReviewNoteUpdate",
-    "ReviewNoteResponse",
     "SystemNoteCreate",
     "SystemNoteUpdate",
     "SystemNoteResponse",

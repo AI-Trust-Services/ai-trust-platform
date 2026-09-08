@@ -3,10 +3,6 @@ import { Outlet } from "react-router";
 import { useLuigiThemeSync } from "./hooks/useLuigi";
 import { HEALTH_URL } from "./api/client";
 import { cn } from "@/lib/utils";
-// [REVIEW_MODE] -- POC feedback collection, remove before merging to main
-import { ReviewModeProvider } from "@/hooks/useReviewMode";
-import { ReviewPanel } from "@/components/ReviewPanel";
-// [/REVIEW_MODE]
 import { CommandMenu } from "@/components/CommandMenu";
 
 type ShowToast = (msg: string, isError?: boolean) => void;
@@ -52,9 +48,6 @@ export default function App() {
 
   return (
     <ToastContext.Provider value={showToast}>
-      {/* [REVIEW_MODE] -- POC feedback collection, remove before merging to main */}
-      <ReviewModeProvider>
-      {/* [/REVIEW_MODE] */}
         <div className="min-h-screen bg-background">
           {/* Backend health banner */}
           {backendOk === false && (
@@ -84,16 +77,9 @@ export default function App() {
             </div>
           )}
 
-          {/* [REVIEW_MODE] -- POC feedback collection, remove before merging to main */}
-          <ReviewPanel />
-          {/* [/REVIEW_MODE] */}
-
           {/* Command Menu (Ctrl+K) */}
           <CommandMenu open={cmdOpen} onOpenChange={setCmdOpen} />
         </div>
-      {/* [REVIEW_MODE] -- POC feedback collection, remove before merging to main */}
-      </ReviewModeProvider>
-      {/* [/REVIEW_MODE] */}
     </ToastContext.Provider>
   );
 }

@@ -91,8 +91,8 @@
   ] : [
       {
         pathSegment: "today",
-        label: "Today",
-        icon: "home",
+        label: "Tasks",
+        icon: "task",
         viewUrl: base + "/registry/#/today",
         navigationContext: "today",
       },
@@ -102,6 +102,7 @@
         icon: "task",
         viewUrl: base + "/registry/#/work",
         navigationContext: "work",
+        hideFromNav: true,  // Disabled - redundant with Tasks view
       },
       {
         pathSegment: "systems",
@@ -1046,20 +1047,6 @@
           let modelsCache = [];
           let activeTab = 'actions';
 
-          // [REVIEW_MODE] -- POC feedback collection, remove before merging to main
-          // Helper to get review mode command with current state
-          function getReviewModeCommand() {
-            const isEnabled = localStorage.getItem('ai_trust_review_mode') === 'true';
-            return {
-              type: 'action',
-              icon: isEnabled ? '🚫' : '📝',
-              label: isEnabled ? 'Disable Review Mode (DEV ONLY)' : 'Enable Review Mode (DEV ONLY)',
-              description: 'POC feedback collection',
-              action: 'toggleReviewMode'
-            };
-          }
-          // [/REVIEW_MODE]
-
           // Define action commands (quick actions) - filtered by permissions
           const baseActionCommands = [
             { type: 'nav', icon: '➕', label: 'Register new AI System', description: 'Start registration wizard', path: '#/home/systems?register=true', segment: 'ai-system-registry' },
@@ -1067,17 +1054,14 @@
             { type: 'nav', icon: '📊', label: 'View Dashboard', description: 'Compliance posture overview', path: '#/home/overview' },
           ].filter(cmd => !cmd.segment || canSee(cmd.segment));
 
-          // Dynamic getter for action commands (includes review mode with current state)
+          // Dynamic getter for action commands
           function getActionCommands() {
-            // [REVIEW_MODE] -- POC feedback collection, change to: return baseActionCommands;
-            return [...baseActionCommands, getReviewModeCommand()];
-            // [/REVIEW_MODE]
+            return baseActionCommands;
           }
 
           // Define navigation commands (all views) - filtered by permissions
           const navCommands = [
-            { type: 'nav', icon: '🏠', label: 'Today', description: 'Your daily overview', path: '#/home/today' },
-            { type: 'nav', icon: '📋', label: 'My Work', description: 'Tasks and assignments', path: '#/home/work' },
+            { type: 'nav', icon: '📋', label: 'Tasks', description: 'All tasks and assignments', path: '#/home/today' },
             { type: 'nav', icon: '🤖', label: 'AI Systems', description: 'System registry', path: '#/home/systems', segment: 'ai-system-registry' },
             { type: 'divider', label: 'Compliance' },
             { type: 'nav', icon: '📊', label: 'Overview Dashboard', description: 'Compliance posture overview', path: '#/home/overview' },
@@ -1243,23 +1227,6 @@
             } else if (item.type === 'model') {
               window.location.hash = `#/home/models/${item.id}`;
             }
-            // [REVIEW_MODE] -- POC feedback collection, remove this entire else-if block before merging to main
-            else if (item.type === 'action' && item.action === 'toggleReviewMode') {
-              // DEV ONLY: Toggle review mode in the registry iframe
-              const reviewKey = 'ai_trust_review_mode';
-              const isEnabled = localStorage.getItem(reviewKey) === 'true';
-              if (isEnabled) {
-                localStorage.removeItem(reviewKey);
-                console.log('%c🔍 Review mode disabled', 'color: #ef4444; font-weight: bold');
-              } else {
-                localStorage.setItem(reviewKey, 'true');
-                console.log('%c🔍 Review mode enabled', 'color: #22c55e; font-weight: bold');
-              }
-              // Reload the current iframe to pick up the change
-              const iframe = document.querySelector('iframe[title="Luigi content"]');
-              if (iframe) iframe.contentWindow.location.reload();
-            }
-            // [/REVIEW_MODE]
           }
 
           async function searchCommand(query) {

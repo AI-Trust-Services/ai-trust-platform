@@ -1,4 +1,4 @@
-import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult, ReviewNote, ReviewNoteCreate, ReviewNoteUpdate, Framework, Assessment, AssessmentDetail, Obligation, ObligationDetail, Control, ControlDetail, Evidence, EvidenceDetail, SystemNote, SystemNoteCreate, SystemNoteUpdate } from "../types";
+import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult, Framework, Assessment, AssessmentDetail, Obligation, ObligationDetail, Control, ControlDetail, Evidence, EvidenceDetail, SystemNote, SystemNoteCreate, SystemNoteUpdate } from "../types";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
@@ -124,28 +124,6 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ note, assignee_username: assigneeUsername }),
     }),
-
-  // ── Review Notes (POC feedback) ────────────────────────────────────────────
-  reviewNotes: {
-    list: (pagePath?: string) => {
-      const params = pagePath ? `?page_path=${encodeURIComponent(pagePath)}` : "";
-      return request<ReviewNote[]>(`/review-notes${params}`);
-    },
-    create: (data: ReviewNoteCreate) =>
-      request<ReviewNote>("/review-notes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      }),
-    update: (id: string, data: ReviewNoteUpdate) =>
-      request<ReviewNote>(`/review-notes/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      }),
-    delete: (id: string) => request<{ status: string; id: string }>(`/review-notes/${id}`, { method: "DELETE" }),
-    exportUrl: () => `${API_BASE}/review-notes/export`,
-  },
 
   // ── Compliance API (from compliance MFE) ─────────────────────────────────────
   compliance: {

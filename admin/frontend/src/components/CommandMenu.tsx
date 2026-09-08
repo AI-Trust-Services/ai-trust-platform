@@ -1,7 +1,5 @@
 /**
  * CommandMenu — Command palette for admin frontend.
- *
- * DEV ONLY: Review Mode feature for POC feedback collection.
  */
 
 import { useEffect } from "react";
@@ -12,8 +10,6 @@ import {
   Bot,
   Mail,
   Settings,
-  MessageSquarePlus,
-  MessageSquareOff,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -22,9 +18,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
 } from "@/components/ui/command";
-import { useReviewMode } from "@/hooks/useReviewMode";
 
 interface CommandMenuProps {
   open: boolean;
@@ -33,7 +27,6 @@ interface CommandMenuProps {
 
 export function CommandMenu({ open, onOpenChange }: CommandMenuProps) {
   const navigate = useNavigate();
-  const { enabled: reviewEnabled, setEnabled: setReviewEnabled } = useReviewMode();
 
   // Keyboard shortcut (Ctrl+K / Cmd+K)
   useEffect(() => {
@@ -79,23 +72,6 @@ export function CommandMenu({ open, onOpenChange }: CommandMenuProps) {
             <Settings className="mr-2" />
             Settings
           </CommandItem>
-        </CommandGroup>
-
-        <CommandSeparator />
-
-        <CommandGroup heading="Actions">
-          {/* DEV ONLY: Review Mode for POC feedback collection */}
-          {reviewEnabled ? (
-            <CommandItem onSelect={() => runCommand(() => setReviewEnabled(false))}>
-              <MessageSquareOff className="mr-2" />
-              Disable Review Mode (DEV ONLY)
-            </CommandItem>
-          ) : (
-            <CommandItem onSelect={() => runCommand(() => setReviewEnabled(true))}>
-              <MessageSquarePlus className="mr-2" />
-              Enable Review Mode (DEV ONLY)
-            </CommandItem>
-          )}
         </CommandGroup>
       </CommandList>
     </CommandDialog>

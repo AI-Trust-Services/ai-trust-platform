@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router";
 import {
-  Plus, Search, Filter, ChevronRight, ChevronDown, List, Grid3x3,
-  BarChart3, Database
+  Plus, Search, Filter, ChevronRight, ChevronDown,
+  BarChart3, Database, Columns3, ArrowUpDown
 } from "lucide-react";
 import SystemDetail from "../components/SystemDetail";
 import type { UserMap } from "../components/SystemDetail";
@@ -25,6 +25,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 // Lifecycle stage configuration
@@ -97,14 +105,37 @@ function LifecycleProgress({ lifecycle }: { lifecycle: string }) {
   );
 }
 
+// Sortable table header component
+interface SortableHeaderProps {
+  label: string;
+  sortKey: string;
+  currentSort: string;
+  onSort: (key: string) => void;
+  className?: string;
+}
+
+function SortableHeader({ label, sortKey, currentSort, onSort, className }: SortableHeaderProps) {
+  const isActive = currentSort === sortKey;
+  return (
+    <button
+      onClick={() => onSort(sortKey)}
+      className={cn("flex items-center gap-1 hover:text-foreground", className)}
+    >
+      {label}
+      <ArrowUpDown className={cn("size-3", isActive && "text-primary")} />
+    </button>
+  );
+}
+
 // System row component
 interface SystemRowProps {
   system: AISystem;
   userMap: UserMap;
+  optionalColumns: Set<string>;
   onClick: () => void;
 }
 
-function SystemRow({ system, userMap, onClick }: SystemRowProps) {
+function SystemRow({ system, userMap, optionalColumns, onClick }: SystemRowProps) {
   const owner = userMap[system.owner_username || ""] || {};
   const ownerName = [owner.firstName, owner.lastName].filter(Boolean).join(" ") || system.owner_username || "—";
   const ownerInitials = owner.firstName && owner.lastName
@@ -183,6 +214,20 @@ function SystemRow({ system, userMap, onClick }: SystemRowProps) {
         </div>
       </div>
 
+      {/* Provider / Deployer (optional) */}
+      {optionalColumns.has("provider_deployer") && (
+        <div className="w-32 shrink-0 text-sm text-muted-foreground">
+          {system.org_role === "provider" ? "Provider" : system.org_role === "deployer" ? "Deployer" : system.org_role || "—"}
+        </div>
+      )}
+
+      {/* Parent / Subsidiary (optional) */}
+      {optionalColumns.has("parent_subsidiary") && (
+        <div className="w-40 shrink-0 text-sm text-muted-foreground">
+          {system.org_name || "—"}
+        </div>
+      )}
+
       {/* Risk Level */}
       <div className="w-20 shrink-0">
         <RiskBadge level={riskLevel} />
@@ -218,7 +263,7 @@ export default function Systems() {
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [businessUnitFilter, setBusinessUnitFilter] = useState("all");
   const [sortBy, setSortBy] = useState("updated");
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [optionalColumns, setOptionalColumns] = useState<Set<string>>(new Set());
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [fillInSystem, setFillInSystem] = useState<AISystem | undefined>(undefined);
@@ -306,6 +351,8 @@ export default function Systems() {
     } else if (sortBy === "risk") {
       const riskOrder = { prohibited: 0, high: 1, "gpai-systemic": 2, "gpai-standard": 3, limited: 4, minimal: 5 };
       result.sort((a, b) => (riskOrder[a.tier as keyof typeof riskOrder] ?? 5) - (riskOrder[b.tier as keyof typeof riskOrder] ?? 5));
+    } else if (sortBy === "lifecycle") {
+      result.sort((a, b) => getLifecycleStage(a.lifecycle).index - getLifecycleStage(b.lifecycle).index);
     }
 
     return result;
@@ -441,24 +488,45 @@ export default function Systems() {
               </Select>
             </div>
             <div className="flex rounded-lg border border-input p-0.5">
-              <button
-                className={cn(
-                  "rounded p-1.5 transition-colors",
-                  viewMode === "list" ? "bg-muted" : "hover:bg-muted/50"
-                )}
-                onClick={() => setViewMode("list")}
-              >
-                <List className="size-4" />
-              </button>
-              <button
-                className={cn(
-                  "rounded p-1.5 transition-colors",
-                  viewMode === "grid" ? "bg-muted" : "hover:bg-muted/50"
-                )}
-                onClick={() => setViewMode("grid")}
-              >
-                <Grid3x3 className="size-4" />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-1.5 rounded px-2 py-1.5 text-sm hover:bg-muted/50">
+                    <Columns3 className="size-4" />
+                    Columns
+                    <ChevronDown className="size-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>Optional columns</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuCheckboxItem
+                    checked={optionalColumns.has("provider_deployer")}
+                    onCheckedChange={(checked) => {
+                      setOptionalColumns(prev => {
+                        const next = new Set(prev);
+                        if (checked) next.add("provider_deployer");
+                        else next.delete("provider_deployer");
+                        return next;
+                      });
+                    }}
+                  >
+                    Provider / Deployer
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={optionalColumns.has("parent_subsidiary")}
+                    onCheckedChange={(checked) => {
+                      setOptionalColumns(prev => {
+                        const next = new Set(prev);
+                        if (checked) next.add("parent_subsidiary");
+                        else next.delete("parent_subsidiary");
+                        return next;
+                      });
+                    }}
+                  >
+                    Parent Company / Subsidiary
+                  </DropdownMenuCheckboxItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -468,13 +536,19 @@ export default function Systems() {
           <Card className="m-6 overflow-hidden">
             {/* Table Header */}
             <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              <div className="flex-1">AI System</div>
+              <SortableHeader label="AI System" sortKey="name" currentSort={sortBy} onSort={setSortBy} className="flex-1" />
               <div className="w-44 shrink-0">Use Case</div>
-              <div className="w-32 shrink-0">Lifecycle Stage</div>
+              <SortableHeader label="Lifecycle Stage" sortKey="lifecycle" currentSort={sortBy} onSort={setSortBy} className="w-32 shrink-0" />
               <div className="w-36 shrink-0">Owner</div>
-              <div className="w-20 shrink-0">Risk Level</div>
+              {optionalColumns.has("provider_deployer") && (
+                <div className="w-32 shrink-0">Provider / Deployer</div>
+              )}
+              {optionalColumns.has("parent_subsidiary") && (
+                <div className="w-40 shrink-0">Parent / Subsidiary</div>
+              )}
+              <SortableHeader label="Risk Level" sortKey="risk" currentSort={sortBy} onSort={setSortBy} className="w-20 shrink-0" />
               <div className="w-20 shrink-0 text-center">Open Tasks</div>
-              <div className="w-28 shrink-0">Last Updated</div>
+              <SortableHeader label="Last Updated" sortKey="updated" currentSort={sortBy} onSort={setSortBy} className="w-28 shrink-0" />
               <div className="w-4 shrink-0"></div>
             </div>
 
@@ -491,6 +565,7 @@ export default function Systems() {
                   key={sys.id}
                   system={sys}
                   userMap={userMap}
+                  optionalColumns={optionalColumns}
                   onClick={() => openSystem(sys)}
                 />
               ))
