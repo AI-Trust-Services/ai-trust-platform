@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
-import { EVIDENCE_TYPES, evidenceTypeLabel } from "../utils";
+import { EVIDENCE_TYPES, evidenceTypeLabel, expectedEvidence } from "../utils";
 import type { AISystem, Assessment, Control, Obligation } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -247,13 +247,23 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
                     <div className="p-4 text-center text-xs text-muted-foreground">Select an AI system to see its requirements</div>
                   ) : controls.length === 0 ? (
                     <div className="p-4 text-center text-xs text-muted-foreground">No requirements for this system</div>
-                  ) : controls.map((c) => (
-                    <label key={c.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
-                      <Checkbox checked={selectedControls.has(c.id)} onCheckedChange={() => toggleControl(c.id)} />
-                      <span className="flex-1 truncate text-[13px] text-foreground">{c.title}</span>
+                  ) : controls.map((c) => {
+                    const expected = expectedEvidence(c.description);
+                    return (
+                    <label key={c.id} className="flex cursor-pointer items-start gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
+                      <Checkbox className="mt-0.5" checked={selectedControls.has(c.id)} onCheckedChange={() => toggleControl(c.id)} />
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="truncate text-[13px] text-foreground">{c.title}</span>
+                        {expected && (
+                          <span className="text-[11px] leading-snug text-muted-foreground">
+                            <span className="font-medium">Expected:</span> {expected}
+                          </span>
+                        )}
+                      </div>
                       <span className="shrink-0 text-[11px] text-muted-foreground">{c.id}</span>
                     </label>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

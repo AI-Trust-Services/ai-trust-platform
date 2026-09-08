@@ -70,3 +70,13 @@ export function humanize(s: string | null | undefined): string {
   if (!s) return "—";
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+// Auto-generated requirement descriptions carry an "Expected evidence: <type> —
+// <what to upload>" line from the AI Act Requirements catalogue. Extract it so the
+// upload flow can show what a requirement expects. Returns null when absent
+// (manual requirements, retained-set controls).
+export function expectedEvidence(description: string | null | undefined): string | null {
+  if (!description) return null;
+  const m = description.match(/Expected evidence:\s*([\s\S]+)$/i);
+  return m ? m[1].trim() : null;
+}
