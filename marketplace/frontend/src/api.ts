@@ -10,6 +10,8 @@ export interface MarketplaceService {
   sso_enabled?: boolean | null;
   // image only: the ref needs private-registry pull credentials (supplied at deploy time).
   registry_private?: boolean | null;
+  // Operator-supplied plain env vars (non-secret), surfaced for the Configuration panel.
+  env?: Record<string, string> | null;
   source: "internal" | "external" | "external_discovered";
   open_mode: "same_window" | "new_tab";
   status: "pending" | "deploying" | "running" | "failed";
@@ -54,6 +56,9 @@ export interface ServiceCreate {
   // image only: the ref lives in a private registry. Non-secret flag; the credentials are entered
   // at Deploy time (see api.deploy), never stored.
   registry_private?: boolean;
+  // dockerfile/image only: plain NON-SECRET env vars injected into the deployed container. For a
+  // same_window server app the backend auto-sets ISSUER to the app's proxy URL unless set here.
+  env?: Record<string, string>;
 }
 
 // Deploy-time private-registry credentials for a registry_private image app. Passed to the pull
@@ -76,6 +81,8 @@ export interface OcmIngest {
   open_mode?: "same_window" | "new_tab";
   registry_private?: boolean;
   sso_enabled?: boolean;
+  // Plain NON-SECRET env vars injected into the deployed container (same as ServiceCreate.env).
+  env?: Record<string, string>;
   // Optional credentials for a PRIVATE OCM *descriptor* repo (the descriptor itself may need auth to
   // read — separate from the image pull). Write-through: used once to resolve, NEVER stored/returned.
   resolve_username?: string;
@@ -101,6 +108,8 @@ export interface OcmBuild {
   app_port: number; // the container's listen port
   open_mode?: "same_window" | "new_tab";
   sso_enabled?: boolean;
+  // Plain NON-SECRET env vars injected into the deployed container (same as ServiceCreate.env).
+  env?: Record<string, string>;
 }
 
 export type AuthMode = "bearer" | "header_map" | "none" | "oidc_federation";

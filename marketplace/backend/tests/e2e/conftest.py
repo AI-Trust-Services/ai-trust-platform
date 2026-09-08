@@ -33,6 +33,10 @@ os.environ.setdefault("KEYCLOAK_ADMIN_PASSWORD", "admin")
 os.environ.setdefault("KEYCLOAK_PUBLIC_URL", "http://localhost:8180")
 os.environ.setdefault("APP_PUBLIC_URL", "http://localhost:8080")
 
+# Env dicts captured by the fake deploy backend, keyed by service name — lets a test assert exactly
+# what environment (custom vars + auto-ISSUER + OIDC_*) reached the deploy call. Reset per e2e_setup.
+DEPLOYED_ENV: dict[str, dict[str, str]] = {}
+
 # Placeholder DATABASE_URL at collection time so ai_trust_persistence imports during
 # collection; the real test DB URL is set in e2e_setup before any test runs.
 _PG_USER = os.environ.get("POSTGRES_USER", "postgres")
@@ -171,13 +175,18 @@ def e2e_setup():
 
     # Fake deploy backend: no Docker/k8s. Returns a plausible (host, image) so the router
     # flips the row to "running" and records service_host, mirroring a real deploy.
+    # Captured env dicts (by service name) so tests can assert what reached the deploy call.
+    DEPLOYED_ENV.clear()
+
     async def _fake_create_static(name, git_url, git_ref):
         return f"mkt-{name}-svc"
 
     async def _fake_build_and_deploy(name, git_url, git_ref, app_port, env, secret_env):
+        DEPLOYED_ENV[name] = dict(env)
         return f"mkt-{name}-svc", f"localhost:5000/mkt-{name}:{git_ref}"
 
     async def _fake_run_image(name, image_ref, app_port, env, secret_env, registry_auth=None):
+        DEPLOYED_ENV[name] = dict(env)
         return f"mkt-{name}-svc", image_ref
 
     async def _fake_delete(name):

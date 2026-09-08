@@ -176,6 +176,8 @@ function ServiceCard(props: {
   const [showCreds, setShowCreds] = useState(false);
   const [regUser, setRegUser] = useState("");
   const [regToken, setRegToken] = useState("");
+  // Configuration panel toggle — shows what was registered/configured for this service.
+  const [showConfig, setShowConfig] = useState(false);
   const badgeClass = svc.source === "external" ? "external" : svc.status;
   const badgeText = svc.source === "external" ? "external" : svc.status;
   const isServerApp = svc.kind === "dockerfile" || svc.kind === "image";
@@ -230,10 +232,47 @@ function ServiceCard(props: {
               <button>Open</button>
             </a>
           ))}
+        <button onClick={() => setShowConfig((v) => !v)} disabled={busy}>
+          {showConfig ? "Hide config" : "Configuration"}
+        </button>
         <button className="danger" onClick={onDelete} disabled={busy}>
           Delete
         </button>
       </div>
+      {/* Configuration panel — what was registered/configured for this service (read-only). Shows the
+          operator-supplied env; deploy-time secrets (OIDC client secret, pull creds) are never here. */}
+      {showConfig && (
+        <div className="config-panel">
+          <table className="fed-table">
+            <tbody>
+              <tr><th>Kind</th><td>{svc.kind}</td></tr>
+              {svc.kind === "image" && <tr><th>Image ref</th><td><code>{svc.image_ref || "—"}</code></td></tr>}
+              {svc.kind !== "image" && svc.git_url && (
+                <tr><th>Git</th><td><code>{svc.git_url}</code> @ <code>{svc.git_ref}</code></td></tr>
+              )}
+              {isServerApp && <tr><th>App port</th><td>{svc.app_port ?? "—"}</td></tr>}
+              <tr><th>Open mode</th><td>{svc.open_mode === "new_tab" ? "new tab" : "same window (embedded)"}</td></tr>
+              {isServerApp && <tr><th>Platform SSO</th><td>{svc.sso_enabled ? "on (role-gated)" : "off"}</td></tr>}
+              {isServerApp && (
+                <tr>
+                  <th>Environment</th>
+                  <td>
+                    {svc.env && Object.keys(svc.env).length > 0 ? (
+                      <ul className="env-list">
+                        {Object.entries(svc.env).map(([k, v]) => (
+                          <li key={k}><code>{k}</code> = <code>{v}</code></li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className="sub">(none — ISSUER auto-set for same-window apps at deploy)</span>
+                    )}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
       {/* Private-image pull credentials — entered at deploy time, sent to pull the image, never
           stored in Postgres or returned. Only shown for a registry_private image after Deploy. */}
       {isPrivateImage && showCreds && svc.status !== "running" && (
@@ -324,6 +363,8 @@ function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: 
   const [ocmResolveToken, setOcmResolveToken] = useState("");
   // OCM (build) only: path within the repo to the component constructor.
   const [ocmConstructor, setOcmConstructor] = useState("component-constructor.yaml");
+  // Server apps only: operator-supplied env vars, entered as KEY=VALUE lines. Parsed on submit.
+  const [envText, setEnvText] = useState("");
 
   const isOcm = kind === "ocm";
   const isOcmBuild = kind === "ocm-build";
@@ -336,6 +377,19 @@ function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const port = Number(appPort) || 8080;
+    // Parse the KEY=VALUE textarea into a map (skip blanks/comments; split on the first '=').
+    const parseEnv = (): Record<string, string> | undefined => {
+      const out: Record<string, string> = {};
+      for (const raw of envText.split("\n")) {
+        const line = raw.trim();
+        if (!line || line.startsWith("#")) continue;
+        const i = line.indexOf("=");
+        if (i <= 0) continue;
+        out[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+      }
+      return Object.keys(out).length ? out : undefined;
+    };
+    const envMap = parseEnv();
     if (isOcm) {
       const data: OcmIngest = {
         name: name.trim(),
@@ -347,6 +401,7 @@ function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: 
         registry_private: registryPrivate,
         sso_enabled: ssoEnabled,
       };
+      if (envMap) data.env = envMap;
       if (ocmResource.trim()) data.resource = ocmResource.trim();
       // Resolve-time credentials are only for a private descriptor repo; omit when blank.
       if (ocmResolveUser.trim() && ocmResolveToken) {
@@ -366,6 +421,7 @@ function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: 
         open_mode: openNewTab ? "new_tab" : "same_window",
         sso_enabled: ssoEnabled,
       };
+      if (envMap) data.env = envMap;
       // Optional overrides — omit when the operator leaves the defaults/blanks.
       if (ocmConstructor.trim() && ocmConstructor.trim() !== "component-constructor.yaml") {
         data.constructorPath = ocmConstructor.trim();
@@ -388,6 +444,7 @@ function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: 
     if (isServerApp) {
       data.app_port = port;
       data.sso_enabled = ssoEnabled;
+      if (envMap) data.env = envMap;
     }
     if (kind === "image") {
       data.image_ref = imageRef.trim();
@@ -626,6 +683,22 @@ function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: 
               <span className="sub hint">
                 Launch the app first-party at its own URL in a new browser tab instead of embedding it
                 in an iframe. Use this for apps whose routing or login can't run under the embed path.
+              </span>
+            </label>
+            <label className="env-field">
+              Environment variables (optional)
+              <textarea
+                value={envText}
+                onChange={(e) => setEnvText(e.target.value)}
+                placeholder={"KEY=VALUE\nONE_PER_LINE=here"}
+                rows={4}
+                spellCheck={false}
+              />
+              <span className="sub hint">
+                Plain, non-secret config injected into the container, one <code>KEY=VALUE</code> per
+                line. For an embedded (same-window) app, <code>ISSUER</code> is auto-set to the app's
+                proxy URL unless you set it here. Do <strong>not</strong> put secrets or registry
+                credentials here.
               </span>
             </label>
           </>

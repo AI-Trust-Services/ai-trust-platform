@@ -180,6 +180,8 @@ async def _create_internal(session, body: ServiceCreate) -> MarketplaceService:
         image_ref=body.image_ref if body.kind == "image" else None,
         # image only: the ref needs private-registry pull credentials (supplied at deploy time).
         registry_private=body.registry_private if body.kind == "image" else False,
+        # dockerfile/image only: operator-supplied plain env vars injected at deploy (non-secret).
+        env=(body.env or {}) if body.kind in _server_kinds else {},
         source=body.source,
         # Honor open_mode for external apps AND for internal server apps (dockerfile/image):
         # a running app that can't live under the same-origin embed base path can be opened in
@@ -223,6 +225,7 @@ async def ingest_ocm(body: OcmIngestRequest) -> ServiceResponse:
         open_mode=body.open_mode,
         registry_private=body.registry_private,
         sso_enabled=body.sso_enabled,
+        env=body.env,
         source="internal",
     )
     async with SessionLocal() as session:
@@ -272,6 +275,7 @@ async def build_ocm(body: OcmBuildRequest) -> ServiceResponse:
         # The built image lives in the in-cluster registry the platform reads without auth.
         registry_private=False,
         sso_enabled=body.sso_enabled,
+        env=body.env,
         source="internal",
     )
     async with SessionLocal() as session:
@@ -602,6 +606,8 @@ async def deploy_service(service_id: str, body: DeployRequest | None = None) -> 
         kind, app_port, sso_enabled = row.kind, row.app_port, bool(row.sso_enabled)
         row_image_ref = row.image_ref
         registry_private = bool(row.registry_private)
+        open_mode = row.open_mode
+        row_env = dict(row.env or {})  # operator-supplied non-secret env, injected below
 
         # Private-registry pulls need deploy-time credentials (never persisted — see DeployRequest).
         # Reject before flipping to "deploying" so a missing-cred deploy leaves status untouched.
@@ -628,14 +634,25 @@ async def deploy_service(service_id: str, body: DeployRequest | None = None) -> 
     new_status, err = "running", None
     try:
         if kind in ("dockerfile", "image"):
-            env: dict[str, str] = {}
+            # Seed the container env from the operator's stored vars (non-secret). For a same_window
+            # server app that runs its OWN login, auto-set ISSUER to the app's proxy base so its
+            # OIDC/redirects resolve through the marketplace proxy — unless the operator set ISSUER.
+            env: dict[str, str] = dict(row_env)
+            if open_mode == "same_window" and "ISSUER" not in env:
+                env["ISSUER"] = oidc.embed_base(name)
             secret_env: dict[str, str] = {}
             if sso_enabled:
                 # Mint (idempotently) the per-app confidential Keycloak client whose redirect URIs
                 # cover the app's same-origin embed base, then read its secret live (never persisted).
                 client_id = keycloak.ensure_app_client(name, oidc.embed_base(name))
-                env = oidc.oidc_env(client_id, name)
+                # Merge so operator env + platform OIDC_* coexist (OIDC keys win on collision).
+                env = {**env, **oidc.oidc_env(client_id, name)}
                 secret_env = {"OIDC_CLIENT_SECRET": keycloak.get_client_secret(client_id)}
+            # Log the env var NAMES only — values may be arbitrary operator config, never logged.
+            logger.info(
+                "marketplace.deploy.env",
+                extra={"id": service_id, "service": name, "env_keys": sorted(env.keys())},
+            )
             if kind == "dockerfile":
                 host, image = await deploy.build_and_deploy(
                     name, git_url, git_ref, int(app_port or 8080), env, secret_env

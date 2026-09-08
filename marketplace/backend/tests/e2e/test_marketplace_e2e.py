@@ -191,6 +191,51 @@ async def test_public_image_deploy_runs(client):
     assert body["service_host"] == "mkt-pub-svc"
 
 
+# ── custom env vars: persist, auto-ISSUER, explicit-wins, kind guard ────────────────────────────
+
+async def test_image_env_persists(client):
+    row = await create_service(
+        client, name="envimg", label="Env Img", kind="image", app_port=3000,
+        image_ref="acme/app:1.0", git_url="", env={"FOO": "bar", "BAZ": "qux"},
+    )
+    assert row["env"] == {"FOO": "bar", "BAZ": "qux"}
+
+
+async def test_same_window_image_auto_issuer(client):
+    from tests.e2e.conftest import DEPLOYED_ENV
+    row = await create_service(
+        client, name="cap", label="Capitals", kind="image", app_port=3000,
+        image_ref="mirceacraciun795/capitals-weather:1.0.0", git_url="",
+        open_mode="same_window",
+    )
+    r = await client.post(f"/v1/services/{row['id']}/deploy")
+    assert r.status_code == 200, r.text
+    # Auto-ISSUER for a same-window server app that set no ISSUER of its own.
+    assert DEPLOYED_ENV["cap"]["ISSUER"] == "http://localhost:8080/api/marketplace/v1/proxy/cap"
+
+
+async def test_explicit_issuer_wins(client):
+    from tests.e2e.conftest import DEPLOYED_ENV
+    row = await create_service(
+        client, name="capx", label="Capitals X", kind="image", app_port=3000,
+        image_ref="acme/app:1.0", git_url="", open_mode="same_window",
+        env={"ISSUER": "https://custom.example.com"},
+    )
+    r = await client.post(f"/v1/services/{row['id']}/deploy")
+    assert r.status_code == 200, r.text
+    assert DEPLOYED_ENV["capx"]["ISSUER"] == "https://custom.example.com"
+
+
+async def test_env_rejected_for_static(client):
+    # env is only valid for a server app (dockerfile/image) — static must 422.
+    payload = {
+        "name": "envstatic", "label": "Env Static", "kind": "static",
+        "git_url": "https://example.com/x.git", "env": {"FOO": "bar"},
+    }
+    r = await client.post("/v1/services", json=payload)
+    assert r.status_code == 422, r.text
+
+
 async def test_static_deploy_runs(client):
     row = await create_service(client, name="staticdep", label="Static Dep")
     r = await client.post(f"/v1/services/{row['id']}/deploy")

@@ -81,6 +81,20 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .type-card input[type="radio"] { position: absolute; top: 10px; right: 10px; margin: 0; accent-color: var(--accent); }
 .type-card-title { font-size: 13px; font-weight: 600; padding-right: 20px; }
 .type-card-desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+/* Env-vars textarea in the Add form (server-app kinds). */
+.form .env-field { grid-column: 1 / -1; }
+.form .env-field textarea {
+  padding: 8px; border: 1px solid var(--border); border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; resize: vertical;
+}
+
+/* Service-card Configuration panel — read-only summary of what was registered. */
+.config-panel { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.config-panel .fed-table th { width: 110px; }
+.config-panel .env-list { margin: 0; padding-left: 16px; }
+.config-panel .env-list li { margin: 2px 0; }
+.config-panel code { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; word-break: break-all; }
 .empty { color: var(--muted); padding: 40px; text-align: center; border: 1px dashed var(--border); border-radius: 10px; }
 
 /* Discover Applications section */

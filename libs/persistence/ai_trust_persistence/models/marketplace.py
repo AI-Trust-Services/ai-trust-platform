@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
@@ -68,6 +69,15 @@ class MarketplaceService(Base):
     # (k8s) or passed to the pull call in memory (compose), and NEVER stored in Postgres or returned
     # on any response — the same never-persist contract as OIDC_CLIENT_SECRET.
     registry_private: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # dockerfile/image only: operator-supplied plain environment variables injected into the deployed
+    # container (compose ``environment=`` / k8s plain ``V1EnvVar``). NON-SECRET config only — secrets
+    # and registry pull credentials never go here (those travel through the deploy-time body and are
+    # never persisted). For a same_window server app the deploy path auto-adds ISSUER=<proxy base>
+    # unless the operator already set it, so an app that runs its own OIDC login resolves through the
+    # marketplace proxy. Defaults to {} so pre-existing rows stay valid.
+    env: Mapped[dict[str, str]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # ── Discovery / federation (source="external_discovered") ───────────────────────────────────

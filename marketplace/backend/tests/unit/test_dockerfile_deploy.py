@@ -312,7 +312,7 @@ def test_docker_run_image_passes_auth_config(monkeypatch):
             raise docker_client.docker.errors.NotFound("nope")
 
         def run(self, *a, **kw):
-            pass
+            calls.append({"run": kw})
 
     class _FakeCli:
         images = _FakeImages()
@@ -323,12 +323,44 @@ def test_docker_run_image_passes_auth_config(monkeypatch):
 
     auth = {"username": "u", "password": "t"}
     docker_client.run_image("whoami", "ghcr.io/acme/app:1.2", 80, {}, {}, registry_auth=auth)
-    assert calls[-1] == {"ref": "ghcr.io/acme/app:1.2", "auth_config": auth}
+    assert calls[0] == {"ref": "ghcr.io/acme/app:1.2", "auth_config": auth}
 
     calls.clear()
     docker_client.run_image("whoami", "traefik/whoami:latest", 80, {}, {})
     # No auth_config key at all when public (bare pull).
-    assert calls[-1] == {"ref": "traefik/whoami:latest"}
+    assert calls[0] == {"ref": "traefik/whoami:latest"}
+
+
+def test_docker_run_image_injects_env(monkeypatch):
+    """docker_client.run_image passes custom env (e.g. ISSUER) into the container environment."""
+    from app import docker_client
+
+    run_kwargs: list[dict] = []
+
+    class _FakeImages:
+        def pull(self, ref, **kw):
+            pass
+
+    class _FakeContainers:
+        def get(self, _):
+            raise docker_client.docker.errors.NotFound("nope")
+
+        def run(self, image, **kw):
+            run_kwargs.append(kw)
+
+    class _FakeCli:
+        images = _FakeImages()
+        containers = _FakeContainers()
+
+    monkeypatch.setattr(docker_client, "_client", lambda: _FakeCli())
+    monkeypatch.setattr(docker_client, "_detect_network", lambda _cli: None)
+
+    docker_client.run_image(
+        "capitals", "mirceacraciun795/capitals-weather:1.0.0", 3000,
+        {"ISSUER": "http://localhost:8080/api/marketplace/v1/proxy/capitals"}, {},
+    )
+    env = run_kwargs[0]["environment"]
+    assert env["ISSUER"] == "http://localhost:8080/api/marketplace/v1/proxy/capitals"
 
 
 # ── gitauth.credentials_for: host-match → GIT_ASKPASS creds, never a URL-embedded token (#4) ───────
