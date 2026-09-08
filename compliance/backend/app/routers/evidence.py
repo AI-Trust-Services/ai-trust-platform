@@ -291,6 +291,48 @@ async def delete_evidence(evidence_id: str) -> dict:
     return {"status": "deleted", "id": evidence_id}
 
 
+@router.post("/evidence/{evidence_id}/controls/{control_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def link_control(evidence_id: str, control_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        await _load(session, evidence_id)
+        if not (await session.execute(select(Control.id).where(Control.id == control_id))).scalar_one_or_none():
+            raise HTTPException(404, f"Control {control_id} not found")
+        await session.execute(
+            pg_insert(evidence_controls).values(evidence_id=evidence_id, control_id=control_id).on_conflict_do_nothing()
+        )
+        await session.flush()
+        await refresh_control_effectiveness(session, control_id)
+        await refresh_obligations_for_control(session, control_id)
+        await session.commit()
+        row = await _load(session, evidence_id)
+        controls = await _linked_controls(session, evidence_id)
+    logger.info("evidence.control_linked", extra={"evidence_id": evidence_id, "control_id": control_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.controls = [ControlRef.model_validate(c) for c in controls]
+    return detail
+
+
+@router.delete("/evidence/{evidence_id}/controls/{control_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def unlink_control(evidence_id: str, control_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        await _load(session, evidence_id)
+        await session.execute(
+            evidence_controls.delete()
+            .where(evidence_controls.c.evidence_id == evidence_id)
+            .where(evidence_controls.c.control_id == control_id)
+        )
+        await session.flush()
+        await refresh_control_effectiveness(session, control_id)
+        await refresh_obligations_for_control(session, control_id)
+        await session.commit()
+        row = await _load(session, evidence_id)
+        controls = await _linked_controls(session, evidence_id)
+    logger.info("evidence.control_unlinked", extra={"evidence_id": evidence_id, "control_id": control_id})
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.controls = [ControlRef.model_validate(c) for c in controls]
+    return detail
+
+
 @router.post("/evidence/{evidence_id}/approve", response_model=EvidenceResponse, dependencies=[Depends(require_permission(EVIDENCE_APPROVE))])
 async def approve_evidence(evidence_id: str) -> EvidenceResponse:
     return await _set_status(evidence_id, "approved")

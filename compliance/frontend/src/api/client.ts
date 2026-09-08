@@ -134,6 +134,10 @@ export const api = {
     request<EvidenceVersion[]>(API_BASE, `/evidence/${id}/versions`),
   uploadEvidenceVersion: (id: string, formData: FormData): Promise<EvidenceDetail> =>
     request<EvidenceDetail>(API_BASE, `/evidence/${id}/upload-version`, { method: "POST", body: formData }),
+  linkControl: (evidenceId: string, controlId: string): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${evidenceId}/controls/${controlId}`, { method: "POST" }),
+  unlinkControl: (evidenceId: string, controlId: string): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${evidenceId}/controls/${controlId}`, { method: "DELETE" }),
 
   // Current user's effective permissions — served by the registry backend.
   myPermissions: (): Promise<PermissionsResponse> =>
