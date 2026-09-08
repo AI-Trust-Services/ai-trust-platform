@@ -42,27 +42,28 @@ spec:
     releaseName: ai-trust
     targetNamespace: ai-trust
     valuesFrom:
-      # APP_PUBLIC_URL / KEYCLOAK_PUBLIC_URL are set in ai-trust-env by bootstrap.sh
+      # ai-trust-flux-values holds the 5 non-sensitive URL/hostname keys needed here.
+      # Flux's HelmRelease valuesFrom has no cross-namespace support, so this secret
+      # lives in ocm-system (same namespace as the HelmRelease) and is kept in sync
+      # with ai-trust-env by bootstrap.sh from the same .env source.
       - kind: Secret
-        name: ai-trust-env
+        name: ai-trust-flux-values
         valuesKey: APP_PUBLIC_URL
         targetPath: appPublicUrl
       - kind: Secret
-        name: ai-trust-env
+        name: ai-trust-flux-values
         valuesKey: KEYCLOAK_PUBLIC_URL
         targetPath: keycloakPublicUrl
-      # INGRESS_HOST / INGRESS_KEYCLOAK_HOST / INGRESS_MINIO_HOST are injected by
-      # bootstrap-gardener.yml (derived from APP_PUBLIC_URL / KEYCLOAK_PUBLIC_URL)
       - kind: Secret
-        name: ai-trust-env
+        name: ai-trust-flux-values
         valuesKey: INGRESS_HOST
         targetPath: ingress.host
       - kind: Secret
-        name: ai-trust-env
+        name: ai-trust-flux-values
         valuesKey: INGRESS_KEYCLOAK_HOST
         targetPath: ingress.keycloakHost
       - kind: Secret
-        name: ai-trust-env
+        name: ai-trust-flux-values
         valuesKey: INGRESS_MINIO_HOST
         targetPath: ingress.minioHost
     values:

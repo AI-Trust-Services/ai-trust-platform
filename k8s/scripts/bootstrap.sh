@@ -65,6 +65,20 @@ kubectl create secret generic ai-trust-env \
   --from-literal=INGRESS_MINIO_HOST="${INGRESS_MINIO_HOST}" \
   -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
+# Flux's HelmRelease valuesFrom has no cross-namespace support — the secret must exist
+# in the same namespace as the HelmRelease (ocm-system). Only the 5 non-sensitive URL/
+# hostname values needed by the FluxDeployer are stored here; all credentials stay in
+# ai-trust-env in the ai-trust namespace.
+echo "==> secret/ai-trust-flux-values in ocm-system (Helm chart URL values for FluxDeployer)"
+kubectl create namespace ocm-system --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic ai-trust-flux-values \
+  --from-literal=APP_PUBLIC_URL="${APP_PUBLIC_URL:-}" \
+  --from-literal=KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-}" \
+  --from-literal=INGRESS_HOST="${INGRESS_HOST}" \
+  --from-literal=INGRESS_KEYCLOAK_HOST="${INGRESS_KEYCLOAK_HOST}" \
+  --from-literal=INGRESS_MINIO_HOST="${INGRESS_MINIO_HOST}" \
+  -n ocm-system --dry-run=client -o yaml | kubectl apply -f -
+
 echo "==> configmap/postgres-init (from infra/postgres/init.sh)"
 kubectl create configmap postgres-init \
   --from-file=init.sh="$REPO_ROOT/infra/postgres/init.sh" \
