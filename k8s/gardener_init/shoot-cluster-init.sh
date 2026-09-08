@@ -145,8 +145,8 @@ FLUX_VERSION="v2.9.5"
 _install_ocm_cli() {
   echo "    Installing OCM CLI ${OCM_CLI_VERSION}..."
   curl -sSfL \
-    "https://github.com/open-component-model/ocm/releases/download/${OCM_CLI_VERSION}/install.sh" \
-    | sudo bash
+    "https://github.com/open-component-model/ocm/releases/download/${OCM_CLI_VERSION}/ocm-${OCM_CLI_VERSION#v}-linux-amd64.tar.gz" \
+    | sudo tar -xz -C /usr/local/bin ocm
 }
 
 if kubectl get deployment ocm-controller -n ocm-system &>/dev/null; then
