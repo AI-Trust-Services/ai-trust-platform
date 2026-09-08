@@ -63,6 +63,25 @@ export interface DeployCreds {
   registry_token: string;
 }
 
+// Ingest a deployable image from an OCM (Open Component Model) component version. The backend runs the
+// `ocm` CLI to resolve the component's ociImage resource to its concrete, digest-pinned imageReference,
+// then registers exactly a kind="image" row (status "pending") — deploy is the normal separate step.
+export interface OcmIngest {
+  name: string;
+  label: string;
+  ocm_repo: string; // the OCM repository / CLI --repo, e.g. "ghcr.io/acme"
+  component: string; // the component version, e.g. "github.com/acme/app:1.0.0"
+  resource?: string; // optional ociImage resource name; auto-picked when the component has exactly one
+  app_port: number; // the container's listen port
+  open_mode?: "same_window" | "new_tab";
+  registry_private?: boolean;
+  sso_enabled?: boolean;
+  // Optional credentials for a PRIVATE OCM *descriptor* repo (the descriptor itself may need auth to
+  // read — separate from the image pull). Write-through: used once to resolve, NEVER stored/returned.
+  resolve_username?: string;
+  resolve_token?: string;
+}
+
 export type AuthMode = "bearer" | "header_map" | "none" | "oidc_federation";
 
 export interface DiscoveredAppCreate {
@@ -142,6 +161,9 @@ export const api = {
   list: (): Promise<MarketplaceService[]> => request<MarketplaceService[]>("/services"),
   add: (data: ServiceCreate): Promise<MarketplaceService> =>
     request<MarketplaceService>("/services", json("POST", data)),
+  // Resolve an OCM component to its digest-pinned image and register it as a kind="image" row.
+  ingestOcm: (data: OcmIngest): Promise<MarketplaceService> =>
+    request<MarketplaceService>("/discover/ocm", json("POST", data)),
   deploy: (id: string, creds?: DeployCreds): Promise<MarketplaceService> =>
     request<MarketplaceService>(
       `/services/${id}/deploy`,

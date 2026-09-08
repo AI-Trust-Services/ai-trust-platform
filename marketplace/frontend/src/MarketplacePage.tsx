@@ -8,9 +8,16 @@ import {
   type DiscoveredAppCreate,
   type FederationSetup,
   type MarketplaceService,
+  type OcmIngest,
   type PlatformRole,
   type ServiceCreate,
 } from "./api";
+
+// What AddForm emits: either a plain internal service (git/image/static) or an OCM component to
+// resolve-then-register. The page dispatches to the matching endpoint.
+type AddPayload =
+  | { via: "service"; data: ServiceCreate }
+  | { via: "ocm"; data: OcmIngest };
 
 // A deployed server app (dockerfile/image) wired to Platform SSO is role-gated exactly like a
 // discovered app (backend `_is_gated`): hidden until enabled, proxy 403s without a matching role.
@@ -59,11 +66,12 @@ export default function MarketplacePage() {
     return () => clearInterval(t);
   }, [services, refresh]);
 
-  async function onAdd(data: ServiceCreate) {
+  async function onAdd(payload: AddPayload) {
     setBusy("add");
     setError(null);
     try {
-      await api.add(data);
+      if (payload.via === "ocm") await api.ingestOcm(payload.data);
+      else await api.add(payload.data);
       await refresh();
     } catch (e) {
       setError((e as Error).message);
@@ -268,12 +276,12 @@ function ServiceCard(props: {
   );
 }
 
-function AddForm({ onSubmit, busy }: { onSubmit: (d: ServiceCreate) => void; busy: boolean }) {
+function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: boolean }) {
   const [label, setLabel] = useState("");
   const [name, setName] = useState("");
   const [gitUrl, setGitUrl] = useState("");
   const [gitRef, setGitRef] = useState("main");
-  const [kind, setKind] = useState<"static" | "dockerfile" | "image">("static");
+  const [kind, setKind] = useState<"static" | "dockerfile" | "image" | "ocm">("static");
   const [imageRef, setImageRef] = useState("");
   const [appPort, setAppPort] = useState("8080");
   const [ssoEnabled, setSsoEnabled] = useState(false);
@@ -281,11 +289,40 @@ function AddForm({ onSubmit, busy }: { onSubmit: (d: ServiceCreate) => void; bus
   // Server apps only: open at their proxy origin in a new tab instead of the same-origin embed
   // iframe (for apps whose own routing/SSO can't run under the embed base path).
   const [openNewTab, setOpenNewTab] = useState(false);
+  // OCM only: the component reference + optional resource name and private-descriptor credentials.
+  const [ocmRepo, setOcmRepo] = useState("");
+  const [ocmComponent, setOcmComponent] = useState("");
+  const [ocmResource, setOcmResource] = useState("");
+  const [ocmResolveUser, setOcmResolveUser] = useState("");
+  const [ocmResolveToken, setOcmResolveToken] = useState("");
 
-  const isServerApp = kind === "dockerfile" || kind === "image";
+  const isOcm = kind === "ocm";
+  // OCM resolves to a kind="image" row, so it behaves like a server app in the form (port, SSO, tab).
+  const isServerApp = kind === "dockerfile" || kind === "image" || isOcm;
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    const port = Number(appPort) || 8080;
+    if (isOcm) {
+      const data: OcmIngest = {
+        name: name.trim(),
+        label: label.trim(),
+        ocm_repo: ocmRepo.trim(),
+        component: ocmComponent.trim(),
+        app_port: port,
+        open_mode: openNewTab ? "new_tab" : "same_window",
+        registry_private: registryPrivate,
+        sso_enabled: ssoEnabled,
+      };
+      if (ocmResource.trim()) data.resource = ocmResource.trim();
+      // Resolve-time credentials are only for a private descriptor repo; omit when blank.
+      if (ocmResolveUser.trim() && ocmResolveToken) {
+        data.resolve_username = ocmResolveUser.trim();
+        data.resolve_token = ocmResolveToken;
+      }
+      onSubmit({ via: "ocm", data });
+      return;
+    }
     const data: ServiceCreate = {
       name: name.trim(),
       label: label.trim(),
@@ -297,14 +334,14 @@ function AddForm({ onSubmit, busy }: { onSubmit: (d: ServiceCreate) => void; bus
       kind,
     };
     if (isServerApp) {
-      data.app_port = Number(appPort) || 8080;
+      data.app_port = port;
       data.sso_enabled = ssoEnabled;
     }
     if (kind === "image") {
       data.image_ref = imageRef.trim();
       data.registry_private = registryPrivate;
     }
-    onSubmit(data);
+    onSubmit({ via: "service", data });
   }
 
   // Suggest a k8s-safe name from the label if the user hasn't typed one.
@@ -331,14 +368,15 @@ function AddForm({ onSubmit, busy }: { onSubmit: (d: ServiceCreate) => void; bus
           Type
           <select
             value={kind}
-            onChange={(e) => setKind(e.target.value as "static" | "dockerfile" | "image")}
+            onChange={(e) => setKind(e.target.value as "static" | "dockerfile" | "image" | "ocm")}
           >
             <option value="static">Static site (nginx serves the repo)</option>
             <option value="dockerfile">Server app (build the Dockerfile &amp; run it)</option>
             <option value="image">Server app (pull &amp; run a prebuilt image)</option>
+            <option value="ocm">Server app (resolve &amp; run an OCM component)</option>
           </select>
         </label>
-        {kind !== "image" && (
+        {kind !== "image" && !isOcm && (
           <>
             <label>
               Git URL
@@ -380,6 +418,83 @@ function AddForm({ onSubmit, busy }: { onSubmit: (d: ServiceCreate) => void; bus
             </label>
           </>
         )}
+        {isOcm && (
+          <>
+            <label>
+              OCM repository
+              <input
+                value={ocmRepo}
+                onChange={(e) => setOcmRepo(e.target.value)}
+                placeholder="ghcr.io/acme"
+                required
+              />
+              <span className="sub hint">
+                The OCM repository the component lives in (the CLI <code>--repo</code>).
+              </span>
+            </label>
+            <label>
+              Component reference
+              <input
+                value={ocmComponent}
+                onChange={(e) => setOcmComponent(e.target.value)}
+                placeholder="github.com/acme/app:1.0.0"
+                required
+              />
+              <span className="sub hint">
+                The component version. The platform runs the <code>ocm</code> CLI to resolve its{" "}
+                <code>ociImage</code> resource to the concrete, digest-pinned image ref — you don't
+                have to know the exact ref.
+              </span>
+            </label>
+            <label>
+              Resource name (optional)
+              <input
+                value={ocmResource}
+                onChange={(e) => setOcmResource(e.target.value)}
+                placeholder="(auto — leave blank for single-image components)"
+              />
+              <span className="sub hint">
+                Only needed when the component ships several <code>ociImage</code> resources; the
+                ingest error lists the available names.
+              </span>
+            </label>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={registryPrivate}
+                onChange={(e) => setRegistryPrivate(e.target.checked)}
+              />
+              Private image registry
+              <span className="sub hint">
+                The resolved image needs pull credentials — enter them at <strong>Deploy</strong>{" "}
+                time (never stored). Ticking this does not affect resolving the descriptor.
+              </span>
+            </label>
+            <label>
+              Private descriptor — resolve username (optional)
+              <input
+                value={ocmResolveUser}
+                onChange={(e) => setOcmResolveUser(e.target.value)}
+                placeholder="(leave blank for a public component descriptor)"
+                autoComplete="off"
+              />
+            </label>
+            <label>
+              Private descriptor — resolve token (optional)
+              <input
+                type="password"
+                value={ocmResolveToken}
+                onChange={(e) => setOcmResolveToken(e.target.value)}
+                autoComplete="off"
+              />
+              <span className="sub hint">
+                Credentials to <em>read the component descriptor</em> when its OCI registry is
+                private. Used once to resolve and <strong>never stored, returned, or logged</strong>.
+                This is separate from the image-pull credentials entered at Deploy time.
+              </span>
+            </label>
+          </>
+        )}
         {isServerApp && (
           <>
             <label>
@@ -417,7 +532,7 @@ function AddForm({ onSubmit, busy }: { onSubmit: (d: ServiceCreate) => void; bus
       </div>
       <div className="actions">
         <button className="primary" type="submit" disabled={busy}>
-          {busy ? "Adding…" : "Add to catalog"}
+          {busy ? (isOcm ? "Resolving…" : "Adding…") : isOcm ? "Resolve & add to catalog" : "Add to catalog"}
         </button>
       </div>
     </form>
