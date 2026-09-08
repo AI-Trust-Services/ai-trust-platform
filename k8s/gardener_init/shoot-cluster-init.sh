@@ -25,8 +25,9 @@
 #      ai-trust/ai-trust-tls Secret that the Helm Ingress references.
 #   3. Annotates the Traefik LoadBalancer Service with Gardener DNS annotations so
 #      shoot-dns-service auto-publishes A-records for all ingress hostnames.
-#   4. Installs the OCM controller (which also installs Flux as a prerequisite)
-#      via the OCM CLI (`ocm controller install`).
+#   4. Installs the OCM controller via the OCM CLI, then installs Flux via the
+#      Flux CLI (`flux install`). Both are required — OCM manages component
+#      versions, Flux (source-controller + helm-controller) applies the HelmRelease.
 #   5. Applies rbac.yaml — grants the GitHub Actions OIDC identity the permissions
 #      needed by bootstrap-gardener.yml (ai-trust namespace + ocm-system namespace).
 #
@@ -130,8 +131,8 @@ kubectl annotate svc traefik -n default --overwrite \
 echo "    Annotated Traefik LB Service: ${DNSNAMES}"
 
 echo ""
-echo "==> [4/5] Installing OCM controller (also installs Flux as a prerequisite)"
-if kubectl get deployment ocm-controller-manager -n ocm-system &>/dev/null; then
+echo "==> [4/5] Installing OCM controller and Flux"
+if kubectl get deployment ocm-controller -n ocm-system &>/dev/null; then
   echo "    OCM controller already installed — skipping."
 else
   if ! command -v ocm &>/dev/null; then
@@ -140,6 +141,17 @@ else
   fi
   ocm controller install
   echo "    OCM controller installed."
+fi
+
+if kubectl get deployment source-controller -n flux-system &>/dev/null; then
+  echo "    Flux already installed — skipping."
+else
+  if ! command -v flux &>/dev/null; then
+    echo "    Installing Flux CLI..."
+    curl -s https://fluxcd.io/install.sh | sudo bash
+  fi
+  flux install
+  echo "    Flux installed."
 fi
 
 echo ""
