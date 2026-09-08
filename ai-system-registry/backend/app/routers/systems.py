@@ -342,16 +342,20 @@ async def upload_registration_document(
 
         key = await minio_client.upload_file(system_id, filename, data, file.content_type or "application/octet-stream")
 
-        docs = list(row.registration_documents or [])
-        docs.append(RegistrationDocument(
-            filename=filename,
-            minio_key=key,
-            uploaded_at=datetime.now(timezone.utc),
-        ).model_dump(mode="json"))
-        row.registration_documents = docs
-        row.updated_at = datetime.now(timezone.utc)
-        await session.commit()
-        await session.refresh(row)
+        try:
+            docs = list(row.registration_documents or [])
+            docs.append(RegistrationDocument(
+                filename=filename,
+                minio_key=key,
+                uploaded_at=datetime.now(timezone.utc),
+            ).model_dump(mode="json"))
+            row.registration_documents = docs
+            row.updated_at = datetime.now(timezone.utc)
+            await session.commit()
+            await session.refresh(row)
+        except Exception:
+            await minio_client.delete_file(key)
+            raise
 
     logger.info("system.document_uploaded", extra={
         "system_id": system_id, "file_name": filename, "by": current_user,
