@@ -459,6 +459,9 @@ async def submit_assessment(assessment_id: str, request: Request) -> AssessmentR
         )).scalar_one()
         if obligation_count == 0:
             raise HTTPException(422, "Cannot submit — generate or add at least one obligation first")
+        system = (await session.execute(
+            select(AISystem).where(AISystem.id == row.ai_system_id)
+        )).scalar_one_or_none()
         before_status = row.status
         row.status = "submitted"
         row.updated_at = datetime.now(timezone.utc)
@@ -469,6 +472,7 @@ async def submit_assessment(assessment_id: str, request: Request) -> AssessmentR
             resource_type="assessment",
             resource_id=assessment_id,
             ai_system_id=row.ai_system_id,
+            ai_system_name=system.name if system else "",
             changes={"status": {"before": before_status, "after": "submitted"}},
         )
         await session.commit()
@@ -488,6 +492,9 @@ async def approve_assessment(assessment_id: str, request: Request) -> Assessment
         row.status = "approved"
         row.updated_at = datetime.now(timezone.utc)
         await refresh_assessment_score(session, assessment_id)
+        system = (await session.execute(
+            select(AISystem).where(AISystem.id == row.ai_system_id)
+        )).scalar_one_or_none()
         log_audit_event(
             session,
             actor=current_user,
@@ -495,6 +502,7 @@ async def approve_assessment(assessment_id: str, request: Request) -> Assessment
             resource_type="assessment",
             resource_id=assessment_id,
             ai_system_id=row.ai_system_id,
+            ai_system_name=system.name if system else "",
             changes={"status": {"before": before_status, "after": "approved"}},
         )
         await session.commit()
