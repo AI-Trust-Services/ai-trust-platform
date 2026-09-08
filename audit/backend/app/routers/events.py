@@ -226,28 +226,36 @@ def get_stats(
     prev_from = datetime.fromtimestamp(from_ts.timestamp() - window_secs)
     prev_to = from_ts
 
-    def _count(from_t: datetime, to_t: datetime, resource_types: list[str] | None = None) -> int:
-        conditions = [
-            "created_at >= {f:DateTime}",
-            "created_at <= {t:DateTime}",
-        ]
-        params: dict = {"f": from_t, "t": to_t}
-        if resource_types:
-            placeholders = ", ".join(f"{{rt{i}:String}}" for i in range(len(resource_types)))
-            conditions.append(f"resource_type IN ({placeholders})")
-            for i, rt in enumerate(resource_types):
-                params[f"rt{i}"] = rt
-        where = " AND ".join(conditions)
-        r = ch.query(f"SELECT count() FROM {AUDIT_EVENTS} FINAL WHERE {where}", parameters=params)
-        return r.result_rows[0][0] if r.result_rows else 0
+    sys_types = _CATEGORIES["system_events"]
+    rac_types = _CATEGORIES["risk_and_compliance"]
+    sys_ph = ", ".join(f"{{sys{i}:String}}" for i in range(len(sys_types)))
+    rac_ph = ", ".join(f"{{rac{i}:String}}" for i in range(len(rac_types)))
 
-    def _stat(resource_types: list[str] | None = None) -> CategoryStat:
-        cur = _count(from_ts, to_ts, resource_types)
-        prev = _count(prev_from, prev_to, resource_types)
-        return CategoryStat(count=cur, trend_pct=_trend(cur, prev))
+    params: dict = {
+        "cf": from_ts, "ct": to_ts,
+        "pf": prev_from, "pt": prev_to,
+    }
+    for i, v in enumerate(sys_types):
+        params[f"sys{i}"] = v
+    for i, v in enumerate(rac_types):
+        params[f"rac{i}"] = v
+
+    sql = f"""
+        SELECT
+            countIf(created_at >= {{cf:DateTime}} AND created_at <= {{ct:DateTime}}) AS cur_total,
+            countIf(created_at >= {{pf:DateTime}} AND created_at <= {{pt:DateTime}}) AS prev_total,
+            countIf(created_at >= {{cf:DateTime}} AND created_at <= {{ct:DateTime}} AND resource_type IN ({sys_ph})) AS cur_sys,
+            countIf(created_at >= {{pf:DateTime}} AND created_at <= {{pt:DateTime}} AND resource_type IN ({sys_ph})) AS prev_sys,
+            countIf(created_at >= {{cf:DateTime}} AND created_at <= {{ct:DateTime}} AND resource_type IN ({rac_ph})) AS cur_rac,
+            countIf(created_at >= {{pf:DateTime}} AND created_at <= {{pt:DateTime}} AND resource_type IN ({rac_ph})) AS prev_rac
+        FROM {AUDIT_EVENTS} FINAL
+    """
+    r = ch.query(sql, parameters=params)
+    row = r.result_rows[0] if r.result_rows else (0, 0, 0, 0, 0, 0)
+    cur_total, prev_total, cur_sys, prev_sys, cur_rac, prev_rac = row
 
     return AuditStatsResponse(
-        total=_stat(),
-        system_events=_stat(_CATEGORIES["system_events"]),
-        risk_and_compliance=_stat(_CATEGORIES["risk_and_compliance"]),
+        total=CategoryStat(count=cur_total, trend_pct=_trend(cur_total, prev_total)),
+        system_events=CategoryStat(count=cur_sys, trend_pct=_trend(cur_sys, prev_sys)),
+        risk_and_compliance=CategoryStat(count=cur_rac, trend_pct=_trend(cur_rac, prev_rac)),
     )
