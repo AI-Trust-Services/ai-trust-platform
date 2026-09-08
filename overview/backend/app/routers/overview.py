@@ -4,13 +4,13 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Query
 from sqlalchemy import and_, case, exists, func, or_, select
-from sqlalchemy.orm import aliased
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
-from ai_trust_persistence.models.evidence import Evidence, evidence_obligations
+from ai_trust_persistence.models.evidence import Evidence, evidence_controls
+from ai_trust_persistence.models.control import control_obligations
 from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.obligation import Obligation
@@ -192,15 +192,17 @@ async def get_compliance_stats(
             )
         )).scalar_one()
 
-        # Obligations with no approved evidence linked — NOT EXISTS subquery
+        # obligations that are not fulfilled/not_applicable and have no approved evidence
         missing_count = (await session.execute(
             select(func.count()).select_from(Obligation).where(
                 Obligation.status.not_in(["fulfilled", "not_applicable"]),
+                # NOT EXISTS: no approved evidence covers this obligation
                 ~(
-                    select(evidence_obligations.c.obligation_id)
-                    .join(Evidence, Evidence.id == evidence_obligations.c.evidence_id)
+                    select(evidence_controls.c.evidence_id)
+                    .join(control_obligations, control_obligations.c.control_id == evidence_controls.c.control_id)
+                    .join(Evidence, Evidence.id == evidence_controls.c.evidence_id)
                     .where(
-                        evidence_obligations.c.obligation_id == Obligation.id,
+                        control_obligations.c.obligation_id == Obligation.id,
                         Evidence.status == "approved",
                     )
                     .correlate(Obligation)
@@ -235,17 +237,13 @@ async def get_compliance_stats(
 
         # Expiring evidence — approved evidence with validity_until within the window,
         # soonest first. (Powers the "Evidence Expiring Soon" widget.)
-        evd_sys = aliased(AISystem)
         evd_deadlines = (await session.execute(
             select(
                 Evidence.id,
                 Evidence.title,
                 Evidence.validity_until.label("due_date"),
                 Evidence.status,
-                Evidence.ai_system_id,
-                evd_sys.name.label("ai_system_name"),
             )
-            .join(evd_sys, evd_sys.id == Evidence.ai_system_id)
             .where(
                 Evidence.validity_until >= today,
                 Evidence.validity_until < window_end,
@@ -262,8 +260,8 @@ async def get_compliance_stats(
                 "title":          r.title,
                 "due_date":       r.due_date.isoformat() if r.due_date else None,
                 "status":         r.status,
-                "ai_system_id":   r.ai_system_id,
-                "ai_system_name": r.ai_system_name,
+                "ai_system_id":   None,
+                "ai_system_name": None,
                 "framework_id":   None,
             }
             for r in evd_deadlines
