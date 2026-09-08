@@ -193,3 +193,22 @@ class ReassessmentTriggerOut(BaseModel):
     new_register_id: Optional[str]
 
     model_config = {"from_attributes": True}
+
+
+class TestReportIn(BaseModel):
+    title: str
+    summary: str = ""
+    findings: str = ""
+    result: str = "pass"  # "pass" | "fail" | "inconclusive"
+    author: Optional[str] = None
+    attachments: str = ""  # JSON list of {name, url}
+    mitigation_id: Optional[str] = None
+
+
+class TestReportOut(TestReportIn):
+    id: str
+    risk_id: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

@@ -97,4 +97,18 @@ export interface ReassessmentTrigger {
   new_register_id: string | null;
 }
 
+export interface TestReport {
+  id: string;
+  risk_id: string | null;
+  mitigation_id: string | null;
+  title: string;
+  summary: string;
+  findings: string;
+  result: string;
+  author: string | null;
+  attachments: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export type WizardStep = "scope" | "identify" | "evaluate" | "mitigate" | "approve";

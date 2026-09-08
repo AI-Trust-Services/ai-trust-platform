@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
-import type { RiskRegister, RiskEntry, MisuseScenario, MitigationMeasure, WizardStep } from "../types";
+import type { RiskRegister, RiskEntry, MisuseScenario, MitigationMeasure, TestReport, WizardStep } from "../types";
 
 const STEPS: { key: WizardStep; label: string }[] = [
   { key: "scope",    label: "1. Scope" },
@@ -488,7 +488,7 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
       {/* Existing risks */}
       {risks.length > 0 && (
         <Card>
-          <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700 }}>Identified risks ({risks.length})</h3>
+          <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700 }}>Identified risks or misuse scenarios ({risks.length})</h3>
           {risks.map(r => (
             <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
               <div style={{ flex: 1 }}>
@@ -517,9 +517,9 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
       {/* Action buttons */}
       <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
         {[
-          { key: "risk" as const, label: "+ Add risk", desc: "Known or foreseeable risk" },
-          { key: "misuse" as const, label: "+ Add misuse scenario", desc: "How could this system be misused? (Art. 9(2)(a))" },
-          { key: "monitoring" as const, label: "+ Add monitoring risk", desc: "Risk identified from post-market monitoring (Art. 9(2)(c))" },
+          { key: "risk" as const, label: "+ Add risk", desc: "Known or foreseeable risk (Art. 9(2)(a))" },
+          { key: "misuse" as const, label: "+ Add misuse scenario", desc: "Foreseeable misuse by third parties (Art. 9(2)(b))" },
+          { key: "monitoring" as const, label: "+ Add monitoring risk", desc: "Risk from post-market monitoring (Art. 9(2)(c))" },
         ].map(btn => (
           <button key={btn.key} onClick={() => openForm(btn.key)}
             style={{
@@ -621,7 +621,7 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
       {/* Form: Add misuse scenario */}
       {activeForm === "misuse" && (
         <Card>
-          <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Add misuse scenario <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-secondary)" }}>Art. 9(2)(a)</span></h3>
+          <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Add misuse scenario <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-secondary)" }}>Art. 9(2)(b)</span></h3>
           {risks.length === 0 ? (
             <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>Add at least one risk first before adding misuse scenarios.</div>
           ) : (
@@ -751,7 +751,6 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
   onRisksChange: (r: RiskEntry[]) => void;
   onNext: () => void;
 }) {
-  const [open, setOpen] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
 
   async function confirmRisk(risk: RiskEntry) {
@@ -765,6 +764,9 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
   }
 
   const confirmed = risks.filter(r => r.status === "confirmed").length;
+  const regularRisks = risks.filter(r => r.source !== "monitoring");
+  const monitoringRisks = risks.filter(r => r.source === "monitoring");
+  const allMisuseScenarios = risks.flatMap(r => r.misuse_scenarios.map(ms => ({ ...ms, riskTitle: r.title })));
 
   return (
     <div>
@@ -786,11 +788,14 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
         const sc = { bg: SEV_BG[risk.severity] ?? "#eef1f4", color: SEV_COLORS[risk.severity] ?? "#556b82" };
         return (
           <Card key={risk.id} style={{ borderLeft: `3px solid ${sc.color}`, padding: "0" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", cursor: "pointer" }}
-              onClick={() => setOpen(o => ({ ...o, [risk.id]: !o[risk.id] }))}>
+            {/* Header — always visible, no collapse */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px" }}>
               <div style={{ flex: 1 }}>
                 <span style={{ fontWeight: 600, fontSize: 13 }}>{risk.title}</span>
-                <span style={{ marginLeft: 10, fontSize: 11, background: sc.bg, color: sc.color, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
+                {risk.source === "monitoring" && (
+                  <span style={{ marginLeft: 8, fontSize: 10, background: "#dbeafe", color: "#1e40af", padding: "1px 6px", borderRadius: 6, fontWeight: 700, textTransform: "uppercase" }}>monitoring</span>
+                )}
+                <span style={{ marginLeft: 8, fontSize: 11, background: sc.bg, color: sc.color, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
                   {risk.severity}
                 </span>
                 {risk.affects_vulnerable_groups && (
@@ -801,13 +806,13 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 {risk.status !== "confirmed" && (
-                  <button onClick={e => { e.stopPropagation(); confirmRisk(risk); }}
+                  <button onClick={() => confirmRisk(risk)}
                     style={{ fontSize: 11, padding: "4px 10px", background: "#d5f5e3", color: "#1a5c35", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}>
                     ✓ Confirm
                   </button>
                 )}
                 {risk.status !== "dismissed" && (
-                  <button onClick={e => { e.stopPropagation(); dismissRisk(risk); }}
+                  <button onClick={() => dismissRisk(risk)}
                     style={{ fontSize: 11, padding: "4px 10px", background: "var(--bg)", color: "var(--text-secondary)", border: "none", borderRadius: 4, cursor: "pointer" }}>
                     Dismiss
                   </button>
@@ -816,30 +821,34 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
                   <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 600 }}>✓ confirmed</span>
                 )}
               </div>
-              <span style={{ color: "var(--text-secondary)" }}>{open[risk.id] ? "▲" : "▼"}</span>
             </div>
 
-            {open[risk.id] && (
-              <div style={{ padding: "0 20px 16px", borderTop: "1px solid #f4f4f5" }}>
-                {risk.description && <p style={{ fontSize: 13, color: "var(--text)", marginTop: 12 }}>{risk.description}</p>}
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            {/* Body — always expanded */}
+            <div style={{ padding: "0 20px 16px", borderTop: "1px solid #f4f4f5" }}>
+              {/* Risk details */}
+              <div style={{ marginTop: 12, marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>Risk</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
                   <span style={{ fontSize: 11, background: "var(--bg)", color: "var(--text-secondary)", padding: "2px 8px", borderRadius: 10 }}>
-                    {risk.risk_type === "foreseeable" ? "⚡ Foreseeable" : "📋 Known"} (Art. 9(2)(a))
+                    {risk.risk_type === "foreseeable" ? "⚡ Foreseeable" : "📋 Known"}
                   </span>
                   <span style={{ fontSize: 11, background: "var(--bg)", color: "var(--text-secondary)", padding: "2px 8px", borderRadius: 10 }}>
                     Likelihood: {risk.likelihood}
                   </span>
                   {risk.category && (
                     <span style={{ fontSize: 11, background: "var(--bg)", color: "var(--text-secondary)", padding: "2px 8px", borderRadius: 10 }}>
-                      {risk.category}
+                      {RISK_CATEGORIES.find(c => c.value === risk.category)?.label ?? risk.category}
                     </span>
                   )}
                 </div>
+                {risk.description && <p style={{ fontSize: 12, color: "var(--text)", margin: 0 }}>{risk.description}</p>}
+              </div>
 
-                {/* Misuse scenarios */}
-                <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
-                    Misuse scenarios (Art. 9(2)(a))
+              {/* Misuse scenarios — only if any exist */}
+              {risk.misuse_scenarios.length > 0 && (
+                <div style={{ marginBottom: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
+                    Misuse scenarios
                   </div>
                   {risk.misuse_scenarios.map(ms => (
                     <div key={ms.id} style={{ fontSize: 12, padding: "6px 0", borderBottom: "1px solid #f4f4f5" }}>
@@ -851,14 +860,19 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
                       )}
                     </div>
                   ))}
-                  {risk.misuse_scenarios.length === 0 && (
-                    <div style={{ fontSize: 12, color: "var(--text-secondary)", fontStyle: "italic" }}>
-                      No misuse scenarios — add them in the Identify step.
-                    </div>
-                  )}
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* Monitoring observation — only for monitoring risks */}
+              {risk.source === "monitoring" && (risk as any).observation && (
+                <div style={{ marginBottom: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
+                    Monitoring observation
+                  </div>
+                  <p style={{ fontSize: 12, color: "var(--text)", margin: 0 }}>{(risk as any).observation}</p>
+                </div>
+              )}
+            </div>
           </Card>
         );
       })}
@@ -885,7 +899,6 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
   onNext: () => void;
 }) {
   const confirmedRisks = risks.filter(r => r.status === "confirmed");
-  const [open, setOpen] = useState<Record<string, boolean>>({});
   const [addMit, setAddMit] = useState<Record<string, boolean>>({});
   const [mitDraft, setMitDraft] = useState<Record<string, Partial<MitigationMeasure>>>({});
   const [residualDraft, setResidualDraft] = useState<Record<string, { residual_likelihood: string; residual_severity: string; date_of_assessment: string; review_notes: string }>>({});
@@ -893,6 +906,41 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [closureNote, setClosureNote] = useState<Record<string, string>>({});
   const [err, setErr] = useState<Record<string, string>>({});
+  const [testReports, setTestReports] = useState<Record<string, TestReport[]>>({});
+  const [addTest, setAddTest] = useState<Record<string, boolean>>({});
+  const [testDraft, setTestDraft] = useState<Record<string, { title: string; summary: string; findings: string; result: string; author: string }>>({});
+  const [testSaving, setTestSaving] = useState<Record<string, boolean>>({});
+
+  async function loadTestReports(riskId: string) {
+    const reports = await api.getTestReports(riskId);
+    setTestReports(t => ({ ...t, [riskId]: reports }));
+  }
+
+  useEffect(() => {
+    confirmedRisks.forEach(r => loadTestReports(r.id));
+  }, [risks.length]);
+
+  async function saveTestReport(riskId: string) {
+    const d = testDraft[riskId] ?? {};
+    if (!d.title?.trim()) return;
+    setTestSaving(s => ({ ...s, [riskId]: true }));
+    try {
+      const report = await api.createTestReport(riskId, {
+        title: d.title,
+        summary: d.summary ?? "",
+        findings: d.findings ?? "",
+        result: d.result ?? "pass",
+        author: d.author || null,
+        attachments: "",
+        mitigation_id: null,
+      });
+      setTestReports(t => ({ ...t, [riskId]: [report, ...(t[riskId] ?? [])] }));
+      setTestDraft(td => ({ ...td, [riskId]: { title: "", summary: "", findings: "", result: "pass", author: "" } }));
+      setAddTest(a => ({ ...a, [riskId]: false }));
+    } finally {
+      setTestSaving(s => ({ ...s, [riskId]: false }));
+    }
+  };
 
   async function saveResidual(riskId: string) {
     const d = residualDraft[riskId] ?? {};
@@ -963,19 +1011,16 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
         const complete = hasMit || hasJustification;
         return (
           <Card key={risk.id} style={{ borderLeft: `3px solid ${complete ? "#16a34a" : "#f59e0b"}`, padding: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", cursor: "pointer" }}
-              onClick={() => setOpen(o => ({ ...o, [risk.id]: !o[risk.id] }))}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px" }}>
               <div style={{ flex: 1 }}>
                 <span style={{ fontWeight: 600, fontSize: 13 }}>{risk.title}</span>
                 <span style={{ marginLeft: 10, fontSize: 11, color: "var(--text-secondary)" }}>{risk.mitigations.length} measure(s)</span>
                 {complete && <span style={{ marginLeft: 8, fontSize: 11, color: "#16a34a", fontWeight: 600 }}>✓</span>}
                 {!complete && <span style={{ marginLeft: 8, fontSize: 11, color: "#f59e0b", fontWeight: 600 }}>⚠ needs risk management measure</span>}
               </div>
-              <span style={{ color: "var(--text-secondary)" }}>{open[risk.id] ? "▲" : "▼"}</span>
             </div>
 
-            {open[risk.id] && (
-              <div style={{ padding: "0 20px 16px", borderTop: "1px solid #f4f4f5" }}>
+            <div style={{ padding: "0 20px 16px", borderTop: "1px solid #f4f4f5" }}>
                 {/* Existing mitigations grouped by level */}
                 {HIERARCHY_LEVELS.map(level => {
                   const items = risk.mitigations.filter(m => m.hierarchy_level === level.value);
@@ -1053,6 +1098,81 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                     </div>
                   </div>
                 )}
+
+                {/* Test reports */}
+                <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #f4f4f5" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Test reports</span>
+                    <button onClick={() => setAddTest(a => ({ ...a, [risk.id]: !addTest[risk.id] }))}
+                      style={{ fontSize: 11, fontWeight: 600, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 10px", cursor: "pointer" }}>
+                      + Add test report
+                    </button>
+                  </div>
+                  {(testReports[risk.id] ?? []).map(tr => (
+                    <div key={tr.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "1px solid #f4f4f5" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontWeight: 600 }}>{tr.title}</span>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 6, textTransform: "uppercase",
+                          background: tr.result === "pass" ? "#d5f5e3" : tr.result === "fail" ? "#fee2e2" : "#fde8d0",
+                          color: tr.result === "pass" ? "#1a5c35" : tr.result === "fail" ? "#991b1b" : "#8b3a00",
+                        }}>{tr.result}</span>
+                        {tr.author && <span style={{ color: "var(--text-secondary)", fontSize: 11 }}>{tr.author}</span>}
+                        <span style={{ color: "var(--text-secondary)", fontSize: 11 }}>{new Date(tr.created_at).toLocaleDateString()}</span>
+                      </div>
+                      {tr.summary && <div style={{ color: "var(--text-secondary)", marginTop: 3 }}>{tr.summary}</div>}
+                      {tr.findings && <div style={{ marginTop: 3, fontStyle: "italic" }}>{tr.findings}</div>}
+                    </div>
+                  ))}
+                  {(testReports[risk.id] ?? []).length === 0 && !addTest[risk.id] && (
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)", fontStyle: "italic" }}>No test reports yet.</div>
+                  )}
+                  {addTest[risk.id] && (
+                    <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <Label required>Title</Label>
+                        <Input value={testDraft[risk.id]?.title ?? ""}
+                          onChange={v => setTestDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { summary: "", findings: "", result: "pass", author: "" }, title: v } }))}
+                          placeholder="e.g. Fairness audit — Q3 2026" />
+                      </div>
+                      <div>
+                        <Label>Result</Label>
+                        <Select value={testDraft[risk.id]?.result ?? "pass"}
+                          onChange={v => setTestDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { title: "", summary: "", findings: "", author: "" }, result: v } }))}
+                          options={[{ value: "pass", label: "Pass" }, { value: "fail", label: "Fail" }, { value: "inconclusive", label: "Inconclusive" }]} />
+                      </div>
+                      <div>
+                        <Label>Author</Label>
+                        <Input value={testDraft[risk.id]?.author ?? ""}
+                          onChange={v => setTestDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { title: "", summary: "", findings: "", result: "pass" }, author: v } }))}
+                          placeholder="e.g. jane.doe@company.com" />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <Label required>Summary</Label>
+                        <Textarea value={testDraft[risk.id]?.summary ?? ""}
+                          onChange={v => setTestDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { title: "", findings: "", result: "pass", author: "" }, summary: v } }))}
+                          rows={2} placeholder="Brief summary of what was tested and how…" />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <Label required>Findings / conclusions</Label>
+                        <Textarea value={testDraft[risk.id]?.findings ?? ""}
+                          onChange={v => setTestDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { title: "", summary: "", result: "pass", author: "" }, findings: v } }))}
+                          rows={2} placeholder="What did the test reveal? What actions follow?" />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
+                        <button onClick={() => saveTestReport(risk.id)}
+                          disabled={testSaving[risk.id] || !testDraft[risk.id]?.title?.trim() || !testDraft[risk.id]?.summary?.trim() || !testDraft[risk.id]?.findings?.trim()}
+                          style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                          {testSaving[risk.id] ? "Saving…" : "Save test report"}
+                        </button>
+                        <button onClick={() => setAddTest(a => ({ ...a, [risk.id]: false }))}
+                          style={{ fontSize: 12, background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Closure justification (alternative to mitigation) */}
                 {!hasMit && (
@@ -1132,8 +1252,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                     {residualSaving[risk.id] ? "Saving…" : "Save residual risk"}
                   </button>
                 </div>
-              </div>
-            )}
+            </div>
           </Card>
         );
       })}

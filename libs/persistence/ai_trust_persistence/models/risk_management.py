@@ -197,3 +197,36 @@ class ReassessmentTrigger(Base):
     new_register_id: Mapped[str | None] = mapped_column(
         String(30), ForeignKey("risk_registers.id", ondelete="SET NULL"), nullable=True
     )
+
+
+class TestReport(Base):
+    """Test report linked to a risk or mitigation measure.
+
+    Records test execution results — title, summary, findings, optional attachments.
+    Continuous, independent of the assessment cycle.
+    """
+
+    __tablename__ = "test_reports"
+
+    id: Mapped[str] = mapped_column(String(30), primary_key=True)
+    risk_id: Mapped[str | None] = mapped_column(
+        String(30), ForeignKey("risk_entries.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    mitigation_id: Mapped[str | None] = mapped_column(
+        String(30), ForeignKey("mitigation_measures.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    findings: Mapped[str] = mapped_column(Text, default="")
+    result: Mapped[str] = mapped_column(String(20), default="pass")
+    # "pass" | "fail" | "inconclusive"
+
+    author: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    attachments: Mapped[str] = mapped_column(Text, default="")
+    # JSON list of {name, url} objects
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

@@ -5,6 +5,7 @@ import type {
   MisuseScenario,
   MitigationMeasure,
   ReassessmentTrigger,
+  TestReport,
 } from "../types";
 
 const BASE = import.meta.env.VITE_RISK_MANAGEMENT_API_BASE ?? "/api/risk-management/v1";
@@ -69,4 +70,10 @@ export const api = {
   getTriggers: (systemId: string) => request<ReassessmentTrigger[]>(`/systems/${systemId}/triggers`),
   acknowledgeTrigger: (triggerId: string) =>
     request<ReassessmentTrigger>(`/triggers/${triggerId}/acknowledge`, { method: "POST" }),
+
+  // Test reports
+  getTestReports: (riskId: string) => request<TestReport[]>(`/risks/${riskId}/test-reports`),
+  createTestReport: (riskId: string, body: Omit<TestReport, "id" | "risk_id" | "created_at" | "updated_at">) =>
+    request<TestReport>(`/risks/${riskId}/test-reports`, { method: "POST", ...json(body) }),
+  deleteTestReport: (reportId: string) => request<void>(`/test-reports/${reportId}`, { method: "DELETE" }),
 };
