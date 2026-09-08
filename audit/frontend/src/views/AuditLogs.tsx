@@ -42,9 +42,11 @@ const ACTION_LABELS: Record<string, string> = {
   "assessment.created": "Created",
   "assessment.submitted": "Submitted",
   "assessment.approved": "Approved",
+  "assessment.deleted": "Deleted",
   "evidence.uploaded": "Uploaded",
   "evidence.approved": "Approved",
   "evidence.rejected": "Rejected",
+  "evidence.deleted": "Deleted",
 };
 
 const ACTION_COLORS: Record<string, string> = {
@@ -55,9 +57,11 @@ const ACTION_COLORS: Record<string, string> = {
   "assessment.created": "bg-[#d5f5e3] text-[#1a5c35]",
   "assessment.submitted": "bg-[#e8f0fb] text-[#0a4a9e]",
   "assessment.approved": "bg-[#d5f5e3] text-[#1a5c35]",
+  "assessment.deleted": "bg-[#fde8e8] text-[#8b0000]",
   "evidence.uploaded": "bg-[#f0e8fb] text-[#5a0a9e]",
   "evidence.approved": "bg-[#d5f5e3] text-[#1a5c35]",
   "evidence.rejected": "bg-[#fde8e8] text-[#8b0000]",
+  "evidence.deleted": "bg-[#fde8e8] text-[#8b0000]",
 };
 
 const RESOURCE_TYPE_LABELS: Record<string, string> = {
