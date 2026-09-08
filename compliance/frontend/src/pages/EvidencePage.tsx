@@ -7,7 +7,7 @@ import KpiCard from "../components/KpiCard";
 import DetailPanel, { DetailField, DetailSection } from "../components/DetailPanel";
 import UploadEvidenceModal from "../components/UploadEvidenceModal";
 import UploadVersionModal from "../components/UploadVersionModal";
-import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, OBLIGATION_STATUS_META, fmtDate, humanize } from "../utils";
+import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, OBLIGATION_STATUS_META, fmtDate, humanize, evidenceTypeLabel } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import type { AISystem, Control, Evidence, EvidenceDetail, EvidenceVersion, Obligation } from "../types";
 import { Button } from "@/components/ui/button";
@@ -175,7 +175,7 @@ export default function EvidencePage() {
           <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All Types</SelectItem>
-            {EVIDENCE_TYPES.map((t) => <SelectItem key={t} value={t}>{humanize(t)}</SelectItem>)}
+            {EVIDENCE_TYPES.map((t) => <SelectItem key={t} value={t}>{evidenceTypeLabel(t)}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={systemFilter || ALL} onValueChange={(v) => setSystemFilter(v === ALL ? "" : v)}>
@@ -224,7 +224,7 @@ export default function EvidencePage() {
               ) : filtered.map((e) => (
                 <TableRow key={e.id} data-state={selected === e.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(e)}>
                   <TableCell><div className="font-medium text-foreground">{e.title}</div><div className="text-xs text-muted-foreground">{e.id}</div></TableCell>
-                  <TableCell className="text-[13px]">{humanize(e.evidence_type)}</TableCell>
+                  <TableCell className="text-[13px]">{evidenceTypeLabel(e.evidence_type)}</TableCell>
                   <TableCell>{e.ai_system_id ? (systemsById[e.ai_system_id]?.name ?? e.ai_system_id) : "—"}</TableCell>
                   <TableCell><Badge variant="secondary" className="rounded-full font-medium">v{e.version_label}</Badge></TableCell>
                   <TableCell><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></TableCell>
@@ -276,7 +276,7 @@ export default function EvidencePage() {
       <DetailPanel
         open={!!detail}
         title={detail?.title ?? ""}
-        subtitle={detail ? humanize(detail.evidence_type) : undefined}
+        subtitle={detail ? evidenceTypeLabel(detail.evidence_type) : undefined}
         badge={detail ? EVIDENCE_STATUS_META[detail.status]?.label : undefined}
         onClose={closePanel}
       >
@@ -285,7 +285,7 @@ export default function EvidencePage() {
           <DetailSection title="General Information">
             <DetailField label="ID">{detail.id}</DetailField>
             <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : "—"}</DetailField>
-            <DetailField label="Type">{humanize(detail.evidence_type)}</DetailField>
+            <DetailField label="Type">{evidenceTypeLabel(detail.evidence_type)}</DetailField>
             <DetailField label="Status"><StatusBadge meta={EVIDENCE_STATUS_META} value={detail.status} /></DetailField>
             <DetailField label="Uploaded By">{detail.uploaded_by || "—"}</DetailField>
             <DetailField label="Uploaded">{fmtDate(detail.created_at)}</DetailField>
@@ -308,7 +308,7 @@ export default function EvidencePage() {
             <DetailSection title="Linked To">
               {detailControls.length > 0 && (
                 <>
-                  <div className="pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">Controls</div>
+                  <div className="pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">Requirements</div>
                   <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
                     <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
                   ))}</ul>

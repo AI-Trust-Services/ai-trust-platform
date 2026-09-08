@@ -100,7 +100,7 @@
       },
       {
         pathSegment: "controls",
-        label: "Controls",
+        label: "Requirements",
         icon: "shield",
         viewUrl: "/compliance/#/controls",
         navigationContext: "controls",

@@ -52,7 +52,6 @@ export interface Control {
   control_ref: string | null;
   title: string;
   description: string;
-  category: string;
   status: string;
   effectiveness: string;
   owner: string;

@@ -35,7 +35,6 @@ export default function ControlsPage() {
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [systemFilter, setSystemFilter] = useState("");
   const [effectivenessFilter, setEffectivenessFilter] = useState("");
@@ -98,15 +97,14 @@ export default function ControlsPage() {
     const s = search.toLowerCase();
     return controls.filter((c) =>
       (!s || c.title.toLowerCase().includes(s) || c.id.toLowerCase().includes(s)) &&
-      (!categoryFilter || c.category === categoryFilter) &&
       (!statusFilter || c.status === statusFilter) &&
       (!effectivenessFilter || c.effectiveness === effectivenessFilter) &&
       (!systemFilter || (systemFilter === "__org__" ? !c.ai_system_id : c.ai_system_id === systemFilter))
     );
-  }, [controls, search, categoryFilter, statusFilter, effectivenessFilter, systemFilter]);
+  }, [controls, search, statusFilter, effectivenessFilter, systemFilter]);
 
   // Reset to the first page whenever the filtered set changes.
-  useEffect(() => { setPage(1); }, [search, categoryFilter, statusFilter, effectivenessFilter, systemFilter]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, effectivenessFilter, systemFilter]);
 
   // Clamp to a valid page — the list can shrink under us (delete, status change
   // filtering a row out) while `page` stays high, which would show an empty table.
@@ -117,7 +115,6 @@ export default function ControlsPage() {
     [filtered, safePage, pageSize]
   );
 
-  const categories = useMemo(() => [...new Set(controls.map((c) => c.category))].sort(), [controls]);
   const systemOptions = useMemo(() => {
     // Only systems that have controls; ordered latest-first (API returns systems
     // ordered by created_at desc, so preserve that order rather than re-sorting).
@@ -129,11 +126,11 @@ export default function ControlsPage() {
   }, [controls, systems]);
   const hasOrgWide = useMemo(() => controls.some((c) => !c.ai_system_id), [controls]);
   const activeFilterCount =
-    (categoryFilter ? 1 : 0) + (statusFilter ? 1 : 0) +
+    (statusFilter ? 1 : 0) +
     (effectivenessFilter ? 1 : 0) + (systemFilter ? 1 : 0);
 
   function clearFilters() {
-    setSearch(""); setCategoryFilter(""); setStatusFilter("");
+    setSearch(""); setStatusFilter("");
     setEffectivenessFilter(""); setSystemFilter("");
   }
 
@@ -151,36 +148,29 @@ export default function ControlsPage() {
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
             <ShieldCheck className="size-5" />
           </span>
-          <h1 className="text-lg font-semibold text-foreground">Controls</h1>
+          <h1 className="text-lg font-semibold text-foreground">Requirements</h1>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load}><RotateCw /> Refresh</Button>
           <Button size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-            onClick={() => setCreateOpen(true)}><Plus /> New Control</Button>
+            onClick={() => setCreateOpen(true)}><Plus /> New Requirement</Button>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-3 px-5 pt-4">
-        <KpiCard label="Total" value={kpis.total} icon={ShieldCheck} color="#71717a" sub="all controls" />
+        <KpiCard label="Total" value={kpis.total} icon={ShieldCheck} color="#71717a" sub="all requirements" />
         <KpiCard label="Effective" value={kpis.effective} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.effective / kpis.total * 100) : 0}% of total`} />
         <KpiCard label="Implemented" value={kpis.implemented} icon={Layers} color="#1147E9" sub="ready for review" />
         <KpiCard label="Not Started" value={kpis.notStarted} icon={Clock} color="#e05c00" sub="pending action" />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-5 pt-3">
-        <Input className="max-w-xs" placeholder="Search controls…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Input className="max-w-xs" placeholder="Search requirements…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <Select value={statusFilter || ALL} onValueChange={(v) => setStatusFilter(v === ALL ? "" : v)}>
           <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All Statuses</SelectItem>
             {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{CONTROL_STATUS_META[s].label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={categoryFilter || ALL} onValueChange={(v) => setCategoryFilter(v === ALL ? "" : v)}>
-          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All Categories</SelectItem>
-            {categories.map((c) => <SelectItem key={c} value={c}>{humanize(c)}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={effectivenessFilter || ALL} onValueChange={(v) => setEffectivenessFilter(v === ALL ? "" : v)}>
@@ -210,8 +200,7 @@ export default function ControlsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Control</TableHead>
-                <TableHead>Category</TableHead>
+                <TableHead>Requirement</TableHead>
                 <TableHead>AI System</TableHead>
                 <TableHead>Owner</TableHead>
                 <TableHead>Status</TableHead>
@@ -222,11 +211,10 @@ export default function ControlsPage() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No controls yet.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No requirements yet.</TableCell></TableRow>
               ) : paged.map((c) => (
                 <TableRow key={c.id} data-state={selected === c.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(c)}>
                   <TableCell><div className="font-medium text-foreground">{c.title}</div><div className="text-xs text-muted-foreground">{c.id}</div></TableCell>
-                  <TableCell className="text-[13px]">{humanize(c.category)}</TableCell>
                   <TableCell>{c.ai_system_id ? (systemsById[c.ai_system_id]?.name ?? c.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{c.owner || "—"}</TableCell>
                   <TableCell><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></TableCell>
@@ -243,7 +231,7 @@ export default function ControlsPage() {
                         </SelectContent>
                       </Select>
                       <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"
-                        disabled={!mayWrite} title={mayWrite ? "Delete this control" : noWriteTitle}
+                        disabled={!mayWrite} title={mayWrite ? "Delete this requirement" : noWriteTitle}
                         onClick={async () => {
                           if (!confirm(`Delete "${c.title}"?`)) return;
                           try { await api.deleteControl(c.id); showToast("Deleted"); load(); closePanel(); }
@@ -268,7 +256,6 @@ export default function ControlsPage() {
       <DetailPanel
         open={!!detail}
         title={detail?.title ?? ""}
-        subtitle={detail ? humanize(detail.category) : undefined}
         badge={detail ? CONTROL_STATUS_META[detail.status]?.label : undefined}
         onClose={closePanel}
       >
@@ -276,7 +263,6 @@ export default function ControlsPage() {
           <>
             <DetailSection title="General Information">
               <DetailField label="ID">{detail.id}</DetailField>
-              <DetailField label="Category">{humanize(detail.category)}</DetailField>
               <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</DetailField>
               <DetailField label="Owner">{detail.owner || "—"}</DetailField>
               <DetailField label="Status"><StatusBadge meta={CONTROL_STATUS_META} value={detail.status} /></DetailField>
