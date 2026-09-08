@@ -12,8 +12,8 @@ can unassign (delete the row) or overwrite the answer at any time.
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0015"
-down_revision = "0014"
+revision = "0016"
+down_revision = "0015"
 branch_labels = None
 depends_on = None
 

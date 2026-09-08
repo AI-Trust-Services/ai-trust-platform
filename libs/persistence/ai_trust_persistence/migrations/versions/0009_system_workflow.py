@@ -1,14 +1,14 @@
 """Add workflow_status, assignee_username, compliance_officer_username to ai_systems and create system_workflow_steps
 
-Revision ID: 0010
-Revises: 0009
+Revision ID: 0009
+Revises: 0008
 Create Date: 2026-08-12
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0010"
-down_revision = "0009"
+revision = "0009"
+down_revision = "0008"
 branch_labels = None
 depends_on = None
 
