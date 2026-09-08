@@ -66,10 +66,13 @@ spec:
         name: ai-trust-flux-values
         valuesKey: INGRESS_MINIO_HOST
         targetPath: ingress.minioHost
+      - kind: Secret
+        name: ai-trust-flux-values
+        valuesKey: IMAGE_TAG
+        targetPath: image.tag
     values:
       image:
         repository: ghcr.io/ai-trust-services/ai-trust-platform
-        tag: latest
         pullPolicy: IfNotPresent
       imagePullSecrets:
         - name: ghcr-pull-secret

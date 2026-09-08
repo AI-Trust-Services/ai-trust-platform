@@ -77,6 +77,7 @@ kubectl create secret generic ai-trust-flux-values \
   --from-literal=INGRESS_HOST="${INGRESS_HOST}" \
   --from-literal=INGRESS_KEYCLOAK_HOST="${INGRESS_KEYCLOAK_HOST}" \
   --from-literal=INGRESS_MINIO_HOST="${INGRESS_MINIO_HOST}" \
+  --from-literal=IMAGE_TAG="${IMAGE_TAG:-latest}" \
   -n ocm-system --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> configmap/postgres-init (from infra/postgres/init.sh)"

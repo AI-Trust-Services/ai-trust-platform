@@ -145,6 +145,8 @@ jobs:
           inject USERS_BACKEND_CLIENT_SECRET "$USERS_BACKEND_CLIENT_SECRET"
 
       - name: Bootstrap namespace/secrets/configmaps
+        env:
+          IMAGE_TAG: ${{ inputs.ocm_version }}
         run: bash k8s/scripts/bootstrap.sh
 
       - name: Create ghcr.io pull secret
