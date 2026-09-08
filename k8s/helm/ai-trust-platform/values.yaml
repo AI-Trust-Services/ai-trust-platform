@@ -196,7 +196,7 @@ components:
     openfgaConfig: true
 
   - name: audit
-    backendPort: 8009
+    backendPort: 8008
     rootPath: /api/audit
     extraEnv:
       OPENFGA_URL: http://openfga:8080
