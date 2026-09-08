@@ -4,7 +4,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+from app.questionnaire_required import VALID_QUESTION_KEYS
 
 
 class WorkflowStepResponse(BaseModel):
@@ -78,17 +80,38 @@ class QuestionAssignRequest(BaseModel):
     assignee_username: str
     note: str | None = None
 
+    @field_validator("question_key")
+    @classmethod
+    def must_be_valid_key(cls, v: str) -> str:
+        if v not in VALID_QUESTION_KEYS:
+            raise ValueError(f"Unknown question_key '{v}'")
+        return v
+
 
 class QuestionUnassignRequest(BaseModel):
     """Section owner removes a per-question assignment."""
     section: Literal["business", "technical"]
     question_key: str
 
+    @field_validator("question_key")
+    @classmethod
+    def must_be_valid_key(cls, v: str) -> str:
+        if v not in VALID_QUESTION_KEYS:
+            raise ValueError(f"Unknown question_key '{v}'")
+        return v
+
 
 class QuestionAnswerRequest(BaseModel):
     """Assignee marks their assigned question as answered."""
     section: Literal["business", "technical"]
     question_key: str
+
+    @field_validator("question_key")
+    @classmethod
+    def must_be_valid_key(cls, v: str) -> str:
+        if v not in VALID_QUESTION_KEYS:
+            raise ValueError(f"Unknown question_key '{v}'")
+        return v
 
 
 class QuestionAssignmentResponse(BaseModel):

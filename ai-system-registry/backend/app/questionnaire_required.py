@@ -11,6 +11,51 @@ business and technical assignees may submit partial sections; only approval is g
 """
 from __future__ import annotations
 
+# All question keys that exist in the frontend questionnaire. Used to validate
+# per-question assignment requests at the API boundary.
+VALID_QUESTION_KEYS: frozenset[str] = frozenset({
+    "affected_people",
+    "automation_and_oversight",
+    "biometric_categorisation_sensitive",
+    "data_and_inputs",
+    "decision_domain",
+    "department",
+    "emotion_recognition_workplace",
+    "exception_category",
+    "exploits_vulnerability",
+    "external_id",
+    "generates_synthetic_content",
+    "is_biometric_identification",
+    "is_chatbot",
+    "is_credit_scoring",
+    "is_critical_infrastructure",
+    "is_education_related",
+    "is_employment_related",
+    "is_gpai",
+    "is_judicial_admin",
+    "is_law_enforcement",
+    "is_migration",
+    "is_public_service",
+    "model_nature",
+    "planned_modifications",
+    "predictive_policing",
+    "prohibited_practices",
+    "real_time_biometric_public",
+    "sector_legislation",
+    "social_scoring_public",
+    "subliminal_manipulation",
+    "submission_type",
+    "technologies",
+    "training_compute_flops",
+    "untargeted_facial_scraping",
+    "use_case",
+    "use_case_owner",
+    "use_case_status",
+    "use_case_type",
+    "used_in_eu",
+    "user_interaction",
+})
+
 # (key, storage): "system" = top-level AISystem column, "answers" = questionnaire_answers[key].
 # Optional keys (external_id, additional_entity_roles) and boolean/number keys (used_in_eu)
 # are intentionally omitted — an unchecked box / blank optional field is a valid answer.
