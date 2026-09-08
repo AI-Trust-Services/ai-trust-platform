@@ -324,10 +324,6 @@ async def upload_registration_document(
     if ext not in _ALLOWED_DOC_EXTENSIONS:
         raise HTTPException(422, f"Unsupported file type '{ext}'. Allowed: {sorted(_ALLOWED_DOC_EXTENSIONS)}")
 
-    data = await file.read()
-    if not data:
-        raise HTTPException(422, "The uploaded file is empty")
-
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
         row = result.scalar_one_or_none()
@@ -335,6 +331,14 @@ async def upload_registration_document(
             raise HTTPException(404, f"System {system_id} not found")
         if row.registration_mode != "full_manual":
             raise HTTPException(422, "Supporting documents may only be uploaded for full-manual registrations")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(422, "The uploaded file is empty")
+
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
 
         key = await minio_client.upload_file(system_id, filename, data, file.content_type or "application/octet-stream")
 
