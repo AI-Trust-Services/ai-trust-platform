@@ -5,6 +5,7 @@ httpx==0.28.1
 PyJWT[crypto]==2.9.0
 kubernetes-asyncio==31.1.0
 docker==7.1.0
+PyYAML==6.0.2
 -e /app/libs/persistence
 -e /app/libs/logging
 -e /app/libs/authorization

@@ -20,7 +20,7 @@ from ai_trust_persistence.models.marketplace import (
     MarketplaceService,
 )
 
-from app import deploy, discovery, identity, keycloak, oidc
+from app import deploy, discovery, identity, keycloak, ocm, oidc
 from app.ids import new_id
 from app.schemas import (
     DeployRequest,
@@ -29,6 +29,7 @@ from app.schemas import (
     EnablementResponse,
     EnableRoleRequest,
     FederationSetup,
+    OcmIngestRequest,
     ServiceCreate,
     ServiceResponse,
 )
@@ -144,43 +145,94 @@ async def list_services(
              dependencies=[Depends(require_permission(MARKETPLACE_MANAGE))])
 async def add_service(body: ServiceCreate) -> ServiceResponse:
     async with SessionLocal() as session:
-        exists = await session.execute(
-            select(MarketplaceService).where(MarketplaceService.name == body.name)
-        )
-        if exists.scalar_one_or_none():
-            raise HTTPException(409, f"A service named '{body.name}' already exists")
-
-        _server_kinds = ("dockerfile", "image")
-        row = MarketplaceService(
-            id=new_id("MKT"),
-            name=body.name,
-            label=body.label,
-            git_url=body.git_url,
-            git_ref=body.git_ref,
-            kind=body.kind if body.source != "external" else "static",
-            app_port=body.app_port if body.kind in _server_kinds else None,
-            sso_enabled=body.sso_enabled if body.kind in _server_kinds else False,
-            # image only: the operator-supplied public image ref to pull-and-run.
-            image_ref=body.image_ref if body.kind == "image" else None,
-            # image only: the ref needs private-registry pull credentials (supplied at deploy time).
-            registry_private=body.registry_private if body.kind == "image" else False,
-            source=body.source,
-            # Honor open_mode for external apps AND for internal server apps (dockerfile/image):
-            # a running app that can't live under the same-origin embed base path can be opened in
-            # a new tab through the proxy. Static sites are always embedded (same_window).
-            open_mode=(
-                body.open_mode
-                if (body.source == "external" or body.kind in _server_kinds)
-                else "same_window"
-            ),
-            status="running" if body.source == "external" else "pending",
-            # For external services there is nothing to deploy — store the URL to open.
-            service_host=body.external_url if body.source == "external" else None,
-        )
-        session.add(row)
+        row = await _create_internal(session, body)
         await session.commit()
         await session.refresh(row)
     logger.info("marketplace.service.added", extra={"id": row.id, "service": row.name, "source": row.source})
+    return ServiceResponse.model_validate(row)
+
+
+async def _create_internal(session, body: ServiceCreate) -> MarketplaceService:
+    """Build and add (not commit) a MarketplaceService row from a validated ServiceCreate.
+
+    The single register/persist path — shared by ``POST /services`` and ``POST /discover/ocm`` (which
+    resolves an OCM component to a ``kind="image"`` ServiceCreate first). The caller owns the
+    transaction and commits, per the repo's session convention."""
+    exists = await session.execute(
+        select(MarketplaceService).where(MarketplaceService.name == body.name)
+    )
+    if exists.scalar_one_or_none():
+        raise HTTPException(409, f"A service named '{body.name}' already exists")
+
+    _server_kinds = ("dockerfile", "image")
+    row = MarketplaceService(
+        id=new_id("MKT"),
+        name=body.name,
+        label=body.label,
+        git_url=body.git_url,
+        git_ref=body.git_ref,
+        kind=body.kind if body.source != "external" else "static",
+        app_port=body.app_port if body.kind in _server_kinds else None,
+        sso_enabled=body.sso_enabled if body.kind in _server_kinds else False,
+        # image only: the operator-supplied public image ref to pull-and-run.
+        image_ref=body.image_ref if body.kind == "image" else None,
+        # image only: the ref needs private-registry pull credentials (supplied at deploy time).
+        registry_private=body.registry_private if body.kind == "image" else False,
+        source=body.source,
+        # Honor open_mode for external apps AND for internal server apps (dockerfile/image):
+        # a running app that can't live under the same-origin embed base path can be opened in
+        # a new tab through the proxy. Static sites are always embedded (same_window).
+        open_mode=(
+            body.open_mode
+            if (body.source == "external" or body.kind in _server_kinds)
+            else "same_window"
+        ),
+        status="running" if body.source == "external" else "pending",
+        # For external services there is nothing to deploy — store the URL to open.
+        service_host=body.external_url if body.source == "external" else None,
+    )
+    session.add(row)
+    return row
+
+
+@router.post("/discover/ocm", response_model=ServiceResponse, status_code=201,
+             dependencies=[Depends(require_permission(MARKETPLACE_MANAGE))])
+async def ingest_ocm(body: OcmIngestRequest) -> ServiceResponse:
+    """Resolve an OCM component version to its ociImage ref and register it as a kind="image" service.
+
+    A thin resolver in front of the normal register flow: the operator pastes a component reference
+    (repo + component) instead of the exact, un-guessable digest-pinned image ref; we shell to the
+    ``ocm`` CLI to read the descriptor, then persist through the same ``_create_internal`` path as
+    ``POST /services``. The result is an internal ``kind="image"`` row at ``status="pending"`` — deploy
+    is the normal separate ``POST /services/{id}/deploy`` step (with pull credentials in the body when
+    ``registry_private``)."""
+    resolved = await ocm.resolve_component(
+        body.ocm_repo, body.component, body.resource,
+        # Write-through resolve credentials for a private OCM descriptor repo (never persisted/logged).
+        creds=((body.resolve_username, body.resolve_token)
+               if body.resolve_username and body.resolve_token else None),
+    )
+    sc = ServiceCreate(
+        name=body.name,
+        label=body.label,
+        kind="image",
+        image_ref=resolved.image_ref,
+        app_port=body.app_port,
+        open_mode=body.open_mode,
+        registry_private=body.registry_private,
+        sso_enabled=body.sso_enabled,
+        source="internal",
+    )
+    async with SessionLocal() as session:
+        row = await _create_internal(session, sc)
+        await session.commit()
+        await session.refresh(row)
+    # image_ref is non-secret (a public/digest-pinned OCI ref); never log any registry pull token.
+    logger.info(
+        "marketplace.ocm.ingested",
+        extra={"id": row.id, "service": row.name, "component": body.component,
+               "image_ref": resolved.image_ref},
+    )
     return ServiceResponse.model_validate(row)
 
 

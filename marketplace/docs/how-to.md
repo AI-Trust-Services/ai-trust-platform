@@ -18,6 +18,7 @@ oauth2-proxy forwards your identity header automatically.
 | I have… | Use | The platform… |
 |---------|-----|---------------|
 | A **prebuilt image** (public or private registry) | `kind="image"` | pulls & runs it |
+| An **OCM component** (`ociImage` resource) | `/discover/ocm` | resolves the descriptor → pulls & runs the resolved image |
 | A **Git repo with a `Dockerfile`** at its root | `kind="dockerfile"` | builds, pushes to the in-cluster registry, runs it |
 | A repo of **static files** (HTML/JS/CSS) | `kind="static"` | git-clones it and serves it with nginx |
 | An app **already running on its own infra** | external (`/discover/manual`) | registers a pointer and federates SSO / proxies to it |
@@ -73,6 +74,77 @@ curl -X POST /v1/services/<id>/deploy -H 'content-type: application/json' -d '{
   `pending` — nothing is attempted.
 - Only the non-secret flag `registry_private: true` is ever stored/returned. The token is
   write-through to the container runtime and then gone.
+
+---
+
+## 1b. Ingest from an OCM component (`POST /discover/ocm`)
+
+If your app is shipped as an **OCM (Open Component Model) component** rather than a bare image ref,
+you paste the *component reference* and the platform resolves the concrete, digest-pinned image for
+you. This is the SAP-standard way to ship software: a component version (e.g.
+`github.com/acme/app:1.0.0`) carries a signed **component descriptor** listing typed resources; the
+deployable container is a resource of type `ociImage` whose access is an `ociArtifact` with a
+concrete `imageReference`. That resolved ref is **not guessable** from the component name — OCM may
+re-nest the image under the component subpath and pin a digest (e.g.
+`ghcr.io/acme/acme/app:1.0.0@sha256:…`). Reading it from the descriptor is the whole point.
+
+`POST /discover/ocm` runs the `ocm` CLI (baked into the backend image) once to resolve the descriptor,
+then registers exactly the same `kind="image"` row as section 1 — so deploy, SSO, the role gate,
+new-tab, and everything else are reused unchanged. Only the resolve step is new. (Out of scope:
+`helmChart` / git-source resources, and signature *verification* as a gate.)
+
+**Ingest:**
+
+```bash
+curl -X POST /v1/discover/ocm -H 'content-type: application/json' -d '{
+  "name": "whether-app",
+  "label": "Weather App",
+  "ocm_repo": "ghcr.io/acme",
+  "component": "github.com/acme/whether-app:1.0.0",
+  "app_port": 3000,
+  "open_mode": "new_tab",
+  "registry_private": true
+}'
+```
+
+Returns `201` with the registered row — `kind="image"`, `status="pending"`, and `image_ref` set to
+the **resolved, digest-pinned** ref (not the component name you sent). Deploy is then the ordinary
+section-1 step: `POST /v1/services/<id>/deploy` (with pull credentials in the body when
+`registry_private`).
+
+| Field | Meaning |
+|-------|---------|
+| `ocm_repo` | The OCM repository — the CLI `--repo`, e.g. `ghcr.io/acme`. |
+| `component` | The component version, e.g. `github.com/acme/whether-app:1.0.0`. |
+| `resource` | *(optional)* the `ociImage` resource name; auto-picked when the component has exactly one. Required — with a clear 422 listing the names — when a component has several. |
+| `app_port`, `open_mode`, `registry_private`, `sso_enabled` | Same meaning as `kind="image"` (section 1 / section 6). |
+
+### Private descriptor repo (resolve-time credentials)
+
+The component **descriptor itself** lives in an OCI registry, and that registry may require auth just
+to *read* it — separate from (and earlier than) the image pull. When the descriptor repo is private,
+pass resolve-time credentials on the ingest call:
+
+```bash
+curl -X POST /v1/discover/ocm -H 'content-type: application/json' -d '{
+  "name":"whether-app","label":"Weather App",
+  "ocm_repo":"ghcr.io/acme","component":"github.com/acme/whether-app:1.0.0",
+  "app_port":3000,"open_mode":"new_tab","registry_private":true,
+  "resolve_username":"acme-bot",
+  "resolve_token":"ghp_xxx"
+}'
+```
+
+- `resolve_username` / `resolve_token` are **write-through**: used once to run the resolve (handed to
+  the `ocm` CLI as `--cred` arguments, never embedded in a URL), and then gone — never stored in
+  Postgres, returned on any response, or logged. Same never-persist contract as the deploy-time pull
+  credentials.
+- These are **only** for reading the descriptor. The image pull still uses the separate
+  `registry_username`/`registry_token` on the **deploy** call (they are often the same ghcr token, but
+  the two steps are independent).
+- If the `ocm` binary is missing from the image the endpoint returns `503`; a failed/timed-out resolve
+  (auth denied, component not found) returns `502` with the CLI's error tail; a component with no
+  `ociImage`/`ociArtifact` resource (e.g. a chart-only component) returns `422`.
 
 ---
 

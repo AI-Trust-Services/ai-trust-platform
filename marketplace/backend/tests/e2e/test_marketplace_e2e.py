@@ -207,6 +207,87 @@ async def test_discovered_app_not_deployable(client):
     assert "elsewhere" in r.json()["detail"].lower()
 
 
+# ── OCM ingestion: resolve → register kind=image → deploy ───────────────────────────────────────
+
+async def test_ocm_ingest_registers_image(client, monkeypatch):
+    # Mock the CLI-backed resolver: POST /discover/ocm resolves the component to a digest-pinned
+    # ref, then persists through the same register path as POST /services (kind="image", pending).
+    from app import ocm
+    resolved_ref = (
+        "ghcr.io/mirceacraciun/mirceacraciun/whether-app:1.0.0"
+        "@sha256:818236bc17718e63210fb7faa16d83d3efddea786bf9ac03e1b815209fc2a240"
+    )
+
+    async def _fake_resolve(repo, component, resource=None, creds=None):
+        return ocm.ResolvedComponent(
+            image_ref=resolved_ref, resource_name="whether-app",
+            component=component, version="1.0.0",
+            digest="818236bc17718e63210fb7faa16d83d3efddea786bf9ac03e1b815209fc2a240",
+        )
+
+    monkeypatch.setattr(ocm, "resolve_component", _fake_resolve)
+
+    r = await client.post("/v1/discover/ocm", json={
+        "name": "whether-app", "label": "Weather App",
+        "ocm_repo": "ghcr.io/mirceacraciun",
+        "component": "github.com/mirceacraciun/whether-app:1.0.0",
+        "app_port": 3000, "open_mode": "new_tab", "registry_private": True,
+    })
+    assert r.status_code == 201, r.text
+    row = r.json()
+    assert row["kind"] == "image"
+    assert row["image_ref"] == resolved_ref  # the un-guessable resolved ref, not the component name
+    assert row["app_port"] == 3000
+    assert row["open_mode"] == "new_tab"
+    assert row["registry_private"] is True
+    assert row["source"] == "internal"
+    assert row["status"] == "pending"
+
+    # The ingested row deploys through the normal image path (deploy is faked in e2e_setup).
+    d = await client.post(f"/v1/services/{row['id']}/deploy", json={
+        "registry_username": "mirceacraciun", "registry_token": "ghp_fake",
+    })
+    assert d.status_code == 200, d.text
+    assert d.json()["status"] == "running"
+
+
+async def test_ocm_ingest_resolver_error_surfaces(client, monkeypatch):
+    # A resolver HTTPException (e.g. component has no ociImage) propagates as the API status.
+    from app import ocm
+    from fastapi import HTTPException
+
+    async def _boom(repo, component, resource=None, creds=None):
+        raise HTTPException(422, "Component has no ociImage/ociArtifact resource to deploy")
+
+    monkeypatch.setattr(ocm, "resolve_component", _boom)
+    r = await client.post("/v1/discover/ocm", json={
+        "name": "chartonly", "label": "Chart Only",
+        "ocm_repo": "ghcr.io/acme", "component": "github.com/acme/chartonly:1.0.0",
+        "app_port": 8080,
+    })
+    assert r.status_code == 422
+    assert "ociImage" in r.json()["detail"]
+
+
+async def test_ocm_ingest_duplicate_name_409(client, monkeypatch):
+    from app import ocm
+
+    async def _fake_resolve(repo, component, resource=None, creds=None):
+        return ocm.ResolvedComponent(
+            image_ref="ghcr.io/acme/app:1@sha256:abc", resource_name="app",
+            component=component, version="1", digest="abc",
+        )
+
+    monkeypatch.setattr(ocm, "resolve_component", _fake_resolve)
+    body = {"name": "dup", "label": "Dup", "ocm_repo": "ghcr.io/acme",
+            "component": "github.com/acme/app:1.0.0", "app_port": 8080}
+    r1 = await client.post("/v1/discover/ocm", json=body)
+    assert r1.status_code == 201, r1.text
+    r2 = await client.post("/v1/discover/ocm", json=body)
+    assert r2.status_code == 409
+
+
+
 # ── proxy gate: 403 for unenabled discovered app, then forwards after enable ────────────────────
 
 async def test_proxy_gated_then_forwarded(client, as_user, monkeypatch):

@@ -161,6 +161,48 @@ class EnableRoleRequest(BaseModel):
     role: str = Field(..., min_length=1, max_length=255)
 
 
+class OcmIngestRequest(BaseModel):
+    """Ingest a deployable image from an OCM (Open Component Model) component version.
+
+    The platform resolves ``component`` in ``ocm_repo`` to its ``ociImage`` resource's concrete,
+    digest-pinned ``imageReference`` (via the ``ocm`` CLI) and registers it as a ``kind="image"``
+    service — so the operator pastes a component reference instead of the exact, un-guessable image
+    ref. Deploy is the normal separate ``POST /services/{id}/deploy`` step (with pull credentials in
+    the body when ``registry_private``).
+    """
+
+    name: str = Field(..., min_length=1, max_length=63, description="k8s-safe slug")
+    label: str = Field(..., min_length=1, max_length=200)
+    # The OCM repository (the CLI --repo), e.g. "ghcr.io/acme".
+    ocm_repo: str = Field(..., min_length=1, max_length=2000)
+    # The component version, e.g. "github.com/acme/app:1.0.0".
+    component: str = Field(..., min_length=1, max_length=2000)
+    # Optional ociImage resource name; auto-picked when the component has exactly one.
+    resource: str | None = Field(default=None, max_length=255)
+    app_port: int = Field(..., ge=1, le=65535, description="port the container listens on")
+    open_mode: str = Field(default="same_window")  # same_window | new_tab
+    registry_private: bool = Field(default=False)
+    sso_enabled: bool = Field(default=False)
+    # Optional credentials for a PRIVATE OCM descriptor repo — the component descriptor itself lives
+    # in an OCI registry that may require auth to read. Write-through only: used once to run the ocm
+    # resolve and NEVER persisted, returned, or logged (same never-store contract as DeployRequest's
+    # pull credentials). Deploy-time pull credentials are still supplied separately on the deploy call.
+    resolve_username: str | None = Field(default=None, max_length=255)
+    resolve_token: str | None = Field(default=None, max_length=4096)
+
+    @field_validator("name")
+    @classmethod
+    def _valid_name(cls, v: str) -> str:
+        return _check_name(v)
+
+    @field_validator("open_mode")
+    @classmethod
+    def _valid_open_mode(cls, v: str) -> str:
+        if v not in ("same_window", "new_tab"):
+            raise ValueError("open_mode must be 'same_window' or 'new_tab'")
+        return v
+
+
 class DeployRequest(BaseModel):
     """Optional body for ``POST /services/{id}/deploy``.
 
