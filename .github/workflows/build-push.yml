@@ -320,8 +320,7 @@ jobs:
             GITHUB_REPOSITORY_OWNER="${OWNER}" \
             IMAGE_TAG="${TAG}" \
             CHART_TAG="0.0.0-${TAG}"
-          ocm transfer commontransportarchive dist/ctf "oci://ghcr.io/${OWNER}/ocm" --copy-resources --overwrite || \
-            echo "::warning::OCM component push failed — images and chart are still published"
+          ocm transfer commontransportarchive dist/ctf "oci://ghcr.io/${OWNER}/ocm" --overwrite
           if [[ -n "${LATEST_TAG}" ]]; then
             mkdir -p dist/ctf-latest
             ocm add componentversions --create --file dist/ctf-latest .ocm/component-constructor.yaml \
@@ -329,14 +328,13 @@ jobs:
               GITHUB_REPOSITORY_OWNER="${OWNER}" \
               IMAGE_TAG="${TAG}" \
               CHART_TAG="0.0.0-${LATEST_TAG}"
-            ocm transfer commontransportarchive dist/ctf-latest "oci://ghcr.io/${OWNER}/ocm" --copy-resources --overwrite || \
-              echo "::warning::OCM latest component push failed"
+            ocm transfer commontransportarchive dist/ctf-latest "oci://ghcr.io/${OWNER}/ocm" --overwrite
           fi
 
   deploy:
     name: Bootstrap Gardener (${{ needs.images-published.outputs.cluster }})
     needs: [images-published, publish-ocm]
-    if: needs.images-published.result == 'success' && needs.publish-ocm.result != 'failure' && needs.images-published.outputs.deploy == 'true'
+    if: needs.images-published.result == 'success' && needs.publish-ocm.result == 'success' && needs.images-published.outputs.deploy == 'true'
     uses: ./.github/workflows/bootstrap-gardener.yml
     with:
       cluster: ${{ needs.images-published.outputs.cluster }}
