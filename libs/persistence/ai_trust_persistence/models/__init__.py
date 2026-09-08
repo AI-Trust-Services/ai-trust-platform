@@ -8,7 +8,6 @@ from ai_trust_persistence.models.evidence import (
     Evidence,
     EvidenceVersion,
     evidence_controls,
-    evidence_obligations,
 )
 from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
@@ -30,5 +29,4 @@ __all__ = [
     "SystemWorkflowStep",
     "control_obligations",
     "evidence_controls",
-    "evidence_obligations",
 ]
