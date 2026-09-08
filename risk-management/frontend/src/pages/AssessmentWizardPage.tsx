@@ -89,10 +89,10 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
 
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
         <tr>
-          <td style="padding:4px 8px 4px 0;color:#556b82;width:140px">Category</td>
-          <td style="padding:4px 0">${cap(r.category)}</td>
+          <td style="padding:4px 8px 4px 0;color:#556b82;width:140px">Impact category</td>
+          <td style="padding:4px 0">${RISK_CATEGORIES.find(c => c.value === r.category)?.label ?? cap(r.category)}</td>
           <td style="padding:4px 8px 4px 16px;color:#556b82;width:140px">Risk type</td>
-          <td style="padding:4px 0">${cap(r.risk_type)}</td>
+          <td style="padding:4px 0">${r.risk_type === "foreseeable" ? "Foreseeable" : r.risk_type === "known" ? "Known" : cap(r.risk_type)}</td>
         </tr>
         <tr>
           <td style="padding:4px 8px 4px 0;color:#556b82">Likelihood</td>
@@ -277,6 +277,12 @@ function ScopeStep({ register, onNext, onPatch }: {
 
 // ── Step 2: Identify ──────────────────────────────────────────────────────────
 const RISK_CATEGORIES = [
+  { value: "health", label: "Health" },
+  { value: "safety", label: "Safety" },
+  { value: "fundamental_rights", label: "Fundamental Rights" },
+];
+
+const RISK_TITLE_SUGGESTIONS = [
   "Discrimination / unfair treatment",
   "Privacy violation",
   "Safety / physical harm",
@@ -330,15 +336,51 @@ interface DraftRisk {
   severity: string;
   likelihood: string;
   risk_owner: string;
+  assignee: string;
+  due_date: string;
   ai_lifecycle_phase: string;
   impact: string;
 }
 
 const emptyDraft = (): DraftRisk => ({
-  title: "", description: "", category: "Discrimination / unfair treatment",
-  risk_type: "known", affects_vulnerable_groups: false, vulnerable_groups: "",
+  title: "", description: "", category: "health",
+  risk_type: "", affects_vulnerable_groups: false, vulnerable_groups: "",
   severity: "medium", likelihood: "possible",
-  risk_owner: "", ai_lifecycle_phase: "", impact: "",
+  risk_owner: "", assignee: "", due_date: "", ai_lifecycle_phase: "", impact: "",
+});
+
+interface DraftMisuseScenario {
+  risk_id: string;
+  actor: string;
+  description: string;
+  likelihood: string;
+  consequence: string;
+  vulnerable_group: string;
+  assignee: string;
+  due_date: string;
+}
+
+const emptyMsDraft = (): DraftMisuseScenario => ({
+  risk_id: "", actor: "", description: "", likelihood: "possible",
+  consequence: "", vulnerable_group: "", assignee: "", due_date: "",
+});
+
+interface DraftMonitoringRisk {
+  title: string;
+  description: string;
+  category: string;
+  observation: string;
+  severity: string;
+  likelihood: string;
+  risk_owner: string;
+  assignee: string;
+  due_date: string;
+}
+
+const emptyMonitoringDraft = (): DraftMonitoringRisk => ({
+  title: "", description: "", category: "health", observation: "",
+  severity: "medium", likelihood: "possible",
+  risk_owner: "", assignee: "", due_date: "",
 });
 
 function IdentifyStep({ register, risks, onRisksChange, onNext }: {
@@ -347,18 +389,27 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
   onRisksChange: (risks: RiskEntry[]) => void;
   onNext: () => void;
 }) {
+  const [activeForm, setActiveForm] = useState<"none" | "risk" | "misuse" | "monitoring">("none");
   const [draft, setDraft] = useState<DraftRisk>(emptyDraft());
+  const [msDraft, setMsDraft] = useState<DraftMisuseScenario>(emptyMsDraft());
+  const [monDraft, setMonDraft] = useState<DraftMonitoringRisk>(emptyMonitoringDraft());
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
+  function openForm(form: "risk" | "misuse" | "monitoring") {
+    setActiveForm(prev => prev === form ? "none" : form);
+    setErr("");
+  }
+
   async function addRisk() {
     if (!draft.title.trim()) { setErr("Risk title is required."); return; }
+    if (!draft.risk_type) { setErr("Risk type is required — select Known or Foreseeable (Art. 9(2)(a))."); return; }
+    if (!draft.category) { setErr("Impact category is required — select Health, Safety, or Fundamental Rights."); return; }
     if (draft.affects_vulnerable_groups && !draft.vulnerable_groups.trim()) {
       setErr("Vulnerable groups field is mandatory when 'affects vulnerable groups' is checked (Art. 9(9)).");
       return;
     }
-    setSaving(true);
-    setErr("");
+    setSaving(true); setErr("");
     try {
       const created = await api.createRisk(register.id, {
         ...draft,
@@ -366,14 +417,65 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
           draft.vulnerable_groups ? draft.vulnerable_groups.split(",").map(s => s.trim()).filter(Boolean) : []
         ),
         risk_level_autocalculated: calcRiskLevel(draft.severity, draft.likelihood),
+        assigned_to: draft.assignee || null,
+        due_date: draft.due_date || null,
+        source: "manual",
       });
       onRisksChange([...risks, created]);
       setDraft(emptyDraft());
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setSaving(false);
-    }
+      setActiveForm("none");
+    } catch (e) { setErr(String(e)); }
+    finally { setSaving(false); }
+  }
+
+  async function addMisuseScenario() {
+    const d = msDraft;
+    if (!d.risk_id) { setErr("Select the risk this scenario belongs to."); return; }
+    if (!d.actor.trim() || !d.description.trim()) { setErr("Actor and scenario description are required."); return; }
+    setSaving(true); setErr("");
+    try {
+      const ms = await api.addMisuseScenario(d.risk_id, {
+        actor: d.actor,
+        description: d.description,
+        likelihood: d.likelihood,
+        consequence: d.consequence,
+        vulnerable_group: d.vulnerable_group || null,
+      });
+      onRisksChange(risks.map(r => r.id === d.risk_id ? { ...r, misuse_scenarios: [...r.misuse_scenarios, ms] } : r));
+      setMsDraft(emptyMsDraft());
+      setActiveForm("none");
+    } catch (e) { setErr(String(e)); }
+    finally { setSaving(false); }
+  }
+
+  async function addMonitoringRisk() {
+    const d = monDraft;
+    if (!d.title.trim()) { setErr("Risk title is required."); return; }
+    if (!d.category) { setErr("Impact category is required."); return; }
+    setSaving(true); setErr("");
+    try {
+      const created = await api.createRisk(register.id, {
+        title: d.title,
+        description: `${d.description}${d.observation ? `\n\nObservation: ${d.observation}` : ""}`,
+        category: d.category,
+        risk_type: "foreseeable",
+        source: "monitoring",
+        severity: d.severity,
+        likelihood: d.likelihood,
+        risk_owner: d.risk_owner,
+        assigned_to: d.assignee || null,
+        due_date: d.due_date || null,
+        risk_level_autocalculated: calcRiskLevel(d.severity, d.likelihood),
+        affects_vulnerable_groups: false,
+        vulnerable_groups: "[]",
+        ai_lifecycle_phase: "operation",
+        impact: "",
+      });
+      onRisksChange([...risks, created]);
+      setMonDraft(emptyMonitoringDraft());
+      setActiveForm("none");
+    } catch (e) { setErr(String(e)); }
+    finally { setSaving(false); }
   }
 
   async function removeRisk(id: string) {
@@ -390,13 +492,19 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
           {risks.map(r => (
             <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>
+                  {r.title}
+                  {r.source === "monitoring" && (
+                    <span style={{ marginLeft: 8, fontSize: 10, background: "#dbeafe", color: "#1e40af", padding: "1px 6px", borderRadius: 6, fontWeight: 700, textTransform: "uppercase" }}>monitoring</span>
+                  )}
+                </div>
                 <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <span>{r.category} · {r.risk_type}</span>
+                  <span>{RISK_CATEGORIES.find(c => c.value === r.category)?.label ?? r.category} · {r.risk_type === "foreseeable" ? "Foreseeable" : r.risk_type === "known" ? "Known" : r.risk_type}</span>
                   {r.risk_level_autocalculated && <RiskLevelBadge level={r.risk_level_autocalculated} />}
-                  {r.ai_lifecycle_phase && <span style={{ background: "var(--bg)", padding: "1px 6px", borderRadius: 8, fontSize: 11 }}>{r.ai_lifecycle_phase}</span>}
                   {r.risk_owner && <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>owner: {r.risk_owner}</span>}
+                  {r.assigned_to && <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>assignee: {r.assigned_to}</span>}
                   {r.affects_vulnerable_groups && <span style={{ color: "#8b3a00" }}>⚠ vulnerable groups</span>}
+                  {r.misuse_scenarios.length > 0 && <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{r.misuse_scenarios.length} misuse scenario(s)</span>}
                 </div>
               </div>
               <button onClick={() => removeRisk(r.id)}
@@ -406,89 +514,228 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
         </Card>
       )}
 
-      {/* Add risk form */}
-      <Card>
-        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700 }}>Add risk</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <Label required>Risk title</Label>
-            <Input value={draft.title} onChange={v => setDraft(d => ({ ...d, title: v }))}
-              placeholder="e.g. Discriminatory outcomes for applicants with employment gaps" />
-          </div>
-          <div>
-            <Label>Category</Label>
-            <Select value={draft.category} onChange={v => setDraft(d => ({ ...d, category: v }))}
-              options={RISK_CATEGORIES.map(c => ({ value: c, label: c }))} />
-          </div>
-          <div>
-            <Label>Risk type (Art. 9(2)(a))</Label>
-            <Select value={draft.risk_type} onChange={v => setDraft(d => ({ ...d, risk_type: v }))}
-              options={[{ value: "known", label: "Known risk" }, { value: "foreseeable", label: "Foreseeable risk" }]} />
-          </div>
-          <div>
-            <Label>Severity</Label>
-            <Select value={draft.severity} onChange={v => setDraft(d => ({ ...d, severity: v }))}
-              options={[
-                { value: "critical", label: "Critical" }, { value: "high", label: "High" },
-                { value: "medium", label: "Medium" }, { value: "low", label: "Low" },
-              ]} />
-          </div>
-          <div>
-            <Label>Likelihood</Label>
-            <Select value={draft.likelihood} onChange={v => setDraft(d => ({ ...d, likelihood: v }))}
-              options={[
-                { value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" },
-                { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" },
-              ]} />
-          </div>
-          <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>Risk level (auto):</span>
-            <RiskLevelBadge level={calcRiskLevel(draft.severity, draft.likelihood)} />
-          </div>
-          <div>
-            <Label>Risk owner</Label>
-            <Input value={draft.risk_owner} onChange={v => setDraft(d => ({ ...d, risk_owner: v }))}
-              placeholder="e.g. jane.doe@company.com" />
-          </div>
-          <div>
-            <Label>AI lifecycle phase</Label>
-            <Select value={draft.ai_lifecycle_phase} onChange={v => setDraft(d => ({ ...d, ai_lifecycle_phase: v }))}
-              options={LIFECYCLE_PHASES} />
-          </div>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <Label>Impact description</Label>
-            <Textarea value={draft.impact} onChange={v => setDraft(d => ({ ...d, impact: v }))} rows={2}
-              placeholder="Describe the business, operational, or user impact if this risk materialises…" />
-          </div>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <Label>Description</Label>
-            <Textarea value={draft.description} onChange={v => setDraft(d => ({ ...d, description: v }))} rows={2}
-              placeholder="Describe the risk, its root cause, and potential impact…" />
-          </div>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-              <input type="checkbox" checked={draft.affects_vulnerable_groups}
-                onChange={e => setDraft(d => ({ ...d, affects_vulnerable_groups: e.target.checked }))} />
-              <span>Affects vulnerable groups or children (Art. 9(9)) <span style={{ color: "#dc2626" }}>*</span></span>
-            </label>
-            {draft.affects_vulnerable_groups && (
-              <div style={{ marginTop: 8 }}>
-                <Label required>Vulnerable groups affected</Label>
-                <Input value={draft.vulnerable_groups} onChange={v => setDraft(d => ({ ...d, vulnerable_groups: v }))}
-                  placeholder="e.g. Children, elderly persons, people with disabilities (comma-separated)" />
-                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
-                  Mandatory per Art. 9(9) — EU AI Act requires special attention for these groups.
+      {/* Action buttons */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+        {[
+          { key: "risk" as const, label: "+ Add risk", desc: "Known or foreseeable risk" },
+          { key: "misuse" as const, label: "+ Add misuse scenario", desc: "How could this system be misused? (Art. 9(2)(a))" },
+          { key: "monitoring" as const, label: "+ Add monitoring risk", desc: "Risk identified from post-market monitoring (Art. 9(2)(c))" },
+        ].map(btn => (
+          <button key={btn.key} onClick={() => openForm(btn.key)}
+            style={{
+              padding: "8px 16px", fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: "pointer",
+              border: `1px solid ${activeForm === btn.key ? "var(--brand)" : "var(--border)"}`,
+              background: activeForm === btn.key ? "var(--brand)" : "var(--surface)",
+              color: activeForm === btn.key ? "#fff" : "var(--text)",
+            }}>
+            {btn.label}
+            <div style={{ fontSize: 10, fontWeight: 400, color: activeForm === btn.key ? "rgba(255,255,255,0.8)" : "var(--text-secondary)", marginTop: 1 }}>{btn.desc}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* Form: Add risk */}
+      {activeForm === "risk" && (
+        <Card>
+          <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Add risk</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label required>Risk title</Label>
+              <input list="risk-title-suggestions" value={draft.title}
+                onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
+                placeholder="e.g. Discriminatory outcomes for applicants with employment gaps"
+                style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
+              <datalist id="risk-title-suggestions">{RISK_TITLE_SUGGESTIONS.map(s => <option key={s} value={s} />)}</datalist>
+            </div>
+            <div>
+              <Label required>Impact category (Art. 9)</Label>
+              <Select value={draft.category} onChange={v => setDraft(d => ({ ...d, category: v }))} options={RISK_CATEGORIES} />
+            </div>
+            <div>
+              <Label required>Risk type (Art. 9(2)(a))</Label>
+              <Select value={draft.risk_type} onChange={v => setDraft(d => ({ ...d, risk_type: v }))}
+                options={[{ value: "", label: "— select —" }, { value: "known", label: "Known risk" }, { value: "foreseeable", label: "Foreseeable risk" }]} />
+            </div>
+            <div>
+              <Label>Severity</Label>
+              <Select value={draft.severity} onChange={v => setDraft(d => ({ ...d, severity: v }))}
+                options={[{ value: "critical", label: "Critical" }, { value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }]} />
+            </div>
+            <div>
+              <Label>Likelihood</Label>
+              <Select value={draft.likelihood} onChange={v => setDraft(d => ({ ...d, likelihood: v }))}
+                options={[{ value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
+            </div>
+            <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Risk level (auto):</span>
+              <RiskLevelBadge level={calcRiskLevel(draft.severity, draft.likelihood)} />
+            </div>
+            <div>
+              <Label>Risk owner</Label>
+              <Input value={draft.risk_owner} onChange={v => setDraft(d => ({ ...d, risk_owner: v }))} placeholder="e.g. jane.doe@company.com" />
+            </div>
+            <div>
+              <Label>AI lifecycle phase</Label>
+              <Select value={draft.ai_lifecycle_phase} onChange={v => setDraft(d => ({ ...d, ai_lifecycle_phase: v }))} options={LIFECYCLE_PHASES} />
+            </div>
+            <div>
+              <Label>Assignee</Label>
+              <Input value={draft.assignee} onChange={v => setDraft(d => ({ ...d, assignee: v }))} placeholder="Person responsible for this risk" />
+            </div>
+            <div>
+              <Label>Due date</Label>
+              <input type="date" value={draft.due_date} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value }))}
+                style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label>Impact description</Label>
+              <Textarea value={draft.impact} onChange={v => setDraft(d => ({ ...d, impact: v }))} rows={2} placeholder="Describe the business, operational, or user impact…" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label>Description</Label>
+              <Textarea value={draft.description} onChange={v => setDraft(d => ({ ...d, description: v }))} rows={2} placeholder="Describe the risk, its root cause, and potential impact…" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                <input type="checkbox" checked={draft.affects_vulnerable_groups}
+                  onChange={e => setDraft(d => ({ ...d, affects_vulnerable_groups: e.target.checked }))} />
+                <span>Affects vulnerable groups or children (Art. 9(9)) <span style={{ color: "#dc2626" }}>*</span></span>
+              </label>
+              {draft.affects_vulnerable_groups && (
+                <div style={{ marginTop: 8 }}>
+                  <Label required>Vulnerable groups affected</Label>
+                  <Input value={draft.vulnerable_groups} onChange={v => setDraft(d => ({ ...d, vulnerable_groups: v }))}
+                    placeholder="e.g. Children, elderly persons, people with disabilities (comma-separated)" />
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-        <ErrorMsg msg={err} />
-        <button onClick={addRisk} disabled={saving}
-          style={{ background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
-          {saving ? "Adding…" : "+ Add risk"}
-        </button>
-      </Card>
+          <ErrorMsg msg={err} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={addRisk} disabled={saving} className="btn-primary btn-sm">{saving ? "Adding…" : "+ Add risk"}</button>
+            <button onClick={() => setActiveForm("none")} className="btn-ghost btn-sm">Cancel</button>
+          </div>
+        </Card>
+      )}
+
+      {/* Form: Add misuse scenario */}
+      {activeForm === "misuse" && (
+        <Card>
+          <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Add misuse scenario <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-secondary)" }}>Art. 9(2)(a)</span></h3>
+          {risks.length === 0 ? (
+            <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>Add at least one risk first before adding misuse scenarios.</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Label required>Linked risk</Label>
+                <Select value={msDraft.risk_id} onChange={v => setMsDraft(d => ({ ...d, risk_id: v }))}
+                  options={[{ value: "", label: "— select risk —" }, ...risks.map(r => ({ value: r.id, label: r.title }))]} />
+              </div>
+              <div>
+                <Label required>Actor</Label>
+                <Input value={msDraft.actor} onChange={v => setMsDraft(d => ({ ...d, actor: v }))} placeholder="e.g. Malicious hiring manager" />
+              </div>
+              <div>
+                <Label>Likelihood</Label>
+                <Select value={msDraft.likelihood} onChange={v => setMsDraft(d => ({ ...d, likelihood: v }))}
+                  options={[{ value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Label required>Scenario description</Label>
+                <Textarea value={msDraft.description} onChange={v => setMsDraft(d => ({ ...d, description: v }))} rows={2}
+                  placeholder="Describe how this actor could misuse the system…" />
+              </div>
+              <div>
+                <Label>Consequence</Label>
+                <Input value={msDraft.consequence} onChange={v => setMsDraft(d => ({ ...d, consequence: v }))} placeholder="e.g. Systematic rejection of qualified candidates" />
+              </div>
+              <div>
+                <Label>Vulnerable group (if applicable)</Label>
+                <Input value={msDraft.vulnerable_group} onChange={v => setMsDraft(d => ({ ...d, vulnerable_group: v }))} placeholder="e.g. Pregnant women" />
+              </div>
+              <div>
+                <Label>Assignee</Label>
+                <Input value={msDraft.assignee} onChange={v => setMsDraft(d => ({ ...d, assignee: v }))} placeholder="Person responsible" />
+              </div>
+              <div>
+                <Label>Due date</Label>
+                <input type="date" value={msDraft.due_date} onChange={e => setMsDraft(d => ({ ...d, due_date: e.target.value }))}
+                  style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
+              </div>
+            </div>
+          )}
+          <ErrorMsg msg={err} />
+          {risks.length > 0 && (
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={addMisuseScenario} disabled={saving} className="btn-primary btn-sm">{saving ? "Adding…" : "+ Add scenario"}</button>
+              <button onClick={() => setActiveForm("none")} className="btn-ghost btn-sm">Cancel</button>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Form: Add monitoring risk */}
+      {activeForm === "monitoring" && (
+        <Card>
+          <h3 style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 700 }}>Add monitoring risk <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-secondary)" }}>Art. 9(2)(c)</span></h3>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 14 }}>Risk identified from post-market monitoring. Type is automatically set to Foreseeable.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label required>Risk title</Label>
+              <input list="risk-title-suggestions" value={monDraft.title}
+                onChange={e => setMonDraft(d => ({ ...d, title: e.target.value }))}
+                placeholder="e.g. Model drift causing biased outcomes in production"
+                style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
+            </div>
+            <div>
+              <Label required>Impact category (Art. 9)</Label>
+              <Select value={monDraft.category} onChange={v => setMonDraft(d => ({ ...d, category: v }))} options={RISK_CATEGORIES} />
+            </div>
+            <div>
+              <Label>Severity</Label>
+              <Select value={monDraft.severity} onChange={v => setMonDraft(d => ({ ...d, severity: v }))}
+                options={[{ value: "critical", label: "Critical" }, { value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }]} />
+            </div>
+            <div>
+              <Label>Likelihood</Label>
+              <Select value={monDraft.likelihood} onChange={v => setMonDraft(d => ({ ...d, likelihood: v }))}
+                options={[{ value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
+            </div>
+            <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Risk level (auto):</span>
+              <RiskLevelBadge level={calcRiskLevel(monDraft.severity, monDraft.likelihood)} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label>Observation</Label>
+              <Textarea value={monDraft.observation} onChange={v => setMonDraft(d => ({ ...d, observation: v }))} rows={2}
+                placeholder="Describe what was observed in monitoring that triggered this risk…" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label>Description</Label>
+              <Textarea value={monDraft.description} onChange={v => setMonDraft(d => ({ ...d, description: v }))} rows={2}
+                placeholder="Describe the risk…" />
+            </div>
+            <div>
+              <Label>Risk owner</Label>
+              <Input value={monDraft.risk_owner} onChange={v => setMonDraft(d => ({ ...d, risk_owner: v }))} placeholder="e.g. jane.doe@company.com" />
+            </div>
+            <div>
+              <Label>Assignee</Label>
+              <Input value={monDraft.assignee} onChange={v => setMonDraft(d => ({ ...d, assignee: v }))} placeholder="Person responsible for this risk" />
+            </div>
+            <div>
+              <Label>Due date</Label>
+              <input type="date" value={monDraft.due_date} onChange={e => setMonDraft(d => ({ ...d, due_date: e.target.value }))}
+                style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
+            </div>
+          </div>
+          <ErrorMsg msg={err} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={addMonitoringRisk} disabled={saving} className="btn-primary btn-sm">{saving ? "Adding…" : "+ Add monitoring risk"}</button>
+            <button onClick={() => setActiveForm("none")} className="btn-ghost btn-sm">Cancel</button>
+          </div>
+        </Card>
+      )}
 
       <button onClick={onNext} disabled={risks.length === 0}
         style={{ background: risks.length === 0 ? "#9ca3af" : "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: risks.length === 0 ? "not-allowed" : "pointer" }}>
@@ -505,8 +752,6 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
   onNext: () => void;
 }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [addMisuse, setAddMisuse] = useState<Record<string, boolean>>({});
-  const [msDraft, setMsDraft] = useState<Record<string, Partial<MisuseScenario>>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
 
   async function confirmRisk(risk: RiskEntry) {
@@ -517,26 +762,6 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
   async function dismissRisk(risk: RiskEntry) {
     const updated = await api.patchRisk(risk.id, { status: "dismissed" });
     onRisksChange(risks.map(r => r.id === risk.id ? { ...r, ...updated, misuse_scenarios: r.misuse_scenarios, mitigations: r.mitigations } : r));
-  }
-
-  async function addMisuseScenario(riskId: string) {
-    const d = msDraft[riskId] ?? {};
-    if (!d.actor?.trim() || !d.description?.trim()) return;
-    setSaving(s => ({ ...s, [riskId]: true }));
-    try {
-      const ms = await api.addMisuseScenario(riskId, {
-        actor: d.actor ?? "",
-        description: d.description ?? "",
-        likelihood: d.likelihood ?? "possible",
-        consequence: d.consequence ?? "",
-        vulnerable_group: d.vulnerable_group ?? null,
-      });
-      onRisksChange(risks.map(r => r.id === riskId ? { ...r, misuse_scenarios: [...r.misuse_scenarios, ms] } : r));
-      setMsDraft(prev => ({ ...prev, [riskId]: {} }));
-      setAddMisuse(prev => ({ ...prev, [riskId]: false }));
-    } finally {
-      setSaving(s => ({ ...s, [riskId]: false }));
-    }
   }
 
   const confirmed = risks.filter(r => r.status === "confirmed").length;
@@ -626,52 +851,9 @@ function EvaluateStep({ risks, onRisksChange, onNext }: {
                       )}
                     </div>
                   ))}
-                  {!addMisuse[risk.id] ? (
-                    <button onClick={() => setAddMisuse(a => ({ ...a, [risk.id]: true }))}
-                      style={{ fontSize: 12, color: "#1147E9", background: "transparent", border: "none", cursor: "pointer", padding: 0, marginTop: 6 }}>
-                      + Add misuse scenario
-                    </button>
-                  ) : (
-                    <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <div>
-                        <Label required>Actor</Label>
-                        <Input value={msDraft[risk.id]?.actor ?? ""} onChange={v => setMsDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], actor: v } }))}
-                          placeholder="e.g. Malicious hiring manager" />
-                      </div>
-                      <div>
-                        <Label>Likelihood</Label>
-                        <Select value={msDraft[risk.id]?.likelihood ?? "possible"}
-                          onChange={v => setMsDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], likelihood: v } }))}
-                          options={[
-                            { value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" },
-                            { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" },
-                          ]} />
-                      </div>
-                      <div style={{ gridColumn: "1 / -1" }}>
-                        <Label required>Scenario description</Label>
-                        <Input value={msDraft[risk.id]?.description ?? ""} onChange={v => setMsDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], description: v } }))}
-                          placeholder="Describe how this actor could misuse the system…" />
-                      </div>
-                      <div>
-                        <Label>Consequence</Label>
-                        <Input value={msDraft[risk.id]?.consequence ?? ""} onChange={v => setMsDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], consequence: v } }))}
-                          placeholder="e.g. Systematic rejection of qualified candidates" />
-                      </div>
-                      <div>
-                        <Label>Vulnerable group (if applicable)</Label>
-                        <Input value={msDraft[risk.id]?.vulnerable_group ?? ""} onChange={v => setMsDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], vulnerable_group: v || null } }))}
-                          placeholder="e.g. Pregnant women" />
-                      </div>
-                      <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
-                        <button onClick={() => addMisuseScenario(risk.id)} disabled={saving[risk.id]}
-                          style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
-                          Save
-                        </button>
-                        <button onClick={() => setAddMisuse(a => ({ ...a, [risk.id]: false }))}
-                          style={{ fontSize: 12, background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
-                          Cancel
-                        </button>
-                      </div>
+                  {risk.misuse_scenarios.length === 0 && (
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)", fontStyle: "italic" }}>
+                      No misuse scenarios — add them in the Identify step.
                     </div>
                   )}
                 </div>
@@ -744,8 +926,8 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
         hierarchy_level: d.hierarchy_level ?? "mitigate",
         implementation_guidance: d.implementation_guidance ?? "",
         status: "planned",
-        assigned_to: null,
-        due_date: null,
+        assigned_to: d.assigned_to ?? null,
+        due_date: d.due_date ?? null,
         override_notes: "",
       });
       onRisksChange(risks.map(r => r.id === riskId ? { ...r, mitigations: [...r.mitigations, mit] } : r));
@@ -843,6 +1025,20 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                       <Textarea value={mitDraft[risk.id]?.implementation_guidance ?? ""}
                         onChange={v => setMitDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], implementation_guidance: v } }))}
                         rows={2} placeholder="How to implement this measure…" />
+                    </div>
+                    <div>
+                      <Label>Assignee</Label>
+                      <Input
+                        value={mitDraft[risk.id]?.assigned_to ?? risk.risk_owner ?? ""}
+                        onChange={v => setMitDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], assigned_to: v } }))}
+                        placeholder={risk.risk_owner ? `Default: ${risk.risk_owner}` : "Person responsible"} />
+                    </div>
+                    <div>
+                      <Label>Due date</Label>
+                      <input type="date"
+                        value={mitDraft[risk.id]?.due_date ?? ""}
+                        onChange={e => setMitDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], due_date: e.target.value } }))}
+                        style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
                     </div>
                     <ErrorMsg msg={err[risk.id] ?? ""} />
                     <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
