@@ -166,7 +166,7 @@ async def _generate_obligations_in_session(
                 prior_by_ref[key] = po
 
     created: list[Obligation] = []
-    for t in templates:
+    for idx, t in enumerate(templates):
         carried = prior_by_ref.get(t["cluster_id"])
         obl = Obligation(
             id=new_id("OBL"),
@@ -179,6 +179,7 @@ async def _generate_obligations_in_session(
             description=t["description"],
             status=("not_applicable" if carried and carried.status == "not_applicable" else "applicable"),
             owner=carried.owner if carried else "",
+            sort_order=idx,
         )
         session.add(obl)
         created.append(obl)
@@ -221,7 +222,7 @@ async def _generate_controls_in_session(
                 "article_ref": obl.article_ref, "tier": tier, "org_role": org_role,
             })
             continue
-        for t in templates:
+        for j, t in enumerate(templates):
             control_ref = t.get("control_ref") or f"{obl.article_ref}:{t['slug']}"
             control = Control(
                 id=new_id("CTL"),
@@ -233,6 +234,9 @@ async def _generate_controls_in_session(
                 status="not_started",
                 effectiveness="medium",
                 owner=prior_owner_by_ref.get(control_ref, ""),
+                # Order controls after their obligation's position, then by template
+                # order within the cluster (headroom of 100 controls per cluster).
+                sort_order=obl.sort_order * 100 + j,
             )
             session.add(control)
             await session.flush()  # assign control.id before linking
