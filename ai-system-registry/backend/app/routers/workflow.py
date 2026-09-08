@@ -218,18 +218,19 @@ async def assign_sections(
         "co": body.compliance_officer_username,
     })
 
-    background_tasks.add_task(
-        email_sender.notify,
-        to_username=body.business_assignee_username,
-        subject=f"[AI Trust] Action required: fill Use Case & Context for '{system_name}'",
-        body=(
-            f"Hi,\n\n"
-            f"You have been assigned to complete the 'Use Case & Context' section for the AI system "
-            f"'{system_name}' ({system_id}).\n\n"
-            f"Please log in and open the system to fill in the required information.\n\n"
-            f"AI Trust Platform: {email_sender.REGISTRY_URL}"
-        ),
-    )
+    if body.business_assignee_username:
+        background_tasks.add_task(
+            email_sender.notify,
+            to_username=body.business_assignee_username,
+            subject=f"[AI Trust] Action required: fill Use Case & Context for '{system_name}'",
+            body=(
+                f"Hi,\n\n"
+                f"You have been assigned to complete the 'Use Case & Context' section for the AI system "
+                f"'{system_name}' ({system_id}).\n\n"
+                f"Please log in and open the system to fill in the required information.\n\n"
+                f"AI Trust Platform: {email_sender.REGISTRY_URL}"
+            ),
+        )
 
     return result_steps
 
