@@ -37,7 +37,6 @@ export default function ControlsPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [systemFilter, setSystemFilter] = useState("");
-  const [effectivenessFilter, setEffectivenessFilter] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [selected, setSelected] = useState<string | null>(null);
@@ -99,13 +98,12 @@ export default function ControlsPage() {
       (!s || c.title.toLowerCase().includes(s) || c.id.toLowerCase().includes(s)) &&
       (!categoryFilter || c.category === categoryFilter) &&
       (!statusFilter || c.status === statusFilter) &&
-      (!effectivenessFilter || c.effectiveness === effectivenessFilter) &&
       (!systemFilter || (systemFilter === "__org__" ? !c.ai_system_id : c.ai_system_id === systemFilter))
     );
-  }, [controls, search, categoryFilter, statusFilter, effectivenessFilter, systemFilter]);
+  }, [controls, search, categoryFilter, statusFilter, systemFilter]);
 
   // Reset to the first page whenever the filtered set changes.
-  useEffect(() => { setPage(1); }, [search, categoryFilter, statusFilter, effectivenessFilter, systemFilter]);
+  useEffect(() => { setPage(1); }, [search, categoryFilter, statusFilter, systemFilter]);
 
   // Clamp to a valid page — the list can shrink under us (delete, status change
   // filtering a row out) while `page` stays high, which would show an empty table.
@@ -129,11 +127,11 @@ export default function ControlsPage() {
   const hasOrgWide = useMemo(() => controls.some((c) => !c.ai_system_id), [controls]);
   const activeFilterCount =
     (categoryFilter ? 1 : 0) + (statusFilter ? 1 : 0) +
-    (effectivenessFilter ? 1 : 0) + (systemFilter ? 1 : 0);
+    (systemFilter ? 1 : 0);
 
   function clearFilters() {
     setSearch(""); setCategoryFilter(""); setStatusFilter("");
-    setEffectivenessFilter(""); setSystemFilter("");
+    setSystemFilter("");
   }
 
   const kpis = useMemo(() => ({
@@ -182,13 +180,6 @@ export default function ControlsPage() {
             {categories.map((c) => <SelectItem key={c} value={c}>{humanize(c)}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={effectivenessFilter || ALL} onValueChange={(v) => setEffectivenessFilter(v === ALL ? "" : v)}>
-          <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All Effectiveness</SelectItem>
-            {["high", "medium", "low"].map((e) => <SelectItem key={e} value={e}>{humanize(e)}</SelectItem>)}
-          </SelectContent>
-        </Select>
         <Select value={systemFilter || ALL} onValueChange={(v) => setSystemFilter(v === ALL ? "" : v)}>
           <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -214,14 +205,13 @@ export default function ControlsPage() {
                 <TableHead>AI System</TableHead>
                 <TableHead>Owner</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Effectiveness</TableHead>
                 <TableHead>Due</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No requirements yet.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No requirements yet.</TableCell></TableRow>
               ) : paged.map((c) => (
                 <TableRow key={c.id} data-state={selected === c.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(c)}>
                   <TableCell><div className="font-medium text-foreground">{c.title}</div><div className="text-xs text-muted-foreground">{c.id}</div></TableCell>
@@ -229,7 +219,6 @@ export default function ControlsPage() {
                   <TableCell>{c.ai_system_id ? (systemsById[c.ai_system_id]?.name ?? c.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{c.owner || "—"}</TableCell>
                   <TableCell><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></TableCell>
-                  <TableCell><Badge variant="secondary" className="rounded-full font-medium">{humanize(c.effectiveness)}</Badge></TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{fmtDate(c.due_date)}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
@@ -279,7 +268,6 @@ export default function ControlsPage() {
               <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</DetailField>
               <DetailField label="Owner">{detail.owner || "—"}</DetailField>
               <DetailField label="Status"><StatusBadge meta={CONTROL_STATUS_META} value={detail.status} /></DetailField>
-              <DetailField label="Effectiveness"><Badge variant="secondary" className="rounded-full font-medium">{humanize(detail.effectiveness)}</Badge></DetailField>
               <DetailField label="Due Date">{fmtDate(detail.due_date)}</DetailField>
             </DetailSection>
             {detail.description && (
