@@ -194,6 +194,8 @@ async def assign_sections(
         row.technical_assignee_username = body.technical_assignee_username
         row.compliance_officer_username = body.compliance_officer_username
         row.assignee_username = body.business_assignee_username
+        if body.intended_purpose is not None:
+            row.intended_purpose = body.intended_purpose
         row.workflow_status = "business_pending"
 
         step = SystemWorkflowStep(
@@ -882,12 +884,15 @@ async def sub_reclaim_section(
 @router.get("/systems/{system_id}/workflow/rce-summary")
 async def get_rce_summary(
     system_id: str,
-    _: str = Depends(require_permission(SYSTEMS_READ)),
+    user: str = Depends(require_permission(SYSTEMS_READ)),
 ):
     """Return the full RCE output for the CO review panel.
 
     Includes tier, org_role, registration_mode, classification_rationale, and the
     list of applicable obligations derived from the system's tier and org_role.
+
+    The AI ``classification_rationale`` is CO-only decision support: it is returned
+    only to the assigned compliance officer, never to the system's owner/assignees.
     """
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
@@ -895,12 +900,13 @@ async def get_rce_summary(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
 
+    is_assigned_co = bool(row.compliance_officer_username) and user == row.compliance_officer_username
     obligations = obligations_for_tier(row.tier or "minimal", row.org_role or "provider")
     return {
         "tier": row.tier,
         "org_role": row.org_role,
         "registration_mode": row.registration_mode,
-        "classification_rationale": row.classification_rationale,
+        "classification_rationale": row.classification_rationale if is_assigned_co else None,
         "obligations": [
             {"title": o["title"], "article_ref": o["article_ref"], "description": o["description"]}
             for o in obligations

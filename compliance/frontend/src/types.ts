@@ -111,6 +111,7 @@ export interface AISystem {
   workflow_status: string;
   registration_mode: string;
   org_role: string;
+  intended_purpose: string;
   assignee_username: string | null;
   business_assignee_username: string | null;
   technical_assignee_username: string | null;

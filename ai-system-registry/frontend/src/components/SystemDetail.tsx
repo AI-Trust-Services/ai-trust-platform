@@ -28,8 +28,8 @@ import { cn } from "@/lib/utils";
 // Hands off to the Compliance MFE and asks it to open the "New assessment" modal on arrival.
 // The flag is read+cleared by the compliance AssessmentsPage; localStorage is shared because
 // both MFEs are same-origin under the shell proxy. Luigi owns the actual iframe switch.
-function startRiskClassification() {
-  localStorage.setItem("compliance.openCreateAssessment", "1");
+function startRiskClassification(systemId: string) {
+  localStorage.setItem("compliance.pendingAssessment", JSON.stringify({ systemId }));
   LuigiClient.linkManager().navigate("/home/assessments");
 }
 
@@ -973,7 +973,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                     <WorkflowProgress
                       system={system}
                       onSystemUpdate={handleSystemUpdate}
-                      onStartClassification={startRiskClassification}
+                      onStartClassification={() => startRiskClassification(system.id)}
                       userMap={userMap}
                     />
                   </Section>

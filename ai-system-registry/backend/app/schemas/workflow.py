@@ -42,6 +42,9 @@ class WorkflowAssignRequest(BaseModel):
     business_assignee_username: str | None = None
     technical_assignee_username: str | None = None
     compliance_officer_username: str | None = None
+    # Set alongside assignment so the assessment-creation flow can record the system's
+    # intended purpose without a separate (assignee-guarded) PUT to /systems/{id}.
+    intended_purpose: str | None = None
     note: str | None = None
 
 

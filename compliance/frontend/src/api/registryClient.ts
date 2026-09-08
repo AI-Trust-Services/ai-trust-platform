@@ -31,7 +31,7 @@ export const registryClient = {
       ...json({ answers, section }),
     }),
 
-  assignWorkflow: (systemId: string, body: { business_assignee_username: string; technical_assignee_username?: string; compliance_officer_username?: string; note?: string }) =>
+  assignWorkflow: (systemId: string, body: { business_assignee_username: string; technical_assignee_username?: string; compliance_officer_username?: string; intended_purpose?: string; note?: string }) =>
     request<WorkflowStep[]>(`/systems/${systemId}/workflow/assign`, { method: "POST", ...json(body) }),
 
   submitBusinessSection: (systemId: string, note?: string) =>

@@ -31,15 +31,28 @@ import { cn } from "@/lib/utils";
 
 const ALL = "__all__";
 
-// One-shot hand-off flag set by the registry MFE's "Start Risk Classification" button.
-// Read+cleared on arrival so closing the modal or navigating back never reopens it.
+// One-shot hand-off from the registry MFE. The richer key carries the chosen system
+// (and optionally framework) so the modal can skip straight to the right step. Read+cleared
+// on arrival so closing the modal or navigating back never reopens it. The legacy boolean
+// flag is still honored as an empty payload (open at system-select) for safety.
+const PENDING_ASSESSMENT_KEY = "compliance.pendingAssessment";
 const OPEN_CREATE_FLAG = "compliance.openCreateAssessment";
-function consumeOpenCreateFlag(): boolean {
+type PendingAssessment = { systemId?: string; frameworkId?: string };
+function consumePendingAssessment(): PendingAssessment | null {
+  const raw = localStorage.getItem(PENDING_ASSESSMENT_KEY);
+  if (raw) {
+    localStorage.removeItem(PENDING_ASSESSMENT_KEY);
+    try {
+      return JSON.parse(raw) as PendingAssessment;
+    } catch {
+      return {};
+    }
+  }
   if (localStorage.getItem(OPEN_CREATE_FLAG) === "1") {
     localStorage.removeItem(OPEN_CREATE_FLAG);
-    return true;
+    return {};
   }
-  return false;
+  return null;
 }
 
 const VALID_TIERS = ["prohibited", "gpai-systemic", "gpai-standard", "high", "limited", "minimal"] as const;
@@ -354,7 +367,8 @@ export default function AssessmentsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<AssessmentDetail | null>(null);
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
-  const [createOpen, setCreateOpen] = useState(consumeOpenCreateFlag);
+  const [pendingAssessment, setPendingAssessment] = useState<PendingAssessment | null>(consumePendingAssessment);
+  const [createOpen, setCreateOpen] = useState(() => pendingAssessment !== null);
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -364,7 +378,8 @@ export default function AssessmentsPage() {
   // no reload happens, so we also consume the flag on Luigi context updates.
   useEffect(() => {
     const id = LuigiClient.addContextUpdateListener(() => {
-      if (consumeOpenCreateFlag()) setCreateOpen(true);
+      const payload = consumePendingAssessment();
+      if (payload) { setPendingAssessment(payload); setCreateOpen(true); }
     });
     return () => { LuigiClient.removeContextUpdateListener(id); };
   }, []);
@@ -395,6 +410,13 @@ export default function AssessmentsPage() {
   const mayApprove = can("systems:approve");
   const noWriteTitle = "Requires permission: assessments:write";
   const noApproveTitle = "Requires permission: assessments:approve";
+
+  // The AI classification rationale is CO-only decision support — the person who created /
+  // owns the system must not see the AI's inferred tier or reasoning. Only the assigned
+  // compliance officer for the system may view it.
+  const isAssignedCO =
+    !!selectedDetail &&
+    systemsById[selectedDetail.ai_system_id]?.compliance_officer_username === username;
 
   const load = useCallback(async () => {
     try {
@@ -743,49 +765,54 @@ export default function AssessmentsPage() {
                   <DetailField label="Status"><StatusBadge meta={ASSESSMENT_STATUS_META} value={selectedDetail.status} /></DetailField>
                 </DetailSection>
 
-                {/* AI rationale (object with reasoning/flags) */}
-                {rceSummary?.classification_rationale &&
-                  typeof rceSummary.classification_rationale === "object" &&
-                  !Array.isArray(rceSummary.classification_rationale) &&
-                  (rceSummary.classification_rationale as ClassificationRationale).flags !== undefined && (
-                  <ClassificationRationalePanel rationale={rceSummary.classification_rationale as ClassificationRationale} />
-                )}
-                {/* Simple array-of-flags rationale */}
-                {rceSummary?.classification_rationale && Array.isArray(rceSummary.classification_rationale) && (
-                  <div className="rounded-md border border-border bg-muted/30 p-4">
-                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <Sparkles className="size-4" /> Classification Flags
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      {(rceSummary.classification_rationale as Array<{ flag: string; value: boolean | number; rationale: string }>).map((f, i) => (
-                        <div key={i} className="flex items-start gap-2 text-[13px]">
-                          <span className={cn("mt-0.5 rounded px-1.5 py-0.5 text-xs font-medium", f.value ? "bg-[var(--brand)]/15 text-[var(--brand)]" : "bg-muted text-muted-foreground")}>
-                            {typeof f.value === "boolean" ? (f.value ? "Yes" : "No") : String(f.value)}
-                          </span>
-                          <div>
-                            <span className="font-medium">{f.flag}</span>
-                            {f.rationale && <span className="ml-1 text-muted-foreground">— {f.rationale}</span>}
-                          </div>
+                {/* AI classification rationale + inferred tier — visible only to the assigned CO. */}
+                {isAssignedCO && (
+                  <>
+                    {/* AI rationale (object with reasoning/flags) */}
+                    {rceSummary?.classification_rationale &&
+                      typeof rceSummary.classification_rationale === "object" &&
+                      !Array.isArray(rceSummary.classification_rationale) &&
+                      (rceSummary.classification_rationale as ClassificationRationale).flags !== undefined && (
+                      <ClassificationRationalePanel rationale={rceSummary.classification_rationale as ClassificationRationale} />
+                    )}
+                    {/* Simple array-of-flags rationale */}
+                    {rceSummary?.classification_rationale && Array.isArray(rceSummary.classification_rationale) && (
+                      <div className="rounded-md border border-border bg-muted/30 p-4">
+                        <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                          <Sparkles className="size-4" /> Classification Flags
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                        <div className="flex flex-col gap-1.5">
+                          {(rceSummary.classification_rationale as Array<{ flag: string; value: boolean | number; rationale: string }>).map((f, i) => (
+                            <div key={i} className="flex items-start gap-2 text-[13px]">
+                              <span className={cn("mt-0.5 rounded px-1.5 py-0.5 text-xs font-medium", f.value ? "bg-[var(--brand)]/15 text-[var(--brand)]" : "bg-muted text-muted-foreground")}>
+                                {typeof f.value === "boolean" ? (f.value ? "Yes" : "No") : String(f.value)}
+                              </span>
+                              <div>
+                                <span className="font-medium">{f.flag}</span>
+                                {f.rationale && <span className="ml-1 text-muted-foreground">— {f.rationale}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                {/* RCE summary: tier + role */}
-                {rceSummary && (
-                  <div className="flex flex-wrap gap-3 text-[13px]">
-                    <div><span className="font-medium text-muted-foreground">Inferred tier: </span>
-                      <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs">{rceSummary.tier ?? "—"}</span>
-                    </div>
-                    <div><span className="font-medium text-muted-foreground">Role: </span>
-                      <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs capitalize">{rceSummary.org_role ?? "—"}</span>
-                    </div>
-                  </div>
+                    {/* RCE summary: tier + role */}
+                    {rceSummary && (
+                      <div className="flex flex-wrap gap-3 text-[13px]">
+                        <div><span className="font-medium text-muted-foreground">Inferred tier: </span>
+                          <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs">{rceSummary.tier ?? "—"}</span>
+                        </div>
+                        <div><span className="font-medium text-muted-foreground">Role: </span>
+                          <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs capitalize">{rceSummary.org_role ?? "—"}</span>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* CO actions */}
-                {mayApprove && rcePanel === "" && (
+                {isAssignedCO && rcePanel === "" && (
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Button onClick={() => setRcePanel("approve")} disabled={rceActing}>Approve…</Button>
                     <Button variant="outline" onClick={() => { setRcePanel("requestInfo"); setInfoContributor(""); setRceNote(""); }} disabled={rceActing}>Request Info…</Button>
@@ -793,7 +820,7 @@ export default function AssessmentsPage() {
                   </div>
                 )}
 
-                {mayApprove && rcePanel === "approve" && (
+                {isAssignedCO && rcePanel === "approve" && (
                   <div className="overflow-hidden rounded-md border border-border">
                     <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Approve Assessment</div>
                     <div className="flex flex-col gap-3 p-4">
@@ -836,7 +863,7 @@ export default function AssessmentsPage() {
                   </div>
                 )}
 
-                {mayApprove && rcePanel === "requestInfo" && (
+                {isAssignedCO && rcePanel === "requestInfo" && (
                   <div className="overflow-hidden rounded-md border border-border">
                     <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Request More Information</div>
                     <div className="flex flex-col gap-3 p-4">
@@ -865,7 +892,7 @@ export default function AssessmentsPage() {
                   </div>
                 )}
 
-                {mayApprove && rcePanel === "reject" && (
+                {isAssignedCO && rcePanel === "reject" && (
                   <div className="overflow-hidden rounded-md border border-border">
                     <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Reject Assessment</div>
                     <div className="flex flex-col gap-3 p-4">
@@ -894,8 +921,8 @@ export default function AssessmentsPage() {
                   </div>
                 )}
 
-                {!mayApprove && (
-                  <p className="text-sm text-muted-foreground">{noApproveTitle}</p>
+                {!isAssignedCO && (
+                  <p className="text-sm text-muted-foreground">Only the assigned compliance officer can review this system.</p>
                 )}
               </div>
             )}
@@ -937,7 +964,13 @@ export default function AssessmentsPage() {
         )}
       </DetailPanel>
 
-      <CreateAssessmentModal open={createOpen} onClose={() => setCreateOpen(false)} onSuccess={load} />
+      <CreateAssessmentModal
+        open={createOpen}
+        onClose={() => { setCreateOpen(false); setPendingAssessment(null); }}
+        onSuccess={load}
+        initialSystemId={pendingAssessment?.systemId}
+        initialFrameworkId={pendingAssessment?.frameworkId}
+      />
 
       {/* Center dialogs: questionnaire + classification (outside side panel) */}
       {selectedSystem && qAssessmentId && (

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import LuigiClient from "@luigi-project/client";
-import { Check, Loader2, X, ChevronDown, ChevronRight, Copy } from "lucide-react";
+import { Check, Loader2, X, ChevronDown, ChevronRight, Copy, ClipboardList } from "lucide-react";
 import { TierBadge } from "./Badges";
 import { previewClassify, copyToClipboard, SELECT_CLASS } from "../utils";
 import { api } from "../api/client";
@@ -17,13 +17,23 @@ import { Alert } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
-// Hands off to the Compliance MFE and asks it to open the "New assessment" modal on arrival.
-// The flag is read+cleared by the compliance AssessmentsPage; localStorage is shared because
+// Hands off to the Compliance MFE and asks it to open the "New assessment" modal on arrival,
+// carrying the chosen system + framework so the modal skips straight to the details step.
+// The payload is read+cleared by the compliance AssessmentsPage; localStorage is shared because
 // both MFEs are same-origin under the shell proxy. Luigi owns the actual iframe switch.
-function startRiskClassification() {
-  localStorage.setItem("compliance.openCreateAssessment", "1");
+function startFrameworkAssessment(systemId: string, frameworkId: string) {
+  localStorage.setItem("compliance.pendingAssessment", JSON.stringify({ systemId, frameworkId }));
   LuigiClient.linkManager().navigate("/home/assessments");
 }
+
+const EU_AI_ACT_ID = "FRM-EU-AI-ACT";
+
+// Framework cards shown after registration. Only EU AI Act is wired; ISO/NIST are placeholders.
+const FRAMEWORK_CARDS: Array<{ frameworkId: string; title: string; description: string; enabled: boolean }> = [
+  { frameworkId: EU_AI_ACT_ID, title: "Start EU AI Act Risk Classification", description: "Run the risk classification questionnaire, determine the tier, and generate obligations.", enabled: true },
+  { frameworkId: "FRM-ISO-42001", title: "Start ISO/IEC 42001 Assessment", description: "Coming soon.", enabled: false },
+  { frameworkId: "FRM-NIST-AI-RMF", title: "Start NIST AI RMF Assessment", description: "Coming soon.", enabled: false },
+];
 
 const EMPTY_FORM: AISystemFormData = {
   name: "", version: "1.0.0", provider: "", org_name: "",
@@ -222,24 +232,52 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
             <Alert variant="info" className="mb-4">
               {isEngineerMode
                 ? "System details saved and submitted for review. The compliance officer has been notified."
-                : "AI system registered. Open Assessments to complete risk classification and start the compliance workflow."}
+                : "AI system registered. Choose a framework to start compliance, or do it later from Assessments."}
             </Alert>
             {!isEngineerMode && (
-              <div className="overflow-hidden rounded-md border border-border">
-                <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Telemetry Configuration</div>
-                <div className="p-4">
-                  <p className="mb-3 text-[13px]">
-                    Use this system ID as the telemetry service name
-                    (e.g. <code className="font-mono">OTEL_SERVICE_NAME</code>):
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 font-mono text-[13px]">
-                      {doneId}
-                    </code>
-                    <Button variant="ghost" onClick={handleCopyId} className="shrink-0"><Copy /> Copy ID</Button>
+              <>
+                <div className="mb-4 grid grid-cols-3 gap-4">
+                  {FRAMEWORK_CARDS.map((c) => (
+                    <button
+                      key={c.frameworkId}
+                      disabled={!c.enabled}
+                      className={cn(
+                        "border border-border rounded-lg p-5 text-left flex flex-col gap-4 transition-all w-full",
+                        c.enabled
+                          ? "hover:border-primary hover:shadow-[0_0_0_1px_var(--brand)] cursor-pointer"
+                          : "opacity-50 cursor-not-allowed",
+                      )}
+                      onClick={() => c.enabled && startFrameworkAssessment(doneId!, c.frameworkId)}
+                    >
+                      <div className={cn(
+                        "flex size-11 shrink-0 items-center justify-center rounded-xl",
+                        c.enabled ? "bg-[var(--brand)]/10 text-[var(--brand)]" : "bg-[#f0f2f4] text-[#5a6e82]",
+                      )}>
+                        <ClipboardList className="size-5" />
+                      </div>
+                      <div>
+                        <div className="text-[15px] font-semibold">{c.title}</div>
+                        <div className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">{c.description}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div className="overflow-hidden rounded-md border border-border">
+                  <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Telemetry Configuration</div>
+                  <div className="p-4">
+                    <p className="mb-3 text-[13px]">
+                      Use this system ID as the telemetry service name
+                      (e.g. <code className="font-mono">OTEL_SERVICE_NAME</code>):
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 font-mono text-[13px]">
+                        {doneId}
+                      </code>
+                      <Button variant="ghost" onClick={handleCopyId} className="shrink-0"><Copy /> Copy ID</Button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
         ) : (
@@ -471,12 +509,9 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
         <DialogFooter className="sm:justify-start">
           {doneId ? (
             <>
-              {!isEngineerMode && (
-                <Button variant="outline" onClick={startRiskClassification}>
-                  Start Risk Classification
-                </Button>
-              )}
-              <Button onClick={onClose}>Done</Button>
+              <Button variant={isEngineerMode ? "default" : "outline"} onClick={onClose}>
+                {isEngineerMode ? "Done" : "Do it later"}
+              </Button>
             </>
           ) : (
             <>
