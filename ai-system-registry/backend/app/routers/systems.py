@@ -16,6 +16,7 @@ from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from app.schemas import (
     AISystemResponse,
     AISystemUpdate,
+    FieldConfirmationPatch,
     IntakeResponse,
     SystemModelLinkBody,
     SystemModelResponse,
@@ -107,6 +108,33 @@ async def delete_system(system_id: str) -> dict:
         await session.commit()
     logger.info("system.deleted", extra={"system_id": system_id, "system_name": name})
     return {"status": "deleted", "id": system_id, "name": name}
+
+
+@router.patch("/systems/{system_id}/field-confirmations", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+async def patch_field_confirmations(system_id: str, body: FieldConfirmationPatch, request: Request) -> AISystemResponse:
+    """Merge field confirmations — only the keys sent are merged into field_confirmations."""
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
+
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+
+        if row.assignee_username and current_user != row.assignee_username:
+            raise HTTPException(403, "Only the assigned user may update this system")
+
+        # Merge new confirmations into existing
+        existing = row.field_confirmations or {}
+        merged = {**existing, **body.confirmations}
+        row.field_confirmations = merged
+        row.updated_at = datetime.now(timezone.utc)
+
+        await session.commit()
+        await session.refresh(row)
+
+    logger.info("system.field_confirmations_updated", extra={"system_id": system_id, "confirmed_fields": list(body.confirmations.keys())})
+    return AISystemResponse.model_validate(row)
 
 
 @router.post("/systems/{system_id}/reclassify", response_model=IntakeResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])

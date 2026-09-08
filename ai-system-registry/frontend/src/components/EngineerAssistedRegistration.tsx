@@ -609,7 +609,11 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
                   "flex items-start gap-3 rounded-lg border-2 p-3 mt-4 cursor-pointer",
                   flagsConfirmed ? "border-[var(--success)] bg-[#f0faf4]" : "border-[var(--warning)] bg-[var(--warning-bg)]",
                 )}
-                onClick={() => setFlagsConfirmed(v => !v)}
+                onClick={(e) => {
+                  // Only toggle if clicking the outer div, not the checkbox itself
+                  if ((e.target as HTMLElement).closest('[role="checkbox"]')) return;
+                  setFlagsConfirmed(v => !v);
+                }}
               >
                 <Checkbox
                   checked={flagsConfirmed}

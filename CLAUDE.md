@@ -131,7 +131,7 @@ See [docs/architecture.md](docs/architecture.md) for repo layout, GenAI observab
 
 ## Frontend stacks
 
-All React frontends (registry, alerts, DTA, compliance, monitoring, users, iam) share:
+All React frontends (registry, alerts, DTA, compliance, monitoring, users, iam, admin) share:
 - **Stack** — React 19, React Router 8, TypeScript 5.8. Use React 19 APIs (no `forwardRef`/`React.FC`, `use()` where applicable).
 - **Build** — Vite 6 (`npm run build → dist/`), multi-stage Dockerfile (`node:24-alpine` build → `nginx:alpine` serve).
 - **Base path** — `base` in `vite.config.ts` (e.g. `/registry/`) for correct asset resolution under the shell sub-path.
@@ -139,7 +139,7 @@ All React frontends (registry, alerts, DTA, compliance, monitoring, users, iam) 
 - **API base URL** — from `import.meta.env.VITE_*_API_BASE` at build time (relative paths, e.g. `/api/registry/v1`).
 - **Health polling** — red banner with auto-retry if backend is down.
 - **nginx headers** — `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding).
-- **UI5 Web Components** — `@ui5/webcomponents-react` 2.25 (SAP Fiori look). Import named components (`import { Button } from "@ui5/webcomponents-react"`) and use as JSX; never raw `<ui5-button>` custom elements.
+- **UI components** — Radix UI primitives (`@radix-ui/react-*`) + Tailwind CSS 4 (shadcn/ui pattern). Use the shared component wrappers in `src/components/ui/` — never raw Radix primitives directly in page components. Icons via `lucide-react`. Charts via `recharts`.
 
 **Exceptions:** Overview is static HTML served by nginx (no build). DTA uses a dev proxy (`vite.config.ts` proxies `/api/*` → `http://localhost:8006`, no local CORS).
 

@@ -22,6 +22,11 @@ from app.schemas.model_card import (
     ModelCardUpdate,
     ModelCardResponse,
 )
+from app.schemas.system_note import (
+    SystemNoteCreate,
+    SystemNoteUpdate,
+    SystemNoteResponse,
+)
 from app.schemas.workflow import (
     WorkflowStepResponse,
     WorkflowSubmitRequest,
@@ -48,6 +53,9 @@ __all__ = [
     "ModelCardCreate",
     "ModelCardUpdate",
     "ModelCardResponse",
+    "SystemNoteCreate",
+    "SystemNoteUpdate",
+    "SystemNoteResponse",
     "WorkflowStepResponse",
     "WorkflowSubmitRequest",
     "WorkflowApproveRequest",
