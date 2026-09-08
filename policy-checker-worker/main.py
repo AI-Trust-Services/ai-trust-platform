@@ -380,7 +380,7 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
     today = date.today()
     async with SessionLocal() as session:
         rows = (await session.execute(
-            select(Evidence.id, Evidence.title, Evidence.ai_system_id)
+            select(Evidence.id, Evidence.title)
             .where(Evidence.validity_until.is_not(None))
             .where(Evidence.validity_until < today)
             .where(Evidence.status == "approved")
@@ -388,13 +388,6 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
 
         if not rows:
             return []
-
-        sys_ids = [r.ai_system_id for r in rows if r.ai_system_id]
-        sys_map: dict[str, str] = {}
-        if sys_ids:
-            sys_map = {r.id: r.name for r in (await session.execute(
-                select(AISystem.id, AISystem.name).where(AISystem.id.in_(sys_ids))
-            )).all()}
 
         # Collect all linked control IDs in one query before any status mutations.
         evd_ids = [r.id for r in rows]
@@ -464,10 +457,7 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
                         obl.status = "in_progress"
                     await session.flush()
 
-            sys_name = sys_map.get(evd.ai_system_id, "") if evd.ai_system_id else ""
             desc = f"Evidence expired: '{evd.title}'"
-            if sys_name:
-                desc += f" — {sys_name}"
             results.append(EvalResult(
                 triggered=True, value=1.0, description=desc,
                 entity_id=evd.id, entity_type="evidence",
@@ -485,7 +475,7 @@ async def _eval_evidence_expiring(min_days: int, max_days: int) -> list[EvalResu
 
     async with SessionLocal() as session:
         rows = (await session.execute(
-            select(Evidence.id, Evidence.title, Evidence.ai_system_id, Evidence.validity_until)
+            select(Evidence.id, Evidence.title, Evidence.validity_until)
             .where(Evidence.status == "approved")
             .where(Evidence.validity_until.is_not(None))
             .where(Evidence.validity_until >= cutoff_far)
@@ -495,20 +485,10 @@ async def _eval_evidence_expiring(min_days: int, max_days: int) -> list[EvalResu
         if not rows:
             return []
 
-        sys_ids = [r.ai_system_id for r in rows if r.ai_system_id]
-        sys_map: dict[str, str] = {}
-        if sys_ids:
-            sys_map = {r.id: r.name for r in (await session.execute(
-                select(AISystem.id, AISystem.name).where(AISystem.id.in_(sys_ids))
-            )).all()}
-
     results: list[EvalResult] = []
     for evd in rows:
         days_left = (evd.validity_until - today).days
-        sys_name = sys_map.get(evd.ai_system_id, "") if evd.ai_system_id else ""
         desc = f"Evidence expiring in {days_left} day(s): '{evd.title}'"
-        if sys_name:
-            desc += f" — {sys_name}"
         results.append(EvalResult(
             triggered=True, value=float(days_left), description=desc,
             entity_id=evd.id, entity_type="evidence",
