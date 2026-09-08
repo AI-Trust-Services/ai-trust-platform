@@ -783,12 +783,31 @@ async def proxy(name: str, path: str, request: Request) -> Response:
     except httpx.HTTPError as e:
         raise HTTPException(502, f"Upstream '{name}' unreachable: {e}") from e
 
-    resp_headers = {
-        k: v for k, v in upstream.headers.items() if k.lower() not in _HOP_BY_HOP
-    }
-    return Response(
+    # Build the response preserving MULTIPLE Set-Cookie headers (a dict collapses them, which breaks
+    # session cookies for an app that sets more than one). Rewrite a redirect Location so an app that
+    # emits ROOT-RELATIVE redirects (e.g. Express ``res.redirect("/login")``) stays under the proxy
+    # prefix instead of escaping to the platform origin — an app reached same-origin under
+    # ``/api/marketplace/v1/proxy/<name>/`` that redirects to a bare ``/login`` would otherwise resolve
+    # against ``APP_PUBLIC_URL/login`` (the shell) and never load. A fully-qualified external Location
+    # (another origin) is left untouched.
+    prefix = f"/api/marketplace/v1/proxy/{name}"
+    is_redirect = 300 <= upstream.status_code < 400
+    resp = Response(
         content=upstream.content,
         status_code=upstream.status_code,
-        headers=resp_headers,
         media_type=upstream.headers.get("content-type"),
     )
+    # Starlette set content-length/content-type on resp.raw_headers; keep those, then append every
+    # upstream header (except hop-by-hop + the content-* we already have), preserving MULTIPLE
+    # Set-Cookie entries (a dict would collapse them and break multi-cookie session apps).
+    passthrough: list[tuple[bytes, bytes]] = []
+    for k, v in upstream.headers.multi_items():
+        kl = k.lower()
+        if kl in _HOP_BY_HOP or kl in ("content-length", "content-type"):
+            continue
+        if is_redirect and kl == "location" and v.startswith("/") \
+                and not v.startswith(prefix + "/") and v != prefix:
+            v = f"{prefix}{v}"
+        passthrough.append((k.encode("latin-1"), v.encode("latin-1")))
+    resp.raw_headers = resp.raw_headers + passthrough
+    return resp
