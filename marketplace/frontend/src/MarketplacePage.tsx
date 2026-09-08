@@ -284,6 +284,15 @@ function ServiceCard(props: {
 // the operator can tell them apart. Keep this copy identical to marketplace/docs/how-to.md.
 type AddKind = "static" | "dockerfile" | "image" | "ocm" | "ocm-build";
 
+// Short titles for the Type radio cards (the longer sentence lives in KIND_EXPLANATION).
+const KIND_LABEL: Record<AddKind, string> = {
+  static: "Static site",
+  dockerfile: "Server app — build Dockerfile",
+  image: "Server app — prebuilt image",
+  ocm: "Server app — OCM (resolve published)",
+  "ocm-build": "Server app — OCM (build from Git repo)",
+};
+
 const KIND_EXPLANATION: Record<AddKind, string> = {
   static: "Serve a repo of HTML/JS/CSS with nginx (needs an index.html at the root).",
   dockerfile: "Build the repo's Dockerfile, push to the platform registry, and run it.",
@@ -407,20 +416,24 @@ function AddForm({ onSubmit, busy }: { onSubmit: (p: AddPayload) => void; busy: 
           Slug (URL-safe)
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="weather" required />
         </label>
-        <label>
-          Type
-          <select
-            value={kind}
-            onChange={(e) => setKind(e.target.value as AddKind)}
-          >
-            <option value="static">Static site (nginx serves the repo)</option>
-            <option value="dockerfile">Server app (build the Dockerfile &amp; run it)</option>
-            <option value="image">Server app (pull &amp; run a prebuilt image)</option>
-            <option value="ocm">Server app (resolve &amp; run a published OCM component)</option>
-            <option value="ocm-build">Server app (build &amp; run an OCM component from a Git repo)</option>
-          </select>
-          <span className="sub hint">{KIND_EXPLANATION[kind]}</span>
-        </label>
+        <div className="type-picker">
+          <span className="type-picker-legend">Type</span>
+          <div className="type-cards">
+            {(Object.keys(KIND_EXPLANATION) as AddKind[]).map((k) => (
+              <label key={k} className={"type-card" + (kind === k ? " selected" : "")}>
+                <input
+                  type="radio"
+                  name="service-kind"
+                  value={k}
+                  checked={kind === k}
+                  onChange={() => setKind(k)}
+                />
+                <span className="type-card-title">{KIND_LABEL[k]}</span>
+                <span className="type-card-desc">{KIND_EXPLANATION[k]}</span>
+              </label>
+            ))}
+          </div>
+        </div>
         {needsGit && (
           <>
             <label>

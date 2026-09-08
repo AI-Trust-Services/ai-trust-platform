@@ -66,6 +66,21 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .form .hint { margin: 10px 0 0; font-size: 12px; }
 .form .hint code { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
 .error { color: var(--danger); font-size: 13px; margin-top: 8px; }
+
+/* Type picker — 5 always-visible radio cards instead of a hidden <select> dropdown. */
+.type-picker { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
+.type-picker-legend { font-size: 13px; }
+.type-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.type-card {
+  display: flex; flex-direction: column; gap: 4px;
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+  cursor: pointer; background: var(--bg); position: relative; transition: border-color .12s, background .12s;
+}
+.type-card:hover { border-color: var(--accent); }
+.type-card.selected { border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 1px var(--accent) inset; }
+.type-card input[type="radio"] { position: absolute; top: 10px; right: 10px; margin: 0; accent-color: var(--accent); }
+.type-card-title { font-size: 13px; font-weight: 600; padding-right: 20px; }
+.type-card-desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
 .empty { color: var(--muted); padding: 40px; text-align: center; border: 1px dashed var(--border); border-radius: 10px; }
 
 /* Discover Applications section */
