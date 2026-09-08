@@ -1,0 +1,34 @@
+{{/* Background job, no HTTP port - flushes Postgres audit_events to ClickHouse every AUDIT_FLUSH_INTERVAL seconds. */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audit-flush-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "audit-flush-worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "audit-flush-worker") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        # mirrors compose: depends_on db-migrate + clickhouse-migrate (both completed)
+        {{- include "ai-trust.waitForJob" (dict "job" "db-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "clickhouse-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
+      containers:
+        - name: audit-flush-worker
+          image: {{ .Values.image.repository }}/audit-flush-worker:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # DATABASE_URL, CLICKHOUSE_USER/PASSWORD
+          env:
+            - name: CLICKHOUSE_HOST
+              value: clickhouse
+            - name: CLICKHOUSE_PORT
+              value: "8123"
+            - name: AUDIT_FLUSH_INTERVAL
+              value: "5"

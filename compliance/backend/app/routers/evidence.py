@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import EVIDENCE_APPROVE, EVIDENCE_READ, EVIDENCE_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models import (
     AISystem,
     Assessment,
@@ -106,6 +107,7 @@ async def list_evidence(
 
 @router.post("/evidence", response_model=EvidenceDetailResponse, status_code=201, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
 async def create_evidence(
+    request: Request,
     title: str = Form(...),
     description: str = Form(default=""),
     evidence_type: str = Form(default="document"),
@@ -118,6 +120,7 @@ async def create_evidence(
     uploaded_by: str = Form(default=""),
     file: UploadFile | None = File(default=None),
 ) -> EvidenceDetailResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     if not title.strip():
         raise HTTPException(422, "title must not be blank")
     if evidence_type not in VALID_EVIDENCE_TYPES:
@@ -142,10 +145,15 @@ async def create_evidence(
                 select(Obligation.id).where(Obligation.id == oid)
             )).scalar_one_or_none():
                 raise HTTPException(404, f"Obligation {oid} not found")
-        if ai_system_id and not (await session.execute(
-            select(AISystem.id).where(AISystem.id == ai_system_id)
-        )).scalar_one_or_none():
-            raise HTTPException(404, f"AI system {ai_system_id} not found")
+        if ai_system_id:
+            ai_system_name_row = (await session.execute(
+                select(AISystem.id, AISystem.name).where(AISystem.id == ai_system_id)
+            )).one_or_none()
+            if not ai_system_name_row:
+                raise HTTPException(404, f"AI system {ai_system_id} not found")
+            ai_system_name = ai_system_name_row[1]
+        else:
+            ai_system_name = None
         if assessment_id and not (await session.execute(
             select(Assessment.id).where(Assessment.id == assessment_id)
         )).scalar_one_or_none():
@@ -204,6 +212,15 @@ async def create_evidence(
                 await session.execute(pg_insert(evidence_obligations).values(
                     evidence_id=evidence_id, obligation_id=oid).on_conflict_do_nothing())
 
+            log_audit_event(
+                session,
+                actor=current_user,
+                action="evidence.uploaded",
+                resource_type="evidence",
+                resource_id=evidence_id,
+                ai_system_id=ai_system_id,
+                ai_system_name=ai_system_name,
+            )
             await session.commit()
             await session.refresh(row)
             linked_control_ids, linked_obligation_ids = await _linked_ids(session, evidence_id)
@@ -262,10 +279,15 @@ async def update_evidence(evidence_id: str, body: EvidenceUpdate) -> EvidenceRes
 
 
 @router.delete("/evidence/{evidence_id}", dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
-async def delete_evidence(evidence_id: str) -> dict:
+async def delete_evidence(evidence_id: str, request: Request) -> dict:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         row = await _load(session, evidence_id)
         file_path = row.file_path
+        ai_system_id = row.ai_system_id
+        ai_system_name: str | None = None
+        if ai_system_id:
+            ai_system_name = await session.scalar(select(AISystem.name).where(AISystem.id == ai_system_id))
         control_ids, _ = await _linked_ids(session, evidence_id)
         await session.delete(row)
         await session.flush()
@@ -273,6 +295,15 @@ async def delete_evidence(evidence_id: str) -> dict:
         for cid in control_ids:
             await refresh_control_effectiveness(session, cid)
             await refresh_obligations_for_control(session, cid)
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="evidence.deleted",
+            resource_type="evidence",
+            resource_id=evidence_id,
+            ai_system_id=ai_system_id,
+            ai_system_name=ai_system_name,
+        )
         await session.commit()
     if file_path:
         await minio_client.delete_file(file_path)
@@ -281,22 +312,40 @@ async def delete_evidence(evidence_id: str) -> dict:
 
 
 @router.post("/evidence/{evidence_id}/approve", response_model=EvidenceResponse, dependencies=[Depends(require_permission(EVIDENCE_APPROVE))])
-async def approve_evidence(evidence_id: str) -> EvidenceResponse:
-    return await _set_status(evidence_id, "approved")
+async def approve_evidence(evidence_id: str, request: Request) -> EvidenceResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
+    return await _set_status(evidence_id, "approved", current_user)
 
 
 @router.post("/evidence/{evidence_id}/reject", response_model=EvidenceResponse, dependencies=[Depends(require_permission(EVIDENCE_APPROVE))])
-async def reject_evidence(evidence_id: str) -> EvidenceResponse:
-    return await _set_status(evidence_id, "rejected")
+async def reject_evidence(evidence_id: str, request: Request) -> EvidenceResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
+    return await _set_status(evidence_id, "rejected", current_user)
 
 
-async def _set_status(evidence_id: str, status: str) -> EvidenceResponse:
+async def _set_status(evidence_id: str, status: str, actor: str) -> EvidenceResponse:
     async with SessionLocal() as session:
         row = await _load(session, evidence_id)
+        before_status = row.status
         row.status = status
         row.updated_at = datetime.now(timezone.utc)
+        ai_system_name = None
+        if row.ai_system_id:
+            ai_system_name = (await session.execute(
+                select(AISystem.name).where(AISystem.id == row.ai_system_id)
+            )).scalar_one_or_none()
         await session.flush()
         await _cascade_from_evidence(session, evidence_id)
+        log_audit_event(
+            session,
+            actor=actor,
+            action=f"evidence.{status}",
+            resource_type="evidence",
+            resource_id=evidence_id,
+            ai_system_id=row.ai_system_id,
+            ai_system_name=ai_system_name,
+            changes={"status": {"before": before_status, "after": status}},
+        )
         await session.commit()
         await session.refresh(row)
     logger.info("evidence.status_changed", extra={"evidence_id": evidence_id, "status": status})
