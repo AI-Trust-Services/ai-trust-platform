@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import io
 import os
+import re
 from datetime import timedelta
 
 from minio import Minio
@@ -70,7 +71,8 @@ async def ensure_bucket() -> None:
 
 def object_key(system_id: str, filename: str) -> str:
     """Deterministic, path-traversal-safe object key: ``{system_id}/{filename}``."""
-    safe_name = os.path.basename(filename).replace("..", "").strip() or "file"
+    base = os.path.basename(filename.replace("\\", "/"))
+    safe_name = re.sub(r"[^\w.\-]", "_", base).strip(".") or "file"
     return f"{system_id}/{safe_name}"
 
 
