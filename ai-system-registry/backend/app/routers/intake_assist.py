@@ -24,7 +24,7 @@ from ai_trust_authorization.constants import SYSTEMS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
-from app.classifier import CLASSIFIER_INPUTS, _classify_from_flags
+from app.classifier import CLASSIFIER_INPUTS, classify_from_flags
 from app.documents import DocumentParseError, is_supported, parse_document
 from app.llm import (
     LLM_VISION_MODEL,
@@ -107,7 +107,7 @@ async def _run_assist_turn(
             raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
 
         response.inferred_flags = inferred
-        response.classification = _classify_from_flags(inferred)
+        response.classification = classify_from_flags(inferred)
         logger.info(
             "intake_assist.completed",
             extra={"tier": response.classification.tier, "flag_count": len(inferred)},

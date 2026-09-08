@@ -121,7 +121,7 @@ def classify(body: Any) -> ClassificationResult:
     )
 
 
-def _classify_from_flags(flags: list[Any]) -> ClassificationResult:
+def classify_from_flags(flags: list[Any]) -> ClassificationResult:
     """Run the deterministic classifier over a list of inferred flags.
 
     Each item needs ``.flag`` (name) and ``.value`` attributes. Builds a synthetic
@@ -176,7 +176,7 @@ async def classify_ai_questionnaire(row: Any) -> tuple[ClassificationResult, dic
     parsed = await parse_json_response(result["text"], task="classify_questionnaire")
 
     inferred = [InferredFlag(**f) for f in parsed.get("inferred_flags", [])]
-    classification = _classify_from_flags(inferred)
+    classification = classify_from_flags(inferred)
 
     confidence = parsed.get("confidence")
     rationale = {
