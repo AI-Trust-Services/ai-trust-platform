@@ -433,13 +433,13 @@ async def approve_system(
 
         # The compliance officer is the last person and must ensure everything is filled —
         # the business/technical assignees may submit partial sections, but approval is gated.
-        # missing = missing_for_approval(row)
-        # if missing:
-        #     raise HTTPException(
-        #         422,
-        #         f"Cannot approve — required questions are unanswered: {', '.join(missing)}. "
-        #         "Use 'Request Info' to have a contributor complete them.",
-        #     )
+        missing = missing_for_approval(row)
+        if missing:
+            raise HTTPException(
+                422,
+                f"Cannot approve — required questions are unanswered: {', '.join(missing)}. "
+                "Use 'Request Info' to have a contributor complete them.",
+            )
 
         # Optional CO tier override, applied before finalising.
         if body.tier is not None and body.tier != row.tier:
