@@ -54,6 +54,10 @@ For `kind="dockerfile"` specifically:
 
 ### When SSO-enabled (`sso_enabled=true`)
 
+> Full step-by-step app-side integration guide (RP flow, base-path handling, the
+> `OIDC_ISSUER_INTERNAL` back-channel, cookie rules, a Node/Express patch pattern, and a worked
+> reference) is in [integrate-platform-sso.md](integrate-platform-sso.md).
+
 The platform mints a per-app confidential Keycloak client `aitrust-app-<name>` in realm `ai-trust`
 and injects these env vars. The app runs its **own** OIDC Authorization-Code login using them:
 
