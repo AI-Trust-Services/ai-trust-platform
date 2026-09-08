@@ -27,6 +27,10 @@ oauth2-proxy forwards your identity header automatically.
 Rule of thumb: if the platform runs your container it's `image`/`dockerfile`/`static`; if you run it
 yourself it's an external discovered app.
 
+> Server apps (`image`/`dockerfile`/OCM) can take **environment variables** at register time, and an
+> app that runs its own login embedded same-window gets an auto-set `ISSUER` — see
+> [§8](#8-environment-variables--sso-for-embedded-apps) and [env-and-sso.md](env-and-sso.md).
+
 ---
 
 ## 1. Publish a prebuilt image (`kind="image"`)
@@ -336,6 +340,67 @@ Any discovered app with a `health_url` is probed on a fixed interval by the
   ```bash
   docker compose up -d marketplace-health-worker
   ```
+
+---
+
+## 8. Environment variables & SSO for embedded apps
+
+A `dockerfile` or `image` (incl. OCM-resolved/built) server app can carry **plain, non-secret
+environment variables** the platform injects into the deployed container. Supply them at register
+time — in the UI as a `KEY=VALUE` box (one per line, on the *Type = Server app* forms), or via the
+`env` field on the API:
+
+```bash
+curl -X POST /v1/services -d '{
+  "name":"capitals-weather","label":"EU Capitals Weather","kind":"image",
+  "image_ref":"mirceacraciun795/capitals-weather:1.0.0","app_port":3000,
+  "open_mode":"same_window",
+  "env": { "LOG_LEVEL":"info" }
+}'
+```
+
+Rules:
+- **Non-secret only.** `env` is stored in Postgres and returned on the service response (visible in the
+  card's **Configuration** panel). Never put secrets, tokens, or registry credentials here — those go
+  through the deploy-time body (`registry_username`/`registry_token`) and are never persisted. The
+  `OIDC_CLIENT_SECRET` for Platform-SSO apps is likewise delivered separately and never appears in `env`.
+- **Bounds:** at most 50 vars; keys must be valid env names (`[A-Za-z_][A-Za-z0-9_]*`, ≤128 chars);
+  values ≤2048 chars. `env` is rejected (422) for `kind="static"`.
+
+### Auto-`ISSUER` for same-window apps that run their own login
+
+An app embedded **same-window** is reached under the marketplace proxy base
+`<APP_PUBLIC_URL>/api/marketplace/v1/proxy/<name>` — not at its own origin. If such an app runs its
+**own** OIDC provider/login (like `capitals-weather`), its login redirect must point at that proxy base,
+not at a hardcoded `localhost:PORT`. So the deploy path **auto-injects**:
+
+```
+ISSUER = <APP_PUBLIC_URL>/api/marketplace/v1/proxy/<name>
+```
+
+for every `open_mode="same_window"` server app — **unless you set `ISSUER` yourself** in `env`
+(your value always wins). This is why `capitals-weather` can register with an empty env box and its
+embedded login "just works". (This is distinct from **Platform SSO** / `sso_enabled`, which mints a
+per-app Keycloak client and injects `OIDC_*` for an app that federates to the *platform* realm.)
+
+**Worked example — capitals-weather (its own OIDC, admin/admin):**
+1. Marketplace → Type = **Server app — prebuilt image**.
+2. Image ref `mirceacraciun795/capitals-weather:1.0.0`, App port `3000`, leave **Open in a new tab**
+   OFF (embedded), leave the env box blank.
+3. **Add to catalog** → **Deploy** (public image, no credentials).
+4. Open the tile → the app renders embedded; log in with `admin` / `admin`. The OIDC redirect stays
+   under `/api/marketplace/v1/proxy/capitals-weather/…`.
+5. Click **Configuration** on the card to see exactly what was stored (kind, image, port, open-mode,
+   SSO, and the env — `ISSUER` is set automatically at deploy for same-window apps).
+
+---
+
+## 9. See what was configured (the Configuration button)
+
+Every deployed service card has a **Configuration** toggle showing the persisted config: kind,
+image ref / Git URL+ref, app port, open mode, Platform-SSO on/off, and the operator-supplied
+environment variables (key → value). Deploy-time secrets (OIDC client secret, registry pull creds)
+are never shown — they are never stored.
 
 ---
 
