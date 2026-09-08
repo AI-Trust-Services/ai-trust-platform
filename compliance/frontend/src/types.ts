@@ -66,10 +66,15 @@ export interface ControlDetail extends Control {
   evidence_count: number;
 }
 
+export interface ControlRef {
+  id: string;
+  control_ref: string | null;
+  title: string;
+  status: string;
+}
+
 export interface Evidence {
   id: string;
-  ai_system_id: string | null;
-  assessment_id: string | null;
   title: string;
   description: string;
   evidence_type: string;
@@ -81,13 +86,13 @@ export interface Evidence {
   mime_type: string;
   uploaded_by: string;
   version_label: string;
+  control_count: number;
   created_at: string;
   updated_at: string;
 }
 
 export interface EvidenceDetail extends Evidence {
-  control_ids: string[];
-  obligation_ids: string[];
+  controls: ControlRef[];
 }
 
 export interface EvidenceVersion {
