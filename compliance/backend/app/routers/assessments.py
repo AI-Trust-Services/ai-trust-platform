@@ -301,16 +301,29 @@ async def update_assessment(assessment_id: str, body: AssessmentUpdate) -> Asses
 
 
 @router.delete("/assessments/{assessment_id}", dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def delete_assessment(assessment_id: str) -> dict:
+async def delete_assessment(assessment_id: str, request: Request) -> dict:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
         ai_system_id = row.ai_system_id
+        system = (await session.execute(
+            select(AISystem).where(AISystem.id == ai_system_id)
+        )).scalar_one_or_none()
 
         deleted_controls = await _delete_generated_controls(session, assessment_id)
 
         await session.delete(row)
         await session.flush()
         await sync_system_compliance(session, ai_system_id)
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="assessment.deleted",
+            resource_type="assessment",
+            resource_id=assessment_id,
+            ai_system_id=ai_system_id,
+            ai_system_name=system.name if system else "",
+        )
         await session.commit()
     logger.info("assessment.deleted", extra={
         "assessment_id": assessment_id, "controls_deleted": deleted_controls,
