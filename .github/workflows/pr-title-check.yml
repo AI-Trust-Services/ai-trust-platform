@@ -1,0 +1,24 @@
+name: PR Title Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  check-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          PATTERN='^(feat|fix|refactor|docs|test|chore|build|ci|perf|style|revert)(\(#[0-9]+\))?: .+'
+          if [[ ! "$PR_TITLE" =~ $PATTERN ]]; then
+            echo "PR title does not follow the convention."
+            echo "Expected: <type>(#<issue>): <short description>"
+            echo "Types: feat, fix, refactor, docs, test, chore, build, ci, perf, style, revert"
+            echo "Scope (optional): issue number, e.g. #87"
+            echo "Got: \"$PR_TITLE\""
+            exit 1
+          fi
+          echo "PR title is valid: $PR_TITLE"
