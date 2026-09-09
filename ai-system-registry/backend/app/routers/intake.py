@@ -7,6 +7,7 @@ from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from app.classifier import CLASSIFIER_INPUTS, classify
@@ -79,6 +80,15 @@ async def intake_system(body: AISystemCreate, request: Request, background_tasks
     async with SessionLocal() as session:
         session.add(row)
         session.add(step)
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="system.registered",
+            resource_type="ai_system",
+            resource_id=system_id,
+            ai_system_id=system_id,
+            ai_system_name=body.name,
+        )
         await session.commit()
         await session.refresh(row)
 
