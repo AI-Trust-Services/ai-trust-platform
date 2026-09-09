@@ -2,7 +2,7 @@ name: Bootstrap Gardener Cluster
 
 # Runs the namespace/secret bootstrap and applies OCM CRs so the OCM controller
 # + Flux can take over the actual Helm deployment. Called automatically by
-# build-push.yml on every main merge, and can also be triggered manually.
+# build-push-deploy.yml on every main merge, and can also be triggered manually.
 #
 # Prerequisites (one-time, per cluster):
 #   bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>

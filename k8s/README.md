@@ -111,7 +111,7 @@ A third path, alongside docker-compose and local `kind`. The platform is package
 ### How it works end-to-end
 
 ```
-build-push.yml
+build-push-deploy.yml
   ├─ build & push ~22 Docker images  →  ghcr.io/ai-trust-services/ai-trust-platform/<name>:<cluster>-<sha>
   ├─ build & push Helm chart OCI     →  ghcr.io/ai-trust-services/charts/ai-trust-platform:0.0.0-<cluster>-<sha>
   ├─ publish OCM component           →  ghcr.io/ai-trust-services/ocm  (references images + chart by digest)
@@ -129,14 +129,14 @@ On the cluster (OCM controller + Flux):
 
 ### Workflows
 
-- **`build-push.yml`** — runs on every push to `main`, on version tags (`v*.*.*`), or manually
+- **`build-push-deploy.yml`** — runs on every push to `main`, on version tags (`v*.*.*`), or manually
   via `workflow_dispatch` (inputs: `branch`, `gardener_cluster`). Tags images
   `<cluster>-<short-sha>` (isolated per cluster); `ai-trust-main` builds additionally tag `latest`.
   OCM component version: `0.0.0-<cluster>-<sha>`. Feature branch pushes build images but do NOT
   publish OCM or trigger a deploy (set `gardener_cluster=sr-test` in `workflow_dispatch` to deploy
   from a feature branch).
 
-- **`bootstrap-gardener.yml`** — called by `build-push.yml` after successful publish, or manually.
+- **`bootstrap-gardener.yml`** — called by `build-push-deploy.yml` after successful publish, or manually.
   Authenticates via Gardener Structured Auth + GitHub OIDC (no stored kubeconfig). Runs
   `k8s/scripts/bootstrap.sh` (namespace, `ai-trust-env` secret, `ai-trust-flux-values` secret in
   `ocm-system`, ConfigMaps, RBAC), then applies `k8s/ocm/` with the exact built version
@@ -266,8 +266,8 @@ All other config lives in `k8s/env/<cluster>/.env` (committed). No per-cluster G
 2. Copy `k8s/gardener_init/env/example/.env` → `k8s/gardener_init/env/<cluster-name>/.env` and fill in hostnames
 3. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>` (installs OCM controller, Flux, Traefik, DNS, TLS cert, RBAC)
 4. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/sr-test/.env`, fill in Gardener connection vars and hostnames)
-5. Add `<cluster-name>` to the `options` list in `build-push.yml` and `bootstrap-gardener.yml` `workflow_dispatch` inputs
-6. Trigger `build-push.yml` with `gardener_cluster=<cluster-name>`
+5. Add `<cluster-name>` to the `options` list in `build-push-deploy.yml` and `bootstrap-gardener.yml` `workflow_dispatch` inputs
+6. Trigger `build-push-deploy.yml` with `gardener_cluster=<cluster-name>`
 
 ## Known limitations / gaps as of local-dev scope (same as docker-compose today)
 

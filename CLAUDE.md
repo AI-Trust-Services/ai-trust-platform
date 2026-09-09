@@ -23,7 +23,7 @@ Manifests live in `k8s/helm/ai-trust-platform/`. Every k8s Service name matches 
 The platform is packaged as an OCM component and deployed to Gardener shoot clusters via Flux HelmRelease. See [k8s/README.md](k8s/README.md) for the full guide.
 ```bash
 # Trigger a build + deploy to a specific cluster from any branch:
-gh workflow run build-push.yml \
+gh workflow run build-push-deploy.yml \
   --ref <branch> \
   --field gardener_cluster=sr-test
 

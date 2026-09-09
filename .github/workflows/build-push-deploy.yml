@@ -1,4 +1,4 @@
-name: Build and Push Images
+name: Deployment Workflow
 
 # Builds every locally-built image (mirrors k8s/scripts/build-and-load-images.sh)
 # and pushes it to ghcr.io. Third-party images (postgres, keycloak, openfga,
