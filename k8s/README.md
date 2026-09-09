@@ -48,7 +48,8 @@ set it explicitly: `TENANCY_MODE=single make up`. To change it later:
 ```bash
 cp .env.example .env
 cd k8s
-make up      # PROMPT tenancy mode → kind create cluster → bootstrap → build/load images → helm install
+make up      
+# PROMPT tenancy mode → kind create cluster → bootstrap → build/load images → helm install
 ```
 
 Then open http://localhost:8080 and log in via Keycloak, same as with docker-compose.
