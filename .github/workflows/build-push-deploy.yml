@@ -17,7 +17,7 @@ name: Deployment Workflow
 
 on:
   push:
-    branches: [main, 19-package-ai-trust-platform-components-as-ocm-open-component-model]
+    branches: [main]
     tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
