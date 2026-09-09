@@ -122,6 +122,11 @@ async def list_services(
     except HTTPException:
         user = ""
     roles = await _user_roles(user) if user else set()
+    # An operator (marketplace:manage) manages the catalog, so they must see a gated INTERNAL app
+    # (one the platform deploys) even before it is enabled for any role — otherwise a freshly
+    # registered sso_enabled app is invisible to the very person who has to Deploy it and enable a
+    # role for it (chicken-and-egg). Discovered EXTERNAL apps stay visibility-scoped as before.
+    is_operator = bool(user) and await check_permission(user, MARKETPLACE_MANAGE)
 
     async with SessionLocal() as session:
         stmt = select(MarketplaceService).order_by(MarketplaceService.label)
@@ -133,10 +138,13 @@ async def list_services(
         for r in rows:
             if _is_gated(r):
                 enabled = bool(user) and await _is_enabled_for(session, r.id, user, roles)
-                if not enabled:
+                # Operators additionally see gated INTERNAL apps pre-enablement so they can deploy +
+                # enable them; they do NOT get a free pass to unenabled external_discovered apps.
+                operator_visible = is_operator and r.source == "internal"
+                if not enabled and not operator_visible:
                     continue
                 resp = ServiceResponse.model_validate(r)
-                resp.enabled_for_me = True
+                resp.enabled_for_me = enabled
                 out.append(resp)
             else:
                 out.append(ServiceResponse.model_validate(r))

@@ -88,6 +88,29 @@ async def test_sso_app_hidden_until_role_enabled(client, as_user):
     assert shown[0]["enabled_for_me"] is True
 
 
+async def test_operator_sees_gated_internal_app_before_enablement(client, as_user):
+    """An operator (marketplace:manage) must see a gated INTERNAL app in the catalog even before any
+    role is enabled — otherwise the freshly registered app is invisible to the person who has to
+    Deploy it and enable a role (chicken-and-egg). Regression guard for the list_services fix."""
+    app_row = await create_service(
+        client, name="opsees", label="Ops Sees", kind="image", app_port=3000,
+        image_ref="ghcr.io/acme/app:sso", git_url="", sso_enabled=True,
+    )
+    app_id = app_row["id"]
+
+    # Operator posture (check → allow ⇒ has marketplace:manage): the gated, not-yet-enabled app IS
+    # listed, and enabled_for_me reflects that no role is enabled yet.
+    r = await client.get("/v1/services", headers=as_user.operator())
+    shown = [s for s in r.json() if s["id"] == app_id]
+    assert len(shown) == 1, "operator should see the gated internal app pre-enablement"
+    assert shown[0]["enabled_for_me"] is False
+
+    # A plain non-operator user still does NOT see it (gate intact for non-operators).
+    r = await client.get("/v1/services", headers=as_user.user("dave", roles=[]))
+    assert all(s["id"] != app_id for s in r.json())
+
+
+
 # ── static app is never retro-hidden (regression) ──────────────────────────────────────────────
 
 async def test_static_app_always_visible(client, as_user):
