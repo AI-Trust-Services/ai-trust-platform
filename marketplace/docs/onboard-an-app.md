@@ -41,6 +41,12 @@ recognizes them as the platform user — no second login.
 
 ## Layer 1 — What your APP must do
 
+> **Don't want to change your app's code?** Use the **sidecar** instead — run
+> `marketplace/tools/prepare-app/prepare-app.sh <your-repo>` and it wraps your unmodified app with a
+> Platform-SSO reverse proxy (works for any language). See
+> [`../tools/prepare-app/README.md`](../tools/prepare-app/README.md). The rest of this section is the
+> hand-integration path (make the app itself an OIDC RP), for when you want the app to be OIDC-aware.
+
 Your app must be an **OIDC Relying Party (RP)** that federates to the platform's Keycloak and runs
 correctly **under the marketplace proxy sub-path**. Everything is driven by environment variables the
 platform injects — no platform hostnames are hardcoded in your app.
