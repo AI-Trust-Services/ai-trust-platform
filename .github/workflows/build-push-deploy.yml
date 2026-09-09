@@ -17,7 +17,7 @@ name: Deployment Workflow
 
 on:
   push:
-    branches: [main, 20-set-up-cicd-pipeline-for-ai-trust-platform]
+    branches: [main, 19-package-ai-trust-platform-components-as-ocm-open-component-model]
     tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
