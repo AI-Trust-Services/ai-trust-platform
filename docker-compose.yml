@@ -195,6 +195,10 @@ services:
         condition: service_started
       audit-backend:
         condition: service_healthy
+      admin-frontend:
+        condition: service_started
+      admin-backend:
+        condition: service_healthy
     restart: on-failure
 
   ai-system-registry-frontend:
@@ -255,6 +259,14 @@ services:
       context: ./audit/frontend
       args:
         VITE_AUDIT_API_BASE: ${VITE_AUDIT_API_BASE:-/api/audit/v1}
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
+    restart: on-failure
+
+  admin-frontend:
+    build:
+      context: ./admin/frontend
+      args:
+        VITE_ADMIN_API_BASE: ${VITE_ADMIN_API_BASE:-/api/admin/v1}
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
     restart: on-failure
 
@@ -322,6 +334,38 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    restart: on-failure
+
+  admin-backend:
+    build:
+      context: .
+      dockerfile: admin/backend/Dockerfile
+    environment:
+      <<: *db-env
+      ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/admin"
+      OPENFGA_URL: http://openfga:8080
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-AI Trust Platform}
+      SMTP_SSL: ${SMTP_SSL}
+      SMTP_STARTTLS: ${SMTP_STARTTLS}
+    volumes:
+      - openfga-config:/config:ro
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      openfga-provision:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: on-failure
 
   audit-flush-worker:

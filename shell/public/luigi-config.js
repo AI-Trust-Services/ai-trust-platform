@@ -37,6 +37,8 @@
     "evidence": ["evidence:read", "evidence:write", "evidence:approve"],
     "users": ["iam:manage"],
     "audit": ["audit:read"],
+    "mail-service": ["iam:manage"],
+    "admin-settings": ["iam:manage"],
   };
   const canSee = (seg) =>
     !PAGE_PERMISSIONS[seg] || PAGE_PERMISSIONS[seg].some((p) => permissions.includes(p));
@@ -128,6 +130,22 @@
         viewUrl: "/audit/",
         navigationContext: "audit",
         viewGroup: "audit",
+      },
+      {
+        pathSegment: "mail-service",
+        label: "Mail Service",
+        icon: "email",
+        viewUrl: "/admin/#/mail-service",
+        navigationContext: "mail-service",
+        viewGroup: "admin",
+      },
+      {
+        pathSegment: "admin-settings",
+        label: "Settings",
+        icon: "action-settings",
+        viewUrl: "/admin/#/admin-settings",
+        navigationContext: "admin-settings",
+        viewGroup: "admin",
       },
   ].filter((node) => canSee(node.pathSegment));
 
