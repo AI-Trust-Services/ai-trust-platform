@@ -7,8 +7,8 @@ import KpiCard from "../components/KpiCard";
 import DetailPanel, { DetailField, DetailSection } from "../components/DetailPanel";
 import UploadEvidenceModal from "../components/UploadEvidenceModal";
 import UploadVersionModal from "../components/UploadVersionModal";
-import LinkControlModal from "../components/LinkControlModal";
-import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, fmtDate, humanize } from "../utils";
+import ControlPicker from "../components/ControlPicker";
+import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, fmtDate, humanize } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import type { AISystem, Evidence, EvidenceDetail, EvidenceVersion } from "../types";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,6 @@ export default function EvidencePage() {
   const [versions, setVersions] = useState<EvidenceVersion[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [versionOpen, setVersionOpen] = useState(false);
-  const [linkControlOpen, setLinkControlOpen] = useState(false);
   const showToast = useToast();
   const { can } = usePermissions();
   const mayWrite = can("evidence:write");
@@ -299,45 +298,22 @@ export default function EvidencePage() {
               <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
             </DetailSection>
           )}
-          <DetailSection
-            title={
-              <div className="flex items-center justify-between">
-                <span>Linked Controls ({detail.controls.length})</span>
-                {mayWrite && (
-                  <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => setLinkControlOpen(true)}>
-                    <Plus className="size-3.5" /> Add
-                  </Button>
-                )}
-              </div>
-            }
-          >
-            {detail.controls.length === 0 ? (
-              <p className="text-[13px] text-muted-foreground">No controls linked. Use "Add" to link controls.</p>
-            ) : (
-              <ul className="flex flex-col gap-1.5">{detail.controls.map((c) => (
-                <li key={c.id} className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] text-foreground">{c.title}</div>
-                    {c.ai_system_id && <div className="truncate text-[11px] text-muted-foreground">{systemsById[c.ai_system_id]?.name ?? c.ai_system_id}</div>}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <StatusBadge meta={CONTROL_STATUS_META} value={c.status} />
-                    {mayWrite && (
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                        title="Unlink control"
-                        onClick={async () => {
-                          try {
-                            const updated = await api.unlinkControl(detail.id, c.id);
-                            setDetail(updated);
-                            load();
-                          } catch (e) { showToast((e as Error).message, true); }
-                        }}
-                      ><X className="size-3.5" /></Button>
-                    )}
-                  </div>
-                </li>
-              ))}</ul>
-            )}
+          <DetailSection title="Linked Controls">
+            <ControlPicker
+              value={detail.controls.map((c) => c.id)}
+              onChange={async (newIds) => {
+                const prev = detail.controls.map((c) => c.id);
+                const added = newIds.filter((id) => !prev.includes(id));
+                const removed = prev.filter((id) => !newIds.includes(id));
+                try {
+                  let updated = detail;
+                  for (const id of added) updated = await api.linkControl(detail.id, id);
+                  for (const id of removed) updated = await api.unlinkControl(detail.id, id);
+                  setDetail(updated);
+                  load();
+                } catch (e) { showToast((e as Error).message, true); }
+              }}
+            />
           </DetailSection>
           <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
             {detail.file_name && (
@@ -391,12 +367,6 @@ export default function EvidencePage() {
       </DetailPanel>
 
       <UploadEvidenceModal open={uploadOpen} onClose={() => setUploadOpen(false)} onSuccess={load} />
-      <LinkControlModal
-        open={linkControlOpen}
-        evidence={detail}
-        onClose={() => setLinkControlOpen(false)}
-        onSuccess={(updated) => setDetail(updated)}
-      />
       <UploadVersionModal
         open={versionOpen}
         evidence={detail}

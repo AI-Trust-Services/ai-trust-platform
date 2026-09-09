@@ -3,7 +3,6 @@ import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { EVIDENCE_TYPES, humanize } from "../utils";
-import type { AISystem, Control } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -11,12 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import ControlPicker from "./ControlPicker";
 
 interface Props {
   open: boolean;
@@ -28,7 +26,6 @@ interface FormState {
   title: string;
   description: string;
   evidence_type: string;
-  ai_system_id: string;
   validity_from: string;
   validity_until: string;
   uploaded_by: string;
@@ -36,58 +33,26 @@ interface FormState {
 
 const EMPTY: FormState = {
   title: "", description: "", evidence_type: "document",
-  ai_system_id: "",
   validity_from: "", validity_until: "", uploaded_by: "",
 };
-// Radix Select disallows empty-string item values — use a sentinel for "none".
-const NONE = "__none__";
 
 export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [file, setFile] = useState<File | null>(null);
-  const [systems, setSystems] = useState<AISystem[]>([]);
-  const [controls, setControls] = useState<Control[]>([]);
-  const [selectedControls, setSelectedControls] = useState<Set<string>>(new Set());
+  const [selectedControls, setSelectedControls] = useState<string[]>([]);
   const [drag, setDrag] = useState(false);
   const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const showToast = useToast();
 
-  // Load systems on open
   useEffect(() => {
     if (!open) return;
     setForm(EMPTY);
     setFile(null);
-    setSelectedControls(new Set());
-    setControls([]);
-    (async () => {
-      try {
-        const sys = await api.getSystems();
-        setSystems(sys.filter((s) => s.lifecycle !== "decommissioned"));
-      } catch (e) {
-        showToast(`Failed to load systems: ${(e as Error).message}`, true);
-      }
-    })();
-  }, [open, showToast]);
-
-  // When system changes: load its controls
-  useEffect(() => {
-    setSelectedControls(new Set());
-    if (!form.ai_system_id) { setControls([]); return; }
-    (async () => {
-      try {
-        setControls(await api.getControls({ ai_system_id: form.ai_system_id }));
-      } catch (e) {
-        showToast(`Failed to load controls: ${(e as Error).message}`, true);
-      }
-    })();
-  }, [form.ai_system_id, showToast]);
+    setSelectedControls([]);
+  }, [open]);
 
   if (!open) return null;
-
-  function toggleControl(id: string) {
-    setSelectedControls((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  }
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -97,9 +62,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
 
   async function handleSubmit() {
     if (!form.title.trim()) { showToast("Title is required", true); return; }
-    if (selectedControls.size === 0) {
-      showToast("Link to at least one control", true); return;
-    }
+    if (selectedControls.length === 0) { showToast("Link to at least one control", true); return; }
     setLoading(true);
     try {
       const fd = new FormData();
@@ -184,41 +147,11 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
               </div>
             </div>
 
-            {/* Right column: linking */}
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label>AI System</Label>
-                <Select
-                  value={form.ai_system_id || NONE}
-                  onValueChange={(v) => setForm((f) => ({ ...f, ai_system_id: v === NONE ? "" : v }))}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>— select to filter controls —</SelectItem>
-                    {systems.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.id})</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="flex items-center gap-1.5">
-                  Link to Controls <span className="text-destructive">*</span>
-                  {selectedControls.size > 0 && <Badge variant="secondary" className="rounded-full font-medium">{selectedControls.size} selected</Badge>}
-                </Label>
-                <div className="max-h-60 overflow-y-auto rounded-md border border-border">
-                  {!form.ai_system_id ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground">Select an AI system to see its controls</div>
-                  ) : controls.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground">No controls for this system</div>
-                  ) : controls.map((c) => (
-                    <label key={c.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
-                      <Checkbox checked={selectedControls.has(c.id)} onCheckedChange={() => toggleControl(c.id)} />
-                      <span className="flex-1 truncate text-[13px] text-foreground">{c.title}</span>
-                      <span className="shrink-0 text-[11px] text-muted-foreground">{c.control_ref || c.id}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
+            {/* Right column: control picker */}
+            <ControlPicker
+              value={selectedControls}
+              onChange={setSelectedControls}
+            />
           </div>
         </div>
         <DialogFooter>
