@@ -1,5 +1,8 @@
 # Marketplace — How to publish and run an app (quick start)
 
+> **Onboarding an app with Platform SSO (login through the platform, role-gated, embedded)?** Read the
+> complete end-to-end guide: [onboard-an-app.md](onboard-an-app.md).
+
 This is the **hands-on guide**. It walks you through getting an app into the Marketplace and in front
 of users, start to finish, for each of the three onboarding models. For the full field-by-field
 contract see [app-requirements.md](app-requirements.md); for the build pipeline internals see

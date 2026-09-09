@@ -193,7 +193,39 @@ async def test_public_image_deploy_runs(client):
 
 # ── custom env vars: persist, auto-ISSUER, explicit-wins, kind guard ────────────────────────────
 
-async def test_image_env_persists(client):
+async def test_platform_sso_env_contract(client):
+    """Locks the exact env a Platform-SSO same-window app receives at deploy — the contract that
+    marketplace/docs/onboard-an-app.md and integrate-platform-sso.md document. If this breaks, those
+    docs are wrong. Mirrors the reference app capitals-weather (sso_enabled, same_window, with the
+    operator-supplied OIDC_ISSUER_INTERNAL back-channel)."""
+    from tests.e2e.conftest import DEPLOYED_ENV
+    row = await create_service(
+        client, name="capitals-weather", label="EU Capitals Weather", kind="image",
+        app_port=3000, image_ref="localhost:5000/capitals-weather:sso", git_url="",
+        open_mode="same_window", sso_enabled=True,
+        env={"OIDC_ISSUER_INTERNAL": "http://keycloak:8080/realms/ai-trust"},
+    )
+    r = await client.post(f"/v1/services/{row['id']}/deploy")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "running"
+
+    env = DEPLOYED_ENV["capitals-weather"]
+    # The four OIDC_* vars the platform injects (KEYCLOAK_PUBLIC_URL/APP_PUBLIC_URL from conftest).
+    assert env["OIDC_ISSUER"] == "http://localhost:8180/realms/ai-trust"
+    assert env["OIDC_CLIENT_ID"] == "aitrust-app-capitals-weather"
+    assert env["OIDC_REDIRECT_URI"] == (
+        "http://localhost:8080/api/marketplace/v1/proxy/capitals-weather/oauth/callback"
+    )
+    assert env["OIDC_SCOPES"] == "openid profile email"
+    # The operator-supplied back-channel issuer survives.
+    assert env["OIDC_ISSUER_INTERNAL"] == "http://keycloak:8080/realms/ai-trust"
+    # Auto-ISSUER = the app's public proxy base (NOT the realm issuer).
+    assert env["ISSUER"] == "http://localhost:8080/api/marketplace/v1/proxy/capitals-weather"
+    # OIDC_CLIENT_SECRET is a secret — delivered out-of-band, never in the plain env dict.
+    assert "OIDC_CLIENT_SECRET" not in env
+
+
+# ── custom env vars: persist, auto-ISSUER, explicit-wins, kind guard ────────────────────────────
     row = await create_service(
         client, name="envimg", label="Env Img", kind="image", app_port=3000,
         image_ref="acme/app:1.0", git_url="", env={"FOO": "bar", "BAZ": "qux"},

@@ -1,5 +1,9 @@
 # Integrate an app as a Platform-SSO, role-gated internal Marketplace app
 
+> This is **Layer 1** (the app-side contract) of the full end-to-end guide,
+> [onboard-an-app.md](onboard-an-app.md) — which also covers what the platform does automatically and
+> the click-by-click UI walkthrough.
+
 This is the app-side contract for running **your** app inside the AI Trust Marketplace as an
 **internal** service that authenticates against the **platform** (Keycloak `ai-trust` realm) and is
 **role-gated** — one platform login, and an operator enables the app for one or more roles.
