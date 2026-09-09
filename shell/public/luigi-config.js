@@ -176,7 +176,7 @@
 
         /* ── Shell bar ── */
         .fd-shellbar {
-          background: #ffffff !important;
+          background: #1e40af !important;
           border-bottom: none !important;
           box-shadow: none !important;
           height: 48px !important;
@@ -185,7 +185,7 @@
         .fd-shellbar__title,
         .lui-shellbar__title,
         .shellbar-title {
-          color: #111827 !important;
+          color: #ffffff !important;
           font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
           font-weight: 600 !important;
           font-size: 14px !important;
