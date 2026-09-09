@@ -179,12 +179,12 @@ jobs:
             -n ocm-system --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Apply OCM component CRs
-        run: kubectl apply -f k8s/ocm/
-
-      - name: Pin ComponentVersion to exact built version
-        if: inputs.ocm_version != ''
+        env:
+          OCM_VERSION: 0.0.0-${{ inputs.ocm_version }}
         run: |
-          kubectl patch componentversion ai-trust-platform -n ocm-system \
-            --type=merge \
-            -p "{\"spec\":{\"version\":{\"semver\":\"0.0.0-${{ inputs.ocm_version }}\"}}}"
-          echo "Pinned ComponentVersion to 0.0.0-${{ inputs.ocm_version }}"
+          if [[ -z "${{ inputs.ocm_version }}" ]]; then
+            echo "error: ocm_version input is required to pin the ComponentVersion" >&2
+            exit 1
+          fi
+          envsubst '${OCM_VERSION}' < k8s/ocm/manifests.yaml | kubectl apply -f -
+          echo "Applied OCM CRs with ComponentVersion pinned to ${OCM_VERSION}"

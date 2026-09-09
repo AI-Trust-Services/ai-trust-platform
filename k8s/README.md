@@ -117,11 +117,11 @@ build-push.yml
   ├─ publish OCM component           →  ghcr.io/ai-trust-services/ocm  (references images + chart by digest)
   └─ calls bootstrap-gardener.yml
        ├─ creates namespace/secrets/RBAC via bootstrap.sh
-       ├─ applies k8s/ocm/ CRs (ComponentVersion, Resource, FluxDeployer)
-       └─ pins ComponentVersion to exact built version
+       └─ applies k8s/ocm/ CRs (ComponentVersion, Resource, FluxDeployer),
+          substituting the exact built version into ComponentVersion.spec.version.semver
 
 On the cluster (OCM controller + Flux):
-  ComponentVersion  →  resolves latest matching OCM component
+  ComponentVersion  →  resolves the exact pinned OCM component version
   Resource          →  exposes the ai-trust-platform-chart resource
   FluxDeployer      →  creates/updates a HelmRelease in ocm-system
   Flux helm-controller  →  helm upgrade --install ai-trust in ai-trust namespace
@@ -139,14 +139,23 @@ On the cluster (OCM controller + Flux):
 - **`bootstrap-gardener.yml`** — called by `build-push.yml` after successful publish, or manually.
   Authenticates via Gardener Structured Auth + GitHub OIDC (no stored kubeconfig). Runs
   `k8s/scripts/bootstrap.sh` (namespace, `ai-trust-env` secret, `ai-trust-flux-values` secret in
-  `ocm-system`, ConfigMaps, RBAC), then applies `k8s/ocm/` and patches the ComponentVersion to the
-  exact built version so the cluster never auto-upgrades to an unrelated build.
+  `ocm-system`, ConfigMaps, RBAC), then applies `k8s/ocm/` with the exact built version
+  substituted into `ComponentVersion.spec.version.semver` (an exact-match pin, not a range),
+  so the cluster reconciles only that version and never auto-upgrades to an unrelated build.
 
 ### OCM component structure
 
 The component descriptor lives at `ghcr.io/ai-trust-services/ocm` and contains **references** (not
 copies) to the images and chart already pushed by the build step. Nothing is duplicated in the
 registry. The component constructor is `.ocm/component-constructor.yaml`.
+
+`k8s/ocm/manifests.yaml` pins `ComponentVersion.spec.version.semver` via a `${OCM_VERSION}`
+placeholder — `bootstrap-gardener.yml` substitutes the exact built version at apply time. To
+apply it by hand, supply the version yourself (a bare `kubectl apply -f k8s/ocm/` would apply
+the literal placeholder and fail):
+```bash
+OCM_VERSION=0.0.0-<cluster>-<sha> envsubst '${OCM_VERSION}' < k8s/ocm/manifests.yaml | kubectl apply -f -
+```
 
 To inspect published versions:
 ```bash
