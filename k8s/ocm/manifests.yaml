@@ -42,7 +42,7 @@ spec:
     releaseName: ai-trust
     targetNamespace: ai-trust
     valuesFrom:
-      # ai-trust-flux-values holds the 5 non-sensitive URL/hostname keys needed here.
+      # ai-trust-flux-values holds the 6 non-sensitive URL/hostname/tag keys needed here.
       # Flux's HelmRelease valuesFrom has no cross-namespace support, so this secret
       # lives in ocm-system (same namespace as the HelmRelease) and is kept in sync
       # with ai-trust-env by bootstrap.sh from the same .env source.

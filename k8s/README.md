@@ -143,6 +143,20 @@ On the cluster (OCM controller + Flux):
   substituted into `ComponentVersion.spec.version.semver` (an exact-match pin, not a range),
   so the cluster reconciles only that version and never auto-upgrades to an unrelated build.
 
+**Two secrets, two namespaces:** bootstrap.sh creates two distinct secrets per cluster:
+- `ai-trust-env` in `ai-trust` — the full credential set from `.env` (plus computed connection
+  strings). Used by Helm chart pods via `envFrom`.
+- `ai-trust-flux-values` in `ocm-system` — only the 6 non-sensitive URL/hostname/tag values
+  (`APP_PUBLIC_URL`, `KEYCLOAK_PUBLIC_URL`, `INGRESS_*`, `IMAGE_TAG`). Used by the FluxDeployer's
+  `valuesFrom`.
+
+  The split is necessary because Flux's `HelmRelease` object is created in `ocm-system` (same
+  namespace as the FluxDeployer), and Flux resolves `valuesFrom` secrets relative to the
+  HelmRelease's own namespace. Flux v2 `ValuesReference` has no `namespace` override field, so
+  there is no way to reference a secret in `ai-trust` from a `valuesFrom` entry — the secret
+  must live in `ocm-system`. Credentials stay only in `ai-trust-env` to avoid storing them in
+  the FluxDeployer's namespace unnecessarily.
+
 ### OCM component structure
 
 The component descriptor lives at `ghcr.io/ai-trust-services/ocm` and contains **references** (not
