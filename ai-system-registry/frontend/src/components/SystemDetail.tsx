@@ -559,7 +559,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                   </Section>
                   <Section title="Classification">
                     <DetailGrid rows={[
-                      ["Risk Tier", <TierBadge key="tier" tier={system.tier} workflowStatus={system.workflow_status} />],
+                      ["Risk Classification", <TierBadge key="tier" tier={system.tier} workflowStatus={system.workflow_status} />],
                       ["Classification Basis", <span key="basis" className="text-[13px]">{system.basis}</span>],
                       system.annex_iii_area != null && ["Annex III Area", `Area ${system.annex_iii_area}`],
                       ["GPAI", system.is_gpai ? <span key="gpai" className="text-[var(--brand)]">Yes</span> : "No"],
