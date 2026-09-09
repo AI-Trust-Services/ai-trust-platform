@@ -68,6 +68,7 @@ export interface ControlDetail extends Control {
 
 export interface ControlRef {
   id: string;
+  ai_system_id: string | null;
   control_ref: string | null;
   title: string;
   status: string;

@@ -45,6 +45,7 @@ class EvidenceUpdate(BaseModel):
 
 class ControlRef(BaseModel):
     id: str
+    ai_system_id: str | None
     control_ref: str | None
     title: str
     status: str
