@@ -1,0 +1,46 @@
+apiVersion: v1
+data:
+  listen.xml: |
+    <clickhouse>
+        <listen_host>0.0.0.0</listen_host>
+    </clickhouse>
+  storage.xml: |
+    <clickhouse>
+        <storage_configuration>
+            <disks>
+                <minio>
+                    <type>s3</type>
+                    <endpoint>http://minio:9000/clickhouse/</endpoint>
+                    <access_key_id from_env="MINIO_ROOT_USER"/>
+                    <secret_access_key from_env="MINIO_ROOT_PASSWORD"/>
+                    <send_metadata>false</send_metadata>
+                </minio>
+                <minio_cache>
+                    <type>cache</type>
+                    <disk>minio</disk>
+                    <path>/var/lib/clickhouse/filesystem_cache/minio/</path>
+                    <max_size>10Gi</max_size>
+                </minio_cache>
+            </disks>
+            <policies>
+                <tiered>
+                    <volumes>
+                        <hot>
+                            <disk>default</disk>
+                        </hot>
+                        <cold>
+                            <disk>minio_cache</disk>
+                        </cold>
+                    </volumes>
+                    <!-- Start moving parts to cold when hot disk is 90% full (i.e. keep max ~10GB on a 100GB disk).
+                         Set to a value matching your actual disk size. For explicit age-based moves, rely on the
+                         TTL clause in the table definition instead. -->
+                    <move_factor>0.1</move_factor>
+                </tiered>
+            </policies>
+        </storage_configuration>
+    </clickhouse>
+kind: ConfigMap
+metadata:
+  name: ch-config
+  namespace: ai-trust-app

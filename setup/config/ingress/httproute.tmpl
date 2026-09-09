@@ -1,0 +1,90 @@
+# HTTPRoute: __APP_DOMAIN__ -> oauth2-proxy, for INGRESS_MODE=gateway.
+# The route lives next to the Gateway (in the Gateway's namespace); the backend
+# oauth2-proxy Service lives in __APP_NS__, so a ReferenceGrant in __APP_NS__
+# authorises the cross-namespace backendRef.
+#
+# A SEPARATE rule sends /keycloak/* straight to Keycloak, bypassing oauth2-proxy
+# (else oauth2-proxy would gate the login page itself -> redirect loop). Keycloak
+# serves natively under /keycloak (KC_HTTP_RELATIVE_PATH), so no path rewrite.
+#
+# ROUTE PRIORITY NOTE: some Traefik versions (< 3.7) have no Gateway-API listener
+# isolation, so a cluster-wide wildcard HTTPRoute can also attach to this listener
+# and TIE on path. To win deterministically we declare EXACT `Path` matches (which
+# outrank `PathPrefix`) for every path the app owns, plus a `/` catch-all. This is
+# harmless on controllers that DO isolate listeners.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ai-trust-keycloak
+  namespace: __GATEWAY_NS__
+spec:
+  parentRefs:
+    - name: __GATEWAY_NAME__
+      namespace: __GATEWAY_NS__
+      sectionName: __GATEWAY_LISTENER__
+  hostnames:
+    - __APP_DOMAIN__
+  rules:
+    - matches:
+        - path: { type: Exact, value: /keycloak }
+        - path: { type: PathPrefix, value: /keycloak/ }
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: keycloak
+          namespace: __APP_NS__
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ai-trust-app
+  namespace: __GATEWAY_NS__
+spec:
+  parentRefs:
+    - name: __GATEWAY_NAME__
+      namespace: __GATEWAY_NS__
+      sectionName: __GATEWAY_LISTENER__
+  hostnames:
+    - __APP_DOMAIN__
+  rules:
+    - matches:
+        - path: { type: Exact, value: /rest }
+        - path: { type: PathPrefix, value: /rest/ }
+        - path: { type: Exact, value: /api }
+        - path: { type: PathPrefix, value: /api/ }
+        - path: { type: Exact, value: /oauth2 }
+        - path: { type: PathPrefix, value: /oauth2/ }
+        - path: { type: Exact, value: /assets }
+        - path: { type: PathPrefix, value: /assets/ }
+        - path: { type: Exact, value: /luigi-core }
+        - path: { type: PathPrefix, value: /luigi-core/ }
+        - path: { type: Exact, value: /favicon.ico }
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: oauth2-proxy
+          namespace: __APP_NS__
+          port: 8080
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: oauth2-proxy
+          namespace: __APP_NS__
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-gateway-to-app
+  namespace: __APP_NS__
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: __GATEWAY_NS__
+  to:
+    - group: ""
+      kind: Service

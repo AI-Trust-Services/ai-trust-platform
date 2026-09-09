@@ -1,0 +1,21 @@
+# Gateway listener patch (INGRESS_MODE=gateway) — appends a dedicated HTTPS
+# terminate listener for the app's host to an EXISTING Gateway. Idempotent by name.
+# Applied as a JSON patch to the Gateway named __GATEWAY_NAME__ in __GATEWAY_NS__.
+# Terminates TLS with the pre-existing Secret __GATEWAY_TLS_SECRET__ (must cover __APP_DOMAIN__).
+- op: add
+  path: /spec/listeners/-
+  value:
+    name: __GATEWAY_LISTENER__
+    hostname: __APP_DOMAIN__
+    port: __GATEWAY_PORT__
+    protocol: HTTPS
+    tls:
+      mode: Terminate
+      certificateRefs:
+        - group: ""
+          kind: Secret
+          name: __GATEWAY_TLS_SECRET__
+          namespace: __GATEWAY_NS__
+    allowedRoutes:
+      namespaces:
+        from: All

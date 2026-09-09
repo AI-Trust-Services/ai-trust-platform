@@ -1,0 +1,172 @@
+# ---------------- WORKERS / PIPELINE ----------------
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: policy-checker-worker, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: policy-checker-worker } }
+  template:
+    metadata: { labels: { app: policy-checker-worker } }
+    spec:
+      containers:
+        - name: policy-checker-worker
+          image: aitrust/policy-checker-worker:kind
+          imagePullPolicy: Always
+          env:
+            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-secrets, key: DATABASE_URL } } }
+            - { name: CLICKHOUSE_HOST, value: clickhouse }
+            - { name: CLICKHOUSE_PORT, value: "8123" }
+            - { name: CLICKHOUSE_USER, valueFrom: { secretKeyRef: { name: app-secrets, key: CLICKHOUSE_USER } } }
+            - { name: CLICKHOUSE_PASSWORD, valueFrom: { secretKeyRef: { name: app-secrets, key: CLICKHOUSE_PASSWORD } } }
+            - { name: ALERT_POLL_INTERVAL, value: "10" }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: otel-clickhouse-consumer, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: otel-clickhouse-consumer } }
+  template:
+    metadata: { labels: { app: otel-clickhouse-consumer } }
+    spec:
+      containers:
+        - name: otel-clickhouse-consumer
+          image: aitrust/clickhouse-consumer:kind
+          imagePullPolicy: Always
+          env:
+            - { name: RABBITMQ_URL, valueFrom: { secretKeyRef: { name: app-secrets, key: RABBITMQ_URL } } }
+            - { name: BATCH_SIZE, value: "100" }
+            - { name: BATCH_TIMEOUT, value: "5" }
+            - { name: CLICKHOUSE_HOST, value: clickhouse }
+            - { name: CLICKHOUSE_PORT, value: "8123" }
+            - { name: CLICKHOUSE_USER, valueFrom: { secretKeyRef: { name: app-secrets, key: CLICKHOUSE_USER } } }
+            - { name: CLICKHOUSE_PASSWORD, valueFrom: { secretKeyRef: { name: app-secrets, key: CLICKHOUSE_PASSWORD } } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: otel-rmq-bridge, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: otel-rmq-bridge } }
+  template:
+    metadata: { labels: { app: otel-rmq-bridge } }
+    spec:
+      containers:
+        - name: otel-rmq-bridge
+          image: aitrust/rmq-bridge:kind
+          imagePullPolicy: Always
+          env:
+            - { name: RABBITMQ_URL, valueFrom: { secretKeyRef: { name: app-secrets, key: RABBITMQ_URL } } }
+            - { name: RMQ_CONNECT_RETRIES, value: "10" }
+            - { name: RMQ_CONNECT_DELAY, value: "3.0" }
+          ports: [{ containerPort: 8002 }]
+          readinessProbe:
+            exec: { command: ["python","healthcheck.py"] }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata: { name: otel-rmq-bridge, namespace: ai-trust-app }
+spec: { selector: { app: otel-rmq-bridge }, ports: [{ port: 8002, targetPort: 8002 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: otel-collector, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: otel-collector } }
+  template:
+    metadata: { labels: { app: otel-collector } }
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.102.0
+          ports: [{ containerPort: 4317 }, { containerPort: 4318 }]
+          volumeMounts:
+            - { name: config, mountPath: /etc/otelcol-contrib/config.yaml, subPath: config.yaml }
+      volumes:
+        - { name: config, configMap: { name: otel-collector-config } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: otel-collector, namespace: ai-trust-app }
+spec: { selector: { app: otel-collector }, ports: [{ name: grpc, port: 4317, targetPort: 4317 }, { name: http, port: 4318, targetPort: 4318 }] }
+---
+# ---------------- SHELL (nginx reverse proxy) ----------------
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: shell, namespace: ai-trust-app }
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector: { matchLabels: { app: shell } }
+  template:
+    metadata: { labels: { app: shell } }
+    spec:
+      containers:
+        - name: shell
+          image: aitrust/shell:kind
+          imagePullPolicy: Always
+          ports: [{ containerPort: 80 }]
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata: { name: shell, namespace: ai-trust-app }
+spec: { selector: { app: shell }, ports: [{ port: 80, targetPort: 80 }] }
+---
+# ---------------- OAUTH2-PROXY (entry point :4180) ----------------
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: oauth2-proxy, namespace: ai-trust-app }
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector: { matchLabels: { app: oauth2-proxy } }
+  template:
+    metadata: { labels: { app: oauth2-proxy } }
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+          env:
+            - { name: KEYCLOAK_CLIENT_SECRET, valueFrom: { secretKeyRef: { name: app-secrets, key: KEYCLOAK_CLIENT_SECRET } } }
+            - { name: KEYCLOAK_PUBLIC_URL, valueFrom: { configMapKeyRef: { name: app-config, key: KEYCLOAK_PUBLIC_URL } } }
+            - { name: APP_PUBLIC_URL, valueFrom: { configMapKeyRef: { name: app-config, key: APP_PUBLIC_URL } } }
+            - { name: OAUTH2_PROXY_COOKIE_SECRET, valueFrom: { secretKeyRef: { name: app-secrets, key: OAUTH2_PROXY_COOKIE_SECRET } } }
+          args:
+            - --provider=oidc
+            - --client-id=oauth2-proxy
+            - --client-secret=$(KEYCLOAK_CLIENT_SECRET)
+            - --oidc-issuer-url=http://keycloak:8080/realms/ai-trust
+            - --login-url=$(KEYCLOAK_PUBLIC_URL)/realms/ai-trust/protocol/openid-connect/auth
+            - --redeem-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/token
+            - --oidc-jwks-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/certs
+            - --skip-oidc-discovery=true
+            - --insecure-oidc-skip-issuer-verification=true
+            - --redirect-url=$(APP_PUBLIC_URL)/oauth2/callback
+            - --upstream=http://shell:80
+            - --http-address=0.0.0.0:4180
+            - --cookie-secret=$(OAUTH2_PROXY_COOKIE_SECRET)
+            - --cookie-secure=false
+            - --email-domain=*
+            - --pass-authorization-header=true
+            - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout
+          ports: [{ containerPort: 4180 }]
+          readinessProbe:
+            httpGet: { path: /ping, port: 4180 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata: { name: oauth2-proxy, namespace: ai-trust-app }
+spec: { selector: { app: oauth2-proxy }, ports: [{ port: 8080, targetPort: 4180 }] }

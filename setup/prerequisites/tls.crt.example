@@ -1,0 +1,6 @@
+-----BEGIN CERTIFICATE-----
+# Replace this file with your real PEM certificate, saved as `tls.crt` (no .example).
+# The certificate's Subject Alternative Name must cover the APP_DOMAIN you set in config.env.
+# A chain is fine (leaf first, then intermediates). Only needed when
+# INGRESS_MODE=ingress and TLS_MODE=provided.
+-----END CERTIFICATE-----

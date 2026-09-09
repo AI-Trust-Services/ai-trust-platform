@@ -1,0 +1,28 @@
+apiVersion: v1
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    exporters:
+      otlphttp:
+        endpoint: http://otel-rmq-bridge:8002
+        tls:
+          insecure: true
+        encoding: json
+        compression: none
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [otlphttp]
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: ai-trust-app
