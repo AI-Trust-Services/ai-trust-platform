@@ -267,9 +267,14 @@ async def create_control(client: httpx.AsyncClient, system_id: str | None = None
     return r.json()
 
 
-async def create_evidence(client: httpx.AsyncClient, **kwargs) -> dict:
-    """Creates evidence without a file. At least one link target required."""
-    data = {"title": "Test Evidence", "evidence_type": "document", **kwargs}
+async def create_evidence(client: httpx.AsyncClient, control_ids: list[str] | None = None, **kwargs) -> dict:
+    """Creates evidence without a file. Auto-creates a control when none given."""
+    kwargs.pop("ai_system_id", None)  # no longer a form field on evidence
+    if control_ids is None:
+        sys = await create_system()
+        ctl = await create_control(client, sys["id"])
+        control_ids = [ctl["id"]]
+    data = {"title": "Test Evidence", "evidence_type": "document", "control_ids": control_ids, **kwargs}
     r = await client.post("/v1/evidence", data=data)
     assert r.status_code == 201, r.text
     return r.json()
