@@ -82,7 +82,7 @@ def downgrade() -> None:
     op.create_check_constraint(
         "ck_controls_status",
         "controls",
-        "status IN ('not_started','in_implementation','implemented','effective','ineffective','deactivated')",
+        "status IN ('not_started','planned','in_implementation','implemented','effective','ineffective','deactivated')",
     )
 
     # --- lifecycle ---
