@@ -393,6 +393,16 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     <Input type="text" id="eng_org_name" value={form.org_name} onChange={set("org_name")} />
                   </div>
                   <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="eng_org_role">Organisation Role</Label>
+                    <select className={SELECT_CLASS} id="eng_org_role" value={form.org_role} onChange={set("org_role")}>
+                      <option value="provider">Provider</option>
+                      <option value="deployer">Deployer</option>
+                      <option value="importer">Importer</option>
+                      <option value="distributor">Distributor</option>
+                      <option value="authorised_representative">Authorised Representative</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
                     <Label htmlFor="eng_system_type">System Type</Label>
                     <select className={SELECT_CLASS} id="eng_system_type" value={form.system_type} onChange={set("system_type")}>
                       <option value="application">Application</option>

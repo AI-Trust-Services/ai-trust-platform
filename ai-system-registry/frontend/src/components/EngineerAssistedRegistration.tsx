@@ -29,12 +29,20 @@ const FIELD_LABELS: Record<string, string> = {
   version:          "Version",
   provider:         "Provider",
   org_name:         "Organisation Name",
+  org_role:         "Organisation Role",
   system_type:      "System Type",
   lifecycle:        "Lifecycle State",
   autonomy_level:   "Autonomy Level",
 };
 
 const ENUM_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  org_role: [
+    { value: "provider",                  label: "Provider" },
+    { value: "deployer",                  label: "Deployer" },
+    { value: "importer",                  label: "Importer" },
+    { value: "distributor",               label: "Distributor" },
+    { value: "authorised_representative", label: "Authorised Representative" },
+  ],
   system_type: [
     { value: "application", label: "Application" },
     { value: "model",       label: "Model" },
