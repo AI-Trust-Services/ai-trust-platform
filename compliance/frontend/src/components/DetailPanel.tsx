@@ -42,7 +42,7 @@ export function DetailField({ label, children }: DetailFieldProps) {
   );
 }
 
-interface DetailSectionProps { title: string; children: ReactNode; }
+interface DetailSectionProps { title: ReactNode; children: ReactNode; }
 export function DetailSection({ title, children }: DetailSectionProps) {
   return (
     <div className="px-5 pt-4">
