@@ -22,6 +22,10 @@ on:
         options:
           - ai-trust-main
           - sr-test
+      ocm_version:
+        description: "Exact OCM component version to pin (e.g. ai-trust-main-abc123def456)"
+        required: true
+        type: string
   workflow_call:
     inputs:
       cluster:
@@ -29,9 +33,8 @@ on:
         required: true
         type: string
       ocm_version:
-        description: "Exact OCM component version to pin (e.g. 0.0.0-sr-test-abc123)"
-        required: false
-        default: ""
+        description: "Exact OCM component version to pin (e.g. ai-trust-main-abc123def456)"
+        required: true
         type: string
     secrets:
       GHCR_PULL_TOKEN:
