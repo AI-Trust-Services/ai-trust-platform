@@ -83,7 +83,7 @@ Watch it come up with `make status` or `kubectl get pods -n ai-trust -w`. One-sh
 
 - Rebuilt an image after a code change? `make build` again, then
   `kubectl rollout restart deployment/<name> -n ai-trust` (or `make upgrade` to reapply everything).
-- Changed something a one-shot **Job** runs (e.g. added a migration)? `make build` (rebuilds the image) → `make upgrade` (Helm pre-upgrade hooks delete the old completed Job and recreate it automatically).
+- Changed something a one-shot **Job** runs (e.g. added a migration)? `make build` (rebuilds the image) → `make upgrade`. Each upgrade renders the Jobs under a new per-revision name (`<base>-r<N>`), so Helm creates fresh Jobs and prunes the previous revision's automatically — no manual cleanup, no Job immutability error (see [Per-revision Job names](#per-revision-job-names-one-shot-jobs)).
 - `make down` tears down the Helm release and deletes the whole kind cluster (equivalent to
   `docker compose down --remove-orphans`, but also throws away the cluster itself, not just the
   containers - PVC-backed data goes with it).
@@ -211,15 +211,33 @@ Per-cluster SHA prefixes ensure versions never collide. `--overwrite` in the pub
 because re-running the same workflow on the same commit is the only case that hits the same version
 string.
 
-### Helm hook ordering for one-shot Jobs
+### Per-revision Job names (one-shot Jobs)
 
 All init/migration Jobs (`db-migrate`, `clickhouse-migrate`, `minio-init`, `keycloak-ssl-patch`,
-`keycloak-provision`, `openfga-migrate`, `openfga-provision`) are annotated as Helm pre-upgrade
-hooks with `before-hook-creation` delete policy. This means Helm deletes the completed Job from
-the previous release before creating the new one — avoiding the Kubernetes Job immutability error
-(`spec.template is immutable`) that would otherwise block `helm upgrade`. Sequenced pairs run in
-order via `helm.sh/hook-weight` (`keycloak-ssl-patch` → `keycloak-provision`,
-`openfga-migrate` → `openfga-provision`).
+`keycloak-provision`, `openfga-migrate`, `openfga-provision`) are **plain Helm resources** whose
+`metadata.name` carries a per-release-revision suffix — `<base>-r<.Release.Revision>` — via the
+`ai-trust.jobName` helper in `_helpers.tpl`.
+
+Kubernetes Jobs are immutable (`spec.template: field is immutable`): on `helm upgrade`, patching an
+existing completed Job of the same name fails. Because every upgrade bumps `.Release.Revision`, each
+deploy renders a **new** Job name, so the upgrade is a *create*, not a *patch* — the immutability
+error can't occur. Helm prunes the previous revision's Job automatically (it's absent from the new
+manifest), so there is no `ttlSecondsAfterFinished` time-race and no CI-side `kubectl delete`. Flux's
+helm-controller inherits this same behaviour, so OCM/Flux version bumps upgrade cleanly regardless of
+how frequently they fire.
+
+On a **fresh install** the Jobs apply in the same pass as the infra Deployments; each Job's own
+`waitForTcp`/`waitForHttp` initContainer blocks until its backing service (postgres, clickhouse,
+minio, keycloak…) is reachable — there are no pre-install hooks to deadlock on. Ordering between
+Jobs still uses the `waitForJob` initContainer, which resolves the **same** per-revision name through
+`ai-trust.jobName`, so the wait target always matches the current revision's Job
+(`keycloak-ssl-patch` → `keycloak-provision`, `openfga-migrate` → `openfga` → `openfga-provision`).
+
+> Migrating an **already-deployed** cluster from the old hook-based scheme: the old Jobs were Helm
+> hook resources not tracked in the release manifest, so the first upgrade to this scheme won't prune
+> them. Delete them once manually (they're completed one-shots, safe to remove):
+> `kubectl delete job -n ai-trust db-migrate clickhouse-migrate minio-init keycloak-ssl-patch keycloak-provision openfga-migrate openfga-provision`.
+> Fresh clusters and kind are unaffected.
 
 ### Cluster authentication — Structured Authentication + GitHub OIDC
 

@@ -17,8 +17,8 @@ spec:
       {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         # mirrors compose: depends_on db-migrate + clickhouse-migrate (both completed)
-        {{- include "ai-trust.waitForJob" (dict "job" "db-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
-        {{- include "ai-trust.waitForJob" (dict "job" "clickhouse-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "db-migrate" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "clickhouse-migrate" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
       containers:
         - name: policy-checker-worker
           image: {{ .Values.image.repository }}/policy-checker-worker:{{ .Values.image.tag }}
