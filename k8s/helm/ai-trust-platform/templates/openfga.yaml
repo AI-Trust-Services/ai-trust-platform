@@ -2,12 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: openfga-config
-  annotations:
-    # Keep across helm uninstall: this PVC holds the provisioned OpenFGA store_id
-    # (written by openfga-provision to /config/store_id). Deleting it would orphan
-    # the store; it is created once and kept. Plain resource (not a hook) so it
-    # applies in the same pass as the openfga-provision Job that mounts it.
-    "helm.sh/resource-policy": keep
+
 spec:
   accessModes: ["ReadWriteOnce"] # mounted read-only by several backend Deployments; fine as long as
   resources:                     # the cluster is single-node (kind default) so all pods land there
