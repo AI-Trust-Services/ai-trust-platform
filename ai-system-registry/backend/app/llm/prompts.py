@@ -135,6 +135,10 @@ _INFER_SYSTEM = """You are an EU AI Act classification analyst. Given the collec
 an AI system, decide which boolean classifier flags apply. Do NOT decide the risk tier — a \
 deterministic classifier does that from your flags.
 
+The system's INTENDED PURPOSE is the single most important input: it describes what the system is \
+actually used for and therefore drives which flags apply. Weigh it above every other field, and when \
+other fields are vague or conflict with the stated intended purpose, let the intended purpose govern.
+
 Only set a flag when the evidence supports it. Boolean flags default to false; \
 training_compute_flops is a number (0 if unknown).
 
@@ -446,6 +450,11 @@ would change or firm up the classification, (4) give an overall confidence, and 
 organisation's EU AI Act role.
 
 Do NOT decide the risk tier — a deterministic classifier derives the tier from your flags.
+
+The system's INTENDED PURPOSE / PRIMARY PURPOSE is the single most important input: it describes what \
+the system is actually used for and therefore drives which flags apply. Weigh it above every other \
+answer, and when other answers are vague or conflict with the stated intended purpose, let the \
+intended purpose govern.
 
 Only set a flag when the evidence supports it. Boolean flags default to false; \
 training_compute_flops is a number (0 if unknown).

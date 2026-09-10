@@ -307,9 +307,13 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess, initia
 
         {step === "details" && (
           <div className="flex flex-col gap-4 p-6">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="ca-purpose">Intended Purpose <span className="text-destructive">*</span></Label>
-              <Textarea id="ca-purpose" value={intendedPurpose} onChange={(e) => setIntendedPurpose(e.target.value)} placeholder="Describe the intended purpose of this AI system…" />
+            <div className="flex flex-col gap-1.5 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3">
+              <Label htmlFor="ca-purpose" className="flex flex-wrap items-center gap-2 text-[var(--brand)]">
+                Intended Purpose <span className="text-destructive">*</span>
+                <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk tier</span>
+              </Label>
+              <Textarea id="ca-purpose" value={intendedPurpose} onChange={(e) => setIntendedPurpose(e.target.value)} placeholder="Describe the intended purpose of this AI system…" className="border-[var(--brand)]/40 focus-visible:ring-[var(--brand)]" />
+              <p className="text-xs text-muted-foreground">The most important input — the risk classification is assessed primarily against the intended purpose.</p>
             </div>
             <UserCombobox
               label="Business Owner of the AI System"

@@ -428,9 +428,13 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     <Label htmlFor="eng_description">Description</Label>
                     <Textarea id="eng_description" rows={3} value={form.description} onChange={set("description")} placeholder="Brief description of the AI system…" />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="eng_purpose">Intended Purpose</Label>
-                    <Textarea id="eng_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="Describe the intended purpose and deployment context…" />
+                  <div className="flex flex-col gap-1.5 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3">
+                    <Label htmlFor="eng_purpose" className="flex flex-wrap items-center gap-2 text-[var(--brand)]">
+                      Intended Purpose
+                      <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk tier</span>
+                    </Label>
+                    <Textarea id="eng_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="Describe the intended purpose and deployment context…" className="border-[var(--brand)]/40 focus-visible:ring-[var(--brand)]" />
+                    <p className="text-xs text-muted-foreground">The most important input — the risk classification is assessed primarily against the intended purpose.</p>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="eng_lifecycle">Lifecycle State</Label>

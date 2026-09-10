@@ -697,7 +697,7 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
         </div>
         <div className="flex flex-col gap-1.5"><Label htmlFor="edit_app_url">Application URL</Label><Input type="url" id="edit_app_url" value={form.application_url} onChange={set("application_url")} /></div>
         <div className="col-span-2 flex flex-col gap-1.5"><Label htmlFor="edit_description">Description</Label><Textarea id="edit_description" rows={3} value={form.description} onChange={set("description")} /></div>
-        <div className="col-span-2 flex flex-col gap-1.5"><Label htmlFor="edit_purpose">Intended Purpose</Label><Textarea id="edit_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} /></div>
+        <div className="col-span-2 flex flex-col gap-1.5 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3"><Label htmlFor="edit_purpose" className="flex flex-wrap items-center gap-2 text-[var(--brand)]">Intended Purpose <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk tier</span></Label><Textarea id="edit_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} className="border-[var(--brand)]/40 focus-visible:ring-[var(--brand)]" /><p className="text-xs text-muted-foreground">The most important input — the risk classification is assessed primarily against the intended purpose.</p></div>
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -1062,8 +1062,14 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                   <Section title="Purpose">
                     <DetailGrid rows={[
                       ["Description", system.description || "—"],
-                      ["Intended Purpose", system.intended_purpose || "—"],
                     ]} />
+                    <div className="mt-3 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[13px] font-semibold text-[var(--brand)]">Intended Purpose</span>
+                        <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--brand)]">Drives risk tier</span>
+                      </div>
+                      <p className="mt-1 text-[13px] text-foreground">{system.intended_purpose || "—"}</p>
+                    </div>
                   </Section>
                   <Section title="Classification">
                     <DetailGrid rows={[
