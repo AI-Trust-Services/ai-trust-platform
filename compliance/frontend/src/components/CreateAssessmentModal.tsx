@@ -240,9 +240,6 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess, initia
             <div className="grid grid-cols-[1.2fr_1fr] gap-4">
               {/* LEFT — recommended framework (EU AI Act) */}
               <div className="flex flex-col gap-2">
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {euActRecommended(selectedSystem?.eu_output_usage ?? null, selectedSystem?.eu_market_placement ?? null) ? "Recommended for you" : "Not applicable"}
-                </div>
                 {(() => {
                   const recommended = euActRecommended(selectedSystem?.eu_output_usage ?? null, selectedSystem?.eu_market_placement ?? null);
                   return (
@@ -268,13 +265,13 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess, initia
                             "rounded-full px-2 py-0.5 text-[11px] font-semibold",
                             recommended ? "bg-[var(--brand)]/15 text-[var(--brand)]" : "bg-muted text-muted-foreground",
                           )}>
-                            {recommended ? "Recommended" : "Not applicable"}
+                            {recommended ? "Strongly Recommended" : "Not applicable"}
                           </span>
                         </div>
                         <div className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">
                           {recommended
-                            ? "Run the risk classification questionnaire, determine the tier, and generate obligations."
-                            : "This system's answers indicate it is neither used in nor placed on the EU market, so EU AI Act classification is likely not required. You can still start it if needed."}
+                            ? "Run the risk classification questionnaire, determine the category, and generate obligations."
+                            : "Your answers indicate the system or its output is not used in the EU. The EU AI Act is likely not applicable. You may still want to perform an EU AI Act Risk Classification"}
                         </div>
                       </div>
                     </button>
@@ -310,10 +307,10 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess, initia
             <div className="flex flex-col gap-1.5 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3">
               <Label htmlFor="ca-purpose" className="flex flex-wrap items-center gap-2 text-[var(--brand)]">
                 Intended Purpose <span className="text-destructive">*</span>
-                <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk tier</span>
+                <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk classification category</span>
               </Label>
               <Textarea id="ca-purpose" value={intendedPurpose} onChange={(e) => setIntendedPurpose(e.target.value)} placeholder="Describe the intended purpose of this AI system…" className="border-[var(--brand)]/40 focus-visible:ring-[var(--brand)]" />
-              <p className="text-xs text-muted-foreground">The most important input — the risk classification is assessed primarily against the intended purpose.</p>
+              <p className="text-xs text-muted-foreground">The intended purpose determines how your AI system is classified under the EU AI Act. You can edit this during the risk classification process.</p>
             </div>
             <UserCombobox
               label="Business Owner of the AI System"

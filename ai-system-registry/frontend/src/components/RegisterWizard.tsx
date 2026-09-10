@@ -7,7 +7,6 @@ import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import type { AISystem, AISystemFormData } from "../types";
 import { TECHNICAL_QUESTIONS } from "../config/questionnaire";
-import { COUNTRIES } from "../config/countries";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -204,7 +203,6 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
 
   async function handleOwnerSubmit() {
     if (!form.name.trim()) { showToast("System name is required", true); return; }
-    if (!form.deployment_country) { showToast("Please select the deployment country", true); return; }
     if (form.eu_output_usage === null || form.eu_market_placement === null) {
       showToast("Please answer both EU deployment questions", true); return;
     }
@@ -279,9 +277,6 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                 <div className="mb-4 grid grid-cols-[1.2fr_1fr] gap-4">
                   {/* LEFT — recommended framework (EU AI Act) */}
                   <div className="flex flex-col gap-2">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {euActRecommended(form.eu_output_usage, form.eu_market_placement) ? "Recommended for you" : "Not applicable"}
-                    </div>
                     {(() => {
                       const recommended = euActRecommended(form.eu_output_usage, form.eu_market_placement);
                       return (
@@ -307,13 +302,13 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                                 "rounded-full px-2 py-0.5 text-[11px] font-semibold",
                                 recommended ? "bg-[var(--brand)]/15 text-[var(--brand)]" : "bg-muted text-muted-foreground",
                               )}>
-                                {recommended ? "Recommended" : "Not applicable"}
+                                {recommended ? "Strongly Recommended" : "Not applicable"}
                               </span>
                             </div>
                             <div className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">
                               {recommended
-                                ? "Run the risk classification questionnaire, determine the tier, and generate obligations."
-                                : "Your answers indicate the system is neither used in nor placed on the EU market, so EU AI Act classification is likely not required. You can still start it if needed."}
+                                ? "Run the risk classification questionnaire, determine the category, and generate obligations."
+                                : "Your answers indicate the system or its output is not used in the EU. The EU AI Act is likely not applicable. You may still want to perform an EU AI Act Risk Classification"}
                             </div>
                           </div>
                         </button>
@@ -379,7 +374,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
             )}
 
             <div className="overflow-y-auto px-6 py-5">
-              {/* OWNER MODE: name + description + deployment country + EU questions */}
+              {/* OWNER MODE: name + description + EU questions */}
               {!isEngineerMode && (
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1.5">
@@ -390,30 +385,17 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     <Label htmlFor="reg_desc">Description</Label>
                     <Textarea id="reg_desc" rows={3} value={form.description} onChange={set("description")} placeholder="Brief description of the AI system…" />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="reg_country">Country of Use <span className="text-[var(--danger-fg)]">*</span></Label>
-                    <select className={SELECT_CLASS} id="reg_country" value={form.deployment_country} onChange={set("deployment_country")}>
-                      <option value="">Select a country…</option>
-                      {COUNTRIES.map((c) => (
-                        <option key={c.code} value={c.code}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* EU-presence questions appear once a country is selected. The blank slot
-                      below is reserved for future country-specific questions. */}
-                  {form.deployment_country && (
-                    <div className="flex flex-col gap-4 rounded-md border border-border bg-muted/20 p-4">
-                      <div className="flex flex-col gap-2">
-                        <Label>Will the output of the AI system be used in the European Union? <span className="text-[var(--danger-fg)]">*</span></Label>
-                        <YesNo value={form.eu_output_usage} onChange={(v) => setForm((f) => ({ ...f, eu_output_usage: v }))} />
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <Label>Will the AI system be placed on the market or put into service in the European Union? <span className="text-[var(--danger-fg)]">*</span></Label>
-                        <YesNo value={form.eu_market_placement} onChange={(v) => setForm((f) => ({ ...f, eu_market_placement: v }))} />
-                      </div>
+                  {/* EU-presence questions drive the framework recommendation. */}
+                  <div className="flex flex-col gap-4 rounded-md border border-border bg-muted/20 p-4">
+                    <div className="flex flex-col gap-2">
+                      <Label>Will the output of the AI system be used in the European Union? <span className="text-[var(--danger-fg)]">*</span></Label>
+                      <YesNo value={form.eu_output_usage} onChange={(v) => setForm((f) => ({ ...f, eu_output_usage: v }))} />
                     </div>
-                  )}
+                    <div className="flex flex-col gap-2">
+                      <Label>Will the AI system be placed on the market or put into service in the European Union? <span className="text-[var(--danger-fg)]">*</span></Label>
+                      <YesNo value={form.eu_market_placement} onChange={(v) => setForm((f) => ({ ...f, eu_market_placement: v }))} />
+                    </div>
+                  </div>
 
                   <p className="text-xs text-muted-foreground">
                     Risk classification and compliance workflow are completed in Assessments after registration.
@@ -431,10 +413,10 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                   <div className="flex flex-col gap-1.5 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3">
                     <Label htmlFor="eng_purpose" className="flex flex-wrap items-center gap-2 text-[var(--brand)]">
                       Intended Purpose
-                      <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk tier</span>
+                      <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk classification category</span>
                     </Label>
                     <Textarea id="eng_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="Describe the intended purpose and deployment context…" className="border-[var(--brand)]/40 focus-visible:ring-[var(--brand)]" />
-                    <p className="text-xs text-muted-foreground">The most important input — the risk classification is assessed primarily against the intended purpose.</p>
+                    <p className="text-xs text-muted-foreground">The intended purpose determines how your AI system is classified under the EU AI Act. You can edit this during the risk classification process.</p>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="eng_lifecycle">Lifecycle State</Label>
@@ -482,7 +464,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
               {isEngineerMode && step === 1 && (
                 <div>
                   <Alert variant="info" className="mb-4">
-                    Check all applicable flags. The risk tier will be determined automatically from these flags.
+                    Check all applicable flags. The risk classification category will be determined automatically from these flags.
                   </Alert>
                   <CollapsiblePanel title="Art. 5 — Prohibited Practices">
                     <div className="grid grid-cols-2 gap-2">

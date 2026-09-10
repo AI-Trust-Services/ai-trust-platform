@@ -466,7 +466,7 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
                           )}>
                             {label}
                             {key === "intended_purpose" && (
-                              <span className="rounded-full bg-[var(--brand)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide">Drives risk tier</span>
+                              <span className="rounded-full bg-[var(--brand)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide">Drives risk classification category</span>
                             )}
                           </label>
                           {!isEmpty && (

@@ -181,7 +181,7 @@ export default function QuestionnaireSection({ open, system, section, username, 
     setDelegateSearch("");
     setDelegateSelected("");
     setFields(section === "business"
-      ? getBusinessFieldValues(system) as Record<string, unknown>
+      ? { ...getBusinessFieldValues(system), intended_purpose: system.intended_purpose ?? "" } as Record<string, unknown>
       : getAITechnicalFieldValues(system) as Record<string, unknown>);
     registryClient.getWorkflow(system.id).then(setSteps).catch(() => setSteps([]));
     registryClient.getQuestionAssignments(system.id).then(setAssignments).catch(() => setAssignments([]));
@@ -227,6 +227,11 @@ export default function QuestionnaireSection({ open, system, section, username, 
           if (val == null) continue;
           if (q.storage === "system") systemFields[q.key] = val;
           else answerFields[q.key] = String(val);
+        }
+        // Intended purpose is a top-level system field shown at the top of the business
+        // section (not part of BUSINESS_QUESTIONS); persist it back to the system.
+        if (!iAmQuestionAssignee && typeof fields.intended_purpose === "string") {
+          systemFields.intended_purpose = fields.intended_purpose;
         }
         await Promise.all([
           Object.keys(systemFields).length > 0 ? registryClient.updateSystem(system.id, systemFields) : null,
@@ -428,6 +433,24 @@ export default function QuestionnaireSection({ open, system, section, username, 
           <input ref={fileRef} type="file" accept=".txt,.md,.pdf,.docx,.pptx,.png,.jpg,.jpeg" className="hidden" onChange={handleUpload} />
         </div>
         <div className="flex flex-col gap-3">
+          {section === "business" && !iAmQuestionAssignee && (
+            <div className="flex flex-col gap-1.5 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3">
+              <Label htmlFor="qs-intended-purpose" className="flex flex-wrap items-center gap-2 text-[var(--brand)]">
+                Intended Purpose <span className="text-destructive">*</span>
+                <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk classification category</span>
+              </Label>
+              <Textarea
+                id="qs-intended-purpose"
+                value={typeof fields.intended_purpose === "string" ? fields.intended_purpose : ""}
+                onChange={(e) => setFields((f) => ({ ...f, intended_purpose: e.target.value }))}
+                placeholder="Describe the intended purpose of this AI system…"
+                rows={3}
+                className="border-[var(--brand)]/40 focus-visible:ring-[var(--brand)]"
+                disabled={!editable}
+              />
+              <p className="text-xs text-muted-foreground">The intended purpose determines how your AI system is classified under the EU AI Act.</p>
+            </div>
+          )}
           {visibleQuestions.map((q) => {
             const val = fields[q.key];
             const assignment = assignmentFor(q.key);
