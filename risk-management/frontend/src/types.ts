@@ -82,6 +82,7 @@ export interface RiskRegister {
   created_at: string;
   updated_at: string;
   last_assessment_completed_at: string | null;
+  next_review_date: string | null;
   risks: RiskEntry[];
 }
 
@@ -111,4 +112,51 @@ export interface TestReport {
   updated_at: string;
 }
 
-export type WizardStep = "scope" | "identify" | "evaluate" | "mitigate" | "approve";
+export interface PlanTask {
+  id: string;
+  register_id: string;
+  risk_id: string | null;
+  title: string;
+  description: string;
+  assigned_to: string | null;
+  due_date: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RiskFieldChange {
+  field: string;
+  from_value: string;
+  to_value: string;
+}
+
+export interface RegisterDiffEntry {
+  title: string;
+  fields: RiskFieldChange[];
+  mitigations_added: string[];
+  mitigations_removed: string[];
+}
+
+export interface RegisterDiff {
+  added: string[];
+  removed: string[];
+  changed: RegisterDiffEntry[];
+  mitigations_delta: number;
+}
+
+export interface Incident {
+  id: string;
+  register_id: string;
+  risk_id: string | null;
+  title: string;
+  description: string;
+  status: string;
+  reported_by: string | null;
+  occurred_at: string | null;
+  attachments: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type WizardStep = "scope" | "identify" | "evaluate" | "mitigate" | "plan" | "approve";

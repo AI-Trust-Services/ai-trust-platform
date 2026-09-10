@@ -6,6 +6,9 @@ import type {
   MitigationMeasure,
   ReassessmentTrigger,
   TestReport,
+  PlanTask,
+  RegisterDiff,
+  Incident,
 } from "../types";
 
 const BASE = import.meta.env.VITE_RISK_MANAGEMENT_API_BASE ?? "/api/risk-management/v1";
@@ -76,4 +79,25 @@ export const api = {
   createTestReport: (riskId: string, body: Omit<TestReport, "id" | "risk_id" | "created_at" | "updated_at">) =>
     request<TestReport>(`/risks/${riskId}/test-reports`, { method: "POST", ...json(body) }),
   deleteTestReport: (reportId: string) => request<void>(`/test-reports/${reportId}`, { method: "DELETE" }),
+
+  // Plan tasks
+  getPlanTasks: (registerId: string) => request<PlanTask[]>(`/registers/${registerId}/plan-tasks`),
+  createPlanTask: (registerId: string, body: Omit<PlanTask, "id" | "register_id" | "created_at" | "updated_at">) =>
+    request<PlanTask>(`/registers/${registerId}/plan-tasks`, { method: "POST", ...json(body) }),
+  patchPlanTask: (taskId: string, body: Partial<PlanTask>) =>
+    request<PlanTask>(`/plan-tasks/${taskId}`, { method: "PATCH", ...json(body) }),
+  deletePlanTask: (taskId: string) => request<void>(`/plan-tasks/${taskId}`, { method: "DELETE" }),
+  checkOverdueTasks: (registerId: string) =>
+    request<void>(`/registers/${registerId}/check-overdue-tasks`, { method: "POST" }),
+
+  // Register diff
+  getRegisterDiff: (registerId: string) => request<RegisterDiff>(`/registers/${registerId}/diff`),
+
+  // Incidents
+  getIncidents: (registerId: string) => request<Incident[]>(`/registers/${registerId}/incidents`),
+  createIncident: (registerId: string, body: Omit<Incident, "id" | "register_id" | "created_at" | "updated_at">) =>
+    request<Incident>(`/registers/${registerId}/incidents`, { method: "POST", ...json(body) }),
+  patchIncident: (incidentId: string, body: Partial<Incident>) =>
+    request<Incident>(`/incidents/${incidentId}`, { method: "PATCH", ...json(body) }),
+  deleteIncident: (incidentId: string) => request<void>(`/incidents/${incidentId}`, { method: "DELETE" }),
 };

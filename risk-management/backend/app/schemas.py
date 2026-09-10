@@ -147,6 +147,7 @@ class RiskRegisterOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_assessment_completed_at: Optional[datetime]
+    next_review_date: Optional[datetime] = None
     risks: list[RiskEntryOut] = []
 
     model_config = {"from_attributes": True}
@@ -158,6 +159,7 @@ class RiskRegisterPatch(BaseModel):
     residual_risk_acceptable: Optional[bool] = None
     residual_risk_argument: Optional[str] = None
     notes: Optional[str] = None
+    next_review_date: Optional[datetime] = None
 
 
 class ApproveRegisterIn(BaseModel):
@@ -212,3 +214,79 @@ class TestReportOut(TestReportIn):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class PlanTaskIn(BaseModel):
+    title: str
+    description: str = ""
+    risk_id: Optional[str] = None
+    assigned_to: Optional[str] = None
+    due_date: Optional[datetime] = None
+    status: str = "open"
+
+
+class PlanTaskOut(PlanTaskIn):
+    id: str
+    register_id: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PlanTaskPatch(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    risk_id: Optional[str] = None
+    assigned_to: Optional[str] = None
+    due_date: Optional[datetime] = None
+    status: Optional[str] = None
+
+
+class RiskFieldChange(BaseModel):
+    field: str
+    from_value: str
+    to_value: str
+
+
+class RegisterDiffEntry(BaseModel):
+    title: str
+    fields: list[RiskFieldChange] = []
+    mitigations_added: list[str] = []
+    mitigations_removed: list[str] = []
+
+
+class RegisterDiff(BaseModel):
+    added: list[str] = []
+    removed: list[str] = []
+    changed: list[RegisterDiffEntry] = []
+    mitigations_delta: int = 0
+
+
+class IncidentIn(BaseModel):
+    title: str
+    description: str = ""
+    status: str = "open"
+    risk_id: Optional[str] = None
+    reported_by: Optional[str] = None
+    occurred_at: Optional[datetime] = None
+    attachments: str = ""
+
+
+class IncidentOut(IncidentIn):
+    id: str
+    register_id: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class IncidentPatch(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    risk_id: Optional[str] = None
+    reported_by: Optional[str] = None
+    occurred_at: Optional[datetime] = None
+    attachments: Optional[str] = None

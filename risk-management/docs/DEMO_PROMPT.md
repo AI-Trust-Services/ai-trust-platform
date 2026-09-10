@@ -57,13 +57,16 @@ Explain: EU AI Act Art. 9 requires iterative risk management for HIGH-risk syste
 
 ### Step 2 — Explore a completed HIGH-risk assessment (HR Screening or Credit Risk)
 Click "Open" on HR Candidate Screening AI.
-Show me: the approved wizard with all 5 steps green, the read-only "Approved" banner, browsing previous steps, the Export Report button.
+Show me: the approved wizard with all 6 steps green, the read-only "Approved" banner, browsing previous steps, the Export Report button.
+In step 3 (Evaluate), point out risk descriptions and misuse scenarios shown under each confirmed risk.
+In step 5 (Plan), show the scheduled review date and the tasks list with status badges, descriptions, owners, and due dates.
+In step 6 (Approve), show the Incidents card with the demo incident and its linked follow-up task.
 Explain: Art. 9(2) iterative cycle, what each step covers.
 
 ### Step 3 — Versioning and archived export
 Still on HR Screening, scroll down below the wizard.
-Show me: the 3 archived assessment versions collapsed below the active one. Expand one. Click the "📄 Export" button on an archived card — the report opens with a yellow "ARCHIVED" banner indicating it is from a previous cycle, retained for audit purposes only.
-Explain: why versioning matters for audit trails and Art. 9(1) continuous monitoring; and why archived reports must be clearly marked to avoid confusion with the current approved state.
+Show me: the archived assessment versions collapsed below the active one, with diff badges (green "+N added", red "-N removed", yellow "N level changed") showing what changed vs the prior cycle. Expand one. Click the "📄 Export" button on an archived card — the report opens with a yellow "ARCHIVED" banner indicating it is from a previous cycle, retained for audit purposes only.
+Explain: why versioning matters for audit trails and Art. 9(1) continuous monitoring; why archived reports must be clearly marked to avoid confusion with the current approved state; and how diff badges let reviewers quickly see what changed between cycles without reading both reports in full.
 
 ### Step 4 — Export a report
 Click "Export report" on the HR Screening assessment.
@@ -73,8 +76,8 @@ Explain: documentation obligations under Art. 9(12) and Art. 13.
 ### Step 5 — Resume an in-progress assessment (Medical Imaging)
 Go back to the systems list. Click "Resume" on Medical Image Diagnosis Assistant (orange button).
 Show me: the wizard reopens at the Identify step with 2 risks already added but not confirmed.
-Walk me through: confirming a risk, adding a mitigation, setting residual risk, approving.
-Explain: Art. 9(2)(a) identify known/foreseeable risks, Art. 9(2)(b)+(c) mitigation hierarchy, Art. 9(2)(d) residual risk.
+Walk me through: confirming a risk, adding a mitigation, setting residual risk, setting a review date in the Plan step, adding a task, approving.
+Explain: Art. 9(2)(a) identify known/foreseeable risks, Art. 9(2)(b)+(c) mitigation hierarchy, Art. 9(2)(d) residual risk, Art. 9(1) iterative review planning.
 
 ### Step 6 — Restart for reassessment (Credit Risk)
 Go back to the list. Click "Restart" on Credit Risk Assessment Model (red button).
@@ -88,13 +91,19 @@ Explain: Art. 5 prohibited practices — no mitigation path exists, documentatio
 
 ### Step 8 — Start a brand new assessment
 Go back to the list. Click "Start" (green) on Employee Performance Analytics — this system has no risk assessment yet.
-Walk me through: filling in the scope, adding the first risk, confirming it, adding a mitigation, setting residual risk, approving.
-Explain: Art. 9(2) requires that a risk management system be established before a high-risk AI system is put into service. A HIGH-tier system with no assessment is non-compliant from day one.
+Walk me through all 6 steps:
+1. Scope — paste the scope from DEMO_WALKTHROUGH_EPA.md
+2. Identify — add the 2 risks from the walkthrough
+3. Evaluate — confirm both
+4. Mitigate — add mitigations from the walkthrough
+5. Plan — set review date 3 months out; add 2 tasks; show that the Next button is disabled until review date is set
+6. Approve — report an incident with a linked follow-up task; sign off
+Explain: Art. 9(2) requires that a risk management system be established before a high-risk AI system is put into service. A HIGH-tier system with no assessment is non-compliant from day one. The Plan step enforces Art. 9(1) iterative monitoring — you cannot approve without committing to a review date.
 
 ## After the walkthrough
 
 Summarise:
 - Which Art. 9 obligations are covered by each wizard step
-- What the "reassessment_needed" flag tracks and how it's triggered
-- What's still missing / marked as future work in the codebase (check memory/project_ai_trust.md)
+- What the "reassessment_needed" flag tracks and how it's triggered (6-month schedule, task overdue, system change)
+- How incidents link to risks and tasks to form a closed-loop monitoring record
 ```

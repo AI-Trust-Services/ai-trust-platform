@@ -21,6 +21,8 @@ from ai_trust_persistence.models.risk_management import (
     MitigationMeasure,
     ReassessmentTrigger,
     TestReport,
+    PlanTask,
+    Incident,
 )
 
 __all__ = [
@@ -42,6 +44,8 @@ __all__ = [
     "MitigationMeasure",
     "ReassessmentTrigger",
     "TestReport",
+    "PlanTask",
+    "Incident",
     "control_obligations",
     "evidence_controls",
     "evidence_obligations",

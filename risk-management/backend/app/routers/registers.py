@@ -24,6 +24,9 @@ from app.schemas import (
     RiskRegisterPatch,
     ApproveRegisterIn,
     SystemRiskSummary,
+    RegisterDiff,
+    RegisterDiffEntry,
+    RiskFieldChange,
 )
 
 logger = get_logger(__name__)
@@ -95,11 +98,12 @@ async def list_systems(session: AsyncSession = Depends(get_session)):
         )
         active_register = reg_result.scalar_one_or_none()
 
-        # Count unacknowledged triggers
+        # Count unacknowledged triggers that are already due (triggered_at <= now)
         trigger_count_result = await session.execute(
             select(func.count(ReassessmentTrigger.id))
             .where(ReassessmentTrigger.ai_system_id == sys.id)
             .where(ReassessmentTrigger.acknowledged == False)  # noqa: E712
+            .where(ReassessmentTrigger.triggered_at <= datetime.now(timezone.utc))
         )
         unacknowledged = trigger_count_result.scalar_one() or 0
 
@@ -230,6 +234,8 @@ async def patch_register(
         register.residual_risk_argument = body.residual_risk_argument
     if body.notes is not None:
         register.notes = body.notes
+    if body.next_review_date is not None:
+        register.next_review_date = body.next_review_date
 
     session.add(register)
     await session.commit()
@@ -276,6 +282,22 @@ async def approve_register(
             detail=f"Cannot approve: {len(incomplete)} risk(s) have no mitigation and no closure justification: {', '.join(incomplete[:3])}{'…' if len(incomplete) > 3 else ''}",
         )
 
+    # Planning step completeness: review date must be set and within 6 months
+    if not register.next_review_date:
+        raise HTTPException(
+            status_code=422,
+            detail="Cannot approve: review date not set. Go to the Plan step and set a review date.",
+        )
+    max_review = datetime.now(timezone.utc) + timedelta(days=180)
+    review_date = register.next_review_date
+    if review_date.tzinfo is None:
+        review_date = review_date.replace(tzinfo=timezone.utc)
+    if review_date > max_review:
+        raise HTTPException(
+            status_code=422,
+            detail="Cannot approve: review date must be within 6 months from today.",
+        )
+
     register.status = "approved"
     register.residual_risk_acceptable = body.residual_risk_acceptable
     register.residual_risk_argument = body.residual_risk_argument
@@ -298,3 +320,119 @@ async def approve_register(
     full = await _load_register_full(session, register_id)
     logger.info("risk_register.approved", extra={"register_id": register_id, "approver": _username(request)})
     return RiskRegisterOut.model_validate(full)
+
+
+@router.get("/registers/{register_id}/diff", response_model=RegisterDiff)
+async def get_register_diff(
+    register_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Compare this register's risks against the previous register for the same system."""
+    result = await session.execute(select(RiskRegister).where(RiskRegister.id == register_id))
+    register = result.scalar_one_or_none()
+    if register is None:
+        raise HTTPException(status_code=404, detail="Register not found")
+
+    # Load current register risks
+    curr_risks_result = await session.execute(
+        select(RiskEntry).where(RiskEntry.register_id == register_id)
+    )
+    curr_risks = list(curr_risks_result.scalars().all())
+
+    # Find the previous register for the same system (archived, created before this one)
+    prev_result = await session.execute(
+        select(RiskRegister)
+        .where(RiskRegister.ai_system_id == register.ai_system_id)
+        .where(RiskRegister.id != register_id)
+        .where(RiskRegister.status == "archived")
+        .where(RiskRegister.created_at < register.created_at)
+        .order_by(RiskRegister.created_at.desc())
+        .limit(1)
+    )
+    prev_register = prev_result.scalar_one_or_none()
+
+    if prev_register is None:
+        return RegisterDiff(added=[r.title for r in curr_risks])
+
+    prev_risks_result = await session.execute(
+        select(RiskEntry).where(RiskEntry.register_id == prev_register.id)
+    )
+    prev_risks = list(prev_risks_result.scalars().all())
+
+    # Load mitigations for both registers
+    all_risk_ids = [r.id for r in curr_risks] + [r.id for r in prev_risks]
+    mit_result = await session.execute(
+        select(MitigationMeasure).where(MitigationMeasure.risk_id.in_(all_risk_ids))
+    )
+    all_mits = list(mit_result.scalars().all())
+    mits_by_risk: dict[str, list[MitigationMeasure]] = {}
+    for m in all_mits:
+        mits_by_risk.setdefault(m.risk_id, []).append(m)
+
+    TRACKED_FIELDS = [
+        ("severity", "Severity"),
+        ("likelihood", "Likelihood"),
+        ("category", "Category"),
+        ("risk_type", "Risk type"),
+        ("impact", "Impact"),
+        ("description", "Description"),
+        ("affects_vulnerable_groups", "Affects vulnerable groups"),
+        ("vulnerable_groups", "Vulnerable groups"),
+        ("ai_lifecycle_phase", "AI lifecycle phase"),
+        ("risk_owner", "Risk owner"),
+        ("residual_likelihood", "Residual likelihood"),
+        ("residual_severity", "Residual severity"),
+        ("final_risk_level", "Residual level"),
+        ("review_notes", "Residual justification"),
+        ("closure_justification", "Closure justification"),
+        ("status", "Status"),
+    ]
+
+    def _str(val) -> str:
+        if val is None:
+            return ""
+        return str(val).strip()
+
+    prev_map = {r.title: r for r in prev_risks}
+    curr_map = {r.title: r for r in curr_risks}
+
+    added = [t for t in curr_map if t not in prev_map]
+    removed = [t for t in prev_map if t not in curr_map]
+
+    changed: list[RegisterDiffEntry] = []
+    for title in curr_map:
+        if title not in prev_map:
+            continue
+        prev_r = prev_map[title]
+        curr_r = curr_map[title]
+
+        field_changes: list[RiskFieldChange] = []
+        for attr, label in TRACKED_FIELDS:
+            pv = _str(getattr(prev_r, attr, None))
+            cv = _str(getattr(curr_r, attr, None))
+            if pv != cv:
+                field_changes.append(RiskFieldChange(field=label, from_value=pv or "—", to_value=cv or "—"))
+
+        # Compare mitigations by title
+        prev_mit_titles = {m.title for m in mits_by_risk.get(prev_r.id, [])}
+        curr_mit_titles = {m.title for m in mits_by_risk.get(curr_r.id, [])}
+        mit_added = sorted(curr_mit_titles - prev_mit_titles)
+        mit_removed = sorted(prev_mit_titles - curr_mit_titles)
+
+        if field_changes or mit_added or mit_removed:
+            changed.append(RegisterDiffEntry(
+                title=title,
+                fields=field_changes,
+                mitigations_added=mit_added,
+                mitigations_removed=mit_removed,
+            ))
+
+    curr_mit = sum(len(mits_by_risk.get(r.id, [])) for r in curr_risks)
+    prev_mit = sum(len(mits_by_risk.get(r.id, [])) for r in prev_risks)
+
+    return RegisterDiff(
+        added=added,
+        removed=removed,
+        changed=changed,
+        mitigations_delta=curr_mit - prev_mit,
+    )

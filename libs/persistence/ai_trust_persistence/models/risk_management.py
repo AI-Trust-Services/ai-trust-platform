@@ -44,6 +44,10 @@ class RiskRegister(Base):
     last_assessment_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Planning step: scheduled next review date (must be within 6 months)
+    next_review_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class RiskEntry(Base):
@@ -223,6 +227,69 @@ class TestReport(Base):
     # "pass" | "fail" | "inconclusive"
 
     author: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    attachments: Mapped[str] = mapped_column(Text, default="")
+    # JSON list of {name, url} objects
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class PlanTask(Base):
+    """Planning task linked to a risk register and optionally to a specific risk entry.
+
+    Used in the Plan step (step 5) of the risk management wizard.
+    Overdue tasks trigger a ReassessmentTrigger automatically.
+    """
+
+    __tablename__ = "plan_tasks"
+
+    id: Mapped[str] = mapped_column(String(30), primary_key=True)
+    register_id: Mapped[str] = mapped_column(
+        String(30), ForeignKey("risk_registers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    risk_id: Mapped[str | None] = mapped_column(
+        String(30), ForeignKey("risk_entries.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    assigned_to: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="open")
+    # "open" | "in_progress" | "done"
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class Incident(Base):
+    """A realized risk — an incident linked to a risk management cycle.
+
+    Records situations where an identified risk actually materialized.
+    May reference a specific risk entry and include attached documents.
+    """
+
+    __tablename__ = "incidents"
+
+    id: Mapped[str] = mapped_column(String(30), primary_key=True)
+    register_id: Mapped[str] = mapped_column(
+        String(30), ForeignKey("risk_registers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    risk_id: Mapped[str | None] = mapped_column(
+        String(30), ForeignKey("risk_entries.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(50), default="open")
+    # "open" | "under_investigation" | "resolved" | "closed"
+
+    reported_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attachments: Mapped[str] = mapped_column(Text, default="")
     # JSON list of {name, url} objects
 

@@ -78,22 +78,24 @@ Open **Risk Management** in the sidebar. You'll see:
 - **Risk management not completed badge** — shown for HIGH-risk systems with a register in progress but not yet approved
 - **Risk management in progress badge** — shown (orange) for non-HIGH systems where risk management is optional
 
-### Assessment wizard (5 steps)
+### Assessment wizard (6 steps)
 
 1. **Scope** — define what this assessment covers (Art. 9(2)(a))
 2. **Identify** — add risks with severity/likelihood matrix, auto-calculated risk level badge, lifecycle phase, owner, vulnerable groups (Art. 9(9))
-3. **Evaluate** — confirm or dismiss each identified risk
+3. **Evaluate** — confirm or dismiss each identified risk; view risk descriptions and misuse scenarios
 4. **Mitigate** — add mitigation measures in hierarchy order: Eliminate → Reduce → Mitigate → Inform (Art. 9(2)(b)+(c)); record residual risk
-5. **Approve** — summary, residual risk argument (Art. 9(5)), approve
+5. **Plan** — set scheduled review date (max 6 months, Art. 9(1)); add tasks with title, description, linked risk, owner, due date; overdue tasks auto-trigger re-assessment
+6. **Approve** — cycle summary, expert sign-off argument (Art. 9(5)), incident reporting with linked tasks
 
 After approval:
 - All steps remain browsable in read-only mode (green "Approved" banner)
 - **Export report** button generates a printable HTML report
+- **Incidents** card remains editable — log and track situations where risks materialized
 - **Restart** button (when reassessment is due) starts a new cycle pre-filled from the previous one
 
 ### Versioning
 
-Previous assessment cycles appear as collapsed cards below the active wizard. Each card shows the approval date, confirmed risk count, and residual risk verdict. Click to expand for full detail.
+Previous assessment cycles appear as collapsed cards below the active wizard. Each card shows the approval date, confirmed risk count, residual risk verdict, and **diff badges** vs the prior cycle (green "+N added", red "-N removed", yellow "N level changed"). Click to expand for full detail including risk level changes.
 
 ---
 

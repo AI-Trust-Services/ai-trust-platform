@@ -115,14 +115,79 @@ Click **Next**.
 
 ---
 
-## Step 5 — Approve
+## Step 5 — Plan
 
-**What to say:** *"The final step requires a responsible person to sign off on the overall residual risk. Under Art. 9(5), someone with authority must confirm the risk is acceptable before the system can be put into service."*
+**What to say:** *"Before approving, the cycle requires a concrete action plan: a scheduled review date and a list of tasks linked to specific risks. Tasks have owners and deadlines — overdue tasks automatically create a re-assessment trigger."*
+
+### Review date
+
+Set the **Scheduled review date** to 3 months from today (must be within 6 months).
+
+**What to say:** *"The 6-month maximum enforces Art. 9(1)'s iterative monitoring requirement — you cannot approve and forget for more than half a year."*
+
+### Tasks
+
+Click **+ Add task** and fill in:
+
+| Field | Value |
+|---|---|
+| Task title | Complete Q3 bias audit |
+| Description | Run the quarterly demographic parity report. Compare acceptance rates across gender, age, and ethnicity. Escalate to HR Director if parity gap >3%. |
+| Linked risk | Biased performance scoring against protected employee groups |
+| Assigned to | hr.director@company.com |
+| Due date | 30 days from today |
+| Status | In progress |
+
+Click **Save task**, then add a second task:
+
+| Field | Value |
+|---|---|
+| Task title | Verify SHAP reports are generated for all decisions |
+| Description | Audit 50 recent score records to confirm SHAP reports are present and accessible to employees. |
+| Linked risk | Lack of explainability for low performance scores |
+| Assigned to | hr.director@company.com |
+| Due date | 45 days from today |
+| Status | Open |
+
+Click **Next: Approve →**.
+
+---
+
+## Step 6 — Approve
+
+**What to say:** *"The final step requires a responsible person to sign off on the overall residual risk. Under Art. 9(5), someone with authority must confirm the risk is acceptable before the system can be put into service. You can also record any incidents — situations where a risk actually materialized."*
+
+### Report an incident (optional demonstration)
+
+Click **+ Report incident** and fill in:
+
+| Field | Value |
+|---|---|
+| Incident title | Performance scores flagged as potentially biased for part-time employees |
+| Description | Three managers independently reported that part-time employees scored significantly lower than full-time peers with equivalent output metrics. Suspected training data imbalance. |
+| Linked risk | Biased performance scoring against protected employee groups |
+| Reported by | hr.director@company.com |
+| Date occurred | (today's date) |
+| Attachments | Manager feedback forms (3x PDF)\nSample score comparison spreadsheet |
+| Status | Under investigation |
+
+Click **Report incident**.
+
+Then add a follow-up task to this incident by clicking **+ Add task** under the incident:
+
+| Field | Value |
+|---|---|
+| Task title | Investigate part-time bias in training data |
+| Description | Pull training data split by employment type. Check whether part-time label or correlated features drove the score gap. Report findings to HR Director within 2 weeks. |
+| Assigned to | ml.engineer@company.com |
+| Due date | 14 days from today |
+
+### Sign off
 
 | Field | Value |
 |---|---|
 | Residual risk acceptable | ✓ Yes |
-| Residual risk argument | Residual risk is acceptable following implementation of bias elimination controls and mandatory explainability reporting. Quarterly independent audits ensure ongoing compliance. The system must not be deployed until the bias audit and SHAP reporting are implemented and verified. |
+| Expert sign-off argument | Residual risk is acceptable following implementation of bias elimination controls and mandatory explainability reporting. Quarterly independent audits ensure ongoing compliance. The system must not be deployed until the bias audit and SHAP reporting are implemented and verified. |
 
 Click **Approve**.
 
@@ -130,11 +195,12 @@ Click **Approve**.
 
 ## After approval
 
-**What to say:** *"Once approved, the assessment is locked in read-only mode — you can browse all steps but cannot edit them. This is the audit trail. The Export Report button generates a printable HTML summary for regulators or internal audit."*
+**What to say:** *"Once approved, the assessment is locked in read-only mode — you can browse all steps but cannot edit them. This is the audit trail. The Export Report button generates a printable HTML summary for regulators or internal audit. Incidents remain visible and editable even after approval — you can continue to log and investigate them."*
 
 - Click **Export report** and show the generated document.
 - Point out the green **Approved** banner and the locked steps.
 - Scroll down to show that this first cycle is now stored as version 1.
+- Show the Incidents card with the reported incident and its linked follow-up task.
 
 ---
 
@@ -144,6 +210,7 @@ Click **Approve**.
 |---|---|
 | Scope | Art. 9(2)(a) — define what is assessed |
 | Identify | Art. 9(2)(a) — known and foreseeable risks; Art. 9(9) — vulnerable groups |
-| Evaluate | Art. 9(2)(b) — decide which risks to address |
+| Evaluate | Art. 9(2)(b) — decide which risks to address; review risk descriptions |
 | Mitigate | Art. 9(2)(b)+(c) — mitigation hierarchy; Art. 9(2)(d) — residual risk |
-| Approve | Art. 9(5) — responsible person sign-off; Art. 9(12) — documentation |
+| Plan | Art. 9(1) — iterative monitoring; scheduled review date ≤6 months; task tracking with owners and deadlines |
+| Approve | Art. 9(5) — expert sign-off; Art. 9(12) — documentation; incident recording |

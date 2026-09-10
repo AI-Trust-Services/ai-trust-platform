@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
-import type { RiskRegister, RiskEntry, MisuseScenario, MitigationMeasure, TestReport, WizardStep } from "../types";
+import type { RiskRegister, RiskEntry, MisuseScenario, MitigationMeasure, TestReport, PlanTask, WizardStep } from "../types";
 
 const STEPS: { key: WizardStep; label: string }[] = [
   { key: "scope",    label: "1. Scope" },
   { key: "identify", label: "2. Identify" },
   { key: "evaluate", label: "3. Evaluate" },
   { key: "mitigate", label: "4. Manage risks" },
-  { key: "approve",  label: "5. Approve" },
+  { key: "plan",     label: "5. Plan" },
+  { key: "approve",  label: "6. Approve" },
 ];
 
 const SEV_COLORS: Record<string, string> = {
@@ -73,7 +74,7 @@ function ApprovedBanner({ register }: { register: { approver_username?: string |
   );
 }
 
-function exportReport(systemName: string, register: RiskRegister, risks: RiskEntry[], archived = false) {
+async function exportReport(systemName: string, register: RiskRegister, risks: RiskEntry[], archived = false, nextRegisterId: string | null = null) {
   const confirmed = risks.filter(r => r.status === "confirmed");
   const fmtDate = (d?: string | null) => d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
   const levelBadge = (l?: string | null) => {
@@ -83,9 +84,66 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
   const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : "—";
   const np = (s: string | null | undefined) => s?.trim() ? s : `<span style="color:#9ca3af;font-style:italic">Not provided</span>`;
 
-  const risksHtml = confirmed.map((r, idx) => `
-    <div style="border:1px solid #e4e4e7;border-radius:8px;padding:18px 20px;margin-bottom:16px;page-break-inside:avoid">
-      <div style="font-weight:700;font-size:15px;margin-bottom:10px">${idx + 1}. ${r.title}</div>
+  // Fetch plan tasks and incidents for the register
+  let planTasks: PlanTask[] = [];
+  let incidents: import("../types").Incident[] = [];
+  try { planTasks = await api.getPlanTasks(register.id); } catch { /* ignore */ }
+  try { incidents = await api.getIncidents(register.id); } catch { /* ignore */ }
+
+  // For archived reports: fetch diff against next version to mark changed fields
+  let diffRemovedInNext = new Set<string>();
+  let diffChangedInNext = new Map<string, import("../types").RegisterDiffEntry>();
+  let diffAddedInNext = new Set<string>();
+  if (archived && nextRegisterId) {
+    try {
+      const d = await api.getRegisterDiff(nextRegisterId);
+      diffRemovedInNext = new Set(d.removed);
+      diffAddedInNext = new Set(d.added);
+      diffChangedInNext = new Map(d.changed.map(c => [c.title, c]));
+    } catch { /* ignore */ }
+  }
+
+  const riskTitleById: Record<string, string> = {};
+  risks.forEach(r => { riskTitleById[r.id] = r.title; });
+
+  const changedBadge = `<span style="background:#ffd5d5;color:#8b0000;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:6px;text-transform:uppercase">changed in the next version</span>`;
+
+  const risksHtml = confirmed.map((r, idx) => {
+    const isRemovedInNext = diffRemovedInNext.has(r.title);
+    const entry = diffChangedInNext.get(r.title);
+    const hasChanges = entry && ((entry.fields ?? []).length > 0 || (entry.mitigations_added ?? []).length > 0 || (entry.mitigations_removed ?? []).length > 0);
+    const riskBorderStyle = isRemovedInNext
+      ? "border:2px solid #f87171;background:#fff5f5"
+      : hasChanges
+        ? "border:2px solid #fbbf24;background:#fffbeb"
+        : "border:1px solid #e4e4e7";
+    const removedBanner = isRemovedInNext
+      ? `<div style="background:#ffd5d5;color:#8b0000;font-size:11px;font-weight:700;padding:6px 10px;border-radius:4px;margin-bottom:10px">⚠ REMOVED IN NEXT VERSION — this risk was not carried forward to the next cycle</div>`
+      : "";
+    const changesBanner = hasChanges && entry
+      ? `<div style="background:#fff3c4;color:#7a5900;font-size:11px;padding:6px 10px;border-radius:4px;margin-bottom:10px">
+          <div style="font-weight:700;margin-bottom:4px">⚠ CHANGED IN NEXT VERSION</div>
+          <table style="border-collapse:collapse;font-size:11px">
+            ${(entry.fields ?? []).map(fc => `<tr>
+              <td style="padding:1px 8px 1px 0;font-weight:600;white-space:nowrap">${fc.field}</td>
+              <td style="padding:1px 6px 1px 0;text-decoration:line-through;color:#8b0000">${fc.from_value}</td>
+              <td style="padding:1px 0;color:#1a5c35">→ ${fc.to_value}</td>
+            </tr>`).join("")}
+            ${(entry.mitigations_added ?? []).map(t => `<tr>
+              <td style="padding:1px 8px 1px 0;font-weight:600;white-space:nowrap;color:#1a5c35">Mitigation added</td>
+              <td colspan="2" style="padding:1px 0;color:#1a5c35">${t}</td>
+            </tr>`).join("")}
+            ${(entry.mitigations_removed ?? []).map(t => `<tr>
+              <td style="padding:1px 8px 1px 0;font-weight:600;white-space:nowrap;color:#8b0000">Mitigation removed</td>
+              <td colspan="2" style="padding:1px 0;text-decoration:line-through;color:#8b0000">${t}</td>
+            </tr>`).join("")}
+          </table>
+        </div>`
+      : "";
+    return `
+    <div style="${riskBorderStyle};border-radius:8px;padding:18px 20px;margin-bottom:16px;page-break-inside:avoid">
+      ${removedBanner}${changesBanner}
+      <div style="font-weight:700;font-size:15px;margin-bottom:10px">${idx + 1}. ${r.title}${isRemovedInNext || hasChanges ? changedBadge : ""}</div>
 
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
         <tr>
@@ -123,8 +181,8 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
       </div>
 
       <div style="margin-top:10px">
-        <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Misuse scenarios — Art. 9(2)(a) (${r.misuse_scenarios.length})</div>
-        ${r.misuse_scenarios.length > 0 ? r.misuse_scenarios.map(ms => `
+        <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Misuse scenarios — Art. 9(2)(a) (${(r.misuse_scenarios ?? []).length})</div>
+        ${(r.misuse_scenarios ?? []).length > 0 ? (r.misuse_scenarios ?? []).map(ms => `
           <div style="background:#fff5f5;border-left:3px solid #fca5a5;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px;font-size:12px">
             <div><strong>Actor:</strong> ${ms.actor || "—"} · <strong>Likelihood:</strong> ${cap(ms.likelihood)}</div>
             <div style="margin-top:3px">${ms.description}</div>
@@ -135,8 +193,8 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
       </div>
 
       <div style="margin-top:10px">
-        <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Risk management measures — Art. 9(2)(b)+(c) (${r.mitigations.length})</div>
-        ${r.mitigations.length > 0 ? r.mitigations.map(m => `
+        <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Risk management measures — Art. 9(2)(b)+(c) (${(r.mitigations ?? []).length})</div>
+        ${(r.mitigations ?? []).length > 0 ? (r.mitigations ?? []).map(m => `
           <div style="background:#f0f4ff;border-left:3px solid #93c5fd;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px;font-size:12px">
             <div>
               <span style="background:#dbeafe;color:#1e40af;padding:1px 7px;border-radius:8px;font-weight:700;font-size:10px;text-transform:uppercase;margin-right:8px">${m.hierarchy_level}</span>
@@ -173,7 +231,8 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
         <div style="margin-top:6px;color:#374151"><strong>Justification:</strong> ${np(r.review_notes)}</div>
       </div>
     </div>
-  `).join("");
+  `;
+  }).join("");
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Risk Management Report — ${systemName}</title>
@@ -208,21 +267,102 @@ function exportReport(systemName: string, register: RiskRegister, risks: RiskEnt
     ${register.notes ? `<div class="section-title">Assessment notes</div><div class="scope-box">${register.notes}</div>` : ""}
     <div class="stats">
       <div class="stat"><div class="stat-val">${confirmed.length}</div><div class="stat-lbl">Confirmed risks</div></div>
-      <div class="stat"><div class="stat-val">${confirmed.reduce((a, r) => a + r.mitigations.length, 0)}</div><div class="stat-lbl">Measures</div></div>
+      <div class="stat"><div class="stat-val">${confirmed.reduce((a, r) => a + (r.mitigations ?? []).length, 0)}</div><div class="stat-lbl">Measures</div></div>
       <div class="stat"><div class="stat-val">${confirmed.filter(r => r.affects_vulnerable_groups).length}</div><div class="stat-lbl">Vulnerable group risks</div></div>
-      <div class="stat"><div class="stat-val">${confirmed.reduce((a, r) => a + r.misuse_scenarios.length, 0)}</div><div class="stat-lbl">Misuse scenarios</div></div>
+      <div class="stat"><div class="stat-val">${confirmed.reduce((a, r) => a + (r.misuse_scenarios ?? []).length, 0)}</div><div class="stat-lbl">Misuse scenarios</div></div>
     </div>
     <div class="section-title">Confirmed risks (${confirmed.length})</div>
     ${risksHtml || "<p style='color:#9ca3af;font-size:13px'>No confirmed risks.</p>"}
+    ${diffAddedInNext.size > 0 ? `
+      <div style="margin-top:8px">
+        ${[...diffAddedInNext].map(title => `
+          <div style="border:2px dashed #6ee7b7;background:#f0faf4;border-radius:8px;padding:14px 18px;margin-bottom:12px">
+            <div style="font-size:11px;font-weight:700;background:#d5f5e3;color:#1a5c35;display:inline-block;padding:2px 8px;border-radius:6px;margin-bottom:8px;text-transform:uppercase">added in next version</div>
+            <div style="font-weight:700;font-size:15px;color:#1a5c35">${title}</div>
+            <div style="font-size:12px;color:#556b82;margin-top:4px;font-style:italic">This risk did not exist in this version — it was introduced in the next cycle.</div>
+          </div>
+        `).join("")}
+      </div>
+    ` : ""}
     ${register.residual_risk_argument ? `
       <div class="section-title">Overall residual risk argument (Art. 9(5))</div>
       <div class="scope-box">${register.residual_risk_argument}</div>
     ` : ""}
+    <div class="section-title">Review plan (Art. 9(1))</div>
+    <div class="scope-box">
+      <strong>Scheduled review date:</strong> ${fmtDate(register.next_review_date)}
+    </div>
+    ${planTasks.length > 0 ? `
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px">
+        <thead>
+          <tr style="background:#f4f4f5">
+            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Task</th>
+            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Linked risk</th>
+            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Assigned to</th>
+            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Due</th>
+            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${planTasks.map(t => `
+            <tr style="border-bottom:1px solid #e4e4e7">
+              <td style="padding:6px 10px;vertical-align:top">
+                <div style="font-weight:600">${t.title}</div>
+                ${t.description ? `<div style="color:#556b82;margin-top:2px">${t.description}</div>` : ""}
+              </td>
+              <td style="padding:6px 10px;vertical-align:top;color:#374151">${t.risk_id && riskTitleById[t.risk_id] ? riskTitleById[t.risk_id] : "—"}</td>
+              <td style="padding:6px 10px;vertical-align:top;color:#374151">${t.assigned_to || "—"}</td>
+              <td style="padding:6px 10px;vertical-align:top;white-space:nowrap">${fmtDate(t.due_date)}</td>
+              <td style="padding:6px 10px;vertical-align:top;font-weight:600;text-transform:capitalize">${cap(t.status)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    ` : `<div style="color:#9ca3af;font-size:12px;font-style:italic;padding:4px 0">No tasks recorded.</div>`}
+    ${incidents.length > 0 ? `
+      <div class="section-title">Incidents (${incidents.length})</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px">
+        <thead>
+          <tr style="background:#f4f4f5">
+            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Incident</th>
+            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Linked risk</th>
+            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Reported by</th>
+            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Occurred</th>
+            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${incidents.map(inc => {
+            const linkedRisk = inc.risk_id && riskTitleById[inc.risk_id] ? riskTitleById[inc.risk_id] : "—";
+            return `
+            <tr style="border-bottom:1px solid #e4e4e7">
+              <td style="padding:6px 10px;vertical-align:top">
+                <div style="font-weight:600">${inc.title}</div>
+                ${inc.description ? `<div style="color:#556b82;margin-top:2px">${inc.description}</div>` : ""}
+              </td>
+              <td style="padding:6px 10px;vertical-align:top;color:#374151">${linkedRisk}</td>
+              <td style="padding:6px 10px;vertical-align:top;color:#374151">${inc.reported_by || "—"}</td>
+              <td style="padding:6px 10px;vertical-align:top;white-space:nowrap">${fmtDate(inc.occurred_at)}</td>
+              <td style="padding:6px 10px;vertical-align:top;font-weight:600;text-transform:capitalize">${cap(inc.status)}</td>
+            </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    ` : ""}
     <div class="footer">Generated by AI Trust Platform · EU AI Act Art. 9 Risk Management · ${new Date().getFullYear()}</div>
   </body></html>`;
 
-  const w = (window.top ?? window).open("", "_blank");
-  if (w) { w.document.write(html); w.document.close(); w.focus(); }
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 // ── Step 1: Scope ─────────────────────────────────────────────────────────────
@@ -964,7 +1104,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
   async function saveMitigation(riskId: string) {
     const d = mitDraft[riskId] ?? {};
     if (!d.title?.trim()) { setErr(e => ({ ...e, [riskId]: "Measure title is required." })); return; }
-    if (!d.hierarchy_level) { setErr(e => ({ ...e, [riskId]: "Hierarchy level is required (Art. 9(2)(c))." })); return; }
+    if (!d.hierarchy_level) { setErr(e => ({ ...e, [riskId]: "Hierarchy level is required." })); return; }
     setSaving(s => ({ ...s, [riskId]: true }));
     setErr(e => ({ ...e, [riskId]: "" }));
     try {
@@ -1000,7 +1140,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
   return (
     <div>
       <div style={{ background: "var(--bg)", borderRadius: 8, padding: "12px 16px", marginBottom: 16, fontSize: 12, color: "var(--text)" }}>
-        <strong>Art. 9(2)(b)+(c) — Risk management measures:</strong> Apply measures in order: <strong>Eliminate</strong> (preferred) →
+        <strong>Risk management measures:</strong> Apply measures in order: <strong>Eliminate</strong> (preferred) →
         <strong> Reduce</strong> → <strong>Mitigate</strong> → <strong>Inform</strong>. Every confirmed risk must have at least one measure
         or a documented justification for not applying any.
       </div>
@@ -1055,7 +1195,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                 ) : (
                   <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                     <div style={{ gridColumn: "1 / -1" }}>
-                      <Label required>Hierarchy level (Art. 9(2)(c))</Label>
+                      <Label required>Hierarchy level</Label>
                       <Select value={mitDraft[risk.id]?.hierarchy_level ?? ""}
                         onChange={v => setMitDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], hierarchy_level: v } }))}
                         options={[{ value: "", label: "Select…" }, ...HIERARCHY_LEVELS.map(l => ({ value: l.value, label: `${l.label} — ${l.desc}` }))]} />
@@ -1193,7 +1333,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                 {/* Residual risk (post-mitigation) */}
                 <div style={{ marginTop: 14, padding: "10px 14px", background: "var(--bg)", borderRadius: 6, border: "1px solid var(--border)" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.4px" }}>
-                    Residual risk (post-mitigation) — Art. 9(2)(d)
+                    Residual risk (post-mitigation)
                     {risk.final_risk_level && (
                       <span style={{ marginLeft: 10 }}><RiskLevelBadge level={risk.final_risk_level} /></span>
                     )}
@@ -1245,7 +1385,7 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
                       value={residualDraft[risk.id]?.review_notes ?? risk.review_notes ?? ""}
                       onChange={v => setResidualDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { residual_likelihood: "", residual_severity: "", date_of_assessment: "" }, review_notes: v } }))}
                       rows={2}
-                      placeholder="Explain why the residual risk level is acceptable (Art. 9(2)(d))…" />
+                      placeholder="Explain why the residual risk level is acceptable…" />
                   </div>
                   <button onClick={() => saveResidual(risk.id)} disabled={residualSaving[risk.id]}
                     style={{ marginTop: 10, fontSize: 11, background: "transparent", color: "var(--text-secondary)", border: "1px solid #d1d5db", borderRadius: 4, padding: "4px 12px", cursor: "pointer" }}>
@@ -1271,7 +1411,250 @@ function MitigateStep({ risks, onRisksChange, onNext }: {
   );
 }
 
-// ── Step 5: Approve ───────────────────────────────────────────────────────────
+// ── Step 5: Plan ─────────────────────────────────────────────────────────────
+function PlanStep({ register, risks, onRegisterUpdated, onNext }: {
+  register: RiskRegister;
+  risks: RiskEntry[];
+  onRegisterUpdated: (r: RiskRegister) => void;
+  onNext: () => void;
+}) {
+  const [tasks, setTasks] = useState<PlanTask[]>([]);
+  const [addingTask, setAddingTask] = useState(false);
+  const [taskDraft, setTaskDraft] = useState<Partial<PlanTask>>({});
+  const [savingTask, setSavingTask] = useState(false);
+  const [taskErr, setTaskErr] = useState("");
+  const [reviewDate, setReviewDate] = useState(
+    register.next_review_date ? register.next_review_date.slice(0, 10) : ""
+  );
+  const [reviewDateErr, setReviewDateErr] = useState("");
+  const [savingDate, setSavingDate] = useState(false);
+
+  useEffect(() => {
+    api.getPlanTasks(register.id).then(setTasks).catch(() => {});
+    api.checkOverdueTasks(register.id).catch(() => {});
+  }, [register.id]);
+
+  const today = new Date();
+  const maxDate = new Date(today);
+  maxDate.setDate(maxDate.getDate() + 180);
+  const maxDateStr = maxDate.toISOString().slice(0, 10);
+  const todayStr = today.toISOString().slice(0, 10);
+
+  async function saveReviewDate(value: string) {
+    if (!value) { setReviewDateErr("Review date is required."); return; }
+    if (value > maxDateStr) { setReviewDateErr("Review date must be within 6 months from today."); return; }
+    setReviewDateErr("");
+    setSavingDate(true);
+    try {
+      const updated = await api.patchRegister(register.id, { next_review_date: value } as Partial<RiskRegister>);
+      onRegisterUpdated(updated);
+    } finally {
+      setSavingDate(false);
+    }
+  }
+
+  async function addTask() {
+    if (!taskDraft.title?.trim()) { setTaskErr("Task title is required."); return; }
+    setTaskErr("");
+    setSavingTask(true);
+    try {
+      const task = await api.createPlanTask(register.id, {
+        title: taskDraft.title ?? "",
+        risk_id: taskDraft.risk_id ?? null,
+        assigned_to: taskDraft.assigned_to ?? null,
+        due_date: taskDraft.due_date ?? null,
+        status: taskDraft.status ?? "open",
+      });
+      setTasks(prev => [...prev, task]);
+      setTaskDraft({});
+      setAddingTask(false);
+    } finally {
+      setSavingTask(false);
+    }
+  }
+
+  async function deleteTask(taskId: string) {
+    await api.deletePlanTask(taskId);
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+  }
+
+  async function updateTaskStatus(taskId: string, status: string) {
+    const updated = await api.patchPlanTask(taskId, { status });
+    setTasks(prev => prev.map(t => t.id === taskId ? updated : t));
+  }
+
+  const riskById: Record<string, string> = {};
+  risks.forEach(r => { riskById[r.id] = r.title; });
+
+  const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
+    open:        { bg: "#f4f4f5", color: "#6b7280" },
+    in_progress: { bg: "#eff6ff", color: "#1147E9" },
+    done:        { bg: "#d5f5e3", color: "#1a5c35" },
+    overdue:     { bg: "#ffd5d5", color: "#8b0000" },
+  };
+
+  function taskStatusKey(task: PlanTask): string {
+    if (task.status === "done") return "done";
+    if (task.due_date && task.due_date.slice(0, 10) < todayStr) return "overdue";
+    return task.status;
+  }
+
+  return (
+    <div>
+      {/* Review date */}
+      <Card>
+        <h3 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 700 }}>Scheduled review date</h3>
+        <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--text-secondary)" }}>
+          Set the date for the next scheduled review of this risk management cycle. Must be within 6 months.
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <input
+            type="date"
+            value={reviewDate}
+            min={todayStr}
+            max={maxDateStr}
+            onChange={e => { setReviewDate(e.target.value); setReviewDateErr(""); }}
+            onBlur={e => saveReviewDate(e.target.value)}
+            style={{ fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}
+          />
+          {savingDate && <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Saving…</span>}
+          {reviewDate && !reviewDateErr && !savingDate && (
+            <span style={{ fontSize: 12, color: "#1a5c35" }}>✓ Set</span>
+          )}
+        </div>
+        {reviewDateErr && <div style={{ marginTop: 6, fontSize: 12, color: "#dc2626" }}>{reviewDateErr}</div>}
+      </Card>
+
+      {/* Tasks */}
+      <Card>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Tasks</h3>
+          {!addingTask && (
+            <button onClick={() => setAddingTask(true)}
+              style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontWeight: 600 }}>
+              + Add task
+            </button>
+          )}
+        </div>
+
+        {tasks.length === 0 && !addingTask && (
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0 }}>No tasks yet. Add tasks to track actions for this risk management cycle.</p>
+        )}
+
+        {tasks.map(task => {
+          const sk = taskStatusKey(task);
+          const sc = STATUS_COLORS[sk] ?? STATUS_COLORS.open;
+          return (
+            <div key={task.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, marginBottom: 2 }}>{task.title}</div>
+                {task.description && <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 2 }}>{task.description}</div>}
+                <table style={{ fontSize: 11, color: "var(--text-secondary)", borderCollapse: "collapse", marginTop: 2 }}>
+                  <tbody>
+                    {task.risk_id && riskById[task.risk_id] && (
+                      <tr>
+                        <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>Risk</td>
+                        <td>{riskById[task.risk_id]}</td>
+                      </tr>
+                    )}
+                    {task.assigned_to && (
+                      <tr>
+                        <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>👤 Assigned</td>
+                        <td>{task.assigned_to}</td>
+                      </tr>
+                    )}
+                    {task.due_date && (
+                      <tr>
+                        <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>📅 Due</td>
+                        <td>{task.due_date.slice(0, 10)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <select
+                value={task.status}
+                onChange={e => updateTaskStatus(task.id, e.target.value)}
+                style={{ fontSize: 11, padding: "3px 6px", borderRadius: 6, border: "none", background: sc.bg, color: sc.color, fontWeight: 600, cursor: "pointer" }}>
+                <option value="open">Open</option>
+                <option value="in_progress">In progress</option>
+                <option value="done">Done</option>
+              </select>
+              <button onClick={() => deleteTask(task.id)}
+                style={{ fontSize: 11, background: "transparent", border: "none", color: "#9ca3af", cursor: "pointer", padding: "0 4px" }}>✕</button>
+            </div>
+          );
+        })}
+
+        {addingTask && (
+          <div style={{ marginTop: 12, padding: "12px", background: "var(--bg)", borderRadius: 8, border: "1px solid var(--border)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Label required>Task title</Label>
+                <Input value={taskDraft.title ?? ""} onChange={v => setTaskDraft(d => ({ ...d, title: v }))} placeholder="e.g. Conduct bias audit" />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Label>Description</Label>
+                <Textarea value={taskDraft.description ?? ""} onChange={v => setTaskDraft(d => ({ ...d, description: v }))} rows={2} placeholder="What needs to be done and why…" />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Label>Linked risk</Label>
+                <select
+                  value={taskDraft.risk_id ?? ""}
+                  onChange={e => setTaskDraft(d => ({ ...d, risk_id: e.target.value || null }))}
+                  style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+                  <option value="">— None —</option>
+                  {risks.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
+                </select>
+              </div>
+              <div>
+                <Label>Assigned to</Label>
+                <Input value={taskDraft.assigned_to ?? ""} onChange={v => setTaskDraft(d => ({ ...d, assigned_to: v }))} placeholder="Username" />
+              </div>
+              <div>
+                <Label>Due date</Label>
+                <input type="date" value={taskDraft.due_date?.slice(0, 10) ?? ""}
+                  onChange={e => setTaskDraft(d => ({ ...d, due_date: e.target.value || null }))}
+                  style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Label>Status</Label>
+                <select
+                  value={taskDraft.status ?? "open"}
+                  onChange={e => setTaskDraft(d => ({ ...d, status: e.target.value }))}
+                  style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+                  <option value="open">Open</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="done">Done</option>
+                </select>
+              </div>
+            </div>
+            {taskErr && <div style={{ marginBottom: 8, fontSize: 12, color: "#dc2626" }}>{taskErr}</div>}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={addTask} disabled={savingTask}
+                style={{ fontSize: 12, background: savingTask ? "#9ca3af" : "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 16px", cursor: savingTask ? "not-allowed" : "pointer", fontWeight: 600 }}>
+                {savingTask ? "Saving…" : "Save task"}
+              </button>
+              <button onClick={() => { setAddingTask(false); setTaskDraft({}); setTaskErr(""); }}
+                style={{ fontSize: 12, background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 16px", cursor: "pointer", color: "var(--text)" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+        <button onClick={onNext}
+          style={{ background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          Next: Approve →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 6: Approve ───────────────────────────────────────────────────────────
 function ApproveStep({ register, risks, onApprove }: {
   register: RiskRegister;
   risks: RiskEntry[];
@@ -1282,9 +1665,47 @@ function ApproveStep({ register, risks, onApprove }: {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
+  // Incidents state
+  const [incidents, setIncidents] = useState<import("../types").Incident[]>([]);
+  const [addingIncident, setAddingIncident] = useState(false);
+  const [incidentDraft, setIncidentDraft] = useState<Partial<import("../types").Incident>>({});
+  const [savingIncident, setSavingIncident] = useState(false);
+  const [incidentErr, setIncidentErr] = useState("");
+
+  useEffect(() => {
+    api.getIncidents(register.id).then(setIncidents).catch(() => {});
+  }, [register.id]);
+
   const confirmedRisks = risks.filter(r => r.status === "confirmed");
   const totalMitigations = confirmedRisks.reduce((acc, r) => acc + r.mitigations.length, 0);
   const vulnerableGroupRisks = confirmedRisks.filter(r => r.affects_vulnerable_groups);
+
+  async function addIncident() {
+    if (!incidentDraft.title?.trim()) { setIncidentErr("Incident title is required."); return; }
+    setIncidentErr("");
+    setSavingIncident(true);
+    try {
+      const incident = await api.createIncident(register.id, {
+        title: incidentDraft.title ?? "",
+        description: incidentDraft.description ?? "",
+        status: incidentDraft.status ?? "open",
+        risk_id: incidentDraft.risk_id ?? null,
+        reported_by: incidentDraft.reported_by ?? null,
+        occurred_at: incidentDraft.occurred_at ?? null,
+        attachments: incidentDraft.attachments ?? "",
+      });
+      setIncidents(prev => [incident, ...prev]);
+      setIncidentDraft({});
+      setAddingIncident(false);
+    } finally {
+      setSavingIncident(false);
+    }
+  }
+
+  async function deleteIncident(id: string) {
+    await api.deleteIncident(id);
+    setIncidents(prev => prev.filter(i => i.id !== id));
+  }
 
   async function handleApprove() {
     if (!argument.trim()) { setErr("Residual risk argument is required (Art. 9(5))."); return; }
@@ -1299,6 +1720,137 @@ function ApproveStep({ register, risks, onApprove }: {
     }
   }
 
+  const incidentsSection = (
+    <Card>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Incidents</h3>
+        {!addingIncident && (
+          <button onClick={() => setAddingIncident(true)}
+            style={{ fontSize: 12, background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontWeight: 600 }}>
+            + Report incident
+          </button>
+        )}
+      </div>
+      <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--text-secondary)" }}>
+        Record situations where an identified risk materialized. Each incident should be investigated and linked to a specific risk if applicable.
+      </p>
+      {incidents.length === 0 && !addingIncident && (
+        <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0 }}>No incidents reported.</p>
+      )}
+      {incidents.map(incident => {
+        const INCIDENT_STATUS: Record<string, { bg: string; color: string; label: string }> = {
+          open:                { bg: "#ffd5d5", color: "#8b0000", label: "Open" },
+          under_investigation: { bg: "#fde8d0", color: "#8b3a00", label: "Under investigation" },
+          resolved:            { bg: "#d5f5e3", color: "#1a5c35", label: "Resolved" },
+          closed:              { bg: "#f4f4f5", color: "#6b7280", label: "Closed" },
+        };
+        const sc = INCIDENT_STATUS[incident.status] ?? INCIDENT_STATUS.open;
+        const linkedRisk = risks.find(r => r.id === incident.risk_id);
+        return (
+          <div key={incident.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, marginBottom: 2 }}>{incident.title}</div>
+              {incident.description && <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 2 }}>{incident.description}</div>}
+              <table style={{ fontSize: 11, color: "var(--text-secondary)", borderCollapse: "collapse", marginTop: 2 }}>
+                <tbody>
+                  {linkedRisk && (
+                    <tr>
+                      <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>Risk</td>
+                      <td>{linkedRisk.title}</td>
+                    </tr>
+                  )}
+                  {incident.reported_by && (
+                    <tr>
+                      <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>👤 Reported by</td>
+                      <td>{incident.reported_by}</td>
+                    </tr>
+                  )}
+                  {incident.occurred_at && (
+                    <tr>
+                      <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>📅 Occurred</td>
+                      <td>{incident.occurred_at.slice(0, 10)}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <select
+              value={incident.status}
+              onChange={async e => {
+                const updated = await api.patchIncident(incident.id, { status: e.target.value });
+                setIncidents(prev => prev.map(i => i.id === incident.id ? updated : i));
+              }}
+              style={{ fontSize: 11, padding: "3px 6px", borderRadius: 6, border: "none", background: sc.bg, color: sc.color, fontWeight: 600, cursor: "pointer" }}>
+              <option value="open">Open</option>
+              <option value="under_investigation">Under investigation</option>
+              <option value="resolved">Resolved</option>
+              <option value="closed">Closed</option>
+            </select>
+            <button onClick={() => deleteIncident(incident.id)}
+              style={{ fontSize: 11, background: "transparent", border: "none", color: "#9ca3af", cursor: "pointer", padding: "0 4px" }}>✕</button>
+          </div>
+        );
+      })}
+      {addingIncident && (
+        <div style={{ marginTop: 12, padding: "12px", background: "var(--bg)", borderRadius: 8, border: "1px solid var(--border)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label required>Incident title</Label>
+              <Input value={incidentDraft.title ?? ""} onChange={v => setIncidentDraft(d => ({ ...d, title: v }))} placeholder="e.g. Biased output causing incorrect decision" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label>Description</Label>
+              <Textarea value={incidentDraft.description ?? ""} onChange={v => setIncidentDraft(d => ({ ...d, description: v }))} rows={3} placeholder="Describe what happened, the impact, and context…" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label>Linked risk</Label>
+              <select value={incidentDraft.risk_id ?? ""} onChange={e => setIncidentDraft(d => ({ ...d, risk_id: e.target.value || null }))}
+                style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+                <option value="">— None —</option>
+                {risks.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>Reported by</Label>
+              <Input value={incidentDraft.reported_by ?? ""} onChange={v => setIncidentDraft(d => ({ ...d, reported_by: v }))} placeholder="Username" />
+            </div>
+            <div>
+              <Label>Date occurred</Label>
+              <input type="date" value={incidentDraft.occurred_at?.slice(0, 10) ?? ""}
+                onChange={e => setIncidentDraft(d => ({ ...d, occurred_at: e.target.value || null }))}
+                style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label>Attachments / document references</Label>
+              <Textarea value={incidentDraft.attachments ?? ""} onChange={v => setIncidentDraft(d => ({ ...d, attachments: v }))} rows={2} placeholder="List document names or URLs (one per line)…" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label>Status</Label>
+              <select value={incidentDraft.status ?? "open"} onChange={e => setIncidentDraft(d => ({ ...d, status: e.target.value }))}
+                style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+                <option value="open">Open</option>
+                <option value="under_investigation">Under investigation</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+              </select>
+            </div>
+          </div>
+          {incidentErr && <div style={{ marginBottom: 8, fontSize: 12, color: "#dc2626" }}>{incidentErr}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={addIncident} disabled={savingIncident}
+              style={{ fontSize: 12, background: savingIncident ? "#9ca3af" : "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "6px 16px", cursor: savingIncident ? "not-allowed" : "pointer", fontWeight: 600 }}>
+              {savingIncident ? "Saving…" : "Report incident"}
+            </button>
+            <button onClick={() => { setAddingIncident(false); setIncidentDraft({}); setIncidentErr(""); }}
+              style={{ fontSize: 12, background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 16px", cursor: "pointer", color: "var(--text)" }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+
   if (register.status === "approved") {
     return (
       <div>
@@ -1312,9 +1864,10 @@ function ApproveStep({ register, risks, onApprove }: {
           </div>
           <div style={{ marginTop: 4, fontSize: 12, color: "var(--text)" }}>{register.residual_risk_argument}</div>
           <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-secondary)" }}>
-            Next re-assessment scheduled in 6 months (automatic trigger created — Art. 9(1)).
+            Next re-assessment scheduled in 6 months (automatic trigger created).
           </div>
         </Card>
+        {incidentsSection}
       </div>
     );
   }
@@ -1323,7 +1876,7 @@ function ApproveStep({ register, risks, onApprove }: {
     <div>
       {/* Summary */}
       <Card>
-        <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>Assessment summary</h3>
+        <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>Cycle summary</h3>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10, marginBottom: 14 }}>
           {[
             { label: "Confirmed risks", value: confirmedRisks.length },
@@ -1352,9 +1905,11 @@ function ApproveStep({ register, risks, onApprove }: {
         ))}
       </Card>
 
-      {/* Residual risk argument (Art. 9(5)) */}
+      {incidentsSection}
+
+      {/* Residual risk argument */}
       <Card>
-        <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>Residual risk argument (Art. 9(5))</h3>
+        <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>Residual risk argument</h3>
         <div style={{ marginBottom: 14 }}>
           <Label>Residual risk acceptability</Label>
           <div style={{ display: "flex", gap: 12 }}>
@@ -1367,7 +1922,7 @@ function ApproveStep({ register, risks, onApprove }: {
           </div>
         </div>
         <div>
-          <Label required>Argument (Art. 9(5) — expert sign-off)</Label>
+          <Label required>Expert sign-off argument</Label>
           <Textarea value={argument} onChange={setArgument} rows={4}
             placeholder="Describe why the residual risk is acceptable (or not): evidence, assumptions, open issues, safeguards in place…" />
         </div>
@@ -1378,7 +1933,7 @@ function ApproveStep({ register, risks, onApprove }: {
             {saving ? "Approving…" : "Approve register"}
           </button>
           <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
-            Approving creates a 6-month re-assessment trigger (Art. 9(1)).
+            Approving creates a 6-month re-assessment trigger.
           </div>
         </div>
       </Card>
@@ -1387,10 +1942,23 @@ function ApproveStep({ register, risks, onApprove }: {
 }
 
 // ── Archived register summary card ───────────────────────────────────────────
-function ArchivedRegisterCard({ reg, systemName }: { reg: RiskRegister; systemName: string }) {
+function ArchivedRegisterCard({ reg, systemName, nextRegisterId }: { reg: RiskRegister; systemName: string; nextRegisterId: string | null }) {
   const [open, setOpen] = useState(false);
+  const [diff, setDiff] = useState<import("../types").RegisterDiff | null>(null);
   const confirmed = reg.risks.filter(r => r.status === "confirmed");
   const fmtDate = (d?: string | null) => d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+  useEffect(() => {
+    if (!nextRegisterId) return;
+    api.getRegisterDiff(nextRegisterId).then(setDiff).catch(() => {});
+  }, [reg.id, nextRegisterId]);
+
+  // Build sets for quick lookup
+  const addedInNext = new Set(diff?.added ?? []);
+  const removedInNext = new Set(diff?.removed ?? []);
+  const changedInNext = new Map((diff?.changed ?? []).map(c => [c.title, c]));
+  const hasChanges = (diff?.added.length ?? 0) > 0 || (diff?.removed.length ?? 0) > 0 || (diff?.changed.length ?? 0) > 0;
+
   return (
     <div style={{ border: "1px solid var(--border)", borderRadius: 10, marginBottom: 12, overflow: "hidden", opacity: 0.85 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", background: "var(--bg)", cursor: "pointer" }}
@@ -1407,8 +1975,16 @@ function ArchivedRegisterCard({ reg, systemName }: { reg: RiskRegister; systemNa
             Residual: {reg.residual_risk_acceptable ? "Acceptable" : "Not acceptable"}
           </span>
         )}
+        {nextRegisterId && hasChanges && (() => {
+          const n = (diff?.added.length ?? 0) + (diff?.removed.length ?? 0) + (diff?.changed.length ?? 0);
+          return (
+            <span style={{ fontSize: 10, background: "#fde8d0", color: "#7a3000", padding: "2px 9px", borderRadius: 8, fontWeight: 600, marginLeft: 4 }}>
+              {n} {n === 1 ? "change was" : "changes were"} made
+            </span>
+          );
+        })()}
         <button
-          onClick={e => { e.stopPropagation(); exportReport(systemName, reg, reg.risks, true); }}
+          onClick={e => { e.stopPropagation(); exportReport(systemName, reg, reg.risks, true, nextRegisterId).catch(err => alert("Export failed: " + err)); }}
           style={{ marginLeft: "auto", background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
         >
           📄 Export
@@ -1420,15 +1996,68 @@ function ArchivedRegisterCard({ reg, systemName }: { reg: RiskRegister; systemNa
           <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 10 }}>
             <strong>Scope:</strong> {reg.assessment_scope || "—"}
           </div>
-          {confirmed.map(r => (
-            <div key={r.id} style={{ padding: "8px 0", borderBottom: "1px solid #f4f4f5", fontSize: 12 }}>
-              <span style={{ fontWeight: 600 }}>{r.title}</span>
-              <span style={{ marginLeft: 8, color: "var(--text-secondary)" }}>{r.category} · {r.severity}</span>
-              {r.mitigations.length > 0 && (
-                <span style={{ marginLeft: 8, color: "#1a5c35" }}>{r.mitigations.length} measure(s)</span>
-              )}
+          {confirmed.map(r => {
+            const wasRemoved = removedInNext.has(r.title);
+            const entry = changedInNext.get(r.title);
+            const hasFieldChanges = entry && (entry.fields.length > 0 || entry.mitigations_added.length > 0 || entry.mitigations_removed.length > 0);
+            return (
+              <div key={r.id} style={{
+                padding: "8px 10px",
+                borderBottom: "1px solid #f4f4f5",
+                fontSize: 12,
+                borderRadius: 4,
+                marginBottom: 2,
+                background: wasRemoved ? "#fff0f0" : hasFieldChanges ? "#fffbeb" : "transparent",
+                borderLeft: wasRemoved ? "3px solid #f87171" : hasFieldChanges ? "3px solid #fbbf24" : "none",
+              }}>
+                <div style={{ fontWeight: 600, marginBottom: hasFieldChanges ? 4 : 0 }}>
+                  {r.title}
+                  <span style={{ marginLeft: 8, fontWeight: 400, color: "var(--text-secondary)" }}>{r.category} · {r.severity}</span>
+                  {wasRemoved && <span style={{ marginLeft: 8, fontSize: 11, color: "#8b0000", fontWeight: 600 }}>removed in next version</span>}
+                  {r.mitigations.length > 0 && <span style={{ marginLeft: 8, color: "#1a5c35", fontWeight: 400 }}>{r.mitigations.length} measure(s)</span>}
+                </div>
+                {hasFieldChanges && entry && (
+                  <table style={{ fontSize: 11, color: "var(--text-secondary)", borderCollapse: "collapse", marginTop: 2 }}>
+                    <tbody>
+                      {entry.fields.map(fc => (
+                        <tr key={fc.field}>
+                          <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500, color: "#7a5900" }}>{fc.field}</td>
+                          <td style={{ paddingRight: 6, color: "#8b0000", textDecoration: "line-through" }}>{fc.from_value}</td>
+                          <td style={{ color: "#1a5c35" }}>→ {fc.to_value}</td>
+                        </tr>
+                      ))}
+                      {entry.mitigations_added.map(t => (
+                        <tr key={"a-" + t}>
+                          <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500, color: "#1a5c35" }}>Mitigation added</td>
+                          <td colSpan={2} style={{ color: "#1a5c35" }}>{t}</td>
+                        </tr>
+                      ))}
+                      {entry.mitigations_removed.map(t => (
+                        <tr key={"r-" + t}>
+                          <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500, color: "#8b0000" }}>Mitigation removed</td>
+                          <td colSpan={2} style={{ color: "#8b0000", textDecoration: "line-through" }}>{t}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            );
+          })}
+          {/* Risks added in the next cycle (present in next but not here) */}
+          {nextRegisterId && (diff?.added.length ?? 0) > 0 && (
+            <div style={{ marginTop: 8 }}>
+              {diff!.added.map(title => (
+                <div key={title} style={{
+                  padding: "8px 10px", borderBottom: "1px solid #f4f4f5", fontSize: 12, borderRadius: 4, marginBottom: 2,
+                  background: "#f0faf4", borderLeft: "3px solid #6ee7b7", color: "#374151",
+                }}>
+                  <span style={{ fontWeight: 600 }}>{title}</span>
+                  <span style={{ marginLeft: 8, fontSize: 11, color: "#1a5c35", fontWeight: 600 }}>added in next cycle</span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
           {reg.residual_risk_argument && (
             <div style={{ marginTop: 10, fontSize: 12, color: "var(--text)" }}>
               <strong>Residual risk argument:</strong> {reg.residual_risk_argument}
@@ -1630,19 +2259,25 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
         <EvaluateStep risks={risks} onRisksChange={setRisks} onNext={() => setStep("mitigate")} />
       )}
       {step === "mitigate" && (
-        <MitigateStep risks={risks} onRisksChange={setRisks} onNext={() => setStep("approve")} />
+        <MitigateStep risks={risks} onRisksChange={setRisks} onNext={() => setStep("plan")} />
+      )}
+      {step === "plan" && register && (
+        <PlanStep register={register} risks={risks} onRegisterUpdated={setRegister} onNext={() => setStep("approve")} />
       )}
       {step === "approve" && register && (
         <ApproveStep register={register} risks={risks} onApprove={handleApprove} />
       )}
 
-      {/* Previous assessment versions */}
+      {/* Previous cycles */}
       {archivedRegisters.length > 0 && (
         <div style={{ marginTop: 32 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12, borderTop: "1px solid var(--border)", paddingTop: 20 }}>
-            Previous assessment versions ({archivedRegisters.length})
+            Previous cycles ({archivedRegisters.length})
           </div>
-          {archivedRegisters.map(r => <ArchivedRegisterCard key={r.id} reg={r} systemName={systemName} />)}
+          {archivedRegisters.map((r, i) => {
+            const nextId = i === 0 ? (register?.id ?? null) : archivedRegisters[i - 1].id;
+            return <ArchivedRegisterCard key={r.id} reg={r} systemName={systemName} nextRegisterId={nextId} />;
+          })}
         </div>
       )}
 
