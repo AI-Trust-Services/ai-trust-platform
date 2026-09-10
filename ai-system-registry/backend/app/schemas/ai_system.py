@@ -120,6 +120,22 @@ class AISystemCreate(BaseModel):
             raise ValueError(f"org_role must be one of {sorted(VALID_ROLES)}")
         return v
 
+    @field_validator(
+        "assignee_username",
+        "compliance_officer_username",
+        "business_assignee_username",
+        "technical_assignee_username",
+        mode="before",
+    )
+    @classmethod
+    def blank_username_to_none(cls, v):
+        """Coerce ""/whitespace → None. A falsy-but-present username would otherwise
+        slip past the ``row.assignee_username and ...`` edit guard in update_system,
+        letting anyone edit the system."""
+        if isinstance(v, str):
+            v = v.strip()
+        return v or None
+
 
 class AISystemUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)

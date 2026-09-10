@@ -49,6 +49,20 @@ class WorkflowAssignRequest(BaseModel):
     intended_purpose: str | None = None
     note: str | None = None
 
+    @field_validator(
+        "business_assignee_username",
+        "technical_assignee_username",
+        "compliance_officer_username",
+        mode="before",
+    )
+    @classmethod
+    def blank_username_to_none(cls, v):
+        """Coerce ""/whitespace → None. A falsy-but-present assignee would otherwise
+        slip past the ``row.<assignee> and ...`` edit guards in systems/workflow."""
+        if isinstance(v, str):
+            v = v.strip()
+        return v or None
+
 
 class WorkflowSubmitSectionRequest(BaseModel):
     note: str | None = None

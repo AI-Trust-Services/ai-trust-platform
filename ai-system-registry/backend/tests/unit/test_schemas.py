@@ -43,9 +43,10 @@ def test_create_assignee_optional():
 
 
 def test_create_assignee_empty_string_is_stored_as_none():
-    # Empty string assignee_username is allowed (treated as unset by the intake router)
+    # Blank assignee_username is coerced to None so a falsy-but-present value can't slip
+    # past the `row.assignee_username and ...` edit guard in update_system.
     s = AISystemCreate(name="Test", assignee_username="")
-    assert s.assignee_username == ""
+    assert s.assignee_username is None
 
 
 # --- AISystemUpdate ---
