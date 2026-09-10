@@ -322,7 +322,7 @@ Immutable audit trail — records who did what and when across all platform acti
 
 **audit-flush-worker/** — standalone asyncio worker (no HTTP port). `AUDIT_FLUSH_INTERVAL` (default 5s), `AUDIT_FLUSH_BATCH_SIZE` (default 500). On ClickHouse failure the exception is caught in the main loop, logged, and retried next cycle — rows stay in Postgres safely.
 
-### admin/ (port 8009, `/api/admin/`)
+### admin/ (port 8010, `/api/admin/`)
 Platform administration — SMTP mail service configuration and general platform settings. Access restricted to `platform_administrator` role via `iam:manage` permission.
 
 **Data model** — single-row `platform_settings` table (migration `0014`, always `id=1`). Seeded from env vars on first startup; once a row exists the DB is the source of truth and env vars are ignored. Password is stored in the row but **never returned** by GET endpoints — only `has_password: bool` is exposed.
