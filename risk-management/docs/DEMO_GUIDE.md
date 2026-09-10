@@ -95,7 +95,7 @@ After approval:
 
 ### Versioning
 
-Previous assessment cycles appear as collapsed cards below the active wizard. Each card shows the approval date, confirmed risk count, residual risk verdict, and **diff badges** vs the prior cycle (green "+N added", red "-N removed", yellow "N level changed"). Click to expand for full detail including risk level changes.
+Previous assessment cycles appear as collapsed cards below the active wizard. Each card shows the approval date, confirmed risk count, residual risk verdict, and a **diff badge** showing how many changes were made going into the next cycle (e.g. "3 changes were made"). Click to expand for full detail including field-level changes per risk.
 
 ---
 

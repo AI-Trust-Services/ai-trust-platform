@@ -57,6 +57,8 @@ async def patch_plan_task(task_id: str, body: PlanTaskPatch):
             raise HTTPException(status_code=404, detail="Task not found")
         if body.title is not None:
             task.title = body.title
+        if body.description is not None:
+            task.description = body.description
         if body.risk_id is not None:
             task.risk_id = body.risk_id
         if body.assigned_to is not None:

@@ -173,14 +173,7 @@ Click **+ Report incident** and fill in:
 
 Click **Report incident**.
 
-Then add a follow-up task to this incident by clicking **+ Add task** under the incident:
-
-| Field | Value |
-|---|---|
-| Task title | Investigate part-time bias in training data |
-| Description | Pull training data split by employment type. Check whether part-time label or correlated features drove the score gap. Report findings to HR Director within 2 weeks. |
-| Assigned to | ml.engineer@company.com |
-| Due date | 14 days from today |
+After reporting, update the status using the dropdown next to the incident — change it to **Under investigation**.
 
 ### Sign off
 
@@ -200,7 +193,7 @@ Click **Approve**.
 - Click **Export report** and show the generated document.
 - Point out the green **Approved** banner and the locked steps.
 - Scroll down to show that this first cycle is now stored as version 1.
-- Show the Incidents card with the reported incident and its linked follow-up task.
+- Show the Incidents card with the reported incident and its status.
 
 ---
 
