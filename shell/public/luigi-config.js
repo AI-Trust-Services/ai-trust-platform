@@ -488,6 +488,10 @@
         .lui-side-nav--collapsed .fd-nested-list__title {
           display: none !important;
         }
+        .lui-side-nav--collapsed .version-sha,
+        body.semiCollapsed .version-sha {
+          display: none !important;
+        }
         .lui-side-nav--collapsed .sap-icon,
         .lui-side-nav--collapsed .fd-navigation__icon,
         body.semiCollapsed .sap-icon,
@@ -704,6 +708,47 @@
         });
 
         sidebar.appendChild(btn);
+
+        // Version chip — SHA + HelmRelease status dot
+        const versionChip = document.createElement("div");
+        versionChip.id = "luigi-version-chip";
+        versionChip.style.cssText = [
+          "display:flex", "align-items:center", "gap:6px",
+          "padding:6px 12px", "font-size:11px", "color:var(--sapContent_LabelColor,#6a6d70)",
+          "cursor:default", "user-select:none", "white-space:nowrap", "overflow:hidden",
+        ].join(";");
+
+        const dot = document.createElement("span");
+        dot.style.cssText = "width:8px;height:8px;border-radius:50%;flex-shrink:0;background:#aaa";
+        dot.title = "Loading…";
+
+        const shaLabel = document.createElement("span");
+        shaLabel.className = "version-sha";
+        shaLabel.style.cssText = "overflow:hidden;text-overflow:ellipsis";
+        shaLabel.textContent = "…";
+
+        versionChip.appendChild(dot);
+        versionChip.appendChild(shaLabel);
+        sidebar.appendChild(versionChip);
+
+        const STATUS_COLORS = { ready: "#27ae60", failed: "#e74c3c", progressing: "#f39c12", unknown: "#aaa" };
+
+        function applyVersionInfo({ sha, status, message }) {
+          dot.style.background = STATUS_COLORS[status] || STATUS_COLORS.unknown;
+          dot.title = message || status;
+          shaLabel.textContent = sha === "unknown" ? "—" : sha;
+          versionChip.title = message || status;
+        }
+
+        function fetchVersion() {
+          fetch("/api/overview/v1/version")
+            .then(r => r.ok ? r.json() : Promise.reject(r.status))
+            .then(applyVersionInfo)
+            .catch(() => applyVersionInfo({ sha: "unknown", status: "unknown", message: "unavailable" }));
+        }
+
+        fetchVersion();
+        setInterval(fetchVersion, 30000);
       }, 300);
 
       // Inject alerts bell + account chip into shell bar

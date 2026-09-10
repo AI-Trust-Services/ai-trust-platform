@@ -147,4 +147,31 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 EOF
 
+echo "==> RBAC for overview-backend: read HelmRelease status from ocm-system"
+cat <<EOF | kubectl apply -n ocm-system -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: helmrelease-reader
+  namespace: ocm-system
+rules:
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: overview-backend-helmrelease-reader
+  namespace: ocm-system
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: $NAMESPACE
+roleRef:
+  kind: Role
+  name: helmrelease-reader
+  apiGroup: rbac.authorization.k8s.io
+EOF
+
 echo "==> bootstrap complete (namespace: $NAMESPACE)"
