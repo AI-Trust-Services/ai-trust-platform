@@ -133,6 +133,12 @@ jobs:
           - name: policy-checker-worker
             context: .
             dockerfile: policy-checker-worker/Dockerfile
+          - name: audit-backend
+            context: .
+            dockerfile: audit/backend/Dockerfile
+          - name: audit-flush-worker
+            context: .
+            dockerfile: audit-flush-worker/Dockerfile
           - name: otel-clickhouse-consumer
             context: .
             dockerfile: consumers/clickhouse-consumer/Dockerfile
@@ -206,6 +212,12 @@ jobs:
             dockerfile: ./decision-trace-analyzer/frontend/Dockerfile
             build_args: |
               VITE_DTA_API_BASE=${{ vars.VITE_DTA_API_BASE || '/api/dta/v1' }}
+          - name: audit-frontend
+            context: ./audit/frontend
+            dockerfile: ./audit/frontend/Dockerfile
+            build_args: |
+              VITE_AUDIT_API_BASE=${{ vars.VITE_AUDIT_API_BASE || '/api/audit/v1' }}
+              VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
