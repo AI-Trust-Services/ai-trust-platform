@@ -49,12 +49,36 @@ while IFS='=' read -r key _; do
   literal_args+=(--from-literal="${key}=${value}")
 done < <(tr -d '\r' < "$REPO_ROOT/.env" | grep -v '^\s*#' | grep -v '^\s*$')
 
+# Derive ingress hostnames from the public URLs (strip scheme) so FluxDeployer
+# valuesFrom can map them directly to ingress.host / ingress.keycloakHost.
+INGRESS_HOST=$(echo "${APP_PUBLIC_URL:-}" | sed -E 's#^[a-zA-Z]+://##')
+INGRESS_KEYCLOAK_HOST=$(echo "${KEYCLOAK_PUBLIC_URL:-}" | sed -E 's#^[a-zA-Z]+://##')
+INGRESS_MINIO_HOST=$(echo "${MINIO_PUBLIC_URL:-}" | sed -E 's#^[a-zA-Z]+://##')
+
 kubectl create secret generic ai-trust-env \
   "${literal_args[@]}" \
   --from-literal=DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/ai_trust" \
   --from-literal=RABBITMQ_URL="amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/" \
   --from-literal=OPENFGA_DATASTORE_URI="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/openfga?sslmode=disable" \
+  --from-literal=INGRESS_HOST="${INGRESS_HOST}" \
+  --from-literal=INGRESS_KEYCLOAK_HOST="${INGRESS_KEYCLOAK_HOST}" \
+  --from-literal=INGRESS_MINIO_HOST="${INGRESS_MINIO_HOST}" \
   -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+
+# Flux's HelmRelease valuesFrom has no cross-namespace support — the secret must exist
+# in the same namespace as the HelmRelease (ocm-system). Only the 5 non-sensitive URL/
+# hostname values needed by the FluxDeployer are stored here; all credentials stay in
+# ai-trust-env in the ai-trust namespace.
+echo "==> secret/ai-trust-flux-values in ocm-system (Helm chart URL values for FluxDeployer)"
+kubectl create namespace ocm-system --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic ai-trust-flux-values \
+  --from-literal=APP_PUBLIC_URL="${APP_PUBLIC_URL:-}" \
+  --from-literal=KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-}" \
+  --from-literal=INGRESS_HOST="${INGRESS_HOST}" \
+  --from-literal=INGRESS_KEYCLOAK_HOST="${INGRESS_KEYCLOAK_HOST}" \
+  --from-literal=INGRESS_MINIO_HOST="${INGRESS_MINIO_HOST}" \
+  --from-literal=IMAGE_TAG="${IMAGE_TAG:-latest}" \
+  -n ocm-system --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> configmap/postgres-init (from infra/postgres/init.sh)"
 kubectl create configmap postgres-init \

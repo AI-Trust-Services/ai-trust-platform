@@ -16,7 +16,7 @@ spec:
       serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
       initContainers:
         # mirrors compose: oauth2-proxy depends_on keycloak-provision (completed) + shell (started)
-        {{- include "ai-trust.waitForJob" (dict "job" "keycloak-provision" "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "keycloak-provision" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
         {{- include "ai-trust.waitForTcp" (dict "name" "shell" "port" 80 "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:
         - name: oauth2-proxy

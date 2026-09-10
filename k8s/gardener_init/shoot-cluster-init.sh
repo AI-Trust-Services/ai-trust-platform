@@ -19,14 +19,20 @@
 #
 # What it does:
 #   1. Installs Traefik ingress controller via Helm (skipped if already present).
-#   2. Applies rbac.yaml — grants the GitHub Actions OIDC identity the permissions
-#      needed by deploy-gardener.yml (namespace, Helm chart resources, cert.gardener.cloud).
-#   3. Requests a multi-SAN TLS certificate via Gardener cert-service
+#   2. Requests a multi-SAN TLS certificate via Gardener cert-service
 #      (cert.gardener.cloud/v1alpha1 Certificate CRD). Gardener uses DNS-01
 #      automatically — no port 80 required. The cert is stored in the
 #      ai-trust/ai-trust-tls Secret that the Helm Ingress references.
-#   4. Annotates the Traefik LoadBalancer Service with Gardener DNS annotations so
+#   3. Annotates the Traefik LoadBalancer Service with Gardener DNS annotations so
 #      shoot-dns-service auto-publishes A-records for all ingress hostnames.
+#   4. Installs the OCM controller (pinned to OCM_CONTROLLER_VERSION) via the OCM CLI
+#      (pinned to OCM_CLI_VERSION), then installs Flux (pinned to FLUX_VERSION) via the
+#      Flux CLI (`flux install`). Both are required — OCM manages component versions,
+#      Flux (source-controller + helm-controller) applies the HelmRelease.
+#      Re-running the script checks the running image tag and reinstalls only if the
+#      version doesn't match the pin — safe to re-run after upgrades.
+#   5. Applies rbac.yaml — grants the GitHub Actions OIDC identity the permissions
+#      needed by bootstrap-gardener.yml (ai-trust namespace + ocm-system namespace).
 #
 # NOTE: Traefik is installed by this script on first run. If the deployment already
 # exists (e.g. Helm release secret lost after a cluster event), the install is skipped.
@@ -70,7 +76,7 @@ echo "Cluster:    $CLUSTER_NAME"
 echo "Domain:     $SHOOT_DOMAIN"
 echo ""
 
-echo "==> [1/4] Installing Traefik ingress controller (default namespace)"
+echo "==> [1/5] Installing Traefik ingress controller (default namespace)"
 if kubectl get deployment traefik -n default &>/dev/null; then
   echo "    Traefik deployment already exists — skipping install."
 else
@@ -87,12 +93,8 @@ else
 fi
 
 echo ""
-echo "==> [2/4] Applying rbac.yaml to shoot cluster"
-kubectl apply -f "$SCRIPT_DIR/rbac.yaml"
-
-echo ""
-echo "==> [3/4] Requesting TLS certificate via Gardener cert-service (DNS-01, no port 80 needed)"
-# Ensure the ai-trust namespace exists (deploy-gardener.yml bootstrap.sh creates it, but
+echo "==> [2/5] Requesting TLS certificate via Gardener cert-service (DNS-01, no port 80 needed)"
+# Ensure the ai-trust namespace exists (bootstrap-gardener.yml creates it, but
 # shoot-cluster-init may run before the first deploy).
 kubectl create namespace ai-trust --dry-run=client -o yaml | kubectl apply -f -
 # cert.gardener.cloud Certificate CRD — Gardener cert-service issues a Let's Encrypt cert
@@ -118,7 +120,7 @@ echo "    Certificate requested — Gardener cert-service will issue via DNS-01 
 echo "    Monitor: kubectl get certificate ai-trust-tls -n ai-trust -w"
 
 echo ""
-echo "==> [4/4] Annotating Traefik LB Service for Gardener-managed DNS"
+echo "==> [3/5] Annotating Traefik LB Service for Gardener-managed DNS"
 echo "    Waiting for Traefik deployment to be available..."
 kubectl wait --for=condition=available deployment/traefik -n default --timeout=120s || true
 DNSNAMES="${APP_HOST},${KEYCLOAK_HOST}"
@@ -132,6 +134,70 @@ kubectl annotate svc traefik -n default --overwrite \
 echo "    Annotated Traefik LB Service: ${DNSNAMES}"
 
 echo ""
+echo "==> [4/5] Installing OCM controller and Flux"
+# Pinned versions — update together after testing on a non-prod cluster.
+# OCM controller (github.com/open-component-model/ocm-controller) and
+# OCM CLI (github.com/open-component-model/ocm) are versioned independently.
+OCM_CONTROLLER_VERSION="v0.33.0"
+OCM_CLI_VERSION="v0.50.0"
+FLUX_VERSION="v2.9.5"
+
+_install_ocm_cli() {
+  echo "    Installing OCM CLI ${OCM_CLI_VERSION}..."
+  curl -sSfL \
+    "https://github.com/open-component-model/ocm/releases/download/${OCM_CLI_VERSION}/ocm-${OCM_CLI_VERSION#v}-linux-amd64.tar.gz" \
+    | sudo tar -xz -C /usr/local/bin ocm
+}
+
+if kubectl get deployment ocm-controller -n ocm-system &>/dev/null; then
+  RUNNING=$(kubectl get deployment ocm-controller -n ocm-system \
+    -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
+    | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || true)
+  if [[ "$RUNNING" == "$OCM_CONTROLLER_VERSION" ]]; then
+    echo "    OCM controller ${OCM_CONTROLLER_VERSION} already installed — skipping."
+  else
+    echo "    OCM controller running ${RUNNING:-unknown}, want ${OCM_CONTROLLER_VERSION} — reinstalling."
+    command -v ocm &>/dev/null || _install_ocm_cli
+    ocm controller install --version "${OCM_CONTROLLER_VERSION}"
+    echo "    OCM controller reinstalled at ${OCM_CONTROLLER_VERSION}."
+  fi
+else
+  command -v ocm &>/dev/null || _install_ocm_cli
+  ocm controller install --version "${OCM_CONTROLLER_VERSION}"
+  echo "    OCM controller ${OCM_CONTROLLER_VERSION} installed."
+fi
+
+if kubectl get deployment source-controller -n flux-system &>/dev/null; then
+  RUNNING=$(kubectl get deployment source-controller -n flux-system \
+    -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
+    | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || true)
+  if [[ "$RUNNING" == "${FLUX_VERSION#v}"* ]] || kubectl get ns flux-system -o jsonpath='{.metadata.labels.app\.kubernetes\.io/version}' 2>/dev/null | grep -q "${FLUX_VERSION#v}"; then
+    echo "    Flux ${FLUX_VERSION} already installed — skipping."
+  else
+    echo "    Flux running ${RUNNING:-unknown}, want ${FLUX_VERSION} — reinstalling."
+    if ! command -v flux &>/dev/null; then
+      echo "    Installing Flux CLI ${FLUX_VERSION}..."
+      curl -s https://fluxcd.io/install.sh | sudo FLUX_VERSION="${FLUX_VERSION}" bash
+    fi
+    flux install --version="${FLUX_VERSION}"
+    echo "    Flux reinstalled at ${FLUX_VERSION}."
+  fi
+else
+  if ! command -v flux &>/dev/null; then
+    echo "    Installing Flux CLI ${FLUX_VERSION}..."
+    curl -s https://fluxcd.io/install.sh | sudo FLUX_VERSION="${FLUX_VERSION}" bash
+  fi
+  flux install --version="${FLUX_VERSION}"
+  echo "    Flux ${FLUX_VERSION} installed."
+fi
+
+echo ""
+echo "==> [5/5] Applying RBAC (creates ai-trust and ocm-system roles for CI)"
+# ocm-system namespace is created by 'ocm controller install' above.
+# Apply RBAC after so the ocm-system Role/RoleBinding can be created.
+kubectl apply -f "$SCRIPT_DIR/rbac.yaml"
+
+echo ""
 echo "==> shoot-cluster-init complete for '$CLUSTER_NAME'."
 echo ""
 echo "    NOTE: all kubectl commands below require the shoot KUBECONFIG to be active."
@@ -143,5 +209,5 @@ echo ""
 echo "    Get the Traefik LoadBalancer IP:"
 echo "      kubectl get svc traefik -n default"
 echo ""
-echo "    Deploy the platform:"
-echo "      gh workflow run deploy-gardener.yml --field cluster=$CLUSTER_NAME --field image_tag=latest"
+echo "    Bootstrap and deploy the platform:"
+echo "      gh workflow run bootstrap-gardener.yml --field cluster=$CLUSTER_NAME"

@@ -2,6 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: openfga-config
+
 spec:
   accessModes: ["ReadWriteOnce"] # mounted read-only by several backend Deployments; fine as long as
   resources:                     # the cluster is single-node (kind default) so all pods land there
@@ -25,7 +26,7 @@ spec:
       serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
       initContainers:
         # mirrors compose: openfga depends_on openfga-migrate (service_completed_successfully)
-        {{- include "ai-trust.waitForJob" (dict "job" "openfga-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "openfga-migrate" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
       containers:
         - name: openfga
           image: {{ .Values.openfga.image }}
