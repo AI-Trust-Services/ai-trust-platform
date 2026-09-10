@@ -91,7 +91,7 @@ function AssignQuestionDialog({ questionLabel, users, onConfirm, onCancel, busy 
           u.lastName.toLowerCase().includes(q)
         );
       }).slice(0, 8)
-    : [];
+    : users;
 
   function selectUser(u: UserWithRole) {
     const display = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.username;
@@ -103,7 +103,7 @@ function AssignQuestionDialog({ questionLabel, users, onConfirm, onCancel, busy 
   function handleSearchChange(val: string) {
     setSearch(val);
     setSelected(null);
-    setShowDropdown(val.trim().length > 0);
+    setShowDropdown(true);
   }
 
   return (
@@ -120,9 +120,9 @@ function AssignQuestionDialog({ questionLabel, users, onConfirm, onCancel, busy 
               autoFocus
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              onFocus={() => { if (search.trim() && !selected) setShowDropdown(true); }}
+              onFocus={() => { if (!selected) setShowDropdown(true); }}
               onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-              placeholder="Type a name or username…"
+              placeholder="Select or search a name…"
               className="text-sm"
             />
             {showDropdown && filtered.length > 0 && (

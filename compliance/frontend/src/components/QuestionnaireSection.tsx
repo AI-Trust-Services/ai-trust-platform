@@ -77,7 +77,7 @@ function AssignQuestionDialog({ questionLabel, users, onConfirm, onCancel, busy 
         const q = search.toLowerCase();
         return u.username.toLowerCase().includes(q) || u.firstName.toLowerCase().includes(q) || u.lastName.toLowerCase().includes(q);
       }).slice(0, 8)
-    : [];
+    : users;
 
   function selectUser(u: UserWithRole) {
     setSelected({ username: u.username });
@@ -98,10 +98,10 @@ function AssignQuestionDialog({ questionLabel, users, onConfirm, onCancel, busy 
             <Input
               autoFocus
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setSelected(null); setShowDropdown(e.target.value.trim().length > 0); }}
-              onFocus={() => { if (search.trim() && !selected) setShowDropdown(true); }}
+              onChange={(e) => { setSearch(e.target.value); setSelected(null); setShowDropdown(true); }}
+              onFocus={() => { if (!selected) setShowDropdown(true); }}
               onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-              placeholder="Type a name or username…"
+              placeholder="Select or search a name…"
               className="text-sm"
             />
             {showDropdown && filtered.length > 0 && (
@@ -365,10 +365,10 @@ export default function QuestionnaireSection({ open, system, section, username, 
             <div className="relative">
               <Input
                 value={delegateSearch}
-                onChange={(e) => { setDelegateSearch(e.target.value); setDelegateSelected(""); setDelegateDropdown(e.target.value.trim().length > 0); }}
-                onFocus={() => { if (delegateSearch.trim() && !delegateSelected) setDelegateDropdown(true); }}
+                onChange={(e) => { setDelegateSearch(e.target.value); setDelegateSelected(""); setDelegateDropdown(true); }}
+                onFocus={() => { if (!delegateSelected) setDelegateDropdown(true); }}
                 onBlur={() => setTimeout(() => setDelegateDropdown(false), 150)}
-                placeholder="Search by name or username…"
+                placeholder="Select or search a name…"
                 className="text-sm"
               />
               {delegateDropdown && delegateFiltered.length > 0 && (
