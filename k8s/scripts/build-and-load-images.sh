@@ -95,6 +95,12 @@ build audit-frontend ./audit/frontend ./audit/frontend/Dockerfile \
 
 build audit-flush-worker . audit-flush-worker/Dockerfile
 
+build admin-backend . admin/backend/Dockerfile
+
+build admin-frontend ./admin/frontend ./admin/frontend/Dockerfile \
+  --build-arg "VITE_ADMIN_API_BASE=${VITE_ADMIN_API_BASE:-/api/admin/v1}" \
+  --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
+
 build decision-trace-analyzer-frontend ./decision-trace-analyzer/frontend ./decision-trace-analyzer/frontend/Dockerfile \
   --build-arg "VITE_DTA_API_BASE=${VITE_DTA_API_BASE}"
 
