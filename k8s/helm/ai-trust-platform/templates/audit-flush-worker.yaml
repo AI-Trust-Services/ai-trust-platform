@@ -17,8 +17,8 @@ spec:
       {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         # mirrors compose: depends_on db-migrate + clickhouse-migrate (both completed)
-        {{- include "ai-trust.waitForJob" (dict "job" "db-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
-        {{- include "ai-trust.waitForJob" (dict "job" "clickhouse-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "db-migrate" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "clickhouse-migrate" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
       containers:
         - name: audit-flush-worker
           image: {{ .Values.image.repository }}/audit-flush-worker:{{ .Values.image.tag }}
@@ -31,4 +31,6 @@ spec:
             - name: CLICKHOUSE_PORT
               value: "8123"
             - name: AUDIT_FLUSH_INTERVAL
-              value: "5"
+              value: {{ .Values.auditFlush.interval | quote }}
+            - name: AUDIT_FLUSH_BATCH_SIZE
+              value: {{ .Values.auditFlush.batchSize | quote }}
