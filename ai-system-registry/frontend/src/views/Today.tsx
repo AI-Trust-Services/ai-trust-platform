@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { FileText, ArrowRight, Calendar, Search, ChevronRight, ChevronUp, LayoutList, LayoutGrid, HelpCircle, ArrowUpDown, RefreshCw, Filter, Columns, Clock } from "lucide-react";
+import { FileText, ArrowRight, Calendar, ChevronRight, ChevronUp, LayoutList, LayoutGrid, HelpCircle, ArrowUpDown, RefreshCw, Filter, Columns, Clock } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -13,41 +12,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { api } from "@/api/client";
 import { deriveTasksFromSystem, getMyTasks } from "@/utils/taskUtils";
 import type { AISystem, SystemTask } from "@/types";
-
-// Map backend lifecycle to stage info
-function getLifecycleStage(lifecycle: string): { label: string; index: number } {
-  const mapping: Record<string, { label: string; index: number }> = {
-    development: { label: "Register", index: 0 },
-    testing: { label: "Review", index: 1 },
-    conformity: { label: "Classify", index: 2 },
-    market: { label: "Comply", index: 3 },
-    "post-market": { label: "Operate", index: 4 },
-    decommissioned: { label: "Operate", index: 4 },
-  };
-  return mapping[lifecycle] || { label: "Register", index: 0 };
-}
-
-// Get risk level from tier
-function getRiskLevel(tier: string): "high" | "medium" | "low" {
-  if (["high", "gpai-systemic", "prohibited"].includes(tier)) return "high";
-  if (["limited", "gpai-standard"].includes(tier)) return "medium";
-  return "low";
-}
-
-// Get system icon based on name/type
-function getSystemIcon(name: string): string {
-  const lower = name.toLowerCase();
-  if (lower.includes("talent") || lower.includes("recruit")) return "👥";
-  if (lower.includes("schedule") || lower.includes("meeting")) return "📅";
-  if (lower.includes("safety") || lower.includes("watch")) return "🛡️";
-  if (lower.includes("market") || lower.includes("content")) return "✨";
-  if (lower.includes("customer") || lower.includes("support")) return "💬";
-  if (lower.includes("bio") || lower.includes("identity")) return "🔐";
-  if (lower.includes("insight") || lower.includes("analytics")) return "📊";
-  if (lower.includes("policy") || lower.includes("compliance")) return "✓";
-  if (lower.includes("document")) return "📄";
-  return "🤖";
-}
 
 interface TaskCardProps {
   type: "review" | "continue" | "clarification";
@@ -222,99 +186,6 @@ function TaskCardHorizontal({ type, systemName, systemId, description, actionLab
   );
 }
 
-function SystemRow({ system, username, onClick }: { system: AISystem; username: string; onClick: () => void }) {
-  const { label: stageName, index: stageProgress } = getLifecycleStage(system.lifecycle);
-  const riskLevel = getRiskLevel(system.tier);
-  const icon = getSystemIcon(system.name);
-
-  const riskColors = {
-    high: "bg-red-100 text-red-700 border-red-200",
-    medium: "bg-orange-100 text-orange-700 border-orange-200",
-    low: "bg-green-100 text-green-700 border-green-200",
-  };
-
-  const ownerName = system.owner_username || "—";
-  const ownerInitials = ownerName === "—" ? "—" : ownerName.slice(0, 2).toUpperCase();
-
-  const updated = new Date(system.updated_at || system.created_at).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-
-  // Get real task count using shared utility
-  const allTasks = deriveTasksFromSystem(system, username);
-  const myTasks = getMyTasks(allTasks, username);
-  const taskCount = myTasks.length;
-
-  return (
-    <div
-      className="flex cursor-pointer items-center gap-4 border-b border-border px-4 py-3 hover:bg-muted/30"
-      onClick={onClick}
-    >
-      {/* System */}
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-          <span className="text-lg">{icon}</span>
-        </div>
-        <div className="min-w-0">
-          <div className="font-medium">{system.name}</div>
-          <div className="truncate text-xs text-muted-foreground">
-            {system.description || system.provider || "AI System"}
-          </div>
-        </div>
-      </div>
-
-      {/* Risk Level */}
-      <div className="w-24 shrink-0">
-        <Badge className={cn("border text-xs", riskColors[riskLevel])}>
-          {riskLevel === "high" ? "High" : riskLevel === "medium" ? "Medium" : "Low"}
-        </Badge>
-      </div>
-
-      {/* Current Stage with Progress */}
-      <div className="w-48 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center">
-            <div className="size-2 rounded-full bg-primary" />
-            <div className={cn("h-0.5 w-4", stageProgress >= 1 ? "bg-primary" : "bg-muted")} />
-            <div className={cn("size-2 rounded-full", stageProgress >= 1 ? "bg-primary" : "bg-muted")} />
-            <div className={cn("h-0.5 w-4", stageProgress >= 2 ? "bg-primary" : "bg-muted")} />
-            <div className={cn("size-2 rounded-full", stageProgress >= 2 ? "bg-primary" : "bg-muted")} />
-          </div>
-          <span className="text-xs text-muted-foreground">{stageName}</span>
-        </div>
-      </div>
-
-      {/* Owner */}
-      <div className="flex w-40 shrink-0 items-center gap-2">
-        <Avatar className="size-7">
-          <AvatarFallback className="bg-primary text-xs text-primary-foreground">
-            {ownerInitials}
-          </AvatarFallback>
-        </Avatar>
-        <div className="min-w-0">
-          <div className="truncate text-xs font-medium">{ownerName}</div>
-          <div className="truncate text-xs text-muted-foreground">Owner</div>
-        </div>
-      </div>
-
-      {/* Open Tasks */}
-      <div className="w-20 shrink-0 text-center">
-        <Badge variant="secondary" className="text-xs">
-          {taskCount}
-        </Badge>
-      </div>
-
-      {/* Updated */}
-      <div className="w-24 shrink-0 text-xs text-muted-foreground">{updated}</div>
-
-      {/* Arrow */}
-      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-    </div>
-  );
-}
-
 /* Task table row */
 interface TaskTableRowProps {
   task: {
@@ -476,7 +347,6 @@ export default function Today() {
   const [tasksExpanded, setTasksExpanded] = useState(true);
   const [allTasksExpanded, setAllTasksExpanded] = useState(true);
   const [taskSort, setTaskSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
-  const [systemSort, setSystemSort] = useState<string>("updated");
   // All Tasks filters
   const [taskDueFilter, setTaskDueFilter] = useState<string>("all");
   const [taskWaitingFilter, setTaskWaitingFilter] = useState<boolean>(false);
@@ -545,21 +415,6 @@ export default function Today() {
   const myRecentSystems = [...mySystems].sort((a, b) =>
     new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
   );
-
-  // Sort systems based on systemSort
-  const sortedMySystems = [...myRecentSystems].sort((a, b) => {
-    switch (systemSort) {
-      case "name":
-        return a.name.localeCompare(b.name);
-      case "risk": {
-        const riskOrder: Record<string, number> = { prohibited: 0, high: 1, "gpai-systemic": 2, "gpai-standard": 3, limited: 4, minimal: 5 };
-        return (riskOrder[a.tier] ?? 5) - (riskOrder[b.tier] ?? 5);
-      }
-      case "updated":
-      default:
-        return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
-    }
-  }).slice(0, 4);
 
   // Calculate counts for workload sidebar
   const assignedToMeCount = yourTasks.filter(t => t.status === "in_progress").length;
@@ -928,90 +783,6 @@ export default function Today() {
               </Card>
             )
           )}
-        </div>
-
-        {/* Your AI Systems Preview */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Your AI Systems</h2>
-              <p className="text-sm text-muted-foreground">
-                AI systems you own, are assigned to, or have recently worked on.
-              </p>
-            </div>
-            <Button onClick={() => {
-              window.location.hash = "#/systems?register=true";
-            }}>
-              + Register AI system
-            </Button>
-          </div>
-
-          {/* Filters */}
-          <div className="flex items-center gap-3">
-            <div className="relative max-w-xs flex-1">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Search systems..." className="pl-9" />
-            </div>
-            <select className="rounded-lg border border-input bg-background px-3 py-2 text-sm">
-              <option>All stages</option>
-            </select>
-            <select className="rounded-lg border border-input bg-background px-3 py-2 text-sm">
-              <option>All risk levels</option>
-            </select>
-          </div>
-
-          {/* Systems Table */}
-          <Card>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                {/* Table Header with Sortable Columns */}
-                <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <button onClick={() => setSystemSort("name")} className={cn("flex flex-1 items-center gap-1 hover:text-foreground", systemSort === "name" && "text-primary")}>
-                    System
-                    <ArrowUpDown className={cn("size-3", systemSort === "name" && "text-primary")} />
-                  </button>
-                  <button onClick={() => setSystemSort("risk")} className={cn("flex w-24 shrink-0 items-center gap-1 hover:text-foreground", systemSort === "risk" && "text-primary")}>
-                    Risk Level
-                    <ArrowUpDown className={cn("size-3", systemSort === "risk" && "text-primary")} />
-                  </button>
-                  <div className="w-48 shrink-0">Current Stage</div>
-                  <div className="w-40 shrink-0">Owner</div>
-                  <div className="w-20 shrink-0 text-center">Open Tasks</div>
-                  <button onClick={() => setSystemSort("updated")} className={cn("flex w-24 shrink-0 items-center gap-1 hover:text-foreground", systemSort === "updated" && "text-primary")}>
-                    Updated
-                    <ArrowUpDown className={cn("size-3", systemSort === "updated" && "text-primary")} />
-                  </button>
-                  <div className="w-4 shrink-0"></div>
-                </div>
-
-                {/* Table Rows */}
-                {loading ? (
-                  <div className="py-8 text-center text-muted-foreground">Loading...</div>
-                ) : sortedMySystems.length === 0 ? (
-                  <div className="py-8 text-center text-muted-foreground">
-                    No AI systems you're involved with yet.
-                  </div>
-                ) : (
-                  sortedMySystems.map((system) => (
-                    <SystemRow
-                      key={system.id}
-                      system={system}
-                      username={username}
-                      onClick={() => navigate(`/systems/${system.id}`)}
-                    />
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Link
-            to="/systems"
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-          >
-            View all AI systems
-            <ArrowRight className="size-4" />
-          </Link>
         </div>
       </div>
 

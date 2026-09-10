@@ -10,8 +10,10 @@ import RegisterWizard from "../components/RegisterWizard";
 import RegisterModeChooser from "../components/RegisterModeChooser";
 import AssistedRegistration from "../components/AssistedRegistration";
 import EngineerAssistedRegistration from "../components/EngineerAssistedRegistration";
+import AnalyticsDashboard from "../components/AnalyticsDashboard";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
+import { usePermissions } from "../hooks/usePermissions";
 import type { AISystem, ModelCard } from "../types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -253,10 +255,12 @@ function SystemRow({ system, userMap, optionalColumns, onClick }: SystemRowProps
 export default function Systems() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<"systems" | "analytics">("systems");
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [models, setModels] = useState<ModelCard[]>([]);
   const [userMap, setUserMap] = useState<UserMap>({});
   const [search, setSearch] = useState("");
+  const [ownershipFilter, setOwnershipFilter] = useState<"mine" | "all">("mine"); // Default to "Your AI Systems"
   const [lifecycleFilter, setLifecycleFilter] = useState("all");
   const [riskFilter, setRiskFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
@@ -270,6 +274,10 @@ export default function Systems() {
   const [engineerStage, setEngineerStage] = useState<"chooser" | "manual" | "assisted">("chooser");
   const { wizardOpen, setWizardOpen, mayRegister, username } = useModalControls();
   const showToast = useToast();
+  const { can } = usePermissions();
+
+  // Permission check for analytics tab - requires assessments:read
+  const canViewAnalytics = can("assessments:read");
 
   // Handle ?register=true query param to auto-open registration
   useEffect(() => {
@@ -332,6 +340,14 @@ export default function Systems() {
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
     let result = systems.filter((sys) => {
+      // Ownership filter - "Your AI Systems" vs "All AI Systems"
+      if (ownershipFilter === "mine") {
+        const isOwner = sys.owner_username === username;
+        const isAssignee = sys.assignee_username === username;
+        const isComplianceOfficer = sys.compliance_officer_username === username;
+        if (!isOwner && !isAssignee && !isComplianceOfficer) return false;
+      }
+
       const matchSearch = !s || sys.name.toLowerCase().includes(s) ||
         sys.id.toLowerCase().includes(s) || (sys.provider || "").toLowerCase().includes(s);
       const matchLifecycle = lifecycleFilter === "all" || sys.lifecycle === lifecycleFilter;
@@ -355,12 +371,12 @@ export default function Systems() {
     }
 
     return result;
-  }, [systems, search, lifecycleFilter, riskFilter, sortBy]);
+  }, [systems, search, ownershipFilter, username, lifecycleFilter, riskFilter, sortBy]);
 
   // Portfolio summary stats
   const stats = useMemo(() => {
     const byLifecycle: Record<string, number> = {
-      register: 0, review: 0, classify: 0, comply: 0, operate: 0,
+      register: 0, classify: 0, comply: 0, operate: 0,
     };
     const byRisk: Record<string, number> = { high: 0, medium: 0, low: 0 };
 
@@ -387,30 +403,98 @@ export default function Systems() {
       {/* Main Content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-border bg-card px-6 py-5">
-          <div>
-            <h1 className="text-2xl font-semibold">AI Systems</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Browse and manage your AI system portfolio.
-            </p>
+        <div className="border-b border-border bg-card px-6 py-5">
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold">AI Systems</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Cross-system oversight for compliance and risk.
+              </p>
+            </div>
+            {activeTab === "systems" && (
+              <Button
+                disabled={!mayRegister}
+                title={mayRegister ? undefined : "Requires role: business owner or administrator"}
+                onClick={() => setWizardOpen(true)}
+              >
+                <Plus className="mr-2 size-4" />
+                Register AI system
+              </Button>
+            )}
           </div>
-          <Button
-            disabled={!mayRegister}
-            title={mayRegister ? undefined : "Requires role: business owner or administrator"}
-            onClick={() => setWizardOpen(true)}
-          >
-            <Plus className="mr-2 size-4" />
-            Register AI system
-          </Button>
+
+          {/* Tabs */}
+          <div className="mt-4 flex gap-6 border-b border-border -mb-5 -mx-6 px-6">
+            <button
+              onClick={() => setActiveTab("systems")}
+              className={cn(
+                "relative pb-3 text-sm font-medium transition-colors",
+                activeTab === "systems"
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Systems
+              {activeTab === "systems" && (
+                <span className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("analytics")}
+              disabled={!canViewAnalytics}
+              title={canViewAnalytics ? undefined : "Requires assessments:read permission"}
+              className={cn(
+                "relative pb-3 text-sm font-medium transition-colors",
+                activeTab === "analytics"
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+                !canViewAnalytics && "cursor-not-allowed opacity-50"
+              )}
+            >
+              Analytics
+              {activeTab === "analytics" && (
+                <span className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 border-b border-border bg-card px-6 py-4">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              className="pl-9"
+        {/* Systems Tab Content */}
+        {activeTab === "systems" && (
+          <>
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-3 border-b border-border bg-card px-6 py-4">
+              {/* Ownership Toggle */}
+              <div className="flex rounded-lg border border-input bg-background p-1">
+                <button
+                  onClick={() => setOwnershipFilter("mine")}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    ownershipFilter === "mine"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  Your AI Systems
+                </button>
+                <button
+                  onClick={() => setOwnershipFilter("all")}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    ownershipFilter === "all"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  All AI Systems
+                </button>
+              </div>
+
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="text"
+                  className="pl-9"
               placeholder="Search AI systems..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -424,7 +508,6 @@ export default function Systems() {
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
               <SelectItem value="development">Register</SelectItem>
-              <SelectItem value="testing">Review</SelectItem>
               <SelectItem value="conformity">Classify</SelectItem>
               <SelectItem value="market">Comply</SelectItem>
               <SelectItem value="post-market">Operate</SelectItem>
@@ -571,10 +654,18 @@ export default function Systems() {
             )}
           </Card>
         </div>
+          </>
+        )}
+
+        {/* Analytics Tab Content */}
+        {activeTab === "analytics" && canViewAnalytics && (
+          <AnalyticsDashboard className="flex-1 overflow-auto" />
+        )}
       </div>
 
-      {/* Right Sidebar */}
-      <aside className="hidden w-72 shrink-0 overflow-auto bg-card p-6 xl:block">
+      {/* Right Sidebar - only show on Systems tab */}
+      {activeTab === "systems" && (
+        <aside className="hidden w-72 shrink-0 overflow-auto bg-card p-6 xl:block">
         {/* Portfolio Summary Card */}
         <Card className="mb-6">
           <CardContent className="p-4">
@@ -662,6 +753,7 @@ export default function Systems() {
           </CardContent>
         </Card>
       </aside>
+      )}
 
       {/* Engineer: choose AI-assisted vs manual */}
       <RegisterModeChooser

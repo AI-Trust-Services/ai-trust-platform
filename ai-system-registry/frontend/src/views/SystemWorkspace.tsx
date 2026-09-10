@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link, useSearchParams } from "react-router";
 import {
-  ChevronRight, ChevronLeft, MoreHorizontal, CheckCircle2,
+  ChevronRight, ChevronLeft, ChevronDown, MoreHorizontal, CheckCircle2,
   Circle, Info, ArrowRight, FileText, CheckSquare, Pencil, Files,
   Activity, FolderOpen, StickyNote, Database, BarChart3, Bell, Search as SearchIcon,
   Users, Building2, Calendar, ExternalLink, Sparkles, Edit, User
@@ -25,10 +25,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import {
   Dialog,
@@ -994,22 +1002,42 @@ function RecentNotesPanel({ systemId, onViewAll }: { systemId: string; onViewAll
 
 // Files tab with evidence marking
 function FilesTab({ systemId, systemName }: { systemId: string; systemName: string }) {
-  const [files, setFiles] = useState<Array<{ id: string; name: string; type: string; isEvidence: boolean; uploadedAt: string; uploadedBy: string }>>([]);
+  const [files, setFiles] = useState<Array<{ id: string; name: string; type: string; isEvidence: boolean; frameworks: string[]; uploadedAt: string; uploadedBy: string }>>([]);
   const [sortBy, setSortBy] = useState<"name" | "type" | "date">("date");
   const [loading] = useState(false);
+
+  // Available frameworks
+  const availableFrameworks = [
+    { id: "eu-ai-act", name: "EU AI Act" },
+    { id: "nist-ai-rmf", name: "NIST AI RMF" },
+    { id: "iso-42001", name: "ISO 42001" },
+  ];
 
   // Mock data for now
   useEffect(() => {
     // TODO: Replace with actual API call
     setFiles([
-      { id: "1", name: "technical_documentation.pdf", type: "Documentation", isEvidence: false, uploadedAt: "2026-09-01", uploadedBy: "sarah" },
-      { id: "2", name: "model_card.json", type: "Evidence", isEvidence: true, uploadedAt: "2026-08-28", uploadedBy: "john" },
-      { id: "3", name: "risk_assessment.xlsx", type: "Evidence", isEvidence: true, uploadedAt: "2026-08-25", uploadedBy: "lena" },
+      { id: "1", name: "technical_documentation.pdf", type: "Documentation", isEvidence: false, frameworks: ["eu-ai-act"], uploadedAt: "2026-09-01", uploadedBy: "sarah" },
+      { id: "2", name: "model_card.json", type: "Evidence", isEvidence: true, frameworks: ["eu-ai-act", "nist-ai-rmf"], uploadedAt: "2026-08-28", uploadedBy: "john" },
+      { id: "3", name: "risk_assessment.xlsx", type: "Evidence", isEvidence: true, frameworks: [], uploadedAt: "2026-08-25", uploadedBy: "lena" },
     ]);
   }, [systemId]);
 
   const toggleEvidence = (fileId: string) => {
     setFiles(files.map(f => f.id === fileId ? { ...f, isEvidence: !f.isEvidence, type: !f.isEvidence ? "Evidence" : "Documentation" } : f));
+  };
+
+  const toggleFramework = (fileId: string, frameworkId: string) => {
+    setFiles(files.map(f => {
+      if (f.id !== fileId) return f;
+      const hasFramework = f.frameworks.includes(frameworkId);
+      return {
+        ...f,
+        frameworks: hasFramework
+          ? f.frameworks.filter(fw => fw !== frameworkId)
+          : [...f.frameworks, frameworkId]
+      };
+    }));
   };
 
   const sortedFiles = [...files].sort((a, b) => {
@@ -1042,9 +1070,10 @@ function FilesTab({ systemId, systemName }: { systemId: string; systemName: stri
         <CardContent className="p-0">
           <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             <div className="flex-1">File Name</div>
-            <div className="w-32 shrink-0">Type</div>
-            <div className="w-32 shrink-0">Uploaded By</div>
-            <div className="w-32 shrink-0">Date</div>
+            <div className="w-28 shrink-0">Type</div>
+            <div className="w-48 shrink-0">Frameworks</div>
+            <div className="w-24 shrink-0">Uploaded By</div>
+            <div className="w-28 shrink-0">Date</div>
             <div className="w-24 shrink-0">Actions</div>
           </div>
 
@@ -1059,13 +1088,40 @@ function FilesTab({ systemId, systemName }: { systemId: string; systemName: stri
                   <FileText className="size-5 shrink-0 text-muted-foreground" />
                   <span className="truncate font-medium">{file.name}</span>
                 </div>
-                <div className="w-32 shrink-0">
+                <div className="w-28 shrink-0">
                   <Badge className={cn("border-0", file.isEvidence ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700")}>
                     {file.type}
                   </Badge>
                 </div>
-                <div className="w-32 shrink-0 text-sm text-muted-foreground">{file.uploadedBy}</div>
-                <div className="w-32 shrink-0 text-sm text-muted-foreground">
+                <div className="w-48 shrink-0">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-7 w-full justify-between text-xs">
+                        {file.frameworks.length === 0 ? (
+                          <span className="text-muted-foreground">Select frameworks...</span>
+                        ) : (
+                          <span className="truncate">
+                            {file.frameworks.map(fwId => availableFrameworks.find(f => f.id === fwId)?.name).filter(Boolean).join(", ")}
+                          </span>
+                        )}
+                        <ChevronDown className="ml-1 size-3 shrink-0" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-48">
+                      {availableFrameworks.map((fw) => (
+                        <DropdownMenuCheckboxItem
+                          key={fw.id}
+                          checked={file.frameworks.includes(fw.id)}
+                          onCheckedChange={() => toggleFramework(file.id, fw.id)}
+                        >
+                          {fw.name}
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <div className="w-24 shrink-0 text-sm text-muted-foreground">{file.uploadedBy}</div>
+                <div className="w-28 shrink-0 text-sm text-muted-foreground">
                   {new Date(file.uploadedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                 </div>
                 <div className="w-24 shrink-0">
@@ -1493,6 +1549,68 @@ export default function SystemWorkspace() {
         </div>
       </div>
 
+      {/* Context cards row - System Version & Regulatory Framework */}
+      <div className="grid grid-cols-1 gap-4 border-b border-border bg-card px-6 py-4 md:grid-cols-2">
+        {/* System Version Card */}
+        <div className="flex items-start gap-4 rounded-lg border border-border bg-background p-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+            <FileText className="size-5 text-muted-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              System Version <span className="font-normal">(technical context)</span>
+            </div>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">System version</span>
+              <Badge variant="secondary" className="font-mono">v1.0</Badge>
+              <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                <span className="size-1.5 rounded-full bg-gray-400" />
+                Draft
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Technical and business details below belong to this system version.
+            </p>
+          </div>
+          <Select defaultValue="v1.0">
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Change version" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="v1.0">v1.0</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Regulatory Framework Card */}
+        <div className="flex items-start gap-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <CheckCircle2 className="size-5 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Selected Regulatory Framework
+            </div>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Regulatory framework</span>
+              <Select defaultValue="eu-ai-act">
+                <SelectTrigger className="h-8 w-[120px] border-primary/20 bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="eu-ai-act">EU AI Act</SelectItem>
+                  <SelectItem value="nist">NIST AI RMF</SelectItem>
+                  <SelectItem value="iso">ISO 42001</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Assessments, requirements, and compliance artifacts below belong to this selected framework.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
@@ -1508,6 +1626,7 @@ export default function SystemWorkspace() {
             <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
               <div className="border-b border-border px-6">
                 <TabsList className="h-auto bg-transparent p-0">
+                  {/* System-specific tabs */}
                   <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
                     <FileText className="mr-2 size-4" />
                     Overview
@@ -1516,6 +1635,15 @@ export default function SystemWorkspace() {
                     <CheckSquare className="mr-2 size-4" />
                     Tasks
                   </TabsTrigger>
+                  <TabsTrigger value="documents" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
+                    <FolderOpen className="mr-2 size-4" />
+                    Files
+                  </TabsTrigger>
+
+                  {/* Divider between system and regulatory tabs */}
+                  <span className="mx-2 flex items-center text-muted-foreground/50">|</span>
+
+                  {/* Regulatory framework tabs */}
                   <TabsTrigger value="assessments" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
                     <FileText className="mr-2 size-4" />
                     Assessments
@@ -1523,10 +1651,6 @@ export default function SystemWorkspace() {
                   <TabsTrigger value="requirements" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
                     <Pencil className="mr-2 size-4" />
                     Requirements
-                  </TabsTrigger>
-                  <TabsTrigger value="documents" className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                    <FolderOpen className="mr-2 size-4" />
-                    Files
                   </TabsTrigger>
                   {tabsExpanded && (
                     <>

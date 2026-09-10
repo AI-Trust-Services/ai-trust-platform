@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ClipboardList, CheckCircle2, Clock, FileText, RotateCw, ExternalLink } from "lucide-react";
+import { ClipboardList, CheckCircle2, Clock, FileText, RotateCw, Plus } from "lucide-react";
 import { api } from "../../api/client";
 import { navigateToPath } from "../../hooks/useLuigi";
 import { Button } from "@/components/ui/button";
@@ -97,8 +97,8 @@ export default function AssessmentsTab({ systemId, systemName }: AssessmentsTabP
           <Button variant="outline" size="sm" onClick={load}>
             <RotateCw className="mr-2 size-4" /> Refresh
           </Button>
-          <Button size="sm" onClick={() => navigateToPath(`/home/assessments`)}>
-            <ExternalLink className="mr-2 size-4" /> Open in Compliance
+          <Button size="sm" onClick={() => navigateToPath(`/home/assessments?create=true&system_id=${systemId}`)}>
+            <Plus className="mr-2 size-4" /> Create assessment
           </Button>
         </div>
       </div>

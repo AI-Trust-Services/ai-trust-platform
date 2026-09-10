@@ -665,9 +665,10 @@
           display: flex;
           flex-direction: column;
           padding: 0 8px;
-          margin-top: 16px;
+          margin-top: auto; /* Push to bottom of flex container */
           border-top: 1px solid rgba(255,255,255,0.08);
           padding-top: 8px;
+          padding-bottom: 8px;
           overflow: hidden;
         }
         #luigi-recent-systems .recent-header {
@@ -895,38 +896,42 @@
           // Insert before the collapse button (both are direct children of sidebar now)
           sidebar.insertBefore(recentSection, btn);
 
-          // Fetch and render recent systems
+          // Fetch and render recent systems (only systems user has visited)
           async function loadRecentSystems() {
             const list = document.getElementById('recent-systems-list');
             if (!list) return;
 
             try {
-              const res = await fetch('/api/registry/v1/systems?limit=5', { cache: 'no-store' });
-              if (!res.ok) throw new Error('Failed to fetch');
-              const systems = await res.json();
-
-              // Store in localStorage for recent tracking (ordered by last access)
+              // Get IDs of systems the user has recently visited (stored in localStorage)
               const recentIds = JSON.parse(localStorage.getItem('ai_trust_recent_systems') || '[]');
 
-              // Sort systems by their position in recentIds (most recent first)
-              const sortedSystems = [...systems].sort((a, b) => {
-                const aIdx = recentIds.indexOf(a.id);
-                const bIdx = recentIds.indexOf(b.id);
-                if (aIdx === -1 && bIdx === -1) return 0;
-                if (aIdx === -1) return 1;
-                if (bIdx === -1) return -1;
-                return aIdx - bIdx;
-              });
-
-              // Take top 5
-              const recent = sortedSystems.slice(0, 5);
-
-              if (recent.length === 0) {
+              // If user hasn't visited any systems yet, show empty state
+              if (recentIds.length === 0) {
                 list.innerHTML = '<div style="padding:8px 10px; color:#64748b; font-size:12px;">No recent systems</div>';
                 return;
               }
 
-              list.innerHTML = recent.map(sys => {
+              // Fetch all systems to get details for the recent ones
+              const res = await fetch('/api/registry/v1/systems?limit=200', { cache: 'no-store' });
+              if (!res.ok) throw new Error('Failed to fetch');
+              const systems = await res.json();
+
+              // Create a map for quick lookup
+              const systemMap = {};
+              systems.forEach(sys => { systemMap[sys.id] = sys; });
+
+              // Get the recent systems in order, filtering out any that no longer exist
+              const recentSystems = recentIds
+                .map(id => systemMap[id])
+                .filter(sys => sys != null)
+                .slice(0, 5);
+
+              if (recentSystems.length === 0) {
+                list.innerHTML = '<div style="padding:8px 10px; color:#64748b; font-size:12px;">No recent systems</div>';
+                return;
+              }
+
+              list.innerHTML = recentSystems.map(sys => {
                 // Color dot based on tier
                 const dotColors = {
                   'prohibited': '#ef4444',
