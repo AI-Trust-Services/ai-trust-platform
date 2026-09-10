@@ -185,3 +185,17 @@ resources:
     access:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/audit-flush-worker:${IMAGE_TAG}
+
+  - name: admin-backend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/admin-backend:${IMAGE_TAG}
+
+  - name: admin-frontend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/admin-frontend:${IMAGE_TAG}
