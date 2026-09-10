@@ -142,8 +142,6 @@ jobs:
           - name: admin-backend
             context: .
             dockerfile: admin/backend/Dockerfile
-            context: .
-            dockerfile: audit-flush-worker/Dockerfile
           - name: otel-clickhouse-consumer
             context: .
             dockerfile: consumers/clickhouse-consumer/Dockerfile
