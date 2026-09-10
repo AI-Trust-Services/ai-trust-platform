@@ -2,40 +2,34 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, String, Table, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
 
-# Many-to-many: one control can satisfy obligations across multiple assessments
-# and frameworks; one obligation can be satisfied by multiple controls.
-control_obligations = Table(
-    "control_obligations",
-    Base.metadata,
-    Column("control_id", String(30), ForeignKey("controls.id", ondelete="CASCADE"), primary_key=True),
-    Column("obligation_id", String(30), ForeignKey("obligations.id", ondelete="CASCADE"), primary_key=True),
-)
-
 
 class Control(Base):
-    """A technical or organisational measure that satisfies obligations.
+    """A technical or organisational measure that satisfies one obligation.
 
-    Defines *how* an obligation is met. ai_system_id is nullable: a null value
-    means the control is org-wide (applies across all systems), per spec
-    CTL-FR-07. Effectiveness is driven by linked evidence (see cascade.py):
+    Effectiveness is driven by linked evidence (see cascade.py):
     approved evidence -> control becomes 'effective'.
     """
 
     __tablename__ = "controls"
 
     id: Mapped[str] = mapped_column(String(30), primary_key=True)
+    obligation_id: Mapped[str] = mapped_column(
+        String(30), ForeignKey("obligations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    assessment_id: Mapped[str] = mapped_column(
+        String(30), ForeignKey("assessments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Denormalized from obligation for efficient evidence filtering.
     ai_system_id: Mapped[str | None] = mapped_column(
         String(20), ForeignKey("ai_systems.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    # Stable slug ("{article_ref}:{slug}") for auto-generated controls; used as the
-    # carry-forward key across assessment cycles. NULL for manually-created controls.
-    # Deliberately non-unique: the same slug recurs each cycle and org-wide controls
-    # span multiple assessments.
+    # Stable slug ("{article_ref}:{slug}") for auto-generated controls; carry-forward key
+    # across assessment cycles. NULL for manually-created controls.
     control_ref: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
