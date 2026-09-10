@@ -7,6 +7,7 @@ import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import type { AISystem, AISystemFormData } from "../types";
 import { TECHNICAL_QUESTIONS } from "../config/questionnaire";
+import { COUNTRIES } from "../config/countries";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,11 +29,10 @@ function startFrameworkAssessment(systemId: string, frameworkId: string) {
 
 const EU_AI_ACT_ID = "FRM-EU-AI-ACT";
 
-// Framework cards shown after registration. Only EU AI Act is wired; ISO/NIST are placeholders.
-const FRAMEWORK_CARDS: Array<{ frameworkId: string; title: string; description: string; enabled: boolean }> = [
-  { frameworkId: EU_AI_ACT_ID, title: "Start EU AI Act Risk Classification", description: "Run the risk classification questionnaire, determine the tier, and generate obligations.", enabled: true },
-  { frameworkId: "FRM-ISO-42001", title: "Start ISO/IEC 42001 Assessment", description: "Coming soon.", enabled: false },
-  { frameworkId: "FRM-NIST-AI-RMF", title: "Start NIST AI RMF Assessment", description: "Coming soon.", enabled: false },
+// Non-EU-AI-Act frameworks shown on the right ("Other frameworks"). Dummies for now.
+const OTHER_FRAMEWORKS: Array<{ frameworkId: string; title: string; description: string }> = [
+  { frameworkId: "FRM-ISO-42001", title: "ISO/IEC 42001", description: "Coming soon." },
+  { frameworkId: "FRM-NIST-AI-RMF", title: "NIST AI RMF", description: "Coming soon." },
 ];
 
 const EMPTY_FORM: AISystemFormData = {
@@ -40,6 +40,7 @@ const EMPTY_FORM: AISystemFormData = {
   org_role: "provider", provider_country: "DE", system_type: "application",
   autonomy_level: "decision_support", application_url: "",
   description: "", intended_purpose: "", lifecycle: "development",
+  deployment_country: "", eu_output_usage: null, eu_market_placement: null,
   subliminal_manipulation: false, exploits_vulnerability: false,
   social_scoring_public: false, real_time_biometric_public: false,
   emotion_recognition_workplace: false, untargeted_facial_scraping: false,
@@ -73,6 +74,38 @@ function CheckItem({ id, label, checked, onCheckedChange }: { id: string; label:
       <span>{label}</span>
     </label>
   );
+}
+
+// Yes/No segmented control with a null (unanswered) initial state.
+function YesNo({ value, onChange }: { value: boolean | null; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex gap-2">
+      {[
+        { label: "Yes", val: true },
+        { label: "No", val: false },
+      ].map(({ label, val }) => (
+        <button
+          key={label}
+          type="button"
+          onClick={() => onChange(val)}
+          className={cn(
+            "min-w-16 rounded-md border px-4 py-1.5 text-sm font-medium transition-colors",
+            value === val
+              ? "border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]"
+              : "border-border text-muted-foreground hover:border-foreground/30",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Framework recommendation from the two EU-presence answers. EU AI Act is recommended
+// unless the system is neither used in nor placed on the EU market (both explicitly No).
+function euActRecommended(euOutput: boolean | null, euMarket: boolean | null): boolean {
+  return !(euOutput === false && euMarket === false);
 }
 
 interface Props {
@@ -115,6 +148,9 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
         description: system.description || "",
         intended_purpose: system.intended_purpose || "",
         lifecycle: system.lifecycle || "development",
+        deployment_country: system.deployment_country || "",
+        eu_output_usage: system.eu_output_usage,
+        eu_market_placement: system.eu_market_placement,
         subliminal_manipulation: system.subliminal_manipulation,
         exploits_vulnerability: system.exploits_vulnerability,
         social_scoring_public: system.social_scoring_public,
@@ -168,6 +204,10 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
 
   async function handleOwnerSubmit() {
     if (!form.name.trim()) { showToast("System name is required", true); return; }
+    if (!form.deployment_country) { showToast("Please select the deployment country", true); return; }
+    if (form.eu_output_usage === null || form.eu_market_placement === null) {
+      showToast("Please answer both EU deployment questions", true); return;
+    }
     if (submitting.current) return;
     submitting.current = true;
     setLoading(true);
@@ -236,31 +276,70 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
             </Alert>
             {!isEngineerMode && (
               <>
-                <div className="mb-4 grid grid-cols-3 gap-4">
-                  {FRAMEWORK_CARDS.map((c) => (
-                    <button
-                      key={c.frameworkId}
-                      disabled={!c.enabled}
-                      className={cn(
-                        "border border-border rounded-lg p-5 text-left flex flex-col gap-4 transition-all w-full",
-                        c.enabled
-                          ? "hover:border-primary hover:shadow-[0_0_0_1px_var(--brand)] cursor-pointer"
-                          : "opacity-50 cursor-not-allowed",
-                      )}
-                      onClick={() => c.enabled && startFrameworkAssessment(doneId!, c.frameworkId)}
-                    >
-                      <div className={cn(
-                        "flex size-11 shrink-0 items-center justify-center rounded-xl",
-                        c.enabled ? "bg-[var(--brand)]/10 text-[var(--brand)]" : "bg-[#f0f2f4] text-[#5a6e82]",
-                      )}>
-                        <ClipboardList className="size-5" />
-                      </div>
-                      <div>
-                        <div className="text-[15px] font-semibold">{c.title}</div>
-                        <div className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">{c.description}</div>
-                      </div>
-                    </button>
-                  ))}
+                <div className="mb-4 grid grid-cols-[1.2fr_1fr] gap-4">
+                  {/* LEFT — recommended framework (EU AI Act) */}
+                  <div className="flex flex-col gap-2">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {euActRecommended(form.eu_output_usage, form.eu_market_placement) ? "Recommended for you" : "Not applicable"}
+                    </div>
+                    {(() => {
+                      const recommended = euActRecommended(form.eu_output_usage, form.eu_market_placement);
+                      return (
+                        <button
+                          className={cn(
+                            "flex flex-1 w-full flex-col gap-4 rounded-lg border-2 p-5 text-left transition-all cursor-pointer",
+                            recommended
+                              ? "border-[var(--brand)] bg-[var(--brand)]/5 hover:shadow-[0_0_0_1px_var(--brand)]"
+                              : "border-border bg-muted/20 opacity-80 hover:opacity-100",
+                          )}
+                          onClick={() => startFrameworkAssessment(doneId!, EU_AI_ACT_ID)}
+                        >
+                          <div className={cn(
+                            "flex size-11 shrink-0 items-center justify-center rounded-xl",
+                            recommended ? "bg-[var(--brand)]/10 text-[var(--brand)]" : "bg-[#f0f2f4] text-[#5a6e82]",
+                          )}>
+                            <ClipboardList className="size-5" />
+                          </div>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[15px] font-semibold">EU AI Act Risk Classification</span>
+                              <span className={cn(
+                                "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                                recommended ? "bg-[var(--brand)]/15 text-[var(--brand)]" : "bg-muted text-muted-foreground",
+                              )}>
+                                {recommended ? "Recommended" : "Not applicable"}
+                              </span>
+                            </div>
+                            <div className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">
+                              {recommended
+                                ? "Run the risk classification questionnaire, determine the tier, and generate obligations."
+                                : "Your answers indicate the system is neither used in nor placed on the EU market, so EU AI Act classification is likely not required. You can still start it if needed."}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })()}
+                  </div>
+
+                  {/* RIGHT — other frameworks (dummies for now) */}
+                  <div className="flex flex-col gap-2">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Other frameworks</div>
+                    {OTHER_FRAMEWORKS.map((c) => (
+                      <button
+                        key={c.frameworkId}
+                        disabled
+                        className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg border border-border p-4 text-left opacity-50"
+                      >
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#f0f2f4] text-[#5a6e82]">
+                          <ClipboardList className="size-4" />
+                        </div>
+                        <div>
+                          <div className="text-[14px] font-semibold">{c.title}</div>
+                          <div className="text-[12px] text-muted-foreground">{c.description}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="overflow-hidden rounded-md border border-border">
                   <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Telemetry Configuration</div>
@@ -300,7 +379,7 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
             )}
 
             <div className="overflow-y-auto px-6 py-5">
-              {/* OWNER MODE: name + description only */}
+              {/* OWNER MODE: name + description + deployment country + EU questions */}
               {!isEngineerMode && (
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1.5">
@@ -311,6 +390,31 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     <Label htmlFor="reg_desc">Description</Label>
                     <Textarea id="reg_desc" rows={3} value={form.description} onChange={set("description")} placeholder="Brief description of the AI system…" />
                   </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="reg_country">Country of Use <span className="text-[var(--danger-fg)]">*</span></Label>
+                    <select className={SELECT_CLASS} id="reg_country" value={form.deployment_country} onChange={set("deployment_country")}>
+                      <option value="">Select a country…</option>
+                      {COUNTRIES.map((c) => (
+                        <option key={c.code} value={c.code}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* EU-presence questions appear once a country is selected. The blank slot
+                      below is reserved for future country-specific questions. */}
+                  {form.deployment_country && (
+                    <div className="flex flex-col gap-4 rounded-md border border-border bg-muted/20 p-4">
+                      <div className="flex flex-col gap-2">
+                        <Label>Will the output of the AI system be used in the European Union? <span className="text-[var(--danger-fg)]">*</span></Label>
+                        <YesNo value={form.eu_output_usage} onChange={(v) => setForm((f) => ({ ...f, eu_output_usage: v }))} />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label>Will the AI system be placed on the market or put into service in the European Union? <span className="text-[var(--danger-fg)]">*</span></Label>
+                        <YesNo value={form.eu_market_placement} onChange={(v) => setForm((f) => ({ ...f, eu_market_placement: v }))} />
+                      </div>
+                    </div>
+                  )}
+
                   <p className="text-xs text-muted-foreground">
                     Risk classification and compliance workflow are completed in Assessments after registration.
                   </p>

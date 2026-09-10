@@ -112,6 +112,9 @@ export interface AISystem {
   registration_mode: string;
   org_role: string;
   intended_purpose: string;
+  // EU-presence answers captured at registration; drive the framework recommendation.
+  eu_output_usage: boolean | null;
+  eu_market_placement: boolean | null;
   assignee_username: string | null;
   business_assignee_username: string | null;
   technical_assignee_username: string | null;

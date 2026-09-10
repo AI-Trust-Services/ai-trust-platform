@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, ShieldCheck, FileCheck2, Layers } from "lucide-react";
+import { Loader2, ClipboardList } from "lucide-react";
 import { api } from "../api/client";
 import { registryClient } from "../api/registryClient";
 import { useToast } from "../App";
@@ -31,41 +31,18 @@ type User = { username: string; firstName: string; lastName: string; role: strin
 
 const EU_AI_ACT_ID = "FRM-EU-AI-ACT";
 
-// The three framework cards. Only EU AI Act is wired; ISO and NIST are visual
-// placeholders for now (disabled, "Coming soon").
-const FRAMEWORK_CARDS: Array<{
-  frameworkId: string;
-  icon: React.ReactNode;
-  iconClass: string;
-  title: string;
-  description: string;
-  enabled: boolean;
-}> = [
-  {
-    frameworkId: EU_AI_ACT_ID,
-    icon: <ShieldCheck className="size-5" />,
-    iconClass: "bg-[var(--brand)]/10 text-[var(--brand)]",
-    title: "Start EU AI Act Risk Classification",
-    description: "Run the risk classification questionnaire, determine the tier, and generate obligations.",
-    enabled: true,
-  },
-  {
-    frameworkId: "FRM-ISO-42001",
-    icon: <FileCheck2 className="size-5" />,
-    iconClass: "bg-[#f0f2f4] text-[#5a6e82]",
-    title: "Start ISO/IEC 42001 Assessment",
-    description: "Coming soon.",
-    enabled: false,
-  },
-  {
-    frameworkId: "FRM-NIST-AI-RMF",
-    icon: <Layers className="size-5" />,
-    iconClass: "bg-[#f0f2f4] text-[#5a6e82]",
-    title: "Start NIST AI RMF Assessment",
-    description: "Coming soon.",
-    enabled: false,
-  },
+// Non-EU-AI-Act frameworks shown on the right ("Other frameworks"). Dummies for now.
+const OTHER_FRAMEWORKS: Array<{ frameworkId: string; title: string; description: string }> = [
+  { frameworkId: "FRM-ISO-42001", title: "ISO/IEC 42001", description: "Coming soon." },
+  { frameworkId: "FRM-NIST-AI-RMF", title: "NIST AI RMF", description: "Coming soon." },
 ];
+
+// Framework recommendation from the two EU-presence answers captured at registration.
+// EU AI Act is recommended unless the system is neither used in nor placed on the EU
+// market (both explicitly No). Mirrors the registry RegisterWizard success panel.
+function euActRecommended(euOutput: boolean | null, euMarket: boolean | null): boolean {
+  return !(euOutput === false && euMarket === false);
+}
 
 const fullName = (u: User) => [u.firstName, u.lastName].filter(Boolean).join(" ") || u.username;
 
@@ -260,28 +237,70 @@ export default function CreateAssessmentModal({ open, onClose, onSuccess, initia
         {step === "framework" && (
           <div className="flex flex-col gap-4 px-6 py-5">
             <p className="text-sm font-medium text-muted-foreground">Which framework would you like to assess against?</p>
-            <div className="grid grid-cols-3 gap-4">
-              {FRAMEWORK_CARDS.map((c) => (
-                <button
-                  key={c.frameworkId}
-                  disabled={!c.enabled}
-                  className={cn(
-                    "border border-border rounded-lg p-5 text-left flex flex-col gap-4 transition-all w-full",
-                    c.enabled
-                      ? "hover:border-primary hover:shadow-[0_0_0_1px_var(--brand)] cursor-pointer"
-                      : "opacity-50 cursor-not-allowed",
-                  )}
-                  onClick={() => c.enabled && pickFramework(c.frameworkId)}
-                >
-                  <div className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl", c.iconClass)}>
-                    {c.icon}
-                  </div>
-                  <div>
-                    <div className="text-[15px] font-semibold">{c.title}</div>
-                    <div className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">{c.description}</div>
-                  </div>
-                </button>
-              ))}
+            <div className="grid grid-cols-[1.2fr_1fr] gap-4">
+              {/* LEFT — recommended framework (EU AI Act) */}
+              <div className="flex flex-col gap-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {euActRecommended(selectedSystem?.eu_output_usage ?? null, selectedSystem?.eu_market_placement ?? null) ? "Recommended for you" : "Not applicable"}
+                </div>
+                {(() => {
+                  const recommended = euActRecommended(selectedSystem?.eu_output_usage ?? null, selectedSystem?.eu_market_placement ?? null);
+                  return (
+                    <button
+                      className={cn(
+                        "flex flex-1 w-full flex-col gap-4 rounded-lg border-2 p-5 text-left transition-all cursor-pointer",
+                        recommended
+                          ? "border-[var(--brand)] bg-[var(--brand)]/5 hover:shadow-[0_0_0_1px_var(--brand)]"
+                          : "border-border bg-muted/20 opacity-80 hover:opacity-100",
+                      )}
+                      onClick={() => pickFramework(EU_AI_ACT_ID)}
+                    >
+                      <div className={cn(
+                        "flex size-11 shrink-0 items-center justify-center rounded-xl",
+                        recommended ? "bg-[var(--brand)]/10 text-[var(--brand)]" : "bg-[#f0f2f4] text-[#5a6e82]",
+                      )}>
+                        <ClipboardList className="size-5" />
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[15px] font-semibold">EU AI Act Risk Classification</span>
+                          <span className={cn(
+                            "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                            recommended ? "bg-[var(--brand)]/15 text-[var(--brand)]" : "bg-muted text-muted-foreground",
+                          )}>
+                            {recommended ? "Recommended" : "Not applicable"}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">
+                          {recommended
+                            ? "Run the risk classification questionnaire, determine the tier, and generate obligations."
+                            : "This system's answers indicate it is neither used in nor placed on the EU market, so EU AI Act classification is likely not required. You can still start it if needed."}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })()}
+              </div>
+
+              {/* RIGHT — other frameworks (dummies for now) */}
+              <div className="flex flex-col gap-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Other frameworks</div>
+                {OTHER_FRAMEWORKS.map((c) => (
+                  <button
+                    key={c.frameworkId}
+                    disabled
+                    className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg border border-border p-4 text-left opacity-50"
+                  >
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#f0f2f4] text-[#5a6e82]">
+                      <ClipboardList className="size-4" />
+                    </div>
+                    <div>
+                      <div className="text-[14px] font-semibold">{c.title}</div>
+                      <div className="text-[12px] text-muted-foreground">{c.description}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}

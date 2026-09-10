@@ -15,6 +15,9 @@ export interface AISystem {
   org_name: string;
   org_role: OrgRole;
   provider_country: string;
+  deployment_country: string | null;
+  eu_output_usage: boolean | null;
+  eu_market_placement: boolean | null;
   system_type: SystemType;
   autonomy_level: AutonomyLevel;
   lifecycle: LifecycleKey;
@@ -186,6 +189,9 @@ export interface AISystemFormData {
   org_name: string;
   org_role: OrgRole;
   provider_country: string;
+  deployment_country: string;
+  eu_output_usage: boolean | null;
+  eu_market_placement: boolean | null;
   system_type: SystemType;
   autonomy_level: AutonomyLevel;
   lifecycle: LifecycleKey;

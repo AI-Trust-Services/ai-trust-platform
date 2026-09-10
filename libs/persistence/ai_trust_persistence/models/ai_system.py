@@ -31,6 +31,14 @@ class AISystem(Base):
     autonomy_level: Mapped[str] = mapped_column(String(50), default="decision_support")
     application_url: Mapped[str] = mapped_column(String(500), default="")
     provider_country: Mapped[str] = mapped_column(String(5), default="DE")
+    # Country the AI system is deployed in (ISO 3166-1 alpha-2), captured at
+    # registration. Drives (future) country-specific questions in the intake form.
+    deployment_country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    # Two universal EU-presence questions asked for every deployment country.
+    # When both are False, EU AI Act classification is likely not applicable and the
+    # framework picker recommends an alternative instead.
+    eu_output_usage: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    eu_market_placement: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     tier: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     basis: Mapped[str] = mapped_column(Text, default="")

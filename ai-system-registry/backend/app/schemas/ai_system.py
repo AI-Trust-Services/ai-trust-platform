@@ -56,6 +56,12 @@ class AISystemCreate(BaseModel):
     assignee_username: str | None = Field(default=None, max_length=200)
     compliance_officer_username: str | None = Field(default=None, max_length=200)
 
+    # Deployment context captured at registration. deployment_country is ISO
+    # 3166-1 alpha-2; the two EU-presence booleans drive the framework recommendation.
+    deployment_country: str | None = Field(default=None, max_length=2)
+    eu_output_usage: bool | None = None
+    eu_market_placement: bool | None = None
+
     # Optional descriptive fields (populated by the AI-assisted flow; manual owner
     # mode omits them and the intake stays a minimal stub).
     intended_purpose: str | None = None
@@ -131,6 +137,9 @@ class AISystemUpdate(BaseModel):
     autonomy_level: str | None = None
     application_url: str | None = Field(default=None, max_length=500)
     provider_country: str | None = Field(default=None, max_length=5)
+    deployment_country: str | None = Field(default=None, max_length=2)
+    eu_output_usage: bool | None = None
+    eu_market_placement: bool | None = None
     lifecycle: str | None = None
 
     # Risk flags (editable in draft/rejected)
@@ -195,6 +204,9 @@ class AISystemResponse(BaseModel):
     autonomy_level: str
     application_url: str
     provider_country: str
+    deployment_country: str | None
+    eu_output_usage: bool | None
+    eu_market_placement: bool | None
     tier: str
     basis: str
     annex_iii_area: int | None
