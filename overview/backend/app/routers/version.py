@@ -46,7 +46,7 @@ async def get_version() -> dict[str, Any]:
         api = k8s_client.CustomObjectsApi()
         hr = api.get_namespaced_custom_object(
             group="helm.toolkit.fluxcd.io",
-            version="v2beta1",
+            version="v2",
             namespace="ocm-system",
             plural="helmreleases",
             name="ai-trust-platform",

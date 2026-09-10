@@ -121,7 +121,7 @@ metadata:
   namespace: ocm-system
 subjects:
   - kind: ServiceAccount
-    name: default
+    name: job-waiter
     namespace: ai-trust
 roleRef:
   kind: Role
