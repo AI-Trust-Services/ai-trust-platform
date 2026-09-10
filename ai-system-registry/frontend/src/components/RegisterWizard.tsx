@@ -321,6 +321,16 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                         <option value="fully_automated">Fully automated</option>
                       </select>
                     </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="reg_org_role">Organisation Role</Label>
+                      <select className={SELECT_CLASS} id="reg_org_role" value={form.org_role} onChange={set("org_role")}>
+                        <option value="provider">Provider</option>
+                        <option value="deployer">Deployer</option>
+                        <option value="importer">Importer</option>
+                        <option value="distributor">Distributor</option>
+                        <option value="authorised_representative">Authorised Representative</option>
+                      </select>
+                    </div>
                     <div className="col-span-2 flex flex-col gap-1.5">
                       <Label htmlFor="reg_context">Decision Context (optional)</Label>
                       <Textarea id="reg_context" rows={2} value={ownerExtra.decision_context} onChange={(e) => setOwnerField("decision_context", e.target.value)} placeholder="Describe how and where decisions are made by this system…" />
