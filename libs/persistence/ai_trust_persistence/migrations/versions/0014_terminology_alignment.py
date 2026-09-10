@@ -1,7 +1,7 @@
 """Terminology alignment: lifecycle stages, control statuses, evidence statuses
 
-Revision ID: 0013
-Revises: 0012
+Revision ID: 0014
+Revises: 0013
 Create Date: 2026-09-01
 
 Aligns DB enum values with the finalized product terminology document
@@ -24,8 +24,8 @@ Evidence statuses:
 """
 from alembic import op
 
-revision = "0013"
-down_revision = "0012"
+revision = "0014"
+down_revision = "0013"
 branch_labels = None
 depends_on = None
 
