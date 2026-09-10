@@ -338,6 +338,16 @@ async def link_control(evidence_id: str, control_id: str) -> EvidenceDetailRespo
 async def unlink_control(evidence_id: str, control_id: str) -> EvidenceDetailResponse:
     async with SessionLocal() as session:
         await _load(session, evidence_id)
+        linked = (await session.execute(
+            select(func.count()).select_from(evidence_controls).where(evidence_controls.c.evidence_id == evidence_id)
+        )).scalar_one()
+        if linked <= 1:
+            raise HTTPException(409, "Cannot unlink the last control from evidence")
+        is_linked = (await session.execute(
+            select(exists().where(evidence_controls.c.evidence_id == evidence_id).where(evidence_controls.c.control_id == control_id))
+        )).scalar_one()
+        if not is_linked:
+            raise HTTPException(404, f"Control {control_id} is not linked to this evidence")
         await session.execute(
             evidence_controls.delete()
             .where(evidence_controls.c.evidence_id == evidence_id)

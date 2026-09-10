@@ -92,7 +92,7 @@ async def test_list_evidence_filter_by_system(client: httpx.AsyncClient):
     system = await create_system()
     ctl = await create_control(client, system["id"])
     await create_evidence(client, control_ids=[ctl["id"]])
-    r = await client.get(f"/v1/evidence?ai_system_id={system['id']}")
+    r = await client.get(f"/v1/evidence?system_id={system['id']}")
     assert r.status_code == 200
     assert len(r.json()) == 1
 
@@ -336,6 +336,23 @@ async def test_unlink_control(client: httpx.AsyncClient):
     r = await client.delete(f"/v1/evidence/{evd['id']}/controls/{ctl2['id']}")
     assert r.status_code == 200
     assert not any(c["id"] == ctl2["id"] for c in r.json()["controls"])
+
+
+async def test_unlink_last_control_returns_409(client: httpx.AsyncClient):
+    system = await create_system()
+    ctl = await create_control(client, system["id"])
+    evd = await create_evidence(client, control_ids=[ctl["id"]])
+    r = await client.delete(f"/v1/evidence/{evd['id']}/controls/{ctl['id']}")
+    assert r.status_code == 409
+
+
+async def test_unlink_control_not_linked_returns_404(client: httpx.AsyncClient):
+    system = await create_system()
+    ctl1 = await create_control(client, system["id"])
+    ctl2 = await create_control(client, system["id"])
+    evd = await create_evidence(client, control_ids=[ctl1["id"]])
+    r = await client.delete(f"/v1/evidence/{evd['id']}/controls/{ctl2['id']}")
+    assert r.status_code == 404
 
 
 async def test_link_control_404_missing_control(client: httpx.AsyncClient):
