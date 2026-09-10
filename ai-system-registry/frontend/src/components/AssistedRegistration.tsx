@@ -25,31 +25,6 @@ interface Props {
 const GREETING =
   "Hi! I'll help you register your AI system. Upload a document (model card, spec, or brief) and I'll pre-fill the questionnaire — then we'll go through any remaining questions together.";
 
-// Maps backend field names → our questionnaire keys (used when receiving from backend).
-// Backend TARGET_FIELDS now use the same keys as questionnaire.ts, so no remapping needed.
-const ASSIST_MAP: Record<string, string> = {};
-
-// Reverse: our questionnaire keys → backend field names (used when sending to backend)
-const ASSIST_MAP_REVERSE: Record<string, string> = Object.fromEntries(
-  Object.entries(ASSIST_MAP).map(([k, v]) => [v, k])
-);
-
-function mapAssistFields(raw: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(raw)) {
-    result[ASSIST_MAP[k] ?? k] = v;
-  }
-  return result;
-}
-
-function toBackendFields(fields: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(fields)) {
-    result[ASSIST_MAP_REVERSE[k] ?? k] = v;
-  }
-  return result;
-}
-
 function displayName(u: UserSummary) {
   const full = [u.firstName, u.lastName].filter(Boolean).join(" ");
   return full ? `${full} (${u.username})` : u.username;
@@ -126,9 +101,9 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
   async function runTurn(nextTranscript: ChatMessage[], overrideFields?: Record<string, unknown>) {
     setBusy(true);
     try {
-      const res = await api.assistTurn(nextTranscript, toBackendFields(overrideFields ?? fields));
+      const res = await api.assistTurn(nextTranscript, overrideFields ?? fields);
       if (res.extracted_fields && Object.keys(res.extracted_fields).length > 0) {
-        setFields(f => ({ ...f, ...mapAssistFields(res.extracted_fields!) }));
+        setFields(f => ({ ...f, ...res.extracted_fields! }));
       }
       if (res.message) {
         setTranscript([...nextTranscript, { role: "assistant", content: res.message }]);
@@ -163,7 +138,7 @@ export default function AssistedRegistration({ open, onClose, onSuccess }: Props
     setTranscript(currentTranscript);
     try {
       const res = await api.assistExtract(file);
-      const extracted = mapAssistFields(res.extracted_fields || {});
+      const extracted = res.extracted_fields || {};
       const merged = { ...fields, ...extracted };
       setFields(merged);
       const notes = res.notes ? ` — ${res.notes}` : "";
