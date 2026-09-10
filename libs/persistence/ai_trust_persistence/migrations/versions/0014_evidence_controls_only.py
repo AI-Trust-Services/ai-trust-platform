@@ -1,18 +1,17 @@
 """Evidence: drop ai_system_id/assessment_id and evidence_obligations table.
 
-Controls are the sole attachment point for evidence. Obligation context is
-derived through evidence_controls → control_obligations → obligations.
+Controls are the sole attachment point for evidence.
 
-Revision ID: 0013
-Revises: 0012
+Revision ID: 0014
+Revises: 0013
 Create Date: 2026-09-08
 """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy import inspect
 
-revision = "0013"
-down_revision = "0012"
+revision = "0014"
+down_revision = "0013"
 branch_labels = None
 depends_on = None
 
