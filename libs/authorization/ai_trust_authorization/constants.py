@@ -32,6 +32,9 @@ MONITORING_READ = "monitoring:read"
 # IAM
 IAM_MANAGE = "iam:manage"
 
+# Audit
+AUDIT_READ = "audit:read"
+
 # All permissions, in matrix order. Used by /me/permissions to enumerate checks.
 ALL_PERMISSIONS = [
     SYSTEMS_READ,
@@ -48,6 +51,7 @@ ALL_PERMISSIONS = [
     ALERTS_MANAGE_RULES,
     MONITORING_READ,
     IAM_MANAGE,
+    AUDIT_READ,
 ]
 
 # Permission string → OpenFGA relation name on platform:global.
@@ -66,6 +70,7 @@ RELATION_BY_PERMISSION = {
     ALERTS_MANAGE_RULES: "can_manage_alert_rules",
     MONITORING_READ: "can_read_monitoring",
     IAM_MANAGE: "can_manage_iam",
+    AUDIT_READ: "can_read_audit",
 }
 
 # The singleton resource all Phase 2 checks run against.
@@ -80,6 +85,7 @@ ROLE_PERMISSIONS = {
         EVIDENCE_READ, EVIDENCE_WRITE,
         ALERTS_READ, ALERTS_HANDLE,
         MONITORING_READ,
+        AUDIT_READ,
     ],
     "ai_compliance_officer": [
         SYSTEMS_READ,
@@ -87,6 +93,7 @@ ROLE_PERMISSIONS = {
         ASSESSMENTS_READ, ASSESSMENTS_WRITE,
         EVIDENCE_READ, EVIDENCE_WRITE, EVIDENCE_APPROVE,
         ALERTS_READ, ALERTS_HANDLE,
+        AUDIT_READ,
     ],
     "business_owner": [
         SYSTEMS_READ,
@@ -102,6 +109,7 @@ ROLE_PERMISSIONS = {
         EVIDENCE_READ,
         ALERTS_READ,
         MONITORING_READ,
+        AUDIT_READ,
     ],
     "executive": [
         SYSTEMS_READ,

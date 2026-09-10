@@ -47,12 +47,29 @@ Usage: {{ include "ai-trust.waitForHttp" (dict "name" "clickhouse" "port" 8123 "
 {{- end -}}
 
 {{/*
+Per-revision name for a one-shot Job: `<base>-r<release-revision>`.
+Each helm upgrade bumps .Release.Revision, so the Job gets a NEW name every
+deploy - a create, not a patch, which sidesteps Kubernetes Job immutability
+(`spec.template: field is immutable`) on Flux/Gardener upgrades. Helm prunes the
+prior revision's Job automatically (it's absent from the new manifest). Both the
+Job's metadata.name and every waitForJob initContainer target this same helper,
+so the name and the `kubectl wait job/<name>` target can never drift apart.
+Usage: {{ include "ai-trust.jobName" (dict "base" "db-migrate" "rev" .Release.Revision) }}
+*/}}
+{{- define "ai-trust.jobName" -}}
+{{- printf "%s-r%d" .base (int .rev) -}}
+{{- end -}}
+
+{{/*
 initContainer that blocks until a Job reaches condition=complete. Requires the
 pod to run under the job-waiter ServiceAccount (RBAC created by bootstrap.sh).
 Mirrors docker-compose's `depends_on: condition: service_completed_successfully`.
-Usage: {{ include "ai-trust.waitForJob" (dict "job" "db-migrate" "image" .Values.waitImages.kubectl) }}
+Takes the Job's BASE name + the release revision and resolves the same suffixed
+name the Job template uses, so it always waits on the current revision's Job.
+Usage: {{ include "ai-trust.waitForJob" (dict "job" "db-migrate" "rev" .Release.Revision "image" .Values.waitImages.kubectl) }}
 */}}
 {{- define "ai-trust.waitForJob" -}}
+{{- $name := include "ai-trust.jobName" (dict "base" .job "rev" .rev) -}}
 - name: wait-for-{{ .job }}
   image: {{ .image }}
   env:
@@ -67,7 +84,7 @@ Usage: {{ include "ai-trust.waitForJob" (dict "job" "db-migrate" "image" .Values
     - wait
     - --for=condition=complete
     - --timeout=600s
-    - job/{{ .job }}
+    - job/{{ $name }}
     - -n
     - $(POD_NAMESPACE)
 {{- end -}}

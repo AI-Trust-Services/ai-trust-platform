@@ -97,6 +97,10 @@ otel:
 policyChecker:
   pollInterval: "10"
 
+auditFlush:
+  interval: "5"
+  batchSize: "500"
+
 # ── Ollama (optional local LLM for AI-assisted registration) ──
 # Disabled by default: the registry backend defaults to the offline `stub`
 # provider. To use a real model, set enabled: true here AND LLM_PROVIDER=ollama
@@ -192,5 +196,16 @@ components:
       USERS_BACKEND_CLIENT_ID: users-backend
       OPENFGA_URL: http://openfga:8080
     dependsOnJobs: [db-migrate, keycloak-provision, openfga-provision]
+    dependsOnServices: []
+    openfgaConfig: true
+
+  - name: audit
+    backendPort: 8009
+    rootPath: /api/audit
+    extraEnv:
+      OPENFGA_URL: http://openfga:8080
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+    dependsOnJobs: [clickhouse-migrate, openfga-provision]
     dependsOnServices: []
     openfgaConfig: true

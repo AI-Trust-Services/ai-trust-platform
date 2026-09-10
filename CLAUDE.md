@@ -19,6 +19,24 @@ make down    # helm uninstall + kind delete cluster
 ```
 Manifests live in `k8s/helm/ai-trust-platform/`. Every k8s Service name matches the docker-compose service name (`postgres`, `ai-system-registry-backend`, etc.) so `shell/nginx.conf` and backend env vars work unmodified.
 
+### Deploy to Gardener (OCM + Flux + GitHub Actions)
+The platform is packaged as an OCM component and deployed to Gardener shoot clusters via Flux HelmRelease. See [k8s/README.md](k8s/README.md) for the full guide.
+```bash
+# Trigger a build + deploy to a specific cluster from any branch:
+gh workflow run build-push-deploy.yml \
+  --ref <branch> \
+  --field gardener_cluster=sr-test
+
+# Check deploy status on the cluster:
+kubectl get componentversion,resource,fluxdeployer -n ocm-system
+kubectl get helmrelease ai-trust -n ocm-system -o wide
+kubectl get pods -n ai-trust
+```
+- OCM component descriptor: `.ocm/component-constructor.yaml`
+- OCM CRs (ComponentVersion, Resource, FluxDeployer): `k8s/ocm/manifests.yaml`
+- Per-cluster env: `k8s/env/<cluster>/.env`
+- One-time cluster setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster>` (installs OCM controller, Flux, Traefik, DNS, TLS cert)
+
 ### Run tests (any backend)
 ```bash
 cd <component>/backend   # e.g. cd compliance/backend
@@ -72,8 +90,8 @@ All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports 
 |---|---|
 | Luigi shell / entry point | http://localhost:8080 |
 | Keycloak (browser login) | http://localhost:8180 |
-| Frontends | `/registry/`, `/overview/`, `/monitoring/`, `/alerts/`, `/dta/`, `/compliance/`, `/iam/` under `:8080` |
-| Backend APIs | `/api/{registry,overview,monitoring,alerts,dta,compliance}/v1` under `:8080` (health at `/api/*/health`, docs at `/api/registry/docs`) |
+| Frontends | `/registry/`, `/overview/`, `/monitoring/`, `/alerts/`, `/dta/`, `/compliance/`, `/iam/`, `/audit/` under `:8080` |
+| Backend APIs | `/api/{registry,overview,monitoring,alerts,dta,compliance,audit}/v1` under `:8080` (health at `/api/*/health`, docs at `/api/registry/docs`) |
 | IAM / roles API | `/api/users/v1/iam` · current-user permissions `/api/users/v1/me/permissions` |
 | PostgreSQL | localhost:5432 / db `ai_trust` |
 | OTel Collector | gRPC localhost:4317 · HTTP localhost:4318 |
@@ -139,7 +157,7 @@ All React frontends (registry, alerts, DTA, compliance, monitoring, users, iam) 
 - **API base URL** — from `import.meta.env.VITE_*_API_BASE` at build time (relative paths, e.g. `/api/registry/v1`).
 - **Health polling** — red banner with auto-retry if backend is down.
 - **nginx headers** — `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding).
-- **UI5 Web Components** — `@ui5/webcomponents-react` 2.25 (SAP Fiori look). Import named components (`import { Button } from "@ui5/webcomponents-react"`) and use as JSX; never raw `<ui5-button>` custom elements.
+- **UI components** — Radix UI primitives + Tailwind CSS 4 (shadcn pattern). Named imports from `@/components/ui/`. Never raw HTML elements where a component exists.
 
 **Exceptions:** Overview is static HTML served by nginx (no build). DTA uses a dev proxy (`vite.config.ts` proxies `/api/*` → `http://localhost:8006`, no local CORS).
 
@@ -175,11 +193,12 @@ Static HTML + `luigi-config.js` served by nginx (Luigi core from CDN). Nav nodes
 
 Each component has `frontend/` (nginx, internal) and `backend/` (FastAPI, internal). All traffic routes through `:8080` via the shell proxy.
 
-### Dual deployment paths (docker-compose and k8s) — keep in sync
-Both paths are fully supported; **develop and change them together**. When you touch how a service runs:
-- New service in `docker-compose.yml` → add matching Deployment+Service (or Job) to the Helm chart + its image to `k8s/scripts/build-and-load-images.sh`.
+### Dual deployment paths (docker-compose, k8s kind, and Gardener/OCM) — keep in sync
+Three paths are fully supported; **develop and change them together**. When you touch how a service runs:
+- New service in `docker-compose.yml` → add matching Deployment+Service (or Job) to the Helm chart + its image to `k8s/scripts/build-and-load-images.sh` + add it as a resource in `.ocm/component-constructor.yaml`.
 - New/changed env var or secret → add to `.env.example`; it flows to k8s via `k8s/scripts/bootstrap.sh`'s Secret (sourced from the same `.env`, no separate k8s env file).
 - New `depends_on: condition:` → add the matching `waitForTcp`/`waitForHttp`/`waitForJob` initContainer (helpers in `_helpers.tpl`).
+- New one-shot Job → add `helm.sh/hook: pre-install,pre-upgrade` and `helm.sh/hook-delete-policy: before-hook-creation` annotations (see `jobs.yaml`). Without hooks, `helm upgrade` will fail with a Job immutability error on the second deploy.
 - Renamed/moved a mounted file (e.g. `infra/*/init.sh`, `otel-pipeline/**/config`) → update both `docker-compose.yml` `volumes:` **and** `bootstrap.sh` `--from-file`. Nothing enforces this in CI — a rename on one side silently breaks the other.
 
 ### Adding a new component
@@ -193,7 +212,7 @@ Both paths are fully supported; **develop and change them together**. When you t
 8. Add proxy routes to `shell/nginx.conf` (`/new-component/`, `/api/new-component/`).
 9. Add `base: "/new-component/"` to the frontend `vite.config.ts`.
 10. Add a nav node to `shell/luigi-config.js`.
-11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh`.
+11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh` **and** as `ociImage` resources in `.ocm/component-constructor.yaml`.
 
 ### ai-system-registry/ (port 8001, `/api/registry/`)
 AI system registration and EU AI Act classification.
@@ -267,6 +286,23 @@ Three alert rules seeded in migration `0004` drive evidence expiry:
 - `evidence_expired` — marks approved evidence past `validity_until` as `expired`, cascades control effectiveness + obligation status, fires alert
 - `evidence_expiring_30d` — fires warning for approved evidence expiring in 8–30 days
 - `evidence_expiring_7d` — fires warning for approved evidence expiring in 1–7 days; replaces the 30-day alert when evidence enters the 7-day window (auto-resolves the 30-day alert)
+
+### audit/ (port 8008, `/api/audit/`)
+Immutable audit trail — records who did what and when across all platform actions. Write-ahead buffer in Postgres, queryable archive in ClickHouse.
+
+**Data flow** — `log_audit_event()` in `libs/persistence/ai_trust_persistence/audit.py` adds an `AuditEvent` row to the caller's session (committed atomically with the business action). `audit-flush-worker/` polls Postgres every `AUDIT_FLUSH_INTERVAL` seconds (default 5), batch-inserts rows into ClickHouse `otel.audit_events`, then deletes them from Postgres. Postgres is a transient buffer only — presence means unflushed. ClickHouse uses a two-tier storage policy: hot (local disk, < 7 days) and cold (MinIO S3, auto-moved by TTL). Both tiers are queryable transparently via SQL — cold reads are slower but data is never deleted.
+
+**Instrumented actions** — `system.registered`, `system.deleted`, `system.reclassified` (registry); `assessment.created`, `assessment.submitted`, `assessment.approved` (compliance); `evidence.uploaded`, `evidence.approved`, `evidence.rejected`, `evidence.deleted` (compliance). Changes stored only for meaningful diffs: tier change on reclassify, status transition on submit/approve/reject.
+
+**Backend** (`audit/backend/app/routers/events.py`):
+- `GET /v1/events` — paginated list with filters: `ai_system_id`, `action`, `actor`, `resource_type`, `from`, `to`, `search` (case-insensitive across action/actor/system name), `limit`/`offset`/`sort`
+- `GET /v1/events/{id}` — full detail including `changes` dict
+- `GET /v1/systems` — distinct AI systems present in audit log, filtered by same params as list (used to populate the UI dropdown)
+- `GET /v1/stats` — KPI counts with trend vs. previous equal-length window: `total`, `system_events` (resource_type=ai_system), `risk_and_compliance` (assessment/evidence/control/obligation)
+
+**Authorization** — all endpoints require `audit:read` (OpenFGA). Assigned to `platform_administrator`, `ai_compliance_officer`, `auditor`, `ai_engineer`.
+
+**audit-flush-worker/** — standalone asyncio worker (no HTTP port). `AUDIT_FLUSH_INTERVAL` (default 5s), `AUDIT_FLUSH_BATCH_SIZE` (default 500). On ClickHouse failure the exception is caught in the main loop, logged, and retried next cycle — rows stay in Postgres safely.
 
 ## Environment variables
 

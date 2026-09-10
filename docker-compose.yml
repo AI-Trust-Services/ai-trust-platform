@@ -191,6 +191,10 @@ services:
         condition: service_started
       users-backend:
         condition: service_healthy
+      audit-frontend:
+        condition: service_started
+      audit-backend:
+        condition: service_healthy
     restart: on-failure
 
   ai-system-registry-frontend:
@@ -246,6 +250,14 @@ services:
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
     restart: on-failure
 
+  audit-frontend:
+    build:
+      context: ./audit/frontend
+      args:
+        VITE_AUDIT_API_BASE: ${VITE_AUDIT_API_BASE:-/api/audit/v1}
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
+    restart: on-failure
+
   users-backend:
     build:
       context: .
@@ -283,6 +295,51 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    restart: on-failure
+
+  audit-backend:
+    build:
+      context: .
+      dockerfile: audit/backend/Dockerfile
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      ALLOWED_ORIGINS: "http://localhost:8080"
+      ROOT_PATH: "/api/audit"
+      OPENFGA_URL: http://openfga:8080
+    volumes:
+      - openfga-config:/config:ro
+    depends_on:
+      clickhouse-migrate:
+        condition: service_completed_successfully
+      openfga-provision:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: on-failure
+
+  audit-flush-worker:
+    build:
+      context: .
+      dockerfile: audit-flush-worker/Dockerfile
+    environment:
+      <<: *db-env
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      AUDIT_FLUSH_INTERVAL: "5"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      clickhouse-migrate:
+        condition: service_completed_successfully
     restart: on-failure
 
   ai-system-registry-backend:

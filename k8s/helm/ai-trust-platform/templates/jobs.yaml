@@ -1,11 +1,28 @@
 {{/* One-shot init tasks. Each mirrors a docker-compose one-shot service:
      restartPolicy: OnFailure ~ compose's `restart: on-failure` for a container
-     that runs once and exits 0. */}}
+     that runs once and exits 0.
+
+     Naming strategy — per-revision Job names (`<base>-r<release-revision>`):
+       Jobs are PLAIN resources (no helm hooks). Each helm upgrade bumps
+       .Release.Revision, so every deploy renders a NEW Job name. That makes the
+       upgrade a create (not a patch of an existing completed Job), which
+       sidesteps the Kubernetes Job immutability error (`spec.template: field is
+       immutable`) that broke Flux/Gardener upgrades. Helm prunes the prior
+       revision's Job automatically since it's no longer in the manifest — no
+       ttlSecondsAfterFinished, no CI-side `kubectl delete`. On a fresh install
+       these apply in the same pass as the infra Deployments; each Job's
+       waitForTcp/waitForHttp initContainer blocks until its backing service is
+       reachable, so there is no pre-install hook ordering to deadlock on.
+
+       Ordering between Jobs (e.g. keycloak-provision after keycloak-ssl-patch)
+       uses waitForJob, which resolves the SAME per-revision name via the
+       ai-trust.jobName helper, so the wait target always matches the current
+       revision's Job. */}}
 
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: db-migrate
+  name: {{ include "ai-trust.jobName" (dict "base" "db-migrate" "rev" .Release.Revision) }}
 spec:
   backoffLimit: 6
   template:
@@ -24,7 +41,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: clickhouse-migrate
+  name: {{ include "ai-trust.jobName" (dict "base" "clickhouse-migrate" "rev" .Release.Revision) }}
 spec:
   backoffLimit: 6
   template:
@@ -48,7 +65,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: minio-init
+  name: {{ include "ai-trust.jobName" (dict "base" "minio-init" "rev" .Release.Revision) }}
 spec:
   backoffLimit: 6
   template:
@@ -72,7 +89,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: keycloak-ssl-patch
+  name: {{ include "ai-trust.jobName" (dict "base" "keycloak-ssl-patch" "rev" .Release.Revision) }}
 spec:
   backoffLimit: 6
   template:
@@ -110,7 +127,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: keycloak-provision
+  name: {{ include "ai-trust.jobName" (dict "base" "keycloak-provision" "rev" .Release.Revision) }}
 spec:
   backoffLimit: 6
   template:
@@ -119,7 +136,7 @@ spec:
       serviceAccountName: job-waiter
       {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
-        {{- include "ai-trust.waitForJob" (dict "job" "keycloak-ssl-patch" "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "keycloak-ssl-patch" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
         {{- include "ai-trust.waitForHttp" (dict "name" "keycloak" "port" 8080 "path" "/realms/master" "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:
         - name: keycloak-provision
@@ -136,7 +153,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: openfga-migrate
+  name: {{ include "ai-trust.jobName" (dict "base" "openfga-migrate" "rev" .Release.Revision) }}
 spec:
   backoffLimit: 6
   template:
@@ -157,7 +174,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: openfga-provision
+  name: {{ include "ai-trust.jobName" (dict "base" "openfga-provision" "rev" .Release.Revision) }}
 spec:
   backoffLimit: 6
   template:
@@ -189,7 +206,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: ollama-pull
+  name: {{ include "ai-trust.jobName" (dict "base" "ollama-pull" "rev" .Release.Revision) }}
 spec:
   backoffLimit: 6
   template:

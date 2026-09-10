@@ -87,6 +87,14 @@ build compliance-frontend ./compliance/frontend ./compliance/frontend/Dockerfile
 build users-frontend ./users/frontend ./users/frontend/Dockerfile \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
 
+build audit-backend . audit/backend/Dockerfile
+
+build audit-frontend ./audit/frontend ./audit/frontend/Dockerfile \
+  --build-arg "VITE_AUDIT_API_BASE=${VITE_AUDIT_API_BASE:-/api/audit/v1}" \
+  --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
+
+build audit-flush-worker . audit-flush-worker/Dockerfile
+
 build decision-trace-analyzer-frontend ./decision-trace-analyzer/frontend ./decision-trace-analyzer/frontend/Dockerfile \
   --build-arg "VITE_DTA_API_BASE=${VITE_DTA_API_BASE}"
 

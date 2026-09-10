@@ -26,7 +26,7 @@ spec:
       {{- if or (gt (len $c.dependsOnJobs) 0) (gt (len $c.dependsOnServices) 0) }}
       initContainers:
         {{- range $job := $c.dependsOnJobs }}
-        {{- include "ai-trust.waitForJob" (dict "job" $job "image" $.Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" $job "rev" $.Release.Revision "image" $.Values.waitImages.kubectl) | nindent 8 }}
         {{- end }}
         {{- range $svc := $c.dependsOnServices }}
         {{- include "ai-trust.waitForHttp" (dict "name" $svc.name "port" $svc.port "path" $svc.httpPath "image" $.Values.waitImages.busybox) | nindent 8 }}

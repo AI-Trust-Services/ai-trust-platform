@@ -36,6 +36,7 @@
     "controls": ["assessments:read", "assessments:write", "assessments:approve"],
     "evidence": ["evidence:read", "evidence:write", "evidence:approve"],
     "users": ["iam:manage"],
+    "audit": ["audit:read"],
   };
   const canSee = (seg) =>
     !PAGE_PERMISSIONS[seg] || PAGE_PERMISSIONS[seg].some((p) => permissions.includes(p));
@@ -119,6 +120,14 @@
         viewUrl: "/users/",
         navigationContext: "users",
         viewGroup: "users",
+      },
+      {
+        pathSegment: "audit",
+        label: "Audit Trail",
+        icon: "activity-2",
+        viewUrl: "/audit/",
+        navigationContext: "audit",
+        viewGroup: "audit",
       },
   ].filter((node) => canSee(node.pathSegment));
 

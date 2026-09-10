@@ -48,7 +48,8 @@ set it explicitly: `TENANCY_MODE=single make up`. To change it later:
 ```bash
 cp .env.example .env
 cd k8s
-make up      # PROMPT tenancy mode → kind create cluster → bootstrap → build/load images → helm install
+make up      
+# PROMPT tenancy mode → kind create cluster → bootstrap → build/load images → helm install
 ```
 
 Then open http://localhost:8080 and log in via Keycloak, same as with docker-compose.
@@ -83,9 +84,7 @@ Watch it come up with `make status` or `kubectl get pods -n ai-trust -w`. One-sh
 
 - Rebuilt an image after a code change? `make build` again, then
   `kubectl rollout restart deployment/<name> -n ai-trust` (or `make upgrade` to reapply everything).
-- Changed something a one-shot **Job** runs (e.g. added a migration)? Jobs are immutable once
-  created, so: `make build` (rebuilds the image) → `make reset-jobs` (deletes the old Jobs) →
-  `make upgrade` (recreates them, and everything that waits on them will re-check).
+- Changed something a one-shot **Job** runs (e.g. added a migration)? `make build` (rebuilds the image) → `make upgrade`. Each upgrade renders the Jobs under a new per-revision name (`<base>-r<N>`), so Helm creates fresh Jobs and prunes the previous revision's automatically — no manual cleanup, no Job immutability error (see [Per-revision Job names](#per-revision-job-names-one-shot-jobs)).
 - `make down` tears down the Helm release and deletes the whole kind cluster (equivalent to
   `docker compose down --remove-orphans`, but also throws away the cluster itself, not just the
   containers - PVC-backed data goes with it).
@@ -104,105 +103,190 @@ no direct Kubernetes equivalent, and none of the app images were changed to add 
 Both patterns are defined once in `helm/ai-trust-platform/templates/_helpers.tpl` and reused
 everywhere docker-compose had a `depends_on`.
 
-## Deploying to a real cluster (Gardener) via GitHub Actions
+## Deploying to a real cluster (Gardener) via OCM + Flux + GitHub Actions
 
-A third path, alongside docker-compose and local `kind`: two workflows under `.github/workflows/`
-build/push images to `ghcr.io` and deploy this same Helm chart to a real Gardener shoot cluster.
-Unlike the kind path (images loaded directly, no registry), this path needs a registry and a
-values overlay (`values-gardener.yaml`) that enables the Ingress and sets TLS + public hostnames.
-All infra services (postgres, rabbitmq, clickhouse, minio, otel) default to `ClusterIP` in
-`values.yaml` — no ports are exposed on node IPs on Gardener. The `values-kind.yaml` overlay
-(kind-only) is what switches them to `NodePort` for local development.
+A third path, alongside docker-compose and local `kind`. The platform is packaged as an
+**OCM (Open Component Model) component** and deployed to Gardener shoot clusters via
+**Flux HelmRelease** — driven entirely by two GitHub Actions workflows.
 
-- **`build-push.yml`** - runs automatically on every push to `main` and on version tags (`v*.*.*`),
-  or manually via `workflow_dispatch` with optional `branch` and `gardener_cluster` inputs (defaults:
-  `main` / `ai-trust-main`; set `gardener_cluster=none` to build without deploying).
-  Builds all ~22 locally-built images (same context/Dockerfile/build-args as
-  `k8s/scripts/build-and-load-images.sh`) and pushes each to
-  `ghcr.io/<owner>/ai-trust-platform/<name>`. Images are tagged `<cluster>-<short-sha>` (isolated
-  per cluster to avoid cross-cluster tag collisions) plus `latest` for `ai-trust-main` builds.
-  Frontend Vite build-args come from repo **variables** (`VITE_REGISTRY_API_BASE`, etc.) with the
-  same defaults as `.env.example`, so it works out of the box even if unset. After all images are
-  published, the deploy job calls `deploy-gardener.yml` automatically.
-- **`deploy-gardener.yml`** - called automatically by `build-push.yml` after every successful build,
-  or triggered manually via `workflow_dispatch` (pick cluster and image tag). Authenticates to the
-  shoot cluster via Gardener's **Structured Authentication** + GitHub OIDC (no kubeconfig secret -
-  see below), writes a `.env` from a secret, re-runs the existing `k8s/scripts/bootstrap.sh`
-  unchanged (namespace/Secret/ConfigMaps/RBAC - same script as the kind path), then
-  `helm upgrade --install` with `values-gardener.yaml` layered on top of `values.yaml`.
-- **`cleanup-images.yml`** - runs daily at 03:00 UTC (and can be triggered manually). Deletes image
-  versions older than 1 day from `ghcr.io`. Protected tags (`latest` and `v*.*.*`) are never
-  deleted.
+### How it works end-to-end
 
-### Cluster authentication - Structured Authentication + GitHub OIDC
+```
+build-push-deploy.yml
+  ├─ build & push ~22 Docker images  →  ghcr.io/ai-trust-services/ai-trust-platform/<name>:<cluster>-<sha>
+  ├─ build & push Helm chart OCI     →  ghcr.io/ai-trust-services/charts/ai-trust-platform:0.0.0-<cluster>-<sha>
+  ├─ publish OCM component           →  ghcr.io/ai-trust-services/ocm  (references images + chart by digest)
+  └─ calls bootstrap-gardener.yml
+       ├─ creates namespace/secrets/RBAC via bootstrap.sh
+       └─ applies k8s/ocm/ CRs (ComponentVersion, Resource, FluxDeployer),
+          substituting the exact built version into ComponentVersion.spec.version.semver
 
-Follows Gardener's official guide,
-[Kubernetes Application CI/CD using Structured Authentication](https://gardener.cloud/docs/guides/applications/app-ci-cd/#configure-github-actions):
-GitHub's OIDC token is exchanged directly for cluster access via the shoot's kube-apiserver - no
-kubeconfig ever leaves GitHub, nothing long-lived to leak or rotate. This replaced an earlier,
-simpler design (a static `ServiceAccount` token bound to `cluster-admin`, stored as a
-`GARDENER_KUBECONFIG` secret) once the official guide surfaced this as the supported approach.
+On the cluster (OCM controller + Flux):
+  ComponentVersion  →  resolves the exact pinned OCM component version
+  Resource          →  exposes the ai-trust-platform-chart resource
+  FluxDeployer      →  creates/updates a HelmRelease in ocm-system
+  Flux helm-controller  →  helm upgrade --install ai-trust in ai-trust namespace
+```
 
-One-time setup per cluster, checked into `k8s/gardener_init/`. Two scripts, run in order:
+### Workflows
+
+- **`build-push-deploy.yml`** — runs on every push to `main`, on version tags (`v*.*.*`), or manually
+  via `workflow_dispatch` (inputs: `branch`, `gardener_cluster`). Tags images
+  `<cluster>-<short-sha>` (isolated per cluster); `ai-trust-main` builds additionally tag `latest`.
+  OCM component version: `0.0.0-<cluster>-<sha>`. Feature branch pushes build images but do NOT
+  publish OCM or trigger a deploy (set `gardener_cluster=sr-test` in `workflow_dispatch` to deploy
+  from a feature branch).
+
+- **`bootstrap-gardener.yml`** — called by `build-push-deploy.yml` after successful publish, or manually.
+  Authenticates via Gardener Structured Auth + GitHub OIDC (no stored kubeconfig). Runs
+  `k8s/scripts/bootstrap.sh` (namespace, `ai-trust-env` secret, `ai-trust-flux-values` secret in
+  `ocm-system`, ConfigMaps, RBAC), then applies `k8s/ocm/` with the exact built version
+  substituted into `ComponentVersion.spec.version.semver` (an exact-match pin, not a range),
+  so the cluster reconciles only that version and never auto-upgrades to an unrelated build.
+
+**Two secrets, two namespaces:** bootstrap.sh creates two distinct secrets per cluster:
+- `ai-trust-env` in `ai-trust` — the full credential set from `.env` (plus computed connection
+  strings). Used by Helm chart pods via `envFrom`.
+- `ai-trust-flux-values` in `ocm-system` — only the 6 non-sensitive URL/hostname/tag values
+  (`APP_PUBLIC_URL`, `KEYCLOAK_PUBLIC_URL`, `INGRESS_*`, `IMAGE_TAG`). Used by the FluxDeployer's
+  `valuesFrom`.
+
+  The split is necessary because Flux's `HelmRelease` object is created in `ocm-system` (same
+  namespace as the FluxDeployer), and Flux resolves `valuesFrom` secrets relative to the
+  HelmRelease's own namespace. Flux v2 `ValuesReference` has no `namespace` override field, so
+  there is no way to reference a secret in `ai-trust` from a `valuesFrom` entry — the secret
+  must live in `ocm-system`. Credentials stay only in `ai-trust-env` to avoid storing them in
+  the FluxDeployer's namespace unnecessarily.
+
+### OCM component structure
+
+The component descriptor lives at `ghcr.io/ai-trust-services/ocm` and contains **references** (not
+copies) to the images and chart already pushed by the build step. Nothing is duplicated in the
+registry. The component constructor is `.ocm/component-constructor.yaml`.
+
+`k8s/ocm/manifests.yaml` pins `ComponentVersion.spec.version.semver` via a `${OCM_VERSION}`
+placeholder — `bootstrap-gardener.yml` substitutes the exact built version at apply time. To
+apply it by hand, supply the version yourself (a bare `kubectl apply -f k8s/ocm/` would apply
+the literal placeholder and fail):
+```bash
+OCM_VERSION=0.0.0-<cluster>-<sha> envsubst '${OCM_VERSION}' < k8s/ocm/manifests.yaml | kubectl apply -f -
+```
+
+To inspect published versions:
+```bash
+ocm get componentversions ghcr.io/ai-trust-services/ocm//github.com/ai-trust-services/ai-trust-platform
+ocm get resources ghcr.io/ai-trust-services/ocm//github.com/ai-trust-services/ai-trust-platform:0.0.0-<cluster>-<sha>
+```
+
+### Checking OCM/Flux deploy status on a cluster
 
 ```bash
-# Step 1 — Garden cluster: enable Traefik ingress extension + structured auth
+# Which version is reconciled
+kubectl get componentversion ai-trust-platform -n ocm-system \
+  -o jsonpath='{.status.reconciledVersion}{"\n"}'
+
+# HelmRelease status (shows chart version + success/failure message)
+kubectl get helmrelease ai-trust -n ocm-system -o wide
+
+# Pod image tags (verify the correct SHA is running)
+kubectl get pods -n ai-trust \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+
+# Events from the OCM controller
+kubectl describe componentversion ai-trust-platform -n ocm-system | tail -20
+```
+
+Note: the `Applied version:` column in `kubectl get componentversion` output is blank due to a
+known display bug in ocm-controller v0.33. The correct value is in `.status.reconciledVersion`.
+
+### Version isolation between branches and clusters
+
+| Scenario | OCM version published | Deploys to |
+|---|---|---|
+| Push to `main` | `0.0.0-ai-trust-main-<sha>` + `0.0.0-latest` | `ai-trust-main` |
+| `workflow_dispatch` → sr-test | `0.0.0-sr-test-<sha>` | `sr-test` |
+| Feature branch push | *(not published)* | nowhere |
+| `workflow_dispatch` gardener_cluster=none | *(not published)* | nowhere |
+
+Per-cluster SHA prefixes ensure versions never collide. `--overwrite` in the publish step is safe
+because re-running the same workflow on the same commit is the only case that hits the same version
+string.
+
+### Per-revision Job names (one-shot Jobs)
+
+All init/migration Jobs (`db-migrate`, `clickhouse-migrate`, `minio-init`, `keycloak-ssl-patch`,
+`keycloak-provision`, `openfga-migrate`, `openfga-provision`) are **plain Helm resources** whose
+`metadata.name` carries a per-release-revision suffix — `<base>-r<.Release.Revision>` — via the
+`ai-trust.jobName` helper in `_helpers.tpl`.
+
+Kubernetes Jobs are immutable (`spec.template: field is immutable`): on `helm upgrade`, patching an
+existing completed Job of the same name fails. Because every upgrade bumps `.Release.Revision`, each
+deploy renders a **new** Job name, so the upgrade is a *create*, not a *patch* — the immutability
+error can't occur. Helm prunes the previous revision's Job automatically (it's absent from the new
+manifest), so there is no `ttlSecondsAfterFinished` time-race and no CI-side `kubectl delete`. Flux's
+helm-controller inherits this same behaviour, so OCM/Flux version bumps upgrade cleanly regardless of
+how frequently they fire.
+
+On a **fresh install** the Jobs apply in the same pass as the infra Deployments; each Job's own
+`waitForTcp`/`waitForHttp` initContainer blocks until its backing service (postgres, clickhouse,
+minio, keycloak…) is reachable — there are no pre-install hooks to deadlock on. Ordering between
+Jobs still uses the `waitForJob` initContainer, which resolves the **same** per-revision name through
+`ai-trust.jobName`, so the wait target always matches the current revision's Job
+(`keycloak-ssl-patch` → `keycloak-provision`, `openfga-migrate` → `openfga` → `openfga-provision`).
+
+> Migrating an **already-deployed** cluster from the old hook-based scheme: the old Jobs were Helm
+> hook resources not tracked in the release manifest, so the first upgrade to this scheme won't prune
+> them. Delete them once manually (they're completed one-shots, safe to remove):
+> `kubectl delete job -n ai-trust db-migrate clickhouse-migrate minio-init keycloak-ssl-patch keycloak-provision openfga-migrate openfga-provision`.
+> Fresh clusters and kind are unaffected.
+
+### Cluster authentication — Structured Authentication + GitHub OIDC
+
+GitHub's OIDC token is exchanged directly for cluster access via the shoot's kube-apiserver — no
+kubeconfig stored as a secret, nothing long-lived to rotate.
+
+One-time setup per cluster:
+
+```bash
+# Step 1 — Garden cluster: enable structured auth
 export KUBECONFIG=/path/to/kubeconfig-garden-<landscape>.yaml
 bash k8s/gardener_init/garden-cluster-init.sh <cluster-name>
 
-# Step 2 — Shoot cluster: install Traefik, apply RBAC, provision DNS + Let's Encrypt cert
+# Step 2 — Shoot cluster: install OCM controller + Flux, Traefik, DNS + TLS cert, RBAC
 export KUBECONFIG=/path/to/kubeconfig-<shoot>.yaml
-bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name> <app-host> <keycloak-host> [<minio-host>]
+bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>
+# Hostnames read from k8s/gardener_init/env/<cluster-name>/.env
 ```
 
-Or apply manually:
+`shoot-cluster-init.sh` installs:
+- **Traefik** ingress controller (if not present)
+- **OCM controller** via `ocm controller install`
+- **Flux** via `flux install` (source-controller + helm-controller)
+- Gardener-managed TLS certificate (DNS-01, Let's Encrypt, stored in `ai-trust/ai-trust-tls`)
+- DNS annotations on the Traefik LB Service
+- RBAC for the GitHub Actions OIDC identity
 
-1. **`structured-auth-configmap.yaml`** - applied to the **Garden** cluster (not the shoot), in
-   your project's `garden-<project>` namespace. Trusts `https://token.actions.githubusercontent.com`
-   as an OIDC issuer and maps any GitHub Actions run in `AI-Trust-Services/ai-trust-platform` (any
-   branch/ref - see the comment in the file for why) to a stable Kubernetes username. Edit
-   `metadata.namespace` before applying, then patch the shoot to use it:
-   ```bash
-   KUBECONFIG=$GARDEN_KUBECONFIG kubectl apply -f k8s/gardener_init/structured-auth-configmap.yaml
-   kubectl patch shoot $MY_SHOOT_NAME --type merge --namespace garden-<project> \
-     -p '{"spec":{"kubernetes":{"kubeAPIServer":{"structuredAuthentication":{"configMapName":"ai-trust-platform-github-actions-auth"}}}}}'
-   kubectl get shoot $MY_SHOOT_NAME --watch   # wait for reconciliation to finish
-   ```
-2. **`rbac.yaml`** - applied to the **shoot** cluster, once reconciliation above completes:
-   ```bash
-   KUBECONFIG=$SHOOT_KUBECONFIG kubectl apply -f k8s/gardener_init/rbac.yaml
-   ```
-3. **`shoot-cluster-init.sh`** - run against the **shoot** cluster. Applies `rbac.yaml`, requests a Let's Encrypt multi-SAN cert via Gardener cert-service (DNS-01, no port 80 needed), and annotates the Traefik LB Service for Gardener-managed DNS. Traefik and cert-manager are provisioned automatically by Gardener — do not install them manually.
-   ```bash
-   KUBECONFIG=$SHOOT_KUBECONFIG bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>
-   # Hostnames read from k8s/gardener_init/env/<cluster-name>/.env
-   ```
+> **Do not install cert-manager manually.** Gardener provisions and manages it automatically in a
+> dedicated `cert-manager` namespace. If you see cert-manager pods CrashLooping in the `default`
+> namespace, those are stale orphans from a previous install — delete them with:
+> `kubectl delete deployment,service,serviceaccount -n default -l app.kubernetes.io/instance=cert-manager`
 
 Required GitHub secrets in the `gardener` environment:
 
 | Secret | Purpose |
 |---|---|
-| `GHCR_PULL_TOKEN` | (optional) PAT with `read:packages` — only needed if `ghcr.io` packages are private |
+| `GHCR_PULL_TOKEN` | (optional) PAT with `read:packages` — only needed if packages are private |
 
-All other cluster config (Gardener connection vars, app env) lives in `k8s/env/<cluster>/.env`,
-committed to the repo. No per-cluster GitHub secrets or variables needed.
-
-The chart assumes Traefik Ingress controller is already installed on the shoot (`values-gardener.yaml` sets `ingress.className: traefik`). cert-manager is not required — TLS is provisioned by Gardener cert-service via `shoot-cluster-init.sh`. All services default to `ClusterIP` in `values.yaml`; `oauth2-proxy` and `keycloak` are reached through the Ingress.
-
-**Do not point the workflow at the kubeconfig from the Gardener dashboard / `gardenctl target`** -
-that one authenticates via an `exec:` credential plugin (`kubectl-gardenlogin`) that does an
-interactive OIDC login and has no way to run non-interactively on a GitHub Actions runner. The
-Structured Authentication setup above avoids needing any kubeconfig in CI at all.
+All other config lives in `k8s/env/<cluster>/.env` (committed). No per-cluster GitHub secrets needed.
 
 ### Adding a new cluster
 
 1. Run `bash k8s/gardener_init/garden-cluster-init.sh <cluster-name>` (Garden cluster — structured auth)
-2. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>` (shoot cluster — Traefik install if needed, RBAC, Gardener DNS annotations + Let's Encrypt cert). Hostnames are read from `k8s/gardener_init/env/<cluster-name>/.env` — copy from `k8s/gardener_init/env/example/.env` and fill in.
-3. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/sr-test/.env`, fill in the Gardener connection vars and shoot domain hostnames)
-4. Add `<cluster-name>` to the `options` list in both `.github/workflows/deploy-gardener.yml` (for manual dispatch) and `.github/workflows/build-push.yml` (for manual dispatch input)
-5. Trigger `deploy-gardener.yml` with `cluster=<cluster-name>`
-
-The `ai-trust-main` cluster env is at `k8s/env/ai-trust-main/.env` — update it with the shoot domain hostnames (following the sr-test pattern) before running `shoot-cluster-init.sh` and deploying.
+2. Copy `k8s/gardener_init/env/example/.env` → `k8s/gardener_init/env/<cluster-name>/.env` and fill in hostnames
+3. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>` (installs OCM controller, Flux, Traefik, DNS, TLS cert, RBAC)
+4. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/sr-test/.env`, fill in Gardener connection vars and hostnames)
+5. Add `<cluster-name>` to the `options` list in `build-push-deploy.yml` and `bootstrap-gardener.yml` `workflow_dispatch` inputs
+6. Trigger `build-push-deploy.yml` with `gardener_cluster=<cluster-name>`
 
 ## Known limitations / gaps as of local-dev scope (same as docker-compose today)
 
