@@ -77,7 +77,7 @@ class ControlResponse(BaseModel):
     obligation_id: str
     assessment_id: str
     ai_system_id: str | None
-    assessment_title: str | None
+    assessment_title: str | None  # not a column — must be set manually after model_validate
     control_ref: str | None
     title: str
     description: str

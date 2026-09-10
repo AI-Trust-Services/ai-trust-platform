@@ -17,7 +17,6 @@ from ai_trust_persistence.models import (
     Control,
     Evidence,
     EvidenceVersion,
-    control_obligations,
     evidence_controls,
 )
 from app import minio_client
@@ -113,10 +112,10 @@ async def list_evidence(
                 exists(
                     select(1)
                     .select_from(evidence_controls)
-                    .join(control_obligations, control_obligations.c.control_id == evidence_controls.c.control_id)
+                    .join(Control, Control.id == evidence_controls.c.control_id)
                     .where(
                         evidence_controls.c.evidence_id == Evidence.id,
-                        control_obligations.c.obligation_id == obligation_id,
+                        Control.obligation_id == obligation_id,
                     )
                 )
             )

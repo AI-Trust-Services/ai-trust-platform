@@ -4,7 +4,6 @@ from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_authorization import require_permission
@@ -22,7 +21,6 @@ from ai_trust_persistence.models import (
     Control,
     Framework,
     Obligation,
-    control_obligations,
 )
 from app.cascade import refresh_assessment_score, refresh_obligation, sync_system_compliance
 from app.control_templates import controls_for
@@ -193,7 +191,7 @@ async def _generate_controls_in_session(
 
     For each obligation, `controls_for(article_ref, tier)` yields the tier-scoped
     control templates; each becomes a Control row (control_ref = "{article_ref}:{slug}")
-    linked to the obligation via control_obligations. Owner is carried forward from
+    linked to the obligation via obligation_id. Owner is carried forward from
     the most recent prior control with the same control_ref (see _prior_owners_by_ref).
 
     After linking, each touched obligation is refreshed so its status reflects the
@@ -218,6 +216,8 @@ async def _generate_controls_in_session(
             control_ref = f"{obl.article_ref}:{t['slug']}"
             control = Control(
                 id=new_id("CTL"),
+                obligation_id=obl.id,
+                assessment_id=obl.assessment_id,
                 ai_system_id=ai_system_id,
                 control_ref=control_ref,
                 title=t["title"],
@@ -228,12 +228,7 @@ async def _generate_controls_in_session(
                 owner=prior_owner_by_ref.get(control_ref, ""),
             )
             session.add(control)
-            await session.flush()  # assign control.id before linking
-            await session.execute(
-                pg_insert(control_obligations)
-                .values(control_id=control.id, obligation_id=obl.id)
-                .on_conflict_do_nothing()
-            )
+            await session.flush()
             created.append(control)
         # Recompute the obligation's status now that controls are linked.
         await session.flush()
@@ -245,18 +240,10 @@ async def _generate_controls_in_session(
 async def _prior_owners_by_ref(
     session: AsyncSession, ai_system_id: str
 ) -> dict[str, str]:
-    """Map control_ref -> owner from the most recent prior controls for this system.
-
-    Controls carry no assessment_id, so "prior controls" are those linked (via
-    control_obligations) to obligations of the same system. We keep the owner from
-    the most recently-created control per control_ref, ignoring blank owners so an
-    unassigned prior control does not shadow an assignment from an earlier cycle.
-    """
+    """Map control_ref -> owner from the most recent prior controls for this system."""
     rows = (await session.execute(
         select(Control.control_ref, Control.owner)
-        .join(control_obligations, control_obligations.c.control_id == Control.id)
-        .join(Obligation, Obligation.id == control_obligations.c.obligation_id)
-        .where(Obligation.ai_system_id == ai_system_id)
+        .where(Control.ai_system_id == ai_system_id)
         .where(Control.control_ref.is_not(None))
         .where(Control.owner != "")
         .order_by(Control.created_at.asc())
@@ -332,38 +319,18 @@ async def delete_assessment(assessment_id: str, request: Request) -> dict:
 
 
 async def _delete_generated_controls(session: AsyncSession, assessment_id: str) -> int:
-    """Delete controls that were auto-generated for this assessment's obligations.
+    """Delete auto-generated controls for this assessment.
 
-    Scoped so manual and shared controls are never removed: a control is deleted
-    only if it is auto-generated (control_ref is not null) AND every obligation it
-    links to belongs to this assessment (not shared with another assessment). Runs
-    before the assessment is deleted, while its obligations and links still exist.
-    Returns the number of controls deleted.
+    Auto-generated = control_ref is not null. With 1:N, a control belongs to
+    exactly one assessment, so no shared-control check is needed.
     """
-    # Candidate controls: auto-generated and linked to an obligation of this assessment.
-    candidates = (await session.execute(
+    to_delete = (await session.execute(
         select(Control.id)
-        .join(control_obligations, control_obligations.c.control_id == Control.id)
-        .join(Obligation, Obligation.id == control_obligations.c.obligation_id)
-        .where(Obligation.assessment_id == assessment_id)
+        .where(Control.assessment_id == assessment_id)
         .where(Control.control_ref.is_not(None))
-        .distinct()
     )).scalars().all()
-    if not candidates:
-        return 0
-
-    # Keep any candidate that is also linked to an obligation outside this assessment.
-    shared = set((await session.execute(
-        select(control_obligations.c.control_id)
-        .join(Obligation, Obligation.id == control_obligations.c.obligation_id)
-        .where(control_obligations.c.control_id.in_(candidates))
-        .where(Obligation.assessment_id != assessment_id)
-    )).scalars().all())
-
-    to_delete = [cid for cid in candidates if cid not in shared]
     if not to_delete:
         return 0
-
     await session.execute(Control.__table__.delete().where(Control.id.in_(to_delete)))
     return len(to_delete)
 
@@ -430,8 +397,8 @@ async def generate_controls(assessment_id: str) -> GenerateControlsResponse:
 
         # Idempotent: skip any obligation that already has >=1 linked control.
         linked_obl_ids = set((await session.execute(
-            select(control_obligations.c.obligation_id).where(
-                control_obligations.c.obligation_id.in_([o.id for o in obligations])
+            select(Control.obligation_id).where(
+                Control.obligation_id.in_([o.id for o in obligations])
             )
         )).scalars().all())
         targets = [o for o in obligations if o.id not in linked_obl_ids]
