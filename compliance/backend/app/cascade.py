@@ -23,7 +23,6 @@ from ai_trust_persistence.models import (
     Assessment,
     Control,
     Obligation,
-    control_obligations,
     evidence_controls,
 )
 from ai_trust_persistence.models.evidence import Evidence
@@ -88,8 +87,7 @@ async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
 
     control_statuses = (await session.execute(
         select(Control.status)
-        .join(control_obligations, control_obligations.c.control_id == Control.id)
-        .where(control_obligations.c.obligation_id == obligation_id)
+        .where(Control.obligation_id == obligation_id)
     )).scalars().all()
 
     if not control_statuses:
@@ -103,13 +101,12 @@ async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
 
 
 async def refresh_obligations_for_control(session: AsyncSession, control_id: str) -> None:
-    """Refresh every obligation linked to a given control."""
-    obligation_ids = (await session.execute(
-        select(control_obligations.c.obligation_id)
-        .where(control_obligations.c.control_id == control_id)
-    )).scalars().all()
-    for oid in obligation_ids:
-        await refresh_obligation(session, oid)
+    """Refresh the obligation linked to a given control."""
+    control = (await session.execute(
+        select(Control).where(Control.id == control_id)
+    )).scalar_one_or_none()
+    if control is not None:
+        await refresh_obligation(session, control.obligation_id)
 
 
 async def refresh_assessment_score(session: AsyncSession, assessment_id: str) -> None:
