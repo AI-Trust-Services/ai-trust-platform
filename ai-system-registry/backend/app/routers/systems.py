@@ -17,6 +17,7 @@ from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from app import minio_client
 from app.routers.workflow import _active_sub_assignment, _get_steps
+from app.workflow_utils import section_owner
 from app.schemas import (
     AISystemResponse,
     AISystemUpdate,
@@ -55,7 +56,7 @@ async def _assert_can_edit_section(session, row: AISystem, section: str, current
     steps = await _get_steps(session, row.id)
     holder = _active_sub_assignment(steps, section)
     if holder is None:
-        holder = row.business_assignee_username if section == "business" else row.technical_assignee_username
+        holder = section_owner(row, section)
     if holder and current_user != holder:
         raise HTTPException(403, f"The '{section}' section is currently assigned to {holder}")
 

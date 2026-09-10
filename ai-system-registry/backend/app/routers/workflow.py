@@ -15,6 +15,7 @@ from ai_trust_persistence.models.question_assignment import QuestionAssignment a
 from app.classifier import classify, classify_ai_questionnaire
 from app.ids import new_id
 from app.questionnaire_required import missing_for_approval
+from app.workflow_utils import section_owner
 from app.llm import LLMParseError
 from app.schemas import (
     WorkflowStepResponse,
@@ -50,13 +51,6 @@ _SUB_STEPS = ("sub_assigned", "sub_completed", "sub_reclaimed")
 # the active step of the workflow.
 _SECTION_STATUS = {"business": "business_pending", "technical": "technical_pending"}
 _SECTION_LABEL = {"business": "Use Case & Context", "technical": "AI Risk Classification"}
-
-
-def _section_owner(row: AISystem, section: str) -> str | None:
-    """The assignee that owns ``section`` (the person a sub-assignment is delegated from
-    and returns to)."""
-    return row.business_assignee_username if section == "business" else row.technical_assignee_username
-
 
 
 def _current_user(request: Request) -> str:
@@ -721,7 +715,7 @@ async def sub_assign_section(
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status != _SECTION_STATUS[body.section]:
             raise HTTPException(422, f"Cannot sub-assign '{body.section}' from status '{row.workflow_status}'")
-        owner = _section_owner(row, body.section)
+        owner = section_owner(row, body.section)
         if owner and current_user != owner:
             raise HTTPException(403, "Only the section owner may sub-assign this section")
 
@@ -785,7 +779,7 @@ async def sub_complete_section(
         if current_user != active:
             raise HTTPException(403, "Only the active contributor may complete this sub-assignment")
 
-        owner = _section_owner(row, body.section)
+        owner = section_owner(row, body.section)
         step = SystemWorkflowStep(
             id=new_id("SWS"),
             system_id=system_id,
@@ -838,7 +832,7 @@ async def sub_reclaim_section(
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status != _SECTION_STATUS[body.section]:
             raise HTTPException(422, f"Cannot reclaim '{body.section}' from status '{row.workflow_status}'")
-        owner = _section_owner(row, body.section)
+        owner = section_owner(row, body.section)
         if owner and current_user != owner:
             raise HTTPException(403, "Only the section owner may reclaim this section")
 
@@ -961,7 +955,7 @@ async def question_assign(
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status != _SECTION_STATUS[body.section]:
             raise HTTPException(422, f"Cannot assign questions for '{body.section}' from status '{row.workflow_status}'")
-        owner = _section_owner(row, body.section)
+        owner = section_owner(row, body.section)
         if owner and current_user != owner:
             raise HTTPException(403, "Only the section owner may assign questions")
 
@@ -1034,7 +1028,7 @@ async def question_unassign(
         row = result.scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
-        owner = _section_owner(row, body.section)
+        owner = section_owner(row, body.section)
         if owner and current_user != owner:
             raise HTTPException(403, "Only the section owner may remove question assignments")
 

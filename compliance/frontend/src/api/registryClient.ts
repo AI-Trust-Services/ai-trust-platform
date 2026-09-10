@@ -1,4 +1,4 @@
-import type { AISystem, WorkflowStep, QuestionAssignment } from "../types";
+import type { AISystem, WorkflowStep, QuestionAssignment, ClassificationRationale } from "../types";
 import type { SectionKey } from "../config/questionnaire";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
@@ -102,7 +102,7 @@ export const registryClient = {
       tier: string | null;
       org_role: string | null;
       registration_mode: string | null;
-      classification_rationale: unknown;
+      classification_rationale: ClassificationRationale | null;
       obligations: Array<{ title: string; article_ref: string; description: string }>;
     }>(`/systems/${encodeURIComponent(systemId)}/workflow/rce-summary`),
 
