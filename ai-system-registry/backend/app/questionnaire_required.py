@@ -56,6 +56,53 @@ VALID_QUESTION_KEYS: frozenset[str] = frozenset({
     "user_interaction",
 })
 
+# Human-readable label for each question key, for user-facing text (e.g. assignment
+# emails). Mirrors the {key, label} entries in questionnaire.ts — keep in sync. Callers
+# fall back to the raw key via .get(key, key), so a missing entry degrades gracefully.
+QUESTION_LABEL: dict[str, str] = {
+    "submission_type": "Type of Submission",
+    "external_id": "External System ID",
+    "use_case_owner": "Use Case Owner",
+    "use_case_type": "Type of Use Case",
+    "department": "Developing Business Unit",
+    "technologies": "Technologies Involved",
+    "use_case_status": "Status of AI Use Case",
+    "use_case": "Detailed Description",
+    "planned_modifications": "Planned Changes (12–24 months)",
+    "used_in_eu": "Used in the European Union",
+    "exception_category": "Exception Category",
+    "sector_legislation": "Sector-Specific Legislation",
+    "subliminal_manipulation": "Manipulative or Deceptive Techniques",
+    "exploits_vulnerability": "Exploits Vulnerabilities",
+    "social_scoring_public": "Social Scoring by Public Authority",
+    "real_time_biometric_public": "Real-time Biometric ID in Public Spaces",
+    "emotion_recognition_workplace": "Emotion Recognition (Workplace / Education)",
+    "untargeted_facial_scraping": "Untargeted Facial Image Scraping",
+    "predictive_policing": "Predictive Policing",
+    "biometric_categorisation_sensitive": "Biometric Categorisation by Sensitive Attributes",
+    "is_biometric_identification": "Identity & Biometric Analysis",
+    "is_critical_infrastructure": "Infrastructure Management",
+    "is_education_related": "Education & Training",
+    "is_employment_related": "Human Resources (HR)",
+    "is_credit_scoring": "Financial & Healthcare Services",
+    "is_public_service": "Essential Public Services",
+    "is_law_enforcement": "Public Safety & Policing",
+    "is_migration": "Immigration & Border Control",
+    "is_judicial_admin": "Legal & Democratic Governance",
+    "is_gpai": "General-Purpose AI (GPAI)",
+    "training_compute_flops": "Training Compute (FLOPs)",
+    "is_chatbot": "Conversational AI / Chatbot",
+    "generates_synthetic_content": "Generates Synthetic Content",
+    "data_and_inputs": "Data & Inputs",
+    "decision_domain": "Domain of Use",
+    "automation_and_oversight": "Autonomy & Human Oversight",
+    "affected_people": "Impact on People",
+    "model_nature": "Model Nature",
+    "user_interaction": "User Interaction & Content",
+    "prohibited_practices": "Prohibited Practices Check",
+}
+
+
 # (key, storage): "system" = top-level AISystem column, "answers" = questionnaire_answers[key].
 # Optional keys (external_id, additional_entity_roles) and boolean/number keys (used_in_eu)
 # are intentionally omitted — an unchecked box / blank optional field is a valid answer.

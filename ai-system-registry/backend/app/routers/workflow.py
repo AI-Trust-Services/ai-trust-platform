@@ -14,7 +14,7 @@ from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from ai_trust_persistence.models.question_assignment import QuestionAssignment as QuestionAssignmentModel
 from app.classifier import classify, classify_ai_questionnaire
 from app.ids import new_id
-from app.questionnaire_required import missing_for_approval
+from app.questionnaire_required import QUESTION_LABEL, missing_for_approval
 from app.workflow_utils import section_owner
 from app.llm import LLMParseError
 from app.schemas import (
@@ -1003,7 +1003,7 @@ async def question_assign(
         assignee_username=body.assignee_username,
         system_name=system_name,
         system_id=system_id,
-        question_label=body.question_key,
+        question_label=QUESTION_LABEL.get(body.question_key, body.question_key),
         assigned_by=current_user,
     )
 
