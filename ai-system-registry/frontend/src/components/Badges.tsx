@@ -16,7 +16,7 @@ const TIER_CLASSES: Record<TierKey, string> = {
   pending: "bg-[#eaecee] text-[#556b82]",
 };
 
-const LIFECYCLE_CLASSES: Record<string, string> = {
+const LIFECYCLE_CLASSES: Record<LifecycleKey, string> = {
   development:    "bg-[#eff6ff] text-[#1147E9]",
   testing:        "bg-[#fff3c4] text-[#7a5900]",
   prod_ready:     "bg-[#fde8d0] text-[#8b3a00]",

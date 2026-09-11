@@ -41,7 +41,7 @@ async def test_invalid_assessment_status_rejected():
             framework_id="FRM-EU-AI-ACT",
             title="Bad Status",
             type="compliance",
-            status="pending",   # was the old default; removed in terminology alignment
+            status="pending",   # not in the allowed set
             notes="",
         )
 
