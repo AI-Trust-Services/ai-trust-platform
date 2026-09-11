@@ -352,4 +352,5 @@ jobs:
     with:
       cluster: ${{ needs.images-published.outputs.cluster }}
       ocm_version: ${{ needs.images-published.outputs.tag }}
+      ref: ${{ github.ref }}
     secrets: inherit
