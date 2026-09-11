@@ -10,7 +10,8 @@ from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
-from ai_trust_persistence.models.evidence import Evidence, evidence_obligations
+from ai_trust_persistence.models.control import Control
+from ai_trust_persistence.models.evidence import Evidence, evidence_controls
 from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.obligation import Obligation
@@ -192,15 +193,16 @@ async def get_compliance_stats(
             )
         )).scalar_one()
 
-        # Obligations with no approved evidence linked — NOT EXISTS subquery
+        # Obligations with no approved evidence via linked controls — NOT EXISTS subquery
         missing_count = (await session.execute(
             select(func.count()).select_from(Obligation).where(
                 Obligation.status.not_in(["fulfilled", "not_applicable"]),
                 ~(
-                    select(evidence_obligations.c.obligation_id)
-                    .join(Evidence, Evidence.id == evidence_obligations.c.evidence_id)
+                    select(evidence_controls.c.evidence_id)
+                    .join(Control, Control.id == evidence_controls.c.control_id)
+                    .join(Evidence, Evidence.id == evidence_controls.c.evidence_id)
                     .where(
-                        evidence_obligations.c.obligation_id == Obligation.id,
+                        Control.obligation_id == Obligation.id,
                         Evidence.status == "approved",
                     )
                     .correlate(Obligation)
