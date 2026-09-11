@@ -256,6 +256,7 @@ jobs:
       deploy: ${{ needs.prepare.outputs.deploy }}
       cluster: ${{ needs.prepare.outputs.cluster }}
       tag: ${{ needs.prepare.outputs.tag }}
+      ref: ${{ needs.prepare.outputs.ref }}
     runs-on: ubuntu-latest
     steps:
       - name: Check result
@@ -352,4 +353,5 @@ jobs:
     with:
       cluster: ${{ needs.images-published.outputs.cluster }}
       ocm_version: ${{ needs.images-published.outputs.tag }}
+      ref: ${{ needs.images-published.outputs.ref }}
     secrets: inherit
