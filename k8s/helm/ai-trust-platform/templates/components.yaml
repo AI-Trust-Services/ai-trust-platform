@@ -82,7 +82,12 @@ spec:
   selector:
     {{- include "ai-trust.labels" (dict "name" $backend) | nindent 4 }}
   ports:
-    - port: {{ $c.backendPort }}
+    {{- /* name is required when a Service has multiple ports (K8s validation).
+         Using it consistently makes server-side apply use the name as the merge
+         key instead of the port number, so port changes upgrade in-place rather
+         than producing a duplicate-port validation error on existing clusters. */}}
+    - name: http
+      port: {{ $c.backendPort }}
       targetPort: {{ $c.backendPort }}
 ---
 apiVersion: apps/v1
@@ -121,6 +126,7 @@ spec:
   selector:
     {{- include "ai-trust.labels" (dict "name" $frontend) | nindent 4 }}
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 80
 {{- end }}
