@@ -27,13 +27,6 @@ import httpx
 os.environ.setdefault("OPENFGA_URL", "http://localhost:8080")
 os.environ.setdefault("OPENFGA_STORE_ID", "test-store-id")
 
-# email_sender reads these fail-fast at import time. Notifications themselves are
-# stubbed out in e2e_setup, so the values only need to be present, not valid.
-os.environ.setdefault("SMTP_HOST", "localhost")
-os.environ.setdefault("SMTP_PORT", "25")
-os.environ.setdefault("SMTP_FROM", "noreply@example.com")
-os.environ.setdefault("SMTP_SSL", "false")
-os.environ.setdefault("SMTP_STARTTLS", "false")
 os.environ.setdefault("USERS_BACKEND_URL", "http://users-backend:8008")
 
 _PG_USER = os.environ.get("POSTGRES_USER", "postgres")

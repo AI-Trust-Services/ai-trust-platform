@@ -212,3 +212,12 @@ components:
     dependsOnJobs: [clickhouse-migrate, openfga-provision]
     dependsOnServices: []
     openfgaConfig: true
+
+  - name: admin
+    backendPort: 8010
+    rootPath: /api/admin
+    extraEnv:
+      OPENFGA_URL: http://openfga:8080
+    dependsOnJobs: [db-migrate, openfga-provision]
+    dependsOnServices: []
+    openfgaConfig: true

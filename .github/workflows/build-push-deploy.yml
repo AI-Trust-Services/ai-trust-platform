@@ -139,6 +139,9 @@ jobs:
           - name: audit-flush-worker
             context: .
             dockerfile: audit-flush-worker/Dockerfile
+          - name: admin-backend
+            context: .
+            dockerfile: admin/backend/Dockerfile
           - name: otel-clickhouse-consumer
             context: .
             dockerfile: consumers/clickhouse-consumer/Dockerfile
@@ -217,6 +220,12 @@ jobs:
             dockerfile: ./audit/frontend/Dockerfile
             build_args: |
               VITE_AUDIT_API_BASE=${{ vars.VITE_AUDIT_API_BASE || '/api/audit/v1' }}
+              VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
+          - name: admin-frontend
+            context: ./admin/frontend
+            dockerfile: ./admin/frontend/Dockerfile
+            build_args: |
+              VITE_ADMIN_API_BASE=${{ vars.VITE_ADMIN_API_BASE || '/api/admin/v1' }}
               VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
     steps:
       - name: Check out repository
