@@ -102,7 +102,7 @@ export const api = {
   getControl: (id: string): Promise<ControlDetail> =>
     request<ControlDetail>(API_BASE, `/controls/${id}`),
   createControl: (data: {
-    ai_system_id: string | null; title: string; description: string;
+    obligation_id: string; title: string; description: string;
     category: string; owner: string; due_date: string | null;
   }): Promise<Control> =>
     request<Control>(API_BASE, "/controls", json("POST", data)),
@@ -110,10 +110,6 @@ export const api = {
     request<Control>(API_BASE, `/controls/${id}`, json("PUT", data)),
   deleteControl: (id: string): Promise<null> =>
     request<null>(API_BASE, `/controls/${id}`, { method: "DELETE" }),
-  linkObligation: (controlId: string, obligationId: string): Promise<ControlDetail> =>
-    request<ControlDetail>(API_BASE, `/controls/${controlId}/link/${obligationId}`, { method: "POST" }),
-  unlinkObligation: (controlId: string, obligationId: string): Promise<ControlDetail> =>
-    request<ControlDetail>(API_BASE, `/controls/${controlId}/link/${obligationId}`, { method: "DELETE" }),
 
   // Evidence
   getEvidence: (params: QueryParams = {}): Promise<Evidence[]> =>
@@ -136,6 +132,10 @@ export const api = {
     request<EvidenceVersion[]>(API_BASE, `/evidence/${id}/versions`),
   uploadEvidenceVersion: (id: string, formData: FormData): Promise<EvidenceDetail> =>
     request<EvidenceDetail>(API_BASE, `/evidence/${id}/upload-version`, { method: "POST", body: formData }),
+  linkControl: (evidenceId: string, controlId: string): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${evidenceId}/controls/${controlId}`, { method: "POST" }),
+  unlinkControl: (evidenceId: string, controlId: string): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${evidenceId}/controls/${controlId}`, { method: "DELETE" }),
 
   // Current user's effective permissions — served by the registry backend.
   myPermissions: (): Promise<PermissionsResponse> =>

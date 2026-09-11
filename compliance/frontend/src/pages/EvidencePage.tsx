@@ -7,9 +7,9 @@ import KpiCard from "../components/KpiCard";
 import DetailPanel, { DetailField, DetailSection } from "../components/DetailPanel";
 import UploadEvidenceModal from "../components/UploadEvidenceModal";
 import UploadVersionModal from "../components/UploadVersionModal";
-import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, OBLIGATION_STATUS_META, fmtDate, humanize } from "../utils";
+import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, fmtDate, humanize } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
-import type { AISystem, Control, Evidence, EvidenceDetail, EvidenceVersion, Obligation } from "../types";
+import type { Evidence, EvidenceDetail, EvidenceVersion } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -26,17 +26,13 @@ const ALL = "__all__";
 
 export default function EvidencePage() {
   const [evidence, setEvidence] = useState<Evidence[]>([]);
-  const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
-  const [systemFilter, setSystemFilter] = useState("");
   const [uploaderFilter, setUploaderFilter] = useState("");
   const [expiryFilter, setExpiryFilter] = useState<"all" | "expiring" | "expired">("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<EvidenceDetail | null>(null);
-  const [detailControls, setDetailControls] = useState<Control[]>([]);
-  const [detailObligations, setDetailObligations] = useState<Obligation[]>([]);
   const [versions, setVersions] = useState<EvidenceVersion[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [versionOpen, setVersionOpen] = useState(false);
@@ -49,9 +45,8 @@ export default function EvidencePage() {
 
   const load = useCallback(async () => {
     try {
-      const [ev, sys] = await Promise.all([api.getEvidence(), api.getSystems()]);
+      const ev = await api.getEvidence();
       setEvidence(ev);
-      setSystemsById(Object.fromEntries(sys.map((s) => [s.id, s])));
     } catch (e) {
       showToast(`Failed to load: ${(e as Error).message}`, true);
     }
@@ -62,22 +57,18 @@ export default function EvidencePage() {
   async function openDetail(e: Evidence) {
     setSelected(e.id);
     try {
-      const det = await api.getEvidenceItem(e.id);
-      setDetail(det);
-      const [controls, obligations, vers] = await Promise.all([
-        api.getControls({ evidence_id: e.id }),
-        api.getObligations({ evidence_id: e.id }),
+      const [det, vers] = await Promise.all([
+        api.getEvidenceItem(e.id),
         api.getEvidenceVersions(e.id),
       ]);
-      setDetailControls(controls);
-      setDetailObligations(obligations);
+      setDetail(det);
       setVersions(vers);
     } catch (err) {
       showToast(`Failed to load detail: ${(err as Error).message}`, true);
     }
   }
 
-  function closePanel() { setSelected(null); setDetail(null); setDetailControls([]); setDetailObligations([]); setVersions([]); }
+  function closePanel() { setSelected(null); setDetail(null); setVersions([]); }
 
   async function act(fn: (id: string) => Promise<Evidence>, id: string, msg: string) {
     try {
@@ -111,7 +102,6 @@ export default function EvidencePage() {
       if (s && !e.title.toLowerCase().includes(s) && !(e.file_name ?? "").toLowerCase().includes(s) && !(e.uploaded_by ?? "").toLowerCase().includes(s)) return false;
       if (statusFilter && e.status !== statusFilter) return false;
       if (typeFilter && e.evidence_type !== typeFilter) return false;
-      if (systemFilter && e.ai_system_id !== systemFilter) return false;
       if (uploaderFilter && e.uploaded_by !== uploaderFilter) return false;
       if (expiryFilter === "expired") {
         if (e.status !== "expired") return false;
@@ -123,15 +113,14 @@ export default function EvidencePage() {
       }
       return true;
     });
-  }, [evidence, search, statusFilter, typeFilter, systemFilter, uploaderFilter, expiryFilter]);
+  }, [evidence, search, statusFilter, typeFilter, uploaderFilter, expiryFilter]);
 
   const uploaders = useMemo(() => [...new Set(evidence.map((e) => e.uploaded_by).filter(Boolean))].sort(), [evidence]);
-  const systems = useMemo(() => Object.values(systemsById), [systemsById]);
 
   const kpis = useMemo(() => ({
     total: evidence.length,
     approved: evidence.filter((e) => e.status === "approved").length,
-    pending: evidence.filter((e) => e.status === "awaiting_review" || e.status === "under_review").length,
+    pending: evidence.filter((e) => e.status === "pending" || e.status === "under_review").length,
     expired: evidence.filter((e) => e.status === "expired" || e.status === "rejected").length,
   }), [evidence]);
 
@@ -178,13 +167,6 @@ export default function EvidencePage() {
             {EVIDENCE_TYPES.map((t) => <SelectItem key={t} value={t}>{humanize(t)}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={systemFilter || ALL} onValueChange={(v) => setSystemFilter(v === ALL ? "" : v)}>
-          <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All Systems</SelectItem>
-            {systems.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
         <Select value={uploaderFilter || ALL} onValueChange={(v) => setUploaderFilter(v === ALL ? "" : v)}>
           <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -209,7 +191,7 @@ export default function EvidencePage() {
               <TableRow>
                 <TableHead>Evidence</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>AI System</TableHead>
+                <TableHead>Controls</TableHead>
                 <TableHead>Version</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>File</TableHead>
@@ -225,7 +207,7 @@ export default function EvidencePage() {
                 <TableRow key={e.id} data-state={selected === e.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(e)}>
                   <TableCell><div className="font-medium text-foreground">{e.title}</div><div className="text-xs text-muted-foreground">{e.id}</div></TableCell>
                   <TableCell className="text-[13px]">{humanize(e.evidence_type)}</TableCell>
-                  <TableCell>{e.ai_system_id ? (systemsById[e.ai_system_id]?.name ?? e.ai_system_id) : "—"}</TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{e.control_count}</TableCell>
                   <TableCell><Badge variant="secondary" className="rounded-full font-medium">v{e.version_label}</Badge></TableCell>
                   <TableCell><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></TableCell>
                   <TableCell>{e.file_name ? <Badge variant="secondary" className="max-w-[160px] truncate rounded-full font-medium">{e.file_name}</Badge> : "—"}</TableCell>
@@ -284,7 +266,6 @@ export default function EvidencePage() {
           <>
           <DetailSection title="General Information">
             <DetailField label="ID">{detail.id}</DetailField>
-            <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : "—"}</DetailField>
             <DetailField label="Type">{humanize(detail.evidence_type)}</DetailField>
             <DetailField label="Status"><StatusBadge meta={EVIDENCE_STATUS_META} value={detail.status} /></DetailField>
             <DetailField label="Uploaded By">{detail.uploaded_by || "—"}</DetailField>
@@ -304,27 +285,11 @@ export default function EvidencePage() {
               <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
             </DetailSection>
           )}
-          {(detailControls.length > 0 || detailObligations.length > 0 || detail.assessment_id) && (
-            <DetailSection title="Linked To">
-              {detailControls.length > 0 && (
-                <>
-                  <div className="pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">Requirements</div>
-                  <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
-                  ))}</ul>
-                </>
-              )}
-              {detailObligations.length > 0 && (
-                <>
-                  <div className="pb-0.5 pt-2 text-xs font-semibold text-muted-foreground">Obligations</div>
-                  <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
-                    <li key={o.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
-                  ))}</ul>
-                </>
-              )}
-              {detail.assessment_id && (
-                <DetailField label="Assessment">{detail.assessment_id}</DetailField>
-              )}
+          {(detail.controls.length > 0) && (
+            <DetailSection title={`Linked Requirements (${detail.controls.length})`}>
+              <ul className="flex flex-col gap-1.5">{detail.controls.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
+              ))}</ul>
             </DetailSection>
           )}
           <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
