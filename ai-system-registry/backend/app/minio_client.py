@@ -72,7 +72,9 @@ async def ensure_bucket() -> None:
 def object_key(system_id: str, filename: str) -> str:
     """Deterministic, path-traversal-safe object key: ``{system_id}/{filename}``."""
     base = os.path.basename(filename.replace("\\", "/"))
-    safe_name = re.sub(r"[^\w.\-]", "_", base).strip(".") or "file"
+    # Cap the sanitized name: S3/MinIO enforce a 1024-byte key limit, and an arbitrarily
+    # long name passes the [\w.\-] filter untouched (would 500 on put_object).
+    safe_name = re.sub(r"[^\w.\-]", "_", base).strip(".")[:200] or "file"
     return f"{system_id}/{safe_name}"
 
 
