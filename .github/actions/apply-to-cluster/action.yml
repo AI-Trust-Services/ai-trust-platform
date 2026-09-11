@@ -203,9 +203,9 @@ runs:
         TIMEOUT=1800   # 30 minutes
         INTERVAL=60
         ELAPSED=0
-        echo "Waiting for HelmRelease ai-trust in namespace ai-trust to reach version ${EXPECTED_VERSION}..."
+        echo "Waiting for HelmRelease ai-trust in namespace ocm-system to reach version ${EXPECTED_VERSION}..."
         while true; do
-          HR=$(kubectl get helmrelease ai-trust -n ai-trust -o json 2>/dev/null || true)
+          HR=$(kubectl get helmrelease ai-trust -n ocm-system -o json 2>/dev/null || true)
           if [[ -z "$HR" ]]; then
             echo "[${ELAPSED}s] HelmRelease not yet created — waiting..."
           else
@@ -237,7 +237,7 @@ runs:
           if (( ELAPSED >= TIMEOUT )); then
             echo "error: timed out after ${TIMEOUT}s waiting for HelmRelease to reach version ${EXPECTED_VERSION}" >&2
             echo "Last known HelmRelease status:" >&2
-            kubectl get helmrelease ai-trust -n ai-trust -o yaml >&2 || true
+            kubectl get helmrelease ai-trust -n ocm-system -o yaml >&2 || true
             exit 1
           fi
           sleep "$INTERVAL"

@@ -138,11 +138,15 @@ On the cluster (OCM controller + Flux):
   from a feature branch).
 
 - **`bootstrap-gardener.yml`** — called by `build-push-deploy.yml` after successful publish, or manually.
-  Authenticates via Gardener Structured Auth + GitHub OIDC (no stored kubeconfig). Runs
+  Contains two jobs — `bootstrap-main` (runs under the `main` GitHub environment, so deploys appear
+  in the GitHub Deployments sidebar) and `bootstrap-other` (all other clusters/branches, no
+  environment). Both jobs delegate to the **`.github/actions/apply-to-cluster`** composite action,
+  which: authenticates via Gardener Structured Auth + GitHub OIDC (no stored kubeconfig); runs
   `k8s/scripts/bootstrap.sh` (namespace, `ai-trust-env` secret, `ai-trust-flux-values` secret in
-  `ocm-system`, ConfigMaps, RBAC), then applies `k8s/ocm/` with the exact built version
-  substituted into `ComponentVersion.spec.version.semver` (an exact-match pin, not a range),
-  so the cluster reconciles only that version and never auto-upgrades to an unrelated build.
+  `ocm-system`, ConfigMaps, RBAC); applies `k8s/ocm/` with the exact built version substituted into
+  `ComponentVersion.spec.version.semver` (an exact-match pin, not a range); then **polls the
+  HelmRelease** every 60 s until it reaches `Ready=True` at the expected version — failing fast on
+  `InstallFailed`/`UpgradeFailed` and timing out after 30 minutes.
 
 **Two secrets, two namespaces:** bootstrap.sh creates two distinct secrets per cluster:
 - `ai-trust-env` in `ai-trust` — the full credential set from `.env` (plus computed connection
