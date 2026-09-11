@@ -240,6 +240,24 @@ AI system registration and EU AI Act classification.
 - **LLM layer** (`app/llm/`) — dispatch via `LLM_PROVIDER`: `stub` (default; deterministic, offline, dev/CI), `ollama` (OpenAI-compatible), `external` (OAuth2 + Anthropic-format `/invoke`, fails fast on missing creds). Malformed JSON → one auto-repair retry → `LLMParseError` → route returns 502, UI falls back to the manual form.
 - All four assist routes gated `require_permission(SYSTEMS_WRITE)`.
 
+**Registration modes** — `ai_systems.registration_mode` (`String(30)`, default `ai`) selects one of three intake paths:
+- `ai` — conversational AI-assisted flow (above); LLM infers flags, `classifier.py` decides the tier.
+- `manual_questionnaire` — structured owner + engineer questionnaire (below); flags come from boolean/number answer columns.
+- `full_manual` — the compliance officer enters the tier directly (validated against `VALID_TIERS` in the router) and attaches supporting documents. No questionnaire sections.
+
+An owner who registers with only name + description creates a **`pending`-tier** stub (`ck_ai_systems_tier` includes `pending` since migration `0017`); risk classification is completed later in Assessments. Registration also captures `deployment_country` (ISO 3166-1 alpha-2) + two EU-presence booleans (`eu_output_usage`, `eu_market_placement`, migration `0018`) — all nullable; the frontend uses them to recommend the EU AI Act framework. Terminology-aligned lifecycle values (migration `0014_terminology_alignment`): `conformity`→`prod_ready`, `post-market`→`service`, plus new `updated`.
+
+**Questionnaire workflow** (`routers/workflow.py`, all under `/v1/systems/{id}/workflow/…`) — a 3-role governance chain: **owner** (business section) → **AI engineer** (technical section) → **compliance officer** (approves). `ai_systems.workflow_status` ∈ `draft, business_pending, technical_pending, pending_review, info_requested, approved, rejected` (CHECK `ck_ai_systems_workflow_status`, migration `0015`). Answers live in `questionnaire_answers` (JSONB; business at top level, technical under `"technical"`); `business_assignee_username` / `technical_assignee_username` name the section owners.
+- Assignment / submission: `POST /assign`, `/submit-business`, `/submit-technical`, `/submit`, `/approve`, `/reject`, `/request-info` (CO sends back for detail → `info_requested`), `/submit-info`, `/reset`; `GET /workflow` (step history), `/rce-summary`.
+- **Section delegation** (`sub_assigned_*` steps): `POST /sub-assign`, `/sub-complete`, `/sub-reclaim` — a section owner hands their whole section to a delegate and can reclaim it.
+- **Per-question assignment** (`question_assignments` table, migration `0016`): `GET /question-assignments`, `POST`/`DELETE /question-assign`, `POST /question-answer` — assign individual questions to contributors. Assignment emails use `QUESTION_LABEL` (in `questionnaire_required.py`) for human-readable labels, falling back to the raw key.
+- **Approval gate** — `questionnaire_required.py::missing_for_approval(row)` lists still-unanswered required business + technical questions; the CO cannot approve until empty. `full_manual` systems have no sections → always empty. Assignees may submit partial sections; only approval is gated.
+- `obligation_lookup.py` — pure, hardcoded EU AI Act obligation titles/refs per (tier, `org_role`) for the RCE summary panel (`roles`: `provider` | `deployer` | `both`; pass `org_role="both"` for the full union). Framework-aware full templates still live in `compliance/backend`.
+
+**Other registry routes** (`routers/systems.py`):
+- `PATCH /systems/{id}/questionnaire` — merge-patch questionnaire answers (`section` = `business` | `technical`).
+- `POST /systems/{id}/documents` — multipart upload of a `full_manual` supporting doc to MinIO (extension allowlist + `MAX_DOC_SIZE` 20 MB; filename sanitized/capped in `minio_client.object_key`). Metadata appended to `registration_documents` (JSONB). `GET /systems/{id}/documents/{index}/download-url` returns a presigned URL.
+
 ### overview/ (port 8004, `/api/overview/`)
 Compliance-posture MFE, reads Postgres only, static HTML frontend.
 - `GET /api/overview/v1/stats?lifecycle=` — KPI counts, tier distribution, compliance data, recent registrations. Dashboard layout persists to `localStorage` (`ai_trust_overview_dashboard_v1`).
