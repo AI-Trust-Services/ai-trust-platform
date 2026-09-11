@@ -7,6 +7,7 @@ import KpiCard from "../components/KpiCard";
 import DetailPanel, { DetailField, DetailSection } from "../components/DetailPanel";
 import UploadEvidenceModal from "../components/UploadEvidenceModal";
 import UploadVersionModal from "../components/UploadVersionModal";
+import ControlPicker from "../components/ControlPicker";
 import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, fmtDate, humanize } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import type { Evidence, EvidenceDetail, EvidenceVersion } from "../types";
@@ -285,13 +286,43 @@ export default function EvidencePage() {
               <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
             </DetailSection>
           )}
-          {(detail.controls.length > 0) && (
-            <DetailSection title={`Linked Requirements (${detail.controls.length})`}>
-              <ul className="flex flex-col gap-1.5">{detail.controls.map((c) => (
-                <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
-              ))}</ul>
+          <DetailSection title={`Linked Requirements (${detail.controls.length})`}>
+              {detail.controls.length > 0 && (
+                <ul className="mb-3 flex flex-col gap-1.5">{detail.controls.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[13px] text-foreground">{c.title}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <StatusBadge meta={CONTROL_STATUS_META} value={c.status} />
+                      {mayWrite && (
+                        <Button variant="ghost" size="sm" className="h-6 px-1.5 text-xs text-destructive hover:text-destructive"
+                          onClick={async () => {
+                            try {
+                              const updated = await api.unlinkControl(detail.id, c.id);
+                              setDetail(updated);
+                            } catch (e) { showToast((e as Error).message, true); }
+                          }}>✕</Button>
+                      )}
+                    </div>
+                  </li>
+                ))}</ul>
+              )}
+              {mayWrite && (
+                <ControlPicker
+                  value={detail.controls.map((c) => c.id)}
+                  onChange={async (newIds) => {
+                    const current = detail.controls.map((c) => c.id);
+                    const toAdd = newIds.filter((id) => !current.includes(id));
+                    const toRemove = current.filter((id) => !newIds.includes(id));
+                    try {
+                      let updated = detail;
+                      for (const id of toAdd) updated = await api.linkControl(detail.id, id);
+                      for (const id of toRemove) updated = await api.unlinkControl(detail.id, id);
+                      setDetail(updated);
+                    } catch (e) { showToast((e as Error).message, true); }
+                  }}
+                />
+              )}
             </DetailSection>
-          )}
           <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
             {detail.file_name && (
               <Button variant="outline" size="sm" onClick={() => copyDownloadUrl(detail.id)}><Download /> Download URL</Button>
