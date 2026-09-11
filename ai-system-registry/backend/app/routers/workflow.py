@@ -216,13 +216,13 @@ async def assign_sections(
         background_tasks.add_task(
             email_sender.notify,
             to_username=body.business_assignee_username,
-            subject=f"[AI Trust] Action required: fill Use Case & Context for '{system_name}'",
+            subject=f"[{{platform_name}}] Action required: fill Use Case & Context for '{system_name}'",
             body=(
                 f"Hi,\n\n"
                 f"You have been assigned to complete the 'Use Case & Context' section for the AI system "
                 f"'{system_name}' ({system_id}).\n\n"
                 f"Please log in and open the system to fill in the required information.\n\n"
-                f"AI Trust Platform: {email_sender.REGISTRY_URL}"
+                f"{{platform_name}}: {{registry_url}}"
             ),
         )
 
@@ -272,13 +272,13 @@ async def submit_business_section(
         background_tasks.add_task(
             email_sender.notify,
             to_username=technical_assignee,
-            subject=f"[AI Trust] Action required: fill AI Risk Classification for '{system_name}'",
+            subject=f"[{{platform_name}}] Action required: fill AI Risk Classification for '{system_name}'",
             body=(
                 f"Hi,\n\n"
                 f"You have been assigned to complete the 'AI Risk Classification' section for the AI system "
                 f"'{system_name}' ({system_id}).\n\n"
                 f"Please log in and open the system to fill in the required information.\n\n"
-                f"AI Trust Platform: {email_sender.REGISTRY_URL}"
+                f"{{platform_name}}: {{registry_url}}"
             ),
         )
 
@@ -340,13 +340,13 @@ async def submit_technical_section(
         background_tasks.add_task(
             email_sender.notify,
             to_username=co_username,
-            subject=f"[AI Trust] System '{system_name}' ready for compliance review",
+            subject=f"[{{platform_name}}] System '{system_name}' ready for compliance review",
             body=(
                 f"Hi,\n\n"
                 f"The AI system '{system_name}' ({system_id}) has completed both questionnaire sections "
                 f"and is now ready for your compliance review.\n\n"
                 f"Classified tier: {classification.tier}\n\n"
-                f"AI Trust Platform: {email_sender.REGISTRY_URL}"
+                f"{{platform_name}}: {{registry_url}}"
             ),
         )
 
@@ -394,12 +394,12 @@ async def submit_for_review(
     background_tasks.add_task(
         email_sender.notify,
         to_username=body.assignee_username,
-        subject=f"[AI Trust] System '{system_name}' ready for your review",
+        subject=f"[{{platform_name}}] System '{system_name}' ready for your review",
         body=(
             f"Hi,\n\n"
             f"The AI system '{system_name}' ({system_id}) has been submitted for compliance review "
             f"and is waiting for your approval.\n\n"
-            f"AI Trust Platform: {email_sender.REGISTRY_URL}"
+            f"{{platform_name}}: {{registry_url}}"
         ),
     )
 
@@ -483,12 +483,12 @@ async def approve_system(
         background_tasks.add_task(
             email_sender.notify,
             to_username=owner_username,
-            subject=f"[AI Trust] System '{system_name}' has been approved",
+            subject=f"[{{platform_name}}] System '{system_name}' has been approved",
             body=(
                 f"Hi,\n\n"
                 f"The AI system '{system_name}' ({system_id}) you registered has been approved "
                 f"by the compliance team.\n\n"
-                f"AI Trust Platform: {email_sender.REGISTRY_URL}"
+                f"{{platform_name}}: {{registry_url}}"
             ),
         )
 
@@ -554,14 +554,14 @@ async def reject_system(
         background_tasks.add_task(
             email_sender.notify,
             to_username=target_assignee,
-            subject=f"[AI Trust] System '{system_name}' returned — revision needed",
+            subject=f"[{{platform_name}}] System '{system_name}' returned — revision needed",
             body=(
                 f"Hi,\n\n"
                 f"The AI system '{system_name}' ({system_id}) has been returned for revision "
                 f"of the '{section_label}' section.\n\n"
                 f"Rejection note: {body.note}\n\n"
                 f"Please review the feedback, update the section, and resubmit.\n\n"
-                f"AI Trust Platform: {email_sender.REGISTRY_URL}"
+                f"{{platform_name}}: {{registry_url}}"
             ),
         )
 
@@ -612,14 +612,14 @@ async def request_info(
     background_tasks.add_task(
         email_sender.notify,
         to_username=body.contributor_username,
-        subject=f"[AI Trust] More information needed for '{system_name}'",
+        subject=f"[{{platform_name}}] More information needed for '{system_name}'",
         body=(
             f"Hi,\n\n"
             f"The compliance officer has requested additional information for the AI system "
             f"'{system_name}' ({system_id}) before it can be approved.\n\n"
             f"Request note: {body.note}\n\n"
             f"Please log in, add the requested information, and resubmit.\n\n"
-            f"AI Trust Platform: {email_sender.REGISTRY_URL}"
+            f"{{platform_name}}: {{registry_url}}"
         ),
     )
 
@@ -685,12 +685,12 @@ async def submit_info(
         background_tasks.add_task(
             email_sender.notify,
             to_username=co_username,
-            subject=f"[AI Trust] System '{system_name}' updated and ready for re-review",
+            subject=f"[{{platform_name}}] System '{system_name}' updated and ready for re-review",
             body=(
                 f"Hi,\n\n"
                 f"The requested information for the AI system '{system_name}' ({system_id}) "
                 f"has been provided. It is ready for your review again.\n\n"
-                f"AI Trust Platform: {email_sender.REGISTRY_URL}"
+                f"{{platform_name}}: {{registry_url}}"
             ),
         )
 
@@ -740,13 +740,13 @@ async def sub_assign_section(
     background_tasks.add_task(
         email_sender.notify,
         to_username=body.sub_assignee_username,
-        subject=f"[AI Trust] Help requested: '{_SECTION_LABEL[body.section]}' for '{system_name}'",
+        subject=f"[{{platform_name}}] Help requested: '{_SECTION_LABEL[body.section]}' for '{system_name}'",
         body=(
             f"Hi,\n\n"
             f"You have been asked to help complete the '{_SECTION_LABEL[body.section]}' section for the "
             f"AI system '{system_name}' ({system_id}).\n\n"
             f"Please log in and open the system to fill in the requested information.\n\n"
-            f"AI Trust Platform: {email_sender.REGISTRY_URL}"
+            f"{{platform_name}}: {{registry_url}}"
         ),
     )
 
@@ -801,13 +801,13 @@ async def sub_complete_section(
         background_tasks.add_task(
             email_sender.notify,
             to_username=owner,
-            subject=f"[AI Trust] '{_SECTION_LABEL[body.section]}' input ready for '{system_name}'",
+            subject=f"[{{platform_name}}] '{_SECTION_LABEL[body.section]}' input ready for '{system_name}'",
             body=(
                 f"Hi,\n\n"
                 f"{current_user} has completed the help you requested on the "
                 f"'{_SECTION_LABEL[body.section]}' section for the AI system '{system_name}' ({system_id}).\n\n"
                 f"You can now review and submit the section.\n\n"
-                f"AI Trust Platform: {email_sender.REGISTRY_URL}"
+                f"{{platform_name}}: {{registry_url}}"
             ),
         )
 
@@ -863,13 +863,13 @@ async def sub_reclaim_section(
         background_tasks.add_task(
             email_sender.notify,
             to_username=active,
-            subject=f"[AI Trust] Sub-assignment cancelled for '{system_name}'",
+            subject=f"[{{platform_name}}] Sub-assignment cancelled for '{system_name}'",
             body=(
                 f"Hi,\n\n"
                 f"The section owner has cancelled the help request on the "
                 f"'{_SECTION_LABEL[body.section]}' section for the AI system '{system_name}' ({system_id}). "
                 f"No further action is needed from you.\n\n"
-                f"AI Trust Platform: {email_sender.REGISTRY_URL}"
+                f"{{platform_name}}: {{registry_url}}"
             ),
         )
 
