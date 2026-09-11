@@ -130,7 +130,7 @@ def _truncate() -> None:
     # frameworks is excluded — seeded by migration, never modified by tests.
     cur.execute(
         "TRUNCATE ai_systems, assessments, obligations, controls, evidence, "
-        "control_obligations, evidence_controls, evidence_obligations, "
+        "evidence_controls, "
         "service_model_baselines RESTART IDENTITY CASCADE"
     )
     cur.close()
@@ -254,22 +254,55 @@ async def create_obligation(client: httpx.AsyncClient, assessment_id: str, **kwa
     return r.json()
 
 
-async def create_control(client: httpx.AsyncClient, system_id: str | None = None, **kwargs) -> dict:
+async def create_control(
+    client: httpx.AsyncClient,
+    system_id: str | None = None,
+    obligation_id: str | None = None,
+    **kwargs,
+) -> dict:
+    """Create a control. obligation_id is required by the backend.
+
+    When obligation_id is omitted the helper auto-creates a system (if system_id
+    is also omitted), an assessment, and an obligation so callers that only care
+    about having *a* control don't need to do the setup themselves.
+    """
+    if obligation_id is None:
+        if system_id is None:
+            sys = await create_system()
+            system_id = sys["id"]
+        ass = await create_assessment(client, system_id)
+        obl = await create_obligation(client, ass["id"])
+        obligation_id = obl["id"]
     payload = {
+        "obligation_id": obligation_id,
         "title": "Test Control",
         "category": "general",
         **kwargs,
     }
-    if system_id:
-        payload["ai_system_id"] = system_id
     r = await client.post("/v1/controls", json=payload)
     assert r.status_code == 201, r.text
     return r.json()
 
 
-async def create_evidence(client: httpx.AsyncClient, **kwargs) -> dict:
-    """Creates evidence without a file. At least one link target required."""
-    data = {"title": "Test Evidence", "evidence_type": "document", **kwargs}
-    r = await client.post("/v1/evidence", data=data)
+async def create_evidence(
+    client: httpx.AsyncClient,
+    control_ids: list[str] | None = None,
+    **kwargs,
+) -> dict:
+    """Creates evidence without a file. Auto-creates a control when none given."""
+    if control_ids is None:
+        ctl = await create_control(client)
+        control_ids = [ctl["id"]]
+    # httpx accepts a list of tuples for repeated form fields
+    form: list[tuple[str, str]] = [
+        ("title", kwargs.pop("title", "Test Evidence")),
+        ("evidence_type", kwargs.pop("evidence_type", "document")),
+    ]
+    for k, v in kwargs.items():
+        if v is not None:
+            form.append((k, str(v)))
+    for cid in control_ids:
+        form.append(("control_ids", cid))
+    r = await client.post("/v1/evidence", data=form)
     assert r.status_code == 201, r.text
     return r.json()
