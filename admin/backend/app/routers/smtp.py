@@ -55,7 +55,7 @@ async def update_smtp(
         row.smtp_host = body.smtp_host or None
         row.smtp_port = body.smtp_port
         row.smtp_user = body.smtp_user or None
-        if body.smtp_password is not None:
+        if body.smtp_password:
             row.smtp_password = body.smtp_password
         row.smtp_from = body.smtp_from or None
         row.smtp_from_name = body.smtp_from_name or None

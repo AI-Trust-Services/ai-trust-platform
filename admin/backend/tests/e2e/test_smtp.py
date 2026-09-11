@@ -101,6 +101,27 @@ async def test_put_smtp_preserves_password_when_not_provided(client: httpx.Async
     assert row.smtp_password == original_password
 
 
+async def test_put_smtp_preserves_password_when_empty_string_provided(client: httpx.AsyncClient):
+    row = _default_settings()
+    original_password = row.smtp_password
+    session = _make_session(row)
+
+    with patch("app.routers.smtp.SessionLocal", return_value=session):
+        r = await client.put("/v1/smtp", json={
+            "smtp_host": "smtp.example.com",
+            "smtp_port": 587,
+            "smtp_user": None,
+            "smtp_password": "",
+            "smtp_from": "noreply@example.com",
+            "smtp_from_name": None,
+            "smtp_ssl": False,
+            "smtp_starttls": True,
+        })
+
+    assert r.status_code == 200
+    assert row.smtp_password == original_password
+
+
 async def test_put_smtp_503_when_no_settings_row(client: httpx.AsyncClient):
     session = _make_session(row=None)
     session.scalar = AsyncMock(return_value=None)
