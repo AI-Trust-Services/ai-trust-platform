@@ -199,13 +199,12 @@ runs:
       env:
         EXPECTED_VERSION: ${{ inputs.ocm_version }}
       run: |
-        set -euo pipefail
         TIMEOUT=900    # 15 minutes
         INTERVAL=60
         ELAPSED=0
         echo "Waiting for HelmRelease ai-trust-platform in namespace ocm-system to reach version ${EXPECTED_VERSION}..."
         while true; do
-          HR=$(kubectl get helmrelease ai-trust-platform -n ocm-system -o json 2>/dev/null || true)
+          HR=$(kubectl get helmrelease ai-trust-platform -n ocm-system -o json 2>/dev/null) || HR=""
           if [[ -z "$HR" ]]; then
             echo "[${ELAPSED}s] HelmRelease not yet created — waiting..."
           else
