@@ -17,7 +17,7 @@ VALID_EFFECTIVENESS = frozenset({"high", "medium", "low"})
 
 
 class ControlCreate(BaseModel):
-    ai_system_id: str | None = Field(default=None, max_length=20)
+    obligation_id: str = Field(..., max_length=30)
     title: str = Field(..., min_length=1, max_length=200)
     description: str = Field(default="")
     category: str = Field(default="general")
@@ -40,6 +40,7 @@ class ControlCreate(BaseModel):
 
 
 class ControlUpdate(BaseModel):
+    obligation_id: str | None = Field(default=None, max_length=30)
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     category: str | None = None
@@ -72,7 +73,10 @@ class ControlUpdate(BaseModel):
 
 class ControlResponse(BaseModel):
     id: str
+    obligation_id: str
+    assessment_id: str
     ai_system_id: str | None
+    assessment_title: str | None  # not a column — set manually after model_validate
     control_ref: str | None
     title: str
     description: str
@@ -88,7 +92,6 @@ class ControlResponse(BaseModel):
 
 
 class ControlDetailResponse(ControlResponse):
-    obligation_ids: list[str] = []
     evidence_count: int = 0
 
 
