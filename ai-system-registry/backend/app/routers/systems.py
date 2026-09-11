@@ -42,6 +42,11 @@ _ALLOWED_DOC_EXTENSIONS = frozenset({
     ".xls", ".xlsx", ".csv", ".png", ".jpg", ".jpeg",
 })
 
+# Cap on registration-document uploads. Checked against Content-Length (early reject)
+# and the actual read length (guards a missing/spoofed header) so a large upload can't
+# OOM the process via file.read() loading it all into memory.
+MAX_DOC_SIZE = 20 * 1024 * 1024  # 20 MB
+
 # The pending status each questionnaire section may be edited in, plus the assignee
 # column that owns it.
 _SECTION_STATUS = {"business": "business_pending", "technical": "technical_pending"}
@@ -325,7 +330,13 @@ async def upload_registration_document(
     if ext not in _ALLOWED_DOC_EXTENSIONS:
         raise HTTPException(422, f"Unsupported file type '{ext}'. Allowed: {sorted(_ALLOWED_DOC_EXTENSIONS)}")
 
+    content_length = request.headers.get("content-length")
+    if content_length and content_length.isdigit() and int(content_length) > MAX_DOC_SIZE:
+        raise HTTPException(413, "File exceeds the maximum allowed size (20 MB)")
+
     data = await file.read()
+    if len(data) > MAX_DOC_SIZE:  # guard even if Content-Length was absent or spoofed
+        raise HTTPException(413, "File exceeds the maximum allowed size (20 MB)")
     if not data:
         raise HTTPException(422, "The uploaded file is empty")
 
