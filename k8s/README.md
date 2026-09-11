@@ -190,7 +190,7 @@ kubectl get componentversion ai-trust-platform -n ocm-system \
   -o jsonpath='{.status.reconciledVersion}{"\n"}'
 
 # HelmRelease status (shows chart version + success/failure message)
-kubectl get helmrelease ai-trust -n ocm-system -o wide
+kubectl get helmrelease ai-trust-platform -n ocm-system -o wide
 
 # Pod image tags (verify the correct SHA is running)
 kubectl get pods -n ai-trust \
