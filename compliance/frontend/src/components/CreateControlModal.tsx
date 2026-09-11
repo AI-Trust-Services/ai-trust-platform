@@ -63,7 +63,7 @@ export default function CreateControlModal({ open, onClose, onSuccess }: Props) 
     try {
       await api.createControl({ ...form, ai_system_id: form.ai_system_id || null, due_date: form.due_date || null });
       onClose();
-      showToast("Control created");
+      showToast("Requirement created");
       onSuccess();
     } catch (e) {
       showToast(`Failed: ${(e as Error).message}`, true);
@@ -76,7 +76,7 @@ export default function CreateControlModal({ open, onClose, onSuccess }: Props) 
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="gap-0 p-0 sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle>New Control</DialogTitle>
+          <DialogTitle>New Requirement</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4 p-6">
           <div className="flex flex-col gap-1.5">

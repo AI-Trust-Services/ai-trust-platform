@@ -476,18 +476,18 @@ async def test_generated_controls_linked_to_obligations(client: httpx.AsyncClien
 
 
 async def test_generated_controls_flip_obligations_in_progress(client: httpx.AsyncClient):
-    # Cascade: linking >=1 non-effective control moves obligation applicable -> in_progress.
+    # Cascade: linking >=1 non-fulfilled control moves obligation applicable -> in_progress.
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
     assert all(o["status"] == "in_progress" for o in obs)
 
 
-async def test_generated_controls_start_not_started(client: httpx.AsyncClient):
+async def test_generated_controls_start_open(client: httpx.AsyncClient):
     system = await create_system(tier="minimal")
     await create_assessment(client, system["id"])
     controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    assert all(c["status"] == "not_started" for c in controls)
+    assert all(c["status"] == "open" for c in controls)
 
 
 async def test_prohibited_controls_scoped_to_prohibited_tier(client: httpx.AsyncClient):

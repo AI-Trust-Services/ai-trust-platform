@@ -223,7 +223,7 @@ async def _generate_controls_in_session(
                 title=t["title"],
                 description=t["description"],
                 category=t["category"],
-                status="not_started",
+                status="open",
                 effectiveness="medium",
                 owner=prior_owner_by_ref.get(control_ref, ""),
             )

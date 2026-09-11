@@ -46,7 +46,7 @@ class Evidence(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
     evidence_type: Mapped[str] = mapped_column(String(50), default="document")
-    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    status: Mapped[str] = mapped_column(String(30), default="awaiting_review", index=True)
     validity_from: Mapped[date | None] = mapped_column(Date, nullable=True)
     validity_until: Mapped[date | None] = mapped_column(Date, nullable=True)
 

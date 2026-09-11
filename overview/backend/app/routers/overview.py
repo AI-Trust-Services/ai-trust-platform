@@ -47,7 +47,7 @@ async def get_overview_stats() -> dict:
         high_risk_on_market = (await session.execute(
             select(func.count()).select_from(AISystem).where(
                 AISystem.tier == "high",
-                AISystem.lifecycle.in_(["market", "post-market"])
+                AISystem.lifecycle.in_(["market", "service"])
             )
         )).scalar_one()
 
@@ -111,11 +111,11 @@ async def get_overview_stats() -> dict:
                     AISystem.tier == "prohibited",
                     and_(
                         AISystem.tier == "high",
-                        AISystem.lifecycle.in_(["market", "post-market"]),
+                        AISystem.lifecycle.in_(["market", "service"]),
                         AISystem.compliance < 50,
                     ),
                     and_(
-                        AISystem.lifecycle.in_(["market", "post-market"]),
+                        AISystem.lifecycle.in_(["market", "service"]),
                         # checks if there is one model registered
                         ~exists(
                             select(AISystemModelCard.__table__.c.system_id)

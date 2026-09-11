@@ -16,7 +16,7 @@ VALID_EVIDENCE_TYPES = frozenset({
     "certificate", "screenshot", "api_log",
 })
 VALID_EVIDENCE_STATUSES = frozenset({
-    "pending", "under_review", "approved", "rejected", "expired",
+    "awaiting_review", "under_review", "approved", "rejected", "expired",
 })
 
 
