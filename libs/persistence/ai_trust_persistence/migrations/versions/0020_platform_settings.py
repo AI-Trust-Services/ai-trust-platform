@@ -1,14 +1,14 @@
 """Create platform_settings singleton table for admin-configurable settings
 
-Revision ID: 0014
-Revises: 0013
+Revision ID: 0020
+Revises: 0019
 Create Date: 2026-09-09
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0014"
-down_revision = "0013"
+revision = "0020"
+down_revision = "0019"
 branch_labels = None
 depends_on = None
 
