@@ -204,7 +204,10 @@ runs:
         ELAPSED=0
         echo "Waiting for HelmRelease ai-trust-platform in namespace ocm-system to reach version ${EXPECTED_VERSION}..."
         while true; do
-          HR=$(kubectl get helmrelease ai-trust-platform -n ocm-system -o json 2>/dev/null) || HR=""
+          HR=$(kubectl get helmrelease ai-trust-platform -n ocm-system -o json 2>/tmp/hr_err) || true
+          if [[ -s /tmp/hr_err ]]; then
+            echo "[${ELAPSED}s] kubectl error: $(cat /tmp/hr_err)"
+          fi
           if [[ -z "$HR" ]]; then
             echo "[${ELAPSED}s] HelmRelease not yet created — waiting..."
           else
