@@ -126,7 +126,7 @@ async def notify_question_assigned(
     """Notify a user that a specific questionnaire question has been assigned to them."""
     await notify(
         to_username=assignee_username,
-        subject="[{platform_name}] Question assigned to you for '" + system_name + "'",
+        subject=f"[{{platform_name}}] Question assigned to you for '{system_name}'",
         body=(
             f"Hi,\n\n"
             f"{assigned_by} has asked you to answer a specific question for the AI system "

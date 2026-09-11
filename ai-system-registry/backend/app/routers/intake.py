@@ -70,7 +70,7 @@ async def intake_system(body: AISystemCreate, request: Request, background_tasks
         background_tasks.add_task(
             email_sender.notify,
             to_username=body.assignee_username,
-            subject="[{platform_name}] System '" + row.name + "' assigned to you for details",
+            subject=f"[{{platform_name}}] System '{row.name}' assigned to you for details",
             body=(
                 f"Hi,\n\n"
                 f"You have been assigned to complete the technical details for the AI system '{row.name}' ({row.id}).\n\n"
