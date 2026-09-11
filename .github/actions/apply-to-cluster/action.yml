@@ -214,7 +214,11 @@ runs:
             READY_STATUS=$(echo "$HR" | jq -r '.status.conditions[]? | select(.type=="Ready") | .status' 2>/dev/null || echo "")
             READY_REASON=$(echo "$HR" | jq -r '.status.conditions[]? | select(.type=="Ready") | .reason' 2>/dev/null || echo "")
             READY_MSG=$(echo "$HR" | jq -r '.status.conditions[]? | select(.type=="Ready") | .message' 2>/dev/null || echo "")
-            LAST_APPLIED=$(echo "$HR" | jq -r '.status.lastAppliedRevision // ""' 2>/dev/null || echo "")
+            LAST_APPLIED=$(echo "$HR" | jq -r '.status.lastAppliedRevision // .status.history[0].chartVersion // ""' 2>/dev/null || echo "")
+            # Fall back to extracting the version from the condition message if the field is empty
+            if [[ -z "$LAST_APPLIED" && -n "$READY_MSG" ]]; then
+              LAST_APPLIED=$(echo "$READY_MSG" | grep -oP '(?<=@)[^\s]+' || echo "")
+            fi
             echo "[${ELAPSED}s] Ready=${READY_STATUS} reason=${READY_REASON} lastAppliedRevision=${LAST_APPLIED}"
             [[ -n "$READY_MSG" ]] && echo "         message: ${READY_MSG}"
             # Fail fast on terminal error states
