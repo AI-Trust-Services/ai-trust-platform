@@ -1,15 +1,15 @@
 """Add questionnaire_answers, business_assignee_username, technical_assignee_username to ai_systems
 
-Revision ID: 0014
-Revises: 0013
+Revision ID: 0015
+Revises: 0014
 Create Date: 2026-08-26
 """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0014"
-down_revision = "0013"
+revision = "0015"
+down_revision = "0014"
 branch_labels = None
 depends_on = None
 

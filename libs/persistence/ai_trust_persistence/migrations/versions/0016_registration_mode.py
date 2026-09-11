@@ -1,7 +1,7 @@
 """Add registration_mode and registration_documents to ai_systems
 
-Revision ID: 0015
-Revises: 0014
+Revision ID: 0016
+Revises: 0015
 Create Date: 2026-08-31
 
 Adds the top-level registration mode discriminator (ai / manual_questionnaire /
@@ -23,8 +23,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = "0015"
-down_revision = "0014"
+revision = "0016"
+down_revision = "0015"
 branch_labels = None
 depends_on = None
 

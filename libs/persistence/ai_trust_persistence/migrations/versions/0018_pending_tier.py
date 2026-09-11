@@ -1,7 +1,7 @@
 """Add 'pending' to ck_ai_systems_tier CHECK constraint
 
-Revision ID: 0017
-Revises: 0016
+Revision ID: 0018
+Revises: 0017
 Create Date: 2026-09-03
 
 Systems registered with only a name+description start with tier='pending' until
@@ -9,8 +9,8 @@ risk classification is completed in Assessments.
 """
 from alembic import op
 
-revision = "0017"
-down_revision = "0016"
+revision = "0018"
+down_revision = "0017"
 branch_labels = None
 depends_on = None
 
