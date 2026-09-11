@@ -488,7 +488,7 @@
         .lui-side-nav--collapsed .fd-nested-list__title {
           display: none !important;
         }
-        .lui-side-nav--collapsed .sap-icon,
+.lui-side-nav--collapsed .sap-icon,
         .lui-side-nav--collapsed .fd-navigation__icon,
         body.semiCollapsed .sap-icon,
         body.semiCollapsed .fd-navigation__icon {
@@ -916,10 +916,52 @@
           darkToggle.addEventListener('mouseenter', () => { darkToggle.style.background = document.documentElement.classList.contains('dark') ? 'rgba(255,255,255,0.07)' : '#f3f4f6'; });
           darkToggle.addEventListener('mouseleave', () => { darkToggle.style.background = 'transparent'; });
 
+          // Version chip — SHA + HelmRelease status dot
+          const versionChip = document.createElement("div");
+          versionChip.id = "luigi-version-chip";
+          versionChip.style.cssText = [
+            "display:flex", "align-items:center", "gap:6px",
+            "padding:0 10px", "height:32px", "font-size:11px",
+            "color:var(--sapContent_LabelColor,#6a6d70)",
+            "cursor:default", "user-select:none", "white-space:nowrap",
+            "border-radius:4px",
+          ].join(";");
+
+          const vDot = document.createElement("span");
+          vDot.style.cssText = "width:8px;height:8px;border-radius:50%;flex-shrink:0;background:#aaa";
+          vDot.title = "Loading…";
+
+          const vLabel = document.createElement("span");
+          vLabel.style.cssText = "font-family:monospace;font-size:11px";
+          vLabel.textContent = "…";
+
+          versionChip.appendChild(vDot);
+          versionChip.appendChild(vLabel);
+
+          const STATUS_COLORS = { ready: "#27ae60", failed: "#e74c3c", progressing: "#f39c12", unknown: "#aaa" };
+
+          function applyVersionInfo({ sha, status, message }) {
+            vDot.style.background = STATUS_COLORS[status] || STATUS_COLORS.unknown;
+            vDot.title = message || status;
+            vLabel.textContent = sha === "unknown" ? "—" : sha;
+            versionChip.title = message || status;
+          }
+
+          function fetchVersion() {
+            fetch("/api/overview/v1/version")
+              .then(r => r.ok ? r.json() : Promise.reject(r.status))
+              .then(applyVersionInfo)
+              .catch(() => applyVersionInfo({ sha: "unknown", status: "unknown", message: "unavailable" }));
+          }
+
+          fetchVersion();
+          setInterval(fetchVersion, 30000);
+
           wrapper.appendChild(trigger);
           wrapper.appendChild(dropdown);
           shellbar.prepend(wrapper);
           shellbar.prepend(bell);
+          shellbar.prepend(versionChip);
           shellbar.prepend(darkToggle);
         }
       }, 200);
