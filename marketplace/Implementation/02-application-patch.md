@@ -1,209 +1,234 @@
-# 02 — The application patch (prepare-app + sidecar)
+# 02 — Patching your app for the Marketplace
 
-*Audience: the app's developer. This is the "what happens on the application" half.*
-
-You run **one script** against your app's repository. It adds a Platform-SSO **sidecar** and a build
-recipe. **Your application code is never modified** — the tool only *adds* generated files.
-
-Tool location: [`../tools/prepare-app/`](../tools/prepare-app/). Full tool reference:
-[`../tools/prepare-app/README.md`](../tools/prepare-app/README.md). The complete script source (and the
-templates it fills) is embedded for convenience in [`07-prepare-app-script.md`](./07-prepare-app-script.md).
+*Audience: developers. How to run `prepare-app.sh`, what it generates, and what happens in each path.*
 
 ---
 
-## 2.1 What your app must satisfy (prerequisites)
+## 2.1 The one question: does your app have its own login?
 
-Minimal:
+```
+Does your app have its own login / OIDC?
+        │
+        ├── NO  → Path A: Platform-SSO sidecar
+        │           No code changes. A sidecar handles OIDC for your app.
+        │
+        └── YES → Path B: JWT trust
+                    One small change to your auth middleware.
+                    The platform identity arrives as a Bearer JWT.
+```
 
-- It's an **HTTP server** that listens on a TCP port.
-- It either **honours the `PORT` environment variable**, or you tell the tool a fixed port with
-  `--app-port`.
-- Its repository has a **`Dockerfile` with a `CMD`** (the tool reuses your Dockerfile as the build base and
-  captures your start command).
-
-That's it. Language, framework, and internals don't matter.
+Run `prepare-app.sh` and it asks you this question. Or pass `--sso-mode sidecar` / `--sso-mode jwt-trust`
+to skip the prompt in CI / scripted runs.
 
 ---
 
-## 2.2 Run the script
+## 2.2 Prerequisites
+
+| Requirement | Notes |
+|-------------|-------|
+| Node.js ≥ 18 | Required by the sidecar (Path A only) |
+| Docker with `buildx` | Builds `linux/amd64` images (Gardener nodes are amd64) |
+| Your app has a `Dockerfile` with a `CMD` | The script reads the start command from it |
+| Your app listens on a TCP port | Any language; any port |
+
+---
+
+## 2.3 Running the script
 
 ```bash
-# from anywhere; point it at a local checkout …
-marketplace/tools/prepare-app/prepare-app.sh /path/to/your-app
+# Interactive (asks the SSO question):
+./marketplace/tools/prepare-app/prepare-app.sh /path/to/your-app
 
-# … or let it clone the repo for you
-marketplace/tools/prepare-app/prepare-app.sh --repo https://github.com/<owner>/<repo> --ref main
+# Non-interactive — Path A (sidecar, no own login):
+./marketplace/tools/prepare-app/prepare-app.sh /path/to/your-app --sso-mode sidecar
+
+# Non-interactive — Path B (JWT trust, own login):
+./marketplace/tools/prepare-app/prepare-app.sh /path/to/your-app --sso-mode jwt-trust
+
+# Clone a remote repo instead of using a local path:
+./marketplace/tools/prepare-app/prepare-app.sh --repo https://github.com/owner/repo --ref main
 ```
 
-**Flags:**
+All flags:
 
-| Flag | Default | Meaning |
-|------|---------|---------|
-| *(positional)* `<path>` | — | Local checkout to prepare. Alternative to `--repo`. |
-| `--repo <git-url>` | — | Clone this repo first, then prepare it. |
-| `--ref <name>` | `main` | Branch/ref to clone with `--repo`. |
-| `--app-port N` | app `EXPOSE`, else `3000` | Your app's **internal** port (where the sidecar forwards). |
-| `--listen-port N` | `8080` | The port the **platform** talks to (the sidecar). Must differ from the app port. |
-| `--branch NAME` | `platform-sso` | Branch the CI build triggers on (also referenced in the generated docs). |
-| `--slug NAME` | derived from repo name | The Marketplace slug (URL-safe id). |
-
-> There is **no `--sso` flag and no `--new-tab` flag.** SSO is always wired in — that's the tool's whole
-> point. "Platform SSO ✅" and "Open in a new tab" are **choices you make later in the Marketplace UI**, not
-> script options.
+| Flag | Default | Notes |
+|------|---------|-------|
+| `--sso-mode sidecar\|jwt-trust\|ask` | interactive if stdin is a tty, else `sidecar` | Path selector |
+| `--app-port N` | from `EXPOSE` in Dockerfile, or `3000` | The port your app listens on |
+| `--listen-port N` | `8080` | Sidecar's listen port (Path A only) |
+| `--branch NAME` | `platform-sso` | Branch to commit generated files to |
+| `--slug NAME` | derived from repo name | Marketplace slug (URL-safe, lower-case) |
+| `--repo URL` | — | Clone this URL instead of using a local path |
+| `--ref REF` | `main` | Branch/tag to clone |
 
 ---
 
-## 2.3 What the script generates (nothing else is touched)
+## 2.4 Path A — Platform-SSO sidecar (no own login)
 
-| Path (added to your repo) | Purpose |
-|---------------------------|---------|
-| `.platform-sso/sidecar/server.js` | The reusable OIDC-login reverse proxy (the sidecar). |
-| `.platform-sso/sidecar/package.json` | Sidecar dependencies (`express`, `express-session`). |
-| `.platform-sso/sidecar/README.md` | Sidecar reference. |
-| `.platform-sso/entrypoint.sh` | Starts your app on the internal port **and** the sidecar on the listen port. |
-| `Dockerfile.platform-sso` | The wrapper image = your app image + Node + the sidecar. |
-| `.github/workflows/publish-image.yml` | Builds + publishes the wrapper image on push (see [`03`](./03-publish-image.md)). |
-| `trust_platform_update.md` | A record of exactly what was added, for your repo. |
-| `ui_deploy_guide.md` | A filled-in click-through for the Marketplace UI (the platform-side half). |
+### What it generates
 
-Your original `Dockerfile`, source files, and start command remain **exactly as they were.**
+| Generated file | Purpose |
+|----------------|---------|
+| `.platform-sso/sidecar/server.js` | Node/Express OIDC RP reverse proxy |
+| `.platform-sso/sidecar/package.json` | sidecar npm dependencies |
+| `.platform-sso/sidecar/README.md` | sidecar env vars reference |
+| `.platform-sso/entrypoint.sh` | starts the app on its port + the sidecar on 8080 |
+| `Dockerfile.platform-sso` | wrapper image: your app base + Node + sidecar |
+| `.github/workflows/publish-image.yml` | builds + pushes `:sso` on push to `platform-sso` |
+| `trust_platform_update.md` | summary of what was added |
+| `ui_deploy_guide.md` | field-by-field Marketplace deploy checklist |
+
+**Your existing files are not modified.**
+
+### How the sidecar works
+
+```
+browser
+  → platform proxy (strips /api/marketplace/v1/proxy/<slug>/ prefix)
+  → sidecar :8080  (OIDC Authorization-Code + PKCE; session cookie)
+  → your app :<app-port>  (receives authenticated requests unchanged)
+```
+
+The sidecar:
+- Discovers the OIDC provider via `OIDC_ISSUER_INTERNAL` (in-cluster) for token exchange, but redirects the browser to the public `OIDC_ISSUER` URL.
+- Sets `X-Forwarded-User` and `X-Forwarded-Preferred-Username` on every proxied request.
+- Derives its redirect URI from the `BASE` env var (injected by the platform at deploy time) so it works correctly under the embed prefix.
+
+### Register in the Marketplace
+
+| Field | Value |
+|-------|-------|
+| **Image ref** | `ghcr.io/<owner>/<repo>:sso` |
+| **App port** | `8080` (the sidecar's port) |
+| **Platform SSO** | ✅ ON |
 
 ---
 
-## 2.4 How the wrapper is built
+## 2.5 Path B — JWT trust (app has its own login)
 
-`Dockerfile.platform-sso` is **multi-stage**. The script inlines *your* Dockerfile verbatim (renaming its
-first `FROM` to `AS app-base`), then layers the sidecar on top. Simplified:
+### Why not the sidecar?
 
-```dockerfile
-# ── your original Dockerfile, inlined, first FROM renamed ──
-FROM node:20-alpine AS app-base
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
-COPY . .
-CMD ["node", "server.js"]        # ← your original start command, captured
+Stacking two OIDC flows (sidecar + the app's own login) causes a redirect loop: the app's OIDC
+interaction cookies can't survive the platform proxy stripping the `/api/marketplace/v1/proxy/<slug>/`
+prefix. The result is `500 interaction session id cookie not found` or a `ERR_TOO_MANY_REDIRECTS`.
 
-# ── Platform-SSO wrapper (generated) ──
-FROM app-base
-USER root
-RUN (command -v node) || (apk add --no-cache nodejs npm) || …   # ensure Node for the sidecar
-WORKDIR /opt/platform-sso-sidecar
-COPY .platform-sso/sidecar/package.json ./package.json
-RUN npm install --omit=dev
-COPY .platform-sso/sidecar/server.js ./server.js
-COPY .platform-sso/entrypoint.sh /opt/platform-sso-entrypoint.sh
-ENV UPSTREAM_PORT=3000            # your app's internal port
-ENV LISTEN_PORT=8080             # the port the platform proxies to
-EXPOSE 8080
-ENTRYPOINT ["/opt/platform-sso-entrypoint.sh"]
+The fix is to **remove** the app's own login when running inside the platform and trust the identity that
+the platform already verified.
+
+### What it generates
+
+| Generated file | Purpose |
+|----------------|---------|
+| `.platform-sso/rbac-platform-patch.js` | drop-in `requireAuth` that trusts the platform JWT |
+| `Dockerfile.nosso` | plain app image (no sidecar) — build and push this |
+| `.github/workflows/publish-image.yml` | builds + pushes `:nosso` on push to `platform-sso` |
+| `trust_platform_update.md` | summary of what was added |
+| `ui_deploy_guide.md` | field-by-field Marketplace deploy checklist |
+
+### Applying the patch
+
+Open `.platform-sso/rbac-platform-patch.js`. It contains two functions — `platformIdentity` and
+`requireAuth` — with inline instructions at the top. Copy them into your app's auth middleware and replace
+your existing `requireAuth` (or equivalent).
+
+**What the patch does:**
+
+```js
+function requireAuth(req, res, next) {
+  if (req.session?.user) return next();            // already have a session
+
+  if (PLATFORM_SSO !== "off") {
+    const username = platformIdentity(req);        // read from JWT or header
+    if (username) {
+      req.session.user = { username, roles: [...] }; // establish session
+      return next();
+    }
+  }
+
+  // fall through to your own login only when PLATFORM_SSO=off (local dev)
+}
 ```
 
-And the entrypoint starts both processes (the sidecar is the foreground process; if either dies, the
-container exits):
+Set `PLATFORM_SSO=off` in your local `.env` to keep using your own login during development.
 
-```sh
-export PORT="$UPSTREAM_PORT"      # force port-respecting apps onto 3000
-cd /app && node server.js &        # ← your original CMD, on the internal port
-cd /opt/platform-sso-sidecar && node server.js &   # the sidecar on 8080
-```
+### How the identity arrives
 
-> *(These snippets are the actual output for the reference app `whether-app` — see the worked example
-> below.)*
+On a multi-tenant (MT) deployment, the tenant oauth2-proxy forwards the identity **only** as a JWT in
+`Authorization: Bearer <token>` — it does **not** set `X-Forwarded-Preferred-Username` (the
+`--pass-user-headers` flag is not set). The patch reads both: header first, then JWT. If you're on a
+single-tenant deployment with `--pass-user-headers`, the header will be populated and the JWT decode is
+skipped.
 
----
+### Register in the Marketplace
 
-## 2.5 What the sidecar does at runtime
-
-The sidecar (`server.js`) is a small Node/Express **OIDC Relying-Party reverse proxy**:
-
-1. **Terminates the platform login** — OpenID Connect *Authorization-Code + PKCE* against the platform's
-   Keycloak.
-2. **Establishes a session cookie** (scoped to `Path=/`, because the platform proxy serves the app under a
-   sub-path but the cookie must cover it).
-3. **Reverse-proxies every authenticated request** to your app on `127.0.0.1:$UPSTREAM_PORT`, adding the
-   user's identity as `X-Forwarded-User` / `X-Forwarded-Preferred-Username` headers (your app *may* use
-   them; it doesn't have to).
-
-Two clever details worth knowing:
-
-- **Two issuers.** The sidecar does OIDC *discovery* and *token exchange* over an **internal**,
-  container-reachable Keycloak URL (`OIDC_ISSUER_INTERNAL`), but rewrites the **browser-facing** endpoints
-  (where it sends the user to log in) to the **public** URL (`OIDC_ISSUER`). Back-channel stays internal;
-  front-channel goes to the public host.
-- **The path prefix is stripped by the platform, not the sidecar.** The platform proxy removes the
-  `…/proxy/<slug>` prefix before the request reaches the sidecar, so the sidecar effectively serves at
-  root. It *derives* the app's public base path from the OIDC redirect URI so its own login/callback URLs
-  match what Keycloak whitelisted.
+| Field | Value |
+|-------|-------|
+| **Image ref** | `ghcr.io/<owner>/<repo>:nosso` |
+| **App port** | the app's own port (e.g. `3000`) |
+| **Platform SSO** | ⬜ OFF |
 
 ---
 
 ## 2.6 The environment contract
 
-Three groups of variables. **You only ever set the middle group (and usually not even that).**
+### Platform-injected (Platform SSO ON, Path A only)
 
-**Injected by the platform automatically on deploy** (when Platform SSO is ticked — see [`04`](./04-platform-register-and-deploy.md)):
+Injected automatically at deploy time — **leave the env box empty** in the form:
 
-| Var | Meaning |
+| Var | Value injected |
+|-----|---------------|
+| `OIDC_ISSUER` | public Keycloak URL (browser-reachable) |
+| `OIDC_ISSUER_INTERNAL` | in-cluster Keycloak URL (for token exchange) |
+| `OIDC_CLIENT_ID` | `aitrust-app-<slug>` |
+| `OIDC_CLIENT_SECRET` | minted at deploy time, read from k8s Secret |
+| `OIDC_REDIRECT_URI` | `https://<platform>/api/marketplace/v1/proxy/<slug>/callback` |
+| `OIDC_SCOPES` | `openid profile email` |
+| `LISTEN_PORT` | same as App port (default 8080) |
+| `UPSTREAM_PORT` | app's internal port |
+| `BASE` | the embed prefix path (for the sidecar's redirect URI derivation) |
+
+### Owner-supplied (optional, via the env box in the form)
+
+Set these only for Path A if your app needs them:
+
+| Var | Purpose |
 |-----|---------|
-| `OIDC_ISSUER` | Browser-facing realm issuer — where the user is sent to log in. |
-| `OIDC_CLIENT_ID` | The per-app confidential client, `aitrust-app-<slug>`. |
-| `OIDC_CLIENT_SECRET` | The client secret (delivered as a Kubernetes Secret; never logged). |
-| `OIDC_REDIRECT_URI` | The whitelisted callback, `<platform>/api/marketplace/v1/proxy/<slug>/oauth/callback`. |
-| `OIDC_SCOPES` | `openid profile email`. |
-| `ISSUER` | The app's public base path under the proxy (auto-set for embedded apps). |
+| `PUBLIC_PATHS` | comma-separated path prefixes to serve without auth (e.g. `/public,/health`) |
 
-**Set by you at registration (the env box in the UI):**
+### Path B knob
 
-| Var | When to set it |
-|-----|----------------|
-| `OIDC_ISSUER_INTERNAL` | The in-cluster Keycloak URL the container can reach for discovery/token. **Falls back to `OIDC_ISSUER` if unset.** On modern deployments you usually leave the whole env box empty — see the note below and [`05`](./05-multitenant-mesh-notes.md). |
-
-**Sidecar knobs (set by the generated Dockerfile; you rarely touch these):**
-
-| Var | Default | Meaning |
+| Var | Default | Purpose |
 |-----|---------|---------|
-| `UPSTREAM_PORT` | detected from your Dockerfile | Your app's internal port. |
-| `LISTEN_PORT` / `PORT` | `8080` | The port the platform proxies to. |
-| `PUBLIC_PATHS` | *(empty)* | Comma-list of path prefixes served **without** auth (e.g. a public health endpoint or static assets). |
-| `SESSION_SECRET` | random per process | Session/state signing key. |
-
-> **About `OIDC_ISSUER_INTERNAL`:** older guides tell you to put
-> `OIDC_ISSUER_INTERNAL=http://keycloak:8080/realms/ai-trust` in the env box. That value is specific to the
-> old single-tenant, local-docker setup. On current deployments the platform injects a working
-> `OIDC_ISSUER` and the sidecar falls back to it, so **leave the env box empty** unless you have a genuine
-> back-channel-only reachability problem. On a multi-tenant mesh the realm is *not* `ai-trust` — see
-> [`05`](./05-multitenant-mesh-notes.md).
+| `PLATFORM_SSO` | `on` | set to `off` to disable platform JWT trust and use the app's own login (local dev) |
 
 ---
 
-## 2.7 Ports — the one thing people get wrong
+## 2.7 Ports at a glance
 
-- The **App port you register in the Marketplace = the sidecar's listen port = `8080`.**
-- Your app runs **internally on `3000`** (or whatever `--app-port` detected). It is never exposed
-  directly; the sidecar is the only thing the platform talks to.
-
-Register **8080**, not 3000.
-
----
-
-## 2.8 Limits (know these before you ship)
-
-- **The sidecar does not rewrite URLs inside HTML/JS bodies.** Redirect `Location` headers are handled (by
-  the platform proxy), but if your app hard-codes root-absolute asset URLs like `/app.js` that don't
-  resolve under the proxy sub-path, either set `PUBLIC_PATHS` for those assets or give the app a base-href.
-- **Double login if your app has its own login.** The user sees the platform login (sidecar) first; if
-  your app *also* has a login screen, they'll see that second. Apps with no login of their own get a single
-  clean platform login.
-- **HTTP only.** Non-HTTP protocols are out of scope for the sidecar.
+| | Path A (sidecar) | Path B (JWT trust) |
+|---|---|---|
+| **Register in Marketplace** | `8080` (sidecar listen port) | your app's own port (e.g. `3000`) |
+| **App runs internally on** | your app's port (e.g. `3000`) | your app's port (e.g. `3000`) |
+| **Sidecar runs on** | `8080` | — (no sidecar) |
 
 ---
 
-## 2.9 Worked example — `whether-app`
+## 2.8 Limits — know these before you ship
 
-Reference app: `github.com/mirceacraciun/whether-app` (a small Node "EU Capitals Weather" app on port
-`3000`). Running `prepare-app.sh` against it produced exactly the files in the table above; the resulting
-image is **`ghcr.io/mirceacraciun/whether-app:sso`**. The generated `Dockerfile.platform-sso` and
-`entrypoint.sh` are the snippets shown in §2.4. Register it with **App port 8080**, Platform SSO ✅.
+1. **Root-absolute frontend URLs** — neither the sidecar nor the JWT-trust path rewrites HTML/JS bodies.
+   If your app's browser JS fetches `/api/something` (root-absolute), that request escapes the embed
+   prefix and lands at the platform origin, not your app.
+   **Fix:** derive an `API_BASE` from `window.location.pathname` and prefix every `fetch()` call.
+   See [`08-worked-example`](./08-worked-example-weather-app.md#84-the-last-mile--a-prefix-aware-frontend)
+   for the exact pattern.
 
-Next: [`03-publish-image.md`](./03-publish-image.md) — turn this into a published image.
+2. **Double login for Path A apps that have their own login** — if you deploy an app that has its own
+   OIDC under Path A (sidecar), the user sees two login screens. Use Path B for such apps.
+
+3. **JWT trust requires NetworkPolicy** — Path B decodes the JWT without re-verifying the signature. This
+   is safe only while the pod is reachable exclusively through the platform proxy. Add a NetworkPolicy
+   restricting ingress to the marketplace proxy pod(s).
+
+4. **`linux/amd64` required** — Gardener/Kyma cluster nodes are `amd64`. Build with
+   `docker buildx build --platform linux/amd64` or use the generated CI workflow (it sets `platforms: linux/amd64`).
+   A Mac-built arm64 image fails `ErrImagePull` with *"no match for platform."*

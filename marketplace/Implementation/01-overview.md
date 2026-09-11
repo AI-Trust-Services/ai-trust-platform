@@ -35,43 +35,79 @@ Onboarding has exactly two halves. Keep them separate in your head:
 - **Platform side** — clicking through the Marketplace UI to register, deploy, and enable the app.
   Covered in [`04-platform-register-and-deploy.md`](./04-platform-register-and-deploy.md).
 
+## Two paths — pick one
+
+**The single question:** does your app have its own login?
+
+```
+Does your app have its own login / OIDC?
+        │
+        ├── NO  → Path A: Platform-SSO sidecar
+        │           A companion process handles login for your app.
+        │           Your app code is NOT changed.
+        │           Run prepare-app.sh → answer N → done.
+        │
+        └── YES → Path B: JWT trust
+                    The platform already verified the user; your app just
+                    reads the identity from the JWT the platform passes through.
+                    One small change to your auth middleware.
+                    Run prepare-app.sh → answer Y → apply the patch.
+```
+
+Both paths end in the same place: the user logs in **once** via the platform, opens the tile, and your
+app runs embedded — no second login, no separate website.
+
 ## How a request actually flows (once it's live)
 
-When a user opens the app's tile, here's the journey of a single click:
+### Path A — sidecar
 
 ```
   Browser
     │  opens  https://<platform>/…/proxy/<your-app>/
     ▼
-  Platform proxy  ── strips the "/…/proxy/<your-app>" prefix, checks the user's role ──┐
-    │                                                                                   │ (403 if not allowed)
+  Platform proxy  ── strips the prefix, checks the user's role ──┐
+    │                                                             │ (403 if not allowed)
     ▼
-  Sidecar (in your app's container, port 8080)
-    │  • no session yet?  → redirect the browser to the platform login (Keycloak)
-    │  • logged in?       → forward the request onward, adding the user's identity
+  Sidecar (port 8080, inside your app's container)
+    │  • no session?  → redirect to platform login (Keycloak)
+    │  • logged in?   → forward the request + user identity headers
     ▼
-  Your app (same container, internal port 3000) — unchanged, unaware of any of this
+  Your app (e.g. port 3000, same container) — unchanged, unaware of OIDC
 ```
 
-Two things do all the work:
+### Path B — JWT trust
 
-- **The platform proxy** (on the platform) — routes the request to your app, enforces the role check, and
-  fixes up URLs so the app behaves correctly under its sub-path.
-- **The sidecar** (a small companion inside your app's image) — performs the actual login handshake and
-  then hands the request to your app.
+```
+  Browser
+    │  opens  https://<platform>/…/proxy/<your-app>/
+    ▼
+  Platform proxy  ── strips the prefix, checks the user's role ──┐
+    │                                                             │ (403 if not allowed)
+    ▼
+  Your app (its own port, e.g. 3000) — reads the username from
+    the Bearer JWT in the Authorization header.
+    No sidecar. No second login.
+```
 
-Your app itself does nothing special. It just serves HTTP on a port.
-
-## Why a "sidecar" instead of changing the app?
+## Why a "sidecar" for Path A instead of changing the app?
 
 Two reasons:
 
 1. **Zero code changes.** The app's source, its own Dockerfile, its start command — all untouched. The
-   sidecar is layered *on top* at build time. This means any app, in any language, can be onboarded, and
-   an app owner never has to learn OIDC.
+   sidecar is layered *on top* at build time. Any app, in any language, can be onboarded without its
+   developer learning OIDC.
 2. **One reusable, audited implementation.** The login handshake (OpenID Connect Authorization-Code with
-   PKCE) is fiddly and security-sensitive. Doing it once, in the sidecar, and reusing it everywhere is far
-   safer than every app rolling its own.
+   PKCE) is fiddly and security-sensitive. One shared sidecar is safer than every app rolling its own.
+
+## Why Path B for apps with their own login?
+
+Stacking two OIDC flows (sidecar + the app's own login) causes a redirect loop. The app's OIDC
+interaction cookies can't survive the platform proxy stripping the path prefix. The result is
+`500 interaction session id cookie not found` or `ERR_TOO_MANY_REDIRECTS`.
+
+For these apps the right answer is: drop the app's own login entirely when running inside the platform,
+and trust the identity the platform already verified. One small change; no OIDC knowledge required.
+The `prepare-app.sh --sso-mode jwt-trust` flag generates the patch file for you.
 
 ## Plain-language glossary
 
@@ -81,9 +117,11 @@ Two reasons:
 | **OIDC Relying Party (RP)** | An app that *uses* an OIDC login server to authenticate users. The **sidecar** is the RP; your app doesn't have to be one. |
 | **Sidecar** | A small companion process shipped in the same container as your app. Here it's an OIDC-login reverse proxy that fronts your app. |
 | **Reverse proxy** | Something that receives a request, optionally does work (login), then forwards it to the real app and returns the reply. |
+| **JWT** (JSON Web Token) | A signed, base64-encoded token that carries user claims (like `preferred_username`). The platform's oauth2-proxy adds one to every forwarded request as `Authorization: Bearer <token>`. |
+| **JWT trust (Path B)** | The app reads the user's identity from the Bearer JWT instead of running its own login. Safe because the platform already verified the JWT. |
 | **Keycloak** | The platform's identity server. It shows the login page and issues the tokens that prove who you are. |
 | **Realm** | A tenant/partition inside Keycloak. The built-in single-tenant realm is `ai-trust`; a multi-tenant deployment gives each tenant its own realm (e.g. `test`). This distinction matters in [`05`](./05-multitenant-mesh-notes.md). |
-| **GHCR** | GitHub Container Registry — where the built image is published (`ghcr.io/<owner>/<repo>:sso`). |
+| **GHCR** | GitHub Container Registry — where the built image is published (`ghcr.io/<owner>/<repo>:sso` or `:nosso`). |
 | **Role gate** | The access check: an app is hidden and blocked unless it's *enabled* for a role the user holds. |
 | **Embed proxy** | The platform route `…/api/marketplace/v1/proxy/<slug>/…` that serves your app inside the platform, same-origin, in an iframe. |
 | **Tile** | The clickable card for your app in the platform sidebar, under **Services**. |
@@ -93,6 +131,7 @@ Two reasons:
 - Your app runs inside the platform, reachable at a platform URL under `…/proxy/<your-app>/`.
 - Users open it from a sidebar tile and are **already logged in** (single platform login).
 - Only members of the role(s) you enabled can see or open it.
-- You changed **no application code** to get there.
+- Path A: **no application code changed** at all.
+- Path B: **one function changed** in your auth middleware — and `PLATFORM_SSO=off` keeps your local dev login working.
 
-Next: [`02-application-patch.md`](./02-application-patch.md) — the application-side patch.
+Next: [`02-application-patch.md`](./02-application-patch.md) — both paths in detail.

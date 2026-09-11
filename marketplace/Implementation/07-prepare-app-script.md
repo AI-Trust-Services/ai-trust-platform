@@ -1,15 +1,15 @@
 # 07 — The `prepare-app` script (full source, in one place)
 
 *Audience: developers who want the actual code, not just a description. This embeds the real
-`prepare-app.sh` and the files it generates, so you have everything here without hunting through the
+`prepare-app.sh` and the key generated files, so you have everything here without hunting through the
 repo.*
 
 > The canonical, maintained copy lives in [`../tools/prepare-app/`](../tools/prepare-app/). This page is a
 > convenience mirror for reading. If the two ever differ, the tool folder wins — re-run from there.
 >
-> **What it is:** one Bash script that wraps any HTTP app with a Platform-SSO sidecar (see
-> [`02-application-patch.md`](./02-application-patch.md) for the narrative). It only *adds* files; it never
-> edits your app's code.
+> **What it is:** one Bash script that wraps any HTTP app for the AI Trust Platform Marketplace. Run it
+> and answer one question (`Does your app have its own login?`) — it does the rest. See
+> [`02-application-patch.md`](./02-application-patch.md) for the narrative.
 
 ---
 
@@ -17,266 +17,162 @@ repo.*
 
 ```bash
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────────────────────
-# prepare-app.sh — make ANY HTTP app deployable in the AI Trust Marketplace with
-# Platform SSO, without changing the app's code, by adding a Platform-SSO sidecar.
+# prepare-app.sh — make ANY HTTP app deployable in the AI Trust Marketplace
+# with Platform SSO.
 #
 # Usage:
-#   ./prepare-app.sh <path-to-app-repo> [--app-port N] [--listen-port N] [--branch NAME] [--slug NAME]
-#   ./prepare-app.sh --repo <git-url> [--ref main] [--app-port N] ...
+#   ./prepare-app.sh <path-to-app-repo> [OPTIONS]
+#   ./prepare-app.sh --repo <git-url> [--ref main] [OPTIONS]
 #
-# What it adds to the app repo (never edits existing files):
-#   .platform-sso/sidecar/{server.js,package.json,README.md}
-#   .platform-sso/entrypoint.sh
-#   Dockerfile.platform-sso
-#   .github/workflows/publish-image.yml
-#   trust_platform_update.md, ui_deploy_guide.md
+# Options:
+#   --sso-mode sidecar|jwt-trust|ask
+#                sidecar   (default) — app has NO own login; add a Platform-SSO
+#                           sidecar that handles OIDC for it (no app code changes)
+#                jwt-trust — app has its OWN OIDC/login; replace it with platform
+#                           JWT trust (generates a patch + plain Dockerfile)
+#                ask       — prompt interactively
+#   --app-port N       app's internal port (auto-detected from Dockerfile EXPOSE, or 3000)
+#   --listen-port N    sidecar listen port (Path A only, default 8080)
+#   --branch NAME      git branch (default: platform-sso)
+#   --slug NAME        marketplace slug (default: from repo name)
+#   --repo URL         clone instead of using a local path
+#   --ref REF          branch/tag to clone (default: main)
 #
-# Idempotent: re-running overwrites only the generated files.
-# ─────────────────────────────────────────────────────────────────────────────
-set -euo pipefail
+# What it adds (never edits existing files):
+#
+#   Path A — sidecar:
+#     .platform-sso/sidecar/{server.js,package.json,README.md}
+#     .platform-sso/entrypoint.sh
+#     Dockerfile.platform-sso         (register at port 8080)
+#     .github/workflows/publish-image.yml
+#     trust_platform_update.md, ui_deploy_guide.md
+#
+#   Path B — jwt-trust:
+#     .platform-sso/rbac-platform-patch.js   (drop-in requireAuth)
+#     Dockerfile.nosso                        (register at app port)
+#     .github/workflows/publish-image.yml
+#     trust_platform_update.md, ui_deploy_guide.md
+#
+# See marketplace/Implementation/ for the full onboarding guide.
+```
 
-TOOL_DIR="$(cd "$(dirname "$0")" && pwd)"
-SIDECAR_DIR="$TOOL_DIR/sidecar"
-TMPL_DIR="$TOOL_DIR/templates"
+*(Full source in [`../tools/prepare-app/prepare-app.sh`](../tools/prepare-app/prepare-app.sh))*
 
-APP_DIR=""; REPO=""; REF="main"
-APP_PORT=""; LISTEN_PORT="8080"; BRANCH="platform-sso"; SLUG=""
-CLONE_TMP=""
+---
 
-die() { echo "ERROR: $*" >&2; exit 1; }
+## 7.2 Interactive mode (when you run it without `--sso-mode`)
 
-# ── args ──
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --repo) REPO="$2"; shift 2;;
-    --ref) REF="$2"; shift 2;;
-    --app-port) APP_PORT="$2"; shift 2;;
-    --listen-port) LISTEN_PORT="$2"; shift 2;;
-    --branch) BRANCH="$2"; shift 2;;
-    --slug) SLUG="$2"; shift 2;;
-    -*) die "unknown flag $1";;
-    *) APP_DIR="$1"; shift;;
-  esac
-done
+When stdin is a tty the script asks:
 
-if [ -n "$REPO" ]; then
-  CLONE_TMP="$(mktemp -d)"
-  echo ">> cloning $REPO@$REF"
-  git clone -q --branch "$REF" "$REPO" "$CLONE_TMP" || die "clone failed"
-  APP_DIR="$CLONE_TMP"
-fi
-[ -n "$APP_DIR" ] || die "provide a <path-to-app-repo> or --repo <git-url>"
-[ -d "$APP_DIR" ] || die "app dir not found: $APP_DIR"
-APP_DIR="$(cd "$APP_DIR" && pwd)"
+```
+────────────────────────────────────────────────
+  AI Trust Platform — App Onboarding
+────────────────────────────────────────────────
 
-# ── derive metadata ──
-# repo owner/name from git remote (for the ghcr image ref); fall back to dir name.
-REMOTE_URL="$(git -C "$APP_DIR" remote get-url origin 2>/dev/null || true)"
-# strip protocol/host and a trailing .git, keep the last two path segments (owner/repo). Portable.
-REPO_SLUG="$(printf '%s' "$REMOTE_URL" \
-  | sed -e 's#\.git$##' -e 's#^.*://##' -e 's#^[^/]*[:/]##' \
-  | awk -F/ 'NF>=2{print $(NF-1)"/"$NF} NF<2{print $0}' \
-  | tr '[:upper:]' '[:lower:]')"
-[ -n "$REPO_SLUG" ] || REPO_SLUG="local/$(basename "$APP_DIR" | tr '[:upper:]' '[:lower:]')"
-APP_NAME="$(basename "$APP_DIR")"
-[ -n "$SLUG" ] || SLUG="$(basename "$REPO_SLUG" | tr '[:upper:]' '[:lower:]' | sed -e 's#[^a-z0-9]#-#g' -e 's#^-*##' -e 's#-*$##')"
+Does your app have its OWN login / OIDC?
 
-# app port: --app-port, else EXPOSE in Dockerfile, else 3000
-if [ -z "$APP_PORT" ]; then
-  if [ -f "$APP_DIR/Dockerfile" ]; then
-    APP_PORT="$(grep -iE '^EXPOSE ' "$APP_DIR/Dockerfile" | head -1 | awk '{print $2}' | tr -dc '0-9')"
-  fi
-  [ -n "$APP_PORT" ] || APP_PORT="3000"
-fi
-UPSTREAM_PORT="$APP_PORT"
-[ "$UPSTREAM_PORT" != "$LISTEN_PORT" ] || die "app port ($APP_PORT) must differ from the sidecar listen port ($LISTEN_PORT); pass --listen-port"
+  • If NO  → the tool wraps your app with a Platform-SSO sidecar.
+             NO code changes to your app.
 
-# the app's start command (its Dockerfile CMD), captured for the entrypoint.
-APP_CMD=""
-if [ -f "$APP_DIR/Dockerfile" ]; then
-  # take the last CMD; strip CMD and JSON-array brackets/quotes → a shell command line.
-  APP_CMD="$(grep -iE '^CMD ' "$APP_DIR/Dockerfile" | tail -1 | sed -E 's/^CMD +//I')"
-  case "$APP_CMD" in
-    '['*)
-      # JSON exec-form: ["node", "server.js"] → node server.js
-      APP_CMD="$(printf '%s' "$APP_CMD" \
-        | sed -e 's#^\[##' -e 's#\]$##' \
-        | sed -e 's#" *, *"# #g' -e 's#"##g' \
-        | sed -e 's#^ *##' -e 's# *$##')"
-      ;;
-  esac
-fi
-[ -n "$APP_CMD" ] || die "could not detect the app start command (no CMD in Dockerfile); ensure the app has a Dockerfile with a CMD"
+  • If YES → the tool generates a JWT-trust patch.
+             You apply one small change to your app's auth middleware.
 
-# the app's WORKDIR (last WORKDIR in its Dockerfile) so the entrypoint runs the app from there.
-APP_WORKDIR="$(grep -iE '^WORKDIR ' "$APP_DIR/Dockerfile" | tail -1 | awk '{print $2}')"
-[ -n "$APP_WORKDIR" ] || APP_WORKDIR="/app"
+Does your app have its own login? [y/N]:
+```
 
-echo ">> app dir     : $APP_DIR"
-echo ">> repo slug   : $REPO_SLUG   (image → ghcr.io/$REPO_SLUG:sso)"
-echo ">> marketplace slug: $SLUG"
-echo ">> app port    : $UPSTREAM_PORT (internal)   sidecar listen: $LISTEN_PORT"
-echo ">> app cmd     : $APP_CMD"
-echo ">> branch      : $BRANCH"
+Answer `n` (or Enter) for Path A. Answer `y` for Path B. When stdin is not a tty (CI, piped) it defaults
+to Path A / sidecar.
 
-# ── render helper ──
-render() { # <src-tmpl> <dst>
-  sed -e "s#@@APP_NAME@@#$APP_NAME#g" \
-      -e "s#@@REPO@@#$REPO_SLUG#g" \
-      -e "s#@@SLUG@@#$SLUG#g" \
-      -e "s#@@UPSTREAM_PORT@@#$UPSTREAM_PORT#g" \
-      -e "s#@@LISTEN_PORT@@#$LISTEN_PORT#g" \
-      -e "s#@@BRANCH@@#$BRANCH#g" \
-      -e "s#@@APP_IMAGE_STAGE@@#app-base#g" \
-      -e "s#@@APP_WORKDIR@@#$APP_WORKDIR#g" \
-      -e "s#@@APP_CMD@@#$APP_CMD#g" \
-      "$1" > "$2"
-}
+---
 
-# ── 1. copy the sidecar ──
-mkdir -p "$APP_DIR/.platform-sso/sidecar"
-cp "$SIDECAR_DIR/server.js" "$SIDECAR_DIR/package.json" "$SIDECAR_DIR/README.md" "$APP_DIR/.platform-sso/sidecar/"
+## 7.3 Path A generated files
 
-# ── 2. entrypoint ──
-render "$TMPL_DIR/entrypoint.sh.tmpl" "$APP_DIR/.platform-sso/entrypoint.sh"
-chmod +x "$APP_DIR/.platform-sso/entrypoint.sh"
+### `.platform-sso/entrypoint.sh` (template)
 
-# ── 3. wrapper Dockerfile ──
-# Build the app via its own Dockerfile as a named stage. We inline the app Dockerfile as a base by
-# referencing it through a two-stage build: the platform build must `docker build -f Dockerfile.platform-sso`
-# with the app Dockerfile available. To keep it single-file + portable, we require the app's own image
-# to be buildable as stage "app-base" — achieved by prepending the app Dockerfile with a stage name.
-# Simplest robust approach: generate a combined Dockerfile that first includes the app's Dockerfile
-# content as stage app-base, then the wrapper stages.
-{
-  echo "# syntax=docker/dockerfile:1"
-  echo "# ── stage app-base: the ORIGINAL app Dockerfile, unmodified ──"
-  # rewrite the first FROM to name the stage 'app-base'; leave the rest byte-for-byte.
-  awk 'BEGIN{done=0} /^[Ff][Rr][Oo][Mm] / && !done {print $0 " AS app-base"; done=1; next} {print}' "$APP_DIR/Dockerfile"
-  echo ""
-  echo "# ── Platform-SSO wrapper (generated) ──"
-  # append the wrapper body (skip its own syntax line + the two placeholder FROMs; we already have app-base)
-  render "$TMPL_DIR/Dockerfile.platform-sso.tmpl" /dev/stdout \
-    | awk 'NR==1 && /syntax=/ {next} {print}' \
-    | sed -E 's#^FROM app-base AS app$##; s#^FROM app-base$#FROM app-base#'
-} > "$APP_DIR/Dockerfile.platform-sso"
+```bash
+#!/bin/sh
+# Start the app on its port, then start the Platform-SSO sidecar on the listen port.
+# Both run in the same container; the sidecar proxies to the app.
+set -e
+cd @@APP_WORKDIR@@
+@@APP_CMD@@ &   # start the app in the background
+cd /app-sso
+node sidecar/server.js
+```
 
-# ── 4. CI workflow ──
-mkdir -p "$APP_DIR/.github/workflows"
-render "$TMPL_DIR/publish-image.yml.tmpl" "$APP_DIR/.github/workflows/publish-image.yml"
+### `Dockerfile.platform-sso` (template — structure)
 
-# ── 5. docs ──
-render "$TMPL_DIR/trust_platform_update.md.tmpl" "$APP_DIR/trust_platform_update.md"
-render "$TMPL_DIR/ui_deploy_guide.md.tmpl" "$APP_DIR/ui_deploy_guide.md"
+```dockerfile
+# syntax=docker/dockerfile:1
+# ── stage app-base: the ORIGINAL app Dockerfile, unmodified ──
+FROM <your-base> AS app-base
+# ... all your existing Dockerfile steps ...
 
-echo ""
-echo "✅ Prepared $APP_NAME for the AI Trust Marketplace (Platform-SSO sidecar)."
-echo ""
-echo "Added (no existing file modified):"
-echo "  .platform-sso/sidecar/  .platform-sso/entrypoint.sh"
-echo "  Dockerfile.platform-sso  .github/workflows/publish-image.yml"
-echo "  trust_platform_update.md  ui_deploy_guide.md"
-echo ""
-echo "Next steps:"
-echo "  cd $APP_DIR"
-echo "  git checkout -b $BRANCH && git add -A && git commit -m 'Platform-SSO sidecar' && git push -u origin $BRANCH"
-echo "  # CI publishes ghcr.io/$REPO_SLUG:sso  →  register in the Marketplace (see ui_deploy_guide.md)"
-[ -n "$CLONE_TMP" ] && echo "  (working copy: $APP_DIR)"
+# ── Platform-SSO wrapper (generated) ──
+FROM node:20-alpine AS sso-builder
+WORKDIR /app-sso
+COPY .platform-sso/sidecar/package.json ./sidecar/
+RUN npm install --omit=dev --prefix ./sidecar
+
+FROM app-base
+# copy the sidecar and its deps into the app image
+COPY --from=sso-builder /app-sso /app-sso
+COPY .platform-sso/sidecar/ /app-sso/sidecar/
+COPY .platform-sso/entrypoint.sh /app-sso/entrypoint.sh
+ENV UPSTREAM_PORT=@@UPSTREAM_PORT@@
+ENV LISTEN_PORT=@@LISTEN_PORT@@
+EXPOSE @@LISTEN_PORT@@
+ENTRYPOINT ["/app-sso/entrypoint.sh"]
 ```
 
 ---
 
-## 7.2 What it reads: the templates
+## 7.4 Path B generated files
 
-The script fills these templates (`../tools/prepare-app/templates/`) by substituting `@@…@@`
-placeholders, then writes the result into your app repo.
+### `.platform-sso/rbac-platform-patch.js` (the JWT-trust patch)
 
-### `entrypoint.sh.tmpl` → `.platform-sso/entrypoint.sh`
+This file is generated into the app repo. It contains:
 
-```sh
-#!/bin/sh
-# GENERATED by marketplace/tools/prepare-app — starts the wrapped app + the Platform-SSO sidecar.
-# The app runs on 127.0.0.1:$UPSTREAM_PORT (we pass PORT=$UPSTREAM_PORT so port-respecting apps bind
-# there); the sidecar runs on $LISTEN_PORT (the port the marketplace proxies to) as the foreground
-# process. If the sidecar exits, the container exits.
-set -e
+1. `_decodeJwtUsername(authHeader)` — decodes `preferred_username` from a Bearer JWT without signature verification (the platform already verified it).
+2. `platformIdentity(req)` — tries `X-Forwarded-Preferred-Username` header first, falls back to the JWT.
+3. `requireAuth(req, res, next)` — drop-in middleware: if `PLATFORM_SSO !== "off"`, reads the platform identity and establishes a session; otherwise falls through to the app's own login.
 
-: "${UPSTREAM_PORT:=@@UPSTREAM_PORT@@}"
-: "${LISTEN_PORT:=@@LISTEN_PORT@@}"
-export PORT="$UPSTREAM_PORT"          # most apps read PORT; force the app onto the internal port
-export UPSTREAM_PORT LISTEN_PORT
+**How to apply:**
+1. Open `.platform-sso/rbac-platform-patch.js` in the generated app repo.
+2. Copy the three functions into your app's auth middleware file (e.g. `rbac.js`, `auth.js`).
+3. Replace your existing `requireAuth` with the one from the patch.
+4. Set `PLATFORM_SSO=off` in your local `.env` to keep using your own login during development.
 
-echo "[platform-sso] starting wrapped app on 127.0.0.1:$UPSTREAM_PORT …"
-cd "@@APP_WORKDIR@@"
-@@APP_CMD@@ &                          # the original app's CMD, captured from its Dockerfile
-APP_PID=$!
+*(The generated file has full inline comments. See also [`08-worked-example-weather-app.md §8.3`](./08-worked-example-weather-app.md#83-the-key-decision--replace-the-apps-oidc-with-platform-oidc).)*
 
-term() { kill "$APP_PID" "$SIDE_PID" 2>/dev/null || true; exit 0; }
-trap term TERM INT
-
-echo "[platform-sso] starting sidecar on :$LISTEN_PORT …"
-cd /opt/platform-sso-sidecar
-node server.js &
-SIDE_PID=$!
-
-# Exit when either process exits (portable — busybox sh has no `wait -n`).
-while kill -0 "$APP_PID" 2>/dev/null && kill -0 "$SIDE_PID" 2>/dev/null; do
-  sleep 2
-done
-term
-```
-
-### `Dockerfile.platform-sso.tmpl` (the wrapper body)
-
-The script prepends your **own Dockerfile** (renaming its first `FROM` to `AS app-base`), then appends this:
+### `Dockerfile.nosso` (template — structure)
 
 ```dockerfile
 # syntax=docker/dockerfile:1
-# GENERATED by marketplace/tools/prepare-app — Platform-SSO wrapper.
-# Wraps the ORIGINAL app image with a Platform-SSO sidecar. The app is built by its
-# own Dockerfile (unchanged) and runs on 127.0.0.1:@@UPSTREAM_PORT@@; the sidecar
-# terminates the platform login and reverse-proxies to it, listening on @@LISTEN_PORT@@.
+# Dockerfile.nosso — plain app image, no Platform-SSO sidecar.
+# Register in the Marketplace with Platform SSO OFF, app port @@UPSTREAM_PORT@@.
+# Generated by prepare-app.sh --sso-mode jwt-trust
 
-FROM @@APP_IMAGE_STAGE@@ AS app
-FROM @@APP_IMAGE_STAGE@@
-
-# Ensure Node for the sidecar (no-op if the base already has it).
-USER root
-RUN (command -v node >/dev/null 2>&1) || \
-    (command -v apk >/dev/null 2>&1 && apk add --no-cache nodejs npm) || \
-    (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends nodejs npm && rm -rf /var/lib/apt/lists/*) || \
-    echo "WARNING: could not install node automatically; ensure the base image has node"
-
-WORKDIR /opt/platform-sso-sidecar
-COPY .platform-sso/sidecar/package.json ./package.json
-RUN npm install --omit=dev
-COPY .platform-sso/sidecar/server.js ./server.js
-
-COPY .platform-sso/entrypoint.sh /opt/platform-sso-entrypoint.sh
-RUN chmod +x /opt/platform-sso-entrypoint.sh
-
-ENV UPSTREAM_PORT=@@UPSTREAM_PORT@@
-ENV LISTEN_PORT=@@LISTEN_PORT@@
-EXPOSE @@LISTEN_PORT@@
-
-ENTRYPOINT ["/opt/platform-sso-entrypoint.sh"]
+# <your full Dockerfile, verbatim>
 ```
 
-### `publish-image.yml.tmpl` → `.github/workflows/publish-image.yml`
+The file is your original `Dockerfile` with a header comment added. No other changes.
+
+---
+
+## 7.5 Shared generated files
+
+### `.github/workflows/publish-image.yml` (template)
 
 ```yaml
 name: publish-image
-
 on:
   push:
-    branches: [@@BRANCH@@]
+    branches: [platform-sso]
   workflow_dispatch:
-
 permissions:
   contents: read
   packages: write
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -287,62 +183,27 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/amd64
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.platform-sso
+          file: Dockerfile.<sso|nosso>     # Path A → platform-sso; Path B → nosso
+          platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:sso
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/<owner>/<repo>:<sso|nosso>
+            ghcr.io/<owner>/<repo>:${{ github.sha }}
 ```
 
-> **One-time repo setting:** if the first run fails with `denied: permission_denied: write_package`, set
-> *Settings → Actions → General → Workflow permissions → Read and write permissions*.
-
-The tool also renders `trust_platform_update.md` and `ui_deploy_guide.md` into the app repo — a record of
-what was added and a filled-in UI checklist.
+> **One-time repo setting required:** if CI fails with `denied: permission_denied: write_package`, go to
+> **Settings → Actions → General → Workflow permissions → Read and write permissions**.
+> See [`03-publish-image.md §3.3`](./03-publish-image.md#33-one-time-repository-setting-required).
 
 ---
 
-## 7.3 The sidecar (`sidecar/server.js`)
+## 7.6 Idempotency
 
-The sidecar is the reusable OIDC-login reverse proxy the script copies into every app. It's ~240 lines;
-rather than duplicate it here (where it could drift), read the maintained source and its reference:
-
-- Source: [`../tools/prepare-app/sidecar/server.js`](../tools/prepare-app/sidecar/server.js)
-- Reference: [`../tools/prepare-app/sidecar/README.md`](../tools/prepare-app/sidecar/README.md)
-- Behaviour + env contract are summarised in [`02-application-patch.md §2.5–2.6`](./02-application-patch.md#25-what-the-sidecar-does-at-runtime).
-
-Its dependencies (`sidecar/package.json`) are just Express + express-session:
-
-```json
-{
-  "name": "aitrust-platform-sso-sidecar",
-  "version": "1.0.0",
-  "private": true,
-  "type": "commonjs",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" },
-  "dependencies": {
-    "express": "^4.21.2",
-    "express-session": "^1.18.1"
-  }
-}
-```
-
----
-
-## 7.4 Run it
-
-```bash
-# from the ai-trust-platform repo root, against a local app checkout:
-marketplace/tools/prepare-app/prepare-app.sh /path/to/your-app
-
-# or clone-and-prepare in one shot:
-marketplace/tools/prepare-app/prepare-app.sh --repo https://github.com/<owner>/<repo> --ref main
-```
-
-Then commit + push the `platform-sso` branch → CI publishes `ghcr.io/<owner>/<repo>:sso`
-([`03-publish-image.md`](./03-publish-image.md)) → register it in the Marketplace
-([`04-platform-register-and-deploy.md`](./04-platform-register-and-deploy.md)).
+Re-running `prepare-app.sh` on the same repo overwrites only the generated files. Your existing source
+files are never touched.
