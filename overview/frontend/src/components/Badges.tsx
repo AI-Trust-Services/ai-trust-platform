@@ -13,17 +13,23 @@ const TIER_CLASSES: Record<TierKey, string> = {
 };
 
 const LIFECYCLE_CLASSES: Record<LifecycleKey, string> = {
-  development: "bg-[#eff6ff] text-[#1147E9]",
-  testing: "bg-[#fffbeb] text-[#b45309]",
-  conformity: "bg-[#fff7ed] text-[#c2410c]",
-  market: "bg-[#f0fdf4] text-[#15803d]",
-  "post-market": "bg-[#f0fdf4] text-[#166534]",
+  development:   "bg-[#eff6ff] text-[#1147E9]",
+  testing:       "bg-[#fffbeb] text-[#b45309]",
+  prod_ready:    "bg-[#fff7ed] text-[#c2410c]",
+  market:        "bg-[#f0fdf4] text-[#15803d]",
+  service:       "bg-[#f0fdf4] text-[#166534]",
+  updated:       "bg-[#fef9ee] text-[#92400e]",
   decommissioned: "bg-[#f4f4f5] text-[#71717a]",
 };
 
 const LIFECYCLE_LABELS: Record<LifecycleKey, string> = {
-  development: "Development", testing: "Testing", conformity: "Conformity",
-  market: "On Market", "post-market": "Post-Market", decommissioned: "Decommissioned",
+  development:   "Development",
+  testing:       "Testing",
+  prod_ready:    "Production Ready",
+  market:        "On Market",
+  service:       "In Service",
+  updated:       "Updated",
+  decommissioned: "Decommissioned",
 };
 
 export function TierBadge({ tier }: { tier: TierKey }) {

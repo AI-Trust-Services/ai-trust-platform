@@ -38,7 +38,7 @@ spec:
             - name: data
               mountPath: /var/lib/clickhouse
         # mirrors compose: clickhouse depends_on minio-init (service_completed_successfully)
-        {{- include "ai-trust.waitForJob" (dict "job" "minio-init" "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "minio-init" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
       containers:
         - name: clickhouse
           image: {{ .Values.clickhouse.image }}

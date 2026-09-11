@@ -166,5 +166,5 @@ async def test_invalid_lifecycle_rejected():
 
 @pytest.mark.asyncio
 async def test_valid_lifecycles_accepted():
-    for lifecycle in ("development", "testing", "conformity", "market", "post-market", "decommissioned"):
+    for lifecycle in ("development", "testing", "prod_ready", "market", "service", "updated", "decommissioned"):
         await create_system(lifecycle=lifecycle)

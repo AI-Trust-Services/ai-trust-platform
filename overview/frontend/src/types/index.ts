@@ -1,5 +1,5 @@
 export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal";
-export type LifecycleKey = "development" | "testing" | "conformity" | "market" | "post-market" | "decommissioned";
+export type LifecycleKey = "development" | "testing" | "prod_ready" | "market" | "service" | "updated" | "decommissioned";
 
 export interface OverviewStats {
   total_systems: number;

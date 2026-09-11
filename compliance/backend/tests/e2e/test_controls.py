@@ -20,7 +20,7 @@ async def test_create_control_returns_201(client: httpx.AsyncClient):
     assert r.status_code == 201
     body = r.json()
     assert body["id"].startswith("CTL-")
-    assert body["status"] == "not_started"
+    assert body["status"] == "open"
     assert body["title"] == "My Control"
 
 
@@ -117,9 +117,9 @@ async def test_update_control_title(client: httpx.AsyncClient):
 async def test_update_control_status(client: httpx.AsyncClient):
     system = await create_system()
     ctl = await create_control(client, system["id"])
-    r = await client.put(f"/v1/controls/{ctl['id']}", json={"status": "implemented"})
+    r = await client.put(f"/v1/controls/{ctl['id']}", json={"status": "under_review"})
     assert r.status_code == 200
-    assert r.json()["status"] == "implemented"
+    assert r.json()["status"] == "under_review"
 
 
 async def test_update_control_404_on_missing(client: httpx.AsyncClient):
@@ -209,8 +209,8 @@ async def test_linking_effective_control_fulfills_obligation(client: httpx.Async
     obl = await create_obligation(client, ass["id"])
     ctl = await create_control(client, system["id"])
 
-    # Manually set control to effective
-    await client.put(f"/v1/controls/{ctl['id']}", json={"status": "effective"})
+    # Manually set control to fulfilled
+    await client.put(f"/v1/controls/{ctl['id']}", json={"status": "fulfilled"})
     await client.post(f"/v1/controls/{ctl['id']}/link/{obl['id']}")
 
     r = await client.get(f"/v1/obligations/{obl['id']}")

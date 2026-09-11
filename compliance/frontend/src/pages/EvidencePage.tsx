@@ -131,7 +131,7 @@ export default function EvidencePage() {
   const kpis = useMemo(() => ({
     total: evidence.length,
     approved: evidence.filter((e) => e.status === "approved").length,
-    pending: evidence.filter((e) => e.status === "pending" || e.status === "under_review").length,
+    pending: evidence.filter((e) => e.status === "awaiting_review" || e.status === "under_review").length,
     expired: evidence.filter((e) => e.status === "expired" || e.status === "rejected").length,
   }), [evidence]);
 
@@ -308,7 +308,7 @@ export default function EvidencePage() {
             <DetailSection title="Linked To">
               {detailControls.length > 0 && (
                 <>
-                  <div className="pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">Controls</div>
+                  <div className="pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">Requirements</div>
                   <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
                     <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
                   ))}</ul>

@@ -7,9 +7,11 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 VALID_LIFECYCLES = frozenset({
-    "development", "testing", "conformity", "market", "post-market", "decommissioned",
+    "development", "testing", "prod_ready", "market", "service", "updated", "decommissioned",
 })
-VALID_ROLES = frozenset({"provider", "deployer", "both", "importer", "distributor"})
+VALID_ROLES = frozenset({
+    "provider", "deployer", "both", "importer", "distributor", "authorised_representative",
+})
 # The six canonical EU AI Act tiers — enforced by ck_ai_systems_tier at the DB layer.
 # Validated in the API layer for CO overrides / full-manual entry so a bad value
 # returns 422 instead of 500-ing on commit.
