@@ -23,7 +23,6 @@ from ai_trust_persistence.models import (
     Assessment,
     Control,
     Obligation,
-    control_obligations,
     evidence_controls,
 )
 from ai_trust_persistence.models.evidence import Evidence
@@ -65,11 +64,6 @@ async def refresh_control_effectiveness(session: AsyncSession, control_id: str) 
     if approved_count > 0:
         control.status = "fulfilled"
     elif control.status == "fulfilled":
-        # Sole supporting evidence was rejected/removed — revert the
-        # auto-promotion so obligations/scores can drop accordingly.
-        # Use "planned" rather than "open": the control may have been
-        # auto-promoted from any earlier state so "open" could be a
-        # spurious downgrade past manual progress.
         control.status = "planned"
 
 
@@ -77,8 +71,8 @@ async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
     """Recompute an obligation's status from its linked controls, then rescore.
 
     - no controls linked           -> revert to 'applicable' (unless locked)
-    - >=1 linked, all 'effective'  -> 'fulfilled'
-    - >=1 linked, not all effective-> 'in_progress'
+    - >=1 linked, all 'fulfilled'  -> 'fulfilled'
+    - >=1 linked, not all fulfilled-> 'in_progress'
     """
     obligation = (await session.execute(
         select(Obligation).where(Obligation.id == obligation_id)
@@ -88,8 +82,7 @@ async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
 
     control_statuses = (await session.execute(
         select(Control.status)
-        .join(control_obligations, control_obligations.c.control_id == Control.id)
-        .where(control_obligations.c.obligation_id == obligation_id)
+        .where(Control.obligation_id == obligation_id)
     )).scalars().all()
 
     if not control_statuses:
@@ -103,13 +96,12 @@ async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
 
 
 async def refresh_obligations_for_control(session: AsyncSession, control_id: str) -> None:
-    """Refresh every obligation linked to a given control."""
-    obligation_ids = (await session.execute(
-        select(control_obligations.c.obligation_id)
-        .where(control_obligations.c.control_id == control_id)
-    )).scalars().all()
-    for oid in obligation_ids:
-        await refresh_obligation(session, oid)
+    """Refresh the obligation linked to a given control."""
+    control = (await session.execute(
+        select(Control).where(Control.id == control_id)
+    )).scalar_one_or_none()
+    if control is not None:
+        await refresh_obligation(session, control.obligation_id)
 
 
 async def refresh_assessment_score(session: AsyncSession, assessment_id: str) -> None:
@@ -167,4 +159,3 @@ async def _sync_system_compliance(session: AsyncSession, ai_system_id: str) -> N
     )).scalar_one_or_none()
     if system is not None:
         system.compliance = round(float(avg), 1) if avg is not None else 0.0
-

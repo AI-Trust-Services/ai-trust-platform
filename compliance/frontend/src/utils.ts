@@ -35,10 +35,10 @@ export const CONTROL_STATUS_META: Record<string, BadgeMeta> = {
 
 export const EVIDENCE_STATUS_META: Record<string, BadgeMeta> = {
   awaiting_review: { label: "Awaiting Review", cls: "st-applicable" },
-  under_review:    { label: "Under Review",    cls: "st-review" },
-  approved:        { label: "Approved",        cls: "st-fulfilled" },
-  rejected:        { label: "Rejected",        cls: "st-overdue" },
-  expired:         { label: "Expired",         cls: "st-na" },
+  under_review:{ label: "Under Review", cls: "st-review" },
+  approved:    { label: "Approved",     cls: "st-fulfilled" },
+  rejected:    { label: "Rejected",     cls: "st-overdue" },
+  expired:     { label: "Expired",      cls: "st-na" },
 };
 
 export const ASSESSMENT_TYPES: string[] = [
