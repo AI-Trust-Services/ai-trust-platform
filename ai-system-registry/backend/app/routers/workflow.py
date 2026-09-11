@@ -123,12 +123,12 @@ def _active_sub_assignment(steps: list[WorkflowStepResponse], section: str) -> s
     Derived purely from step ordering: among the sub-assignment steps for this section
     (``sub_assigned_{section}`` / ``sub_completed_{section}`` / ``sub_reclaimed_{section}``),
     if the most recent one is a ``sub_assigned`` the contributor still holds the token."""
-    suffix = f"_{section}"
-    relevant = [s for s in steps if s.step.endswith(suffix) and s.step[: -len(suffix)] in _SUB_STEPS]
+    valid = {f"{kind}_{section}" for kind in _SUB_STEPS}
+    relevant = [s for s in steps if s.step in valid]
     if not relevant:
         return None
     latest = relevant[-1]  # steps arrive ordered by created_at
-    if latest.step == f"sub_assigned{suffix}":
+    if latest.step == f"sub_assigned_{section}":
         return latest.assignee_username
     return None
 
