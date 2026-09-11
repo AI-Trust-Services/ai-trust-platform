@@ -237,6 +237,8 @@ async def get_compliance_stats(
 
         # Expiring evidence — approved evidence with validity_until within the window,
         # soonest first. (Powers the "Evidence Expiring Soon" widget.)
+        # ai_system_id is resolved via evidence_controls → Control.ai_system_id
+        evd_ctl = aliased(Control)
         evd_sys = aliased(AISystem)
         evd_deadlines = (await session.execute(
             select(
@@ -244,16 +246,19 @@ async def get_compliance_stats(
                 Evidence.title,
                 Evidence.validity_until.label("due_date"),
                 Evidence.status,
-                Evidence.ai_system_id,
+                evd_ctl.ai_system_id,
                 evd_sys.name.label("ai_system_name"),
             )
-            .join(evd_sys, evd_sys.id == Evidence.ai_system_id)
+            .join(evidence_controls, evidence_controls.c.evidence_id == Evidence.id)
+            .join(evd_ctl, evd_ctl.id == evidence_controls.c.control_id)
+            .join(evd_sys, evd_sys.id == evd_ctl.ai_system_id)
             .where(
                 Evidence.validity_until >= today,
                 Evidence.validity_until < window_end,
                 Evidence.status == "approved",
             )
-            .order_by(Evidence.validity_until.asc())
+            .distinct(Evidence.id)
+            .order_by(Evidence.id, Evidence.validity_until.asc())
             .limit(30)
         )).all()
 

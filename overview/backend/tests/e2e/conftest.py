@@ -91,7 +91,7 @@ def _truncate() -> None:
     # frameworks is excluded — seeded by migration, never modified by tests.
     cur.execute(
         "TRUNCATE ai_systems, model_cards, assessments, obligations, evidence, "
-        "evidence_obligations, evidence_controls RESTART IDENTITY CASCADE"
+        "evidence_controls RESTART IDENTITY CASCADE"
     )
     cur.close()
     conn.close()
