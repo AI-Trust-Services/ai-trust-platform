@@ -90,8 +90,8 @@ async def test_smtp(
     if not row.smtp_from:
         return SmtpTestResponse(success=False, message="From address is not configured. Save settings first.")
 
-    msg = MIMEText("This is a test email from AI Trust Platform to verify your SMTP configuration.", "plain")
-    msg["Subject"] = "AI Trust Platform — SMTP test"
+    msg = MIMEText(f"This is a test email from {row.platform_name} to verify your SMTP configuration.", "plain")
+    msg["Subject"] = f"{row.platform_name} — SMTP test"
     msg["From"] = f"{row.smtp_from_name} <{row.smtp_from}>" if row.smtp_from_name else row.smtp_from
     msg["To"] = str(body.to)
 
