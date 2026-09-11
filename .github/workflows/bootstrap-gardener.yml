@@ -206,7 +206,6 @@ jobs:
     runs-on: ubuntu-latest
     # all other deploys (sr-test cluster, or feature-branch manual runs to ai-trust-main)
     if: inputs.cluster != 'ai-trust-main' || (inputs.ref != 'refs/heads/main' && inputs.ref != 'main')
-    environment: other
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
