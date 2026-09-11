@@ -186,3 +186,40 @@ async def test_smtp_test_timeout_returns_descriptive_message(client: httpx.Async
     assert r.status_code == 200
     assert r.json()["success"] is False
     assert "timed out" in r.json()["message"].lower() or "unreachable" in r.json()["message"].lower()
+
+
+async def test_smtp_test_smtp_timeout_error_returns_descriptive_message(client: httpx.AsyncClient):
+    import aiosmtplib
+    session = _make_session()
+    with (
+        patch("app.routers.smtp.SessionLocal", return_value=session),
+        patch("app.routers.smtp.aiosmtplib.send",
+              new=AsyncMock(side_effect=aiosmtplib.SMTPTimeoutError("timed out"))),
+    ):
+        r = await client.post("/v1/smtp/test", json={"to": "admin@local.dev"})
+    assert r.status_code == 200
+    assert r.json()["success"] is False
+    assert "timed out" in r.json()["message"].lower() or "unreachable" in r.json()["message"].lower()
+
+
+async def test_put_smtp_normalises_empty_strings_to_null(client: httpx.AsyncClient):
+    row = _default_settings()
+    session = _make_session(row)
+    session.refresh = AsyncMock(side_effect=lambda r: None)
+
+    with patch("app.routers.smtp.SessionLocal", return_value=session):
+        r = await client.put("/v1/smtp", json={
+            "smtp_host": "",
+            "smtp_port": 587,
+            "smtp_user": "",
+            "smtp_from": "",
+            "smtp_from_name": "",
+            "smtp_ssl": False,
+            "smtp_starttls": False,
+        })
+
+    assert r.status_code == 200
+    assert row.smtp_host is None
+    assert row.smtp_user is None
+    assert row.smtp_from is None
+    assert row.smtp_from_name is None
