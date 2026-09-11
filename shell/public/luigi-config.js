@@ -6,10 +6,12 @@
 (async function initShell() {
   let permissions = [];
   let currentUser = { username: "", firstName: "", lastName: "" };
+  let platformName = "AI Trust";
   try {
-    const [permRes, meRes] = await Promise.all([
+    const [permRes, meRes, settingsRes] = await Promise.all([
       fetch("/api/users/v1/me/permissions", { cache: "no-store" }),
       fetch("/api/users/v1/me", { cache: "no-store" }),
+      fetch("/api/admin/v1/settings", { cache: "no-store" }),
     ]);
     if (permRes.ok) {
       const data = await permRes.json();
@@ -17,6 +19,10 @@
     }
     if (meRes.ok) {
       currentUser = await meRes.json();
+    }
+    if (settingsRes.ok) {
+      const s = await settingsRes.json();
+      if (s.platform_name) platformName = s.platform_name;
     }
   } catch (e) {
     permissions = [];
@@ -168,7 +174,7 @@
 
   settings: {
     header: {
-      title: "AI Trust",
+      title: platformName,
     },
     responsiveNavigation: "Fiori3",
     sideNavigation: {
@@ -194,6 +200,7 @@
 
   lifecycleHooks: {
     luigiAfterInit: () => {
+      document.title = platformName;
       const style = document.createElement("style");
       style.textContent = `:root {
           --luigi-nav-bg: #0f172a;
@@ -664,15 +671,15 @@
         icon.className = "luigi-brand-icon";
         const imgFull = document.createElement("img");
         imgFull.src = "/brand/svg/horizontal_color.svg";
-        imgFull.alt = "AI Trust";
+        imgFull.alt = platformName;
         imgFull.className = "brand-logo-full";
         const imgFullDark = document.createElement("img");
         imgFullDark.src = "/brand/svg/horizontal_color_dark.svg";
-        imgFullDark.alt = "AI Trust";
+        imgFullDark.alt = platformName;
         imgFullDark.className = "brand-logo-full--dark";
         const imgIcon = document.createElement("img");
         imgIcon.src = "/brand/svg/Icon_color.svg";
-        imgIcon.alt = "AI Trust";
+        imgIcon.alt = platformName;
         imgIcon.className = "brand-logo-icon";
         icon.appendChild(imgFull);
         icon.appendChild(imgFullDark);

@@ -52,13 +52,13 @@ async def update_smtp(
         if row is None:
             raise HTTPException(status_code=503, detail="Platform settings not initialised")
 
-        row.smtp_host = body.smtp_host
+        row.smtp_host = body.smtp_host or None
         row.smtp_port = body.smtp_port
-        row.smtp_user = body.smtp_user
+        row.smtp_user = body.smtp_user or None
         if body.smtp_password is not None:
             row.smtp_password = body.smtp_password
-        row.smtp_from = body.smtp_from
-        row.smtp_from_name = body.smtp_from_name
+        row.smtp_from = body.smtp_from or None
+        row.smtp_from_name = body.smtp_from_name or None
         row.smtp_ssl = body.smtp_ssl
         row.smtp_starttls = body.smtp_starttls
 
@@ -114,7 +114,7 @@ async def test_smtp(
         return SmtpTestResponse(success=False, message="Connection refused — check SMTP host and port.")
     except aiosmtplib.SMTPRecipientRefused:
         return SmtpTestResponse(success=False, message="Recipient address rejected by the mail server.")
-    except TimeoutError:
+    except (aiosmtplib.SMTPTimeoutError, TimeoutError):
         return SmtpTestResponse(success=False, message="Connection timed out — host unreachable.")
     except Exception as exc:
         logger.warning("admin.smtp.test_failed", extra={"error": str(exc)})
