@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Eye, Trash2, RefreshCw } from "lucide-react";
+import { Eye, Trash2, RefreshCw, Sparkles, ClipboardList } from "lucide-react";
 import { TierBadge, LifecycleBadge, ComplianceBar, FormattedDate } from "../components/Badges";
 import SystemDetail from "../components/SystemDetail";
 import type { UserMap } from "../components/SystemDetail";
 import RegisterWizard from "../components/RegisterWizard";
 import RegisterModeChooser from "../components/RegisterModeChooser";
-import AssistedRegistration from "../components/AssistedRegistration";
 import EngineerAssistedRegistration from "../components/EngineerAssistedRegistration";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
@@ -20,7 +19,10 @@ import { cn } from "@/lib/utils";
 
 const WORKFLOW_STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
-  pending_review: "Pending Review",
+  business_pending: "Business Review",
+  technical_pending: "Technical Review",
+  pending_review: "Compliance Review",
+  info_requested: "Information Requested",
   approved: "Approved",
   rejected: "Rejected",
 };
@@ -36,21 +38,17 @@ export default function Systems() {
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [fillInSystem, setFillInSystem] = useState<AISystem | undefined>(undefined);
-  const [ownerStage, setOwnerStage] = useState<"chooser" | "manual" | "assisted">("chooser");
   const [engineerStage, setEngineerStage] = useState<"chooser" | "manual" | "assisted">("chooser");
   const { wizardOpen, setWizardOpen, mayRegister, username } = useModalControls();
   const showToast = useToast();
 
-  // Owner flow always starts at the mode chooser; engineer fill-in also starts at chooser.
   useEffect(() => {
-    if (wizardOpen && !fillInSystem) setOwnerStage("chooser");
     if (wizardOpen && fillInSystem) setEngineerStage("chooser");
   }, [wizardOpen, fillInSystem]);
 
   function closeWizard() {
     setWizardOpen(false);
     setFillInSystem(undefined);
-    setOwnerStage("chooser");
     setEngineerStage("chooser");
   }
 
@@ -76,9 +74,10 @@ export default function Systems() {
     Promise.all([
       api.getUsersByRole("ai_engineer").catch(() => []),
       api.getUsersByRole("ai_compliance_officer").catch(() => []),
-    ]).then(([engineers, cos]) => {
+      api.getUsersByRole("business_owner").catch(() => []),
+    ]).then(([engineers, cos, biz]) => {
       const map: UserMap = {};
-      for (const u of [...engineers, ...cos]) {
+      for (const u of [...engineers, ...cos, ...biz]) {
         map[u.username] = { firstName: u.firstName, lastName: u.lastName };
       }
       setUserMap(map);
@@ -101,9 +100,8 @@ export default function Systems() {
 
 
   async function openSystem(s: AISystem) {
-    // Engineer mode: assigned user + editable status → open wizard to fill in
     const isAssignee = username && s.assignee_username === username;
-    if (isAssignee && (s.workflow_status === "draft" || s.workflow_status === "rejected")) {
+    if (isAssignee && s.workflow_status === "rejected") {
       try {
         const fresh = await api.getSystem(s.id);
         setFillInSystem(fresh);
@@ -113,7 +111,6 @@ export default function Systems() {
       }
       return;
     }
-    // Otherwise open the detail panel
     try {
       const fresh = await api.getSystem(s.id);
       setSelectedSystem(fresh);
@@ -123,13 +120,13 @@ export default function Systems() {
     }
   }
 
-  // Workflow-state pill. The four states encode workflow meaning (like the tier
-  // and lifecycle identity maps), so they keep their existing hues rather than
-  // moving onto the governed status ramp.
   function workflowStatusBadge(status: string) {
     const colors: Record<string, string> = {
       draft: "bg-[#8a9bb0]",
+      business_pending: "bg-[#7b5ea7]",
+      technical_pending: "bg-[#2980b9]",
       pending_review: "bg-[#e67e22]",
+      info_requested: "bg-[#d35400]",
       approved: "bg-[#27ae60]",
       rejected: "bg-[#c0392b]",
     };
@@ -152,6 +149,7 @@ export default function Systems() {
           <option value="gpai-standard">GPAI Standard</option>
           <option value="limited">Transparency Obligations</option>
           <option value="minimal">Minimal or No Risk</option>
+          <option value="pending">Pending</option>
         </select>
         <select className={cn(SELECT_CLASS, "w-auto")} value={lifecycleFilter} onChange={(e) => setLifecycleFilter(e.target.value)}>
           <option value="">All Lifecycle States</option>
@@ -166,7 +164,10 @@ export default function Systems() {
         <select className={cn(SELECT_CLASS, "w-auto")} value={workflowFilter} onChange={(e) => setWorkflowFilter(e.target.value)}>
           <option value="">All Workflow States</option>
           <option value="draft">Draft</option>
-          <option value="pending_review">Pending Review</option>
+          <option value="business_pending">Business Review</option>
+          <option value="technical_pending">Technical Review</option>
+          <option value="pending_review">Compliance Review</option>
+          <option value="info_requested">Information Requested</option>
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </select>
@@ -260,15 +261,35 @@ export default function Systems() {
         </Card>
       </div>
 
+      {/* Owner: simple registration wizard (name + description only) */}
+      <RegisterWizard
+        open={wizardOpen && !fillInSystem}
+        onClose={closeWizard}
+        onSuccess={() => { loadSystems(); loadModels(); }}
+      />
+
       {/* Engineer: choose AI-assisted vs manual */}
       <RegisterModeChooser
         open={wizardOpen && !!fillInSystem && engineerStage === "chooser"}
         onClose={closeWizard}
-        onAssisted={() => setEngineerStage("assisted")}
-        onManual={() => setEngineerStage("manual")}
         title="Complete Technical Registration"
-        assistedDescription="Upload a model card or technical spec and let the assistant extract the details. Review and confirm each field before submitting."
-        manualDescription="Fill in the technical details and risk flags manually using the step-by-step form."
+        options={[
+          {
+            key: "assisted",
+            icon: <Sparkles className="size-5" />,
+            iconClass: "bg-[var(--brand)]/10 text-[var(--brand)]",
+            title: "AI-Assisted",
+            description: "Upload a model card or technical spec and let the assistant extract the details. Review and confirm each field before submitting.",
+            onClick: () => setEngineerStage("assisted"),
+          },
+          {
+            key: "manual",
+            icon: <ClipboardList className="size-5" />,
+            title: "Manual",
+            description: "Fill in the technical details and risk flags manually using the step-by-step form.",
+            onClick: () => setEngineerStage("manual"),
+          },
+        ]}
       />
 
       {/* Engineer: AI-assisted technical flow */}
@@ -283,28 +304,6 @@ export default function Systems() {
       <RegisterWizard
         open={wizardOpen && !!fillInSystem && engineerStage === "manual"}
         system={fillInSystem}
-        onClose={closeWizard}
-        onSuccess={() => { loadSystems(); loadModels(); }}
-      />
-
-      {/* Owner: choose manual vs AI-assisted */}
-      <RegisterModeChooser
-        open={wizardOpen && !fillInSystem && ownerStage === "chooser"}
-        onClose={closeWizard}
-        onManual={() => setOwnerStage("manual")}
-        onAssisted={() => setOwnerStage("assisted")}
-      />
-
-      {/* Owner: classic manual stub */}
-      <RegisterWizard
-        open={wizardOpen && !fillInSystem && ownerStage === "manual"}
-        onClose={closeWizard}
-        onSuccess={() => { loadSystems(); loadModels(); }}
-      />
-
-      {/* Owner: conversational AI-assisted flow */}
-      <AssistedRegistration
-        open={wizardOpen && !fillInSystem && ownerStage === "assisted"}
         onClose={closeWizard}
         onSuccess={() => { loadSystems(); loadModels(); }}
       />

@@ -1,4 +1,5 @@
-import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult } from "../types";
+import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult, QuestionAssignment } from "../types";
+import type { SectionKey } from "../config/questionnaire";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
@@ -85,6 +86,16 @@ export const api = {
       body: JSON.stringify({ confirmations }),
     }),
 
+  // Merge questionnaire answers — only the keys sent are merged. section="business"
+  // merges at the top level; section="technical" merges into the nested "technical"
+  // sub-object (AI-mode free-text technical answers).
+  patchQuestionnaireAnswers: (systemId: string, answers: Record<string, string>, section: SectionKey = "business") =>
+    request<AISystem>(`/systems/${encodeURIComponent(systemId)}/questionnaire`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers, section }),
+    }),
+
   linkModel: (systemId: string, modelId: string) =>
     request<AISystem>(`/systems/${systemId}/model?model_id=${encodeURIComponent(modelId)}`, { method: "PUT" }),
   unlinkModel: (systemId: string) =>
@@ -112,6 +123,30 @@ export const api = {
   getUsersByRole: (role: string) =>
     request<UserSummary[]>(`/users/by-role?role=${encodeURIComponent(role)}`, {}, USERS_API_BASE),
 
+  getAllUsers: async (): Promise<Array<{ username: string; firstName: string; lastName: string; role: string }>> => {
+    const ROLES = [
+      "platform_administrator", "ai_engineer", "ai_compliance_officer",
+      "business_owner", "auditor", "executive",
+    ];
+    const lists = await Promise.all(
+      ROLES.map((role) =>
+        request<Array<{ username: string; firstName: string; lastName: string }>>(
+          `/users/by-role?role=${encodeURIComponent(role)}`,
+          {},
+          USERS_API_BASE,
+        )
+          .then((users) => users.map((u) => ({ ...u, role })))
+          .catch(() => [] as Array<{ username: string; firstName: string; lastName: string; role: string }>),
+      ),
+    );
+    const seen = new Set<string>();
+    return lists.flat().filter((u) => {
+      if (seen.has(u.username)) return false;
+      seen.add(u.username);
+      return true;
+    });
+  },
+
   getWorkflow: (systemId: string) =>
     request<WorkflowStep[]>(`/systems/${systemId}/workflow`),
 
@@ -122,17 +157,137 @@ export const api = {
       body: JSON.stringify({ assignee_username: assigneeUsername, note: note ?? null }),
     }),
 
-  approveSystem: (systemId: string, note?: string) =>
+  approveSystem: (systemId: string, note?: string, tier?: string, orgRole?: string) =>
     request<WorkflowStep[]>(`/systems/${systemId}/workflow/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note ?? null, tier: tier ?? null, org_role: orgRole ?? null }),
+    }),
+
+  rejectSystem: (systemId: string, note: string, assigneeUsername: string, sendTo: "business" | "technical" = "business") =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note, assignee_username: assigneeUsername, send_to: sendTo }),
+    }),
+
+  // New questionnaire workflow endpoints.
+  assignWorkflow: (systemId: string, body: { business_assignee_username: string; technical_assignee_username?: string; compliance_officer_username: string; note?: string }) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  submitBusinessSection: (systemId: string, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-business`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ note: note ?? null }),
     }),
 
-  rejectSystem: (systemId: string, note: string, assigneeUsername: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/reject`, {
+  submitTechnicalSection: (systemId: string, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-technical`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note, assignee_username: assigneeUsername }),
+      body: JSON.stringify({ note: note ?? null }),
+    }),
+
+  // Questionnaire chatbot — stateful, system must exist in DB.
+  questionnaireTurn: (systemId: string, section: SectionKey, transcript: ChatMessage[], fields: Record<string, unknown>) =>
+    request<AssistTurnResponse>(`/intake/assist/questionnaire/${encodeURIComponent(systemId)}/turn`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ section, transcript, fields }),
+    }),
+
+  questionnaireExtract: (systemId: string, section: SectionKey, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<AssistExtractResponse>(`/intake/assist/questionnaire/${encodeURIComponent(systemId)}/extract?section=${section}`, { method: "POST", body: fd });
+  },
+
+  // CO sends a system back to a specific contributor for more information.
+  requestInfo: (systemId: string, contributorUsername: string, note: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/request-info`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contributor_username: contributorUsername, note }),
+    }),
+
+  // Contributor returns an info-requested system to the CO.
+  submitInfo: (systemId: string, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-info`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note ?? null }),
+    }),
+
+  // Section owner hands a section to a contributor (task handoff).
+  subAssign: (systemId: string, section: SectionKey, subAssigneeUsername: string, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/sub-assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ section, sub_assignee_username: subAssigneeUsername, note: note ?? null }),
+    }),
+
+  // Contributor marks a sub-assigned section complete, returning it to the owner.
+  subComplete: (systemId: string, section: SectionKey, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/sub-complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ section, note: note ?? null }),
+    }),
+
+  // Section owner cancels an active sub-assignment and reclaims editing.
+  subReclaim: (systemId: string, section: SectionKey, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/sub-reclaim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ section, note: note ?? null }),
+    }),
+
+  // Full-manual supporting documents.
+  uploadDocument: (systemId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<AISystem>(`/systems/${encodeURIComponent(systemId)}/documents`, { method: "POST", body: fd });
+  },
+
+  getDocumentDownloadUrl: (systemId: string, docIndex: number) =>
+    request<{ url: string }>(`/systems/${encodeURIComponent(systemId)}/documents/${docIndex}/download-url`),
+
+  getRceSummary: (systemId: string) =>
+    request<{
+      tier: string | null;
+      org_role: string | null;
+      registration_mode: string | null;
+      classification_rationale: unknown;
+      obligations: Array<{ title: string; article_ref: string; description: string }>;
+    }>(`/systems/${encodeURIComponent(systemId)}/workflow/rce-summary`),
+
+  getQuestionAssignments: (systemId: string) =>
+    request<QuestionAssignment[]>(`/systems/${encodeURIComponent(systemId)}/workflow/question-assignments`),
+
+  questionAssign: (systemId: string, body: { section: string; question_key: string; assignee_username: string; note?: string }) =>
+    request<QuestionAssignment[]>(`/systems/${encodeURIComponent(systemId)}/workflow/question-assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  questionUnassign: (systemId: string, body: { section: string; question_key: string }) =>
+    request<QuestionAssignment[]>(`/systems/${encodeURIComponent(systemId)}/workflow/question-assign`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  questionAnswer: (systemId: string, body: { section: string; question_key: string }) =>
+    request<QuestionAssignment[]>(`/systems/${encodeURIComponent(systemId)}/workflow/question-answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     }),
 };
+

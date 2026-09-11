@@ -1,9 +1,11 @@
 export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal" | "pending";
 export type LifecycleKey = "development" | "testing" | "prod_ready" | "market" | "service" | "updated" | "decommissioned";
-export type OrgRole = "provider" | "deployer" | "importer" | "distributor" | "authorised_representative";
+export type OrgRole = "provider" | "deployer" | "both" | "importer" | "distributor" | "authorised_representative";
 export type SystemType = "application" | "model" | "component" | "service";
 export type AutonomyLevel = "decision_support" | "human_in_the_loop" | "human_on_the_loop" | "fully_automated";
 export type ModelType = "llm" | "embedding" | "multimodal" | "classifier";
+export type WorkflowStatus = "draft" | "business_pending" | "technical_pending" | "pending_review" | "info_requested" | "approved" | "rejected";
+export type RegistrationMode = "ai" | "manual_questionnaire" | "full_manual";
 
 export interface AISystem {
   id: string;
@@ -13,21 +15,39 @@ export interface AISystem {
   org_name: string;
   org_role: OrgRole;
   provider_country: string;
+  deployment_country: string | null;
+  eu_output_usage: boolean | null;
+  eu_market_placement: boolean | null;
   system_type: SystemType;
   autonomy_level: AutonomyLevel;
   lifecycle: LifecycleKey;
   application_url: string;
   description: string;
   intended_purpose: string;
+  department: string | null;
+  use_case: string | null;
+  people_affected: string | null;
+  decision_context: string | null;
   tier: TierKey;
   basis: string;
   annex_iii_area: number | null;
   compliance: number;
   created_at: string;
   updated_at: string;
-  workflow_status: string;
+  workflow_status: WorkflowStatus;
+  registration_mode: RegistrationMode;
   assignee_username: string | null;
   compliance_officer_username: string | null;
+  business_assignee_username: string | null;
+  technical_assignee_username: string | null;
+  // Business answers live at the top level; technical free-text answers (AI mode)
+  // are nested under the "technical" key. Values are strings except that nesting.
+  questionnaire_answers: Record<string, unknown> | null;
+  registration_documents: RegistrationDocument[] | null;
+  // Two shapes: legacy bare RationaleItem[] (AI-assisted intake) or the extended
+  // ClassificationRationale object (questionnaire workflow, CO-only). Discriminate
+  // with Array.isArray().
+  classification_rationale: RationaleItem[] | ClassificationRationale | null;
   is_gpai: boolean;
   training_compute_flops: number;
   is_chatbot: boolean;
@@ -61,12 +81,21 @@ export interface WorkflowStep {
   created_at: string;
 }
 
+export interface QuestionAssignment {
+  id: string;
+  section: string;
+  question_key: string;
+  assignee_username: string;
+  assigned_by_username: string;
+  assigned_at: string;
+  answered_at: string | null;
+}
+
 export interface UserSummary {
   username: string;
   firstName: string;
   lastName: string;
 }
-
 
 export interface ModelCard {
   id: string;
@@ -113,6 +142,24 @@ export interface RationaleItem {
   confidence: number;
 }
 
+// Extended classification output from the questionnaire workflow — visible only
+// to the compliance officer. Distinct from the legacy bare RationaleItem[].
+export interface ClassificationRationale {
+  flags: RationaleItem[];
+  confidence: number | null;
+  reasoning: string | null;
+  missing_info: string[];
+  org_role?: string;
+  org_role_rationale?: string;
+}
+
+// One supporting document uploaded in the full-manual override flow.
+export interface RegistrationDocument {
+  filename: string;
+  minio_key: string;
+  uploaded_at: string;
+}
+
 export interface ClassificationResult {
   tier: TierKey;
   basis: string;
@@ -142,6 +189,9 @@ export interface AISystemFormData {
   org_name: string;
   org_role: OrgRole;
   provider_country: string;
+  deployment_country: string;
+  eu_output_usage: boolean | null;
+  eu_market_placement: boolean | null;
   system_type: SystemType;
   autonomy_level: AutonomyLevel;
   lifecycle: LifecycleKey;
@@ -185,3 +235,4 @@ export interface PermissionsResponse {
   username: string;
   permissions: string[];
 }
+

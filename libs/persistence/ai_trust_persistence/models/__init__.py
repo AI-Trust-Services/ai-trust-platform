@@ -1,6 +1,7 @@
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.alert_rule import AlertRule
+from ai_trust_persistence.models.question_assignment import QuestionAssignment
 from ai_trust_persistence.models.assessment import Assessment
 from ai_trust_persistence.models.audit_event import AuditEvent
 from ai_trust_persistence.models.control import Control, control_obligations
@@ -30,6 +31,7 @@ __all__ = [
     "Evidence",
     "EvidenceVersion",
     "SystemWorkflowStep",
+    "QuestionAssignment",
     "control_obligations",
     "evidence_controls",
     "evidence_obligations",

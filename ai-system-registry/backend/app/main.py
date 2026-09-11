@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,10 +11,27 @@ from sqlalchemy import text
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_tenancy import install_tenant_middleware
 from ai_trust_persistence import SessionLocal
+from app import minio_client
 from app.routers import intake, intake_assist, systems, model_cards, workflow
 
-app = FastAPI(title="AI System Registry", version="1.0.0", root_path=os.environ.get("ROOT_PATH", ""))
 logger = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        await minio_client.ensure_bucket()
+    except Exception as e:
+        logger.warning("startup.bucket_ensure_failed", extra={"error": str(e)})
+    yield
+
+
+app = FastAPI(
+    title="AI System Registry",
+    version="1.0.0",
+    root_path=os.environ.get("ROOT_PATH", ""),
+    lifespan=lifespan,
+)
 
 _raw_origins = os.environ.get("ALLOWED_ORIGINS", "")
 _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]

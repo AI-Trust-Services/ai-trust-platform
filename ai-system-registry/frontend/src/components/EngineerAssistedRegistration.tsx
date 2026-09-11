@@ -470,8 +470,14 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
                         borderCls,
                       )}>
                         <div className="flex items-center justify-between">
-                          <label htmlFor={`eng_field_${key}`} className="text-[11px] font-semibold text-muted-foreground">
+                          <label htmlFor={`eng_field_${key}`} className={cn(
+                            "flex flex-wrap items-center gap-1.5 text-[11px] font-semibold",
+                            key === "intended_purpose" ? "text-[var(--brand)]" : "text-muted-foreground",
+                          )}>
                             {label}
+                            {key === "intended_purpose" && (
+                              <span className="rounded-full bg-[var(--brand)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide">Drives risk classification category</span>
+                            )}
                           </label>
                           {!isEmpty && (
                             isConfirmed ? (

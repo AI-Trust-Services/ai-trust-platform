@@ -58,8 +58,14 @@ async def test_owner_turn_returns_message_and_extracted_fields(client: httpx.Asy
     assert body["degraded"] is False
 
 
-async def test_owner_turn_reaches_complete_after_full_sequence(client: httpx.AsyncClient):
-    """Drive REQUIRED_FIELD_KEYS turns; stub marks complete on the last one."""
+async def test_owner_turn_reaches_complete_after_full_sequence(client: httpx.AsyncClient, monkeypatch):
+    """Drive REQUIRED_FIELD_KEYS turns; stub marks complete on the last one.
+
+    The default TURN_CAP (12) is below REQUIRED_FIELD_KEYS (14), so the one-shot
+    chat would degrade before the stub converges. Raise the cap here so the full
+    scripted sequence completes and flag inference runs.
+    """
+    monkeypatch.setattr("app.routers.intake_assist.TURN_CAP", len(REQUIRED_FIELD_KEYS) + 5)
     transcript = [{"role": "assistant", "content": "Hi! Describe your system."}]
     fields: dict = {}
 
@@ -136,8 +142,8 @@ async def test_owner_extract_from_text_file(client: httpx.AsyncClient):
     assert r.status_code == 200
     body = r.json()
     assert isinstance(body["extracted_fields"], dict)
-    # Stub always extracts system_name + purpose + department from documents
-    assert "system_name" in body["extracted_fields"]
+    # Stub extracts department, technologies, use_case, entity_role, etc. from documents
+    assert "department" in body["extracted_fields"]
 
 
 async def test_owner_extract_unsupported_file_type_returns_400(client: httpx.AsyncClient):
@@ -228,8 +234,9 @@ async def test_engineer_turn_404_on_missing_system(client: httpx.AsyncClient):
     assert r.status_code == 404
 
 
-async def test_engineer_turn_reaches_complete_and_infers_flags(client: httpx.AsyncClient):
+async def test_engineer_turn_reaches_complete_and_infers_flags(client: httpx.AsyncClient, monkeypatch):
     """Full sequence for the engineer flow — should complete and infer flags."""
+    monkeypatch.setattr("app.routers.intake_assist.TURN_CAP", len(REQUIRED_FIELD_KEYS) + 5)
     system_id = await _create_system(
         client,
         intended_purpose="Screens and ranks job applicants to support recruiters.",
@@ -312,11 +319,12 @@ async def test_engineer_extract_oversized_file_returns_400(client: httpx.AsyncCl
 # Full round-trip: owner AI flow → POST /intake with inferred flags
 # ---------------------------------------------------------------------------
 
-async def test_full_owner_flow_registers_high_risk_system(client: httpx.AsyncClient):
+async def test_full_owner_flow_registers_high_risk_system(client: httpx.AsyncClient, monkeypatch):
     """Drive the owner turn loop to completion, then register with inferred flags.
 
     The stub infers is_employment_related=True, so the final tier must be 'high'.
     """
+    monkeypatch.setattr("app.routers.intake_assist.TURN_CAP", len(REQUIRED_FIELD_KEYS) + 5)
     transcript = [{"role": "assistant", "content": "Tell me about your system."}]
     fields: dict = {}
     inferred_flags = None
@@ -340,7 +348,7 @@ async def test_full_owner_flow_registers_high_risk_system(client: httpx.AsyncCli
     assert inferred_flags is not None
 
     intake_payload: dict = {
-        "name": fields.get("system_name", "TalentMatch"),
+        "name": "TalentMatch",
         "description": fields.get("purpose", ""),
         "assignee_username": _ENGINEER,
         "classification_rationale": inferred_flags,
