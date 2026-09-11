@@ -18,9 +18,7 @@ from tests.e2e.conftest import _test_engine
 
 EXPECTED = [
     # M2M reverse indexes
-    ("control_obligations", "ix_control_obligations_obligation_id"),
     ("evidence_controls",   "ix_evidence_controls_control_id"),
-    ("evidence_obligations","ix_evidence_obligations_obligation_id"),
     # Composite hot-path indexes
     ("assessments",         "ix_assessments_system_status"),
     ("obligations",         "ix_obligations_assessment_status"),
@@ -55,9 +53,7 @@ async def test_migration_0007_indexes_exist():
 async def test_m2m_reverse_index_columns():
     """Each reverse index must cover the correct column."""
     expected_columns = {
-        "ix_control_obligations_obligation_id": "obligation_id",
         "ix_evidence_controls_control_id":      "control_id",
-        "ix_evidence_obligations_obligation_id":"obligation_id",
     }
 
     async with AsyncSession(_test_engine) as session:

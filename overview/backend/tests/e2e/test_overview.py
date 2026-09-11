@@ -459,7 +459,7 @@ async def test_expired_counts_only_approved(client: httpx.AsyncClient):
         session.add(_sys(id=sys_id))
         await session.flush()
         session.add(_evd(sys_id, status="approved", validity_until=today - timedelta(days=1)))
-        session.add(_evd(sys_id, status="awaiting_review", validity_until=today - timedelta(days=1)))
+        session.add(_evd(sys_id, status="pending", validity_until=today - timedelta(days=1)))
         await session.commit()
 
     r = await client.get("/v1/compliance-stats")
