@@ -65,7 +65,7 @@ class EvidenceResponse(BaseModel):
 
 
 class EvidenceDetailResponse(EvidenceResponse):
-    control_ids: list[str] = []
+    requirement_ids: list[str] = []
     obligation_ids: list[str] = []
 
 
