@@ -121,7 +121,7 @@ export default function EvidencePage() {
   const kpis = useMemo(() => ({
     total: evidence.length,
     approved: evidence.filter((e) => e.status === "approved").length,
-    pending: evidence.filter((e) => e.status === "pending" || e.status === "under_review").length,
+    pending: evidence.filter((e) => e.status === "awaiting_review").length,
     expired: evidence.filter((e) => e.status === "expired" || e.status === "rejected").length,
   }), [evidence]);
 

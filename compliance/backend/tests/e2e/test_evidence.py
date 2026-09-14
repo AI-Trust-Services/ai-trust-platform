@@ -26,7 +26,7 @@ async def test_create_evidence_linked_to_control(client: httpx.AsyncClient):
     assert r.status_code == 201
     body = r.json()
     assert body["id"].startswith("EVD-")
-    assert body["status"] == "pending"
+    assert body["status"] == "awaiting_review"
     assert any(c["id"] == ctl["id"] for c in body["controls"])
 
 

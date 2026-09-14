@@ -89,7 +89,7 @@ async def _control(
     return row
 
 
-async def _evidence(session: AsyncSession, status: str = "pending") -> Evidence:
+async def _evidence(session: AsyncSession, status: str = "awaiting_review") -> Evidence:
     row = Evidence(
         id=new_id("EVD"),
         title="Test Evidence",
