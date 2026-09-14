@@ -57,7 +57,7 @@ flowchart LR
     deploy -->|"new component version<br/>triggers upgrade"| component_version
     component_artifact -. pulled by .-> component_version
     image_artifacts -. pulled by .-> workloads
-    chart_artifact -. pulled by .-> workloads
+    chart_artifact -. resolved by .-> resource
 
     classDef node fill:#f0edff,stroke:#8f8f99,stroke-width:1px,color:#202124
     class build_images,build_chart,build_component,deploy,image_artifacts,chart_artifact,component_artifact,component_version,resource,flux_deployer,helm_release,workloads node
