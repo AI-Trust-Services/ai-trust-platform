@@ -3,43 +3,90 @@
 ## Deploy flow
 
 ```mermaid
-flowchart TD
-    dev([Developer\ngit push / workflow_dispatch])
+flowchart LR
+    developer(["Developer<br/>git push /<br/>workflow_dispatch"])
 
-    subgraph gha1["GitHub Actions — build-push-deploy.yml"]
-        prepare["1. prepare\ncompute tag: cluster-sha"]
-        build["2. build-push\n~22 images → ghcr.io/…/ai-trust-platform/name:cluster-sha"]
-        chart["3. package-chart\nhelm package → ghcr.io/…/charts/ai-trust-platform:0.0.0-cluster-sha"]
-        ocm_pub["4. publish-ocm\ncomponent 0.0.0-cluster-sha\n  ├─ ref → chart OCI artifact\n  └─ ref → each image"]
-        trigger["5. deploy\ncall bootstrap-gardener.yml"]
-        prepare --> build --> chart --> ocm_pub --> trigger
-    end
+    subgraph github["🐙 GitHub"]
+        direction TB
 
-    subgraph gha2["GitHub Actions — bootstrap-gardener.yml"]
-        auth["Gardener Structured Auth + GitHub OIDC"]
-        bootstrap["bootstrap.sh\n  ├─ ns ai-trust\n  ├─ secret/ai-trust-env → ai-trust\n  ├─ secret/ai-trust-flux-values → ocm-system\n  └─ ConfigMaps + RBAC"]
-        apply["envsubst → kubectl apply k8s/ocm/manifests.yaml\n  ├─ ComponentVersion  semver: 0.0.0-cluster-sha  (exact pin)\n  ├─ Resource\n  └─ FluxDeployer"]
-        auth --> bootstrap --> apply
-    end
-
-    subgraph cluster["Gardener Shoot Cluster"]
-        subgraph ocm_sys["ocm-system"]
-            cv["ComponentVersion\nresolves exact pinned version"]
-            res["Resource\nexposes chart artifact"]
-            fd["FluxDeployer\ncreates HelmRelease"]
-            hr["HelmRelease\nvaluesFrom: ai-trust-flux-values"]
-            cv --> res --> fd --> hr
+        subgraph ghcr["📦 GHCR — ghcr.io/AI-Trust-Services"]
+            direction TB
+            image_artifacts["Image artifacts<br/>name:cluster-sha"]
+            chart_artifact["Chart artifact<br/>charts/ai-trust-<br/>platform:0.0.0-cluster-sha"]
+            component_artifact["OCM component descriptor<br/>0.0.0-cluster-sha"]
         end
-        subgraph ai_trust["ai-trust"]
-            pods["helm upgrade --install ai-trust\nimage.tag  ← ai-trust-flux-values\nenvFrom    ← ai-trust-env\n\nPods: registry, compliance, monitoring,\nalerts, dta, overview, users, shell, …"]
+
+        subgraph actions["⚙️ GitHub Actions — build-push-deploy.yml"]
+            direction LR
+            build_images["Build Docker images<br/>~22 services"]
+            build_chart["Build Helm chart<br/>helm package"]
+            build_component["Build OCM component<br/>0.0.0-cluster-sha<br/>refs chart + images"]
+            deploy["Deploy step<br/>kubectl apply OCM CRs"]
+            cr_apply_succeeded(["CR apply succeeded"])
+            cr_apply_failed(["CR apply failed"])
+            build_images --> build_chart --> build_component --> deploy
+            deploy -->|success| cr_apply_succeeded
+            deploy -->|failure| cr_apply_failed
         end
-        hr -->|"Flux helm-controller\nreconciles every 1m"| pods
+
+        build_images -. push .-> image_artifacts
+        build_chart -. push .-> chart_artifact
+        build_component -. push .-> component_artifact
     end
 
-    dev --> gha1
-    trigger --> gha2
-    apply -->|"OCM controller\nreconciles every 1m"| cv
+    subgraph cluster["🟪 Gardener Shoot Cluster"]
+        direction LR
+
+        subgraph ocm["OCM — resolves pinned component"]
+            direction LR
+            component_version["ComponentVersion<br/>semver: 0.0.0-cluster-sha"]
+            resource["Resource<br/>exposes chart artifact"]
+            component_version --> resource
+        end
+
+        subgraph flux["Flux — reconciles desired state"]
+            direction LR
+            flux_deployer["FluxDeployer<br/>creates HelmRelease"]
+            helm_release["HelmRelease<br/>valuesFrom: ai-trust-flux-values"]
+            flux_deployer --> helm_release
+        end
+
+        subgraph helm["Helm — renders + applies chart"]
+            direction TB
+            workloads["helm upgrade --install ai-<br/>trust<br/><br/>Pods: registry, compliance,<br/>monitoring,<br/>alerts, dta, overview,<br/>users, shell, …"]
+            rollout_succeeded(["Rollout succeeded"])
+            rollout_failed(["Rollout failed"])
+            workloads -->|success| rollout_succeeded
+            workloads -->|failure| rollout_failed
+        end
+
+        resource --> flux_deployer
+        helm_release -->|helm-controller| workloads
+    end
+
+    developer --> build_images
+    deploy -->|"new component version<br/>triggers upgrade"| component_version
+    component_artifact -. pulled by .-> component_version
+    image_artifacts -. pulled by .-> workloads
+    chart_artifact -. pulled by .-> workloads
+
+    classDef node fill:#f0edff,stroke:#8f8f99,stroke-width:1px,color:#202124
+    classDef success fill:#e8f5e9,stroke:#79a77d,stroke-width:1px,color:#16351a
+    classDef failure fill:#fdecec,stroke:#bd7777,stroke-width:1px,color:#4d1717
+    class developer,build_images,build_chart,build_component,deploy,image_artifacts,chart_artifact,component_artifact,component_version,resource,flux_deployer,helm_release,workloads node
+    class cr_apply_succeeded,rollout_succeeded success
+    class cr_apply_failed,rollout_failed failure
+    style github fill:#fffde7,stroke:#c9c5ae,stroke-width:1px,color:#202124
+    style cluster fill:#fffde7,stroke:#c9c5ae,stroke-width:1px,color:#202124
+    style actions fill:#fffef2,stroke:#d8d3b8,stroke-width:1px,color:#202124
+    style ghcr fill:#fffef2,stroke:#d8d3b8,stroke-width:1px,color:#202124
+    style ocm fill:#fffef2,stroke:#d8d3b8,stroke-width:1px,color:#202124
+    style flux fill:#fffef2,stroke:#d8d3b8,stroke-width:1px,color:#202124
+    style helm fill:#fffef2,stroke:#d8d3b8,stroke-width:1px,color:#202124
+    linkStyle default stroke:#777982,stroke-width:1px
 ```
+
+**Flow:** A push or manual dispatch runs **GitHub Actions**, which builds the Docker images, the Helm chart, and the OCM component — all pushed to **GHCR**. The deploy step applies the OCM CRs to the **Gardener cluster**, where a new component version triggers the chain **OCM → Flux → Helm**: OCM resolves the pinned component, Flux creates/reconciles the `HelmRelease`, and Helm runs `helm upgrade` to roll the pods. The diagram reports success or failure for both applying the OCM CRs and completing the Helm rollout.
 
 ---
 
