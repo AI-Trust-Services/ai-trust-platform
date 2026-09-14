@@ -129,8 +129,8 @@ def _truncate() -> None:
     )
     # frameworks is excluded — seeded by migration, never modified by tests.
     cur.execute(
-        "TRUNCATE ai_systems, assessments, obligations, controls, evidence, "
-        "control_obligations, evidence_controls, evidence_obligations, "
+        "TRUNCATE ai_systems, assessments, obligations, requirements, evidence, "
+        "requirement_obligations, evidence_requirements, evidence_obligations, "
         "service_model_baselines RESTART IDENTITY CASCADE"
     )
     cur.close()
@@ -254,15 +254,15 @@ async def create_obligation(client: httpx.AsyncClient, assessment_id: str, **kwa
     return r.json()
 
 
-async def create_control(client: httpx.AsyncClient, system_id: str | None = None, **kwargs) -> dict:
+async def create_requirement(client: httpx.AsyncClient, system_id: str | None = None, **kwargs) -> dict:
     payload = {
-        "title": "Test Control",
+        "title": "Test Requirement",
         "category": "general",
         **kwargs,
     }
     if system_id:
         payload["ai_system_id"] = system_id
-    r = await client.post("/v1/controls", json=payload)
+    r = await client.post("/v1/requirements", json=payload)
     assert r.status_code == 201, r.text
     return r.json()
 
