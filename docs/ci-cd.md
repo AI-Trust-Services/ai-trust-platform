@@ -4,8 +4,6 @@
 
 ```mermaid
 flowchart LR
-    developer(["Developer<br/>git push /<br/>workflow_dispatch"])
-
     subgraph github["🐙 GitHub"]
         direction TB
 
@@ -22,11 +20,7 @@ flowchart LR
             build_chart["Build Helm chart<br/>helm package"]
             build_component["Build OCM component<br/>0.0.0-cluster-sha<br/>refs chart + images"]
             deploy["Deploy step<br/>kubectl apply OCM CRs"]
-            cr_apply_succeeded(["CR apply succeeded"])
-            cr_apply_failed(["CR apply failed"])
             build_images --> build_chart --> build_component --> deploy
-            deploy -->|success| cr_apply_succeeded
-            deploy -->|failure| cr_apply_failed
         end
 
         build_images -. push .-> image_artifacts
@@ -54,28 +48,19 @@ flowchart LR
         subgraph helm["Helm — renders + applies chart"]
             direction TB
             workloads["helm upgrade --install ai-<br/>trust<br/><br/>Pods: registry, compliance,<br/>monitoring,<br/>alerts, dta, overview,<br/>users, shell, …"]
-            rollout_succeeded(["Rollout succeeded"])
-            rollout_failed(["Rollout failed"])
-            workloads -->|success| rollout_succeeded
-            workloads -->|failure| rollout_failed
         end
 
         resource --> flux_deployer
         helm_release -->|helm-controller| workloads
     end
 
-    developer --> build_images
     deploy -->|"new component version<br/>triggers upgrade"| component_version
     component_artifact -. pulled by .-> component_version
     image_artifacts -. pulled by .-> workloads
     chart_artifact -. pulled by .-> workloads
 
     classDef node fill:#f0edff,stroke:#8f8f99,stroke-width:1px,color:#202124
-    classDef success fill:#e8f5e9,stroke:#79a77d,stroke-width:1px,color:#16351a
-    classDef failure fill:#fdecec,stroke:#bd7777,stroke-width:1px,color:#4d1717
-    class developer,build_images,build_chart,build_component,deploy,image_artifacts,chart_artifact,component_artifact,component_version,resource,flux_deployer,helm_release,workloads node
-    class cr_apply_succeeded,rollout_succeeded success
-    class cr_apply_failed,rollout_failed failure
+    class build_images,build_chart,build_component,deploy,image_artifacts,chart_artifact,component_artifact,component_version,resource,flux_deployer,helm_release,workloads node
     style github fill:#fffde7,stroke:#c9c5ae,stroke-width:1px,color:#202124
     style cluster fill:#fffde7,stroke:#c9c5ae,stroke-width:1px,color:#202124
     style actions fill:#fffef2,stroke:#d8d3b8,stroke-width:1px,color:#202124
@@ -86,7 +71,7 @@ flowchart LR
     linkStyle default stroke:#777982,stroke-width:1px
 ```
 
-**Flow:** A push or manual dispatch runs **GitHub Actions**, which builds the Docker images, the Helm chart, and the OCM component — all pushed to **GHCR**. The deploy step applies the OCM CRs to the **Gardener cluster**, where a new component version triggers the chain **OCM → Flux → Helm**: OCM resolves the pinned component, Flux creates/reconciles the `HelmRelease`, and Helm runs `helm upgrade` to roll the pods. The diagram reports success or failure for both applying the OCM CRs and completing the Helm rollout.
+**Flow:** **GitHub Actions** builds the Docker images, the Helm chart, and the OCM component — all pushed to **GHCR**. The deploy step applies the OCM CRs to the **Gardener cluster**, where a new component version triggers the chain **OCM → Flux → Helm**: OCM resolves the pinned component, Flux creates/reconciles the `HelmRelease`, and Helm runs `helm upgrade` to roll the pods.
 
 ---
 
