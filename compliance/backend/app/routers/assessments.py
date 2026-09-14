@@ -24,7 +24,7 @@ from ai_trust_persistence.models import (
     control_obligations,
 )
 from app.cascade import refresh_assessment_score, refresh_obligation, sync_system_compliance
-from app.control_templates import controls_for
+from app.control_templates import cluster_articles, controls_for
 from app.ids import new_id
 from app.obligation_templates import obligations_for
 from app.schemas import (
@@ -168,13 +168,17 @@ async def _generate_obligations_in_session(
     created: list[Obligation] = []
     for idx, t in enumerate(templates):
         carried = prior_by_ref.get(t["cluster_id"])
+        # Prefer the aggregate of the cluster's requirement articles (all articles
+        # the obligation touches); fall back to the cluster's own display article
+        # for retained sets (which carry no per-requirement articles).
+        article_ref = cluster_articles(t["cluster_id"], system.tier, system.org_role) or t["article_ref"]
         obl = Obligation(
             id=new_id("OBL"),
             assessment_id=assessment.id,
             ai_system_id=assessment.ai_system_id,
             framework_id=assessment.framework_id,
             title=t["title"],
-            article_ref=t["article_ref"],
+            article_ref=article_ref,
             cluster_id=t["cluster_id"],
             description=t["description"],
             status=("not_applicable" if carried and carried.status == "not_applicable" else "applicable"),
@@ -228,6 +232,7 @@ async def _generate_controls_in_session(
                 id=new_id("CTL"),
                 ai_system_id=ai_system_id,
                 control_ref=control_ref,
+                article_ref=t.get("article"),
                 title=t["title"],
                 description=t["description"],
                 category=t.get("category", "general"),

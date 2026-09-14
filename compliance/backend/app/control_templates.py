@@ -28,6 +28,8 @@ regulations are law, not configuration.
 """
 from __future__ import annotations
 
+import re
+
 # Which source risk tokens apply to each assessment tier. A control is generated
 # for a tier if its risk/risk_category is "All" or shares any token here. The
 # High/Limited tokens without the "-Risk" suffix come from the AI Act Requirements
@@ -39,6 +41,100 @@ _TIER_RISK_CATEGORIES: dict[str, set[str]] = {
     "minimal": set(),  # only "All" controls (the voluntary Art. 69 set)
     "gpai-standard": {"GPAI"},
     "gpai-systemic": {"GPAI", "GPAI-Systemic"},  # systemic is a superset
+}
+
+
+# Per-requirement AI Act article reference, keyed by control_ref (= Requirement ID).
+# Derived once from the AI Act Requirements catalogue: the "AI Act Article / Legal
+# Source" column, recitals dropped, "Article(s)" -> "Art.". Attached to each control
+# by controls_for() and aggregated per cluster by cluster_articles(). Retained sets
+# (GPAI/NIST/ISO) have no entry here -> their controls carry no article.
+_REQUIREMENT_ARTICLES: dict[str, str] = {
+    "P-RM-01": "Art. 9 (1)(2)",
+    "P-RM-02": "Art. 9 (2)(a), (b)",
+    "P-RM-03": "Art. 9 (2)(c)",
+    "P-RM-04": "Art. 9 (2)(d)",
+    "P-RM-05": "Art. 9 (6), (7), (8)",
+    "P-RM-06": "Art. 72 (2); Art. 9 (2)",
+    "P-RM-07": "Art. 11, Annex IV",
+    "P-DG-01": "Art. 10 (1)",
+    "P-DG-02": "Art. 10 (2) (a)-(e), (h)",
+    "P-DG-03": "Art. 10 (2)(f), (g)",
+    "P-DG-04": "Art. 10 (3)",
+    "P-DG-05": "Art. 10 (3)",
+    "P-DG-06": "Art. 10 (3)",
+    "P-DG-07": "Art. 10 (3)",
+    "P-DG-08": "Art. 10 (4)",
+    "P-DG-09": "Art. 10 (5)",
+    "P-TD-01": "Art. 11",
+    "P-TD-02": "Art. 11",
+    "P-TD-03": "Art. 18 (1)(a)",
+    "P-TD-04": "Art. 11 (1)",
+    "P-TD-05": "Art. 72(3)",
+    "P-RK-01": "Art. 12 (1)",
+    "P-RK-02": "Art. 12 (2)",
+    "P-RK-03": "Art. 19 (1)",
+    "P-TR-01": "Art. 13 (1)",
+    "P-TR-02": "Art. 13 (2)",
+    "P-HO-01": "Art. 14 (3)(a)",
+    "P-HO-02": "Art. 14 (3)(b)",
+    "P-HO-03": "Art. 14 (4)(a)",
+    "P-HO-04": "Art. 14 (4)(b),(c)",
+    "P-HO-05": "Art. 14 (4)(d)",
+    "P-HO-06": "Art. 14 (4)(e)",
+    "P-HO-07": "Art. 14",
+    "P-ARC-01": "Art. 15 (1)",
+    "P-ARC-02a": "Art. 15 (3)",
+    "P-ARC-02b": "Art. 15 (3)",
+    "P-ARC-03a": "Art. 15 (4)",
+    "P-ARC-03b": "Art. 15 (4)",
+    "P-ARC-04": "Art. 15 (4)",
+    "P-ARC-05": "Art. 15 (5)",
+    "P-QMS-01a": "Art. 17(1)",
+    "P-QMS-01b": "Art. 17(1)",
+    "P-QMS-01c": "Art. 17(1)",
+    "P-CA-01a": "Art. 43",
+    "P-CA-01b": "Art. 43",
+    "P-CA-01c": "Art. 43",
+    "P-CA-02": "Art. 47",
+    "P-CE-01": "Art. 48",
+    "P-REG-01": "Art. 49 (1)",
+    "P-REG-02": "Art. 49 (2)",
+    "P-REG-03": "Art. 49 (5)",
+    "P-LIM-01": "Art. 50 (1)",
+    "P-LIM-02": "Art. 50 (2)",
+    "P-CAI-01": "Art. 20(1) and (2)",
+    "P-PMM-01a": "Art. 72(1)",
+    "P-PMM-01b": "Art. 72(1)",
+    "P-PMM-02a": "Art. 72(2)",
+    "P-PMM-02b": "Art. 72(2)",
+    "P-PMM-02c": "Art. 72(2)",
+    "P-PMM-03": "Art. 72(3)",
+    "P-ACC-01": "Art. 16 (l)",
+    "P-INC-01": "Art. 73",
+    "D-RM-01": "Art. 26",
+    "D-RM-02": "Art. 26",
+    "D-TOM-01": "Art. 26(1)",
+    "D-HO-01": "Art. 26(2)",
+    "D-ID-01": "Art. 26(4)",
+    "D-ID-02": "Art. 26(4)",
+    "D-OMI-01a": "Art. 26(5), Art. 72",
+    "D-OMI-01b": "Art. 26(5), Art. 72",
+    "D-OMI-03": "Art. 26(5)",
+    "D-OMI-04": "Art. 26(5)",
+    "D-OMI-05": "Art. 26(5)",
+    "D-IE-01": "Art. 26(7)",
+    "D-FIO-01": "Art. 26",
+    "D-RL-01": "Art. 26(6)",
+    "D-DPIA-01": "Art. 26(11)",
+    "D-FRIA-01": "Art. 27",
+    "D-FRIA-02": "Art. 27(3)",
+    "D-REG-01": "Art. 49 (3)",
+    "D-REG-02": "Art. 49 (5)",
+    "D-LIM-01a": "Art. 50 (3)",
+    "D-LIM-01b": "Art. 50 (3)",
+    "D-LIM-02": "Art. 50 (4) subpara. 1",
+    "D-LIM-03": "Art. 50 (4) subpara. 2",
 }
 
 
@@ -72,27 +168,30 @@ _CONTROL_TEMPLATES: dict[str, list[dict]] = {
     ],
     "P-DG": [
         {"control_ref": "P-DG-01", "role": "provider", "risk": "High", "category": "general",
+         "title": "Data governance practices",
+         "description": "Implement data governance practices for training, validation and testing datasets that are appropriate to the intended purpose of the high-risk AI system.\n\nExpected evidence: code — datasets and respective documentation."},
+        {"control_ref": "P-DG-02", "role": "provider", "risk": "High", "category": "general",
          "title": "Data management practices",
          "description": "Implement data management practices for training, validation and testing datasets that are appropriate to the intended purpose of the high-risk AI system.\n\nExpected evidence: code — datasets and respective documentation."},
-        {"control_ref": "P-DG-02", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-DG-03", "role": "provider", "risk": "High", "category": "general",
          "title": "Bias and discrimination",
          "description": "Identify, prevent and mitigate potential biases in the datasets that could affect the health and safety of individuals or lead to discrimination prohibited under Union law.\n\nExpected evidence: function is used / document — bias analysis and bias mitigation measures used."},
-        {"control_ref": "P-DG-03", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-DG-04", "role": "provider", "risk": "High", "category": "general",
          "title": "Relevance of datasets",
          "description": "Ensure that training, validation and testing datasets are relevant in view of the intended purpose of the high-risk AI system.\n\nExpected evidence: document — analysis of dataset & protocol."},
-        {"control_ref": "P-DG-04", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-DG-05", "role": "provider", "risk": "High", "category": "general",
          "title": "Sufficient representativeness of datasets",
          "description": "Ensure that training, validation and testing datasets are sufficiently representative in view of the intended purpose of the high-risk AI system.\n\nExpected evidence: document — analysis of dataset & protocol."},
-        {"control_ref": "P-DG-05", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-DG-06", "role": "provider", "risk": "High", "category": "general",
          "title": "Best possible freedom from errors and completeness",
          "description": "Ensure that training, validation and testing datasets are, to the best extent possible, free of errors and complete in view of the intended purpose of the high-risk AI system.\n\nExpected evidence: document — analysis of dataset & protocol."},
-        {"control_ref": "P-DG-06", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-DG-07", "role": "provider", "risk": "High", "category": "general",
          "title": "Appropriate statistical properties",
          "description": "Ensure that training, validation and testing datasets have the appropriate statistical properties, including, where applicable, in relation to the persons or groups of persons on whom the high-risk AI system is intended to be used.\n\nExpected evidence: document — analysis of dataset & protocol."},
-        {"control_ref": "P-DG-07", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-DG-08", "role": "provider", "risk": "High", "category": "general",
          "title": "Context-specific fitness of data",
          "description": "Ensure that datasets take into account, to the extent required by the intended purpose, the characteristics particular to the specific geographical, contextual, behavioural or functional setting within which the high-risk AI system is intended to be used.\n\nExpected evidence: document — analysis of dataset & protocol."},
-        {"control_ref": "P-DG-08", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-DG-09", "role": "provider", "risk": "High", "category": "general",
          "title": "Processing of special categories of personal data for bias detection and correction",
          "description": "Process special categories of personal data for the purpose of ensuring bias detection and correction only where this is strictly necessary and only subject to the conditions and safeguards laid down in Article 10(5).\n\nExpected evidence: document — analysis of dataset & protocol."},
     ],
@@ -159,12 +258,18 @@ _CONTROL_TEMPLATES: dict[str, list[dict]] = {
         {"control_ref": "P-ARC-01", "role": "provider", "risk": "High", "category": "general",
          "title": "Lifecycle",
          "description": "Ensure accuracy, robustness and cybersecurity throughout the lifecycle.\n\nExpected evidence: code / document — design documentation."},
-        {"control_ref": "P-ARC-02", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-ARC-02a", "role": "provider", "risk": "High", "category": "general",
          "title": "Accuracy",
-         "description": "Ensure appropriate and context-specific accuracy of the AI system throughout its entire lifecycle, and clearly communicate its accuracy and relevant performance metrics in the instructions for use.\n\nExpected evidence:\n- code — design documentation.\n- document — instructions for use."},
-        {"control_ref": "P-ARC-03", "role": "provider", "risk": "High", "category": "general",
-         "title": "Robustness",
-         "description": "Implement measures to ensure robustness against errors, faults and inconsistencies, both within the system and its operating environment.\n\nExpected evidence:\n- code / document — design documentation (AI system robustness).\n- code / document — design documentation (operating-environment robustness)."},
+         "description": "Ensure appropriate and context-specific accuracy of the AI system throughout its entire lifecycle.\n\nExpected evidence: code — design documentation."},
+        {"control_ref": "P-ARC-02b", "role": "provider", "risk": "High", "category": "general",
+         "title": "Accuracy Communication",
+         "description": "Clearly communicate the accuracy of the AI system and relevant performance metrics in the instructions for use.\n\nExpected evidence: document — instructions for use."},
+        {"control_ref": "P-ARC-03a", "role": "provider", "risk": "High", "category": "general",
+         "title": "Robustness of AI system",
+         "description": "Implement measures to ensure robustness against errors, faults and inconsistencies, both within the system and its operating environment.\n\nExpected evidence: code / document — design documentation."},
+        {"control_ref": "P-ARC-03b", "role": "provider", "risk": "High", "category": "general",
+         "title": "Robustness of operating environment",
+         "description": "Implement measures to ensure robustness against errors, faults and inconsistencies, both within the system and its operating environment.\n\nExpected evidence: code / document — design documentation."},
         {"control_ref": "P-ARC-04", "role": "provider", "risk": "High", "category": "general",
          "title": "Feedback loops",
          "description": "Mitigate the risk of possibly biased outputs influencing input for future operations (feedback loops) in systems that continue to learn after deployment.\n\nExpected evidence: code / document — design documentation."},
@@ -173,17 +278,27 @@ _CONTROL_TEMPLATES: dict[str, list[dict]] = {
          "description": "Protect the system against manipulation by unauthorised third parties, and implement targeted cybersecurity measures to defend against AI-specific threats such as data poisoning, adversarial examples, and confidentiality attacks.\n\nExpected evidence: code / document — security documentation / policy."},
     ],
     "P-QMS": [
-        {"control_ref": "P-QMS-01", "role": "provider", "risk": "High", "category": "general",
-         "title": "Quality management system",
-         "description": "Providers of high-risk AI systems must introduce, document and regularly update a quality management system.\n\nExpected evidence: function is used / document — QMS feature, an API to another QMS system, or documentation."},
+        {"control_ref": "P-QMS-01a", "role": "provider", "risk": "High", "category": "general",
+         "title": "QMS - usage",
+         "description": "Providers of high-risk AI systems must introduce a quality management system.\n\nExpected evidence: function is used / document — QMS feature, an API to another QMS system, or documentation."},
+        {"control_ref": "P-QMS-01b", "role": "provider", "risk": "High", "category": "general",
+         "title": "QMS - Documentation",
+         "description": "Providers of high-risk AI systems must document a quality management system.\n\nExpected evidence: function is used / document — QMS feature, an API to another QMS system, or documentation."},
+        {"control_ref": "P-QMS-01c", "role": "provider", "risk": "High", "category": "general",
+         "title": "QMS - regular update",
+         "description": "Providers of high-risk AI systems must regularly update a quality management system.\n\nExpected evidence: function is used / document — QMS feature, an API to another QMS system, or documentation."},
     ],
     "P-CA": [
-        {"control_ref": "P-CA-01", "role": "provider", "risk": "High", "category": "general",
-         "title": "Conformity assessment",
-         "description": "Carry out the applicable conformity assessment procedure for the high-risk AI system before placing it on the market, before putting it into service, and — where required — after a substantial modification.\n\nExpected evidence: document — documentation of the conformity assessment; substantial modification documentation."},
-    ],
-    "P-DOC": [
-        {"control_ref": "P-DOC-01", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-CA-01a", "role": "provider", "risk": "High", "category": "general",
+         "title": "Conformity Assessment - Before market placement",
+         "description": "Carry out the applicable conformity assessment procedure for the high-risk AI system before placing it on the market.\n\nExpected evidence: document — documentation of the conformity assessment."},
+        {"control_ref": "P-CA-01b", "role": "provider", "risk": "High", "category": "general",
+         "title": "Conformity Assessment - before putting into service",
+         "description": "Carry out the applicable conformity assessment procedure for the high-risk AI system before putting it into service.\n\nExpected evidence: document — documentation of the conformity assessment."},
+        {"control_ref": "P-CA-01c", "role": "provider", "risk": "High", "category": "general",
+         "title": "Conformity Assessment - after a substantial modification where required",
+         "description": "Carry out the applicable conformity assessment procedure for the high-risk AI system, where required, after a substantial modification.\n\nExpected evidence: document — documentation of the conformity assessment; substantial modification documentation."},
+        {"control_ref": "P-CA-02", "role": "provider", "risk": "High", "category": "general",
          "title": "Issue the EU declaration of conformity",
          "description": "Draw up, keep available, and maintain an up-to-date EU declaration of conformity for each high-risk AI system in accordance with Article 47.\n\nExpected evidence: document — EU declaration of conformity."},
     ],
@@ -209,12 +324,21 @@ _CONTROL_TEMPLATES: dict[str, list[dict]] = {
          "description": "Immediately investigate the causes of non-conformity of a high-risk system with the EU AI Act and, in accordance with the applicable conditions, inform the national competent authority where the organization, acting as a provider, is aware that the high-risk AI system poses a risk within the meaning of Article 79(1).\n\nExpected evidence: document — documentation of the implemented process, proof of investigation steps and results, and documentation of the information provided to authorities."},
     ],
     "P-PMM": [
-        {"control_ref": "P-PMM-01", "role": "provider", "risk": "High", "category": "general",
-         "title": "Post-market monitoring system — establishment and documentation",
-         "description": "Establish and document a post-market monitoring system.\n\nExpected evidence: document — documentation of the system."},
-        {"control_ref": "P-PMM-02", "role": "provider", "risk": "High", "category": "general",
-         "title": "Data collection requirements of post-market monitoring",
-         "description": "Actively and systematically collect, document and analyse relevant post-market data on the performance of high-risk AI systems throughout their lifetime in order to assess their continuous compliance with the requirements set out in Chapter III, Section 2, including, where relevant, their interaction with other AI systems.\n\nExpected evidence: function is used / document — PMM feature is used, data uploaded, or a policy regarding data collection is uploaded."},
+        {"control_ref": "P-PMM-01a", "role": "provider", "risk": "High", "category": "general",
+         "title": "Post-market monitoring system - Establishment",
+         "description": "Establish a post-market monitoring system.\n\nExpected evidence: function is used / document — PMM feature is used or documentation of the system."},
+        {"control_ref": "P-PMM-01b", "role": "provider", "risk": "High", "category": "general",
+         "title": "Post-market monitoring system - Documentation",
+         "description": "Document a post-market monitoring system.\n\nExpected evidence: document — documentation of the system."},
+        {"control_ref": "P-PMM-02a", "role": "provider", "risk": "High", "category": "general",
+         "title": "Data Collection Requirements of the PMM - Collection",
+         "description": "Actively and systematically collect relevant post-market data on the performance of high-risk AI systems throughout their lifetime in order to assess their continuous compliance with the requirements set out in Chapter III, Section 2, including, where relevant, their interaction with other AI systems.\n\nExpected evidence: function is used / document — PMM feature is used, data uploaded, or a policy regarding data collection is uploaded."},
+        {"control_ref": "P-PMM-02b", "role": "provider", "risk": "High", "category": "general",
+         "title": "Data Collection Requirements of the PMM - Documentation",
+         "description": "Actively and systematically document relevant post-market data on the performance of high-risk AI systems throughout their lifetime in order to assess their continuous compliance with the requirements set out in Chapter III, Section 2, including, where relevant, their interaction with other AI systems.\n\nExpected evidence: function is used / document — PMM feature is used, data uploaded, or a policy regarding data collection is uploaded."},
+        {"control_ref": "P-PMM-02c", "role": "provider", "risk": "High", "category": "general",
+         "title": "Data Collection Requirements of the PMM - Analysis",
+         "description": "Actively and systematically analyse relevant post-market data on the performance of high-risk AI systems throughout their lifetime in order to assess their continuous compliance with the requirements set out in Chapter III, Section 2, including, where relevant, their interaction with other AI systems.\n\nExpected evidence: function is used / document — PMM feature is used, data uploaded, or a policy regarding data collection is uploaded."},
         {"control_ref": "P-PMM-03", "role": "provider", "risk": "High", "category": "general",
          "title": "Post-market monitoring documentation",
          "description": "Base the post-market monitoring system on a post-market monitoring plan.\n\nExpected evidence: document — post-market monitoring plan."},
@@ -250,7 +374,7 @@ _CONTROL_TEMPLATES: dict[str, list[dict]] = {
          "title": "Deployer's risk management",
          "description": "Carry out risk management activities for the high-risk AI system in accordance with the deployer obligations under Article 26 and the organization's risk framework.\n\nExpected evidence: function is used / document — risk framework of the organization."},
         {"control_ref": "D-RM-02", "role": "deployer", "risk": "High", "category": "general",
-         "title": "Deployer's risk management — risk framework",
+         "title": "Deployer's risk management - Risk Framework",
          "description": "Carry out risk management activities for the high-risk AI system in accordance with the deployer obligations under Article 26 and the organization's risk framework.\n\nExpected evidence: document — risk framework of the organization."},
     ],
     "D-TOM": [
@@ -272,9 +396,12 @@ _CONTROL_TEMPLATES: dict[str, list[dict]] = {
          "description": "The input data must be sufficiently representative.\n\nExpected evidence: document — analysis of dataset & protocol."},
     ],
     "D-OMI": [
-        {"control_ref": "D-OMI-01", "role": "deployer", "risk": "High", "category": "general",
-         "title": "Operational monitoring",
-         "description": "Monitor the operation on the basis of the instructions for use and, where relevant, inform providers in accordance with the provider's post-market monitoring plan.\n\nExpected evidence:\n- function is used / document — feature is used or a corresponding policy to the instructions for use.\n- document — post-market monitoring plan."},
+        {"control_ref": "D-OMI-01a", "role": "deployer", "risk": "High", "category": "general",
+         "title": "Operational monitoring - usage",
+         "description": "Monitor the operation on the basis of the instructions for use and, where relevant, inform providers in accordance with the provider's post-market monitoring plan.\n\nExpected evidence: function is used / document — feature is used or a corresponding policy to the instructions for use."},
+        {"control_ref": "D-OMI-01b", "role": "deployer", "risk": "High", "category": "general",
+         "title": "Operational monitoring - post market monitoring plan",
+         "description": "Monitor the operation on the basis of the instructions for use and, where relevant, inform providers in accordance with the provider's post-market monitoring plan.\n\nExpected evidence: document — post-market monitoring plan."},
         {"control_ref": "D-OMI-03", "role": "deployer", "risk": "High", "category": "general",
          "title": "Suspension of use",
          "description": "Suspend the use of the high-risk AI system without undue delay.\n\nExpected evidence: document — process description proving that processes are implemented and designed for immediate suspension."},
@@ -326,9 +453,12 @@ _CONTROL_TEMPLATES: dict[str, list[dict]] = {
     # EU AI Act — Deployer, Limited-Risk
     # =====================================================================
     "D-LIM": [
-        {"control_ref": "D-LIM-01", "role": "deployer", "risk": "Limited", "category": "general",
-         "title": "Emotion recognition or biometric categorisation system",
-         "description": "Inform affected natural persons about the operation of the emotion recognition or biometric categorisation system, and process personal data in accordance with the applicable EU data protection legislation where the organization deploys such a system.\n\nExpected evidence:\n- document — documentation / protocol of the information provided to the respective individuals.\n- document — data protection impact assessment (DPA)."},
+        {"control_ref": "D-LIM-01a", "role": "deployer", "risk": "Limited", "category": "general",
+         "title": "Emotion Recognition or Biometric Categorisation System",
+         "description": "Inform affected natural persons about the operation of the emotion recognition or biometric categorisation system.\n\nExpected evidence: document — documentation / protocol of the information provided to the respective individuals."},
+        {"control_ref": "D-LIM-01b", "role": "deployer", "risk": "Limited", "category": "general",
+         "title": "Emotion Recognition",
+         "description": "Process personal data in accordance with the applicable EU data protection legislation where the organization deploys an emotion recognition or biometric categorisation system.\n\nExpected evidence: document — data protection impact assessment (DPA)."},
         {"control_ref": "D-LIM-02", "role": "deployer", "risk": "Limited", "category": "general",
          "title": "Deepfake",
          "description": "Disclose that content constituting a deepfake has been artificially generated or manipulated where the organization deploys an AI system that generates or manipulates image, audio, text or video content.\n\nExpected evidence: document — design or technical documentation with appropriate disclosure of artificial generation."},
@@ -525,5 +655,31 @@ def controls_for(cluster_id: str, tier: str, org_role: str = "provider") -> list
     for t in _CONTROL_TEMPLATES.get(cluster_id, []):
         risk = t.get("risk") or t["risk_category"]
         if _tier_allows(risk, tier) and _role_allows(t.get("role"), org_role):
-            out.append(t)
+            # Shallow copy so the per-requirement article can be attached without
+            # mutating the module-level template dict.
+            out.append({**t, "article": _REQUIREMENT_ARTICLES.get(t.get("control_ref", ""), "")})
     return out
+
+
+def cluster_articles(cluster_id: str, tier: str, org_role: str = "provider") -> str:
+    """Aggregate the distinct top-level AI Act articles of a cluster's controls.
+
+    Collects the per-requirement article of every control that survives the
+    tier/role filter, reduces each to its top-level article number (e.g.
+    "Art. 9 (2)(a)" -> "Art. 9"), and returns the distinct set sorted by article
+    number, joined with ", " (e.g. "Art. 9, Art. 11, Art. 72"). Empty when no
+    control carries an article (retained sets) — callers fall back to the cluster's
+    own display article.
+    """
+    tops: set[str] = set()
+    for t in controls_for(cluster_id, tier, org_role):
+        article = t.get("article") or ""
+        for m in re.finditer(r"Art\.\s*\d+[a-z]?", article):
+            tops.add(re.sub(r"\s+", " ", m.group(0)))
+
+    def _num(a: str) -> int:
+        m = re.search(r"\d+", a)
+        return int(m.group(0)) if m else 0
+
+    return ", ".join(sorted(tops, key=_num))
+

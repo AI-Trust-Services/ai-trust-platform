@@ -75,6 +75,7 @@ class ControlResponse(BaseModel):
     id: str
     ai_system_id: str | None
     control_ref: str | None
+    article_ref: str | None = None
     title: str
     description: str
     status: str

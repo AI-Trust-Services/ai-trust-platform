@@ -49,6 +49,7 @@ class ObligationResponse(BaseModel):
     framework_id: str
     title: str
     article_ref: str
+    cluster_id: str | None = None
     description: str
     status: str
     due_date: date | None
