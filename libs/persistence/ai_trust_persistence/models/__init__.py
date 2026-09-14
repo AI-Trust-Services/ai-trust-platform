@@ -1,4 +1,5 @@
 from ai_trust_persistence.models.ai_system import AISystem
+from ai_trust_persistence.models.platform_settings import PlatformSettings
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.alert_rule import AlertRule
 from ai_trust_persistence.models.question_assignment import QuestionAssignment
@@ -30,6 +31,7 @@ __all__ = [
     "Control",
     "Evidence",
     "EvidenceVersion",
+    "PlatformSettings",
     "SystemWorkflowStep",
     "QuestionAssignment",
     "control_obligations",
