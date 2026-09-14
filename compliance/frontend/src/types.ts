@@ -34,6 +34,7 @@ export interface Obligation {
   framework_id: string;
   title: string;
   article_ref: string;
+  cluster_id: string | null;
   description: string;
   status: string;
   due_date: string | null;
@@ -50,6 +51,7 @@ export interface Control {
   id: string;
   ai_system_id: string | null;
   control_ref: string | null;
+  article_ref: string | null;
   title: string;
   description: string;
   status: string;
