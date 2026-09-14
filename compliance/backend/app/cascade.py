@@ -1,12 +1,12 @@
 """Status cascade + score recalculation.
 
 The governance feedback loop, per spec OBL-FR-04 ("obligation status is
-calculated automatically from the status of linked controls and evidence") and
-CTL-FR-05 ("control effectiveness is determined by evidence status"):
+calculated automatically from the status of linked requirements and evidence") and
+CTL-FR-05 ("requirement effectiveness is determined by evidence status"):
 
-    approved evidence  -> linked control becomes 'fulfilled'
-    all controls on an obligation 'fulfilled' -> obligation 'fulfilled'
-    >=1 control linked (not all fulfilled) -> obligation 'in_progress'
+    approved evidence  -> linked requirement becomes 'fulfilled'
+    all requirements on an obligation 'fulfilled' -> obligation 'fulfilled'
+    >=1 requirement linked (not all fulfilled) -> obligation 'in_progress'
     assessment score = fulfilled obligations / total obligations * 100
     ai_systems.compliance = avg(score) across all approved assessments for that system
 
@@ -21,24 +21,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai_trust_persistence.models import (
     AISystem,
     Assessment,
-    Control,
     Obligation,
-    control_obligations,
-    evidence_controls,
+    Requirement,
+    evidence_requirements,
+    requirement_obligations,
 )
 from ai_trust_persistence.models.evidence import Evidence
 
 # Statuses that a cascade must never overwrite — they represent explicit human
 # or terminal decisions. 'overdue' and 'not_applicable' are deliberate human
-# determinations; deactivated/ineffective are terminal control states.
+# determinations; deactivated/ineffective are terminal requirement states.
 _OBLIGATION_LOCKED = frozenset({"not_applicable", "overdue"})
-_CONTROL_LOCKED = frozenset({"deactivated", "ineffective"})
+_REQUIREMENT_LOCKED = frozenset({"deactivated", "ineffective"})
 
 
-async def refresh_control_effectiveness(session: AsyncSession, control_id: str) -> None:
-    """Sync a control's 'fulfilled' status to its approved-evidence backing.
+async def refresh_requirement_effectiveness(session: AsyncSession, requirement_id: str) -> None:
+    """Sync a requirement's 'fulfilled' status to its approved-evidence backing.
 
-    Spec Control Effectiveness Model, applied symmetrically:
+    Spec Requirement Effectiveness Model, applied symmetrically:
     - >=1 approved evidence item        -> promote to 'fulfilled'
     - no approved evidence, currently
       'fulfilled' (auto-promoted before) -> demote back to 'planned'
@@ -48,35 +48,35 @@ async def refresh_control_effectiveness(session: AsyncSession, control_id: str) 
     (deactivated / ineffective) are left untouched. Demoting only from
     'fulfilled' ensures we never clobber a manually-chosen non-fulfilled status.
     """
-    control = (await session.execute(
-        select(Control).where(Control.id == control_id)
+    requirement = (await session.execute(
+        select(Requirement).where(Requirement.id == requirement_id)
     )).scalar_one_or_none()
-    if control is None or control.status in _CONTROL_LOCKED:
+    if requirement is None or requirement.status in _REQUIREMENT_LOCKED:
         return
 
     approved_count = (await session.execute(
         select(func.count())
-        .select_from(evidence_controls)
-        .join(Evidence, Evidence.id == evidence_controls.c.evidence_id)
-        .where(evidence_controls.c.control_id == control_id)
+        .select_from(evidence_requirements)
+        .join(Evidence, Evidence.id == evidence_requirements.c.evidence_id)
+        .where(evidence_requirements.c.requirement_id == requirement_id)
         .where(Evidence.status == "approved")
     )).scalar_one()
 
     if approved_count > 0:
-        control.status = "fulfilled"
-    elif control.status == "fulfilled":
+        requirement.status = "fulfilled"
+    elif requirement.status == "fulfilled":
         # Sole supporting evidence was rejected/removed — revert the
         # auto-promotion so obligations/scores can drop accordingly.
-        # Use "planned" rather than "open": the control may have been
+        # Use "planned" rather than "open": the requirement may have been
         # auto-promoted from any earlier state so "open" could be a
         # spurious downgrade past manual progress.
-        control.status = "planned"
+        requirement.status = "planned"
 
 
 async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
-    """Recompute an obligation's status from its linked controls, then rescore.
+    """Recompute an obligation's status from its linked requirements, then rescore.
 
-    - no controls linked           -> revert to 'applicable' (unless locked)
+    - no requirements linked           -> revert to 'applicable' (unless locked)
     - >=1 linked, all 'effective'  -> 'fulfilled'
     - >=1 linked, not all effective-> 'in_progress'
     """
@@ -86,15 +86,15 @@ async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
     if obligation is None or obligation.status in _OBLIGATION_LOCKED:
         return
 
-    control_statuses = (await session.execute(
-        select(Control.status)
-        .join(control_obligations, control_obligations.c.control_id == Control.id)
-        .where(control_obligations.c.obligation_id == obligation_id)
+    requirement_statuses = (await session.execute(
+        select(Requirement.status)
+        .join(requirement_obligations, requirement_obligations.c.requirement_id == Requirement.id)
+        .where(requirement_obligations.c.obligation_id == obligation_id)
     )).scalars().all()
 
-    if not control_statuses:
+    if not requirement_statuses:
         obligation.status = "applicable"
-    elif all(s == "fulfilled" for s in control_statuses):
+    elif all(s == "fulfilled" for s in requirement_statuses):
         obligation.status = "fulfilled"
     else:
         obligation.status = "in_progress"
@@ -102,11 +102,11 @@ async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
     await refresh_assessment_score(session, obligation.assessment_id)
 
 
-async def refresh_obligations_for_control(session: AsyncSession, control_id: str) -> None:
-    """Refresh every obligation linked to a given control."""
+async def refresh_obligations_for_requirement(session: AsyncSession, requirement_id: str) -> None:
+    """Refresh every obligation linked to a given requirement."""
     obligation_ids = (await session.execute(
-        select(control_obligations.c.obligation_id)
-        .where(control_obligations.c.control_id == control_id)
+        select(requirement_obligations.c.obligation_id)
+        .where(requirement_obligations.c.requirement_id == requirement_id)
     )).scalars().all()
     for oid in obligation_ids:
         await refresh_obligation(session, oid)
