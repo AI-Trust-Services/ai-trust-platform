@@ -51,7 +51,7 @@ def test_eu_high_risk_provider_count():
 
 def test_eu_high_risk_deployer_count():
     obs = obligations_for("FRM-EU-AI-ACT", "high", "deployer")
-    assert len(obs) == 11
+    assert len(obs) == 10
 
 
 def test_eu_high_risk_has_required_fields():

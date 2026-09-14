@@ -316,7 +316,7 @@ async def test_generate_obligations_deployer_high_count(client: httpx.AsyncClien
     system = await create_system(tier="high", org_role="deployer")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    assert len(obs) == 11  # deployer high-risk has 11 obligation clusters
+    assert len(obs) == 10  # deployer high-risk has 10 obligation clusters
 
 
 async def test_generate_obligations_importer_yields_none(client: httpx.AsyncClient):

@@ -112,8 +112,6 @@ _REQUIREMENT_ARTICLES: dict[str, str] = {
     "P-PMM-03": "Art. 72(3)",
     "P-ACC-01": "Art. 16 (l)",
     "P-INC-01": "Art. 73",
-    "D-RM-01": "Art. 26",
-    "D-RM-02": "Art. 26",
     "D-TOM-01": "Art. 26(1)",
     "D-HO-01": "Art. 26(2)",
     "D-ID-01": "Art. 26(4)",
@@ -369,14 +367,6 @@ _CONTROL_TEMPLATES: dict[str, list[dict]] = {
     # =====================================================================
     # EU AI Act — Deployer, High-Risk
     # =====================================================================
-    "D-RM": [
-        {"control_ref": "D-RM-01", "role": "deployer", "risk": "High", "category": "general",
-         "title": "Deployer's risk management",
-         "description": "Carry out risk management activities for the high-risk AI system in accordance with the deployer obligations under Article 26 and the organization's risk framework.\n\nExpected evidence: function is used / document — risk framework of the organization."},
-        {"control_ref": "D-RM-02", "role": "deployer", "risk": "High", "category": "general",
-         "title": "Deployer's risk management - Risk Framework",
-         "description": "Carry out risk management activities for the high-risk AI system in accordance with the deployer obligations under Article 26 and the organization's risk framework.\n\nExpected evidence: document — risk framework of the organization."},
-    ],
     "D-TOM": [
         {"control_ref": "D-TOM-01", "role": "deployer", "risk": "High", "category": "general",
          "title": "Technical and organisational measures",
