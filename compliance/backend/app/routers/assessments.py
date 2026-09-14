@@ -180,7 +180,7 @@ async def _generate_obligations_in_session(
             title=t["title"],
             article_ref=article_ref,
             cluster_id=t["cluster_id"],
-            description=t["description"],
+            description=t.get("description", ""),
             status=("not_applicable" if carried and carried.status == "not_applicable" else "applicable"),
             owner=carried.owner if carried else "",
             sort_order=idx,

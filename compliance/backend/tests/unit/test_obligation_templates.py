@@ -58,8 +58,10 @@ def test_eu_high_risk_has_required_fields():
     for ob in obligations_for("FRM-EU-AI-ACT", "high"):
         assert ob["title"]
         assert ob["article_ref"]
-        assert ob["description"]
         assert ob["cluster_id"]
+        # Clusters carry no description of their own — descriptive text lives on
+        # the requirement-level controls, not the obligation.
+        assert "description" not in ob
 
 
 def test_eu_high_risk_provider_article_refs():
