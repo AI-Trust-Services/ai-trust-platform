@@ -5,12 +5,12 @@ import { useToast } from "../App";
 import { StatusBadge } from "../components/Badges";
 import KpiCard from "../components/KpiCard";
 import DetailPanel, { DetailField, DetailSection } from "../components/DetailPanel";
-import CreateControlModal from "../components/CreateControlModal";
+import CreateRequirementModal from "../components/CreateRequirementModal";
 import LinkObligationModal from "../components/LinkObligationModal";
 import Pagination from "../components/Pagination";
 import { CONTROL_STATUS_META, OBLIGATION_STATUS_META, EVIDENCE_STATUS_META, fmtDate, humanize } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
-import type { AISystem, Control, ControlDetail, Evidence, Obligation } from "../types";
+import type { AISystem, Requirement, RequirementDetail, Evidence, Obligation } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -26,11 +26,11 @@ const STATUS_OPTIONS = [
   "open", "planned", "under_review", "fulfilled", "ineffective", "deactivated",
 ] as const;
 // Radix Select disallows an empty-string item value — sentinel for "All". Note
-// "__org__" is a real filter value (org-wide controls), distinct from this.
+// "__org__" is a real filter value (org-wide requirements), distinct from this.
 const ALL = "__all__";
 
-export default function ControlsPage() {
-  const [controls, setControls] = useState<Control[]>([]);
+export default function RequirementsPage() {
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
   const [search, setSearch] = useState("");
@@ -40,11 +40,11 @@ export default function ControlsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [selected, setSelected] = useState<string | null>(null);
-  const [detail, setDetail] = useState<ControlDetail | null>(null);
+  const [detail, setDetail] = useState<RequirementDetail | null>(null);
   const [detailObligations, setDetailObligations] = useState<Obligation[]>([]);
   const [detailEvidence, setDetailEvidence] = useState<Evidence[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
-  const [linkControl, setLinkControl] = useState<Control | null>(null);
+  const [linkRequirement, setLinkRequirement] = useState<Requirement | null>(null);
   const showToast = useToast();
   const { can } = usePermissions();
   const mayWrite = can("assessments:write");
@@ -52,8 +52,8 @@ export default function ControlsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [ctl, sys] = await Promise.all([api.getControls(), api.getSystems()]);
-      setControls(ctl);
+      const [ctl, sys] = await Promise.all([api.getRequirements(), api.getSystems()]);
+      setRequirements(ctl);
       setSystems(sys);
       setSystemsById(Object.fromEntries(sys.map((s) => [s.id, s])));
     } catch (e) {
@@ -63,11 +63,11 @@ export default function ControlsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function openDetail(c: Control | { id: string }) {
+  async function openDetail(c: Requirement | { id: string }) {
     setSelected(c.id);
     try {
       const [det, evidence, obligations] = await Promise.all([
-        api.getControl(c.id),
+        api.getRequirement(c.id),
         api.getEvidence({ control_id: c.id }),
         api.getObligations({ control_id: c.id }),
       ]);
@@ -83,9 +83,9 @@ export default function ControlsPage() {
 
   async function changeStatus(id: string, status: string) {
     try {
-      await api.updateControl(id, { status });
+      await api.updateRequirement(id, { status });
       showToast("Status updated");
-      setControls((prev) => prev.map((c) => c.id === id ? { ...c, status } : c));
+      setRequirements((prev) => prev.map((c) => c.id === id ? { ...c, status } : c));
       if (selected === id) setDetail((d) => d ? { ...d, status } : d);
     } catch (e) {
       showToast((e as Error).message, true);
@@ -94,13 +94,13 @@ export default function ControlsPage() {
 
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
-    return controls.filter((c) =>
+    return requirements.filter((c) =>
       (!s || c.title.toLowerCase().includes(s) || c.id.toLowerCase().includes(s)) &&
       (!categoryFilter || c.category === categoryFilter) &&
       (!statusFilter || c.status === statusFilter) &&
       (!systemFilter || (systemFilter === "__org__" ? !c.ai_system_id : c.ai_system_id === systemFilter))
     );
-  }, [controls, search, categoryFilter, statusFilter, systemFilter]);
+  }, [requirements, search, categoryFilter, statusFilter, systemFilter]);
 
   // Reset to the first page whenever the filtered set changes.
   useEffect(() => { setPage(1); }, [search, categoryFilter, statusFilter, systemFilter]);
@@ -114,17 +114,17 @@ export default function ControlsPage() {
     [filtered, safePage, pageSize]
   );
 
-  const categories = useMemo(() => [...new Set(controls.map((c) => c.category))].sort(), [controls]);
+  const categories = useMemo(() => [...new Set(requirements.map((c) => c.category))].sort(), [requirements]);
   const systemOptions = useMemo(() => {
-    // Only systems that have controls; ordered latest-first (API returns systems
+    // Only systems that have requirements; ordered latest-first (API returns systems
     // ordered by created_at desc, so preserve that order rather than re-sorting).
-    const withControls = new Set<string>();
-    controls.forEach((c) => { if (c.ai_system_id) withControls.add(c.ai_system_id); });
+    const withRequirements = new Set<string>();
+    requirements.forEach((c) => { if (c.ai_system_id) withRequirements.add(c.ai_system_id); });
     return systems
-      .filter((s) => withControls.has(s.id))
+      .filter((s) => withRequirements.has(s.id))
       .map((s) => ({ id: s.id, name: s.name }));
-  }, [controls, systems]);
-  const hasOrgWide = useMemo(() => controls.some((c) => !c.ai_system_id), [controls]);
+  }, [requirements, systems]);
+  const hasOrgWide = useMemo(() => requirements.some((c) => !c.ai_system_id), [requirements]);
   const activeFilterCount =
     (categoryFilter ? 1 : 0) + (statusFilter ? 1 : 0) +
     (systemFilter ? 1 : 0);
@@ -135,11 +135,11 @@ export default function ControlsPage() {
   }
 
   const kpis = useMemo(() => ({
-    total: controls.length,
-    fulfilled: controls.filter((c) => c.status === "fulfilled").length,
-    underReview: controls.filter((c) => c.status === "under_review").length,
-    open: controls.filter((c) => c.status === "open").length,
-  }), [controls]);
+    total: requirements.length,
+    fulfilled: requirements.filter((c) => c.status === "fulfilled").length,
+    underReview: requirements.filter((c) => c.status === "under_review").length,
+    open: requirements.filter((c) => c.status === "open").length,
+  }), [requirements]);
 
   return (
     <>
@@ -192,7 +192,7 @@ export default function ControlsPage() {
           <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters ({activeFilterCount})</Button>
         )}
         <div className="flex-1" />
-        <span className="text-[13px] text-muted-foreground">{filtered.length} of {controls.length}</span>
+        <span className="text-[13px] text-muted-foreground">{filtered.length} of {requirements.length}</span>
       </div>
 
       <div className="px-5 py-4">
@@ -234,7 +234,7 @@ export default function ControlsPage() {
                         disabled={!mayWrite} title={mayWrite ? "Delete this requirement" : noWriteTitle}
                         onClick={async () => {
                           if (!confirm(`Delete "${c.title}"?`)) return;
-                          try { await api.deleteControl(c.id); showToast("Deleted"); load(); closePanel(); }
+                          try { await api.deleteRequirement(c.id); showToast("Deleted"); load(); closePanel(); }
                           catch (e) { showToast((e as Error).message, true); }
                         }}>Delete</Button>
                     </div>
@@ -309,10 +309,10 @@ export default function ControlsPage() {
         )}
       </DetailPanel>
 
-      <CreateControlModal open={createOpen} onClose={() => setCreateOpen(false)} onSuccess={load} />
+      <CreateRequirementModal open={createOpen} onClose={() => setCreateOpen(false)} onSuccess={load} />
       <LinkObligationModal
-        open={!!linkControl}
-        control={linkControl}
+        open={!!linkRequirement}
+        requirement={linkRequirement}
         onClose={() => setLinkControl(null)}
         onSuccess={() => { load(); if (selected && detail) openDetail(detail); }}
       />
