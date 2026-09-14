@@ -92,12 +92,6 @@ async def test_list_obligations_filter_by_control(client: httpx.AsyncClient):
     assert body[0]["id"] == obs[0]["id"]
 
 
-async def test_list_obligations_filter_by_evidence_is_noop(client: httpx.AsyncClient):
-    # evidence->obligation is now derived via controls; direct filter is a no-op
-    evd = await create_evidence(client)
-    r = await client.get(f"/v1/obligations?evidence_id={evd['id']}")
-    assert r.status_code == 200  # 200 with empty or non-empty list; no error
-
 
 async def test_list_obligations_filter_by_status(client: httpx.AsyncClient):
     system = await create_system()

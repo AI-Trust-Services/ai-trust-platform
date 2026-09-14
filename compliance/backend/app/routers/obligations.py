@@ -37,7 +37,6 @@ async def list_obligations(
     ai_system_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
     control_id: str | None = Query(default=None),
-    evidence_id: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[ObligationResponse]:
@@ -53,8 +52,6 @@ async def list_obligations(
             stmt = stmt.join(
                 Control, Control.obligation_id == Obligation.id
             ).where(Control.id == control_id)
-        if evidence_id:
-            pass  # evidence->obligation is now derived via controls; no direct join
         stmt = stmt.limit(limit).offset(offset)
         result = await session.execute(stmt)
         return [ObligationResponse.model_validate(r) for r in result.scalars().all()]
