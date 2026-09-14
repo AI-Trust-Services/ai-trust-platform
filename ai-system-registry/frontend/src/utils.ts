@@ -23,21 +23,22 @@ export function fmtDateTime(iso: string | null | undefined): string {
 }
 
 export const TIER_META: Record<TierKey, { label: string; cls: string }> = {
-  "prohibited":    { label: "Prohibited",    cls: "badge-prohibited" },
-  "high":          { label: "High-Risk",     cls: "badge-high" },
-  "gpai-systemic": { label: "GPAI Systemic", cls: "badge-gpai-systemic" },
-  "gpai-standard": { label: "GPAI Standard", cls: "badge-gpai-standard" },
-  "limited":       { label: "Limited",       cls: "badge-limited" },
-  "minimal":       { label: "Minimal",       cls: "badge-minimal" },
-  "pending":       { label: "Not classified", cls: "badge-pending" },
+  "prohibited":    { label: "Prohibited Practice",     cls: "badge-prohibited" },
+  "high":          { label: "High Risk",               cls: "badge-high" },
+  "gpai-systemic": { label: "GPAI with Systemic Risk", cls: "badge-gpai-systemic" },
+  "gpai-standard": { label: "GPAI Standard",           cls: "badge-gpai-standard" },
+  "limited":       { label: "Transparency Obligations",cls: "badge-limited" },
+  "minimal":       { label: "Minimal or No Risk",      cls: "badge-minimal" },
+  "pending":       { label: "Not classified",          cls: "badge-pending" },
 };
 
 export const LIFECYCLE_LABELS: Record<LifecycleKey, string> = {
   "development":    "Development",
   "testing":        "Testing",
-  "conformity":     "Conformity",
+  "prod_ready":     "Production Ready",
   "market":         "On Market",
-  "post-market":    "Post-Market",
+  "service":        "In Service",
+  "updated":        "Updated",
   "decommissioned": "Decommissioned",
 };
 

@@ -23,9 +23,10 @@ export const TIER_COLORS: Record<TierKey, string> = {
 export const LIFECYCLE_COLORS: Record<string, string> = {
   development:    "#1147E9",
   testing:        "#e9a922",
-  conformity:     "#e05c00",
+  prod_ready:     "#e05c00",
   market:         "#1a7a3c",
-  "post-market":  "#0d7a3c",
+  service:        "#0d7a3c",
+  updated:        "#5a0080",
   decommissioned: "#999999",
 };
 
@@ -38,10 +39,10 @@ export const PALETTE = [
 export const HIST_COLORS = ["#bb0000", "#e05c00", "#e9a922", "#3d9e6b", "#1a7a3c"];
 
 export const TIER_LABELS: Record<TierKey, string> = {
-  prohibited:       "Prohibited",
-  high:             "High-Risk",
-  "gpai-systemic":  "GPAI Systemic",
+  prohibited:       "Prohibited Practice",
+  high:             "High Risk",
+  "gpai-systemic":  "GPAI with Systemic Risk",
   "gpai-standard":  "GPAI Standard",
-  limited:          "Limited",
-  minimal:          "Minimal",
+  limited:          "Transparency Obligations",
+  minimal:          "Minimal or No Risk",
 };

@@ -284,24 +284,18 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
     if not username:
         raise HTTPException(500, "Keycloak returned a user without a username.")
 
-    # Single-role invariant + last-admin guard both need the current memberships.
     existing_fga_roles = await openfga_client.read_user_roles(f"user:{username}")
 
-    # Guard: don't demote the last platform_administrator. Only relevant when the
-    # user currently *is* an admin being moved to a different role.
     if "role:platform_administrator" in existing_fga_roles and role_name != "platform_administrator":
         pa_members = await openfga_client.read_role_members("role:platform_administrator")
         if len(pa_members) <= 1:
             raise HTTPException(409, "Cannot reassign the last platform administrator.")
 
-    # Single-role invariant: remove existing FGA memberships before writing new one.
     for role_obj in existing_fga_roles:
         await openfga_client.delete_tuple(f"user:{username}", "member", role_obj)
     await openfga_client.write_tuple(f"user:{username}", "member", _role_object(role_name))
 
     logger.info("user.role_assigned", extra={"username": username, "role": role_name})
-    # Keycloak fields are unchanged by the role write; _to_detail re-reads roles
-    # from OpenFGA, so the response reflects the new assignment.
     return await _to_detail(user)
 
 

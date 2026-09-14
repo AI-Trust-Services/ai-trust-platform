@@ -2,13 +2,23 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 VALID_LIFECYCLES = frozenset({
-    "development", "testing", "conformity", "market", "post-market", "decommissioned",
+    "development", "testing", "prod_ready", "market", "service", "updated", "decommissioned",
 })
-VALID_ROLES = frozenset({"provider", "deployer", "importer", "distributor"})
+VALID_ROLES = frozenset({
+    "provider", "deployer", "both", "importer", "distributor", "authorised_representative",
+})
+# The six canonical EU AI Act tiers — enforced by ck_ai_systems_tier at the DB layer.
+# Validated in the API layer for CO overrides / full-manual entry so a bad value
+# returns 422 instead of 500-ing on commit.
+VALID_TIERS = frozenset({
+    "prohibited", "gpai-systemic", "gpai-standard", "high", "limited", "minimal", "pending",
+})
+VALID_REGISTRATION_MODES = frozenset({"ai", "manual_questionnaire", "full_manual"})
 
 
 class RationaleItem(BaseModel):
@@ -19,15 +29,44 @@ class RationaleItem(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
+class ClassificationRationale(BaseModel):
+    """Extended classification output from the questionnaire workflow — visible only to the CO.
+
+    Distinct from the legacy bare ``list[RationaleItem]`` written by AI-assisted intake;
+    readers discriminate the two shapes with ``isinstance``/``Array.isArray``.
+    """
+    flags: list[RationaleItem] = []
+    confidence: float | None = None
+    reasoning: str | None = None
+    missing_info: list[str] = []
+
+
+class RegistrationDocument(BaseModel):
+    """One supporting document uploaded in the full-manual override flow."""
+    filename: str
+    minio_key: str
+    uploaded_at: datetime
+
+
+class DownloadUrlResponse(BaseModel):
+    url: str
+
+
 class AISystemCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: str = Field(default="")
-    assignee_username: str = Field(..., min_length=1, max_length=200)
+    assignee_username: str | None = Field(default=None, max_length=200)
     compliance_officer_username: str | None = Field(default=None, max_length=200)
 
     # Regulatory role of the organisation w.r.t. this system (provider/deployer/
     # importer/distributor). Defaults to "provider" at intake when omitted.
     org_role: str | None = None
+
+    # Deployment context captured at registration. deployment_country is ISO
+    # 3166-1 alpha-2; the two EU-presence booleans drive the framework recommendation.
+    deployment_country: str | None = Field(default=None, max_length=2)
+    eu_output_usage: bool | None = None
+    eu_market_placement: bool | None = None
 
     # Optional descriptive fields (populated by the AI-assisted flow; manual owner
     # mode omits them and the intake stays a minimal stub).
@@ -61,7 +100,17 @@ class AISystemCreate(BaseModel):
     is_chatbot: bool | None = None
     generates_synthetic_content: bool | None = None
 
-    classification_rationale: list[RationaleItem] | None = None
+    classification_rationale: list[RationaleItem] | ClassificationRationale | None = None
+
+    registration_mode: Literal["ai", "manual_questionnaire", "full_manual"] = "ai"
+    org_role: str = "provider"
+    # Full-manual override: creator supplies the tier directly (validated against VALID_TIERS
+    # in the router) and names the compliance officer.
+    tier: str | None = None
+
+    business_assignee_username: str | None = None
+    technical_assignee_username: str | None = None
+    questionnaire_answers: dict | None = None
 
     @field_validator("name")
     @classmethod
@@ -69,6 +118,29 @@ class AISystemCreate(BaseModel):
         if not v.strip():
             raise ValueError("name must not be blank")
         return v
+
+    @field_validator("org_role")
+    @classmethod
+    def org_role_valid(cls, v: str) -> str:
+        if v not in VALID_ROLES:
+            raise ValueError(f"org_role must be one of {sorted(VALID_ROLES)}")
+        return v
+
+    @field_validator(
+        "assignee_username",
+        "compliance_officer_username",
+        "business_assignee_username",
+        "technical_assignee_username",
+        mode="before",
+    )
+    @classmethod
+    def blank_username_to_none(cls, v):
+        """Coerce ""/whitespace → None. A falsy-but-present username would otherwise
+        slip past the ``row.assignee_username and ...`` edit guard in update_system,
+        letting anyone edit the system."""
+        if isinstance(v, str):
+            v = v.strip()
+        return v or None
 
 
 class AISystemUpdate(BaseModel):
@@ -87,6 +159,9 @@ class AISystemUpdate(BaseModel):
     autonomy_level: str | None = None
     application_url: str | None = Field(default=None, max_length=500)
     provider_country: str | None = Field(default=None, max_length=5)
+    deployment_country: str | None = Field(default=None, max_length=2)
+    eu_output_usage: bool | None = None
+    eu_market_placement: bool | None = None
     lifecycle: str | None = None
 
     # Risk flags (editable in draft/rejected)
@@ -119,6 +194,13 @@ class AISystemUpdate(BaseModel):
             raise ValueError("name must not be blank")
         return v
 
+    @field_validator("org_role")
+    @classmethod
+    def org_role_valid(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_ROLES:
+            raise ValueError(f"org_role must be one of {sorted(VALID_ROLES)}")
+        return v
+
 
 class ClassificationResult(BaseModel):
     tier: str
@@ -144,10 +226,13 @@ class AISystemResponse(BaseModel):
     autonomy_level: str
     application_url: str
     provider_country: str
+    deployment_country: str | None
+    eu_output_usage: bool | None
+    eu_market_placement: bool | None
     tier: str
     basis: str
     annex_iii_area: int | None
-    classification_rationale: list[RationaleItem] | None
+    classification_rationale: list[RationaleItem] | ClassificationRationale | None
     field_confirmations: dict[str, bool] | None
     lifecycle: str
     compliance: float
@@ -175,8 +260,13 @@ class AISystemResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     workflow_status: str
+    registration_mode: str
     assignee_username: str | None
     compliance_officer_username: str | None
+    business_assignee_username: str | None
+    technical_assignee_username: str | None
+    questionnaire_answers: dict | None
+    registration_documents: list[RegistrationDocument] | None = None
 
     model_config = {"from_attributes": True}
 
@@ -189,3 +279,13 @@ class IntakeResponse(BaseModel):
 class FieldConfirmationPatch(BaseModel):
     """Partial field-confirmation update — only the keys sent are merged into field_confirmations."""
     confirmations: dict[str, bool]
+
+
+class QuestionnaireAnswersPatch(BaseModel):
+    """Merge-patch update for questionnaire answers.
+
+    ``section="business"`` merges into the top level of ``questionnaire_answers``;
+    ``section="technical"`` merges into the nested ``"technical"`` sub-object (kept
+    separate so the AI-mode flag-inference prompt can read the two sets apart)."""
+    answers: dict[str, str]
+    section: Literal["business", "technical"] = "business"

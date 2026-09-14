@@ -129,7 +129,7 @@ async def eval_high_risk_on_market_low_compliance(rule: AlertRule, ch) -> list[E
         rows = (await session.execute(
             select(AISystem.id, AISystem.name, AISystem.compliance).where(
                 AISystem.tier == "high",
-                AISystem.lifecycle.in_(["market", "post-market"]),
+                AISystem.lifecycle.in_(["market", "service"]),
             )
         )).all()
     results: list[EvalResult] = []
@@ -155,7 +155,7 @@ async def eval_no_signals(rule: AlertRule, ch) -> list[EvalResult]:
     async with SessionLocal() as session:
         systems = (await session.execute(
             select(AISystem.id, AISystem.name).where(
-                AISystem.lifecycle.in_(["market", "post-market"]),
+                AISystem.lifecycle.in_(["market", "service"]),
             )
         )).all()
     if not systems:
@@ -239,7 +239,7 @@ async def eval_market_system_no_model_card(rule: AlertRule, ch) -> list[EvalResu
 
         rows = (await session.execute(
             select(AISystem.id, AISystem.name, (~has_model).label("missing")).where(
-                AISystem.lifecycle.in_(["market", "post-market"]),
+                AISystem.lifecycle.in_(["market", "service"]),
             )
         )).all()
     results: list[EvalResult] = []
@@ -418,7 +418,7 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
             ctrl_ids = evd_ctrl_ids[evd.id]
 
             # Cascade: for each linked control, re-check approved evidence count.
-            # If none remain, demote from effective → in_implementation.
+            # If none remain, demote from fulfilled → planned.
             # Then re-evaluate linked obligations.
 
             for cid in ctrl_ids:
@@ -436,8 +436,8 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
                     .where(Evidence.status == "approved")
                 )).scalar_one()
 
-                if approved_count == 0 and ctrl.status == "effective":
-                    ctrl.status = "in_implementation"
+                if approved_count == 0 and ctrl.status == "fulfilled":
+                    ctrl.status = "planned"
                     await session.flush()
 
                 # Re-evaluate obligations linked to this control
@@ -458,7 +458,7 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
                     )).scalars().all()
                     if not ctrl_statuses:
                         obl.status = "applicable"
-                    elif all(s == "effective" for s in ctrl_statuses):
+                    elif all(s == "fulfilled" for s in ctrl_statuses):
                         obl.status = "fulfilled"
                     else:
                         obl.status = "in_progress"

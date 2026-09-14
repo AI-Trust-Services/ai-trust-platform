@@ -59,7 +59,7 @@ export default function App() {
       {toast && (
         <div
           className={cn(
-            "fixed bottom-5 right-5 z-50 rounded-md px-4 py-2.5 text-[13px] font-medium text-white shadow-lg",
+            "fixed bottom-5 right-5 z-[9999] rounded-md px-4 py-2.5 text-[13px] font-medium text-white shadow-lg",
             toast.isError ? "bg-[var(--destructive)]" : "bg-foreground",
           )}
         >

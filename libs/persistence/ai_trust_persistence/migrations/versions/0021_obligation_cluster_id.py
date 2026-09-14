@@ -1,14 +1,14 @@
 """Add cluster_id to obligations (join key to CSV obligation clusters)
 
-Revision ID: 0013
-Revises: 0012
+Revision ID: 0021
+Revises: 0020
 Create Date: 2026-09-07
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0013"
-down_revision = "0012"
+revision = "0021"
+down_revision = "0020"
 branch_labels = None
 depends_on = None
 

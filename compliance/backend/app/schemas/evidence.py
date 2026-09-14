@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 VALID_EVIDENCE_TYPES = frozenset({"document", "code", "function_is_used"})
 VALID_EVIDENCE_STATUSES = frozenset({
-    "pending", "under_review", "approved", "rejected", "expired",
+    "awaiting_review", "under_review", "approved", "rejected", "expired",
 })
 
 

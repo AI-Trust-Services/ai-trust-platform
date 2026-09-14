@@ -1,14 +1,14 @@
 """Add sort_order to obligations and controls (stable catalogue ordering)
 
-Revision ID: 0014
-Revises: 0013
+Revision ID: 0022
+Revises: 0021
 Create Date: 2026-09-08
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0014"
-down_revision = "0013"
+revision = "0022"
+down_revision = "0021"
 branch_labels = None
 depends_on = None
 

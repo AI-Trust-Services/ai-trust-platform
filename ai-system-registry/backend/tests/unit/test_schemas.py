@@ -36,14 +36,17 @@ def test_create_name_max_length():
         AISystemCreate(name="x" * 201, assignee_username="eng1")
 
 
-def test_create_assignee_required():
-    with pytest.raises(ValidationError):
-        AISystemCreate(name="Test")
+def test_create_assignee_optional():
+    # assignee_username is optional in the new workflow — systems can be created without one
+    s = AISystemCreate(name="Test")
+    assert s.assignee_username is None
 
 
-def test_create_assignee_empty_string():
-    with pytest.raises(ValidationError):
-        AISystemCreate(name="Test", assignee_username="")
+def test_create_assignee_empty_string_is_stored_as_none():
+    # Blank assignee_username is coerced to None so a falsy-but-present value can't slip
+    # past the `row.assignee_username and ...` edit guard in update_system.
+    s = AISystemCreate(name="Test", assignee_username="")
+    assert s.assignee_username is None
 
 
 # --- AISystemUpdate ---

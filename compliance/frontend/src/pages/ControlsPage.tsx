@@ -23,8 +23,7 @@ import {
 } from "@/components/ui/table";
 
 const STATUS_OPTIONS = [
-  "not_started", "planned", "in_implementation", "implemented",
-  "under_review", "effective", "ineffective", "deactivated",
+  "open", "planned", "under_review", "fulfilled", "ineffective", "deactivated",
 ] as const;
 // Radix Select disallows an empty-string item value — sentinel for "All". Note
 // "__org__" is a real filter value (org-wide controls), distinct from this.
@@ -36,6 +35,7 @@ export default function ControlsPage() {
   const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [systemFilter, setSystemFilter] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -97,12 +97,13 @@ export default function ControlsPage() {
     return controls.filter((c) =>
       (!s || c.title.toLowerCase().includes(s) || c.id.toLowerCase().includes(s)) &&
       (!statusFilter || c.status === statusFilter) &&
+      (!categoryFilter || c.category === categoryFilter) &&
       (!systemFilter || (systemFilter === "__org__" ? !c.ai_system_id : c.ai_system_id === systemFilter))
     );
-  }, [controls, search, statusFilter, systemFilter]);
+  }, [controls, search, categoryFilter, statusFilter, systemFilter]);
 
   // Reset to the first page whenever the filtered set changes.
-  useEffect(() => { setPage(1); }, [search, statusFilter, systemFilter]);
+  useEffect(() => { setPage(1); }, [search, categoryFilter, statusFilter, systemFilter]);
 
   // Clamp to a valid page — the list can shrink under us (delete, status change
   // filtering a row out) while `page` stays high, which would show an empty table.
@@ -123,18 +124,21 @@ export default function ControlsPage() {
       .map((s) => ({ id: s.id, name: s.name }));
   }, [controls, systems]);
   const hasOrgWide = useMemo(() => controls.some((c) => !c.ai_system_id), [controls]);
+  const categories = useMemo(() => [...new Set(controls.map((c) => c.category))].sort(), [controls]);
   const activeFilterCount =
-    (statusFilter ? 1 : 0) + (systemFilter ? 1 : 0);
+    (categoryFilter ? 1 : 0) + (statusFilter ? 1 : 0) +
+    (systemFilter ? 1 : 0);
 
   function clearFilters() {
-    setSearch(""); setStatusFilter(""); setSystemFilter("");
+    setSearch(""); setCategoryFilter(""); setStatusFilter("");
+    setSystemFilter("");
   }
 
   const kpis = useMemo(() => ({
     total: controls.length,
-    effective: controls.filter((c) => c.status === "effective").length,
-    implemented: controls.filter((c) => c.status === "implemented").length,
-    notStarted: controls.filter((c) => c.status === "not_started").length,
+    fulfilled: controls.filter((c) => c.status === "fulfilled").length,
+    underReview: controls.filter((c) => c.status === "under_review").length,
+    open: controls.filter((c) => c.status === "open").length,
   }), [controls]);
 
   return (
@@ -155,9 +159,9 @@ export default function ControlsPage() {
 
       <div className="flex flex-wrap gap-3 px-5 pt-4">
         <KpiCard label="Total" value={kpis.total} icon={ShieldCheck} color="#71717a" sub="all requirements" />
-        <KpiCard label="Effective" value={kpis.effective} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.effective / kpis.total * 100) : 0}% of total`} />
-        <KpiCard label="Implemented" value={kpis.implemented} icon={Layers} color="#1147E9" sub="ready for review" />
-        <KpiCard label="Not Started" value={kpis.notStarted} icon={Clock} color="#e05c00" sub="pending action" />
+        <KpiCard label="Fulfilled" value={kpis.fulfilled} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.fulfilled / kpis.total * 100) : 0}% of total`} />
+        <KpiCard label="Under Review" value={kpis.underReview} icon={Layers} color="#1147E9" sub="ready for review" />
+        <KpiCard label="Open" value={kpis.open} icon={Clock} color="#e05c00" sub="pending action" />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-5 pt-3">
@@ -167,6 +171,13 @@ export default function ControlsPage() {
           <SelectContent>
             <SelectItem value={ALL}>All Statuses</SelectItem>
             {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{CONTROL_STATUS_META[s].label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={categoryFilter || ALL} onValueChange={(v) => setCategoryFilter(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Categories</SelectItem>
+            {categories.map((c) => <SelectItem key={c} value={c}>{humanize(c)}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={systemFilter || ALL} onValueChange={(v) => setSystemFilter(v === ALL ? "" : v)}>
@@ -192,6 +203,7 @@ export default function ControlsPage() {
                 <TableHead>Requirement</TableHead>
                 <TableHead>Requirement ID</TableHead>
                 <TableHead>Article</TableHead>
+                <TableHead>Category</TableHead>
                 <TableHead>AI System</TableHead>
                 <TableHead>Owner</TableHead>
                 <TableHead>Status</TableHead>
@@ -201,12 +213,13 @@ export default function ControlsPage() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No requirements yet.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="py-8 text-center text-muted-foreground">No requirements yet.</TableCell></TableRow>
               ) : paged.map((c) => (
                 <TableRow key={c.id} data-state={selected === c.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(c)}>
                   <TableCell><div className="font-medium text-foreground">{c.title}</div><div className="text-xs text-muted-foreground">{c.id}</div></TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{c.control_ref || "—"}</TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{c.article_ref || "—"}</TableCell>
+                  <TableCell className="text-[13px]">{humanize(c.category)}</TableCell>
                   <TableCell>{c.ai_system_id ? (systemsById[c.ai_system_id]?.name ?? c.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{c.owner || "—"}</TableCell>
                   <TableCell><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></TableCell>
@@ -259,7 +272,6 @@ export default function ControlsPage() {
               <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</DetailField>
               <DetailField label="Owner">{detail.owner || "—"}</DetailField>
               <DetailField label="Status"><StatusBadge meta={CONTROL_STATUS_META} value={detail.status} /></DetailField>
-              <DetailField label="Effectiveness"><Badge variant="secondary" className="rounded-full font-medium">{humanize(detail.effectiveness)}</Badge></DetailField>
               <DetailField label="Due Date">{fmtDate(detail.due_date)}</DetailField>
             </DetailSection>
             {detail.description && (

@@ -2,19 +2,21 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import (
-    ASSESSMENTS_APPROVE,
     ASSESSMENTS_READ,
     ASSESSMENTS_WRITE,
+    SYSTEMS_APPROVE,
+    SYSTEMS_WRITE,
 )
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models import (
     AISystem,
     Assessment,
@@ -73,7 +75,8 @@ async def list_assessments(
 
 
 @router.post("/assessments", response_model=AssessmentResponse, status_code=201, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
+async def create_assessment(body: AssessmentCreate, request: Request) -> AssessmentResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         system = (await session.execute(
             select(AISystem).where(AISystem.id == body.ai_system_id)
@@ -82,8 +85,6 @@ async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
             raise HTTPException(404, f"AI system {body.ai_system_id} not found")
         if system.lifecycle == "decommissioned":
             raise HTTPException(422, "Cannot assess a decommissioned AI system")
-        if system.workflow_status != "approved":
-            raise HTTPException(422, "Cannot assess a system that has not been approved")
 
         framework = (await session.execute(
             select(Framework).where(Framework.id == body.framework_id)
@@ -92,6 +93,35 @@ async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
             raise HTTPException(404, f"Framework {body.framework_id} not found")
         if not framework.enabled:
             raise HTTPException(422, f"Framework {body.framework_id} is disabled")
+
+        # Systems with tier "pending" are awaiting questionnaire + classification.
+        # Start in questionnaire_pending and defer obligation generation until after classification.
+        if system.tier == "pending":
+            existing_q = await session.execute(
+                select(Assessment).where(
+                    Assessment.ai_system_id == body.ai_system_id,
+                    Assessment.status == "questionnaire_pending",
+                )
+            )
+            if existing_q.scalar_one_or_none():
+                raise HTTPException(409, "A questionnaire is already in progress for this system. Open the existing assessment to continue.")
+            row = Assessment(
+                id=new_id("ASS"),
+                ai_system_id=body.ai_system_id,
+                framework_id=body.framework_id,
+                title=body.title,
+                type=body.type,
+                notes=body.notes,
+                status="questionnaire_pending",
+            )
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+            logger.info("assessment.created", extra={
+                "assessment_id": row.id, "ai_system_id": row.ai_system_id,
+                "framework_id": row.framework_id, "status": "questionnaire_pending",
+            })
+            return AssessmentResponse.model_validate(row)
 
         row = Assessment(
             id=new_id("ASS"),
@@ -112,6 +142,15 @@ async def create_assessment(body: AssessmentCreate) -> AssessmentResponse:
             })
         else:
             await _generate_controls_in_session(session, created, system.tier, system.org_role)
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="assessment.created",
+            resource_type="assessment",
+            resource_id=row.id,
+            ai_system_id=body.ai_system_id,
+            ai_system_name=system.name,
+        )
         await session.commit()
         await session.refresh(row)
 
@@ -132,18 +171,19 @@ async def _generate_obligations_in_session(
     Returns (created_obligations, prior_prefilled) where prior_prefilled is True
     if any owner/not_applicable values were carried forward from a prior assessment.
     """
-    templates = obligations_for(assessment.framework_id, system.tier, system.org_role)
+    org_role = getattr(system, "org_role", "provider") or "provider"
+    templates = obligations_for(assessment.framework_id, system.tier, org_role)
 
     if (
         assessment.framework_id == "FRM-EU-AI-ACT"
         and system.tier in ("high", "limited")
-        and system.org_role not in ("provider", "deployer")
+        and org_role not in ("provider", "deployer")
     ):
         # Only provider/deployer obligation sets are defined for EU high/limited;
         # importer/distributor yield no obligations (templates is already []).
         logger.warning("assessment.unsupported_org_role", extra={
             "assessment_id": assessment.id, "framework": assessment.framework_id,
-            "tier": system.tier, "org_role": system.org_role,
+            "tier": system.tier, "org_role": org_role,
         })
 
     prior = (await session.execute(
@@ -171,7 +211,7 @@ async def _generate_obligations_in_session(
         # Prefer the aggregate of the cluster's requirement articles (all articles
         # the obligation touches); fall back to the cluster's own display article
         # for retained sets (which carry no per-requirement articles).
-        article_ref = cluster_articles(t["cluster_id"], system.tier, system.org_role) or t["article_ref"]
+        article_ref = cluster_articles(t["cluster_id"], system.tier, org_role) or t["article_ref"]
         obl = Obligation(
             id=new_id("OBL"),
             assessment_id=assessment.id,
@@ -236,7 +276,7 @@ async def _generate_controls_in_session(
                 title=t["title"],
                 description=t["description"],
                 category=t.get("category", "general"),
-                status="not_started",
+                status="open",
                 effectiveness="medium",
                 owner=prior_owner_by_ref.get(control_ref, ""),
                 # Order controls after their obligation's position, then by template
@@ -281,6 +321,49 @@ async def _prior_owners_by_ref(
     return {ref: owner for ref, owner in rows}
 
 
+@router.post("/assessments/{assessment_id}/advance-from-classification", response_model=AssessmentResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+async def advance_from_classification(assessment_id: str) -> AssessmentResponse:
+    """Called after risk classification sets the system tier.
+
+    Generates obligations + controls for the now-known tier, then advances
+    the assessment from questionnaire_pending to pending_review.
+    """
+    async with SessionLocal() as session:
+        row = await _load(session, assessment_id)
+        if row.status != "questionnaire_pending":
+            raise HTTPException(422, "Assessment is not in questionnaire_pending status")
+
+        system = (await session.execute(
+            select(AISystem).where(AISystem.id == row.ai_system_id)
+        )).scalar_one_or_none()
+        if not system:
+            raise HTTPException(404, "AI system not found")
+        if system.tier == "pending":
+            raise HTTPException(422, "System tier is still pending — complete risk classification first")
+
+        created, _ = await _generate_obligations_in_session(session, row, system)
+        if created:
+            await _generate_controls_in_session(
+                session, created, system.tier, getattr(system, "org_role", "provider") or "provider"
+            )
+
+        row.status = "pending_review"
+        row.updated_at = datetime.now(timezone.utc)
+        # Intentional cross-service write: both tables share the same DB and the
+        # same session, so this stays atomic. An HTTP round-trip to the registry
+        # would introduce a distributed-transaction gap where the two states could
+        # diverge on failure.
+        system.workflow_status = "pending_review"
+
+        await session.commit()
+        await session.refresh(row)
+
+    logger.info("assessment.classification_advanced", extra={
+        "assessment_id": row.id, "ai_system_id": row.ai_system_id, "tier": system.tier,
+    })
+    return AssessmentResponse.model_validate(row)
+
+
 @router.get("/assessments/{assessment_id}", response_model=AssessmentDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
 async def get_assessment(assessment_id: str) -> AssessmentDetailResponse:
     async with SessionLocal() as session:
@@ -317,16 +400,29 @@ async def update_assessment(assessment_id: str, body: AssessmentUpdate) -> Asses
 
 
 @router.delete("/assessments/{assessment_id}", dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def delete_assessment(assessment_id: str) -> dict:
+async def delete_assessment(assessment_id: str, request: Request) -> dict:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
         ai_system_id = row.ai_system_id
+        system = (await session.execute(
+            select(AISystem).where(AISystem.id == ai_system_id)
+        )).scalar_one_or_none()
 
         deleted_controls = await _delete_generated_controls(session, assessment_id)
 
         await session.delete(row)
         await session.flush()
         await sync_system_compliance(session, ai_system_id)
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="assessment.deleted",
+            resource_type="assessment",
+            resource_id=assessment_id,
+            ai_system_id=ai_system_id,
+            ai_system_name=system.name if system else "",
+        )
         await session.commit()
     logger.info("assessment.deleted", extra={
         "assessment_id": assessment_id, "controls_deleted": deleted_controls,
@@ -463,7 +559,8 @@ async def generate_controls(assessment_id: str) -> GenerateControlsResponse:
 
 
 @router.post("/assessments/{assessment_id}/submit", response_model=AssessmentResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def submit_assessment(assessment_id: str) -> AssessmentResponse:
+async def submit_assessment(assessment_id: str, request: Request) -> AssessmentResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
         if row.status == "approved":
@@ -474,23 +571,56 @@ async def submit_assessment(assessment_id: str) -> AssessmentResponse:
         )).scalar_one()
         if obligation_count == 0:
             raise HTTPException(422, "Cannot submit — generate or add at least one obligation first")
+        system = (await session.execute(
+            select(AISystem).where(AISystem.id == row.ai_system_id)
+        )).scalar_one_or_none()
+        before_status = row.status
         row.status = "submitted"
         row.updated_at = datetime.now(timezone.utc)
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="assessment.submitted",
+            resource_type="assessment",
+            resource_id=assessment_id,
+            ai_system_id=row.ai_system_id,
+            ai_system_name=system.name if system else "",
+            changes={"status": {"before": before_status, "after": "submitted"}},
+        )
         await session.commit()
         await session.refresh(row)
     logger.info("assessment.submitted", extra={"assessment_id": assessment_id})
     return AssessmentResponse.model_validate(row)
 
 
-@router.post("/assessments/{assessment_id}/approve", response_model=AssessmentResponse, dependencies=[Depends(require_permission(ASSESSMENTS_APPROVE))])
-async def approve_assessment(assessment_id: str) -> AssessmentResponse:
+@router.post("/assessments/{assessment_id}/approve", response_model=AssessmentResponse, dependencies=[Depends(require_permission(SYSTEMS_APPROVE))])
+async def approve_assessment(assessment_id: str, request: Request) -> AssessmentResponse:
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
         if row.status == "approved":
             raise HTTPException(409, "Assessment already approved")
+        before_status = row.status
         row.status = "approved"
         row.updated_at = datetime.now(timezone.utc)
+        # Also advance the system workflow status so the registry reflects approval.
+        sys_row = await session.get(AISystem, row.ai_system_id)
+        if sys_row and sys_row.workflow_status not in ("approved", "rejected"):
+            sys_row.workflow_status = "approved"
         await refresh_assessment_score(session, assessment_id)
+        system = (await session.execute(
+            select(AISystem).where(AISystem.id == row.ai_system_id)
+        )).scalar_one_or_none()
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="assessment.approved",
+            resource_type="assessment",
+            resource_id=assessment_id,
+            ai_system_id=row.ai_system_id,
+            ai_system_name=system.name if system else "",
+            changes={"status": {"before": before_status, "after": "approved"}},
+        )
         await session.commit()
         await session.refresh(row)
     logger.info("assessment.approved", extra={"assessment_id": assessment_id, "score": row.score})
