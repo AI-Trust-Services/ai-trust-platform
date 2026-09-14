@@ -1,0 +1,41 @@
+# Docker build-context excludes. Backends build with context = repo root (`.`),
+# so without this every backend image would ship node_modules/.venv/.git/dist to
+# the daemon — on Windows/WSL the context transfer over the file-sharing bridge is
+# pathologically slow (100+ MB, minutes per image). Keep the context lean.
+# NOTE: Docker ignores .gitignore; these rules must live here.
+
+# Version control
+.git
+.gitignore
+
+# Node / frontend build artefacts (frontends build from their own subdir, never need these here)
+**/node_modules
+**/dist
+**/.vite
+**/npm-debug.log*
+
+# Python virtualenvs and caches
+**/.venv
+**/venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*.egg-info
+
+# Local env / secrets (images get config via k8s Secret, not baked in)
+.env
+**/.env.local
+
+# Editor / OS cruft
+.vscode
+.idea
+**/.DS_Store
+
+# Docs and CI that never belong in an image
+docs
+.github
+
+# k8s tooling dir (not needed inside any app image)
+k8s/.tmp

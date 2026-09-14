@@ -1,0 +1,2 @@
+# Cluster-scoped kubeconfig written by `make cluster` (see Makefile). Local only.
+.kube/
