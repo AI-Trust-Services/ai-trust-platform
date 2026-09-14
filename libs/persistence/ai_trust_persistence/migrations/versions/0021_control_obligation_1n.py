@@ -17,12 +17,9 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    from sqlalchemy import inspect
+    from sqlalchemy import inspect, text
     inspector = inspect(bind)
     existing_tables = set(inspector.get_table_names())
-
-    if "control_obligations" in existing_tables:
-        op.drop_table("control_obligations")
 
     op.add_column("controls", sa.Column(
         "obligation_id", sa.String(30),
@@ -36,6 +33,23 @@ def upgrade() -> None:
     ))
     op.create_index("ix_controls_obligation_id", "controls", ["obligation_id"])
     op.create_index("ix_controls_assessment_id", "controls", ["assessment_id"])
+
+    if "control_obligations" in existing_tables:
+        # Backfill before drop: pick the lexicographically first obligation per control
+        # (DISTINCT ON), then join obligations to get assessment_id in one pass.
+        bind.execute(text("""
+            UPDATE controls c
+            SET obligation_id = co.obligation_id,
+                assessment_id = o.assessment_id
+            FROM (
+                SELECT DISTINCT ON (control_id) control_id, obligation_id
+                FROM control_obligations
+                ORDER BY control_id, obligation_id
+            ) co
+            JOIN obligations o ON o.id = co.obligation_id
+            WHERE c.id = co.control_id
+        """))
+        op.drop_table("control_obligations")
 
     # Remove the now-redundant ai_system_id FK on controls (was nullable/org-wide).
     # ai_system_id is kept for evidence filtering (denormalized from obligation).
