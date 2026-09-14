@@ -16,10 +16,10 @@ Two template shapes coexist:
   merged into a single control and each row's expected evidence is appended to the
   description as an "Expected evidence:" line (there is no separate evidence schema).
 
-- **Retained sets** (Art. 5 prohibited, Art. 53/55 GPAI, Art. 69 voluntary, NIST,
-  ISO): carry a `slug` (AISEC-*/AITP-* source id) from which the generator derives
-  `control_ref = f"{article_ref}:{slug}"`, plus `risk_category` (the tier tokens)
-  and `category`. These sets have no `role` (they apply to any org_role).
+- **Retained sets** (NIST, ISO): carry a `slug` (AITP-* source id) from which the
+  generator derives `control_ref = f"{article_ref}:{slug}"`, plus `risk_category`
+  (always "All") and `category`. These sets have no `role` (they apply to any
+  org_role).
 
 The generator uses `control_ref = t.get("control_ref") or f"{article_ref}:{slug}"`
 and `risk = t.get("risk") or t["risk_category"]`, so both shapes flow through the
@@ -38,7 +38,7 @@ _TIER_RISK_CATEGORIES: dict[str, set[str]] = {
     "prohibited": {"Prohibited"},
     "high": {"High-Risk", "High"},
     "limited": {"Limited-Risk", "Limited"},
-    "minimal": set(),  # only "All" controls (the voluntary Art. 69 set)
+    "minimal": set(),  # only "All"-risk controls apply
     "gpai-standard": {"GPAI"},
     "gpai-systemic": {"GPAI", "GPAI-Systemic"},  # systemic is a superset
 }
@@ -104,12 +104,12 @@ _REQUIREMENT_ARTICLES: dict[str, str] = {
     "P-LIM-01": "Art. 50 (1)",
     "P-LIM-02": "Art. 50 (2)",
     "P-CAI-01": "Art. 20(1) and (2)",
-    "P-PMM-01a": "Art. 72(1)",
-    "P-PMM-01b": "Art. 72(1)",
-    "P-PMM-02a": "Art. 72(2)",
-    "P-PMM-02b": "Art. 72(2)",
-    "P-PMM-02c": "Art. 72(2)",
-    "P-PMM-03": "Art. 72(3)",
+    "P-PMM-01": "Art. 72(1)",
+    "P-PMM-02": "Art. 72(1)",
+    "P-PMM-03": "Art. 72(2)",
+    "P-PMM-04": "Art. 72(2)",
+    "P-PMM-05": "Art. 72(2)",
+    "P-PMM-06": "Art. 72(3)",
     "P-ACC-01": "Art. 16 (l)",
     "P-INC-01": "Art. 73",
     "D-TOM-01": "Art. 26(1)",
@@ -322,22 +322,22 @@ _CONTROL_TEMPLATES: dict[str, list[dict]] = {
          "description": "Immediately investigate the causes of non-conformity of a high-risk system with the EU AI Act and, in accordance with the applicable conditions, inform the national competent authority where the organization, acting as a provider, is aware that the high-risk AI system poses a risk within the meaning of Article 79(1).\n\nExpected evidence: document — documentation of the implemented process, proof of investigation steps and results, and documentation of the information provided to authorities."},
     ],
     "P-PMM": [
-        {"control_ref": "P-PMM-01a", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-PMM-01", "role": "provider", "risk": "High", "category": "general",
          "title": "Post-market monitoring system - Establishment",
          "description": "Establish a post-market monitoring system.\n\nExpected evidence: function is used / document — PMM feature is used or documentation of the system."},
-        {"control_ref": "P-PMM-01b", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-PMM-02", "role": "provider", "risk": "High", "category": "general",
          "title": "Post-market monitoring system - Documentation",
          "description": "Document a post-market monitoring system.\n\nExpected evidence: document — documentation of the system."},
-        {"control_ref": "P-PMM-02a", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-PMM-03", "role": "provider", "risk": "High", "category": "general",
          "title": "Data Collection Requirements of the PMM - Collection",
          "description": "Actively and systematically collect relevant post-market data on the performance of high-risk AI systems throughout their lifetime in order to assess their continuous compliance with the requirements set out in Chapter III, Section 2, including, where relevant, their interaction with other AI systems.\n\nExpected evidence: function is used / document — PMM feature is used, data uploaded, or a policy regarding data collection is uploaded."},
-        {"control_ref": "P-PMM-02b", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-PMM-04", "role": "provider", "risk": "High", "category": "general",
          "title": "Data Collection Requirements of the PMM - Documentation",
          "description": "Actively and systematically document relevant post-market data on the performance of high-risk AI systems throughout their lifetime in order to assess their continuous compliance with the requirements set out in Chapter III, Section 2, including, where relevant, their interaction with other AI systems.\n\nExpected evidence: function is used / document — PMM feature is used, data uploaded, or a policy regarding data collection is uploaded."},
-        {"control_ref": "P-PMM-02c", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-PMM-05", "role": "provider", "risk": "High", "category": "general",
          "title": "Data Collection Requirements of the PMM - Analysis",
          "description": "Actively and systematically analyse relevant post-market data on the performance of high-risk AI systems throughout their lifetime in order to assess their continuous compliance with the requirements set out in Chapter III, Section 2, including, where relevant, their interaction with other AI systems.\n\nExpected evidence: function is used / document — PMM feature is used, data uploaded, or a policy regarding data collection is uploaded."},
-        {"control_ref": "P-PMM-03", "role": "provider", "risk": "High", "category": "general",
+        {"control_ref": "P-PMM-06", "role": "provider", "risk": "High", "category": "general",
          "title": "Post-market monitoring documentation",
          "description": "Base the post-market monitoring system on a post-market monitoring plan.\n\nExpected evidence: document — post-market monitoring plan."},
     ],
@@ -460,93 +460,11 @@ _CONTROL_TEMPLATES: dict[str, list[dict]] = {
     # =====================================================================
     # Retained sets (unchanged) — keyed by cluster_id (= article_ref).
     # These carry a `slug` (control_ref = "{article_ref}:{slug}") and
-    # `risk_category`; they have no `role`, so they apply to any org_role.
+    # `risk_category` ("All"); they have no `role`, so they apply to any
+    # org_role and any tier. NIST/ISO only — the EU AI Act contributes no
+    # retained sets (its obligations/controls come solely from the AI Act
+    # Requirements catalogue, which covers only High/Limited risk).
     # =====================================================================
-
-    # --- EU AI Act: minimal (Art. 69 voluntary; no source-library rows) --
-    "Art. 69": [
-        {"slug": "AITP-VOL-001", "category": "general", "risk_category": "All",
-         "title": "Voluntary code of conduct",
-         "description": "Adopt and document a voluntary code of conduct covering proportionate application of high-risk requirements (Art. 69)."},
-    ],
-    "Art. 69(a) (voluntary)": [
-        {"slug": "AITP-VOL-002", "category": "documentation", "risk_category": "All",
-         "title": "Lightweight system documentation",
-         "description": "Voluntarily maintain lightweight documentation of the system's purpose, data and intended use."},
-    ],
-    "Art. 69(b) (voluntary)": [
-        {"slug": "AITP-VOL-003", "category": "monitoring", "risk_category": "All",
-         "title": "Basic production monitoring",
-         "description": "Voluntarily monitor the system in production for performance degradation and unexpected behaviour."},
-    ],
-
-    # --- EU AI Act: prohibited (Art. 5) ----------------------------------
-    "Art. 5": [
-        {"slug": "AISEC-PH-001", "category": "general", "risk_category": "Prohibited",
-         "title": "Prohibited practice — social scoring",
-         "description": "Do not place on the market, put into service or use AI that evaluates or classifies persons on social behaviour or characteristics leading to detrimental treatment (Art. 5(1)(c))."},
-        {"slug": "AISEC-PH-002", "category": "general", "risk_category": "Prohibited",
-         "title": "Prohibited practice — subliminal manipulation",
-         "description": "Do not deploy subliminal, manipulative or deceptive techniques that materially distort behaviour causing significant harm (Art. 5(1)(a))."},
-        {"slug": "AISEC-PH-003", "category": "general", "risk_category": "Prohibited",
-         "title": "Prohibited practice — exploitation of vulnerabilities",
-         "description": "Do not exploit vulnerabilities of specific groups (age, disability, social/economic situation) to materially distort behaviour causing significant harm (Art. 5(1)(b))."},
-        {"slug": "AISEC-PH-004", "category": "general", "risk_category": "Prohibited",
-         "title": "Prohibited practice — real-time remote biometric identification",
-         "description": "Do not use real-time remote biometric identification in publicly accessible spaces for law enforcement except for the exhaustively listed exceptions (Art. 5(1)(h))."},
-        {"slug": "AISEC-PH-005", "category": "general", "risk_category": "Prohibited",
-         "title": "Prohibited practice — predictive policing (individual)",
-         "description": "Do not assess the risk of a person committing a criminal offence based solely on profiling or personality traits (Art. 5(1)(d))."},
-        {"slug": "AISEC-PH-006", "category": "general", "risk_category": "Prohibited",
-         "title": "Prohibited practice — untargeted facial image scraping",
-         "description": "Do not create or expand facial recognition databases through untargeted scraping of facial images from the internet or CCTV (Art. 5(1)(e))."},
-        {"slug": "AISEC-PH-007", "category": "general", "risk_category": "Prohibited",
-         "title": "Prohibited practice — emotion inference in workplace/education",
-         "description": "Do not infer emotions of natural persons in workplace and education settings, except for medical or safety reasons (Art. 5(1)(f))."},
-        {"slug": "AISEC-PH-008", "category": "general", "risk_category": "Prohibited",
-         "title": "Prohibited practice — non-consensual intimate imagery",
-         "description": "Do not generate or manipulate sexually explicit imagery of real persons without consent or create CSAM; include reasonable safeguards (Art. 5, AI Omnibus)."},
-    ],
-
-    # --- EU AI Act: GPAI (Art. 53) ---------------------------------------
-    "Art. 53": [
-        {"slug": "AISEC-GP-001", "category": "documentation", "risk_category": "GPAI",
-         "title": "GPAI model — technical documentation",
-         "description": "Draw up and keep up to date Annex XI technical documentation of the model, including training and testing processes and evaluation results (Art. 53(1)(a))."},
-        {"slug": "AISEC-GP-003", "category": "documentation", "risk_category": "GPAI",
-         "title": "GPAI model — information to downstream providers",
-         "description": "Provide downstream providers with sufficient information and documentation, including capabilities and limitations, to enable their own compliance (Art. 53(1)(b))."},
-    ],
-    # AISEC-GP-002 covers both sub-articles in the source library; deliberately
-    # reused here. control_ref is "{article_ref}:{slug}", so the two refs stay
-    # distinct ("Art. 53(1)(c):AISEC-GP-002" vs "Art. 53(1)(d):AISEC-GP-002").
-    "Art. 53(1)(c)": [
-        {"slug": "AISEC-GP-002", "category": "general", "risk_category": "GPAI",
-         "title": "GPAI model — copyright compliance policy",
-         "description": "Put in place a policy to comply with Union copyright law (Directive 2019/790) covering rights reservations (Art. 53(1)(c))."},
-    ],
-    "Art. 53(1)(d)": [
-        {"slug": "AISEC-GP-002", "category": "documentation", "risk_category": "GPAI",
-         "title": "GPAI model — training content summary",
-         "description": "Provide a sufficiently detailed summary of training data content using the AI Office template (Art. 53(1)(d))."},
-    ],
-
-    # --- EU AI Act: GPAI systemic (Art. 55) ------------------------------
-    "Art. 55": [
-        {"slug": "AISEC-GP-004", "category": "testing", "risk_category": "GPAI-Systemic",
-         "title": "GPAI systemic — safety and security framework",
-         "description": "Maintain a safety and security framework and perform model evaluation including adversarial testing to identify and mitigate systemic risks (Art. 55(1))."},
-    ],
-    "Art. 55(1)(c)": [
-        {"slug": "AISEC-GP-004-INC", "category": "incident_response", "risk_category": "GPAI-Systemic",
-         "title": "GPAI systemic — serious incident reporting",
-         "description": "Track, document and report serious incidents and possible corrective measures to the AI Office and national authorities (Art. 55(1)(c))."},
-    ],
-    "Art. 55(1)(d)": [
-        {"slug": "AISEC-GP-005", "category": "security", "risk_category": "GPAI-Systemic",
-         "title": "GPAI systemic — cybersecurity protection",
-         "description": "Ensure adequate cybersecurity for the model and its infrastructure, including protection against weight exfiltration and unauthorised access (Art. 55(1)(d))."},
-    ],
 
     # --- NIST AI RMF (tier-independent) ----------------------------------
     "GOVERN": [

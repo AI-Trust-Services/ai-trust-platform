@@ -571,14 +571,15 @@ async def test_generate_controls_creates_for_obligations_without_controls(client
     system = await create_system(tier="minimal")
     ass = await create_assessment(client, system["id"])
     # Manual obligation with a template-backed article_ref but no controls yet.
-    await create_obligation(client, ass["id"], article_ref="Art. 69", title="Manual")
+    # GOVERN is a retained NIST cluster (risk_category "All") -> generates regardless of tier.
+    await create_obligation(client, ass["id"], article_ref="GOVERN", title="Manual")
     # The auto-generated minimal obligations already have controls; only the manual
-    # Art. 69 obligation lacks them -> its 1 control is generated.
+    # GOVERN obligation lacks them -> its 1 control is generated.
     r = await client.post(f"/v1/assessments/{ass['id']}/generate-controls")
     assert r.status_code == 200
     created = r.json()["created"]
     assert len(created) == 1
-    assert created[0]["control_ref"] == "Art. 69:AITP-VOL-001"
+    assert created[0]["control_ref"] == "GOVERN:AITP-NIST-GOVERN"
 
 
 async def test_generate_controls_approved_assessment_returns_409(client: httpx.AsyncClient):
