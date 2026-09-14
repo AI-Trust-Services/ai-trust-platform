@@ -671,5 +671,5 @@ def cluster_articles(cluster_id: str, tier: str, org_role: str = "provider") -> 
         m = re.search(r"\d+", a)
         return int(m.group(0)) if m else 0
 
-    return ", ".join(sorted(tops, key=_num))
+    return ", ".join(sorted(tops, key=_num)) + " EU AI Act" if tops else ""
 

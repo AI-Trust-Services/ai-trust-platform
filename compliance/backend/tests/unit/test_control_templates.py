@@ -169,8 +169,8 @@ def test_controls_for_attaches_article():
 
 def test_cluster_articles_aggregates_distinct_top_level():
     # P-RM requirements reference Art. 9, Art. 11 and Art. 72 -> distinct, num-sorted.
-    assert cluster_articles("P-RM", "high", "provider") == "Art. 9, Art. 11, Art. 72"
-    assert cluster_articles("P-DG", "high", "provider") == "Art. 10"
+    assert cluster_articles("P-RM", "high", "provider") == "Art. 9, Art. 11, Art. 72 EU AI Act"
+    assert cluster_articles("P-DG", "high", "provider") == "Art. 10 EU AI Act"
 
 
 def test_cluster_articles_empty_for_retained_and_wrong_role():

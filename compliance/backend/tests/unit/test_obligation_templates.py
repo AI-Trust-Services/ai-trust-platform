@@ -64,17 +64,17 @@ def test_eu_high_risk_has_required_fields():
 
 def test_eu_high_risk_provider_article_refs():
     refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "high")}
-    assert "Art. 9" in refs
-    assert "Art. 14" in refs
-    assert "Art. 73" in refs
+    assert "Art. 9 EU AI Act" in refs
+    assert "Art. 14 EU AI Act" in refs
+    assert "Art. 73 EU AI Act" in refs
 
 
 def test_eu_high_risk_deployer_article_refs():
     refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "high", "deployer")}
-    assert "Art. 26" in refs
-    assert "Art. 27" in refs
+    assert "Art. 26 EU AI Act" in refs
+    assert "Art. 27 EU AI Act" in refs
     # Provider-only clusters must not leak into the deployer set.
-    assert "Art. 9" not in refs
+    assert "Art. 9 EU AI Act" not in refs
 
 
 def test_eu_high_importer_is_empty():
@@ -97,7 +97,7 @@ def test_eu_limited_deployer_count():
 
 def test_eu_limited_provider_article_refs():
     refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "limited")}
-    assert "Art. 50" in refs
+    assert "Art. 50 EU AI Act" in refs
 
 
 def test_eu_limited_provider_includes_all_risk_cluster():
@@ -117,7 +117,7 @@ def test_eu_minimal_count():
 
 def test_eu_minimal_article_refs():
     refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "minimal")}
-    assert "Art. 69" in refs
+    assert "Art. 69 EU AI Act" in refs
 
 
 def test_eu_prohibited_count():
@@ -133,7 +133,7 @@ def test_eu_gpai_standard_count():
 
 def test_eu_gpai_standard_article_refs():
     refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "gpai-standard")}
-    assert "Art. 53" in refs
+    assert "Art. 53 EU AI Act" in refs
 
 
 def test_eu_gpai_systemic_is_superset_of_standard():
@@ -144,7 +144,7 @@ def test_eu_gpai_systemic_is_superset_of_standard():
 
 def test_eu_gpai_systemic_includes_adversarial_testing():
     refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "gpai-systemic")}
-    assert "Art. 55" in refs
+    assert "Art. 55 EU AI Act" in refs
 
 
 # ---------------------------------------------------------------------------
