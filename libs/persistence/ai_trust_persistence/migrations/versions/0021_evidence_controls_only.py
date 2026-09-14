@@ -8,7 +8,7 @@ Create Date: 2026-09-11
 """
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 revision = "0021"
 down_revision = "0020"
@@ -17,8 +17,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    inspector = inspect(bind)
+    conn = op.get_context().connection
+    inspector = inspect(conn)
 
     evidence_cols = {col["name"] for col in inspector.get_columns("evidence")}
     evidence_indexes = {idx["name"] for idx in inspector.get_indexes("evidence")}

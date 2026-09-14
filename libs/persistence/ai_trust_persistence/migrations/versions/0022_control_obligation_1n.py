@@ -8,6 +8,7 @@ Create Date: 2026-09-11
 """
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect, text
 
 revision = "0022"
 down_revision = "0021"
@@ -16,9 +17,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    from sqlalchemy import inspect, text
-    inspector = inspect(bind)
+    conn = op.get_context().connection
+    inspector = inspect(conn)
     existing_tables = set(inspector.get_table_names())
 
     op.add_column("controls", sa.Column(
@@ -37,7 +37,7 @@ def upgrade() -> None:
     if "control_obligations" in existing_tables:
         # Backfill before drop: pick the lexicographically first obligation per control
         # (DISTINCT ON), then join obligations to get assessment_id in one pass.
-        bind.execute(text("""
+        conn.execute(text("""
             UPDATE controls c
             SET obligation_id = co.obligation_id,
                 assessment_id = o.assessment_id
