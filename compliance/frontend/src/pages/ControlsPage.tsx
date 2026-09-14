@@ -213,8 +213,10 @@ export default function ControlsPage() {
                   <TableCell className="text-[13px] text-muted-foreground">{fmtDate(c.due_date)}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
-                      <Button variant="ghost" size="sm" disabled={!mayWrite} title={mayWrite ? "Link or unlink obligations" : noWriteTitle}
-                        onClick={() => setLinkControl(c)}>Link Obligations</Button>
+                      {!c.control_ref && (
+                        <Button variant="ghost" size="sm" disabled={!mayWrite} title={mayWrite ? "Link or unlink obligations" : noWriteTitle}
+                          onClick={() => setLinkControl(c)}>Link Obligations</Button>
+                      )}
                       <Select value={c.status} disabled={!mayWrite} onValueChange={(v) => changeStatus(c.id, v)}>
                         <SelectTrigger className="h-8 w-[150px]" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -267,7 +269,7 @@ export default function ControlsPage() {
             )}
             <DetailSection title={`Related Obligations (${detailObligations.length})`}>
               {detailObligations.length === 0
-                ? <p className="text-[13px] text-muted-foreground">No obligations linked. Use "Link Obligations".</p>
+                ? <p className="text-[13px] text-muted-foreground">{detail.control_ref ? "No obligations linked." : 'No obligations linked. Use "Link Obligations".'}</p>
                 : <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
                     <li key={o.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
                   ))}</ul>
@@ -282,8 +284,10 @@ export default function ControlsPage() {
               }
             </DetailSection>
             <div className="flex items-center gap-2 px-5 pt-4">
-              <Button variant="outline" size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-                onClick={() => setLinkControl(detail)}>Link Obligations</Button>
+              {!detail.control_ref && (
+                <Button variant="outline" size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+                  onClick={() => setLinkControl(detail)}>Link Obligations</Button>
+              )}
               <Select value={detail.status} disabled={!mayWrite}
                 onValueChange={async (v: string) => {
                   await changeStatus(detail.id, v);
