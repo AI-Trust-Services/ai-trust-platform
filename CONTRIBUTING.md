@@ -32,6 +32,45 @@ The following rule governs code contributions:
 * Due to legal reasons, contributors will be asked to accept a Developer Certificate of Origin (DCO) when they create the first pull request to this project. This happens in an automated fashion during the submission process. SAP uses [the standard DCO text of the Linux Foundation](https://developercertificate.org/).
 * Contributions must follow our [guidelines on AI-generated code](https://github.com/SAP/.github/blob/main/CONTRIBUTING_USING_GENAI.md) in case you are using such tools.
 
+## Pull Request Titles
+
+We squash-merge pull requests, so **the pull request title becomes the commit message on `main`**. Titles are validated automatically by the `PR Title Check` workflow and must follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
+
+```
+<type>[(<scope>)][!]: <short description>
+```
+
+| Part | Required | Notes |
+|---|---|---|
+| `type` | yes | One of `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `build`, `ci`, `perf`, `style`, `revert` |
+| `(scope)` | **optional** | Lowercase component name, for example `compliance`, `registry`, `helm`, `ocm`, `k8s`. Omit it when the change is repository-wide |
+| `!` | optional | Marks a breaking change |
+| `description` | yes | Lowercase, imperative mood, no trailing period |
+
+Examples:
+
+```
+feat(compliance): add article reference to requirement tables
+fix: treat empty smtp_password as absent
+feat(api)!: drop v1 evidence endpoint
+docs: clarify gardener bootstrap order
+chore(deps): bump helm chart to 0.4.0
+```
+
+### Linking an issue
+
+Reference the issue in the **pull request description**, not in the title:
+
+```
+Fixes #87
+```
+
+Closing keywords (`Fixes`, `Closes`, `Resolves`) create a real link between the pull request and the issue, and close the issue automatically when the pull request is merged. An issue number in the title does not. Because GitHub appends the pull request number on squash merge, an issue number in the title also produces a confusing subject such as `fix(#87): correct validation (#130)`, where the two numbers refer to different things.
+
+### Title length
+
+Keep the title at 92 characters or fewer. GitHub appends ` (#123)` when squash merging, which keeps the final commit subject under the conventional 100-character limit.
+
 ## Issues and Planning
 
 * We use GitHub issues to track bugs and enhancement requests.
