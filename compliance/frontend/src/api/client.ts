@@ -1,5 +1,5 @@
 import type {
-  AISystem, Assessment, AssessmentDetail, Control, ControlDetail,
+  AISystem, Assessment, AssessmentDetail, Requirement, RequirementDetail,
   Evidence, EvidenceDetail, EvidenceVersion, Framework, GenerateObligationsResponse,
   DownloadUrlResponse, Obligation, ObligationDetail, PermissionsResponse,
 } from "../types";
@@ -98,24 +98,24 @@ export const api = {
   deleteObligation: (id: string): Promise<null> =>
     request<null>(API_BASE, `/obligations/${id}`, { method: "DELETE" }),
 
-  // Controls
-  getControls: (params: QueryParams = {}): Promise<Control[]> =>
-    request<Control[]>(API_BASE, `/controls${qs(params)}`),
-  getControl: (id: string): Promise<ControlDetail> =>
-    request<ControlDetail>(API_BASE, `/controls/${id}`),
-  createControl: (data: {
+  // Requirements
+  getRequirements: (params: QueryParams = {}): Promise<Requirement[]> =>
+    request<Requirement[]>(API_BASE, `/requirements${qs(params)}`),
+  getRequirement: (id: string): Promise<RequirementDetail> =>
+    request<RequirementDetail>(API_BASE, `/requirements/${id}`),
+  createRequirement: (data: {
     ai_system_id: string | null; title: string; description: string;
     category: string; owner: string; due_date: string | null;
-  }): Promise<Control> =>
-    request<Control>(API_BASE, "/controls", json("POST", data)),
-  updateControl: (id: string, data: Partial<Control>): Promise<Control> =>
-    request<Control>(API_BASE, `/controls/${id}`, json("PUT", data)),
-  deleteControl: (id: string): Promise<null> =>
-    request<null>(API_BASE, `/controls/${id}`, { method: "DELETE" }),
-  linkObligation: (controlId: string, obligationId: string): Promise<ControlDetail> =>
-    request<ControlDetail>(API_BASE, `/controls/${controlId}/link/${obligationId}`, { method: "POST" }),
-  unlinkObligation: (controlId: string, obligationId: string): Promise<ControlDetail> =>
-    request<ControlDetail>(API_BASE, `/controls/${controlId}/link/${obligationId}`, { method: "DELETE" }),
+  }): Promise<Requirement> =>
+    request<Requirement>(API_BASE, "/requirements", json("POST", data)),
+  updateRequirement: (id: string, data: Partial<Requirement>): Promise<Requirement> =>
+    request<Requirement>(API_BASE, `/requirements/${id}`, json("PUT", data)),
+  deleteRequirement: (id: string): Promise<null> =>
+    request<null>(API_BASE, `/requirements/${id}`, { method: "DELETE" }),
+  linkObligation: (requirementId: string, obligationId: string): Promise<RequirementDetail> =>
+    request<RequirementDetail>(API_BASE, `/requirements/${requirementId}/link/${obligationId}`, { method: "POST" }),
+  unlinkObligation: (requirementId: string, obligationId: string): Promise<RequirementDetail> =>
+    request<RequirementDetail>(API_BASE, `/requirements/${requirementId}/link/${obligationId}`, { method: "DELETE" }),
 
   // Evidence
   getEvidence: (params: QueryParams = {}): Promise<Evidence[]> =>
