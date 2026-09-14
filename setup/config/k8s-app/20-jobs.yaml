@@ -1,0 +1,100 @@
+# ---------------- ONE-SHOT JOBS ----------------
+# k8s has no depends_on:condition — each Job waits for its deps via an initContainer TCP probe.
+apiVersion: batch/v1
+kind: Job
+metadata: { name: db-migrate, namespace: ai-trust-app }
+spec:
+  backoffLimit: 10
+  template:
+    metadata: { labels: { app: db-migrate } }
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-pg
+          image: busybox:1.36
+          command: ["sh","-c","until nc -z postgres 5432; do echo waiting-pg; sleep 2; done"]
+      containers:
+        - name: db-migrate
+          image: aitrust/db-migrate:kind
+          imagePullPolicy: Always
+          env:
+            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-secrets, key: DATABASE_URL } } }
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: clickhouse-migrate, namespace: ai-trust-app }
+spec:
+  backoffLimit: 10
+  template:
+    metadata: { labels: { app: clickhouse-migrate } }
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-ch
+          image: busybox:1.36
+          command: ["sh","-c","until nc -z clickhouse 8123; do echo waiting-ch; sleep 2; done"]
+      containers:
+        - name: clickhouse-migrate
+          image: aitrust/clickhouse-migrate:kind
+          imagePullPolicy: Always
+          env:
+            - { name: CLICKHOUSE_HOST, value: clickhouse }
+            - { name: CLICKHOUSE_PORT, value: "8123" }
+            - { name: CLICKHOUSE_USER, valueFrom: { secretKeyRef: { name: app-secrets, key: CLICKHOUSE_USER } } }
+            - { name: CLICKHOUSE_PASSWORD, valueFrom: { secretKeyRef: { name: app-secrets, key: CLICKHOUSE_PASSWORD } } }
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: keycloak-provision, namespace: ai-trust-app }
+spec:
+  backoffLimit: 15
+  template:
+    metadata: { labels: { app: keycloak-provision } }
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-kc
+          image: busybox:1.36
+          # keycloak runs with KC_HTTP_RELATIVE_PATH=/keycloak, so the realms endpoint is under
+          # /keycloak — poll THAT path (bare /realms/master 404s forever otherwise).
+          command: ["sh","-c","until wget -q -O- http://keycloak:8080/keycloak/realms/master >/dev/null 2>&1; do echo waiting-kc; sleep 5; done"]
+      containers:
+        - name: keycloak-provision
+          image: aitrust/keycloak-provision:kind
+          imagePullPolicy: Always
+          env:
+            # include the /keycloak relative path so the provision script hits the admin API correctly
+            - { name: KEYCLOAK_URL, value: "http://keycloak:8080/keycloak" }
+            - { name: KEYCLOAK_ADMIN, valueFrom: { secretKeyRef: { name: app-secrets, key: KEYCLOAK_ADMIN } } }
+            - { name: KEYCLOAK_ADMIN_PASSWORD, valueFrom: { secretKeyRef: { name: app-secrets, key: KEYCLOAK_ADMIN_PASSWORD } } }
+            - { name: APP_PUBLIC_URL, valueFrom: { configMapKeyRef: { name: app-config, key: APP_PUBLIC_URL } } }
+            - { name: KEYCLOAK_CLIENT_SECRET, valueFrom: { secretKeyRef: { name: app-secrets, key: KEYCLOAK_CLIENT_SECRET } } }
+            - { name: APP_ADMIN_USERNAME, valueFrom: { secretKeyRef: { name: app-secrets, key: APP_ADMIN_USERNAME } } }
+            - { name: APP_ADMIN_PASSWORD, valueFrom: { secretKeyRef: { name: app-secrets, key: APP_ADMIN_PASSWORD } } }
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: minio-init, namespace: ai-trust-app }
+spec:
+  backoffLimit: 10
+  template:
+    metadata: { labels: { app: minio-init } }
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-minio
+          image: busybox:1.36
+          command: ["sh","-c","until nc -z minio 9000; do echo waiting-minio; sleep 2; done"]
+      containers:
+        - name: minio-init
+          image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+          env:
+            - { name: MINIO_ROOT_USER, valueFrom: { secretKeyRef: { name: app-secrets, key: MINIO_ROOT_USER } } }
+            - { name: MINIO_ROOT_PASSWORD, valueFrom: { secretKeyRef: { name: app-secrets, key: MINIO_ROOT_PASSWORD } } }
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mc alias set local http://minio:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD &&
+              mc mb --ignore-existing local/clickhouse &&
+              mc mb --ignore-existing local/evidence-files

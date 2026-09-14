@@ -1,0 +1,336 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ai-system-registry-backend, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: ai-system-registry-backend } }
+  template:
+    metadata: { labels: { app: ai-system-registry-backend } }
+    spec:
+      containers:
+        - name: ai-system-registry-backend
+          image: aitrust/ai-system-registry-backend:kind
+          imagePullPolicy: Always
+          env:
+            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-secrets, key: DATABASE_URL } } }
+            - { name: ALLOWED_ORIGINS, valueFrom: { configMapKeyRef: { name: app-config, key: ALLOWED_ORIGINS } } }
+            - { name: ROOT_PATH, value: "/api/registry" }
+          ports: [{ containerPort: 8001 }]
+          readinessProbe:
+            exec: { command: ["python","healthcheck.py"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+---
+apiVersion: v1
+kind: Service
+metadata: { name: ai-system-registry-backend, namespace: ai-trust-app }
+spec: { selector: { app: ai-system-registry-backend }, ports: [{ port: 8001, targetPort: 8001 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: monitoring-backend, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: monitoring-backend } }
+  template:
+    metadata: { labels: { app: monitoring-backend } }
+    spec:
+      containers:
+        - name: monitoring-backend
+          image: aitrust/monitoring-backend:kind
+          imagePullPolicy: Always
+          env:
+            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-secrets, key: DATABASE_URL } } }
+            - { name: ALLOWED_ORIGINS, valueFrom: { configMapKeyRef: { name: app-config, key: ALLOWED_ORIGINS } } }
+            - { name: ROOT_PATH, value: "/api/monitoring" }
+            - { name: CLICKHOUSE_HOST, value: clickhouse }
+            - { name: CLICKHOUSE_PORT, value: "8123" }
+            - { name: CLICKHOUSE_USER, valueFrom: { secretKeyRef: { name: app-secrets, key: CLICKHOUSE_USER } } }
+            - { name: CLICKHOUSE_PASSWORD, valueFrom: { secretKeyRef: { name: app-secrets, key: CLICKHOUSE_PASSWORD } } }
+          ports: [{ containerPort: 8003 }]
+          readinessProbe:
+            exec: { command: ["python","healthcheck.py"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+---
+apiVersion: v1
+kind: Service
+metadata: { name: monitoring-backend, namespace: ai-trust-app }
+spec: { selector: { app: monitoring-backend }, ports: [{ port: 8003, targetPort: 8003 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: overview-backend, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: overview-backend } }
+  template:
+    metadata: { labels: { app: overview-backend } }
+    spec:
+      containers:
+        - name: overview-backend
+          image: aitrust/overview-backend:kind
+          imagePullPolicy: Always
+          env:
+            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-secrets, key: DATABASE_URL } } }
+            - { name: ALLOWED_ORIGINS, valueFrom: { configMapKeyRef: { name: app-config, key: ALLOWED_ORIGINS } } }
+            - { name: ROOT_PATH, value: "/api/overview" }
+          ports: [{ containerPort: 8004 }]
+          readinessProbe:
+            exec: { command: ["python","healthcheck.py"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+---
+apiVersion: v1
+kind: Service
+metadata: { name: overview-backend, namespace: ai-trust-app }
+spec: { selector: { app: overview-backend }, ports: [{ port: 8004, targetPort: 8004 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: alerts-backend, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: alerts-backend } }
+  template:
+    metadata: { labels: { app: alerts-backend } }
+    spec:
+      containers:
+        - name: alerts-backend
+          image: aitrust/alerts-backend:kind
+          imagePullPolicy: Always
+          env:
+            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-secrets, key: DATABASE_URL } } }
+            - { name: ALLOWED_ORIGINS, valueFrom: { configMapKeyRef: { name: app-config, key: ALLOWED_ORIGINS } } }
+            - { name: ROOT_PATH, value: "/api/alerts" }
+            - { name: CLICKHOUSE_HOST, value: clickhouse }
+            - { name: CLICKHOUSE_PORT, value: "8123" }
+            - { name: CLICKHOUSE_USER, valueFrom: { secretKeyRef: { name: app-secrets, key: CLICKHOUSE_USER } } }
+            - { name: CLICKHOUSE_PASSWORD, valueFrom: { secretKeyRef: { name: app-secrets, key: CLICKHOUSE_PASSWORD } } }
+          ports: [{ containerPort: 8005 }]
+          readinessProbe:
+            exec: { command: ["python","healthcheck.py"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+---
+apiVersion: v1
+kind: Service
+metadata: { name: alerts-backend, namespace: ai-trust-app }
+spec: { selector: { app: alerts-backend }, ports: [{ port: 8005, targetPort: 8005 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: compliance-backend, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: compliance-backend } }
+  template:
+    metadata: { labels: { app: compliance-backend } }
+    spec:
+      containers:
+        - name: compliance-backend
+          image: aitrust/compliance-backend:kind
+          imagePullPolicy: Always
+          env:
+            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-secrets, key: DATABASE_URL } } }
+            - { name: ALLOWED_ORIGINS, valueFrom: { configMapKeyRef: { name: app-config, key: ALLOWED_ORIGINS } } }
+            - { name: ROOT_PATH, value: "/api/compliance" }
+            - { name: MINIO_ENDPOINT, valueFrom: { configMapKeyRef: { name: app-config, key: MINIO_ENDPOINT } } }
+            - { name: MINIO_PUBLIC_ENDPOINT, valueFrom: { configMapKeyRef: { name: app-config, key: MINIO_PUBLIC_ENDPOINT } } }
+            - { name: MINIO_ROOT_USER, valueFrom: { secretKeyRef: { name: app-secrets, key: MINIO_ROOT_USER } } }
+            - { name: MINIO_ROOT_PASSWORD, valueFrom: { secretKeyRef: { name: app-secrets, key: MINIO_ROOT_PASSWORD } } }
+            - { name: MINIO_SECURE, valueFrom: { configMapKeyRef: { name: app-config, key: MINIO_SECURE } } }
+            - { name: MINIO_REGION, valueFrom: { configMapKeyRef: { name: app-config, key: MINIO_REGION } } }
+          ports: [{ containerPort: 8007 }]
+          readinessProbe:
+            exec: { command: ["python","healthcheck.py"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+---
+apiVersion: v1
+kind: Service
+metadata: { name: compliance-backend, namespace: ai-trust-app }
+spec: { selector: { app: compliance-backend }, ports: [{ port: 8007, targetPort: 8007 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: decision-trace-analyzer-backend, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: decision-trace-analyzer-backend } }
+  template:
+    metadata: { labels: { app: decision-trace-analyzer-backend } }
+    spec:
+      containers:
+        - name: decision-trace-analyzer-backend
+          image: aitrust/decision-trace-analyzer-backend:kind
+          imagePullPolicy: Always
+          env:
+            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-secrets, key: DATABASE_URL } } }
+            - { name: ALLOWED_ORIGINS, valueFrom: { configMapKeyRef: { name: app-config, key: ALLOWED_ORIGINS } } }
+            - { name: ROOT_PATH, value: "/api/dta" }
+            - { name: CLICKHOUSE_HOST, value: clickhouse }
+            - { name: CLICKHOUSE_PORT, value: "8123" }
+            - { name: CLICKHOUSE_USER, valueFrom: { secretKeyRef: { name: app-secrets, key: CLICKHOUSE_USER } } }
+            - { name: CLICKHOUSE_PASSWORD, valueFrom: { secretKeyRef: { name: app-secrets, key: CLICKHOUSE_PASSWORD } } }
+          ports: [{ containerPort: 8006 }]
+          readinessProbe:
+            exec: { command: ["python","healthcheck.py"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+---
+apiVersion: v1
+kind: Service
+metadata: { name: decision-trace-analyzer-backend, namespace: ai-trust-app }
+spec: { selector: { app: decision-trace-analyzer-backend }, ports: [{ port: 8006, targetPort: 8006 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ai-system-registry-frontend, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: ai-system-registry-frontend } }
+  template:
+    metadata: { labels: { app: ai-system-registry-frontend } }
+    spec:
+      containers:
+        - name: ai-system-registry-frontend
+          image: aitrust/ai-system-registry-frontend:kind
+          imagePullPolicy: Always
+          ports: [{ containerPort: 80 }]
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata: { name: ai-system-registry-frontend, namespace: ai-trust-app }
+spec: { selector: { app: ai-system-registry-frontend }, ports: [{ port: 80, targetPort: 80 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: monitoring-frontend, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: monitoring-frontend } }
+  template:
+    metadata: { labels: { app: monitoring-frontend } }
+    spec:
+      containers:
+        - name: monitoring-frontend
+          image: aitrust/monitoring-frontend:kind
+          imagePullPolicy: Always
+          ports: [{ containerPort: 80 }]
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata: { name: monitoring-frontend, namespace: ai-trust-app }
+spec: { selector: { app: monitoring-frontend }, ports: [{ port: 80, targetPort: 80 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: overview-frontend, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: overview-frontend } }
+  template:
+    metadata: { labels: { app: overview-frontend } }
+    spec:
+      containers:
+        - name: overview-frontend
+          image: aitrust/overview-frontend:kind
+          imagePullPolicy: Always
+          ports: [{ containerPort: 80 }]
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata: { name: overview-frontend, namespace: ai-trust-app }
+spec: { selector: { app: overview-frontend }, ports: [{ port: 80, targetPort: 80 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: alerts-frontend, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: alerts-frontend } }
+  template:
+    metadata: { labels: { app: alerts-frontend } }
+    spec:
+      containers:
+        - name: alerts-frontend
+          image: aitrust/alerts-frontend:kind
+          imagePullPolicy: Always
+          ports: [{ containerPort: 80 }]
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata: { name: alerts-frontend, namespace: ai-trust-app }
+spec: { selector: { app: alerts-frontend }, ports: [{ port: 80, targetPort: 80 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: compliance-frontend, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: compliance-frontend } }
+  template:
+    metadata: { labels: { app: compliance-frontend } }
+    spec:
+      containers:
+        - name: compliance-frontend
+          image: aitrust/compliance-frontend:kind
+          imagePullPolicy: Always
+          ports: [{ containerPort: 80 }]
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata: { name: compliance-frontend, namespace: ai-trust-app }
+spec: { selector: { app: compliance-frontend }, ports: [{ port: 80, targetPort: 80 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: decision-trace-analyzer-frontend, namespace: ai-trust-app }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: decision-trace-analyzer-frontend } }
+  template:
+    metadata: { labels: { app: decision-trace-analyzer-frontend } }
+    spec:
+      containers:
+        - name: decision-trace-analyzer-frontend
+          image: aitrust/decision-trace-analyzer-frontend:kind
+          imagePullPolicy: Always
+          ports: [{ containerPort: 80 }]
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata: { name: decision-trace-analyzer-frontend, namespace: ai-trust-app }
+spec: { selector: { app: decision-trace-analyzer-frontend }, ports: [{ port: 80, targetPort: 80 }] }
