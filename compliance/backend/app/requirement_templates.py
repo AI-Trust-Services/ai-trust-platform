@@ -1,8 +1,8 @@
-"""Control templates per obligation (keyed by article_ref).
+"""Requirement templates per obligation (keyed by article_ref).
 
-Source of truth for auto-generated controls. When an assessment's controls are
-generated, each obligation's `article_ref` selects the matching control templates
-from this flat dict, further filtered by the assessment's risk tier so a control
+Source of truth for auto-generated requirements. When an assessment's requirements are
+generated, each obligation's `article_ref` selects the matching requirement templates
+from this flat dict, further filtered by the assessment's risk tier so a requirement
 scoped to one tier (e.g. a prohibited-practice check) never lands on an obligation
 from another tier. Controls define *how* an obligation is met (see Control model).
 
@@ -38,9 +38,9 @@ _TIER_RISK_CATEGORIES: dict[str, set[str]] = {
 }
 
 
-# Keyed by obligation article_ref -> list of control templates.
+# Keyed by obligation article_ref -> list of requirement templates.
 # Each template: {slug, title, description, category, risk_category}.
-_CONTROL_TEMPLATES: dict[str, list[dict]] = {
+_REQUIREMENT_TEMPLATES: dict[str, list[dict]] = {
     # --- EU AI Act: high-risk --------------------------------------------
     "Art. 9": [
         {"slug": "AISEC-RM-002", "category": "general", "risk_category": "High-Risk",
@@ -364,13 +364,13 @@ def _tier_allows(risk_category: str, tier: str) -> bool:
     return bool(tokens & _TIER_RISK_CATEGORIES.get(tier, set()))
 
 
-def controls_for(article_ref: str, tier: str) -> list[dict]:
-    """Return control templates for an obligation's article_ref at a given tier.
+def requirements_for(article_ref: str, tier: str) -> list[dict]:
+    """Return requirement templates for an obligation's article_ref at a given tier.
 
     Templates whose risk_category does not apply to `tier` are filtered out, so a
-    control scoped to one tier never attaches to an obligation from another. Returns
-    an empty list when an article_ref has no defined controls (or none match the
-    tier) — callers treat this as "no controls to generate" for that obligation and
+    requirement scoped to one tier never attaches to an obligation from another. Returns
+    an empty list when an article_ref has no defined requirements (or none match the
+    tier) — callers treat this as "no requirements to generate" for that obligation and
     should log the gap.
     """
-    return [t for t in _CONTROL_TEMPLATES.get(article_ref, []) if _tier_allows(t["risk_category"], tier)]
+    return [t for t in _REQUIREMENT_TEMPLATES.get(article_ref, []) if _tier_allows(t["risk_category"], tier)]
