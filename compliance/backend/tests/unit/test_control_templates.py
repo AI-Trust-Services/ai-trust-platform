@@ -137,7 +137,7 @@ def test_controls_have_required_fields():
         assert c["category"]
         assert c.get("risk") or c.get("risk_category")
         assert c["control_ref"]
-    for c in controls_for("Art. 5", "prohibited"):
+    for c in controls_for("GOVERN", "high"):
         assert c["title"]
         assert c["description"]
         assert c["category"]
@@ -174,35 +174,15 @@ def test_cluster_articles_aggregates_distinct_top_level():
 
 
 def test_cluster_articles_empty_for_retained_and_wrong_role():
-    # Retained sets carry no per-requirement article.
-    assert cluster_articles("Art. 5", "prohibited") == ""
+    # Retained sets (NIST/ISO) carry no per-requirement article.
+    assert cluster_articles("GOVERN", "high") == ""
     # No provider controls survive for a deployer cluster.
     assert cluster_articles("P-RM", "high", "deployer") == ""
 
 
 # ---------------------------------------------------------------------------
-# controls_for — retained sets (tier scoping unchanged)
+# controls_for — retained sets (tier-independent NIST/ISO)
 # ---------------------------------------------------------------------------
-
-def test_prohibited_controls_only_for_prohibited_tier():
-    assert len(controls_for("Art. 5", "prohibited")) == 8
-    assert controls_for("Art. 5", "high") == []
-
-
-def test_gpai_systemic_controls_excluded_from_standard():
-    assert len(controls_for("Art. 55", "gpai-systemic")) == 1
-    assert controls_for("Art. 55", "gpai-standard") == []
-
-
-def test_gpai_standard_controls_present_for_both():
-    assert len(controls_for("Art. 53", "gpai-standard")) == 2
-    assert len(controls_for("Art. 53", "gpai-systemic")) == 2
-
-
-def test_minimal_voluntary_controls():
-    assert len(controls_for("Art. 69", "minimal")) == 1
-    assert len(controls_for("Art. 69(a) (voluntary)", "minimal")) == 1
-
 
 def test_nist_controls_tier_independent():
     for tier in ("high", "minimal", "prohibited"):
