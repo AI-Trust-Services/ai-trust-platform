@@ -450,7 +450,6 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
                             obl.status = "in_progress"
                         await session.flush()
 
-            sys_name = sys_map.get(evd.ai_system_id, "") if evd.ai_system_id else ""
             desc = f"Evidence expired: '{evd.title}'"
             results.append(EvalResult(
                 triggered=True, value=1.0, description=desc,
