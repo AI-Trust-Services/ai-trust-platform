@@ -239,7 +239,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
               {/* Controls checklist */}
               <div className="flex flex-col gap-1.5">
                 <Label className="flex items-center gap-1.5">
-                  Link to Controls
+                  Link to Requirements
                   {selectedControls.size > 0 && <Badge variant="secondary" className="rounded-full font-medium">{selectedControls.size} selected</Badge>}
                 </Label>
                 <div className="max-h-40 overflow-y-auto rounded-md border border-border">

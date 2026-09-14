@@ -29,12 +29,20 @@ const FIELD_LABELS: Record<string, string> = {
   version:          "Version",
   provider:         "Provider",
   org_name:         "Organisation Name",
+  org_role:         "Organisation Role",
   system_type:      "System Type",
   lifecycle:        "Lifecycle State",
   autonomy_level:   "Autonomy Level",
 };
 
 const ENUM_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  org_role: [
+    { value: "provider",                  label: "Provider" },
+    { value: "deployer",                  label: "Deployer" },
+    { value: "importer",                  label: "Importer" },
+    { value: "distributor",               label: "Distributor" },
+    { value: "authorised_representative", label: "Authorised Representative" },
+  ],
   system_type: [
     { value: "application", label: "Application" },
     { value: "model",       label: "Model" },
@@ -44,8 +52,10 @@ const ENUM_OPTIONS: Record<string, { value: string; label: string }[]> = {
   lifecycle: [
     { value: "development", label: "Development" },
     { value: "testing",     label: "Testing" },
-    { value: "conformity",  label: "Conformity" },
+    { value: "prod_ready",  label: "Production Ready" },
     { value: "market",      label: "On Market" },
+    { value: "service",     label: "In Service" },
+    { value: "updated",     label: "Updated" },
   ],
   autonomy_level: [
     { value: "decision_support",   label: "Decision support" },
@@ -460,8 +470,14 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
                         borderCls,
                       )}>
                         <div className="flex items-center justify-between">
-                          <label htmlFor={`eng_field_${key}`} className="text-[11px] font-semibold text-muted-foreground">
+                          <label htmlFor={`eng_field_${key}`} className={cn(
+                            "flex flex-wrap items-center gap-1.5 text-[11px] font-semibold",
+                            key === "intended_purpose" ? "text-[var(--brand)]" : "text-muted-foreground",
+                          )}>
                             {label}
+                            {key === "intended_purpose" && (
+                              <span className="rounded-full bg-[var(--brand)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide">Drives risk classification category</span>
+                            )}
                           </label>
                           {!isEmpty && (
                             isConfirmed ? (

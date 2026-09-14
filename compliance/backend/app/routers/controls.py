@@ -80,7 +80,7 @@ async def create_control(body: ControlCreate) -> ControlResponse:
             category=body.category,
             owner=body.owner,
             due_date=body.due_date,
-            status="not_started",
+            status="open",
             effectiveness="medium",
         )
         session.add(row)

@@ -17,11 +17,12 @@ const TIER_CLASSES: Record<TierKey, string> = {
 };
 
 const LIFECYCLE_CLASSES: Record<LifecycleKey, string> = {
-  development: "bg-[#eff6ff] text-[#1147E9]",
-  testing: "bg-[#fff3c4] text-[#7a5900]",
-  conformity: "bg-[#fde8d0] text-[#8b3a00]",
-  market: "bg-[#d5f5e3] text-[#1a5c35]",
-  "post-market": "bg-[#c8f0d8] text-[#0d4a28]",
+  development:    "bg-[#eff6ff] text-[#1147E9]",
+  testing:        "bg-[#fff3c4] text-[#7a5900]",
+  prod_ready:     "bg-[#fde8d0] text-[#8b3a00]",
+  market:         "bg-[#d5f5e3] text-[#1a5c35]",
+  service:        "bg-[#c8f0d8] text-[#0d4a28]",
+  updated:        "bg-[#e8f0fb] text-[#1147E9]",
   decommissioned: "bg-[#eeeeee] text-[#666666]",
 };
 

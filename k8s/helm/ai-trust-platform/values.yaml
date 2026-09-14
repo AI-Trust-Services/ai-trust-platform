@@ -97,6 +97,10 @@ otel:
 policyChecker:
   pollInterval: "10"
 
+auditFlush:
+  interval: "5"
+  batchSize: "500"
+
 # ── Ollama (optional local LLM for AI-assisted registration) ──
 # Disabled by default: the registry backend defaults to the offline `stub`
 # provider. To use a real model, set enabled: true here AND LLM_PROVIDER=ollama
@@ -125,7 +129,10 @@ components:
       OPENFGA_URL: http://openfga:8080
       KEYCLOAK_URL: http://keycloak:8080
     dependsOnJobs: [db-migrate, openfga-provision]
-    dependsOnServices: []
+    dependsOnServices:
+      - name: minio
+        port: 9000
+        httpPath: /minio/health/live
     openfgaConfig: true
 
   - name: monitoring
@@ -196,10 +203,21 @@ components:
     openfgaConfig: true
 
   - name: audit
-    backendPort: 8008
+    backendPort: 8009
     rootPath: /api/audit
     extraEnv:
       OPENFGA_URL: http://openfga:8080
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
     dependsOnJobs: [clickhouse-migrate, openfga-provision]
+    dependsOnServices: []
+    openfgaConfig: true
+
+  - name: admin
+    backendPort: 8010
+    rootPath: /api/admin
+    extraEnv:
+      OPENFGA_URL: http://openfga:8080
+    dependsOnJobs: [db-migrate, openfga-provision]
     dependsOnServices: []
     openfgaConfig: true

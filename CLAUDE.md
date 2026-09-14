@@ -19,6 +19,24 @@ make down    # helm uninstall + kind delete cluster
 ```
 Manifests live in `k8s/helm/ai-trust-platform/`. Every k8s Service name matches the docker-compose service name (`postgres`, `ai-system-registry-backend`, etc.) so `shell/nginx.conf` and backend env vars work unmodified.
 
+### Deploy to Gardener (OCM + Flux + GitHub Actions)
+The platform is packaged as an OCM component and deployed to Gardener shoot clusters via Flux HelmRelease. See [k8s/README.md](k8s/README.md) for the full guide.
+```bash
+# Trigger a build + deploy to a specific cluster from any branch:
+gh workflow run build-push-deploy.yml \
+  --ref <branch> \
+  --field gardener_cluster=sr-test
+
+# Check deploy status on the cluster:
+kubectl get componentversion,resource,fluxdeployer -n ocm-system
+kubectl get helmrelease ai-trust -n ocm-system -o wide
+kubectl get pods -n ai-trust
+```
+- OCM component descriptor: `.ocm/component-constructor.yaml`
+- OCM CRs (ComponentVersion, Resource, FluxDeployer): `k8s/ocm/manifests.yaml`
+- Per-cluster env: `k8s/env/<cluster>/.env`
+- One-time cluster setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster>` (installs OCM controller, Flux, Traefik, DNS, TLS cert)
+
 ### Run tests (any backend)
 ```bash
 cd <component>/backend   # e.g. cd compliance/backend
@@ -61,6 +79,7 @@ Codebase-specific decisions. Follow them even where an external pattern is more 
 - **M2M linking** — many-to-many joins (`control_obligations`, `evidence_controls`, `evidence_obligations`) use raw `pg_insert(...).on_conflict_do_nothing()`, not ORM `relationship(secondary=)`. Don't add ORM relationships to M2M tables.
 - **Frontend API client** — every React frontend has `src/api/client.ts` with a typed `request<T>()` wrapper, `json()`/`qs()` helpers, and an `api` object with one method per endpoint. All calls go through `request<T>()` — never raw `fetch()` in components. `formatDetail` normalises FastAPI validation errors. Reference: `compliance/frontend/src/api/client.ts`.
 - **Pydantic schemas** — response schemas set `model_config = {"from_attributes": True}`. Convert rows with `Schema.model_validate(row)` — never `.from_orm()` (Pydantic v1, removed in v2).
+- **CLAUDE.md** — update it as part of any PR that adds or changes a feature, service, endpoint, env var, migration, or architectural pattern. It is the primary reference for AI assistants working in this repo — stale docs cause wrong suggestions and wasted effort.
 
 ---
 
@@ -72,8 +91,8 @@ All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports 
 |---|---|
 | Luigi shell / entry point | http://localhost:8080 |
 | Keycloak (browser login) | http://localhost:8180 |
-| Frontends | `/registry/`, `/overview/`, `/monitoring/`, `/alerts/`, `/dta/`, `/compliance/`, `/iam/`, `/audit/` under `:8080` |
-| Backend APIs | `/api/{registry,overview,monitoring,alerts,dta,compliance,audit}/v1` under `:8080` (health at `/api/*/health`, docs at `/api/registry/docs`) |
+| Frontends | `/registry/`, `/overview/`, `/monitoring/`, `/alerts/`, `/dta/`, `/compliance/`, `/iam/`, `/audit/`, `/admin/` under `:8080` |
+| Backend APIs | `/api/{registry,overview,monitoring,alerts,dta,compliance,audit,admin}/v1` under `:8080` (health at `/api/*/health`, docs at `/api/registry/docs`) |
 | IAM / roles API | `/api/users/v1/iam` · current-user permissions `/api/users/v1/me/permissions` |
 | PostgreSQL | localhost:5432 / db `ai_trust` |
 | OTel Collector | gRPC localhost:4317 · HTTP localhost:4318 |
@@ -175,11 +194,12 @@ Static HTML + `luigi-config.js` served by nginx (Luigi core from CDN). Nav nodes
 
 Each component has `frontend/` (nginx, internal) and `backend/` (FastAPI, internal). All traffic routes through `:8080` via the shell proxy.
 
-### Dual deployment paths (docker-compose and k8s) — keep in sync
-Both paths are fully supported; **develop and change them together**. When you touch how a service runs:
-- New service in `docker-compose.yml` → add matching Deployment+Service (or Job) to the Helm chart + its image to `k8s/scripts/build-and-load-images.sh`.
+### Dual deployment paths (docker-compose, k8s kind, and Gardener/OCM) — keep in sync
+Three paths are fully supported; **develop and change them together**. When you touch how a service runs:
+- New service in `docker-compose.yml` → add matching Deployment+Service (or Job) to the Helm chart + its image to `k8s/scripts/build-and-load-images.sh` + add it as a resource in `.ocm/component-constructor.yaml`.
 - New/changed env var or secret → add to `.env.example`; it flows to k8s via `k8s/scripts/bootstrap.sh`'s Secret (sourced from the same `.env`, no separate k8s env file).
 - New `depends_on: condition:` → add the matching `waitForTcp`/`waitForHttp`/`waitForJob` initContainer (helpers in `_helpers.tpl`).
+- New one-shot Job → add `helm.sh/hook: pre-install,pre-upgrade` and `helm.sh/hook-delete-policy: before-hook-creation` annotations (see `jobs.yaml`). Without hooks, `helm upgrade` will fail with a Job immutability error on the second deploy.
 - Renamed/moved a mounted file (e.g. `infra/*/init.sh`, `otel-pipeline/**/config`) → update both `docker-compose.yml` `volumes:` **and** `bootstrap.sh` `--from-file`. Nothing enforces this in CI — a rename on one side silently breaks the other.
 
 ### Adding a new component
@@ -193,7 +213,7 @@ Both paths are fully supported; **develop and change them together**. When you t
 8. Add proxy routes to `shell/nginx.conf` (`/new-component/`, `/api/new-component/`).
 9. Add `base: "/new-component/"` to the frontend `vite.config.ts`.
 10. Add a nav node to `shell/luigi-config.js`.
-11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh`.
+11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh` **and** as `ociImage` resources in `.ocm/component-constructor.yaml`.
 
 ### ai-system-registry/ (port 8001, `/api/registry/`)
 AI system registration and EU AI Act classification.
@@ -220,6 +240,24 @@ AI system registration and EU AI Act classification.
 - `POST /api/v1/intake` accepts AI-collected fields, flags, and `classification_rationale` (JSONB `{flag, value, rationale, confidence}`); runs `classify()` when flags present. Manual owner mode sends no flags → stays a `pending` stub for the engineer.
 - **LLM layer** (`app/llm/`) — dispatch via `LLM_PROVIDER`: `stub` (default; deterministic, offline, dev/CI), `ollama` (OpenAI-compatible), `external` (OAuth2 + Anthropic-format `/invoke`, fails fast on missing creds). Malformed JSON → one auto-repair retry → `LLMParseError` → route returns 502, UI falls back to the manual form.
 - All four assist routes gated `require_permission(SYSTEMS_WRITE)`.
+
+**Registration modes** — `ai_systems.registration_mode` (`String(30)`, default `ai`) selects one of three intake paths:
+- `ai` — conversational AI-assisted flow (above); LLM infers flags, `classifier.py` decides the tier.
+- `manual_questionnaire` — structured owner + engineer questionnaire (below); flags come from boolean/number answer columns.
+- `full_manual` — the compliance officer enters the tier directly (validated against `VALID_TIERS` in the router) and attaches supporting documents. No questionnaire sections.
+
+An owner who registers with only name + description creates a **`pending`-tier** stub (`ck_ai_systems_tier` includes `pending` since migration `0017`); risk classification is completed later in Assessments. Registration also captures `deployment_country` (ISO 3166-1 alpha-2) + two EU-presence booleans (`eu_output_usage`, `eu_market_placement`, migration `0018`) — all nullable; the frontend uses them to recommend the EU AI Act framework. Terminology-aligned lifecycle values (migration `0014_terminology_alignment`): `conformity`→`prod_ready`, `post-market`→`service`, plus new `updated`.
+
+**Questionnaire workflow** (`routers/workflow.py`, all under `/v1/systems/{id}/workflow/…`) — a 3-role governance chain: **owner** (business section) → **AI engineer** (technical section) → **compliance officer** (approves). `ai_systems.workflow_status` ∈ `draft, business_pending, technical_pending, pending_review, info_requested, approved, rejected` (CHECK `ck_ai_systems_workflow_status`, migration `0015`). Answers live in `questionnaire_answers` (JSONB; business at top level, technical under `"technical"`); `business_assignee_username` / `technical_assignee_username` name the section owners.
+- Assignment / submission: `POST /assign`, `/submit-business`, `/submit-technical`, `/submit`, `/approve`, `/reject`, `/request-info` (CO sends back for detail → `info_requested`), `/submit-info`, `/reset`; `GET /workflow` (step history), `/rce-summary`.
+- **Section delegation** (`sub_assigned_*` steps): `POST /sub-assign`, `/sub-complete`, `/sub-reclaim` — a section owner hands their whole section to a delegate and can reclaim it.
+- **Per-question assignment** (`question_assignments` table, migration `0016`): `GET /question-assignments`, `POST`/`DELETE /question-assign`, `POST /question-answer` — assign individual questions to contributors. Assignment emails use `QUESTION_LABEL` (in `questionnaire_required.py`) for human-readable labels, falling back to the raw key.
+- **Approval gate** — `questionnaire_required.py::missing_for_approval(row)` lists still-unanswered required business + technical questions; the CO cannot approve until empty. `full_manual` systems have no sections → always empty. Assignees may submit partial sections; only approval is gated.
+- `obligation_lookup.py` — pure, hardcoded EU AI Act obligation titles/refs per (tier, `org_role`) for the RCE summary panel (`roles`: `provider` | `deployer` | `both`; pass `org_role="both"` for the full union). Framework-aware full templates still live in `compliance/backend`.
+
+**Other registry routes** (`routers/systems.py`):
+- `PATCH /systems/{id}/questionnaire` — merge-patch questionnaire answers (`section` = `business` | `technical`).
+- `POST /systems/{id}/documents` — multipart upload of a `full_manual` supporting doc to MinIO (extension allowlist + `MAX_DOC_SIZE` 20 MB; filename sanitized/capped in `minio_client.object_key`). Metadata appended to `registration_documents` (JSONB). `GET /systems/{id}/documents/{index}/download-url` returns a presigned URL.
 
 ### overview/ (port 8004, `/api/overview/`)
 Compliance-posture MFE, reads Postgres only, static HTML frontend.
@@ -285,6 +323,17 @@ Immutable audit trail — records who did what and when across all platform acti
 
 **audit-flush-worker/** — standalone asyncio worker (no HTTP port). `AUDIT_FLUSH_INTERVAL` (default 5s), `AUDIT_FLUSH_BATCH_SIZE` (default 500). On ClickHouse failure the exception is caught in the main loop, logged, and retried next cycle — rows stay in Postgres safely.
 
+### admin/ (port 8010, `/api/admin/`)
+Platform administration — SMTP mail service configuration and general platform settings. Access restricted to `platform_administrator` role via `iam:manage` permission.
+
+**Data model** — single-row `platform_settings` table (migration `0020`, always `id=1`). Seeded from env vars on first startup; once a row exists the DB is the source of truth and env vars are ignored. Password is stored in the row but **never returned** by GET endpoints — only `has_password: bool` is exposed.
+
+**Backend** (`admin/backend/app/`):
+- `GET/PUT /v1/smtp` — SMTP configuration (host, port, user, password, from, from_name, ssl, starttls). PUT preserves the existing password when `smtp_password` is absent from the body.
+- `POST /v1/smtp/test` — sends a real test email using the **saved** settings (save first, then test). Returns `{success, message}` with a descriptive error for each failure type (auth, connection refused, recipient rejected, timeout).
+- `GET/PUT /v1/settings` — general platform settings (platform_name, support_email).
+- `startup.py` — `seed_settings_from_env()` called via FastAPI lifespan; reads `SMTP_*`, `PLATFORM_NAME`, `SUPPORT_EMAIL` env vars and inserts the row only if none exists.
+
 ## Environment variables
 
 All credentials load from `.env` (gitignored; copy from `.env.example`, never commit). All services use `os.environ["KEY"]` (fail-fast) — no hardcoded credential defaults in code. **Exception:** SMTP settings are optional — when `SMTP_HOST` is unset, the registry backend skips email and starts normally.
@@ -297,7 +346,7 @@ See `.env.example` for the full list, defaults, and per-service mapping. Notable
 - **Auth** — `KEYCLOAK_*`, `USERS_BACKEND_CLIENT_SECRET`, `APP_PUBLIC_URL`, `APP_ADMIN_*`, `OAUTH2_PROXY_COOKIE_SECRET` (exactly 16/24/32 chars).
 - **compliance MinIO** — `MINIO_ENDPOINT` (in-cluster, uploads), `MINIO_PUBLIC_ENDPOINT` (presigned URLs), `MINIO_SECURE`, `MINIO_REGION`.
 - **alerts** — `ALERT_POLL_INTERVAL` (10 dev, 60+ prod).
-- **registry SMTP** — `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/SSL/STARTTLS`, `USERS_BACKEND_URL`.
+- **admin SMTP** — `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/SSL/STARTTLS` seed the `platform_settings` row on first startup of the admin backend. After that, the DB value wins — changes via the Admin UI persist across redeploys. The registry backend also reads these same vars directly from the environment for its fire-and-forget notifications (it does not read from `platform_settings`).
 - **registry LLM** — `LLM_PROVIDER` (`stub`/`ollama`/`external`), `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_VISION_MODEL`; external provider `AI_CLIENT_ID/SECRET`, `AI_AUTH_URL`, `AI_API_URL`, `AI_RESOURCE_GROUP`, `AI_DEPLOYMENT_ID`, `AI_API_VERSION`; `ASSIST_TURN_CAP` (12), `ASSIST_MAX_TEXT_LENGTH` (15000).
 
 ## otel-pipeline/

@@ -230,9 +230,9 @@ export default function ObligationsPage() {
                 <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
               </DetailSection>
             )}
-            <DetailSection title={`Related Controls (${detailControls.length})`}>
+            <DetailSection title={`Related Requirements (${detailControls.length})`}>
               {detailControls.length === 0
-                ? <p className="text-[13px] text-muted-foreground">No controls linked.</p>
+                ? <p className="text-[13px] text-muted-foreground">No requirements linked.</p>
                 : <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
                     <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
                   ))}</ul>
