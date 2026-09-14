@@ -32,6 +32,7 @@ export default function App() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [modelCreateOpen, setModelCreateOpen] = useState(false);
   const healthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigate = useNavigate();
   const location = useLocation();
   const { can, username } = usePermissions();
   const mayWrite = can("systems:write");
