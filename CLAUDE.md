@@ -238,7 +238,7 @@ AI system registration and EU AI Act classification.
 - `POST /api/v1/intake/assist/extract` — multipart upload (TXT/MD/PDF/DOCX/PPTX/images), parsed via `documents.py` (max `ASSIST_MAX_TEXT_LENGTH`); images use `LLM_VISION_MODEL`. Returns `{extracted_fields, notes}`.
 - `POST /api/v1/intake/assist/engineer/{system_id}/turn` and `/extract` — engineer flow, same shapes, prompts focused on technical fields.
 - `POST /api/v1/intake` accepts AI-collected fields, flags, and `classification_rationale` (JSONB `{flag, value, rationale, confidence}`); runs `classify()` when flags present. Manual owner mode sends no flags → stays a `pending` stub for the engineer.
-- **LLM layer** (`app/llm/`) — dispatch via `LLM_PROVIDER`: `stub` (default; deterministic, offline, dev/CI), `ollama` (OpenAI-compatible), `external` (OAuth2 + Anthropic-format `/invoke`, fails fast on missing creds). Malformed JSON → one auto-repair retry → `LLMParseError` → route returns 502, UI falls back to the manual form.
+- **LLM layer** (`app/llm/`) — dispatch via `LLM_PROVIDER`: `stub` (default; deterministic, offline, dev/CI), `ollama` (OpenAI-compatible), `external` (OAuth2 + Anthropic-format `/invoke`). Config is loaded from `ai_provider_settings` DB at startup via `load_llm_config_from_db()` (called in lifespan); env vars are used only as fallback when the table is empty. Malformed JSON → one auto-repair retry → `LLMParseError` → route returns 502, UI falls back to the manual form.
 - All four assist routes gated `require_permission(SYSTEMS_WRITE)`.
 
 **Registration modes** — `ai_systems.registration_mode` (`String(30)`, default `ai`) selects one of three intake paths:
@@ -325,15 +325,29 @@ Immutable audit trail — records who did what and when across all platform acti
 **audit-flush-worker/** — standalone asyncio worker (no HTTP port). `AUDIT_FLUSH_INTERVAL` (default 5s), `AUDIT_FLUSH_BATCH_SIZE` (default 500). On ClickHouse failure the exception is caught in the main loop, logged, and retried next cycle — rows stay in Postgres safely.
 
 ### admin/ (port 8010, `/api/admin/`)
-Platform administration — SMTP mail service configuration and general platform settings. Access restricted to `platform_administrator` role via `iam:manage` permission.
+Platform administration — SMTP mail service, general platform settings, AI provider configuration, and a summary dashboard. Access restricted to `platform_administrator` role via `iam:manage` permission.
 
-**Data model** — single-row `platform_settings` table (migration `0020`, always `id=1`). Seeded from env vars on first startup; once a row exists the DB is the source of truth and env vars are ignored. Password is stored in the row but **never returned** by GET endpoints — only `has_password: bool` is exposed.
+**Screens** — 5 pages, all gated on `iam:manage`:
+- `/admin-home` — Platform Administration dashboard: KPI tiles (user/role/AI-provider counts, mail status) + cards linking to each section.
+- `/admin-ai-providers` — AI provider configuration (see below).
+- `/mail-service` — SMTP configuration.
+- `/admin-settings` — General platform settings.
+- Users & Roles — served by the separate IAM MFE (`/users/`).
+
+**Data models**:
+- `platform_settings` — single row (`id=1`), migration `0020`. Holds SMTP + general settings. Seeded from env vars on first startup; DB is source of truth after that. Password never returned by GET — only `has_password: bool`.
+- `ai_provider_settings` — key-value table (`provider`, `key`, `value`, `is_secret`), migration `0021`. Holds LLM provider config. Special row `(provider='active', key='provider')` tracks the active provider. Secrets masked in GET responses — only `has_*` bools exposed. All provider configs (ollama + external) retained simultaneously; switching providers is non-destructive.
 
 **Backend** (`admin/backend/app/`):
-- `GET/PUT /v1/smtp` — SMTP configuration (host, port, user, password, from, from_name, ssl, starttls). PUT preserves the existing password when `smtp_password` is absent from the body.
-- `POST /v1/smtp/test` — sends a real test email using the **saved** settings (save first, then test). Returns `{success, message}` with a descriptive error for each failure type (auth, connection refused, recipient rejected, timeout).
+- `GET/PUT /v1/smtp` — SMTP configuration. PUT preserves existing password when `smtp_password` is absent.
+- `POST /v1/smtp/test` — sends a real test email using saved settings. Returns `{success, message}` with descriptive errors.
 - `GET/PUT /v1/settings` — general platform settings (platform_name, support_email).
-- `startup.py` — `seed_settings_from_env()` called via FastAPI lifespan; reads `SMTP_*`, `PLATFORM_NAME`, `SUPPORT_EMAIL` env vars and inserts the row only if none exists.
+- `GET/PUT /v1/ai-provider` — AI provider config. GET returns masked secrets + `has_*` flags. PUT upserts rows; secrets preserved if not sent.
+- `POST /v1/ai-provider/test` — auth-only connection test: OAuth2 token fetch for `external`, base URL ping for `ollama`, instant success for `stub`.
+- `GET /v1/stats` — dashboard KPIs: user/role counts (via internal call to users backend), AI provider count + active provider (from DB), mail configured flag.
+- `startup.py` — `seed_settings_from_env()` seeds both `platform_settings` and `ai_provider_settings` from env vars on first startup only.
+
+**AI provider configuration** — two providers in the UI: `ollama` ("Ollama (Local)": Base URL, Model, Vision Model, API Key) and `external` ("External (Production)": OAuth Client ID/Secret, Auth URL, API URL, Deployment ID, Resource Group). `stub` is not in the UI but works as a fallback. The registry backend reads its LLM config from `ai_provider_settings` at startup (see LLM layer above) — restart the registry after saving changes in the admin UI.
 
 ## Environment variables
 
@@ -348,7 +362,7 @@ See `.env.example` for the full list, defaults, and per-service mapping. Notable
 - **compliance MinIO** — `MINIO_ENDPOINT` (in-cluster, uploads), `MINIO_PUBLIC_ENDPOINT` (presigned URLs), `MINIO_SECURE`, `MINIO_REGION`.
 - **alerts** — `ALERT_POLL_INTERVAL` (10 dev, 60+ prod).
 - **admin SMTP** — `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/SSL/STARTTLS` seed the `platform_settings` row on first startup of the admin backend. After that, the DB value wins — changes via the Admin UI persist across redeploys. The registry backend also reads these same vars directly from the environment for its fire-and-forget notifications (it does not read from `platform_settings`).
-- **registry LLM** — `LLM_PROVIDER` (`stub`/`ollama`/`external`), `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_VISION_MODEL`; external provider `AI_CLIENT_ID/SECRET`, `AI_AUTH_URL`, `AI_API_URL`, `AI_RESOURCE_GROUP`, `AI_DEPLOYMENT_ID`, `AI_API_VERSION`; `ASSIST_TURN_CAP` (12), `ASSIST_MAX_TEXT_LENGTH` (15000).
+- **registry LLM** — `LLM_PROVIDER` (`stub`/`ollama`/`external`), `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_VISION_MODEL`; external provider `AI_CLIENT_ID/SECRET`, `AI_AUTH_URL`, `AI_API_URL`, `AI_RESOURCE_GROUP`, `AI_DEPLOYMENT_ID`, `AI_API_VERSION`; `ASSIST_TURN_CAP` (12), `ASSIST_MAX_TEXT_LENGTH` (15000). These env vars seed `ai_provider_settings` on first admin backend startup only — after that the DB value wins and the registry reads from DB. Changing LLM config via the Admin UI requires a registry restart to take effect.
 
 ## otel-pipeline/
 

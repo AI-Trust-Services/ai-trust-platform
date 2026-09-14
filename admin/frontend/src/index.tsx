@@ -4,6 +4,8 @@ import "./index.css";
 import App from "./App";
 import MailServicePage from "./pages/MailServicePage";
 import SettingsPage from "./pages/SettingsPage";
+import AiProvidersPage from "./pages/AiProvidersPage";
+import AdminHomePage from "./pages/AdminHomePage";
 import { RequirePermission } from "./components/RequirePermission";
 
 const router = createHashRouter([
@@ -24,6 +26,22 @@ const router = createHashRouter([
         element: (
           <RequirePermission anyOf={["iam:manage"]}>
             <SettingsPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "admin-ai-providers",
+        element: (
+          <RequirePermission anyOf={["iam:manage"]}>
+            <AiProvidersPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "admin-home",
+        element: (
+          <RequirePermission anyOf={["iam:manage"]}>
+            <AdminHomePage />
           </RequirePermission>
         ),
       },

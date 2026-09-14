@@ -5,6 +5,10 @@ import type {
   SmtpTestResponse,
   GeneralSettings,
   GeneralSettingsUpdate,
+  AiProviderSettings,
+  AiProviderUpdate,
+  TestConnectionResponse,
+  AdminStats,
 } from "../types";
 
 const API_BASE = import.meta.env.VITE_ADMIN_API_BASE as string;
@@ -59,6 +63,18 @@ export const api = {
 
   updateSettings: (data: GeneralSettingsUpdate): Promise<GeneralSettings> =>
     request<GeneralSettings>("/settings", json("PUT", data)),
+
+  getAiProvider: (): Promise<AiProviderSettings> =>
+    request<AiProviderSettings>("/ai-provider"),
+
+  updateAiProvider: (data: AiProviderUpdate): Promise<AiProviderSettings> =>
+    request<AiProviderSettings>("/ai-provider", json("PUT", data)),
+
+  testAiProvider: (): Promise<TestConnectionResponse> =>
+    request<TestConnectionResponse>("/ai-provider/test", { method: "POST" }),
+
+  getStats: (): Promise<AdminStats> =>
+    request<AdminStats>("/stats"),
 
   myPermissions: (): Promise<{ permissions: string[] }> =>
     fetch(`${USERS_API}/me/permissions`, { cache: "no-store" })

@@ -43,6 +43,8 @@
     "evidence": ["evidence:read", "evidence:write", "evidence:approve"],
     "users": ["iam:manage"],
     "audit": ["audit:read"],
+    "admin-home": ["iam:manage"],
+    "admin-ai-providers": ["iam:manage"],
     "mail-service": ["iam:manage"],
     "admin-settings": ["iam:manage"],
   };
@@ -136,6 +138,22 @@
         viewUrl: "/audit/",
         navigationContext: "audit",
         viewGroup: "audit",
+      },
+      {
+        pathSegment: "admin-home",
+        label: "Administration",
+        icon: "customer-order-entry",
+        viewUrl: "/admin/#/admin-home",
+        navigationContext: "admin-home",
+        viewGroup: "admin",
+      },
+      {
+        pathSegment: "admin-ai-providers",
+        label: "AI Providers",
+        icon: "ai",
+        viewUrl: "/admin/#/admin-ai-providers",
+        navigationContext: "admin-ai-providers",
+        viewGroup: "admin",
       },
       {
         pathSegment: "mail-service",
