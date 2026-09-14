@@ -110,43 +110,6 @@ def test_eu_limited_importer_is_empty():
     assert obligations_for("FRM-EU-AI-ACT", "limited", "importer") == []
 
 
-def test_eu_minimal_count():
-    obs = obligations_for("FRM-EU-AI-ACT", "minimal")
-    assert len(obs) == 3
-
-
-def test_eu_minimal_article_refs():
-    refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "minimal")}
-    assert "Art. 69 EU AI Act" in refs
-
-
-def test_eu_prohibited_count():
-    obs = obligations_for("FRM-EU-AI-ACT", "prohibited")
-    assert len(obs) == 1
-    assert "Art. 5" in obs[0]["article_ref"]
-
-
-def test_eu_gpai_standard_count():
-    obs = obligations_for("FRM-EU-AI-ACT", "gpai-standard")
-    assert len(obs) == 3
-
-
-def test_eu_gpai_standard_article_refs():
-    refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "gpai-standard")}
-    assert "Art. 53 EU AI Act" in refs
-
-
-def test_eu_gpai_systemic_is_superset_of_standard():
-    standard = obligations_for("FRM-EU-AI-ACT", "gpai-standard")
-    systemic = obligations_for("FRM-EU-AI-ACT", "gpai-systemic")
-    assert len(systemic) == len(standard) + 3
-
-
-def test_eu_gpai_systemic_includes_adversarial_testing():
-    refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "gpai-systemic")}
-    assert "Art. 55 EU AI Act" in refs
-
-
 # ---------------------------------------------------------------------------
 # obligations_for — NIST AI RMF
 # ---------------------------------------------------------------------------

@@ -13,8 +13,6 @@ when at least one of its controls survives `controls_for(cluster_id, tier,
 org_role)` — this is where the risk-tier filter, the role filter and the "Risk =
 All" rule all live (a single source of truth, in control_templates.py).
 
-The retained sets (prohibited / GPAI / minimal / NIST / ISO) are unchanged; each
-carries `cluster_id = article_ref` so cluster-keyed carry-forward works uniformly.
 Hardcoded because the regulations are law, not configuration.
 """
 from __future__ import annotations
@@ -114,40 +112,6 @@ _EU_CLUSTERS = [
      "description": "Inform affected persons about emotion recognition or biometric categorisation, and disclose deepfakes and AI-generated public-interest text."},
 ]
 
-# Voluntary set for minimal-risk systems (EU AI Act Art. 69 codes of conduct).
-# All obligations contribute to the compliance score equally.
-_EU_MINIMAL = [
-    {"cluster_id": "Art. 69", "title": "Adopt voluntary code of conduct", "article_ref": "Art. 69 EU AI Act",
-     "description": "Consider adopting a voluntary code of conduct covering the requirements applicable to high-risk systems, on a proportionate basis."},
-    {"cluster_id": "Art. 69(a) (voluntary)", "title": "Maintain basic technical documentation", "article_ref": "Art. 69(a) (voluntary) EU AI Act",
-     "description": "Voluntarily maintain lightweight documentation describing the system's purpose, data, and intended use."},
-    {"cluster_id": "Art. 69(b) (voluntary)", "title": "Establish basic monitoring", "article_ref": "Art. 69(b) (voluntary) EU AI Act",
-     "description": "Voluntarily monitor the system in production for performance degradation and unexpected behaviour."},
-]
-
-_EU_PROHIBITED = [
-    {"cluster_id": "Art. 5", "title": "Cease deployment — prohibited practice", "article_ref": "Art. 5 EU AI Act",
-     "description": "This system falls under a prohibited AI practice and must not be placed on the market, put into service, or used. Immediate remediation required."},
-]
-
-_EU_GPAI = [
-    {"cluster_id": "Art. 53", "title": "Maintain GPAI technical documentation", "article_ref": "Art. 53 EU AI Act",
-     "description": "Draw up and keep up to date technical documentation of the general-purpose AI model, including its training and testing process."},
-    {"cluster_id": "Art. 53(1)(d)", "title": "Publish training content summary", "article_ref": "Art. 53(1)(d) EU AI Act",
-     "description": "Draw up and make publicly available a sufficiently detailed summary of the content used for training the model."},
-    {"cluster_id": "Art. 53(1)(c)", "title": "Establish copyright compliance policy", "article_ref": "Art. 53(1)(c) EU AI Act",
-     "description": "Put in place a policy to comply with Union copyright law, including reservations of rights expressed under the DSM Directive."},
-]
-
-_EU_GPAI_SYSTEMIC = _EU_GPAI + [
-    {"cluster_id": "Art. 55", "title": "Perform model evaluation and adversarial testing", "article_ref": "Art. 55 EU AI Act",
-     "description": "Perform model evaluation, including adversarial testing, to identify and mitigate systemic risks."},
-    {"cluster_id": "Art. 55(1)(c)", "title": "Report serious incidents (GPAI systemic)", "article_ref": "Art. 55(1)(c) EU AI Act",
-     "description": "Track, document and report serious incidents and possible corrective measures to the AI Office and national authorities."},
-    {"cluster_id": "Art. 55(1)(d)", "title": "Ensure cybersecurity protection", "article_ref": "Art. 55(1)(d) EU AI Act",
-     "description": "Ensure an adequate level of cybersecurity protection for the model and its physical infrastructure."},
-]
-
 # --- NIST AI RMF (tier-independent) ------------------------------------------
 
 _NIST = [
@@ -199,12 +163,6 @@ def obligations_for(framework_id: str, tier: str, org_role: str = "provider") ->
         return list(_ISO)
 
     if framework_id == "FRM-EU-AI-ACT":
-        if tier == "prohibited":
-            return list(_EU_PROHIBITED)
-        if tier == "gpai-systemic":
-            return list(_EU_GPAI_SYSTEMIC)
-        if tier == "gpai-standard":
-            return list(_EU_GPAI)
         if tier in ("high", "limited"):
             result: list[dict] = []
             for c in _EU_CLUSTERS:
@@ -218,7 +176,5 @@ def obligations_for(framework_id: str, tier: str, org_role: str = "provider") ->
                         "description": c["description"],
                     })
             return result
-        if tier == "minimal":
-            return list(_EU_MINIMAL)
 
     return []
