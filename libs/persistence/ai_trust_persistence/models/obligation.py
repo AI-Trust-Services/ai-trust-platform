@@ -31,7 +31,7 @@ class Obligation(Base):
         String(30), ForeignKey("frameworks.id"), nullable=False
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
-    article_ref: Mapped[str] = mapped_column(String(50), default="")
+    article_ref: Mapped[str] = mapped_column(String(100), default="")
     cluster_id: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     description: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(30), default="applicable", index=True)

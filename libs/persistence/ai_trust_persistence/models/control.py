@@ -37,6 +37,9 @@ class Control(Base):
     # Deliberately non-unique: the same slug recurs each cycle and org-wide controls
     # span multiple assessments.
     control_ref: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    # Per-requirement AI Act article reference (e.g. "Art. 9 (1)(2)"), copied from the
+    # source catalogue at generation. NULL for retained sets and manual controls.
+    article_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
     category: Mapped[str] = mapped_column(String(50), default="general")
