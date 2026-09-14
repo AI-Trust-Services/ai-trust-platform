@@ -309,7 +309,7 @@ async def test_generate_obligations_creates_correct_count(client: httpx.AsyncCli
     system = await create_system(tier="high")  # org_role defaults to provider
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    assert len(obs) == 16  # EU AI Act high-risk provider has 16 obligation clusters
+    assert len(obs) == 15  # EU AI Act high-risk provider has 15 obligation clusters
 
 
 async def test_generate_obligations_deployer_high_count(client: httpx.AsyncClient):
@@ -479,11 +479,11 @@ async def test_approve_updates_system_compliance(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_create_assessment_auto_generates_controls(client: httpx.AsyncClient):
-    # High-risk EU provider obligations (16 clusters) map to 50 Requirement templates.
+    # High-risk EU provider obligations (15 clusters) map to 60 Requirement templates.
     system = await create_system(tier="high")
     await create_assessment(client, system["id"])
     controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    assert len(controls) == 50
+    assert len(controls) == 60
 
 
 async def test_generated_controls_have_control_ref(client: httpx.AsyncClient):
@@ -501,7 +501,7 @@ async def test_generated_controls_linked_to_obligations(client: httpx.AsyncClien
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    art9 = [o for o in obs if o["article_ref"] == "Art. 9"][0]
+    art9 = [o for o in obs if o["cluster_id"] == "P-RM"][0]
     linked = (await client.get(f"/v1/controls?obligation_id={art9['id']}")).json()
     assert len(linked) == 7  # P-RM cluster (Art. 9) -> 7 Requirements
 
@@ -512,7 +512,7 @@ async def test_high_tier_control_ref_is_requirement_id(client: httpx.AsyncClient
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    art9 = [o for o in obs if o["article_ref"] == "Art. 9"][0]
+    art9 = [o for o in obs if o["cluster_id"] == "P-RM"][0]
     linked = (await client.get(f"/v1/controls?obligation_id={art9['id']}")).json()
     refs = {c["control_ref"] for c in linked}
     assert "P-RM-01" in refs

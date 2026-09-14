@@ -3,8 +3,10 @@ from __future__ import annotations
 
 from app.control_templates import (
     _CONTROL_TEMPLATES,
+    _REQUIREMENT_ARTICLES,
     _role_allows,
     _tier_allows,
+    cluster_articles,
     controls_for,
 )
 from app.obligation_templates import obligations_for
@@ -91,12 +93,12 @@ def test_provider_high_risk_management_controls():
 
 
 def test_provider_high_data_governance_controls():
-    assert len(controls_for("P-DG", "high", "provider")) == 8
+    assert len(controls_for("P-DG", "high", "provider")) == 9
 
 
-def test_provider_high_merged_qms_is_single_control():
-    # P-QMS merges several source rows into one Requirement.
-    assert len(controls_for("P-QMS", "high", "provider")) == 1
+def test_provider_high_qms_controls():
+    # P-QMS splits usage / documentation / regular-update into three Requirements.
+    assert len(controls_for("P-QMS", "high", "provider")) == 3
 
 
 def test_provider_high_registration_controls():
@@ -110,7 +112,7 @@ def test_provider_clusters_absent_for_deployer():
 
 
 def test_deployer_high_clusters():
-    assert len(controls_for("D-OMI", "high", "deployer")) == 4
+    assert len(controls_for("D-OMI", "high", "deployer")) == 5
     assert len(controls_for("D-FRIA", "high", "deployer")) == 2
     # A deployer cluster yields nothing for a provider system.
     assert controls_for("D-OMI", "high", "provider") == []
@@ -124,7 +126,7 @@ def test_all_risk_cluster_applies_at_limited_tier():
 
 def test_limited_transparency_controls():
     assert len(controls_for("P-LIM", "limited", "provider")) == 2
-    assert len(controls_for("D-LIM", "limited", "deployer")) == 3
+    assert len(controls_for("D-LIM", "limited", "deployer")) == 4
 
 
 def test_controls_have_required_fields():
@@ -141,6 +143,41 @@ def test_controls_have_required_fields():
         assert c["category"]
         assert c.get("risk") or c.get("risk_category")
         assert c["slug"]
+
+
+# ---------------------------------------------------------------------------
+# Per-requirement articles + cluster aggregation
+# ---------------------------------------------------------------------------
+
+def test_every_eu_control_ref_has_an_article():
+    # Every explicit Requirement ID (EU CSV set) is mapped; retained sets (slug-based)
+    # carry no control_ref and are intentionally absent.
+    csv_refs = {
+        c["control_ref"]
+        for templates in _CONTROL_TEMPLATES.values()
+        for c in templates
+        if c.get("control_ref")
+    }
+    assert csv_refs, "expected some explicit control_ref templates"
+    assert csv_refs <= set(_REQUIREMENT_ARTICLES), csv_refs - set(_REQUIREMENT_ARTICLES)
+
+
+def test_controls_for_attaches_article():
+    ctls = controls_for("P-RM", "high", "provider")
+    assert ctls[0]["article"] == _REQUIREMENT_ARTICLES["P-RM-01"]
+
+
+def test_cluster_articles_aggregates_distinct_top_level():
+    # P-RM requirements reference Art. 9, Art. 11 and Art. 72 -> distinct, num-sorted.
+    assert cluster_articles("P-RM", "high", "provider") == "Art. 9, Art. 11, Art. 72"
+    assert cluster_articles("P-DG", "high", "provider") == "Art. 10"
+
+
+def test_cluster_articles_empty_for_retained_and_wrong_role():
+    # Retained sets carry no per-requirement article.
+    assert cluster_articles("Art. 5", "prohibited") == ""
+    # No provider controls survive for a deployer cluster.
+    assert cluster_articles("P-RM", "high", "deployer") == ""
 
 
 # ---------------------------------------------------------------------------

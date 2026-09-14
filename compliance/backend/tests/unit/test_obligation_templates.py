@@ -46,7 +46,7 @@ def test_new_id_different_prefixes():
 def test_eu_high_risk_provider_count():
     # Provider is the default org_role.
     obs = obligations_for("FRM-EU-AI-ACT", "high")
-    assert len(obs) == 16
+    assert len(obs) == 15
 
 
 def test_eu_high_risk_deployer_count():
@@ -199,4 +199,4 @@ def test_returns_independent_lists():
     a = obligations_for("FRM-EU-AI-ACT", "high")
     b = obligations_for("FRM-EU-AI-ACT", "high")
     a.clear()
-    assert len(b) == 16
+    assert len(b) == 15
