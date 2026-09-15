@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import (
+    ASSESSMENTS_APPROVE,
     ASSESSMENTS_READ,
     ASSESSMENTS_WRITE,
-    SYSTEMS_APPROVE,
     SYSTEMS_WRITE,
 )
 from ai_trust_logging import get_logger
@@ -604,7 +604,7 @@ async def submit_assessment(assessment_id: str, request: Request) -> AssessmentR
     return AssessmentResponse.model_validate(row)
 
 
-@router.post("/assessments/{assessment_id}/approve", response_model=AssessmentResponse, dependencies=[Depends(require_permission(SYSTEMS_APPROVE))])
+@router.post("/assessments/{assessment_id}/approve", response_model=AssessmentResponse, dependencies=[Depends(require_permission(ASSESSMENTS_APPROVE))])
 async def approve_assessment(assessment_id: str, request: Request) -> AssessmentResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
