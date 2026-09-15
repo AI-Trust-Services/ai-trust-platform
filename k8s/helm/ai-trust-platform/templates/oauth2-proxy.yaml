@@ -75,6 +75,9 @@ metadata:
     # The value MUST use Traefik's provider-namespace syntax (<ns>-<name>@kubernetescrd),
     # NOT the bare CRD name — with a bare name Traefik cannot resolve the ServersTransport,
     # drops the backend, and builds no router at all (host 404s). See sr-test 404 incident.
+    # The ServersTransport object itself is NOT created by this chart — it is created once
+    # by k8s/gardener_init/shoot-cluster-init.sh so it always predates any Helm deploy and
+    # Traefik can resolve this reference on the first reconcile (no create/annotate race).
     traefik.ingress.kubernetes.io/service.serverstransport: {{ .Release.Namespace }}-llm-timeout@kubernetescrd
   {{- end }}
 spec:
