@@ -22,7 +22,7 @@ interface Props {
   onSuccess: () => void;
 }
 
-export default function LinkObligationModal({ open, control, onClose, onSuccess }: Props) {
+export default function LinkObligationModal({ open, requirement, onClose, onSuccess }: Props) {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
   const [assessmentId, setAssessmentId] = useState("");
