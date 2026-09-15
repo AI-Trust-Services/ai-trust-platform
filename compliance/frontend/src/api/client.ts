@@ -80,6 +80,8 @@ export const api = {
     request<Assessment>(API_BASE, `/assessments/${id}/approve`, { method: "POST" }),
   advanceFromClassification: (id: string): Promise<Assessment> =>
     request<Assessment>(API_BASE, `/assessments/${id}/advance-from-classification`, { method: "POST" }),
+  reopenAssessment: (id: string): Promise<Assessment> =>
+    request<Assessment>(API_BASE, `/assessments/${id}/reopen`, { method: "POST" }),
 
   // Obligations
   getObligations: (params: QueryParams = {}): Promise<Obligation[]> =>

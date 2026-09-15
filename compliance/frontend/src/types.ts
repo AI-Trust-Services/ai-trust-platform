@@ -127,6 +127,8 @@ export interface AISystem {
   business_assignee_username: string | null;
   technical_assignee_username: string | null;
   compliance_officer_username: string | null;
+  // When workflow_status === "info_requested", the section the CO reopened for revision.
+  info_requested_section: "business" | "technical" | null;
   classification_rationale: ClassificationRationale | Array<{ flag: string; value: boolean | number; rationale: string }> | null;
   questionnaire_answers: Record<string, unknown> | null;
   // Risk classification flags
