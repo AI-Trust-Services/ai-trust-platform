@@ -68,8 +68,8 @@ export default function RequirementsPage() {
     try {
       const [det, evidence, obligations] = await Promise.all([
         api.getRequirement(c.id),
-        api.getEvidence({ control_id: c.id }),
-        api.getObligations({ control_id: c.id }),
+        api.getEvidence({ requirement_id: c.id }),
+        api.getObligations({ requirement_id: c.id }),
       ]);
       setDetail(det);
       setDetailObligations(obligations);
@@ -223,7 +223,7 @@ export default function RequirementsPage() {
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
                       <Button variant="ghost" size="sm" disabled={!mayWrite} title={mayWrite ? "Link or unlink obligations" : noWriteTitle}
-                        onClick={() => setLinkControl(c)}>Link Obligations</Button>
+                        onClick={() => setLinkRequirement(c)}>Link Obligations</Button>
                       <Select value={c.status} disabled={!mayWrite} onValueChange={(v) => changeStatus(c.id, v)}>
                         <SelectTrigger className="h-8 w-[150px]" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -293,7 +293,7 @@ export default function RequirementsPage() {
             </DetailSection>
             <div className="flex items-center gap-2 px-5 pt-4">
               <Button variant="outline" size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-                onClick={() => setLinkControl(detail)}>Link Obligations</Button>
+                onClick={() => setLinkRequirement(detail)}>Link Obligations</Button>
               <Select value={detail.status} disabled={!mayWrite}
                 onValueChange={async (v: string) => {
                   await changeStatus(detail.id, v);
@@ -313,7 +313,7 @@ export default function RequirementsPage() {
       <LinkObligationModal
         open={!!linkRequirement}
         requirement={linkRequirement}
-        onClose={() => setLinkControl(null)}
+        onClose={() => setLinkRequirement(null)}
         onSuccess={() => { load(); if (selected && detail) openDetail(detail); }}
       />
     </>
