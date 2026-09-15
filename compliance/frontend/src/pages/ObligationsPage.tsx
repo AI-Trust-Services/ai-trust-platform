@@ -178,7 +178,7 @@ export default function ObligationsPage() {
                 <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No obligations found.</TableCell></TableRow>
               ) : filtered.map((o) => (
                 <TableRow key={o.id} data-state={selected === o.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(o)}>
-                  <TableCell><div className="font-medium text-foreground">{o.title}</div><div className="text-xs text-muted-foreground">{o.id}</div></TableCell>
+                  <TableCell><div className="font-medium text-foreground">{o.title}</div><div className="text-xs text-muted-foreground">{o.cluster_id ? `${o.cluster_id} · ${o.id}` : o.id}</div></TableCell>
                   <TableCell className="text-xs">{o.article_ref || "—"}</TableCell>
                   <TableCell>{systemsById[o.ai_system_id]?.name ?? o.ai_system_id}</TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{o.owner || "—"}</TableCell>
@@ -234,7 +234,13 @@ export default function ObligationsPage() {
               {detailControls.length === 0
                 ? <p className="text-[13px] text-muted-foreground">No requirements linked.</p>
                 : <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
+                    <li key={c.id} className="flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        {c.control_ref && <span className="shrink-0 text-xs font-medium text-muted-foreground">{c.control_ref}</span>}
+                        <span className="truncate text-[13px] text-foreground">{c.title}</span>
+                      </span>
+                      <StatusBadge meta={CONTROL_STATUS_META} value={c.status} />
+                    </li>
                   ))}</ul>
               }
             </DetailSection>

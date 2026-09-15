@@ -49,7 +49,9 @@ async def list_controls(
     offset: int = Query(default=0, ge=0),
 ) -> list[ControlResponse]:
     async with SessionLocal() as session:
-        stmt = select(Control).order_by(Control.created_at.desc())
+        # Newest generation first; catalogue order (sort_order) within a generation,
+        # since all rows of one generation share the same transaction timestamp.
+        stmt = select(Control).order_by(Control.created_at.desc(), Control.sort_order.asc())
         if ai_system_id:
             stmt = stmt.where(or_(Control.ai_system_id == ai_system_id, Control.ai_system_id.is_(None)))
         if obligation_id:

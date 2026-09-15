@@ -102,7 +102,7 @@ export default function LinkObligationModal({ open, control, onClose, onSuccess 
         <div className="max-h-[70vh] overflow-y-auto">
           <div className="px-6 pt-4">
             <div className="rounded-md border border-[var(--info-border,var(--border))] bg-[var(--info-bg,var(--muted))] px-3 py-2 text-[13px] text-foreground">
-              Linking a control marks its obligations "In Progress". When the control becomes Effective (via approved evidence), they become "Fulfilled".
+              Linking a requirement marks its obligations "In Progress". When the requirement becomes Effective (via approved evidence), they become "Fulfilled".
             </div>
           </div>
           <div className="px-6 pt-4">

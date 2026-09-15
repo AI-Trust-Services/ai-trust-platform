@@ -40,73 +40,76 @@ def test_new_id_different_prefixes():
 
 
 # ---------------------------------------------------------------------------
-# obligations_for — EU AI Act
+# obligations_for — EU AI Act High / Limited (CSV catalogue, role-aware)
 # ---------------------------------------------------------------------------
 
-def test_eu_high_risk_count():
+def test_eu_high_risk_provider_count():
+    # Provider is the default org_role.
     obs = obligations_for("FRM-EU-AI-ACT", "high")
-    assert len(obs) == 11
+    assert len(obs) == 15
+
+
+def test_eu_high_risk_deployer_count():
+    obs = obligations_for("FRM-EU-AI-ACT", "high", "deployer")
+    assert len(obs) == 10
 
 
 def test_eu_high_risk_has_required_fields():
     for ob in obligations_for("FRM-EU-AI-ACT", "high"):
         assert ob["title"]
         assert ob["article_ref"]
-        assert ob["description"]
+        assert ob["cluster_id"]
+        # Clusters carry no description of their own — descriptive text lives on
+        # the requirement-level controls, not the obligation.
+        assert "description" not in ob
 
 
-def test_eu_high_risk_article_refs():
+def test_eu_high_risk_provider_article_refs():
     refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "high")}
-    assert "Art. 9" in refs
-    assert "Art. 14" in refs
-    assert "Art. 73" in refs
+    assert "Art. 9 EU AI Act" in refs
+    assert "Art. 14 EU AI Act" in refs
+    assert "Art. 73 EU AI Act" in refs
 
 
-def test_eu_limited_count():
+def test_eu_high_risk_deployer_article_refs():
+    refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "high", "deployer")}
+    assert "Art. 26 EU AI Act" in refs
+    assert "Art. 27 EU AI Act" in refs
+    # Provider-only clusters must not leak into the deployer set.
+    assert "Art. 9 EU AI Act" not in refs
+
+
+def test_eu_high_importer_is_empty():
+    assert obligations_for("FRM-EU-AI-ACT", "high", "importer") == []
+
+
+def test_eu_high_distributor_is_empty():
+    assert obligations_for("FRM-EU-AI-ACT", "high", "distributor") == []
+
+
+def test_eu_limited_provider_count():
     obs = obligations_for("FRM-EU-AI-ACT", "limited")
-    assert len(obs) == 3
+    assert len(obs) == 2
 
 
-def test_eu_limited_article_refs():
-    refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "limited")}
-    assert "Art. 50(1)" in refs
-
-
-def test_eu_minimal_count():
-    obs = obligations_for("FRM-EU-AI-ACT", "minimal")
-    assert len(obs) == 3
-
-
-def test_eu_minimal_article_refs():
-    refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "minimal")}
-    assert "Art. 69" in refs
-
-
-def test_eu_prohibited_count():
-    obs = obligations_for("FRM-EU-AI-ACT", "prohibited")
+def test_eu_limited_deployer_count():
+    obs = obligations_for("FRM-EU-AI-ACT", "limited", "deployer")
     assert len(obs) == 1
-    assert "Art. 5" in obs[0]["article_ref"]
 
 
-def test_eu_gpai_standard_count():
-    obs = obligations_for("FRM-EU-AI-ACT", "gpai-standard")
-    assert len(obs) == 3
+def test_eu_limited_provider_article_refs():
+    refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "limited")}
+    assert "Art. 50 EU AI Act" in refs
 
 
-def test_eu_gpai_standard_article_refs():
-    refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "gpai-standard")}
-    assert "Art. 53" in refs
+def test_eu_limited_provider_includes_all_risk_cluster():
+    # P-REG carries a "Risk = All" requirement, so it applies at limited risk too.
+    ids = {ob["cluster_id"] for ob in obligations_for("FRM-EU-AI-ACT", "limited")}
+    assert "P-REG" in ids
 
 
-def test_eu_gpai_systemic_is_superset_of_standard():
-    standard = obligations_for("FRM-EU-AI-ACT", "gpai-standard")
-    systemic = obligations_for("FRM-EU-AI-ACT", "gpai-systemic")
-    assert len(systemic) == len(standard) + 3
-
-
-def test_eu_gpai_systemic_includes_adversarial_testing():
-    refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "gpai-systemic")}
-    assert "Art. 55" in refs
+def test_eu_limited_importer_is_empty():
+    assert obligations_for("FRM-EU-AI-ACT", "limited", "importer") == []
 
 
 # ---------------------------------------------------------------------------
@@ -161,4 +164,4 @@ def test_returns_independent_lists():
     a = obligations_for("FRM-EU-AI-ACT", "high")
     b = obligations_for("FRM-EU-AI-ACT", "high")
     a.clear()
-    assert len(b) == 11
+    assert len(b) == 15

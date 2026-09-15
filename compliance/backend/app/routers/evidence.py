@@ -291,7 +291,7 @@ async def delete_evidence(evidence_id: str, request: Request) -> dict:
         control_ids, _ = await _linked_ids(session, evidence_id)
         await session.delete(row)
         await session.flush()
-        # Removing evidence may drop a control below 'effective'.
+        # Removing evidence may drop a control below 'fulfilled'.
         for cid in control_ids:
             await refresh_control_effectiveness(session, cid)
             await refresh_obligations_for_control(session, cid)

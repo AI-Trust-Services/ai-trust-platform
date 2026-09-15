@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
-import { CONTROL_CATEGORIES, humanize } from "../utils";
 import type { AISystem } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -25,12 +24,11 @@ interface FormState {
   ai_system_id: string;
   title: string;
   description: string;
-  category: string;
   owner: string;
   due_date: string;
 }
 
-const EMPTY: FormState = { ai_system_id: "", title: "", description: "", category: "general", owner: "", due_date: "" };
+const EMPTY: FormState = { ai_system_id: "", title: "", description: "", owner: "", due_date: "" };
 // Sentinel for the "Org-wide" option — Radix Select disallows an empty-string value.
 const ORG_WIDE = "__org__";
 
@@ -82,15 +80,6 @@ export default function CreateControlModal({ open, onClose, onSuccess }: Props) 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="cc-title">Title <span className="text-destructive">*</span></Label>
             <Input id="cc-title" value={form.title} onChange={(e) => setVal("title")(e.target.value)} placeholder="e.g. Human-in-the-loop approval workflow" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Category</Label>
-            <Select value={form.category} onValueChange={setVal("category")}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {CONTROL_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{humanize(c)}</SelectItem>)}
-              </SelectContent>
-            </Select>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>AI System (leave blank for org-wide)</Label>

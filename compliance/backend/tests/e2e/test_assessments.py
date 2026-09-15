@@ -82,24 +82,25 @@ async def test_create_assessment_rejects_decommissioned_system(client: httpx.Asy
     assert r.status_code == 422
 
 
-async def test_create_assessment_rejects_unapproved_system(client: httpx.AsyncClient):
-    # A system must complete the registration workflow (workflow_status == "approved")
-    # before it can be assessed.
+async def test_create_assessment_allowed_for_unapproved_system(client: httpx.AsyncClient):
+    # Creating an assessment is part of the registration/approval workflow itself, so
+    # a system need not already be approved — draft/pending_review/rejected systems are
+    # all assessable. (Approval is driven forward by the assessment lifecycle.)
     for status in ("draft", "pending_review", "rejected"):
-        system = await create_system(workflow_status=status)
+        system = await create_system(tier="high", workflow_status=status)
         r = await client.post("/v1/assessments", json={
             "ai_system_id": system["id"],
             "framework_id": "FRM-EU-AI-ACT",
             "title": "X",
             "type": "compliance",
         })
-        assert r.status_code == 422, f"status={status} should be rejected"
+        assert r.status_code == 201, f"status={status} should be assessable"
 
 
-async def test_create_assessment_unknown_tier_yields_no_obligations(client: httpx.AsyncClient):
-    # obligations_for() returns [] for unknown tiers — assessment is created successfully
-    # but with zero obligations. Zero obligations is a valid state (logged as a warning).
-    system = await create_system(tier="unknown_tier")
+async def test_create_assessment_tier_without_obligations_yields_none(client: httpx.AsyncClient):
+    # The cluster catalogue only defines obligations for EU high/limited tiers.
+    # A minimal-tier system yields zero obligations — a valid state (logged as a warning).
+    system = await create_system(tier="minimal")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
     assert len(obs) == 0
@@ -250,14 +251,14 @@ async def test_delete_assessment_404_on_missing(client: httpx.AsyncClient):
 
 async def test_delete_assessment_removes_generated_controls(client: httpx.AsyncClient):
     # Auto-generated controls should be cleaned up when the assessment is deleted.
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     before = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    assert len(before) == 3
+    assert len(before) == 60
 
     r = await client.delete(f"/v1/assessments/{ass['id']}")
     assert r.status_code == 200
-    assert r.json()["controls_deleted"] == 3
+    assert r.json()["controls_deleted"] == 60
 
     after = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
     assert len(after) == 0
@@ -265,13 +266,13 @@ async def test_delete_assessment_removes_generated_controls(client: httpx.AsyncC
 
 async def test_delete_assessment_keeps_manual_controls(client: httpx.AsyncClient):
     # Manually-created controls (no control_ref) must survive assessment deletion.
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     manual = await create_control(client, system_id=system["id"], title="Manual control")
 
     r = await client.delete(f"/v1/assessments/{ass['id']}")
     assert r.status_code == 200
-    assert r.json()["controls_deleted"] == 3  # only the 3 generated ones
+    assert r.json()["controls_deleted"] == 60  # only the generated ones
 
     remaining = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
     ids = [c["id"] for c in remaining]
@@ -280,7 +281,7 @@ async def test_delete_assessment_keeps_manual_controls(client: httpx.AsyncClient
 
 async def test_delete_assessment_keeps_shared_controls(client: httpx.AsyncClient):
     # A generated control also linked to another assessment's obligation is kept.
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="high")
     ass1 = await create_assessment(client, system["id"])
     ass2 = await create_assessment(client, system["id"])
 
@@ -306,17 +307,50 @@ async def test_delete_assessment_keeps_shared_controls(client: httpx.AsyncClient
 async def test_generate_obligations_creates_correct_count(client: httpx.AsyncClient):
     # Obligations are auto-generated on assessment creation.
     # The endpoint still works but returns 409 if called again.
-    system = await create_system(tier="high")
+    system = await create_system(tier="high")  # org_role defaults to provider
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    assert len(obs) == 11  # EU AI Act high-risk has 11 obligations
+    assert len(obs) == 15  # EU AI Act high-risk provider has 15 obligation clusters
+
+
+async def test_generate_obligations_deployer_high_count(client: httpx.AsyncClient):
+    system = await create_system(tier="high", org_role="deployer")
+    ass = await create_assessment(client, system["id"])
+    obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
+    assert len(obs) == 10  # deployer high-risk has 10 obligation clusters
+
+
+async def test_generate_obligations_importer_yields_none(client: httpx.AsyncClient):
+    # Only provider/deployer are supported for EU High/Limited — importer gets none.
+    system = await create_system(tier="high", org_role="importer")
+    ass = await create_assessment(client, system["id"])
+    obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
+    assert len(obs) == 0
+
+
+async def test_generated_obligations_carry_cluster_id(client: httpx.AsyncClient, db_session):
+    # cluster_id is internal (not exposed in the API) but must be persisted so
+    # carry-forward and control generation key off it.
+    from sqlalchemy import select
+    from ai_trust_persistence.models import Obligation
+
+    system = await create_system(tier="high")
+    ass = await create_assessment(client, system["id"])
+    rows = (await db_session.execute(
+        select(Obligation).where(Obligation.assessment_id == ass["id"])
+    )).scalars().all()
+    assert rows
+    assert all(o.cluster_id for o in rows)
+    assert "P-RM" in {o.cluster_id for o in rows}
 
 
 async def test_generate_obligations_minimal_tier(client: httpx.AsyncClient):
+    # The cluster catalogue defines obligations only for EU high/limited tiers, so a
+    # minimal-tier system yields none.
     system = await create_system(tier="minimal")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    assert len(obs) == 3
+    assert len(obs) == 0
 
 
 async def test_generate_obligations_idempotent_fails_on_second_call(client: httpx.AsyncClient):
@@ -338,7 +372,7 @@ async def test_generate_obligations_approved_assessment_returns_409(client: http
 
 
 async def test_generate_obligations_prefills_from_prior_approved(client: httpx.AsyncClient):
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="high")
 
     # First assessment — auto-generated on create. Mark one obligation not_applicable and approve.
     ass1 = await create_assessment(client, system["id"])
@@ -370,7 +404,7 @@ async def test_submit_assessment(client: httpx.AsyncClient):
 
 async def test_submit_assessment_succeeds_with_auto_generated_obligations(client: httpx.AsyncClient):
     # Obligations are auto-generated on create so submit should always succeed immediately.
-    system = await create_system()
+    system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     r = await client.post(f"/v1/assessments/{ass['id']}/submit")
     assert r.status_code == 200
@@ -448,31 +482,43 @@ async def test_approve_updates_system_compliance(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_create_assessment_auto_generates_controls(client: httpx.AsyncClient):
-    # High-risk EU obligations (11) map to 41 tier-scoped control templates.
+    # High-risk EU provider obligations (15 clusters) map to 60 Requirement templates.
     system = await create_system(tier="high")
     await create_assessment(client, system["id"])
     controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    assert len(controls) == 41
+    assert len(controls) == 60
 
 
 async def test_generated_controls_have_control_ref(client: httpx.AsyncClient):
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="high")
     await create_assessment(client, system["id"])
     controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    assert len(controls) == 3
+    assert len(controls) == 60
     for c in controls:
-        # control_ref is "{article_ref}:{slug}"
+        # Every generated control carries a stable control_ref.
         assert c["control_ref"]
-        assert ":" in c["control_ref"]
 
 
 async def test_generated_controls_linked_to_obligations(client: httpx.AsyncClient):
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    art9 = [o for o in obs if o["article_ref"] == "Art. 9"][0]
+    art9 = [o for o in obs if o["cluster_id"] == "P-RM"][0]
     linked = (await client.get(f"/v1/controls?obligation_id={art9['id']}")).json()
-    assert len(linked) == 5  # Art. 9 -> 5 controls
+    assert len(linked) == 7  # P-RM cluster (Art. 9) -> 7 Requirements
+
+
+async def test_high_tier_control_ref_is_requirement_id(client: httpx.AsyncClient):
+    # EU High/Limited controls use the bare Requirement ID as control_ref (no ":"),
+    # unlike the retained sets which use "{article_ref}:{slug}".
+    system = await create_system(tier="high")
+    ass = await create_assessment(client, system["id"])
+    obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
+    art9 = [o for o in obs if o["cluster_id"] == "P-RM"][0]
+    linked = (await client.get(f"/v1/controls?obligation_id={art9['id']}")).json()
+    refs = {c["control_ref"] for c in linked}
+    assert "P-RM-01" in refs
+    assert all(":" not in r for r in refs)
 
 
 async def test_generated_controls_flip_obligations_in_progress(client: httpx.AsyncClient):
@@ -490,18 +536,18 @@ async def test_generated_controls_start_open(client: httpx.AsyncClient):
     assert all(c["status"] == "open" for c in controls)
 
 
-async def test_prohibited_controls_scoped_to_prohibited_tier(client: httpx.AsyncClient):
-    # A prohibited assessment gets the 8 Art. 5 prohibited-practice controls.
+async def test_prohibited_tier_generates_no_controls(client: httpx.AsyncClient):
+    # The cluster catalogue has no prohibited-tier clusters (prohibited practices are
+    # banned outright, not remediated via controls) — so no obligations and no controls.
     system = await create_system(tier="prohibited")
     await create_assessment(client, system["id"])
     controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    assert len(controls) == 8
-    assert all(c["control_ref"].startswith("Art. 5:") for c in controls)
+    assert len(controls) == 0
 
 
 async def test_unknown_tier_generates_no_controls(client: httpx.AsyncClient):
-    # No obligations -> no controls, assessment still created.
-    system = await create_system(tier="unknown_tier")
+    # A tier with no obligation clusters -> no controls, assessment still created.
+    system = await create_system(tier="minimal")
     await create_assessment(client, system["id"])
     controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
     assert len(controls) == 0
@@ -525,14 +571,15 @@ async def test_generate_controls_creates_for_obligations_without_controls(client
     system = await create_system(tier="minimal")
     ass = await create_assessment(client, system["id"])
     # Manual obligation with a template-backed article_ref but no controls yet.
-    await create_obligation(client, ass["id"], article_ref="Art. 69", title="Manual")
+    # GOVERN is a retained NIST cluster (risk_category "All") -> generates regardless of tier.
+    await create_obligation(client, ass["id"], article_ref="GOVERN", title="Manual")
     # The auto-generated minimal obligations already have controls; only the manual
-    # Art. 69 obligation lacks them -> its 1 control is generated.
+    # GOVERN obligation lacks them -> its 1 control is generated.
     r = await client.post(f"/v1/assessments/{ass['id']}/generate-controls")
     assert r.status_code == 200
     created = r.json()["created"]
     assert len(created) == 1
-    assert created[0]["control_ref"] == "Art. 69:AITP-VOL-001"
+    assert created[0]["control_ref"] == "GOVERN:AITP-NIST-GOVERN"
 
 
 async def test_generate_controls_approved_assessment_returns_409(client: httpx.AsyncClient):
@@ -545,7 +592,7 @@ async def test_generate_controls_approved_assessment_returns_409(client: httpx.A
 
 
 async def test_generate_controls_no_obligations_returns_422(client: httpx.AsyncClient):
-    system = await create_system(tier="unknown_tier")  # yields zero obligations
+    system = await create_system(tier="minimal")  # yields zero obligations
     ass = await create_assessment(client, system["id"])
     r = await client.post(f"/v1/assessments/{ass['id']}/generate-controls")
     assert r.status_code == 422
@@ -556,7 +603,7 @@ async def test_generate_controls_no_obligations_returns_422(client: httpx.AsyncC
 # ---------------------------------------------------------------------------
 
 async def test_control_owner_carried_forward_from_prior(client: httpx.AsyncClient):
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="high")
 
     # First assessment — set an owner on a generated control, then approve.
     ass1 = await create_assessment(client, system["id"])
