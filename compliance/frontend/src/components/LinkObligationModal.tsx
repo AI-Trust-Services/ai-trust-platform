@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
-import type { AISystem, Assessment, Control, Obligation } from "../types";
+import type { AISystem, Assessment, Requirement, Obligation } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -17,12 +17,12 @@ import {
 
 interface Props {
   open: boolean;
-  control: Control | null;
+  requirement: Requirement | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export default function LinkObligationModal({ open, control, onClose, onSuccess }: Props) {
+export default function LinkObligationModal({ open, requirement, onClose, onSuccess }: Props) {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
   const [assessmentId, setAssessmentId] = useState("");
@@ -35,12 +35,12 @@ export default function LinkObligationModal({ open, control, onClose, onSuccess 
   // assessments for an org-wide control) plus systems for labelling, and the
   // control's currently-linked obligation IDs.
   const load = useCallback(async () => {
-    if (!control) return;
+    if (!requirement) return;
     try {
       const [assess, sys, detail] = await Promise.all([
-        api.getAssessments(control.ai_system_id ?? undefined),
+        api.getAssessments(requirement.ai_system_id ?? undefined),
         api.getSystems(),
-        api.getControl(control.id),
+        api.getRequirement(requirement.id),
       ]);
       setAssessments(assess);
       setSystemsById(Object.fromEntries(sys.map((s) => [s.id, s])));
@@ -48,7 +48,7 @@ export default function LinkObligationModal({ open, control, onClose, onSuccess 
     } catch (e) {
       showToast(`Failed to load: ${(e as Error).message}`, true);
     }
-  }, [control, showToast]);
+  }, [requirement, showToast]);
 
   useEffect(() => {
     if (open) {
@@ -70,17 +70,17 @@ export default function LinkObligationModal({ open, control, onClose, onSuccess 
     })();
   }, [assessmentId, showToast]);
 
-  if (!open || !control) return null;
+  if (!open || !requirement) return null;
 
   async function toggle(obligationId: string, isLinked: boolean) {
-    if (!control) return;
+    if (!requirement) return;
     setBusy(obligationId);
     try {
       if (isLinked) {
-        await api.unlinkObligation(control.id, obligationId);
+        await api.unlinkObligation(requirement.id, obligationId);
         setLinked((s) => { const n = new Set(s); n.delete(obligationId); return n; });
       } else {
-        await api.linkObligation(control.id, obligationId);
+        await api.linkObligation(requirement.id, obligationId);
         setLinked((s) => new Set(s).add(obligationId));
       }
       onSuccess();
@@ -91,18 +91,18 @@ export default function LinkObligationModal({ open, control, onClose, onSuccess 
     }
   }
 
-  const orgWide = !control.ai_system_id;
+  const orgWide = !requirement.ai_system_id;
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="gap-0 p-0 sm:max-w-[640px]">
         <DialogHeader>
-          <DialogTitle>Link Obligations — {control.title}</DialogTitle>
+          <DialogTitle>Link Obligations — {requirement.title}</DialogTitle>
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto">
           <div className="px-6 pt-4">
             <div className="rounded-md border border-[var(--info-border,var(--border))] bg-[var(--info-bg,var(--muted))] px-3 py-2 text-[13px] text-foreground">
-              Linking a control marks its obligations "In Progress". When the control becomes Effective (via approved evidence), they become "Fulfilled".
+              Linking a requirement marks its obligations "In Progress". When the requirement becomes Effective (via approved evidence), they become "Fulfilled".
             </div>
           </div>
           <div className="px-6 pt-4">

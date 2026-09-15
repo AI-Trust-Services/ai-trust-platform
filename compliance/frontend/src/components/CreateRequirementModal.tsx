@@ -34,7 +34,7 @@ const EMPTY: FormState = { ai_system_id: "", title: "", description: "", categor
 // Sentinel for the "Org-wide" option — Radix Select disallows an empty-string value.
 const ORG_WIDE = "__org__";
 
-export default function CreateControlModal({ open, onClose, onSuccess }: Props) {
+export default function CreateRequirementModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -61,7 +61,7 @@ export default function CreateControlModal({ open, onClose, onSuccess }: Props) 
     if (!form.title.trim()) { showToast("Title is required", true); return; }
     setLoading(true);
     try {
-      await api.createControl({ ...form, ai_system_id: form.ai_system_id || null, due_date: form.due_date || null });
+      await api.createRequirement({ ...form, ai_system_id: form.ai_system_id || null, due_date: form.due_date || null });
       onClose();
       showToast("Requirement created");
       onSuccess();

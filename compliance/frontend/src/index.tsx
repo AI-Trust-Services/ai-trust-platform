@@ -5,7 +5,7 @@ import App from "./App";
 import { RequirePermission } from "./components/RequirePermission";
 import AssessmentsPage from "./pages/AssessmentsPage";
 import ObligationsPage from "./pages/ObligationsPage";
-import ControlsPage from "./pages/ControlsPage";
+import RequirementsPage from "./pages/RequirementsPage";
 import EvidencePage from "./pages/EvidencePage";
 
 const ASSESSMENT_PERMS = ["assessments:read", "assessments:write", "assessments:approve"];
@@ -25,8 +25,8 @@ const router = createHashRouter([
         element: <RequirePermission anyOf={ASSESSMENT_PERMS}><ObligationsPage /></RequirePermission>,
       },
       {
-        path: "controls",
-        element: <RequirePermission anyOf={ASSESSMENT_PERMS}><ControlsPage /></RequirePermission>,
+        path: "requirements",
+        element: <RequirePermission anyOf={ASSESSMENT_PERMS}><RequirementsPage /></RequirePermission>,
       },
       {
         path: "evidence",
