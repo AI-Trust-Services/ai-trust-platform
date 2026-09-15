@@ -44,7 +44,7 @@ build:
 install:
 	@if helm status $(RELEASE) -n $(NAMESPACE) >/dev/null 2>&1; then \
 		echo "==> release '$(RELEASE)' already installed, resetting immutable Jobs then upgrading"; \
-		kubectl delete job --all -n $(NAMESPACE) --ignore-not-found; \
+		kubectl delete job -n $(NAMESPACE) -l app.kubernetes.io/instance=$(RELEASE) --ignore-not-found; \
 	fi
 	helm upgrade --install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
 
