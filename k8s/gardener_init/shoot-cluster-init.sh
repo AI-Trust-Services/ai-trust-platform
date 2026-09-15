@@ -119,6 +119,34 @@ EOF
 echo "    Certificate requested — Gardener cert-service will issue via DNS-01 (takes ~1-2 min)"
 echo "    Monitor: kubectl get certificate ai-trust-tls -n ai-trust -w"
 
+# Traefik ServersTransport that raises the forwarding timeout for LLM-backed routes
+# (AI classification, document extraction). Traefik's default responseHeaderTimeout of
+# 60s cuts the connection mid-inference; Ollama classification takes 84-120s.
+#
+# Created here (one-time, cluster infra) rather than in the Helm chart on purpose:
+# the oauth2-proxy Service is annotated with
+#   traefik.ingress.kubernetes.io/service.serverstransport: ai-trust-llm-timeout@kubernetescrd
+# by the chart. If the chart also created this object, Helm would apply the Service
+# annotation and the ServersTransport in the same pass, and Traefik could reconcile the
+# Service before ingesting the ServersTransport — it would then fail to resolve the
+# reference, drop the backend, and return host-wide 404s until its next reconcile.
+# Creating it here, once, guarantees the object always predates any Helm deploy, so every
+# GitHub Actions rollout (in either direction) resolves the reference on the first try.
+# The Traefik CRDs (incl. serverstransports.traefik.io) are installed by the Traefik Helm
+# install in step [1/5] above, so this apply always succeeds.
+kubectl apply -f - <<EOF
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: llm-timeout
+  namespace: ai-trust
+spec:
+  forwardingTimeouts:
+    responseHeaderTimeout: 300s
+    readIdleTimeout: 300s
+EOF
+echo "    Created ServersTransport/llm-timeout (300s forwarding timeout for LLM routes)"
+
 echo ""
 echo "==> [3/5] Annotating Traefik LB Service for Gardener-managed DNS"
 echo "    Waiting for Traefik deployment to be available..."
