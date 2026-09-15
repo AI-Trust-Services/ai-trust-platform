@@ -92,7 +92,7 @@ export default function AdminHomePage() {
   useEffect(() => { load(); }, [load]);
 
   const mailValue = stats
-    ? (stats.mail_configured ? "Configured" : "—")
+    ? (stats.mail_configured ? "✓" : "—")
     : "—";
 
   return (
@@ -129,7 +129,7 @@ export default function AdminHomePage() {
           value={loading ? "…" : (stats?.role_count ?? 0)}
           label="Roles"
           actionLabel="View all"
-          onAction={() => navigate("users")}
+          onAction={() => navigate("users-roles")}
         />
         <KpiTile
           icon={<Bot className="size-5" />}
@@ -160,7 +160,7 @@ export default function AdminHomePage() {
           icon={<ShieldCheck className="size-4" />}
           title="Roles & permissions"
           description="Create and manage roles. Define permissions and access levels."
-          path="users"
+          path="users-roles"
         />
         <AdminCard
           icon={<Bot className="size-4" />}
