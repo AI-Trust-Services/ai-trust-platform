@@ -532,7 +532,10 @@ export default function AssessmentsPage() {
       try {
         await api.advanceFromClassification(qAssessmentId);
       } catch (e) {
-        showToast((e as Error).message, true);
+        // submit-info already moved the system to pending_review, but the assessment
+        // is still questionnaire_pending — don't close so the user can retry.
+        showToast(`Failed to update assessment: ${(e as Error).message}`, true);
+        return;
       }
       closeQuestionnaire();
       await load();

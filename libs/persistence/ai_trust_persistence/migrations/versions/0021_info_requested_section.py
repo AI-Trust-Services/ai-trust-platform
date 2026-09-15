@@ -18,7 +18,13 @@ def upgrade() -> None:
         "ai_systems",
         sa.Column("info_requested_section", sa.String(30), nullable=True),
     )
+    op.create_check_constraint(
+        "ck_ai_systems_info_requested_section",
+        "ai_systems",
+        "info_requested_section IN ('business', 'technical')",
+    )
 
 
 def downgrade() -> None:
+    op.drop_constraint("ck_ai_systems_info_requested_section", "ai_systems")
     op.drop_column("ai_systems", "info_requested_section")
