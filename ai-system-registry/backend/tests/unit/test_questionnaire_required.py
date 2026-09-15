@@ -56,7 +56,7 @@ def test_missing_business_all_when_blank():
     assert set(missing) == {
         "submission_type", "use_case_owner", "use_case_type", "department",
         "technologies", "use_case_status", "use_case", "planned_modifications",
-        "entity_role", "exception_category", "sector_legislation",
+        "exception_category", "sector_legislation",
     }
 
 

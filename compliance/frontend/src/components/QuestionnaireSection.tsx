@@ -252,6 +252,7 @@ export default function QuestionnaireSection({ open, system, section, username, 
       showToast("Progress saved");
     } catch (e) {
       showToast(`Save failed: ${(e as Error).message}`, true);
+      throw e; // let handleSubmit abort — never submit on a failed save
     } finally {
       setSaving(false);
     }
@@ -261,7 +262,12 @@ export default function QuestionnaireSection({ open, system, section, username, 
     setSubmitting(true);
     try {
       await handleSave();
-      if (section === "business") {
+      if (system.workflow_status === "info_requested") {
+        // CO requested more info: return the whole system to the CO via submit-info
+        // (which reclassifies), regardless of which section is open.
+        await registryClient.submitInfo(system.id);
+        showToast("Information submitted — returned for review");
+      } else if (section === "business") {
         await registryClient.submitBusinessSection(system.id);
         showToast("Business section submitted — technical assignee notified");
       } else {

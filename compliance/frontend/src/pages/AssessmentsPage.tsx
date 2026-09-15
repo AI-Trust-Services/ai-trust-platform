@@ -59,10 +59,12 @@ const VALID_TIERS = ["prohibited", "gpai-systemic", "gpai-standard", "high", "li
 
 // ── Questionnaire progress indicator ──────────────────────────────────────────
 
-function QuestionnaireProgress({ workflowStatus, classificationVisible }: { workflowStatus: string; classificationVisible: boolean }) {
+function QuestionnaireProgress({ workflowStatus, classificationVisible, section }: { workflowStatus: string; classificationVisible: boolean; section?: "business" | "technical" }) {
   const phases = ["Business", "Technical", "Classification", "Review"];
   const currentIndex = workflowStatus === "pending_review" ? 3
     : classificationVisible ? 2
+    // info_requested carries no phase hint in the status — use the reopened section.
+    : workflowStatus === "info_requested" ? (section === "technical" ? 1 : 0)
     : workflowStatus === "technical_pending" ? 1
     : 0;
 
@@ -387,6 +389,7 @@ export default function AssessmentsPage() {
   // Questionnaire phase state (used when status === "questionnaire_pending")
   const [qSection, setQSection] = useState<"business" | "technical">("business");
   const [qClassification, setQClassification] = useState(false);
+  const [qInfoFlow, setQInfoFlow] = useState(false);
 
   // CO review state (used when status === "pending_review")
   type RcePanel = "" | "approve" | "reject" | "requestInfo";
@@ -397,7 +400,7 @@ export default function AssessmentsPage() {
   const [approveTier, setApproveTier] = useState("");
   const [approveOrgRole, setApproveOrgRole] = useState("provider");
   const [rejectSendTo, setRejectSendTo] = useState<"business" | "technical">("business");
-  const [infoContributor, setInfoContributor] = useState("");
+  const [infoSection, setInfoSection] = useState<"business" | "technical">("business");
   const [rceActing, setRceActing] = useState(false);
 
   // Center-dialog state for questionnaire / classification
@@ -475,6 +478,7 @@ export default function AssessmentsPage() {
 
   async function openQuestionnaire(a: Assessment) {
     setQClassification(false);
+    setQInfoFlow(false);
     setQDialogOpen(false);
     const sysData = systemsById[a.ai_system_id];
     if (!sysData) { showToast("System not found", true); return; }
@@ -482,6 +486,17 @@ export default function AssessmentsPage() {
       const freshSys = await registryClient.getSystem(sysData.id);
       setSelectedSystem(freshSys);
       setQAssessmentId(a.id);
+
+      // CO requested more info: reopen exactly the section the CO flagged
+      // (info_requested_section), so business/technical contributors get their own
+      // question set. Resubmit goes back to the CO via submit-info (QuestionnaireSection).
+      if (freshSys.workflow_status === "info_requested") {
+        setQInfoFlow(true);
+        setQSection(freshSys.info_requested_section === "technical" ? "technical" : "business");
+        setQClassification(false);
+        setQDialogOpen(true);
+        return;
+      }
 
       const isTechnicalPending = freshSys.workflow_status === "technical_pending";
       const techAssignee = freshSys.technical_assignee_username;
@@ -505,10 +520,28 @@ export default function AssessmentsPage() {
     setQAssessmentId("");
     setSelectedSystem(null);
     setQClassification(false);
+    setQInfoFlow(false);
   }
 
   async function onQuestionnaireSectionSuccess() {
     if (!selectedSystem) return;
+    // Info-request resubmit: submit-info already returned the system to pending_review
+    // and reclassified. Move the assessment back to pending_review too (obligations are
+    // reused — advance-from-classification is idempotent), then close.
+    if (qInfoFlow) {
+      try {
+        await api.advanceFromClassification(qAssessmentId);
+      } catch (e) {
+        // submit-info already moved the system to pending_review, but the assessment
+        // is still questionnaire_pending — don't close so the user can retry.
+        showToast(`Failed to update assessment: ${(e as Error).message}`, true);
+        return;
+      }
+      closeQuestionnaire();
+      await load();
+      showToast("Information submitted — returned for review");
+      return;
+    }
     try {
       const freshSys = await registryClient.getSystem(selectedSystem.id);
       setSelectedSystem(freshSys);
@@ -580,6 +613,8 @@ export default function AssessmentsPage() {
     setRceActing(true);
     try {
       await registryClient.rejectSystem(selectedSystem.id, rceNote, selectedSystem.assignee_username || "", rejectSendTo);
+      // Reopen the assessment so the bounced-back owner's editable questionnaire opens on row-click.
+      if (selectedDetail) await api.reopenAssessment(selectedDetail.id);
       showToast("System rejected — returned for revision");
       closePanel();
       await load();
@@ -591,11 +626,13 @@ export default function AssessmentsPage() {
   }
 
   async function handleRceRequestInfo() {
-    if (!selectedSystem || !infoContributor) { showToast("Select who should provide the information", true); return; }
+    if (!selectedSystem || !infoSection) { showToast("Select which section needs revision", true); return; }
     if (!rceNote.trim()) { showToast("Describe what information is needed", true); return; }
     setRceActing(true);
     try {
-      await registryClient.requestInfo(selectedSystem.id, infoContributor, rceNote);
+      await registryClient.requestInfo(selectedSystem.id, infoSection, rceNote);
+      // Reopen the assessment so the requested contributor's editable section opens on row-click.
+      if (selectedDetail) await api.reopenAssessment(selectedDetail.id);
       showToast("Information requested — contributor notified");
       closePanel();
       await load();
@@ -622,8 +659,8 @@ export default function AssessmentsPage() {
     draft: assessments.filter((a) => a.status === "draft").length,
   }), [assessments]);
 
-  // Info contributors for request-info dropdown
-  const infoContributors = selectedSystem ? [
+  // Sections available for a request-info bounce-back, paired with the owner it routes to.
+  const infoSections = selectedSystem ? [
     selectedSystem.business_assignee_username ? ["business", selectedSystem.business_assignee_username] as const : null,
     selectedSystem.technical_assignee_username ? ["technical", selectedSystem.technical_assignee_username] as const : null,
   ].filter(Boolean) as (readonly ["business" | "technical", string])[] : [];
@@ -815,7 +852,7 @@ export default function AssessmentsPage() {
                 {isAssignedCO && rcePanel === "" && (
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Button onClick={() => setRcePanel("approve")} disabled={rceActing}>Approve…</Button>
-                    <Button variant="outline" onClick={() => { setRcePanel("requestInfo"); setInfoContributor(""); setRceNote(""); }} disabled={rceActing}>Request Info…</Button>
+                    <Button variant="outline" onClick={() => { setRcePanel("requestInfo"); setInfoSection(infoSections[0]?.[0] ?? "business"); setRceNote(""); }} disabled={rceActing}>Request Info…</Button>
                     <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={() => { setRcePanel("reject"); setRejectSendTo("business"); setRceNote(""); }} disabled={rceActing}>Reject…</Button>
                   </div>
                 )}
@@ -868,12 +905,14 @@ export default function AssessmentsPage() {
                     <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Request More Information</div>
                     <div className="flex flex-col gap-3 p-4">
                       <div className="flex flex-col gap-1.5">
-                        <Label>Ask <span className="text-destructive">*</span></Label>
-                        <Select value={infoContributor} onValueChange={setInfoContributor}>
-                          <SelectTrigger><SelectValue placeholder="— select contributor —" /></SelectTrigger>
+                        <Label>Section to revise <span className="text-destructive">*</span></Label>
+                        <Select value={infoSection} onValueChange={(v) => setInfoSection(v as "business" | "technical")}>
+                          <SelectTrigger><SelectValue placeholder="— select section —" /></SelectTrigger>
                           <SelectContent>
-                            {infoContributors.map(([section, uname]) => (
-                              <SelectItem key={uname} value={uname}>{uname} ({section === "business" ? "Business" : "Technical"})</SelectItem>
+                            {infoSections.map(([section, owner]) => (
+                              <SelectItem key={section} value={section}>
+                                {section === "business" ? "Business — Use Case & Context" : "Technical — AI Risk Classification"} ({owner})
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -980,7 +1019,7 @@ export default function AssessmentsPage() {
             system={selectedSystem}
             section={qSection}
             username={username}
-            headerExtra={<QuestionnaireProgress workflowStatus={selectedSystem.workflow_status} classificationVisible={false} />}
+            headerExtra={<QuestionnaireProgress workflowStatus={selectedSystem.workflow_status} classificationVisible={false} section={qSection} />}
             onClose={closeQuestionnaire}
             onSuccess={onQuestionnaireSectionSuccess}
             showToast={showToast}

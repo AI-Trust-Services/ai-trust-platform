@@ -87,6 +87,10 @@ class AISystem(Base):
     compliance_officer_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
     business_assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
     technical_assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # While workflow_status == "info_requested", which section the compliance officer
+    # asked to be revised ("business" | "technical"). Null otherwise. Governs which
+    # section the contributor may edit and which questions they see on bounce-back.
+    info_requested_section: Mapped[str | None] = mapped_column(String(30), nullable=True)
     questionnaire_answers: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
     # Full-manual supporting docs: a JSON array of {filename, minio_key, uploaded_at}.
     registration_documents: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
