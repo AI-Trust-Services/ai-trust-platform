@@ -39,7 +39,7 @@
     "alerts": ["alerts:read", "alerts:handle", "alerts:manage_rules"],
     "assessments": ["assessments:read", "assessments:write", "assessments:approve"],
     "obligations": ["assessments:read", "assessments:write", "assessments:approve"],
-    "controls": ["assessments:read", "assessments:write", "assessments:approve"],
+    "requirements": ["assessments:read", "assessments:write", "assessments:approve"],
     "evidence": ["evidence:read", "evidence:write", "evidence:approve"],
     "users": ["iam:manage"],
     "audit": ["audit:read"],
@@ -108,11 +108,11 @@
         navigationContext: "obligations",
       },
       {
-        pathSegment: "controls",
+        pathSegment: "requirements",
         label: "Requirements",
         icon: "shield",
-        viewUrl: "/compliance/#/controls",
-        navigationContext: "controls",
+        viewUrl: "/compliance/#/requirements",
+        navigationContext: "requirements",
       },
       {
         pathSegment: "evidence",
