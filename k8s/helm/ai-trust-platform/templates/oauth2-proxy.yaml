@@ -75,7 +75,7 @@ metadata:
     # The value MUST use Traefik's provider-namespace syntax (<ns>-<name>@kubernetescrd),
     # NOT the bare CRD name — with a bare name Traefik cannot resolve the ServersTransport,
     # drops the backend, and builds no router at all (host 404s). See sr-test 404 incident.
-    traefik.ingress.kubernetes.io/service.serversTransport: {{ .Release.Namespace }}-llm-timeout@kubernetescrd
+    traefik.ingress.kubernetes.io/service.serverstransport: {{ .Release.Namespace }}-llm-timeout@kubernetescrd
   {{- end }}
 spec:
   type: {{ .Values.oauthProxy.serviceType }}
