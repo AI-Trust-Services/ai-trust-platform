@@ -1,6 +1,6 @@
 # Claude Demo Prompt — Risk Management Module
 
-Paste the prompt below into Claude Code (with the `ai-trust-git` repo as working directory) to get an interactive, step-by-step walkthrough of the Risk Management module.
+Paste the prompt below into Claude Code (with the `ai-trust-platform` repo as working directory) to get an interactive, step-by-step walkthrough of the Risk Management module.
 
 ---
 

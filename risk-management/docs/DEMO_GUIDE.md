@@ -2,7 +2,7 @@
 
 ## Quick start with demo data
 
-The platform ships with an optional demo seed that registers 5 diverse AI systems and fully populates their risk registers so the Risk Management module is ready to demonstrate immediately after install.
+The platform ships with an optional demo seed that registers 9 diverse AI systems and fully populates their risk registers so the Risk Management module is ready to demonstrate immediately after install.
 
 ### 1. Clone the repository
 
@@ -28,11 +28,11 @@ The only values you may want to change are `APP_ADMIN_USERNAME` / `APP_ADMIN_PAS
 # Start everything
 docker compose up -d
 
-# Seed 5 demo AI systems with full risk registers (safe to re-run)
+# Seed 9 demo AI systems with full risk registers (safe to re-run)
 docker compose --profile demo up risk-management-demo-seed
 ```
 
-Wait for the seed container to exit (`Exited (0)`), then open [http://localhost:8080](http://localhost:8080) and log in with `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` from your `.env` (defaults: `admin` / `password`).
+Wait for the seed container to exit (`Exited (0)`), then open [http://localhost:8080](http://localhost:8080) and log in with `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` from your `.env` (defaults: `admin` / `Admin1234!`).
 
 Navigate to **Risk Management** in the sidebar.
 
@@ -49,6 +49,37 @@ Navigate to **Risk Management** in the sidebar.
 | Employee Performance Analytics | **HIGH** (employment) | — | No risk management (Start) |
 | Internal Knowledge Base Search | MINIMAL | — | Risk management optional |
 | Meeting Transcription Tool | MINIMAL | 1 voluntary | ✓ Risk management optional |
+
+### Known issues on a new machine
+
+**MinIO images removed from Docker Hub**
+
+`minio/minio` and `minio/mc` have been removed from Docker Hub by MinIO. On a machine with no local image cache, `docker compose up -d` will fail with:
+
+```
+pull access denied for minio/minio, repository does not exist or may require 'docker login'
+pull access denied for minio/mc, repository does not exist or may require 'docker login'
+```
+
+Fix: create a `docker-compose.override.yml` in the repo root with the following content (this file is already in `.gitignore` and will not be committed):
+
+```yaml
+services:
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+```
+
+Docker automatically merges this file with `docker-compose.yml`. If the MinIO version in `docker-compose.yml` changes in the future, update the tags above accordingly.
+
+**Docker CLI not in PATH on macOS**
+
+Docker Desktop installs its CLI to `~/.docker/bin/`, which is not in the default PATH on macOS. If `docker` is not found, add this to `~/.zshrc`:
+
+```bash
+export PATH="$HOME/.docker/bin:$PATH"
+```
 
 ### Configuration
 

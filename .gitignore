@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Local docker-compose overrides (machine-specific)
+docker-compose.override.yml
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
