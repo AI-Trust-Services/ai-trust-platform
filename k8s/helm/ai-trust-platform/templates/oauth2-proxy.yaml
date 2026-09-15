@@ -41,6 +41,12 @@ spec:
             - --redirect-url={{ .Values.appPublicUrl }}/oauth2/callback
             - --upstream=http://shell:80
             - --http-address=0.0.0.0:4180
+            # Raise the upstream response timeout from its 30s default: AI risk
+            # classification (Ollama inference) makes submit-technical take 60-100s,
+            # and the default 30s makes oauth2-proxy return 502 mid-inference.
+            # Matches docker-compose.yml. Complements the Traefik ServersTransport
+            # (Traefik->oauth2-proxy hop) and shell nginx proxy_read_timeout.
+            - --upstream-timeout=300s
             - --cookie-secure={{ .Values.oauthProxy.cookieSecure }}
             {{- if .Values.oauthProxy.cookieSecure }}
             - --cookie-samesite=none
