@@ -106,12 +106,19 @@ runs:
         echo "server-ca-discovery-url: ${GARDENER_CA_DISCOVERY_URL:-<unset>}"
         echo "audience: ${GARDENER_OIDC_AUDIENCE:-<unset>}"
 
-    - name: Authenticate to Gardener cluster via OIDC
+    - name: Authenticate to Gardener cluster (SA token, 1h)
       uses: gardener/cc-utils/.github/actions/kubernetes-auth@1e70b044f4d3305267a559e7ae74b4de57e1fdee
       with:
         server: ${{ env.GARDENER_SHOOT_API_SERVER }}
         server-ca-discovery-url: ${{ env.GARDENER_CA_DISCOVERY_URL }}
         audience: ${{ env.GARDENER_OIDC_AUDIENCE }}
+        # Exchange the short-lived GHA OIDC token (~5min TTL) for a SA token valid 1h.
+        # The wait-for-upgrade loop polls for up to 15min; a single 1h token covers the
+        # entire job — bootstrap steps + wait loop — without a mid-job re-auth.
+        # The github-actions SA is created by k8s/gardener_init/rbac.yaml.
+        service-account-name: github-actions
+        service-account-namespace: ocm-system
+        service-account-token-expiration: 3600
 
     - name: Point KUBECONFIG at the authenticated kubeconfig
       shell: bash
@@ -217,26 +224,6 @@ runs:
         else
           echo "HelmRelease is not Stalled (status: ${STALLED:-unknown}) — no remediation needed."
         fi
-
-    - name: Re-authenticate with long-lived SA token for upgrade wait
-      uses: gardener/cc-utils/.github/actions/kubernetes-auth@1e70b044f4d3305267a559e7ae74b4de57e1fdee
-      with:
-        server: ${{ env.GARDENER_SHOOT_API_SERVER }}
-        server-ca-discovery-url: ${{ env.GARDENER_CA_DISCOVERY_URL }}
-        audience: ${{ env.GARDENER_OIDC_AUDIENCE }}
-        # Exchange the short-lived GHA OIDC token (~5min TTL) for a SA token valid 1h.
-        # The wait-for-upgrade loop polls for up to 15min; without this it hits Unauthorized
-        # at ~5min even when the upgrade is still in progress and eventually succeeds.
-        # The github-actions SA is created by k8s/gardener_init/rbac.yaml with get/list/watch/patch
-        # on helmreleases in ocm-system.
-        service-account-name: github-actions
-        service-account-namespace: ocm-system
-        service-account-token-expiration: 3600
-        kubeconfig-path: kubeconfig-wait.yaml
-
-    - name: Switch KUBECONFIG to long-lived token
-      shell: bash
-      run: echo "KUBECONFIG=$GITHUB_WORKSPACE/kubeconfig-wait.yaml" >> "$GITHUB_ENV"
 
     - name: Wait for HelmRelease upgrade
       shell: bash
