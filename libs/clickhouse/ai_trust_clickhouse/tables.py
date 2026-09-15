@@ -4,6 +4,20 @@
 # without rewriting every query. (Provisioning/migrations create these tables in each tenant db.)
 GEN_AI_SPANS = "gen_ai_spans"
 ALERT_EVENTS = "alert_events"
+AUDIT_EVENTS = "audit_events"
+
+AUDIT_EVENTS_COLUMNS = [
+    "id",
+    "created_at",
+    "actor_username",
+    "action",
+    "resource_type",
+    "resource_id",
+    "ai_system_id",
+    "ai_system_name",
+    "changes",
+    "source",
+]
 
 # Order matters: must match the on-disk column order in ClickHouse. ALTER ADD
 # COLUMN appends at the end, so columns from 0002+ are listed after the

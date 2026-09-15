@@ -23,7 +23,7 @@ class Control(Base):
     Defines *how* an obligation is met. ai_system_id is nullable: a null value
     means the control is org-wide (applies across all systems), per spec
     CTL-FR-07. Effectiveness is driven by linked evidence (see cascade.py):
-    approved evidence -> control becomes 'effective'.
+    approved evidence -> control becomes 'fulfilled'.
     """
 
     __tablename__ = "controls"
@@ -40,7 +40,7 @@ class Control(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
     category: Mapped[str] = mapped_column(String(50), default="general")
-    status: Mapped[str] = mapped_column(String(30), default="not_started", index=True)
+    status: Mapped[str] = mapped_column(String(30), default="open", index=True)
     effectiveness: Mapped[str] = mapped_column(String(20), default="medium")
     owner: Mapped[str] = mapped_column(String(200), default="")
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)

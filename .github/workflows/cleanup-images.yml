@@ -41,6 +41,11 @@ jobs:
           - compliance-frontend
           - users-frontend
           - decision-trace-analyzer-frontend
+          - audit-backend
+          - audit-frontend
+          - audit-flush-worker
+          - admin-backend
+          - admin-frontend
     steps:
       - name: Delete old image versions
         env:

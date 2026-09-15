@@ -125,7 +125,7 @@ spec:
       initContainers:
         # mirrors compose: depends_on rabbitmq (service_healthy) + clickhouse-migrate (completed)
         {{- include "ai-trust.waitForTcp" (dict "name" "rabbitmq" "port" 5672 "image" .Values.waitImages.busybox) | nindent 8 }}
-        {{- include "ai-trust.waitForJob" (dict "job" "clickhouse-migrate" "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "clickhouse-migrate" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
       containers:
         - name: otel-clickhouse-consumer
           image: {{ .Values.image.repository }}/otel-clickhouse-consumer:{{ .Values.image.tag }}

@@ -11,14 +11,15 @@ import { api } from "../api/client";
  */
 export function usePermissions() {
   const [perms, setPerms] = useState<string[] | null>(null);
+  const [username, setUsername] = useState<string>("");
 
   useEffect(() => {
     api
       .myPermissions()
-      .then((r) => setPerms(r.permissions))
+      .then((r) => { setPerms(r.permissions); setUsername(r.username); })
       .catch(() => setPerms([]));
   }, []);
 
   const can = (permission: string) => Array.isArray(perms) && perms.includes(permission);
-  return { can, loading: perms === null };
+  return { can, loading: perms === null, username };
 }

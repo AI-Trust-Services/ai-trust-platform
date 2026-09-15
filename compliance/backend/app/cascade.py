@@ -4,9 +4,9 @@ The governance feedback loop, per spec OBL-FR-04 ("obligation status is
 calculated automatically from the status of linked controls and evidence") and
 CTL-FR-05 ("control effectiveness is determined by evidence status"):
 
-    approved evidence  -> linked control becomes 'effective'
-    all controls on an obligation 'effective' -> obligation 'fulfilled'
-    >=1 control linked (not all effective) -> obligation 'in_progress'
+    approved evidence  -> linked control becomes 'fulfilled'
+    all controls on an obligation 'fulfilled' -> obligation 'fulfilled'
+    >=1 control linked (not all fulfilled) -> obligation 'in_progress'
     assessment score = fulfilled obligations / total obligations * 100
     ai_systems.compliance = avg(score) across all approved assessments for that system
 
@@ -36,17 +36,17 @@ _CONTROL_LOCKED = frozenset({"deactivated", "ineffective"})
 
 
 async def refresh_control_effectiveness(session: AsyncSession, control_id: str) -> None:
-    """Sync a control's 'effective' status to its approved-evidence backing.
+    """Sync a control's 'fulfilled' status to its approved-evidence backing.
 
     Spec Control Effectiveness Model, applied symmetrically:
-    - >=1 approved evidence item        -> promote to 'effective'
+    - >=1 approved evidence item        -> promote to 'fulfilled'
     - no approved evidence, currently
-      'effective' (auto-promoted before) -> demote back to 'implemented'
+      'fulfilled' (auto-promoted before) -> demote back to 'planned'
 
-    Only the effective<->implemented transition is auto-managed; other manual
-    statuses (not_started / planned / under_review) and locked statuses
+    Only the fulfilled<->planned transition is auto-managed; other manual
+    statuses (open / under_review) and locked statuses
     (deactivated / ineffective) are left untouched. Demoting only from
-    'effective' ensures we never clobber a manually-chosen non-effective status.
+    'fulfilled' ensures we never clobber a manually-chosen non-fulfilled status.
     """
     control = (await session.execute(
         select(Control).where(Control.id == control_id)
@@ -63,14 +63,14 @@ async def refresh_control_effectiveness(session: AsyncSession, control_id: str) 
     )).scalar_one()
 
     if approved_count > 0:
-        control.status = "effective"
-    elif control.status == "effective":
+        control.status = "fulfilled"
+    elif control.status == "fulfilled":
         # Sole supporting evidence was rejected/removed — revert the
         # auto-promotion so obligations/scores can drop accordingly.
-        # Use "in_implementation" rather than "implemented": the control may
-        # have been auto-promoted from any earlier state (not_started, planned,
-        # in_implementation) so "implemented" could be a spurious upgrade.
-        control.status = "in_implementation"
+        # Use "planned" rather than "open": the control may have been
+        # auto-promoted from any earlier state so "open" could be a
+        # spurious downgrade past manual progress.
+        control.status = "planned"
 
 
 async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
@@ -94,7 +94,7 @@ async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
 
     if not control_statuses:
         obligation.status = "applicable"
-    elif all(s == "effective" for s in control_statuses):
+    elif all(s == "fulfilled" for s in control_statuses):
         obligation.status = "fulfilled"
     else:
         obligation.status = "in_progress"

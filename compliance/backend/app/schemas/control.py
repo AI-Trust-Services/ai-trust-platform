@@ -11,8 +11,7 @@ VALID_CONTROL_CATEGORIES = frozenset({
     "incident_response", "general",
 })
 VALID_CONTROL_STATUSES = frozenset({
-    "not_started", "planned", "in_implementation", "implemented",
-    "under_review", "effective", "ineffective", "deactivated",
+    "open", "planned", "under_review", "fulfilled", "ineffective", "deactivated",
 })
 VALID_EFFECTIVENESS = frozenset({"high", "medium", "low"})
 

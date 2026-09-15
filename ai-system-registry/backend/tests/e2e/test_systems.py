@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import httpx
+import pytest
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 # ---------------------------------------------------------------------------
@@ -82,9 +85,14 @@ async def test_intake_rejects_missing_name(client: httpx.AsyncClient):
     assert r.status_code == 422
 
 
-async def test_intake_rejects_missing_assignee(client: httpx.AsyncClient):
+async def test_intake_allows_missing_assignee(client: httpx.AsyncClient):
+    # Assignees are no longer set at intake — the creator assigns sections later
+    # via /workflow/assign, so an owner may register with just a name.
     r = await client.post("/v1/intake", json={"name": "No Assignee"}, headers=_HEADERS)
-    assert r.status_code == 422
+    assert r.status_code == 201
+    body = r.json()
+    assert body["system"]["workflow_status"] == "draft"
+    assert body["system"]["assignee_username"] is None
 
 
 async def test_update_system_lifecycle(client: httpx.AsyncClient):
@@ -232,3 +240,54 @@ async def test_link_model_card_404_on_missing_model(client: httpx.AsyncClient):
     system_id = (await _create_system(client))["system"]["id"]
     r = await client.post(f"/v1/systems/{system_id}/models", json={"model_card_id": "MDL-NOTFOUND"})
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /systems/{id}/reclassify — audit event changes
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_reclassify_tier_change_logs_changes(client: httpx.AsyncClient):
+    # Create a minimal system (tier=minimal), then set a high-risk flag to change tier.
+    system_id = (await _create_system(client))["system"]["id"]
+    await client.put(f"/v1/systems/{system_id}", json={"is_biometric_identification": True}, headers=_HEADERS)
+
+    r = await client.post(f"/v1/systems/{system_id}/reclassify", headers=_HEADERS)
+    assert r.status_code == 200
+    assert r.json()["classification"]["tier"] == "high"
+
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.audit_event import AuditEvent
+    async with AsyncSession(engine) as session:
+        row = (await session.execute(
+            select(AuditEvent)
+            .where(AuditEvent.action == "system.reclassified")
+            .where(AuditEvent.resource_id == system_id)
+            .order_by(AuditEvent.created_at.desc())
+        )).scalars().first()
+
+    assert row is not None
+    assert row.changes is not None
+    assert row.changes["tier"]["before"] != row.changes["tier"]["after"]
+
+
+@pytest.mark.asyncio
+async def test_reclassify_no_tier_change_omits_changes(client: httpx.AsyncClient):
+    # Reclassify a system that hasn't changed — tier stays minimal, changes should be None/empty.
+    system_id = (await _create_system(client))["system"]["id"]
+
+    r = await client.post(f"/v1/systems/{system_id}/reclassify", headers=_HEADERS)
+    assert r.status_code == 200
+    assert r.json()["classification"]["tier"] == "minimal"
+
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.audit_event import AuditEvent
+    async with AsyncSession(engine) as session:
+        row = (await session.execute(
+            select(AuditEvent)
+            .where(AuditEvent.action == "system.reclassified")
+            .where(AuditEvent.resource_id == system_id)
+        )).scalars().first()
+
+    assert row is not None
+    assert not row.changes
