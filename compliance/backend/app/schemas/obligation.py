@@ -60,7 +60,7 @@ class ObligationResponse(BaseModel):
 
 
 class ObligationDetailResponse(ObligationResponse):
-    control_ids: list[str] = []
+    requirement_ids: list[str] = []
 
 
 class GenerateObligationsResponse(BaseModel):
