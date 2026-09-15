@@ -71,6 +71,9 @@ kubectl create secret generic ai-trust-env \
 # ai-trust-env in the ai-trust namespace.
 echo "==> secret/ai-trust-flux-values in ocm-system (Helm chart URL values for FluxDeployer)"
 kubectl create namespace ocm-system --dry-run=client -o yaml | kubectl apply -f -
+OLLAMA_ENABLED="false"
+[[ "${LLM_PROVIDER:-stub}" == "ollama" ]] && OLLAMA_ENABLED="true"
+
 kubectl create secret generic ai-trust-flux-values \
   --from-literal=APP_PUBLIC_URL="${APP_PUBLIC_URL:-}" \
   --from-literal=KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-}" \
@@ -78,6 +81,7 @@ kubectl create secret generic ai-trust-flux-values \
   --from-literal=INGRESS_KEYCLOAK_HOST="${INGRESS_KEYCLOAK_HOST}" \
   --from-literal=INGRESS_MINIO_HOST="${INGRESS_MINIO_HOST}" \
   --from-literal=IMAGE_TAG="${IMAGE_TAG:-latest}" \
+  --from-literal=OLLAMA_ENABLED="${OLLAMA_ENABLED}" \
   -n ocm-system --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> configmap/postgres-init (from infra/postgres/init.sh)"
