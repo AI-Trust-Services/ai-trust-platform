@@ -313,9 +313,17 @@ async def advance_from_classification(assessment_id: str) -> AssessmentResponse:
         if system.tier == "pending":
             raise HTTPException(422, "System tier is still pending — complete risk classification first")
 
-        created, _ = await _generate_obligations_in_session(session, row, system)
-        if created:
-            await _generate_controls_in_session(session, created, system.tier)
+        # Idempotent: only generate obligations/controls on the first advance. A
+        # bounce-back (CO reject / request-info) reopens the assessment and re-runs
+        # this endpoint on resubmit — regenerating here would duplicate every row.
+        existing = (await session.execute(
+            select(func.count()).select_from(Obligation)
+            .where(Obligation.assessment_id == row.id)
+        )).scalar_one()
+        if existing == 0:
+            created, _ = await _generate_obligations_in_session(session, row, system)
+            if created:
+                await _generate_controls_in_session(session, created, system.tier)
 
         row.status = "pending_review"
         row.updated_at = datetime.now(timezone.utc)
@@ -330,6 +338,39 @@ async def advance_from_classification(assessment_id: str) -> AssessmentResponse:
 
     logger.info("assessment.classification_advanced", extra={
         "assessment_id": row.id, "ai_system_id": row.ai_system_id, "tier": system.tier,
+    })
+    return AssessmentResponse.model_validate(row)
+
+
+@router.post("/assessments/{assessment_id}/reopen", response_model=AssessmentResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
+async def reopen_assessment(assessment_id: str) -> AssessmentResponse:
+    """Revert a pending_review assessment back to questionnaire_pending.
+
+    Called by the compliance officer's reject / request-info actions (via the
+    frontend, after the registry workflow is already bounced back to a *_pending
+    state). The row-click gate opens the editable questionnaire only for
+    questionnaire_pending assessments, so this reopens the section for the owner
+    to edit. Obligations/controls are left intact — advance-from-classification is
+    idempotent, so the eventual resubmit reuses them rather than duplicating.
+
+    Gated on ASSESSMENTS_WRITE (which the compliance officer holds) — SYSTEMS_WRITE
+    would 403 the CO.
+    """
+    async with SessionLocal() as session:
+        row = await _load(session, assessment_id)
+        if row.status == "approved":
+            raise HTTPException(409, "Approved assessments are immutable — create a new assessment to reassess")
+        if row.status != "pending_review":
+            raise HTTPException(422, "Only an assessment in pending_review can be reopened")
+
+        row.status = "questionnaire_pending"
+        row.updated_at = datetime.now(timezone.utc)
+
+        await session.commit()
+        await session.refresh(row)
+
+    logger.info("assessment.reopened", extra={
+        "assessment_id": row.id, "ai_system_id": row.ai_system_id,
     })
     return AssessmentResponse.model_validate(row)
 
