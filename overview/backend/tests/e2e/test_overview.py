@@ -10,7 +10,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.assessment import Assessment
-from ai_trust_persistence.models.evidence import Evidence, evidence_obligations
+from ai_trust_persistence.models.evidence import Evidence, evidence_controls
+from ai_trust_persistence.models.control import Control
 from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
@@ -343,8 +344,8 @@ async def test_attention_excludes_clean_systems(client: httpx.AsyncClient):
 # GET /overview/compliance-stats
 # ---------------------------------------------------------------------------
 #
-# FK chain: Framework <- Assessment <- Obligation; Evidence links to Obligation
-# via the evidence_obligations M2M table. Obligation.assessment_id is NOT NULL,
+# FK chain: Framework <- Assessment <- Obligation <- Control (obligation_id FK).
+# Evidence links to Controls via evidence_controls M2M. Obligation.assessment_id is NOT NULL,
 # so every obligation needs a parent assessment. `frameworks` is seeded by
 # migrations and never truncated, so framework_compliance is never empty.
 
@@ -376,10 +377,9 @@ def _obl(ass_id: str, sys_id: str, fw_id: str, status: str = "applicable", **kwa
     return Obligation(**{**defaults, **kwargs})
 
 
-def _evd(sys_id: str, status: str = "approved", validity_until: date | None = None) -> Evidence:
+def _evd(status: str = "approved", validity_until: date | None = None) -> Evidence:
     return Evidence(
         id=f"EVD-{uuid.uuid4().hex[:8].upper()}",
-        ai_system_id=sys_id,
         title="Test Evidence",
         status=status,
         validity_until=validity_until,
@@ -438,9 +438,34 @@ async def test_window_days_filters_expiring_soon(client: httpx.AsyncClient):
     sys_id = f"SYS-{uuid.uuid4().hex[:8].upper()}"
     async with SessionLocal() as session:
         session.add(_sys(id=sys_id))
+        fw = _fw()
+        session.add(fw)
+        await session.flush()
+        ass = _ass(sys_id, fw.id)
+        session.add(ass)
+        await session.flush()
+        obl = _obl(ass.id, sys_id, fw.id)
+        session.add(obl)
         await session.flush()
         # expires in 5 days — inside a 7-day window, outside a 3-day window
-        session.add(_evd(sys_id, validity_until=today + timedelta(days=5)))
+        ctl = Control(
+            id=f"CTL-{uuid.uuid4().hex[:8].upper()}",
+            obligation_id=obl.id,
+            assessment_id=ass.id,
+            ai_system_id=sys_id,
+            title="Test Control",
+            category="general",
+            status="under_review",
+            effectiveness="medium",
+        )
+        evd = _evd(validity_until=today + timedelta(days=5))
+        session.add_all([ctl, evd])
+        await session.flush()
+        await session.execute(
+            pg_insert(evidence_controls)
+            .values(evidence_id=evd.id, control_id=ctl.id)
+            .on_conflict_do_nothing()
+        )
         await session.commit()
 
     r7 = await client.get("/v1/compliance-stats?window_days=7")
@@ -458,8 +483,8 @@ async def test_expired_counts_only_approved(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         session.add(_sys(id=sys_id))
         await session.flush()
-        session.add(_evd(sys_id, status="approved", validity_until=today - timedelta(days=1)))
-        session.add(_evd(sys_id, status="awaiting_review", validity_until=today - timedelta(days=1)))
+        session.add(_evd(status="approved", validity_until=today - timedelta(days=1)))
+        session.add(_evd(status="pending", validity_until=today - timedelta(days=1)))
         await session.commit()
 
     r = await client.get("/v1/compliance-stats")
@@ -498,18 +523,31 @@ async def test_missing_count_excludes_obligations_with_approved_evidence(client:
         session.add(ass)
         await session.flush()
         obl = _obl(ass.id, sys_id, fw.id, status="in_progress")
-        evd = _evd(sys_id, status="approved")
-        session.add_all([obl, evd])
+        session.add(obl)
+        await session.flush()
+        # Link via evidence_controls → Control.obligation_id (1:N model)
+        ctl = Control(
+            id=f"CTL-{uuid.uuid4().hex[:8].upper()}",
+            obligation_id=obl.id,
+            assessment_id=ass.id,
+            ai_system_id=sys_id,
+            title="Test Control",
+            category="general",
+            status="under_review",
+            effectiveness="medium",
+        )
+        evd = _evd(status="approved")
+        session.add_all([ctl, evd])
         await session.flush()
         await session.execute(
-            pg_insert(evidence_obligations)
-            .values(evidence_id=evd.id, obligation_id=obl.id)
+            pg_insert(evidence_controls)
+            .values(evidence_id=evd.id, control_id=ctl.id)
             .on_conflict_do_nothing()
         )
         await session.commit()
 
     r = await client.get("/v1/compliance-stats")
-    # in_progress but has approved evidence linked -> not counted as missing
+    # in_progress but has approved evidence linked via control -> not counted as missing
     assert r.json()["evidence_gap"]["missing"] == 0
 
 

@@ -278,26 +278,6 @@ async def test_delete_assessment_keeps_manual_controls(client: httpx.AsyncClient
     assert ids == [manual["id"]]
 
 
-async def test_delete_assessment_keeps_shared_controls(client: httpx.AsyncClient):
-    # A generated control also linked to another assessment's obligation is kept.
-    system = await create_system(tier="minimal")
-    ass1 = await create_assessment(client, system["id"])
-    ass2 = await create_assessment(client, system["id"])
-
-    # Pick a generated control from ass1 and link it to an obligation of ass2.
-    controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    obs2 = (await client.get(f"/v1/obligations?assessment_id={ass2['id']}")).json()
-    shared = controls[0]
-    await client.post(f"/v1/controls/{shared['id']}/link/{obs2[0]['id']}")
-
-    r = await client.delete(f"/v1/assessments/{ass1['id']}")
-    assert r.status_code == 200
-
-    # The shared control must survive because it still links to ass2.
-    remaining_ids = [c["id"] for c in
-                     (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()]
-    assert shared["id"] in remaining_ids
-
 
 # ---------------------------------------------------------------------------
 # POST /assessments/{id}/generate-obligations

@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { CONTROL_CATEGORIES, humanize } from "../utils";
-import type { AISystem } from "../types";
+import type { AISystem, Obligation } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -22,7 +22,8 @@ interface Props {
 }
 
 interface FormState {
-  ai_system_id: string;
+  system_id: string;
+  obligation_id: string;
   title: string;
   description: string;
   category: string;
@@ -30,19 +31,19 @@ interface FormState {
   due_date: string;
 }
 
-const EMPTY: FormState = { ai_system_id: "", title: "", description: "", category: "general", owner: "", due_date: "" };
-// Sentinel for the "Org-wide" option — Radix Select disallows an empty-string value.
-const ORG_WIDE = "__org__";
+const EMPTY: FormState = { system_id: "", obligation_id: "", title: "", description: "", category: "general", owner: "", due_date: "" };
 
 export default function CreateControlModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [systems, setSystems] = useState<AISystem[]>([]);
+  const [obligations, setObligations] = useState<Obligation[]>([]);
   const [loading, setLoading] = useState(false);
   const showToast = useToast();
 
   useEffect(() => {
     if (!open) return;
     setForm(EMPTY);
+    setObligations([]);
     (async () => {
       try {
         const sys = await api.getSystems();
@@ -53,15 +54,35 @@ export default function CreateControlModal({ open, onClose, onSuccess }: Props) 
     })();
   }, [open, showToast]);
 
+  async function onSystemChange(systemId: string) {
+    setForm((f) => ({ ...f, system_id: systemId, obligation_id: "" }));
+    setObligations([]);
+    if (!systemId) return;
+    try {
+      const obls = await api.getObligations({ ai_system_id: systemId });
+      setObligations(obls);
+    } catch (e) {
+      showToast(`Failed to load obligations: ${(e as Error).message}`, true);
+    }
+  }
+
   if (!open) return null;
 
   const setVal = (k: keyof FormState) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   async function handleSubmit() {
+    if (!form.obligation_id) { showToast("Obligation is required", true); return; }
     if (!form.title.trim()) { showToast("Title is required", true); return; }
     setLoading(true);
     try {
-      await api.createControl({ ...form, ai_system_id: form.ai_system_id || null, due_date: form.due_date || null });
+      await api.createControl({
+        obligation_id: form.obligation_id,
+        title: form.title,
+        description: form.description,
+        category: form.category,
+        owner: form.owner,
+        due_date: form.due_date || null,
+      });
       onClose();
       showToast("Requirement created");
       onSuccess();
@@ -93,15 +114,20 @@ export default function CreateControlModal({ open, onClose, onSuccess }: Props) 
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>AI System (leave blank for org-wide)</Label>
-            <Select
-              value={form.ai_system_id || ORG_WIDE}
-              onValueChange={(v) => setVal("ai_system_id")(v === ORG_WIDE ? "" : v)}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Label>AI System <span className="text-destructive">*</span></Label>
+            <Select value={form.system_id} onValueChange={onSystemChange}>
+              <SelectTrigger><SelectValue placeholder="Select a system…" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={ORG_WIDE}>Org-wide (all systems)</SelectItem>
                 {systems.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.id})</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Obligation <span className="text-destructive">*</span></Label>
+            <Select value={form.obligation_id} onValueChange={setVal("obligation_id")} disabled={!form.system_id}>
+              <SelectTrigger><SelectValue placeholder={form.system_id ? "Select an obligation…" : "Select a system first"} /></SelectTrigger>
+              <SelectContent>
+                {obligations.map((o) => <SelectItem key={o.id} value={o.id}>{o.title} ({o.article_ref})</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

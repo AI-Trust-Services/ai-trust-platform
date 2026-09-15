@@ -48,6 +48,8 @@ export interface ObligationDetail extends Obligation {
 
 export interface Control {
   id: string;
+  obligation_id: string;
+  assessment_id: string;
   ai_system_id: string | null;
   control_ref: string | null;
   title: string;
@@ -57,19 +59,25 @@ export interface Control {
   effectiveness: string;
   owner: string;
   due_date: string | null;
+  assessment_title: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface ControlDetail extends Control {
-  obligation_ids: string[];
   evidence_count: number;
+}
+
+export interface ControlRef {
+  id: string;
+  ai_system_id: string | null;
+  control_ref: string | null;
+  title: string;
+  status: string;
 }
 
 export interface Evidence {
   id: string;
-  ai_system_id: string | null;
-  assessment_id: string | null;
   title: string;
   description: string;
   evidence_type: string;
@@ -81,13 +89,13 @@ export interface Evidence {
   mime_type: string;
   uploaded_by: string;
   version_label: string;
+  control_count: number;
   created_at: string;
   updated_at: string;
 }
 
 export interface EvidenceDetail extends Evidence {
-  control_ids: string[];
-  obligation_ids: string[];
+  controls: ControlRef[];
 }
 
 export interface EvidenceVersion {

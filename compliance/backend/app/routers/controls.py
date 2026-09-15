@@ -3,8 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_authorization import require_permission
@@ -12,10 +11,9 @@ from ai_trust_authorization.constants import ASSESSMENTS_READ, ASSESSMENTS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import (
-    AISystem,
+    Assessment,
     Control,
     Obligation,
-    control_obligations,
     evidence_controls,
 )
 from app.cascade import refresh_obligation, refresh_obligations_for_control
@@ -40,6 +38,18 @@ async def _load(session: AsyncSession, control_id: str) -> Control:
     return row
 
 
+async def _assessment_title(session: AsyncSession, assessment_id: str) -> str | None:
+    return (await session.execute(
+        select(Assessment.title).where(Assessment.id == assessment_id)
+    )).scalar_one_or_none()
+
+
+async def _to_response(session: AsyncSession, row: Control) -> ControlResponse:
+    resp = ControlResponse.model_validate(row)
+    resp.assessment_title = await _assessment_title(session, row.assessment_id)
+    return resp
+
+
 @router.get("/controls", response_model=list[ControlResponse], dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
 async def list_controls(
     ai_system_id: str | None = Query(default=None),
@@ -51,30 +61,45 @@ async def list_controls(
     async with SessionLocal() as session:
         stmt = select(Control).order_by(Control.created_at.desc())
         if ai_system_id:
-            stmt = stmt.where(or_(Control.ai_system_id == ai_system_id, Control.ai_system_id.is_(None)))
+            stmt = stmt.where(Control.ai_system_id == ai_system_id)
         if obligation_id:
-            stmt = stmt.join(
-                control_obligations, control_obligations.c.control_id == Control.id
-            ).where(control_obligations.c.obligation_id == obligation_id)
+            stmt = stmt.where(Control.obligation_id == obligation_id)
         if evidence_id:
             stmt = stmt.join(
                 evidence_controls, evidence_controls.c.control_id == Control.id
             ).where(evidence_controls.c.evidence_id == evidence_id)
         stmt = stmt.limit(limit).offset(offset)
-        result = await session.execute(stmt)
-        return [ControlResponse.model_validate(r) for r in result.scalars().all()]
+        controls = (await session.execute(stmt)).scalars().all()
+
+        assessment_ids = {c.assessment_id for c in controls}
+        titles: dict[str, str] = {}
+        if assessment_ids:
+            titles = dict((await session.execute(
+                select(Assessment.id, Assessment.title).where(Assessment.id.in_(assessment_ids))
+            )).all())
+
+        responses = []
+        for c in controls:
+            r = ControlResponse.model_validate(c)
+            r.assessment_title = titles.get(c.assessment_id)
+            responses.append(r)
+        return responses
 
 
 @router.post("/controls", response_model=ControlResponse, status_code=201, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def create_control(body: ControlCreate) -> ControlResponse:
     async with SessionLocal() as session:
-        if body.ai_system_id and not (await session.execute(
-            select(AISystem.id).where(AISystem.id == body.ai_system_id)
-        )).scalar_one_or_none():
-            raise HTTPException(404, f"AI system {body.ai_system_id} not found")
+        obligation = (await session.execute(
+            select(Obligation).where(Obligation.id == body.obligation_id)
+        )).scalar_one_or_none()
+        if not obligation:
+            raise HTTPException(404, f"Obligation {body.obligation_id} not found")
+
         row = Control(
             id=new_id("CTL"),
-            ai_system_id=body.ai_system_id,
+            obligation_id=obligation.id,
+            assessment_id=obligation.assessment_id,
+            ai_system_id=obligation.ai_system_id,
             title=body.title,
             description=body.description,
             category=body.category,
@@ -84,26 +109,25 @@ async def create_control(body: ControlCreate) -> ControlResponse:
             effectiveness="medium",
         )
         session.add(row)
+        await session.flush()
+        await refresh_obligation(session, obligation.id)
         await session.commit()
         await session.refresh(row)
-    logger.info("control.created", extra={"control_id": row.id, "ai_system_id": row.ai_system_id})
-    return ControlResponse.model_validate(row)
+        resp = await _to_response(session, row)
+    logger.info("control.created", extra={"control_id": row.id, "obligation_id": row.obligation_id})
+    return resp
 
 
 @router.get("/controls/{control_id}", response_model=ControlDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
 async def get_control(control_id: str) -> ControlDetailResponse:
     async with SessionLocal() as session:
         row = await _load(session, control_id)
-        obligation_ids = (await session.execute(
-            select(control_obligations.c.obligation_id)
-            .where(control_obligations.c.control_id == control_id)
-        )).scalars().all()
         evidence_count = (await session.execute(
             select(func.count()).select_from(evidence_controls)
             .where(evidence_controls.c.control_id == control_id)
         )).scalar_one()
         detail = ControlDetailResponse.model_validate(row)
-        detail.obligation_ids = list(obligation_ids)
+        detail.assessment_title = await _assessment_title(session, row.assessment_id)
         detail.evidence_count = evidence_count
         return detail
 
@@ -113,71 +137,38 @@ async def update_control(control_id: str, body: ControlUpdate) -> ControlRespons
     updates = body.model_dump(exclude_none=True)
     async with SessionLocal() as session:
         row = await _load(session, control_id)
+
+        if "obligation_id" in updates:
+            obligation = (await session.execute(
+                select(Obligation).where(Obligation.id == updates.pop("obligation_id"))
+            )).scalar_one_or_none()
+            if not obligation:
+                raise HTTPException(404, f"Obligation {body.obligation_id} not found")
+            row.obligation_id = obligation.id
+            row.assessment_id = obligation.assessment_id
+            row.ai_system_id = obligation.ai_system_id
+
         for field, value in updates.items():
             setattr(row, field, value)
         row.updated_at = datetime.now(timezone.utc)
         await session.flush()
-        # A status change may flip linked obligations (fulfilled/in_progress).
         if "status" in updates:
             await refresh_obligations_for_control(session, control_id)
         await session.commit()
         await session.refresh(row)
+        resp = await _to_response(session, row)
     logger.info("control.updated", extra={"control_id": control_id, "fields": sorted(updates.keys())})
-    return ControlResponse.model_validate(row)
+    return resp
 
 
 @router.delete("/controls/{control_id}", dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def delete_control(control_id: str) -> dict:
     async with SessionLocal() as session:
         row = await _load(session, control_id)
-        # Capture linked obligations before the FK-cascade removes the links.
-        obligation_ids = (await session.execute(
-            select(control_obligations.c.obligation_id)
-            .where(control_obligations.c.control_id == control_id)
-        )).scalars().all()
+        obligation_id = row.obligation_id
         await session.delete(row)
         await session.flush()
-        for oid in obligation_ids:
-            await refresh_obligation(session, oid)
+        await refresh_obligation(session, obligation_id)
         await session.commit()
     logger.info("control.deleted", extra={"control_id": control_id})
     return {"status": "deleted", "id": control_id}
-
-
-@router.post("/controls/{control_id}/link/{obligation_id}", response_model=ControlDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def link_obligation(control_id: str, obligation_id: str) -> ControlDetailResponse:
-    async with SessionLocal() as session:
-        await _load(session, control_id)
-        obligation = (await session.execute(
-            select(Obligation).where(Obligation.id == obligation_id)
-        )).scalar_one_or_none()
-        if not obligation:
-            raise HTTPException(404, f"Obligation {obligation_id} not found")
-
-        # Idempotent insert — ignore if the link already exists.
-        await session.execute(
-            pg_insert(control_obligations)
-            .values(control_id=control_id, obligation_id=obligation_id)
-            .on_conflict_do_nothing()
-        )
-        await session.flush()
-        await refresh_obligation(session, obligation_id)
-        await session.commit()
-    logger.info("control.linked", extra={"control_id": control_id, "obligation_id": obligation_id})
-    return await get_control(control_id)
-
-
-@router.delete("/controls/{control_id}/link/{obligation_id}", response_model=ControlDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def unlink_obligation(control_id: str, obligation_id: str) -> ControlDetailResponse:
-    async with SessionLocal() as session:
-        await _load(session, control_id)
-        await session.execute(
-            control_obligations.delete()
-            .where(control_obligations.c.control_id == control_id)
-            .where(control_obligations.c.obligation_id == obligation_id)
-        )
-        await session.flush()
-        await refresh_obligation(session, obligation_id)
-        await session.commit()
-    logger.info("control.unlinked", extra={"control_id": control_id, "obligation_id": obligation_id})
-    return await get_control(control_id)

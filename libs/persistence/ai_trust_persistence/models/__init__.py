@@ -5,13 +5,12 @@ from ai_trust_persistence.models.alert_rule import AlertRule
 from ai_trust_persistence.models.question_assignment import QuestionAssignment
 from ai_trust_persistence.models.assessment import Assessment
 from ai_trust_persistence.models.audit_event import AuditEvent
-from ai_trust_persistence.models.control import Control, control_obligations
+from ai_trust_persistence.models.control import Control
 from ai_trust_persistence.models.custom_role import CustomRole
 from ai_trust_persistence.models.evidence import (
     Evidence,
     EvidenceVersion,
     evidence_controls,
-    evidence_obligations,
 )
 from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
@@ -34,7 +33,5 @@ __all__ = [
     "PlatformSettings",
     "SystemWorkflowStep",
     "QuestionAssignment",
-    "control_obligations",
     "evidence_controls",
-    "evidence_obligations",
 ]
