@@ -19,11 +19,12 @@ up: configure cluster bootstrap build install
 down: uninstall delete-cluster
 
 cluster:
-	@if kind get clusters 2>/dev/null | grep -qx $(CLUSTER_NAME); then \
+	@if kind get clusters 2>/dev/null | grep -Fxq -- '$(CLUSTER_NAME)'; then \
 		echo "==> kind cluster '$(CLUSTER_NAME)' already exists, skipping create"; \
 	else \
 		kind create cluster --name $(CLUSTER_NAME) --config kind-config.yaml; \
 	fi
+	kind export kubeconfig --name $(CLUSTER_NAME)
 
 delete-cluster:
 	kind delete cluster --name $(CLUSTER_NAME)
