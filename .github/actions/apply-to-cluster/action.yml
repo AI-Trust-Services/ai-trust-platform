@@ -194,6 +194,30 @@ runs:
         envsubst '${OCM_VERSION}' < k8s/ocm/manifests.yaml | kubectl apply -f -
         echo "Applied OCM CRs with ComponentVersion pinned to ${OCM_VERSION}"
 
+    - name: Remediate stalled HelmRelease
+      shell: bash
+      run: |
+        # If the HelmRelease is in a Stalled state (e.g. from a previous failed upgrade
+        # that exhausted retries), Flux will not attempt a new upgrade until it is
+        # explicitly told to retry — new OCM component versions are silently ignored.
+        # Annotating with reconcile.fluxcd.io/requestedAt clears the Stalled condition
+        # and forces an immediate reconcile, so the new chart version is picked up.
+        HR=$(kubectl get helmrelease ai-trust-platform -n ocm-system -o json 2>/dev/null || echo "")
+        if [[ -z "$HR" ]]; then
+          echo "HelmRelease not found — skipping remediation (first install)."
+          exit 0
+        fi
+        STALLED=$(echo "$HR" | jq -r '.status.conditions[]? | select(.type=="Stalled") | .status' 2>/dev/null || echo "")
+        if [[ "$STALLED" == "True" ]]; then
+          echo "HelmRelease is Stalled — annotating to force reconcile..."
+          kubectl annotate helmrelease ai-trust-platform -n ocm-system \
+            reconcile.fluxcd.io/requestedAt="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --overwrite
+          echo "Annotation applied — Flux will retry the upgrade."
+        else
+          echo "HelmRelease is not Stalled (status: ${STALLED:-unknown}) — no remediation needed."
+        fi
+
     - name: Wait for HelmRelease upgrade
       shell: bash
       env:
