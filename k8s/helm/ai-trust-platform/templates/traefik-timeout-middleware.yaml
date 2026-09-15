@@ -1,0 +1,15 @@
+{{- if and .Values.ingress.enabled (eq .Values.ingress.className "traefik") }}
+# Raises Traefik's forwarding timeout for LLM-backed routes (AI classification,
+# document extraction). The default 60s is too short for Ollama inference which
+# can take 2-3 minutes. Attached to the Ingress via the router.middlewares annotation
+# in values-gardener.yaml.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: llm-timeout
+  namespace: {{ .Release.Namespace }}
+spec:
+  forwardingTimeouts:
+    responseHeaderTimeout: 300s
+    readIdleTimeout: 300s
+{{- end }}
