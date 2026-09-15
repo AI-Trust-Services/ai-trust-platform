@@ -2,21 +2,13 @@
 # Raises Traefik's forwarding timeout for LLM-backed routes (AI classification,
 # document extraction). The default 60s is too short for Ollama inference which
 # can take 2-3 minutes. forwardingTimeouts lives on ServersTransport (not Middleware).
-# The oauth2-proxy Service is annotated with
-# traefik.ingress.kubernetes.io/service.serverstransport in oauth2-proxy.yaml to pick this up.
-#
-# pre-install,pre-upgrade hook: ensures this object exists BEFORE Traefik reconciles the
-# oauth2-proxy Service annotation on a main→feature upgrade. If the annotation references
-# a ServersTransport that doesn't exist yet, Traefik drops the entire backend from the
-# router, causing host-wide 404s until the next reconcile cycle.
+# The shell Service is annotated with traefik.ingress.kubernetes.io/service.serversTransport
+# in shell.yaml to pick this up.
 apiVersion: traefik.io/v1alpha1
 kind: ServersTransport
 metadata:
   name: llm-timeout
   namespace: {{ .Release.Namespace }}
-  annotations:
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: "-5"
 spec:
   forwardingTimeouts:
     responseHeaderTimeout: 300s
