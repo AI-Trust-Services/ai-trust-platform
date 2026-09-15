@@ -25,10 +25,4 @@ ingress:
   tls:
     enabled: true
     selfSigned: false
-  annotations:
-    # LLM-backed endpoints (AI classification, document extraction) can take 2-3 min
-    # on Ollama. Traefik's default respondingTimeout is 60s — attach a Middleware that
-    # raises the forwarding timeout so the connection isn't cut mid-inference.
-    # The Middleware is defined in templates/traefik-timeout-middleware.yaml.
-    traefik.ingress.kubernetes.io/router.middlewares: "ai-trust-llm-timeout@kubernetescrd"
 

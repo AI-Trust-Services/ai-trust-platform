@@ -61,6 +61,13 @@ apiVersion: v1
 kind: Service
 metadata:
   name: oauth2-proxy
+  {{- if and .Values.ingress.enabled (eq .Values.ingress.className "traefik") }}
+  annotations:
+    # Tell Traefik to use the llm-timeout ServersTransport (300s forwarding timeout)
+    # for this service. Required because Ollama AI classification takes 84-120s and
+    # Traefik's default respondingTimeout of 60s cuts the connection mid-inference.
+    traefik.ingress.kubernetes.io/service.serversTransport: llm-timeout
+  {{- end }}
 spec:
   type: {{ .Values.oauthProxy.serviceType }}
   selector:
