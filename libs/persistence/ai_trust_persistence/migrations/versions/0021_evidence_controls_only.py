@@ -8,7 +8,6 @@ Create Date: 2026-09-11
 """
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy import inspect, text
 
 revision = "0021"
 down_revision = "0020"
@@ -17,31 +16,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    conn = op.get_context().connection
-    inspector = inspect(conn)
+    op.drop_index("ix_evidence_ai_system_id", table_name="evidence")
+    op.drop_index("ix_evidence_assessment_id", table_name="evidence")
+    op.drop_column("evidence", "ai_system_id")
+    op.drop_column("evidence", "assessment_id")
 
-    evidence_cols = {col["name"] for col in inspector.get_columns("evidence")}
-    evidence_indexes = {idx["name"] for idx in inspector.get_indexes("evidence")}
-    existing_tables = set(inspector.get_table_names())
-
-    for fk in inspector.get_foreign_keys("evidence"):
-        if fk["referred_table"] in ("ai_systems", "assessments"):
-            op.drop_constraint(fk["name"], "evidence", type_="foreignkey")
-
-    if "ix_evidence_ai_system_id" in evidence_indexes:
-        op.drop_index("ix_evidence_ai_system_id", table_name="evidence")
-    if "ix_evidence_assessment_id" in evidence_indexes:
-        op.drop_index("ix_evidence_assessment_id", table_name="evidence")
-    if "ai_system_id" in evidence_cols:
-        op.drop_column("evidence", "ai_system_id")
-    if "assessment_id" in evidence_cols:
-        op.drop_column("evidence", "assessment_id")
-
-    if "evidence_obligations" in existing_tables:
-        eo_indexes = {idx["name"] for idx in inspector.get_indexes("evidence_obligations")}
-        if "ix_evidence_obligations_obligation_id" in eo_indexes:
-            op.drop_index("ix_evidence_obligations_obligation_id", table_name="evidence_obligations")
-        op.drop_table("evidence_obligations")
+    op.drop_index("ix_evidence_obligations_obligation_id", table_name="evidence_obligations")
+    op.drop_table("evidence_obligations")
 
 
 def downgrade() -> None:
