@@ -265,6 +265,7 @@ class AISystemResponse(BaseModel):
     compliance_officer_username: str | None
     business_assignee_username: str | None
     technical_assignee_username: str | None
+    info_requested_section: str | None = None
     questionnaire_answers: dict | None
     registration_documents: list[RegistrationDocument] | None = None
 

@@ -109,7 +109,14 @@ async def update_system(system_id: str, body: AISystemUpdate, request: Request) 
             raise HTTPException(404, f"System {system_id} not found")
 
         flag_updates = CLASSIFIER_INPUTS & updates.keys()
-        technical_section_edit = bool(flag_updates) and row.workflow_status == "technical_pending"
+        # The technical section (manual_questionnaire flag checkboxes) is editable in
+        # technical_pending, and while an info request has reopened the technical section.
+        technical_reopened = (
+            row.workflow_status == "info_requested" and row.info_requested_section == "technical"
+        )
+        technical_section_edit = bool(flag_updates) and (
+            row.workflow_status == "technical_pending" or technical_reopened
+        )
 
         if technical_section_edit:
             # Manual-questionnaire mode: the technical section is a checkbox form. Who may
@@ -119,7 +126,7 @@ async def update_system(system_id: str, body: AISystemUpdate, request: Request) 
         elif row.assignee_username and current_user != row.assignee_username:
             raise HTTPException(403, "Only the assigned user may update this system")
 
-        if flag_updates and row.workflow_status not in ("draft", "rejected", "technical_pending"):
+        if flag_updates and row.workflow_status not in ("draft", "rejected", "technical_pending") and not technical_reopened:
             raise HTTPException(422, "Risk flags can only be changed while the system is in draft, rejected, or technical_pending state")
 
         for field, value in updates.items():
@@ -282,10 +289,15 @@ async def patch_questionnaire_answers(system_id: str, body: QuestionnaireAnswers
             raise HTTPException(404, f"System {system_id} not found")
 
         # Business answers are editable in draft (creator pre-fill) or business_pending;
-        # technical answers only in technical_pending. The section edit-lock then decides
-        # who (owner vs active sub-assignee) may actually write.
+        # technical answers only in technical_pending. During an info request the CO has
+        # reopened exactly one section (info_requested_section) for revision. The section
+        # edit-lock then decides who (owner vs active sub-assignee) may actually write.
         allowed_states = ("draft", "business_pending") if body.section == "business" else ("technical_pending",)
-        if row.workflow_status not in allowed_states:
+        info_reopened = (
+            row.workflow_status == "info_requested"
+            and row.info_requested_section == body.section
+        )
+        if row.workflow_status not in allowed_states and not info_reopened:
             raise HTTPException(
                 422,
                 f"The '{body.section}' section can only be updated while the system is in "

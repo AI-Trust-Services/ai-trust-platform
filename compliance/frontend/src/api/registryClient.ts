@@ -40,6 +40,9 @@ export const registryClient = {
   submitTechnicalSection: (systemId: string, note?: string) =>
     request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-technical`, { method: "POST", ...json({ note: note ?? null }) }),
 
+  submitInfo: (systemId: string, note?: string) =>
+    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-info`, { method: "POST", ...json({ note: note ?? null }) }),
+
   getWorkflow: (systemId: string) =>
     request<WorkflowStep[]>(`/systems/${systemId}/workflow`),
 
@@ -116,9 +119,9 @@ export const registryClient = {
       method: "POST", ...json({ note, assignee_username: assigneeUsername, send_to: sendTo }),
     }),
 
-  requestInfo: (systemId: string, contributorUsername: string, note: string) =>
+  requestInfo: (systemId: string, section: "business" | "technical", note: string) =>
     request<unknown>(`/systems/${encodeURIComponent(systemId)}/workflow/request-info`, {
-      method: "POST", ...json({ contributor_username: contributorUsername, note }),
+      method: "POST", ...json({ section, note }),
     }),
 
   resetWorkflow: (systemId: string) =>

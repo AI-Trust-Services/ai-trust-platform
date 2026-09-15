@@ -576,7 +576,8 @@ async def request_info(
     background_tasks: BackgroundTasks,
     _: str = Depends(require_permission(SYSTEMS_APPROVE)),
 ):
-    """CO sends a system in review back to a specific contributor for more information."""
+    """CO sends a system in review back to a specific section for more information.
+    The recipient is that section's current owner."""
     current_user = _current_user(request)
 
     async with SessionLocal() as session:
@@ -589,15 +590,20 @@ async def request_info(
         if row.workflow_status != "pending_review":
             raise HTTPException(422, f"Cannot request info from status '{row.workflow_status}'")
 
+        target_assignee = section_owner(row, body.section)
+        if not target_assignee:
+            raise HTTPException(422, f"The '{body.section}' section has no assigned owner to return it to")
+
         row.workflow_status = "info_requested"
-        row.assignee_username = body.contributor_username
+        row.info_requested_section = body.section
+        row.assignee_username = target_assignee
 
         step = SystemWorkflowStep(
             id=new_id("SWS"),
             system_id=system_id,
             step="info_requested",
             actor_username=current_user,
-            assignee_username=body.contributor_username,
+            assignee_username=target_assignee,
             note=body.note,
         )
         session.add(step)
@@ -606,12 +612,13 @@ async def request_info(
         result_steps = await _get_steps(session, system_id)
 
     logger.info("system.info_requested", extra={
-        "system_id": system_id, "by": current_user, "contributor": body.contributor_username,
+        "system_id": system_id, "by": current_user,
+        "section": body.section, "contributor": target_assignee,
     })
 
     background_tasks.add_task(
         email_sender.notify,
-        to_username=body.contributor_username,
+        to_username=target_assignee,
         subject=f"[{{platform_name}}] More information needed for '{system_name}'",
         body=(
             f"Hi,\n\n"
@@ -661,6 +668,7 @@ async def submit_info(
 
         row.workflow_status = "pending_review"
         row.assignee_username = row.compliance_officer_username
+        row.info_requested_section = None
 
         step = SystemWorkflowStep(
             id=new_id("SWS"),

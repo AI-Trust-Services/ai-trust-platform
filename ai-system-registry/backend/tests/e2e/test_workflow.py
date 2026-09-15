@@ -314,3 +314,99 @@ async def test_rejected_system_can_be_resubmitted(client: httpx.AsyncClient):
         f"/v1/systems/{system_id}/workflow/submit-technical", json={}, headers=_hdr(_TECH)
     )).status_code == 200
     assert (await _status(client, system_id)).json()["workflow_status"] == "pending_review"
+
+
+# ---------------------------------------------------------------------------
+# POST /systems/{id}/workflow/request-info  (CO bounces one section back)
+# ---------------------------------------------------------------------------
+
+async def test_request_info_targets_section_and_routes_to_owner(client: httpx.AsyncClient):
+    system_id = await _drive_to_pending_review(client)
+
+    r = await client.post(
+        f"/v1/systems/{system_id}/workflow/request-info",
+        json={"section": "business", "note": "clarify the use case owner"},
+        headers=_hdr(_OFFICER),
+    )
+    assert r.status_code == 200
+    assert r.json()[-1]["step"] == "info_requested"
+
+    system = (await _status(client, system_id)).json()
+    assert system["workflow_status"] == "info_requested"
+    assert system["info_requested_section"] == "business"
+    # Recipient is derived from the section owner, not hand-picked.
+    assert system["assignee_username"] == _BIZ
+
+
+async def test_request_info_reopens_only_the_targeted_section(client: httpx.AsyncClient):
+    system_id = await _drive_to_pending_review(client)
+    assert (await client.post(
+        f"/v1/systems/{system_id}/workflow/request-info",
+        json={"section": "business", "note": "clarify"},
+        headers=_hdr(_OFFICER),
+    )).status_code == 200
+
+    # The business owner may edit business answers while info is requested…
+    assert (await client.patch(
+        f"/v1/systems/{system_id}/questionnaire",
+        json={"section": "business", "answers": {"use_case_owner": "Updated Owner"}},
+        headers=_hdr(_BIZ),
+    )).status_code == 200
+
+    # …but the untargeted technical section stays locked.
+    r = await client.patch(
+        f"/v1/systems/{system_id}/questionnaire",
+        json={"section": "technical", "answers": {"data_and_inputs": "x"}},
+        headers=_hdr(_TECH),
+    )
+    assert r.status_code == 422
+
+
+async def test_technical_info_request_allows_flag_edits_then_resubmit(client: httpx.AsyncClient):
+    system_id = await _drive_to_pending_review(client)
+    assert (await client.post(
+        f"/v1/systems/{system_id}/workflow/request-info",
+        json={"section": "technical", "note": "confirm GPAI status"},
+        headers=_hdr(_OFFICER),
+    )).status_code == 200
+    system = (await _status(client, system_id)).json()
+    assert system["info_requested_section"] == "technical"
+    assert system["assignee_username"] == _TECH
+
+    # Manual-questionnaire technical section is the classifier flags — editable now.
+    assert (await client.put(
+        f"/v1/systems/{system_id}",
+        json={"is_gpai": True},
+        headers=_hdr(_TECH),
+    )).status_code == 200
+
+    # Resubmit returns to the CO and clears the reopened-section marker.
+    assert (await client.post(
+        f"/v1/systems/{system_id}/workflow/submit-info", json={}, headers=_hdr(_TECH)
+    )).status_code == 200
+    system = (await _status(client, system_id)).json()
+    assert system["workflow_status"] == "pending_review"
+    assert system["info_requested_section"] is None
+    assert system["assignee_username"] == _OFFICER
+
+
+async def test_request_info_rejected_for_non_officer(client: httpx.AsyncClient):
+    system_id = await _drive_to_pending_review(client)
+    r = await client.post(
+        f"/v1/systems/{system_id}/workflow/request-info",
+        json={"section": "business", "note": "nope"},
+        headers=_hdr("intruder"),
+    )
+    assert r.status_code == 403
+
+
+async def test_request_info_rejected_from_invalid_status(client: httpx.AsyncClient):
+    # A freshly registered draft is not in pending_review.
+    system_id = await _register(client)
+    r = await client.post(
+        f"/v1/systems/{system_id}/workflow/request-info",
+        json={"section": "business", "note": "too early"},
+        headers=_hdr(_OFFICER),
+    )
+    assert r.status_code == 422
+

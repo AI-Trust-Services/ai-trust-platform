@@ -620,3 +620,65 @@ async def test_control_owner_carried_forward_from_prior(client: httpx.AsyncClien
                if c["control_ref"] == target["control_ref"] and c["id"] != target["id"]]
     assert len(carried) == 1
     assert carried[0]["owner"] == "Alice"
+
+
+# ---------------------------------------------------------------------------
+# reopen + advance-from-classification idempotency (CO bounce-back flow)
+# ---------------------------------------------------------------------------
+
+async def _set_system_tier(system_id: str, tier: str) -> None:
+    """Directly set a system's tier (simulates risk classification completing)."""
+    from sqlalchemy import update
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from ai_trust_persistence.models import AISystem
+    from tests.e2e.conftest import _test_engine
+
+    async with AsyncSession(_test_engine) as session:
+        await session.execute(update(AISystem).where(AISystem.id == system_id).values(tier=tier))
+        await session.commit()
+
+
+async def test_reopen_reverts_pending_review_to_questionnaire_pending(client: httpx.AsyncClient):
+    system = await create_system(tier="pending")
+    ass = await create_assessment(client, system["id"])
+    assert ass["status"] == "questionnaire_pending"
+
+    await _set_system_tier(system["id"], "high")
+    r = await client.post(f"/v1/assessments/{ass['id']}/advance-from-classification")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "pending_review"
+
+    r = await client.post(f"/v1/assessments/{ass['id']}/reopen")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "questionnaire_pending"
+
+
+async def test_reopen_rejects_non_pending_review(client: httpx.AsyncClient):
+    # A known-tier assessment starts in draft, not pending_review → cannot reopen.
+    system = await create_system(tier="high")
+    ass = await create_assessment(client, system["id"])
+    assert ass["status"] == "draft"
+    r = await client.post(f"/v1/assessments/{ass['id']}/reopen")
+    assert r.status_code == 422
+
+
+async def test_advance_from_classification_is_idempotent_after_reopen(client: httpx.AsyncClient):
+    system = await create_system(tier="pending")
+    ass = await create_assessment(client, system["id"])
+    await _set_system_tier(system["id"], "high")
+
+    r = await client.post(f"/v1/assessments/{ass['id']}/advance-from-classification")
+    assert r.status_code == 200, r.text
+    obs1 = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
+    ctl1 = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
+    assert len(obs1) > 0
+
+    # Bounce back and re-advance — obligations/controls must NOT be duplicated.
+    await client.post(f"/v1/assessments/{ass['id']}/reopen")
+    r = await client.post(f"/v1/assessments/{ass['id']}/advance-from-classification")
+    assert r.status_code == 200, r.text
+    obs2 = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
+    ctl2 = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
+    assert len(obs2) == len(obs1)
+    assert len(ctl2) == len(ctl1)
