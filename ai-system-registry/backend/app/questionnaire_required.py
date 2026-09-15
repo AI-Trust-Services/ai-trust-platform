@@ -115,7 +115,6 @@ REQUIRED_BUSINESS: list[tuple[str, str]] = [
     ("use_case_status", "answers"),
     ("use_case", "system"),
     ("planned_modifications", "answers"),
-    ("entity_role", "answers"),
     ("exception_category", "answers"),
     ("sector_legislation", "answers"),
 ]

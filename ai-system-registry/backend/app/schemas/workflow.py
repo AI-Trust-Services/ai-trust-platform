@@ -82,8 +82,9 @@ class WorkflowSubReclaimRequest(BaseModel):
 
 
 class WorkflowRequestInfoRequest(BaseModel):
-    """CO sends a system back to a specific contributor for more information."""
-    contributor_username: str
+    """CO sends a system back for revision of one section. The recipient is derived
+    from that section's owner (business_assignee / technical_assignee)."""
+    section: Literal["business", "technical"]
     note: str
 
 
