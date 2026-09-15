@@ -78,7 +78,7 @@ export default function ObligationsPage() {
     }
   }
 
-  function closePanel() { setSelected(null); setDetail(null); setDetailControls([]); setDetailEvidence([]); }
+  function closePanel() { setSelected(null); setDetail(null); setDetailRequirements([]); setDetailEvidence([]); }
 
   async function changeStatus(id: string, status: string) {
     try {
