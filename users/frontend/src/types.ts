@@ -59,6 +59,7 @@ export interface CustomRole {
   name: string;
   description: string;
   permissions: string[];
+  alert_categories: string[] | null;
   created_at: string;
 }
 
@@ -66,9 +67,11 @@ export interface CustomRoleCreate {
   name: string;
   description: string;
   permissions: string[];
+  alert_categories?: string[] | null;
 }
 
 export interface CustomRoleUpdate {
   description?: string;
   permissions?: string[];
+  alert_categories?: string[] | null;
 }

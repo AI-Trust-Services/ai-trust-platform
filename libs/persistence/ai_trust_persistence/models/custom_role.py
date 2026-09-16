@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, String, Text, func
+from sqlalchemy import JSON, Column, DateTime, String, Text, func
 from ai_trust_persistence.database import Base
 
 
@@ -9,3 +9,4 @@ class CustomRole(Base):
     name = Column(String(128), nullable=False, unique=True)
     description = Column(Text(), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    alert_categories = Column(JSON, nullable=True)
