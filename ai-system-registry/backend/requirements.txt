@@ -5,7 +5,7 @@ httpx==0.28.1
 PyJWT[crypto]==2.13.0
 aiosmtplib==3.0.2
 python-multipart==0.0.31
-openai==1.51.0
+openai==1.59.9
 pypdf==6.16.1
 python-docx==1.1.2
 python-pptx==1.0.2
