@@ -85,9 +85,9 @@ SHOOT_DOMAIN="${APP_HOST#*.}"
 # subdomain derived from the shoot domain so it doesn't collide with ai-trust or
 # with other namespaces on the same cluster.
 if [[ "$NAMESPACE" != "ai-trust" ]]; then
-  APP_HOST="${NAMESPACE}.${SHOOT_DOMAIN}"
-  KEYCLOAK_HOST="keycloak.${NAMESPACE}.${SHOOT_DOMAIN}"
-  MINIO_HOST="minio.${NAMESPACE}.${SHOOT_DOMAIN}"
+  APP_HOST="${NAMESPACE}.${APP_HOST}"
+  KEYCLOAK_HOST="${NAMESPACE}.${KEYCLOAK_HOST}"
+  MINIO_HOST="${NAMESPACE}.${MINIO_HOST}"
 fi
 
 echo "KUBECONFIG: ${KUBECONFIG:-<not set>}"
@@ -253,6 +253,7 @@ echo "    If you used gardenctl to authenticate, run: eval \$(gardenctl kubectl-
 echo ""
 echo "    Check certificate status:"
 echo "      kubectl get certificate.cert.gardener.cloud ai-trust-tls -n ${NAMESPACE}"
+echo "      kubectl describe certificate.cert.gardener.cloud ai-trust-tls -n ${NAMESPACE}"
 echo ""
 echo "    Bootstrap and deploy the platform:"
 echo "      ai-trust namespace: gh workflow run bootstrap-gardener.yml --field cluster=${CLUSTER_NAME}"
