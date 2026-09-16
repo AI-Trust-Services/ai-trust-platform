@@ -28,14 +28,14 @@ def test_new_id_hex_suffix():
 
 
 def test_new_id_unique():
-    ids = {new_id("CTL") for _ in range(100)}
+    ids = {new_id("REQ") for _ in range(100)}
     assert len(ids) == 100
 
 
 def test_new_id_different_prefixes():
     assert new_id("ASS").startswith("ASS-")
     assert new_id("OBL").startswith("OBL-")
-    assert new_id("CTL").startswith("CTL-")
+    assert new_id("REQ").startswith("REQ-")
     assert new_id("EVD").startswith("EVD-")
 
 

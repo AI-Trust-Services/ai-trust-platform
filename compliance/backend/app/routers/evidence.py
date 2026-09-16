@@ -16,15 +16,15 @@ from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models import (
     AISystem,
     Assessment,
-    Control,
+    Requirement,
     Evidence,
     EvidenceVersion,
     Obligation,
-    evidence_controls,
+    evidence_requirements,
     evidence_obligations,
 )
 from app import minio_client
-from app.cascade import refresh_control_effectiveness, refresh_obligation, refresh_obligations_for_control
+from app.cascade import refresh_requirement_effectiveness, refresh_obligation, refresh_obligations_for_requirement
 from app.ids import new_id
 from app.schemas import (
     DownloadUrlResponse,
@@ -71,18 +71,18 @@ async def _load(session: AsyncSession, evidence_id: str) -> Evidence:
 
 
 async def _linked_ids(session: AsyncSession, evidence_id: str) -> tuple[list[str], list[str]]:
-    control_ids = (await session.execute(
-        select(evidence_controls.c.control_id).where(evidence_controls.c.evidence_id == evidence_id)
+    requirement_ids = (await session.execute(
+        select(evidence_requirements.c.requirement_id).where(evidence_requirements.c.evidence_id == evidence_id)
     )).scalars().all()
     obligation_ids = (await session.execute(
         select(evidence_obligations.c.obligation_id).where(evidence_obligations.c.evidence_id == evidence_id)
     )).scalars().all()
-    return list(control_ids), list(obligation_ids)
+    return list(requirement_ids), list(obligation_ids)
 
 
 @router.get("/evidence", response_model=list[EvidenceResponse], dependencies=[Depends(require_permission(EVIDENCE_READ))])
 async def list_evidence(
-    control_id: str | None = Query(default=None),
+    requirement_id: str | None = Query(default=None),
     obligation_id: str | None = Query(default=None),
     ai_system_id: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
@@ -90,10 +90,10 @@ async def list_evidence(
 ) -> list[EvidenceResponse]:
     async with SessionLocal() as session:
         stmt = select(Evidence).order_by(Evidence.created_at.desc())
-        if control_id:
+        if requirement_id:
             stmt = stmt.join(
-                evidence_controls, evidence_controls.c.evidence_id == Evidence.id
-            ).where(evidence_controls.c.control_id == control_id)
+                evidence_requirements, evidence_requirements.c.evidence_id == Evidence.id
+            ).where(evidence_requirements.c.requirement_id == requirement_id)
         if obligation_id:
             stmt = stmt.join(
                 evidence_obligations, evidence_obligations.c.evidence_id == Evidence.id
@@ -111,7 +111,7 @@ async def create_evidence(
     title: str = Form(...),
     description: str = Form(default=""),
     evidence_type: str = Form(default="document"),
-    control_ids: list[str] = Form(default=[]),
+    requirement_ids: list[str] = Form(default=[]),
     obligation_ids: list[str] = Form(default=[]),
     ai_system_id: str | None = Form(default=None),
     assessment_id: str | None = Form(default=None),
@@ -126,8 +126,8 @@ async def create_evidence(
     if evidence_type not in VALID_EVIDENCE_TYPES:
         raise HTTPException(422, f"invalid evidence type '{evidence_type}'")
     # At least one link target is required (spec EVD-FR-02).
-    if not any([control_ids, obligation_ids, ai_system_id, assessment_id]):
-        raise HTTPException(422, "Evidence must link to at least one of: control, obligation, AI system, or assessment")
+    if not any([requirement_ids, obligation_ids, ai_system_id, assessment_id]):
+        raise HTTPException(422, "Evidence must link to at least one of: requirement, obligation, AI system, or assessment")
 
     v_from = _parse_date(validity_from, "validity_from")
     v_until = _parse_date(validity_until, "validity_until")
@@ -135,11 +135,11 @@ async def create_evidence(
     # 1) Validate every supplied link target in a short-lived session, so we
     #    return clean 404s and never touch object storage on a bad reference.
     async with SessionLocal() as session:
-        for cid in control_ids:
+        for cid in requirement_ids:
             if not (await session.execute(
-                select(Control.id).where(Control.id == cid)
+                select(Requirement.id).where(Requirement.id == cid)
             )).scalar_one_or_none():
-                raise HTTPException(404, f"Control {cid} not found")
+                raise HTTPException(404, f"Requirement {cid} not found")
         for oid in obligation_ids:
             if not (await session.execute(
                 select(Obligation.id).where(Obligation.id == oid)
@@ -205,9 +205,9 @@ async def create_evidence(
             session.add(row)
             await session.flush()
 
-            for cid in control_ids:
-                await session.execute(pg_insert(evidence_controls).values(
-                    evidence_id=evidence_id, control_id=cid).on_conflict_do_nothing())
+            for cid in requirement_ids:
+                await session.execute(pg_insert(evidence_requirements).values(
+                    evidence_id=evidence_id, requirement_id=cid).on_conflict_do_nothing())
             for oid in obligation_ids:
                 await session.execute(pg_insert(evidence_obligations).values(
                     evidence_id=evidence_id, obligation_id=oid).on_conflict_do_nothing())
@@ -223,7 +223,7 @@ async def create_evidence(
             )
             await session.commit()
             await session.refresh(row)
-            linked_control_ids, linked_obligation_ids = await _linked_ids(session, evidence_id)
+            linked_requirement_ids, linked_obligation_ids = await _linked_ids(session, evidence_id)
     except Exception:
         if file_path:
             await minio_client.delete_file(file_path)
@@ -233,7 +233,7 @@ async def create_evidence(
         "evidence_id": evidence_id, "has_file": bool(file_name), "size": file_size,
     })
     detail = EvidenceDetailResponse.model_validate(row)
-    detail.control_ids = linked_control_ids
+    detail.requirement_ids = linked_requirement_ids
     detail.obligation_ids = linked_obligation_ids
     return detail
 
@@ -242,9 +242,9 @@ async def create_evidence(
 async def get_evidence(evidence_id: str) -> EvidenceDetailResponse:
     async with SessionLocal() as session:
         row = await _load(session, evidence_id)
-        control_ids, obligation_ids = await _linked_ids(session, evidence_id)
+        requirement_ids, obligation_ids = await _linked_ids(session, evidence_id)
         detail = EvidenceDetailResponse.model_validate(row)
-        detail.control_ids = control_ids
+        detail.requirement_ids = requirement_ids
         detail.obligation_ids = obligation_ids
         return detail
 
@@ -269,7 +269,7 @@ async def update_evidence(evidence_id: str, body: EvidenceUpdate) -> EvidenceRes
             setattr(row, field, value)
         row.updated_at = datetime.now(timezone.utc)
         await session.flush()
-        # A manual status change (e.g. to/from approved) affects control effectiveness.
+        # A manual status change (e.g. to/from approved) affects requirement effectiveness.
         if "status" in updates:
             await _cascade_from_evidence(session, evidence_id)
         await session.commit()
@@ -288,13 +288,13 @@ async def delete_evidence(evidence_id: str, request: Request) -> dict:
         ai_system_name: str | None = None
         if ai_system_id:
             ai_system_name = await session.scalar(select(AISystem.name).where(AISystem.id == ai_system_id))
-        control_ids, _ = await _linked_ids(session, evidence_id)
+        requirement_ids, _ = await _linked_ids(session, evidence_id)
         await session.delete(row)
         await session.flush()
-        # Removing evidence may drop a control below 'effective'.
-        for cid in control_ids:
-            await refresh_control_effectiveness(session, cid)
-            await refresh_obligations_for_control(session, cid)
+        # Removing evidence may drop a requirement below 'effective'.
+        for cid in requirement_ids:
+            await refresh_requirement_effectiveness(session, cid)
+            await refresh_obligations_for_requirement(session, cid)
         log_audit_event(
             session,
             actor=current_user,
@@ -353,14 +353,14 @@ async def _set_status(evidence_id: str, status: str, actor: str) -> EvidenceResp
 
 
 async def _cascade_from_evidence(session: AsyncSession, evidence_id: str) -> None:
-    """Re-evaluate every control and directly-linked obligation this evidence backs."""
-    control_ids = (await session.execute(
-        select(evidence_controls.c.control_id).where(evidence_controls.c.evidence_id == evidence_id)
+    """Re-evaluate every requirement and directly-linked obligation this evidence backs."""
+    requirement_ids = (await session.execute(
+        select(evidence_requirements.c.requirement_id).where(evidence_requirements.c.evidence_id == evidence_id)
     )).scalars().all()
-    for cid in control_ids:
-        await refresh_control_effectiveness(session, cid)
-        await refresh_obligations_for_control(session, cid)
-    # Evidence can also be linked directly to obligations (without a control
+    for cid in requirement_ids:
+        await refresh_requirement_effectiveness(session, cid)
+        await refresh_obligations_for_requirement(session, cid)
+    # Evidence can also be linked directly to obligations (without a requirement
     # intermediary). Refresh those too so their status and assessment score stay in sync.
     obligation_ids = (await session.execute(
         select(evidence_obligations.c.obligation_id).where(evidence_obligations.c.evidence_id == evidence_id)
@@ -411,7 +411,7 @@ async def upload_evidence_version(
 
     # Write transaction. If it fails, delete the orphaned new file.
     old_file_path = ""
-    linked_control_ids: list[str] = []
+    linked_requirement_ids: list[str] = []
     linked_obligation_ids: list[str] = []
     try:
         async with SessionLocal() as session:
@@ -442,7 +442,7 @@ async def upload_evidence_version(
 
             await session.commit()
             await session.refresh(row)
-            linked_control_ids, linked_obligation_ids = await _linked_ids(session, evidence_id)
+            linked_requirement_ids, linked_obligation_ids = await _linked_ids(session, evidence_id)
     except Exception:
         await minio_client.delete_file(new_file_path)
         raise
@@ -455,6 +455,6 @@ async def upload_evidence_version(
         "evidence_id": evidence_id, "version_label": version_label,
     })
     detail = EvidenceDetailResponse.model_validate(row)
-    detail.control_ids = linked_control_ids
+    detail.requirement_ids = linked_requirement_ids
     detail.obligation_ids = linked_obligation_ids
     return detail

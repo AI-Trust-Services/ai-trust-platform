@@ -1,9 +1,9 @@
-"""Unit tests for control_templates.controls_for() and the tier filter."""
+"""Unit tests for requirement_templates.requirements_for() and the tier filter."""
 from __future__ import annotations
 
-from app.control_templates import _CONTROL_TEMPLATES, _tier_allows, controls_for
+from app.requirement_templates import _REQUIREMENT_TEMPLATES, _tier_allows, requirements_for
 from app.obligation_templates import obligations_for
-from app.schemas.control import VALID_CONTROL_CATEGORIES
+from app.schemas.requirement import VALID_REQUIREMENT_CATEGORIES
 
 
 # ---------------------------------------------------------------------------
@@ -51,11 +51,11 @@ def test_unknown_tier_allows_only_all():
 
 
 # ---------------------------------------------------------------------------
-# controls_for — EU high-risk (counts mirror the source library mapping)
+# requirements_for — EU high-risk (counts mirror the source library mapping)
 # ---------------------------------------------------------------------------
 
 def test_art9_high_risk_controls():
-    ctls = controls_for("Art. 9", "high")
+    ctls = requirements_for("Art. 9", "high")
     assert len(ctls) == 5
     assert {c["slug"] for c in ctls} == {
         "AISEC-RM-002", "AISEC-RM-003", "AISEC-RM-004", "AISEC-RM-005", "AISEC-RM-006",
@@ -63,28 +63,28 @@ def test_art9_high_risk_controls():
 
 
 def test_art10_high_risk_controls():
-    assert len(controls_for("Art. 10", "high")) == 6
+    assert len(requirements_for("Art. 10", "high")) == 6
 
 
 def test_art11_high_risk_controls():
-    assert len(controls_for("Art. 11", "high")) == 5
+    assert len(requirements_for("Art. 11", "high")) == 5
 
 
 def test_art12_high_risk_controls():
-    assert len(controls_for("Art. 12", "high")) == 4
+    assert len(requirements_for("Art. 12", "high")) == 4
 
 
 def test_art14_high_risk_controls():
-    assert len(controls_for("Art. 14", "high")) == 4
+    assert len(requirements_for("Art. 14", "high")) == 4
 
 
 def test_art15_high_risk_controls():
     # AC (2) + RB (3) + CS (6) = 11
-    assert len(controls_for("Art. 15", "high")) == 11
+    assert len(requirements_for("Art. 15", "high")) == 11
 
 
 def test_controls_have_required_fields():
-    for c in controls_for("Art. 15", "high"):
+    for c in requirements_for("Art. 15", "high"):
         assert c["slug"]
         assert c["title"]
         assert c["description"]
@@ -93,60 +93,60 @@ def test_controls_have_required_fields():
 
 
 # ---------------------------------------------------------------------------
-# controls_for — tier scoping
+# requirements_for — tier scoping
 # ---------------------------------------------------------------------------
 
 def test_prohibited_controls_only_for_prohibited_tier():
-    assert len(controls_for("Art. 5", "prohibited")) == 8
+    assert len(requirements_for("Art. 5", "prohibited")) == 8
     # A high-risk assessment must never receive prohibited controls, even if it
     # somehow carried an Art. 5 obligation.
-    assert controls_for("Art. 5", "high") == []
+    assert requirements_for("Art. 5", "high") == []
 
 
 def test_gpai_systemic_controls_excluded_from_standard():
     # Art. 55 safety framework is GPAI-Systemic — not for gpai-standard.
-    assert len(controls_for("Art. 55", "gpai-systemic")) == 1
-    assert controls_for("Art. 55", "gpai-standard") == []
+    assert len(requirements_for("Art. 55", "gpai-systemic")) == 1
+    assert requirements_for("Art. 55", "gpai-standard") == []
 
 
 def test_gpai_standard_controls_present_for_both():
-    assert len(controls_for("Art. 53", "gpai-standard")) == 2
-    assert len(controls_for("Art. 53", "gpai-systemic")) == 2
+    assert len(requirements_for("Art. 53", "gpai-standard")) == 2
+    assert len(requirements_for("Art. 53", "gpai-systemic")) == 2
 
 
 def test_limited_controls():
-    assert len(controls_for("Art. 50(1)", "limited")) == 1
-    assert len(controls_for("Art. 50(2)", "limited")) == 1
-    assert len(controls_for("Art. 50(4)", "limited")) == 1
+    assert len(requirements_for("Art. 50(1)", "limited")) == 1
+    assert len(requirements_for("Art. 50(2)", "limited")) == 1
+    assert len(requirements_for("Art. 50(4)", "limited")) == 1
 
 
 def test_minimal_voluntary_controls():
-    assert len(controls_for("Art. 69", "minimal")) == 1
-    assert len(controls_for("Art. 69(a) (voluntary)", "minimal")) == 1
+    assert len(requirements_for("Art. 69", "minimal")) == 1
+    assert len(requirements_for("Art. 69(a) (voluntary)", "minimal")) == 1
 
 
 def test_nist_controls_tier_independent():
     for tier in ("high", "minimal", "prohibited"):
-        assert len(controls_for("GOVERN", tier)) == 1
+        assert len(requirements_for("GOVERN", tier)) == 1
 
 
 def test_iso_controls_tier_independent():
     for tier in ("high", "minimal", "prohibited"):
-        assert len(controls_for("Clause 4", tier)) == 1
+        assert len(requirements_for("Clause 4", tier)) == 1
 
 
 # ---------------------------------------------------------------------------
-# controls_for — unknown refs / independence
+# requirements_for — unknown refs / independence
 # ---------------------------------------------------------------------------
 
 def test_unknown_article_ref_returns_empty():
-    assert controls_for("Art. 999", "high") == []
+    assert requirements_for("Art. 999", "high") == []
 
 
 def test_returns_independent_lists():
-    a = controls_for("Art. 9", "high")
+    a = requirements_for("Art. 9", "high")
     a.clear()
-    assert len(controls_for("Art. 9", "high")) == 5
+    assert len(requirements_for("Art. 9", "high")) == 5
 
 
 # ---------------------------------------------------------------------------
@@ -159,30 +159,30 @@ def test_every_eu_obligation_has_controls_at_its_tier():
     gaps = []
     for tier in tiers:
         for ob in obligations_for("FRM-EU-AI-ACT", tier):
-            if not controls_for(ob["article_ref"], tier):
+            if not requirements_for(ob["article_ref"], tier):
                 gaps.append((tier, ob["article_ref"]))
-    assert gaps == [], f"obligations without controls: {gaps}"
+    assert gaps == [], f"obligations without requirements: {gaps}"
 
 
 def test_every_nist_obligation_has_controls():
     for ob in obligations_for("FRM-NIST-AI-RMF", "high"):
-        assert controls_for(ob["article_ref"], "high"), ob["article_ref"]
+        assert requirements_for(ob["article_ref"], "high"), ob["article_ref"]
 
 
 def test_every_iso_obligation_has_controls():
     for ob in obligations_for("FRM-ISO-42001", "high"):
-        assert controls_for(ob["article_ref"], "high"), ob["article_ref"]
+        assert requirements_for(ob["article_ref"], "high"), ob["article_ref"]
 
 
 def test_slugs_unique_within_each_article():
-    for ref, templates in _CONTROL_TEMPLATES.items():
+    for ref, templates in _REQUIREMENT_TEMPLATES.items():
         slugs = [t["slug"] for t in templates]
         assert len(slugs) == len(set(slugs)), f"duplicate slug in {ref}"
 
 
 def test_all_categories_are_valid():
-    # Generated controls must use categories a human can later edit without a
-    # ControlUpdate validation error (schemas.control.VALID_CONTROL_CATEGORIES).
-    for ref, templates in _CONTROL_TEMPLATES.items():
+    # Generated requirements must use categories a human can later edit without a
+    # ControlUpdate validation error (schemas.control.VALID_REQUIREMENT_CATEGORIES).
+    for ref, templates in _REQUIREMENT_TEMPLATES.items():
         for t in templates:
-            assert t["category"] in VALID_CONTROL_CATEGORIES, f"{ref}: {t['category']}"
+            assert t["category"] in VALID_REQUIREMENT_CATEGORIES, f"{ref}: {t['category']}"

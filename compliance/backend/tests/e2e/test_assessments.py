@@ -4,7 +4,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from tests.e2e.conftest import create_assessment, create_control, create_obligation, create_system
+from tests.e2e.conftest import create_assessment, create_requirement, create_obligation, create_system
 
 
 # ---------------------------------------------------------------------------
@@ -248,54 +248,54 @@ async def test_delete_assessment_404_on_missing(client: httpx.AsyncClient):
     assert r.status_code == 404
 
 
-async def test_delete_assessment_removes_generated_controls(client: httpx.AsyncClient):
-    # Auto-generated controls should be cleaned up when the assessment is deleted.
+async def test_delete_assessment_removes_generated_requirements(client: httpx.AsyncClient):
+    # Auto-generated requirements should be cleaned up when the assessment is deleted.
     system = await create_system(tier="minimal")
     ass = await create_assessment(client, system["id"])
-    before = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
+    before = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
     assert len(before) == 3
 
     r = await client.delete(f"/v1/assessments/{ass['id']}")
     assert r.status_code == 200
-    assert r.json()["controls_deleted"] == 3
+    assert r.json()["requirements_deleted"] == 3
 
-    after = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
+    after = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
     assert len(after) == 0
 
 
-async def test_delete_assessment_keeps_manual_controls(client: httpx.AsyncClient):
-    # Manually-created controls (no control_ref) must survive assessment deletion.
+async def test_delete_assessment_keeps_manual_requirements(client: httpx.AsyncClient):
+    # Manually-created requirements (no requirement_ref) must survive assessment deletion.
     system = await create_system(tier="minimal")
     ass = await create_assessment(client, system["id"])
-    manual = await create_control(client, system_id=system["id"], title="Manual control")
+    manual = await create_requirement(client, system_id=system["id"], title="Manual requirement")
 
     r = await client.delete(f"/v1/assessments/{ass['id']}")
     assert r.status_code == 200
-    assert r.json()["controls_deleted"] == 3  # only the 3 generated ones
+    assert r.json()["requirements_deleted"] == 3  # only the 3 generated ones
 
-    remaining = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
+    remaining = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
     ids = [c["id"] for c in remaining]
     assert ids == [manual["id"]]
 
 
-async def test_delete_assessment_keeps_shared_controls(client: httpx.AsyncClient):
-    # A generated control also linked to another assessment's obligation is kept.
+async def test_delete_assessment_keeps_shared_requirements(client: httpx.AsyncClient):
+    # A generated requirement also linked to another assessment's obligation is kept.
     system = await create_system(tier="minimal")
     ass1 = await create_assessment(client, system["id"])
     ass2 = await create_assessment(client, system["id"])
 
-    # Pick a generated control from ass1 and link it to an obligation of ass2.
-    controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
+    # Pick a generated requirement from ass1 and link it to an obligation of ass2.
+    requirements = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
     obs2 = (await client.get(f"/v1/obligations?assessment_id={ass2['id']}")).json()
-    shared = controls[0]
-    await client.post(f"/v1/controls/{shared['id']}/link/{obs2[0]['id']}")
+    shared = requirements[0]
+    await client.post(f"/v1/requirements/{shared['id']}/link/{obs2[0]['id']}")
 
     r = await client.delete(f"/v1/assessments/{ass1['id']}")
     assert r.status_code == 200
 
-    # The shared control must survive because it still links to ass2.
+    # The shared requirement must survive because it still links to ass2.
     remaining_ids = [c["id"] for c in
-                     (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()]
+                     (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()]
     assert shared["id"] in remaining_ids
 
 
@@ -444,133 +444,133 @@ async def test_approve_updates_system_compliance(client: httpx.AsyncClient):
 
 
 # ---------------------------------------------------------------------------
-# Control auto-generation (on assessment creation)
+# Requirement auto-generation (on assessment creation)
 # ---------------------------------------------------------------------------
 
-async def test_create_assessment_auto_generates_controls(client: httpx.AsyncClient):
-    # High-risk EU obligations (11) map to 41 tier-scoped control templates.
+async def test_create_assessment_auto_generates_requirements(client: httpx.AsyncClient):
+    # High-risk EU obligations (11) map to 41 tier-scoped requirement templates.
     system = await create_system(tier="high")
     await create_assessment(client, system["id"])
-    controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    assert len(controls) == 41
+    requirements = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
+    assert len(requirements) == 41
 
 
-async def test_generated_controls_have_control_ref(client: httpx.AsyncClient):
+async def test_generated_requirements_have_requirement_ref(client: httpx.AsyncClient):
     system = await create_system(tier="minimal")
     await create_assessment(client, system["id"])
-    controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    assert len(controls) == 3
-    for c in controls:
-        # control_ref is "{article_ref}:{slug}"
-        assert c["control_ref"]
-        assert ":" in c["control_ref"]
+    requirements = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
+    assert len(requirements) == 3
+    for c in requirements:
+        # requirement_ref is "{article_ref}:{slug}"
+        assert c["requirement_ref"]
+        assert ":" in c["requirement_ref"]
 
 
-async def test_generated_controls_linked_to_obligations(client: httpx.AsyncClient):
+async def test_generated_requirements_linked_to_obligations(client: httpx.AsyncClient):
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
     art9 = [o for o in obs if o["article_ref"] == "Art. 9"][0]
-    linked = (await client.get(f"/v1/controls?obligation_id={art9['id']}")).json()
-    assert len(linked) == 5  # Art. 9 -> 5 controls
+    linked = (await client.get(f"/v1/requirements?obligation_id={art9['id']}")).json()
+    assert len(linked) == 5  # Art. 9 -> 5 requirements
 
 
-async def test_generated_controls_flip_obligations_in_progress(client: httpx.AsyncClient):
-    # Cascade: linking >=1 non-fulfilled control moves obligation applicable -> in_progress.
+async def test_generated_requirements_flip_obligations_in_progress(client: httpx.AsyncClient):
+    # Cascade: linking >=1 non-fulfilled requirement moves obligation applicable -> in_progress.
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
     assert all(o["status"] == "in_progress" for o in obs)
 
 
-async def test_generated_controls_start_open(client: httpx.AsyncClient):
+async def test_generated_requirements_start_open(client: httpx.AsyncClient):
     system = await create_system(tier="minimal")
     await create_assessment(client, system["id"])
-    controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    assert all(c["status"] == "open" for c in controls)
+    requirements = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
+    assert all(c["status"] == "open" for c in requirements)
 
 
-async def test_prohibited_controls_scoped_to_prohibited_tier(client: httpx.AsyncClient):
-    # A prohibited assessment gets the 8 Art. 5 prohibited-practice controls.
+async def test_prohibited_requirements_scoped_to_prohibited_tier(client: httpx.AsyncClient):
+    # A prohibited assessment gets the 8 Art. 5 prohibited-practice requirements.
     system = await create_system(tier="prohibited")
     await create_assessment(client, system["id"])
-    controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    assert len(controls) == 8
-    assert all(c["control_ref"].startswith("Art. 5:") for c in controls)
+    requirements = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
+    assert len(requirements) == 8
+    assert all(c["requirement_ref"].startswith("Art. 5:") for c in requirements)
 
 
-async def test_unknown_tier_generates_no_controls(client: httpx.AsyncClient):
-    # No obligations -> no controls, assessment still created.
+async def test_unknown_tier_generates_no_requirements(client: httpx.AsyncClient):
+    # No obligations -> no requirements, assessment still created.
     system = await create_system(tier="unknown_tier")
     await create_assessment(client, system["id"])
-    controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    assert len(controls) == 0
+    requirements = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
+    assert len(requirements) == 0
 
 
 # ---------------------------------------------------------------------------
-# POST /assessments/{id}/generate-controls (standalone)
+# POST /assessments/{id}/generate-requirements (standalone)
 # ---------------------------------------------------------------------------
 
-async def test_generate_controls_skips_obligations_with_existing_controls(client: httpx.AsyncClient):
-    # Controls were already generated on create, so a re-run generates nothing new.
+async def test_generate_requirements_skips_obligations_with_existing_requirements(client: httpx.AsyncClient):
+    # Requirements were already generated on create, so a re-run generates nothing new.
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
-    r = await client.post(f"/v1/assessments/{ass['id']}/generate-controls")
+    r = await client.post(f"/v1/assessments/{ass['id']}/generate-requirements")
     assert r.status_code == 200
     assert r.json()["created"] == []
 
 
-async def test_generate_controls_creates_for_obligations_without_controls(client: httpx.AsyncClient):
-    # Manually create an obligation (no controls), then generate.
+async def test_generate_requirements_creates_for_obligations_without_requirements(client: httpx.AsyncClient):
+    # Manually create an obligation (no requirements), then generate.
     system = await create_system(tier="minimal")
     ass = await create_assessment(client, system["id"])
-    # Manual obligation with a template-backed article_ref but no controls yet.
+    # Manual obligation with a template-backed article_ref but no requirements yet.
     await create_obligation(client, ass["id"], article_ref="Art. 69", title="Manual")
-    # The auto-generated minimal obligations already have controls; only the manual
-    # Art. 69 obligation lacks them -> its 1 control is generated.
-    r = await client.post(f"/v1/assessments/{ass['id']}/generate-controls")
+    # The auto-generated minimal obligations already have requirements; only the manual
+    # Art. 69 obligation lacks them -> its 1 requirement is generated.
+    r = await client.post(f"/v1/assessments/{ass['id']}/generate-requirements")
     assert r.status_code == 200
     created = r.json()["created"]
     assert len(created) == 1
-    assert created[0]["control_ref"] == "Art. 69:AITP-VOL-001"
+    assert created[0]["requirement_ref"] == "Art. 69:AITP-VOL-001"
 
 
-async def test_generate_controls_approved_assessment_returns_409(client: httpx.AsyncClient):
+async def test_generate_requirements_approved_assessment_returns_409(client: httpx.AsyncClient):
     system = await create_system(tier="minimal")
     ass = await create_assessment(client, system["id"])
     await client.post(f"/v1/assessments/{ass['id']}/submit")
     await client.post(f"/v1/assessments/{ass['id']}/approve")
-    r = await client.post(f"/v1/assessments/{ass['id']}/generate-controls")
+    r = await client.post(f"/v1/assessments/{ass['id']}/generate-requirements")
     assert r.status_code == 409
 
 
-async def test_generate_controls_no_obligations_returns_422(client: httpx.AsyncClient):
+async def test_generate_requirements_no_obligations_returns_422(client: httpx.AsyncClient):
     system = await create_system(tier="unknown_tier")  # yields zero obligations
     ass = await create_assessment(client, system["id"])
-    r = await client.post(f"/v1/assessments/{ass['id']}/generate-controls")
+    r = await client.post(f"/v1/assessments/{ass['id']}/generate-requirements")
     assert r.status_code == 422
 
 
 # ---------------------------------------------------------------------------
-# Owner carry-forward for controls
+# Owner carry-forward for requirements
 # ---------------------------------------------------------------------------
 
-async def test_control_owner_carried_forward_from_prior(client: httpx.AsyncClient):
+async def test_requirement_owner_carried_forward_from_prior(client: httpx.AsyncClient):
     system = await create_system(tier="minimal")
 
-    # First assessment — set an owner on a generated control, then approve.
+    # First assessment — set an owner on a generated requirement, then approve.
     ass1 = await create_assessment(client, system["id"])
-    controls1 = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    target = controls1[0]
-    await client.put(f"/v1/controls/{target['id']}", json={"owner": "Alice"})
+    requirements1 = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
+    target = requirements1[0]
+    await client.put(f"/v1/requirements/{target['id']}", json={"owner": "Alice"})
     await client.post(f"/v1/assessments/{ass1['id']}/submit")
     await client.post(f"/v1/assessments/{ass1['id']}/approve")
 
-    # Second assessment — the control with the same control_ref carries Alice.
+    # Second assessment — the requirement with the same requirement_ref carries Alice.
     await create_assessment(client, system["id"])
-    all_controls = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
-    carried = [c for c in all_controls
-               if c["control_ref"] == target["control_ref"] and c["id"] != target["id"]]
+    all_requirements = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
+    carried = [c for c in all_requirements
+               if c["requirement_ref"] == target["requirement_ref"] and c["id"] != target["id"]]
     assert len(carried) == 1
     assert carried[0]["owner"] == "Alice"
 
