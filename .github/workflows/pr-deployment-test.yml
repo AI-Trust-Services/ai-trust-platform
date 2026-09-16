@@ -10,6 +10,9 @@ name: PR Deployment Test
 # Usage: comment "/garden-deploy" on a PR.
 
 on:
+  push:
+    branches:
+      - 193-pre-merge-check-integration-test-deployment
   issue_comment:
     types: [created]
 
@@ -25,10 +28,11 @@ jobs:
   dispatch:
     name: Parse and authorize /garden-deploy
     runs-on: ubuntu-latest
-    # Only run on PR comments that start with /garden-deploy
+    # Only run on PR comments that start with /garden-deploy (or on push for testing)
     if: |
-      github.event.issue.pull_request != null &&
-      startsWith(github.event.comment.body, '/garden-deploy')
+      github.event_name == 'push' ||
+      (github.event.issue.pull_request != null &&
+      startsWith(github.event.comment.body, '/garden-deploy'))
     outputs:
       pr_number: ${{ steps.pr.outputs.pr_number }}
       pr_sha: ${{ steps.pr.outputs.pr_sha }}
@@ -43,11 +47,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_NUMBER="${{ github.event.issue.number }}"
-          PR_DATA=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER})
-          PR_SHA=$(echo "$PR_DATA" | jq -r '.head.sha')
-          PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
-          PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            # Test mode: derive PR details from the push context
+            PR_DATA=$(gh api repos/${{ github.repository }}/pulls \
+              --jq "[.[] | select(.head.ref == \"${{ github.ref_name }}\")][0]")
+            PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number')
+            PR_SHA="${{ github.sha }}"
+            PR_BRANCH="${{ github.ref_name }}"
+            PR_AUTHOR="${{ github.actor }}"
+          else
+            PR_NUMBER="${{ github.event.issue.number }}"
+            PR_DATA=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER})
+            PR_SHA=$(echo "$PR_DATA" | jq -r '.head.sha')
+            PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
+            PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
+          fi
           echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
           echo "pr_sha=${PR_SHA}" >> "$GITHUB_OUTPUT"
           echo "pr_branch=${PR_BRANCH}" >> "$GITHUB_OUTPUT"
@@ -58,6 +72,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+            echo "Push event — skipping auth check."
+            exit 0
+          fi
           ACTOR="${{ github.event.comment.user.login }}"
           PR_AUTHOR="${{ steps.pr.outputs.pr_author }}"
           ORG=$(echo "${{ github.repository }}" | cut -d/ -f1)
