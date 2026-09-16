@@ -152,33 +152,25 @@ EOF
 echo "    Certificate requested — Gardener cert-service will issue via DNS-01 (takes ~1-2 min)"
 echo "    Monitor: kubectl get certificate.cert.gardener.cloud ai-trust-tls-${NAMESPACE} -n ${NAMESPACE} -w"
 
-# Traefik ServersTransport that raises the forwarding timeout for LLM-backed routes
-# (AI classification, document extraction). Traefik's default responseHeaderTimeout of
-# 60s cuts the connection mid-inference; Ollama classification takes 84-120s.
-#
-# Created here (one-time, cluster infra) rather than in the Helm chart on purpose:
-# the oauth2-proxy Service is annotated with
-#   traefik.ingress.kubernetes.io/service.serverstransport: ai-trust-llm-timeout@kubernetescrd
-# by the chart. If the chart also created this object, Helm would apply the Service
-# annotation and the ServersTransport in the same pass, and Traefik could reconcile the
-# Service before ingesting the ServersTransport — it would then fail to resolve the
-# reference, drop the backend, and return host-wide 404s until its next reconcile.
-# Creating it here, once, guarantees the object always predates any Helm deploy, so every
-# GitHub Actions rollout (in either direction) resolves the reference on the first try.
-# The Traefik CRDs (incl. serverstransports.traefik.io) are installed by the Traefik Helm
-# install in step [1/5] above, so this apply always succeeds.
+# Traefik ServersTransport that raises the forwarding timeout for LLM-backed routes.
+# Must live in the app namespace and be named <namespace>-llm-timeout because the
+# oauth2-proxy Service annotation references it as:
+#   traefik.ingress.kubernetes.io/service.serverstransport: <Release.Namespace>-llm-timeout@kubernetescrd
+# Created here (not in the Helm chart) so the object always predates any Helm deploy —
+# if the chart applied the annotation and the object in the same pass, Traefik could
+# reconcile the Service first, fail to resolve the reference, and return 404s site-wide.
 kubectl apply -f - <<EOF
 apiVersion: traefik.io/v1alpha1
 kind: ServersTransport
 metadata:
-  name: llm-timeout
-  namespace: ai-trust
+  name: ${NAMESPACE}-llm-timeout
+  namespace: ${NAMESPACE}
 spec:
   forwardingTimeouts:
     responseHeaderTimeout: 300s
     readIdleTimeout: 300s
 EOF
-echo "    Created ServersTransport/llm-timeout (300s forwarding timeout for LLM routes)"
+echo "    Created ServersTransport/${NAMESPACE}-llm-timeout (300s forwarding timeout for LLM routes)"
 
 echo ""
 if [[ "$FULL_INIT" == "true" ]]; then
