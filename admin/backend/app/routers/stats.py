@@ -4,12 +4,11 @@ import os
 
 import httpx
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from ai_trust_authorization.constants import IAM_MANAGE
 from ai_trust_authorization.permissions import require_permission
 from ai_trust_persistence.database import SessionLocal
-from ai_trust_persistence.models.ai_provider_settings import AIProviderSetting
 from ai_trust_persistence.models.platform_settings import PlatformSettings
 from ai_trust_logging import get_logger
 
@@ -62,20 +61,6 @@ async def _get_roles_count(username: str) -> int:
 @router.get("", response_model=AdminStatsResponse)
 async def get_stats(username: str = Depends(require_permission(IAM_MANAGE))) -> AdminStatsResponse:
     async with SessionLocal() as session:
-        ai_provider_count = await session.scalar(
-            select(func.count(func.distinct(AIProviderSetting.provider))).where(
-                AIProviderSetting.provider != "active"
-            )
-        ) or 0
-
-        active_row = await session.scalar(
-            select(AIProviderSetting).where(
-                AIProviderSetting.provider == "active",
-                AIProviderSetting.key == "provider",
-            )
-        )
-        active_provider = active_row.value if active_row else None
-
         settings_row = await session.scalar(
             select(PlatformSettings).where(PlatformSettings.id == 1)
         )
@@ -86,7 +71,5 @@ async def get_stats(username: str = Depends(require_permission(IAM_MANAGE))) -> 
     return AdminStatsResponse(
         user_count=user_count,
         role_count=role_count,
-        ai_provider_count=ai_provider_count,
-        active_provider=active_provider,
         mail_configured=mail_configured,
     )

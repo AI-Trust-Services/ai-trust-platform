@@ -12,7 +12,6 @@ from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_tenancy import install_tenant_middleware
 from ai_trust_persistence import SessionLocal
 from app import minio_client
-from app.llm.client import load_llm_config_from_db
 from app.routers import intake, intake_assist, systems, model_cards, workflow
 
 logger = get_logger(__name__)
@@ -20,7 +19,6 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await load_llm_config_from_db()
     try:
         await minio_client.ensure_bucket()
     except Exception as e:

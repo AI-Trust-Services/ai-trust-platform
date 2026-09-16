@@ -48,28 +48,7 @@ class GeneralSettingsUpdate(BaseModel):
     support_email: str | None = None
 
 
-class AiProviderSettings(BaseModel):
-    active_provider: str
-    ollama: dict[str, str | None]
-    external: dict[str, str | None]
-    has_ollama_api_key: bool
-    has_external_client_secret: bool
-
-
-class AiProviderUpdate(BaseModel):
-    active_provider: str
-    ollama: dict[str, str | None] | None = None
-    external: dict[str, str | None] | None = None
-
-
-class TestConnectionResponse(BaseModel):
-    success: bool
-    message: str
-
-
 class AdminStatsResponse(BaseModel):
     user_count: int
     role_count: int
-    ai_provider_count: int
-    active_provider: str | None
     mail_configured: bool

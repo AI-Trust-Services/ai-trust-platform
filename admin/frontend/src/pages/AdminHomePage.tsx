@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Shield, Users, ShieldCheck, Bot, Mail, Settings, RefreshCw } from "lucide-react";
+import { Shield, Users, ShieldCheck, Mail, Settings, RefreshCw } from "lucide-react";
 import LuigiClient from "@luigi-project/client";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -132,13 +132,6 @@ export default function AdminHomePage() {
           onAction={() => navigate("users-roles")}
         />
         <KpiTile
-          icon={<Bot className="size-5" />}
-          value={loading ? "…" : (stats?.ai_provider_count ?? 0)}
-          label="AI Providers"
-          actionLabel="Configure"
-          onAction={() => navigate("admin-ai-providers")}
-        />
-        <KpiTile
           icon={<Mail className="size-5" />}
           value={loading ? "…" : mailValue}
           label="Mail service"
@@ -161,12 +154,6 @@ export default function AdminHomePage() {
           title="Roles & permissions"
           description="Create and manage roles. Define permissions and access levels."
           path="users-roles"
-        />
-        <AdminCard
-          icon={<Bot className="size-4" />}
-          title="AI providers"
-          description="Configure and manage connections to AI providers used across the platform."
-          path="admin-ai-providers"
         />
         <AdminCard
           icon={<Mail className="size-4" />}

@@ -45,7 +45,6 @@
     "users-roles": ["iam:manage"],
     "audit": ["audit:read"],
     "admin-home": ["iam:manage"],
-    "admin-ai-providers": ["iam:manage"],
     "mail-service": ["iam:manage"],
     "admin-settings": ["iam:manage"],
   };
@@ -155,14 +154,6 @@
         viewUrl: "/audit/",
         navigationContext: "audit",
         viewGroup: "audit",
-      },
-      {
-        pathSegment: "admin-ai-providers",
-        label: "AI Providers",
-        icon: "ai",
-        viewUrl: "/admin/#/admin-ai-providers",
-        navigationContext: "admin-ai-providers",
-        viewGroup: "admin",
       },
       {
         pathSegment: "mail-service",

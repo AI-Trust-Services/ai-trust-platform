@@ -38,30 +38,3 @@ export interface GeneralSettingsUpdate {
   platform_name?: string | null;
   support_email?: string | null;
 }
-
-export interface AiProviderSettings {
-  active_provider: string;
-  ollama: Record<string, string | null>;
-  external: Record<string, string | null>;
-  has_ollama_api_key: boolean;
-  has_external_client_secret: boolean;
-}
-
-export interface AiProviderUpdate {
-  active_provider: string;
-  ollama?: Record<string, string | null>;
-  external?: Record<string, string | null>;
-}
-
-export interface TestConnectionResponse {
-  success: boolean;
-  message: string;
-}
-
-export interface AdminStats {
-  user_count: number;
-  role_count: number;
-  ai_provider_count: number;
-  active_provider: string | null;
-  mail_configured: boolean;
-}

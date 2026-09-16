@@ -42,68 +42,26 @@ AI_RESOURCE_GROUP = os.environ.get("AI_RESOURCE_GROUP", "default")
 AI_DEPLOYMENT_ID = os.environ.get("AI_DEPLOYMENT_ID", "")
 AI_API_VERSION = os.environ.get("AI_API_VERSION", "bedrock-2023-05-31")
 
-
-async def load_llm_config_from_db() -> None:
-    """Overwrite module globals from ai_provider_settings DB rows if present.
-
-    Called once from the registry lifespan. Falls back silently to env var
-    defaults if the table is empty or the DB is unavailable (e.g. CI with stub).
-    """
-    global LLM_PROVIDER, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, LLM_VISION_MODEL
-    global AI_CLIENT_ID, AI_CLIENT_SECRET, AI_AUTH_URL, AI_API_URL
-    global AI_RESOURCE_GROUP, AI_DEPLOYMENT_ID, AI_API_VERSION, _openai_client
-    try:
-        from sqlalchemy import select
-        from ai_trust_persistence.database import SessionLocal
-        from ai_trust_persistence.models.ai_provider_settings import AIProviderSetting
-
-        async with SessionLocal() as session:
-            rows = (await session.execute(select(AIProviderSetting))).scalars().all()
-
-        if not rows:
-            logger.info("llm.config_from_db_skipped", extra={"reason": "no rows in ai_provider_settings"})
-            return
-
-        kv = {(r.provider, r.key): r.value for r in rows}
-        active = kv.get(("active", "provider")) or LLM_PROVIDER
-        LLM_PROVIDER = active
-
-        if active == "ollama":
-            LLM_BASE_URL = kv.get(("ollama", "llm_base_url")) or LLM_BASE_URL
-            LLM_API_KEY = kv.get(("ollama", "llm_api_key")) or LLM_API_KEY
-            LLM_MODEL = kv.get(("ollama", "llm_model")) or LLM_MODEL
-            LLM_VISION_MODEL = kv.get(("ollama", "llm_vision_model")) or LLM_VISION_MODEL
-            _openai_client = None  # reset singleton so it picks up new base_url / api_key
-        elif active == "external":
-            AI_CLIENT_ID = kv.get(("external", "ai_client_id")) or AI_CLIENT_ID
-            AI_CLIENT_SECRET = kv.get(("external", "ai_client_secret")) or AI_CLIENT_SECRET
-            AI_AUTH_URL = kv.get(("external", "ai_auth_url")) or AI_AUTH_URL
-            AI_API_URL = (kv.get(("external", "ai_api_url")) or AI_API_URL).rstrip("/")
-            AI_RESOURCE_GROUP = kv.get(("external", "ai_resource_group")) or AI_RESOURCE_GROUP
-            AI_DEPLOYMENT_ID = kv.get(("external", "ai_deployment_id")) or AI_DEPLOYMENT_ID
-            AI_API_VERSION = kv.get(("external", "ai_api_version")) or AI_API_VERSION
-
-        logger.info("llm.config_loaded_from_db", extra={"provider": active})
-
-        if active == "external":
-            _missing = [
-                name for name, value in [
-                    ("AI_CLIENT_ID", AI_CLIENT_ID),
-                    ("AI_CLIENT_SECRET", AI_CLIENT_SECRET),
-                    ("AI_AUTH_URL", AI_AUTH_URL),
-                    ("AI_API_URL", AI_API_URL),
-                    ("AI_DEPLOYMENT_ID", AI_DEPLOYMENT_ID),
-                ]
-                if not value
-            ]
-            if _missing:
-                logger.warning(
-                    "llm.external_config_incomplete",
-                    extra={"missing": _missing},
-                )
-
-    except Exception as exc:
-        logger.warning("llm.db_config_load_failed", extra={"error": str(exc), "reason": "falling back to env vars"})
+# Fail fast on misconfiguration: when the external backend is selected, all
+# required credentials must be set — otherwise the first request dies deep
+# inside httpx with an opaque error. Mirrors the repo os.environ[...] convention.
+if LLM_PROVIDER == "external":
+    _missing = [
+        name
+        for name, value in [
+            ("AI_CLIENT_ID", AI_CLIENT_ID),
+            ("AI_CLIENT_SECRET", AI_CLIENT_SECRET),
+            ("AI_AUTH_URL", AI_AUTH_URL),
+            ("AI_API_URL", AI_API_URL),
+            ("AI_DEPLOYMENT_ID", AI_DEPLOYMENT_ID),
+        ]
+        if not value
+    ]
+    if _missing:
+        raise RuntimeError(
+            f"LLM_PROVIDER=external but required env vars are unset: {', '.join(_missing)}. "
+            "Set them in .env or switch to LLM_PROVIDER=stub / ollama."
+        )
 
 
 # ---------------------------------------------------------------------------

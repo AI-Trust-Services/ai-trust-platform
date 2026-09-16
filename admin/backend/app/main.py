@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_tenancy import install_tenant_middleware
-from app.routers import smtp, settings, ai_provider, stats
+from app.routers import smtp, settings, stats
 from app.startup import seed_settings_from_env
 
 logger = get_logger(__name__)
@@ -75,7 +75,6 @@ async def logging_middleware(request: Request, call_next) -> Response:
 
 app.include_router(smtp.router)
 app.include_router(settings.router)
-app.include_router(ai_provider.router)
 app.include_router(stats.router)
 
 
