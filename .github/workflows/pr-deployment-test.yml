@@ -23,6 +23,7 @@ permissions:
   statuses: write
   id-token: write
   packages: write
+  actions: write
 
 jobs:
   dispatch:
