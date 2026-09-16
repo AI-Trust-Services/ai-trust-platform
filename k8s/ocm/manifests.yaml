@@ -70,6 +70,10 @@ spec:
         name: ai-trust-flux-values
         valuesKey: IMAGE_TAG
         targetPath: image.tag
+      - kind: Secret
+        name: ai-trust-flux-values
+        valuesKey: OLLAMA_ENABLED
+        targetPath: ollama.enabled
     values:
       image:
         repository: ghcr.io/ai-trust-services/ai-trust-platform

@@ -410,7 +410,7 @@ export default function AssessmentsPage() {
   const showToast = useToast();
   const { can, username } = usePermissions();
   const mayWrite = can("assessments:write");
-  const mayApprove = can("systems:approve");
+  const mayApprove = can("assessments:approve");
   const noWriteTitle = "Requires permission: assessments:write";
   const noApproveTitle = "Requires permission: assessments:approve";
 
