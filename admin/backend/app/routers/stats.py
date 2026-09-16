@@ -21,55 +21,31 @@ router = APIRouter(prefix="/v1/stats", tags=["stats"])
 _USERS_BACKEND_URL = os.environ.get("USERS_BACKEND_URL", "http://users-backend:8008")
 
 
-async def _get_users_count(username: str) -> int:
+async def _get_user_and_role_counts() -> tuple[int, int]:
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(
-                f"{_USERS_BACKEND_URL}/v1/users",
-                params={"limit": 1},
-                headers={"X-Forwarded-Preferred-Username": username},
-            )
+            resp = await client.get(f"{_USERS_BACKEND_URL}/internal/stats")
         if resp.status_code == 200:
-            return resp.json().get("total", 0)
+            data = resp.json()
+            return data.get("user_count", 0), data.get("role_count", 0)
     except Exception as exc:
-        logger.warning("admin.stats.users_fetch_failed", extra={"error": str(exc)})
-    return 0
-
-
-async def _get_roles_count(username: str) -> int:
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            built_in_resp = await client.get(
-                f"{_USERS_BACKEND_URL}/v1/roles",
-                headers={"X-Forwarded-Preferred-Username": username},
-            )
-            custom_resp = await client.get(
-                f"{_USERS_BACKEND_URL}/v1/iam/custom-roles",
-                headers={"X-Forwarded-Preferred-Username": username},
-            )
-        count = 0
-        if built_in_resp.status_code == 200:
-            count += len(built_in_resp.json())
-        if custom_resp.status_code == 200:
-            count += len(custom_resp.json())
-        return count
-    except Exception as exc:
-        logger.warning("admin.stats.roles_fetch_failed", extra={"error": str(exc)})
-    return 0
+        logger.warning("admin.stats.fetch_failed", extra={"error": str(exc)})
+    return 0, 0
 
 
 @router.get("", response_model=AdminStatsResponse)
-async def get_stats(username: str = Depends(require_permission(IAM_MANAGE))) -> AdminStatsResponse:
+async def get_stats(_: str = Depends(require_permission(IAM_MANAGE))) -> AdminStatsResponse:
     async with SessionLocal() as session:
         settings_row = await session.scalar(
             select(PlatformSettings).where(PlatformSettings.id == 1)
         )
         mail_configured = bool(settings_row and settings_row.smtp_host)
 
-    user_count, role_count = await _get_users_count(username), await _get_roles_count(username)
+    user_count, role_count = await _get_user_and_role_counts()
 
     return AdminStatsResponse(
         user_count=user_count,
         role_count=role_count,
         mail_configured=mail_configured,
     )
+

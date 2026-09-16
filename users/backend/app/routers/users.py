@@ -333,3 +333,27 @@ async def email_lookup(username: str = Body(..., embed=True)) -> dict:
     if not users:
         return {"email": None}
     return {"email": users[0].get("email") or None}
+
+
+@internal_router.get("/stats")
+async def internal_stats() -> dict:
+    """User and role counts for the admin dashboard — no auth, internal only."""
+    from ai_trust_authorization.constants import BUILT_IN_ROLES
+    from ai_trust_persistence.database import SessionLocal
+    from ai_trust_persistence.models.custom_role import CustomRole
+    from sqlalchemy import func as sa_func
+
+    with admin_client(current_realm()) as kc:
+        count_resp = kc.get("/users/count")
+        count_resp.raise_for_status()
+        sa_count_resp = kc.get("/users/count", params={"search": "service-account-"})
+        sa_count_resp.raise_for_status()
+        user_count = max(0, count_resp.json() - sa_count_resp.json())
+
+    async with SessionLocal() as session:
+        custom_count = await session.scalar(sa_func.count(CustomRole.id)) or 0
+
+    return {
+        "user_count": user_count,
+        "role_count": len(BUILT_IN_ROLES) + custom_count,
+    }
