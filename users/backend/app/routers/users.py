@@ -4,7 +4,7 @@ import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import select, func as sa_func
 
 from app.keycloak import admin_client, current_realm
 from ai_trust_logging import get_logger
@@ -338,11 +338,6 @@ async def email_lookup(username: str = Body(..., embed=True)) -> dict:
 @internal_router.get("/stats")
 async def internal_stats() -> dict:
     """User and role counts for the admin dashboard — no auth, internal only."""
-    from ai_trust_authorization.constants import BUILT_IN_ROLES
-    from ai_trust_persistence.database import SessionLocal
-    from ai_trust_persistence.models.custom_role import CustomRole
-    from sqlalchemy import func as sa_func
-
     with admin_client(current_realm()) as kc:
         count_resp = kc.get("/users/count")
         count_resp.raise_for_status()

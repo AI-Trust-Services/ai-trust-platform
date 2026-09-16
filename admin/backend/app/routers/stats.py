@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/v1/stats", tags=["stats"])
 
-_USERS_BACKEND_URL = os.environ.get("USERS_BACKEND_URL", "http://users-backend:8008")
+_USERS_BACKEND_URL = os.environ["USERS_BACKEND_URL"]
 
 
 async def _get_user_and_role_counts() -> tuple[int, int]:
