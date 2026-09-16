@@ -814,6 +814,7 @@
           bell.addEventListener("mouseleave", () => { bell.style.background = "transparent"; });
 
           async function fetchAlertCount() {
+            if (!permissions.includes("alerts:read")) return;
             try {
               const res = await fetch("/api/alerts/v1/count", { cache: "no-store" });
               if (res.ok) {
