@@ -50,7 +50,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [obligations, setObligations] = useState<Obligation[]>([]);
-  const [selectedControls, setSelectedControls] = useState<Set<string>>(new Set());
+  const [selectedRequirements, setSelectedRequirements] = useState<Set<string>>(new Set());
   const [selectedObligations, setSelectedObligations] = useState<Set<string>>(new Set());
   const [drag, setDrag] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -62,7 +62,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
     if (!open) return;
     setForm(EMPTY);
     setFile(null);
-    setSelectedControls(new Set());
+    setSelectedRequirements(new Set());
     setSelectedObligations(new Set());
     setRequirements([]);
     setObligations([]);
@@ -79,7 +79,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
 
   // When system changes: load its assessments and requirements
   useEffect(() => {
-    setSelectedControls(new Set());
+    setSelectedRequirements(new Set());
     setSelectedObligations(new Set());
     setObligations([]);
     setAssessments([]);
@@ -116,7 +116,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
   if (!open) return null;
 
   function toggleRequirement(id: string) {
-    setSelectedControls((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelectedRequirements((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
   function toggleObligation(id: string) {
@@ -131,7 +131,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
 
   async function handleSubmit() {
     if (!form.title.trim()) { showToast("Title is required", true); return; }
-    if (selectedControls.size === 0 && selectedObligations.size === 0 && !form.ai_system_id && !form.assessment_id) {
+    if (selectedRequirements.size === 0 && selectedObligations.size === 0 && !form.ai_system_id && !form.assessment_id) {
       showToast("Link to at least one requirement, obligation, AI system, or assessment", true); return;
     }
     setLoading(true);
@@ -145,7 +145,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
       if (form.assessment_id) fd.append("assessment_id", form.assessment_id);
       if (form.validity_from) fd.append("validity_from", form.validity_from);
       if (form.validity_until) fd.append("validity_until", form.validity_until);
-      selectedControls.forEach((id) => fd.append("requirement_ids", id));
+      selectedRequirements.forEach((id) => fd.append("requirement_ids", id));
       selectedObligations.forEach((id) => fd.append("obligation_ids", id));
       if (file) fd.append("file", file);
       await api.uploadEvidence(fd);
@@ -240,7 +240,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
               <div className="flex flex-col gap-1.5">
                 <Label className="flex items-center gap-1.5">
                   Link to Requirements
-                  {selectedControls.size > 0 && <Badge variant="secondary" className="rounded-full font-medium">{selectedControls.size} selected</Badge>}
+                  {selectedRequirements.size > 0 && <Badge variant="secondary" className="rounded-full font-medium">{selectedRequirements.size} selected</Badge>}
                 </Label>
                 <div className="max-h-40 overflow-y-auto rounded-md border border-border">
                   {!form.ai_system_id ? (
@@ -249,7 +249,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
                     <div className="p-4 text-center text-xs text-muted-foreground">No requirements for this system</div>
                   ): requirements.map((c) => (
                     <label key={c.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
-                      <Checkbox checked={selectedControls.has(c.id)} onCheckedChange={() => toggleRequirement(c.id)} />
+                      <Checkbox checked={selectedRequirements.has(c.id)} onCheckedChange={() => toggleRequirement(c.id)} />
                       <span className="flex-1 truncate text-[13px] text-foreground">{c.title}</span>
                       <span className="shrink-0 text-[11px] text-muted-foreground">{c.id}</span>
                     </label>
