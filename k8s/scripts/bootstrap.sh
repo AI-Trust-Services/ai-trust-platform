@@ -69,12 +69,12 @@ kubectl create secret generic ai-trust-env \
 # in the same namespace as the HelmRelease (ocm-system). Only the 5 non-sensitive URL/
 # hostname values needed by the FluxDeployer are stored here; all credentials stay in
 # ai-trust-env in the ai-trust namespace.
-echo "==> secret/ai-trust-flux-values in ocm-system (Helm chart URL values for FluxDeployer)"
+echo "==> secret/ai-trust-flux-values-${NAMESPACE} in ocm-system (Helm chart URL values for FluxDeployer)"
 kubectl create namespace ocm-system --dry-run=client -o yaml | kubectl apply -f -
 OLLAMA_ENABLED="false"
 [[ "${LLM_PROVIDER:-stub}" == "ollama" ]] && OLLAMA_ENABLED="true"
 
-kubectl create secret generic ai-trust-flux-values \
+kubectl create secret generic "ai-trust-flux-values-${NAMESPACE}" \
   --from-literal=APP_PUBLIC_URL="${APP_PUBLIC_URL:-}" \
   --from-literal=KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-}" \
   --from-literal=INGRESS_HOST="${INGRESS_HOST}" \
