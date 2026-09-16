@@ -3,22 +3,66 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import text, select
+from sqlalchemy import select, text
 
-from ai_trust_authorization import require_permission
+from ai_trust_authorization import openfga_client as fga, require_permission
 from ai_trust_authorization.constants import ALERTS_READ, ALERTS_HANDLE, ALERTS_MANAGE_RULES
 from ai_trust_clickhouse import ch_command, ch_query
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.alert_rule import AlertRule
+from ai_trust_persistence.models.custom_role import CustomRole
 
 router = APIRouter(tags=["alerts"])
 logger = get_logger(__name__)
 
+ROLE_ALERT_CATEGORIES: dict[str, list[str] | None] = {
+    "platform_administrator": None,
+    "auditor": None,
+    "ai_compliance_officer": ["compliance"],
+    "ai_engineer": ["observability"],
+    "business_owner": ["risk", "compliance"],
+    "executive": ["risk"],
+}
+_BUILT_IN_ROLES = frozenset(ROLE_ALERT_CATEGORIES.keys())
+
+
+async def _allowed_categories(username: str) -> list[str] | None:
+    role_objects = await fga.read_user_roles(f"user:{username}")
+
+    cats: set[str] = set()
+    custom_slugs: list[str] = []
+
+    for obj in role_objects:
+        slug = obj[5:] if obj.startswith("role:") else obj
+        if slug in _BUILT_IN_ROLES:
+            builtin_cats = ROLE_ALERT_CATEGORIES[slug]
+            if builtin_cats is None:
+                return None
+            cats.update(builtin_cats)
+        else:
+            custom_slugs.append(slug)
+
+    if custom_slugs:
+        async with SessionLocal() as session:
+            rows = (await session.execute(select(CustomRole))).scalars().all()
+        slug_to_cats = {
+            row.name.lower().replace(" ", "_"): row.alert_categories
+            for row in rows
+        }
+        for slug in custom_slugs:
+            if slug not in slug_to_cats:
+                return None
+            role_cats = slug_to_cats[slug]
+            if role_cats is None:
+                return None
+            cats.update(role_cats)
+
+    return list(cats)
+
 
 async def _resolve_display_names(entity_ids: list[str]) -> dict[str, str]:
-    """Map system IDs to display names via Postgres. Falls back to the ID itself."""
     if not entity_ids:
         return {}
     unique_ids = list({e for e in entity_ids if e})
@@ -35,54 +79,67 @@ def _enrich(rows: list[dict], name_map: dict[str, str]) -> list[dict]:
     return rows
 
 
-@router.get("/active", dependencies=[Depends(require_permission(ALERTS_READ))])
-async def get_active_alerts() -> list[dict]:
-    # Isolation is by per-tenant database — ch_query routes to the current tenant's ClickHouse
-    # database, so the WHERE only carries the domain filter.
-    rows = await ch_query("""
-        SELECT
-            id, rule_id, rule_name, category, severity, alert_type, description,
-            value_at_trigger, toString(triggered_at) AS triggered_at,
-            handled_at, entity_id, entity_type, entity_model
-        FROM alert_events
-        WHERE resolved_at IS NULL AND handled_at IS NULL
-        ORDER BY
-            multiIf(severity='error', 0, severity='warning', 1, 2) ASC,
-            triggered_at DESC
-    """)
+@router.get("/active")
+async def get_active_alerts(username: str = Depends(require_permission(ALERTS_READ))) -> list[dict]:
+    cats = await _allowed_categories(username)
+    if cats is not None and len(cats) == 0:
+        return []
+    sql = (
+        "SELECT id, rule_id, rule_name, category, severity, alert_type, description,"
+        " value_at_trigger, toString(triggered_at) AS triggered_at,"
+        " handled_at, entity_id, entity_type, entity_model"
+        " FROM alert_events"
+        " WHERE resolved_at IS NULL AND handled_at IS NULL"
+    )
+    params: dict | None = None
+    if cats is not None:
+        sql += " AND category IN {cats:Array(String)}"
+        params = {"cats": cats}
+    sql += " ORDER BY multiIf(severity='error', 0, severity='warning', 1, 2) ASC, triggered_at DESC"
+    rows = await ch_query(sql, params)
     entity_ids = [r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"]
     name_map = await _resolve_display_names(entity_ids)
     logger.info("alerts.active_fetched", extra={"count": len(rows)})
     return _enrich(rows, name_map)
 
 
-@router.get("/history", dependencies=[Depends(require_permission(ALERTS_READ))])
-async def get_alert_history() -> list[dict]:
-    rows = await ch_query("""
-        SELECT
-            id, rule_id, rule_name, category, severity, alert_type, description,
-            value_at_trigger,
-            toString(triggered_at) AS triggered_at,
-            toString(resolved_at)  AS resolved_at,
-            toString(handled_at)   AS handled_at,
-            entity_id, entity_type, entity_model
-        FROM alert_events
-        WHERE (resolved_at IS NOT NULL OR handled_at IS NOT NULL)
-        ORDER BY triggered_at DESC
-        LIMIT 100
-    """)
+@router.get("/history")
+async def get_alert_history(username: str = Depends(require_permission(ALERTS_READ))) -> list[dict]:
+    cats = await _allowed_categories(username)
+    if cats is not None and len(cats) == 0:
+        return []
+    sql = (
+        "SELECT id, rule_id, rule_name, category, severity, alert_type, description,"
+        " value_at_trigger,"
+        " toString(triggered_at) AS triggered_at,"
+        " toString(resolved_at)  AS resolved_at,"
+        " toString(handled_at)   AS handled_at,"
+        " entity_id, entity_type, entity_model"
+        " FROM alert_events"
+        " WHERE (resolved_at IS NOT NULL OR handled_at IS NOT NULL)"
+    )
+    params: dict | None = None
+    if cats is not None:
+        sql += " AND category IN {cats:Array(String)}"
+        params = {"cats": cats}
+    sql += " ORDER BY triggered_at DESC LIMIT 100"
+    rows = await ch_query(sql, params)
     entity_ids = [r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"]
     name_map = await _resolve_display_names(entity_ids)
     logger.info("alerts.history_fetched", extra={"count": len(rows)})
     return _enrich(rows, name_map)
 
 
-@router.get("/rules", dependencies=[Depends(require_permission(ALERTS_READ))])
-async def get_alert_rules() -> list[dict]:
+@router.get("/rules")
+async def get_alert_rules(username: str = Depends(require_permission(ALERTS_READ))) -> list[dict]:
+    cats = await _allowed_categories(username)
+    if cats is not None and len(cats) == 0:
+        return []
     async with SessionLocal() as session:
-        rules = (await session.execute(
-            select(AlertRule).order_by(AlertRule.category, AlertRule.name)
-        )).scalars().all()
+        stmt = select(AlertRule).order_by(AlertRule.category, AlertRule.name)
+        if cats is not None:
+            stmt = select(AlertRule).where(AlertRule.category.in_(cats)).order_by(AlertRule.category, AlertRule.name)
+        rules = (await session.execute(stmt)).scalars().all()
     return [
         {
             "id": r.id,
@@ -102,14 +159,21 @@ async def get_alert_rules() -> list[dict]:
     ]
 
 
-@router.get("/count", dependencies=[Depends(require_permission(ALERTS_READ))])
-async def get_alert_count() -> dict:
-    """Fast endpoint for bell badge — returns count of active unhandled alerts."""
-    rows = await ch_query("""
-        SELECT count() AS n
-        FROM alert_events
-        WHERE resolved_at IS NULL AND handled_at IS NULL
-    """)
+@router.get("/count")
+async def get_alert_count(username: str = Depends(require_permission(ALERTS_READ))) -> dict:
+    cats = await _allowed_categories(username)
+    if cats is not None and len(cats) == 0:
+        return {"count": 0}
+    if cats is not None:
+        rows = await ch_query(
+            "SELECT count() AS n FROM alert_events"
+            " WHERE resolved_at IS NULL AND handled_at IS NULL AND category IN {cats:Array(String)}",
+            {"cats": cats},
+        )
+    else:
+        rows = await ch_query(
+            "SELECT count() AS n FROM alert_events WHERE resolved_at IS NULL AND handled_at IS NULL"
+        )
     count = int(rows[0]["n"]) if rows else 0
     logger.info("alerts.count_fetched", extra={"count": count})
     return {"count": count}
@@ -117,7 +181,6 @@ async def get_alert_count() -> dict:
 
 @router.post("/events/{event_id}/handle", dependencies=[Depends(require_permission(ALERTS_HANDLE))])
 async def handle_alert_event(event_id: str) -> dict:
-    """Mark an event-based alert as handled — moves to history permanently."""
     now = datetime.now(timezone.utc)
     await ch_command(
         "ALTER TABLE alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
@@ -131,7 +194,6 @@ async def handle_alert_event(event_id: str) -> dict:
 
 @router.post("/rules/{rule_id}/toggle", dependencies=[Depends(require_permission(ALERTS_MANAGE_RULES))])
 async def toggle_alert_rule(rule_id: str) -> dict:
-    """Enable or disable an alert rule."""
     async with SessionLocal() as session:
         result = await session.execute(select(AlertRule).where(AlertRule.id == rule_id))
         rule = result.scalar_one_or_none()
@@ -146,7 +208,6 @@ async def toggle_alert_rule(rule_id: str) -> dict:
 
 @router.post("/events/{event_id}/approve-model", dependencies=[Depends(require_permission(ALERTS_HANDLE))])
 async def approve_model_change(event_id: str) -> dict:
-    """Approve a model change — marks event as handled and updates the service baseline."""
     rows = await ch_query(
         "SELECT entity_id, entity_model FROM alert_events WHERE id = {id:String}",
         {"id": event_id},
@@ -185,7 +246,6 @@ async def approve_model_change(event_id: str) -> dict:
 
 @router.post("/events/{event_id}/reject-model", dependencies=[Depends(require_permission(ALERTS_HANDLE))])
 async def reject_model_change(event_id: str) -> dict:
-    """Reject a model change — marks event as handled, baseline unchanged."""
     now = datetime.now(timezone.utc)
     await ch_command(
         "ALTER TABLE alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
