@@ -195,21 +195,19 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'build-push-deploy.yml',
-              ref: 'main',
+              ref: process.env.PR_BRANCH,
               inputs: {
-                branch: 'main',
                 gardener_cluster: 'ai-trust-test',
                 namespace: process.env.PR_AUTHOR.toLowerCase(),
                 skip_build_new_version: 'true',
               },
             });
-            core.info(`Triggered build-push-deploy.yml for main deploy (skip_build_new_version=true)`);
+            core.info(`Triggered build-push-deploy.yml on ${process.env.PR_BRANCH} for main deploy (skip_build_new_version=true)`);
 
       - name: Wait for main deploy to complete
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NAMESPACE="${PR_AUTHOR,,}"
           echo "Waiting for main deploy run to appear and complete..."
           sleep 30  # Give GitHub time to register the triggered run
 
@@ -220,7 +218,7 @@ jobs:
             RUN=$(gh run list \
               --repo "${{ github.repository }}" \
               --workflow "build-push-deploy.yml" \
-              --branch main \
+              --branch "${PR_BRANCH}" \
               --limit 1 \
               --json status,conclusion,databaseId \
               --jq '.[0]')
