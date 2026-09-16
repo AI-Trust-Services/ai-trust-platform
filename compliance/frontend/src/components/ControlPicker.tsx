@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { useToast } from "../App";
-import type { AISystem, Control } from "../types";
+import type { AISystem, Assessment, Control } from "../types";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -9,7 +9,9 @@ import {
 } from "@/components/ui/select";
 
 interface Props {
+  /** Currently selected control IDs. */
   value: string[];
+  /** Called when the user checks/unchecks a control. ids = full list of selected control IDs (e.g. ["CTL-ABC12345"]). */
   onChange: (ids: string[]) => void;
 }
 
@@ -18,6 +20,8 @@ const NONE = "__none__";
 export default function ControlPicker({ value, onChange }: Props) {
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [systemId, setSystemId] = useState("");
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [assessmentId, setAssessmentId] = useState("");
   const [controlCatalog, setControlCatalog] = useState<Control[]>([]);
   const [search, setSearch] = useState("");
   const showToast = useToast();
@@ -35,20 +39,33 @@ export default function ControlPicker({ value, onChange }: Props) {
   }, []);
 
   useEffect(() => {
+    setAssessments([]);
+    setAssessmentId("");
     setControlCatalog([]);
     if (!systemId) return;
     (async () => {
       try {
-        setControlCatalog(await api.getControls({ ai_system_id: systemId }));
+        const [allAssessments, allControls] = await Promise.all([
+          api.getAssessments(systemId),
+          api.getControls({ ai_system_id: systemId }),
+        ]);
+        setAssessments(allAssessments.filter((a) => a.status !== "archived"));
+        setControlCatalog(allControls);
       } catch (e) {
-        showToast(`Failed to load controls: ${(e as Error).message}`, true);
+        showToast(`Failed to load data: ${(e as Error).message}`, true);
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [systemId]);
 
+  function handleAssessmentChange(v: string) {
+    setAssessmentId(v === NONE ? "" : v);
+    setSearch("");
+  }
+
   const filtered = controlCatalog
     .filter((c) => {
+      if (c.assessment_id !== assessmentId) return false;
       if (!search) return true;
       const q = search.toLowerCase();
       return c.title.toLowerCase().includes(q) || (c.control_ref ?? "").toLowerCase().includes(q);
@@ -77,6 +94,23 @@ export default function ControlPicker({ value, onChange }: Props) {
         </SelectContent>
       </Select>
       {systemId && (
+        <Select
+          value={assessmentId || NONE}
+          onValueChange={handleAssessmentChange}
+          disabled={assessments.length === 0}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={assessments.length === 0 ? "No assessments for this system" : "Select an assessment…"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>— select an assessment —</SelectItem>
+            {assessments.map((a) => (
+              <SelectItem key={a.id} value={a.id}>{a.title} ({a.status})</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {assessmentId && (
         <>
           <Input
             placeholder="Search controls…"
@@ -87,7 +121,7 @@ export default function ControlPicker({ value, onChange }: Props) {
           <div className="max-h-48 overflow-y-auto rounded-md border border-border">
             {filtered.length === 0 ? (
               <div className="p-3 text-center text-xs text-muted-foreground">
-                {search ? "No controls match" : "No controls for this system"}
+                {search ? "No controls match" : "No controls for this assessment"}
               </div>
             ) : filtered.map((c) => (
               <label key={c.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
