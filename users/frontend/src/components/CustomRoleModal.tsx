@@ -34,6 +34,17 @@ export function CustomRoleModal({ role, onClose, onSaved }: Props) {
   const [permissions, setPermissions] = useState<Set<string>>(
     new Set(role?.permissions ?? [])
   );
+  const [alertCategories, setAlertCategories] = useState<Set<string>>(
+    new Set(role?.alert_categories ?? [])
+  );
+
+  function toggleAlertCategory(cat: string) {
+    setAlertCategories(prev => {
+      const next = new Set(prev);
+      next.has(cat) ? next.delete(cat) : next.add(cat);
+      return next;
+    });
+  }
 
   function togglePermission(p: string) {
     setPermissions(prev => {
@@ -63,12 +74,14 @@ export function CustomRoleModal({ role, onClose, onSaved }: Props) {
         saved = await api.updateCustomRole(role.id, {
           description,
           permissions: Array.from(permissions),
+          alert_categories: alertCategories.size > 0 ? Array.from(alertCategories) : null,
         });
       } else {
         const body: CustomRoleCreate = {
           name: name.trim(),
           description,
           permissions: Array.from(permissions),
+          alert_categories: alertCategories.size > 0 ? Array.from(alertCategories) : null,
         };
         saved = await api.createCustomRole(body);
       }
@@ -109,6 +122,21 @@ export function CustomRoleModal({ role, onClose, onSaved }: Props) {
                 onChange={e => setDescription(e.target.value)}
                 placeholder="What is this role for?"
               />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Alert categories</Label>
+              <p className="text-xs text-muted-foreground">Leave all unchecked to show all alert categories.</p>
+              <div className="flex flex-col gap-2">
+                {(["risk", "compliance", "observability"] as const).map(cat => (
+                  <label key={cat} className="flex cursor-pointer items-center gap-2 text-sm text-foreground capitalize">
+                    <Checkbox
+                      checked={alertCategories.has(cat)}
+                      onCheckedChange={() => toggleAlertCategory(cat)}
+                    />
+                    <span>{cat}</span>
+                  </label>
+                ))}
+              </div>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Permissions *</Label>
