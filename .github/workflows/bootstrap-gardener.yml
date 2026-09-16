@@ -21,10 +21,16 @@ on:
         type: choice
         options:
           - ai-trust-main
+          - ai-trust-test
           - sr-test
       ocm_version:
         description: "Exact OCM component version to pin (e.g. main-abc123def456)"
         required: true
+        type: string
+      namespace:
+        description: "Namespace to deploy into (default: K8S_NAMESPACE from the cluster env file, e.g. ai-trust for ai-trust-main)"
+        required: false
+        default: ""
         type: string
   workflow_call:
     inputs:
@@ -42,7 +48,7 @@ on:
         default: ""
         type: string
       namespace:
-        description: "Namespace to deploy into (e.g. main, alice)"
+        description: "Namespace to deploy into (e.g. ai-trust, alice)"
         required: false
         default: ""
         type: string

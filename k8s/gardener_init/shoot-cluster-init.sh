@@ -11,22 +11,28 @@
 #   export KUBECONFIG=/path/to/shoot-kubeconfig.yaml
 #   bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name> [--namespace=<namespace>]
 #
-# --namespace (default: main):
-#   All 5 steps always run. For namespace=main the cluster-scoped resources
-#   (Traefik, OCM controller, Flux, DNS annotation) are installed for the first
-#   time. For any other namespace they are idempotent no-ops (already present).
-#   Use this to initialise a developer namespace on ai-trust-test before deploying:
+# --namespace (default: ai-trust):
+#   "ai-trust" is the platform's existing, long-running namespace (currently
+#   deployed on ai-trust-main) — the default when no --namespace flag is given.
+#   All 5 steps run identically for every namespace, ai-trust included — nothing
+#   is special-cased. Pass --namespace=<name> to additionally provision a
+#   developer/PR namespace on a shared cluster (e.g. ai-trust-test), derived
+#   from the PR author, so it can coexist with others:
 #     bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=alice
+#   Steps are idempotent — safe to re-run for a namespace that's already set up.
 #
-# Hostnames are read from k8s/gardener_init/env/<cluster-name>/.env.
+# Hostnames are read from k8s/gardener_init/env/<cluster-name>/.env. For any
+# namespace other than ai-trust, the app/keycloak/minio hostnames are instead
+# derived as subdomains of the shoot domain: <namespace>.<shoot-domain>,
+# keycloak.<namespace>.<shoot-domain>, minio.<namespace>.<shoot-domain>.
 # Copy k8s/gardener_init/env/example/.env to env/<cluster-name>/.env and fill in before running.
 #
-# What it does (all runs):
+# What it does (all runs, same for every namespace):
 #   1. Installs Traefik ingress controller via Helm (skipped if already present).
 #   2. Requests a per-namespace TLS certificate via Gardener cert-service (DNS-01).
 #      Also creates the per-namespace Traefik ServersTransport for LLM timeout.
-#   3. Creates a DNSEntry for the namespace (wildcard *.${NAMESPACE}.${SHOOT_DOMAIN}).
-#      For namespace=main also annotates the Traefik LB Service for cluster-wide DNS.
+#   3. Annotates the Traefik LB Service for Gardener-managed DNS, merging this
+#      namespace's hostnames into any already registered by other namespaces.
 #   4. Installs OCM controller + Flux (skipped if already at pinned versions).
 #   5. Applies rbac.yaml — grants the GitHub Actions OIDC identity the permissions
 #      needed by bootstrap-gardener.yml (target namespace + ocm-system namespace).
@@ -37,7 +43,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLUSTER_NAME="${1:-}"
-NAMESPACE="main"
+NAMESPACE="ai-trust"
 
 # Parse optional --namespace=<value> argument
 for arg in "${@:2}"; do
@@ -74,8 +80,11 @@ fi
 # Derive the shoot base domain from the app host (everything after the first label)
 SHOOT_DOMAIN="${APP_HOST#*.}"
 
-# For non-main namespaces, derive per-namespace hostnames from the shoot domain
-if [[ "$NAMESPACE" != "main" ]]; then
+# ai-trust's hostnames come straight from the cluster's .env file (the platform's
+# canonical, already-registered domain). Any other namespace gets its own
+# subdomain derived from the shoot domain so it doesn't collide with ai-trust or
+# with other namespaces on the same cluster.
+if [[ "$NAMESPACE" != "ai-trust" ]]; then
   APP_HOST="${NAMESPACE}.${SHOOT_DOMAIN}"
   KEYCLOAK_HOST="keycloak.${NAMESPACE}.${SHOOT_DOMAIN}"
   MINIO_HOST="minio.${NAMESPACE}.${SHOOT_DOMAIN}"
@@ -115,7 +124,7 @@ kubectl apply -f - <<EOF
 apiVersion: cert.gardener.cloud/v1alpha1
 kind: Certificate
 metadata:
-  name: ai-trust-tls-${NAMESPACE}
+  name: ai-trust-tls
   namespace: ${NAMESPACE}
 spec:
   dnsNames:
@@ -127,7 +136,7 @@ $([ -n "${MINIO_HOST}" ] && echo "    - \"${MINIO_HOST}\"")
     namespace: ${NAMESPACE}
 EOF
 echo "    Certificate requested — Gardener cert-service will issue via DNS-01 (takes ~1-2 min)"
-echo "    Monitor: kubectl get certificate.cert.gardener.cloud ai-trust-tls-${NAMESPACE} -n ${NAMESPACE} -w"
+echo "    Monitor: kubectl get certificate.cert.gardener.cloud ai-trust-tls -n ${NAMESPACE} -w"
 
 # Traefik ServersTransport that raises the forwarding timeout for LLM-backed routes.
 # Must live in the app namespace and be named <namespace>-llm-timeout because the
@@ -150,43 +159,29 @@ EOF
 echo "    Created ServersTransport/${NAMESPACE}-llm-timeout (300s forwarding timeout for LLM routes)"
 echo ""
 
-echo "==> [3/5] Configuring Gardener-managed DNS"
+echo "==> [3/5] Annotating Traefik LB Service for Gardener-managed DNS"
 echo "    Waiting for Traefik deployment to be available..."
 kubectl wait --for=condition=available deployment/traefik -n default --timeout=120s || true
-LB_IP=$(kubectl get svc traefik -n default -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
-if [[ -z "$LB_IP" ]]; then
-  echo "    warning: Traefik LB IP not yet assigned — DNS resources will be created but may not resolve until IP is available" >&2
-  LB_IP="0.0.0.0"
+
+NEW_DNSNAMES="${APP_HOST},${KEYCLOAK_HOST}"
+if [[ -n "$MINIO_HOST" ]]; then
+  NEW_DNSNAMES="${NEW_DNSNAMES},${MINIO_HOST}"
 fi
-if [[ "$NAMESPACE" == "main" ]]; then
-  # For the main namespace, annotate the Traefik LB Service so Gardener registers
-  # the cluster-level hostnames (app, keycloak, minio) against the LB IP.
-  DNSNAMES="${APP_HOST},${KEYCLOAK_HOST}"
-  if [[ -n "$MINIO_HOST" ]]; then
-    DNSNAMES="${DNSNAMES},${MINIO_HOST}"
-  fi
-  kubectl annotate svc traefik -n default --overwrite \
-    dns.gardener.cloud/class=garden \
-    "dns.gardener.cloud/dnsnames=${DNSNAMES}" \
-    dns.gardener.cloud/ttl="120"
-  echo "    Annotated Traefik LB Service: ${DNSNAMES}"
-else
-  # For developer namespaces, create a wildcard DNSEntry so all per-namespace
-  # subdomains (app, keycloak, minio) resolve to the shared Traefik LB IP.
-  kubectl apply -f - <<EOF
-apiVersion: dns.gardener.cloud/v1alpha1
-kind: DNSEntry
-metadata:
-  name: ai-trust-${NAMESPACE}
-  namespace: ${NAMESPACE}
-spec:
-  dnsName: "*.${NAMESPACE}.${SHOOT_DOMAIN}"
-  ttl: 120
-  targets:
-    - "${LB_IP}"
-EOF
-  echo "    DNSEntry created: *.${NAMESPACE}.${SHOOT_DOMAIN} -> ${LB_IP}"
-fi
+
+# Merge this namespace's hostnames into whatever is already annotated instead of
+# overwriting, so multiple namespaces sharing this Traefik LB Service (e.g. the
+# ai-trust namespace plus several developer namespaces on ai-trust-test) keep
+# resolving after shoot-cluster-init.sh is (re-)run for any one of them.
+EXISTING_DNSNAMES=$(kubectl get svc traefik -n default \
+  -o jsonpath='{.metadata.annotations.dns\.gardener\.cloud/dnsnames}' 2>/dev/null || true)
+ALL_DNSNAMES=$(printf '%s\n%s' "$EXISTING_DNSNAMES" "$NEW_DNSNAMES" \
+  | tr ',' '\n' | sed '/^$/d' | awk '!seen[$0]++' | paste -sd, -)
+
+kubectl annotate svc traefik -n default --overwrite \
+  dns.gardener.cloud/class=garden \
+  "dns.gardener.cloud/dnsnames=${ALL_DNSNAMES}" \
+  dns.gardener.cloud/ttl="120"
+echo "    Annotated Traefik LB Service: ${ALL_DNSNAMES}"
 
 echo ""
 echo "==> [4/5] Installing OCM controller and Flux"
@@ -257,11 +252,8 @@ echo "    NOTE: all kubectl commands below require the shoot KUBECONFIG to be ac
 echo "    If you used gardenctl to authenticate, run: eval \$(gardenctl kubectl-env bash)"
 echo ""
 echo "    Check certificate status:"
-echo "      kubectl get certificate.cert.gardener.cloud ai-trust-tls-${NAMESPACE} -n ${NAMESPACE}"
+echo "      kubectl get certificate.cert.gardener.cloud ai-trust-tls -n ${NAMESPACE}"
 echo ""
 echo "    Bootstrap and deploy the platform:"
-if [[ "$NAMESPACE" == "main" ]]; then
-  echo "      gh workflow run bootstrap-gardener.yml --field cluster=${CLUSTER_NAME}"
-else
-  echo "      Comment /garden-deploy on your PR (namespace ${NAMESPACE} is now ready)"
-fi
+echo "      ai-trust namespace: gh workflow run bootstrap-gardener.yml --field cluster=${CLUSTER_NAME}"
+echo "      other namespaces:   comment /garden-deploy on your PR (namespace ${NAMESPACE} is now ready)"

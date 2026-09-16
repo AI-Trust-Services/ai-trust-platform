@@ -8,7 +8,8 @@ name: Deployment Workflow
 #
 # Automatic (push to main): builds images tagged main-<sha>, packages
 # the Helm chart, builds an OCM component, and triggers bootstrap-gardener.yml
-# to sync the ai-trust-main cluster (namespace=main).
+# to sync the ai-trust-main cluster (namespace=ai-trust — the platform's
+# long-running namespace on that cluster; not to be confused with the git branch).
 #
 # Manual (workflow_dispatch): optional branch (default: main) and
 # gardener_cluster (default: ai-trust-main) inputs. Images are tagged
@@ -146,11 +147,12 @@ jobs:
           echo "deploy=${deploy}" >> "$GITHUB_OUTPUT"
 
           # Namespace derivation:
-          #   - ai-trust-main → always "main"
+          #   - ai-trust-main → always "ai-trust" (its existing, long-running namespace —
+          #     kept as-is so this cluster never needs to be re-provisioned from scratch)
           #   - ai-trust-test → explicit input (PR author) or github.actor
           #   - other/none    → github.actor (lowercase)
           if [[ "${cluster}" == "ai-trust-main" ]]; then
-            namespace="main"
+            namespace="ai-trust"
           elif [[ -n "${{ inputs.namespace }}" ]]; then
             namespace="${{ inputs.namespace }}"
           else
@@ -167,8 +169,8 @@ jobs:
             echo "latest_tag=" >> "$GITHUB_OUTPUT"
           elif [[ "${deploy}" == "true" ]]; then
             echo "tag=${namespace}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-            # Only ai-trust-main (namespace=main) gets a floating latest tag
-            if [[ "${namespace}" == "main" ]]; then
+            # Only ai-trust-main (namespace=ai-trust) gets a floating latest tag
+            if [[ "${cluster}" == "ai-trust-main" ]]; then
               echo "latest_tag=latest" >> "$GITHUB_OUTPUT"
             else
               echo "latest_tag=" >> "$GITHUB_OUTPUT"

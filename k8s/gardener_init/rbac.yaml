@@ -4,7 +4,7 @@
 # bootstrap-gardener.yml needs: bootstrap.sh's namespace/Secret/ConfigMap/RBAC setup, plus
 # applying OCM component CRs in ocm-system. Deliberately not cluster-admin.
 #
-# NOTE: the ai-trust namespace is NOT created here — bootstrap.sh creates it idempotently
+# NOTE: the target namespace is NOT created here — bootstrap.sh creates it idempotently
 # on every deploy. The ClusterRole grants create+patch so bootstrap can run from scratch.
 ---
 # Cluster-scoped because Namespace is a cluster-scoped resource.
@@ -114,7 +114,7 @@ roleRef:
 # hitting the ~5min GHA OIDC TTL mid-job.
 # Bound to the same permissions as the OIDC User identity above:
 #   - ClusterRole ai-trust-ci-namespace-reader (namespace get/list/create/patch)
-#   - Role ai-trust-ci-deployer in ai-trust
+#   - Role ai-trust-ci-deployer in the target namespace
 #   - Role ai-trust-ci-ocm-manager in ocm-system
 apiVersion: v1
 kind: ServiceAccount
