@@ -33,7 +33,7 @@ interface FormState {
 
 const EMPTY: FormState = { system_id: "", obligation_id: "", title: "", description: "", category: "general", owner: "", due_date: "" };
 
-export default function CreateControlModal({ open, onClose, onSuccess }: Props) {
+export default function CreateRequirementModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [obligations, setObligations] = useState<Obligation[]>([]);
@@ -75,7 +75,7 @@ export default function CreateControlModal({ open, onClose, onSuccess }: Props) 
     if (!form.title.trim()) { showToast("Title is required", true); return; }
     setLoading(true);
     try {
-      await api.createControl({
+      await api.createRequirement({
         obligation_id: form.obligation_id,
         title: form.title,
         description: form.description,

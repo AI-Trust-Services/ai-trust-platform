@@ -43,16 +43,6 @@ class EvidenceUpdate(BaseModel):
         return v
 
 
-class ControlRef(BaseModel):
-    id: str
-    ai_system_id: str | None
-    control_ref: str | None
-    title: str
-    status: str
-
-    model_config = {"from_attributes": True}
-
-
 class EvidenceResponse(BaseModel):
     id: str
     title: str
@@ -74,7 +64,7 @@ class EvidenceResponse(BaseModel):
 
 
 class EvidenceDetailResponse(EvidenceResponse):
-    controls: list[ControlRef] = []
+    requirement_ids: list[str] = []
 
 
 class EvidenceVersionResponse(BaseModel):

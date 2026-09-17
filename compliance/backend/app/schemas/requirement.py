@@ -1,22 +1,22 @@
-"""Pydantic v2 schemas for Control."""
+"""Pydantic v2 schemas for Requirement."""
 from __future__ import annotations
 
 from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-VALID_CONTROL_CATEGORIES = frozenset({
+VALID_REQUIREMENT_CATEGORIES = frozenset({
     "human_oversight", "documentation", "monitoring", "security", "fairness",
     "data_governance", "logging", "testing", "change_management",
     "incident_response", "general",
 })
-VALID_CONTROL_STATUSES = frozenset({
+VALID_REQUIREMENT_STATUSES = frozenset({
     "open", "planned", "under_review", "fulfilled", "ineffective", "deactivated",
 })
 VALID_EFFECTIVENESS = frozenset({"high", "medium", "low"})
 
 
-class ControlCreate(BaseModel):
+class RequirementCreate(BaseModel):
     obligation_id: str = Field(..., max_length=30)
     title: str = Field(..., min_length=1, max_length=200)
     description: str = Field(default="")
@@ -34,12 +34,12 @@ class ControlCreate(BaseModel):
     @field_validator("category")
     @classmethod
     def category_valid(cls, v: str) -> str:
-        if v not in VALID_CONTROL_CATEGORIES:
-            raise ValueError(f"invalid control category '{v}'")
+        if v not in VALID_REQUIREMENT_CATEGORIES:
+            raise ValueError(f"invalid requirement category '{v}'")
         return v
 
 
-class ControlUpdate(BaseModel):
+class RequirementUpdate(BaseModel):
     obligation_id: str | None = Field(default=None, max_length=30)
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
@@ -52,15 +52,15 @@ class ControlUpdate(BaseModel):
     @field_validator("category")
     @classmethod
     def category_valid(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_CONTROL_CATEGORIES:
-            raise ValueError(f"invalid control category '{v}'")
+        if v is not None and v not in VALID_REQUIREMENT_CATEGORIES:
+            raise ValueError(f"invalid requirement category '{v}'")
         return v
 
     @field_validator("status")
     @classmethod
     def status_valid(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_CONTROL_STATUSES:
-            raise ValueError(f"invalid control status '{v}'")
+        if v is not None and v not in VALID_REQUIREMENT_STATUSES:
+            raise ValueError(f"invalid requirement status '{v}'")
         return v
 
     @field_validator("effectiveness")
@@ -71,13 +71,13 @@ class ControlUpdate(BaseModel):
         return v
 
 
-class ControlResponse(BaseModel):
+class RequirementResponse(BaseModel):
     id: str
     obligation_id: str
     assessment_id: str
     ai_system_id: str | None
     assessment_title: str | None = None  # not a column — set manually after model_validate
-    control_ref: str | None
+    requirement_ref: str | None
     title: str
     description: str
     category: str
@@ -91,10 +91,10 @@ class ControlResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class ControlDetailResponse(ControlResponse):
+class RequirementDetailResponse(RequirementResponse):
     evidence_count: int = 0
 
 
-class GenerateControlsResponse(BaseModel):
-    created: list[ControlResponse]
+class GenerateRequirementsResponse(BaseModel):
+    created: list[RequirementResponse]
     message: str

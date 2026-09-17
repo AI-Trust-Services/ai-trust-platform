@@ -19,7 +19,12 @@ up: configure cluster bootstrap build install
 down: uninstall delete-cluster
 
 cluster:
-	kind create cluster --name $(CLUSTER_NAME) --config kind-config.yaml
+	@if kind get clusters 2>/dev/null | grep -Fxq -- '$(CLUSTER_NAME)'; then \
+		echo "==> kind cluster '$(CLUSTER_NAME)' already exists, skipping create"; \
+	else \
+		kind create cluster --name $(CLUSTER_NAME) --config kind-config.yaml; \
+	fi
+	kind export kubeconfig --name $(CLUSTER_NAME)
 
 delete-cluster:
 	kind delete cluster --name $(CLUSTER_NAME)
@@ -37,7 +42,11 @@ build:
 	bash scripts/build-and-load-images.sh
 
 install:
-	helm install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
+	@if helm status $(RELEASE) -n $(NAMESPACE) >/dev/null 2>&1; then \
+		echo "==> release '$(RELEASE)' already installed, resetting immutable Jobs then upgrading"; \
+		kubectl delete job -n $(NAMESPACE) -l app.kubernetes.io/instance=$(RELEASE) --ignore-not-found; \
+	fi
+	helm upgrade --install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
 
 upgrade:
 	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)

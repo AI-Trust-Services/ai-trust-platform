@@ -1,5 +1,5 @@
 import type {
-  AISystem, Assessment, AssessmentDetail, Control, ControlDetail,
+  AISystem, Assessment, AssessmentDetail, Requirement, RequirementDetail,
   Evidence, EvidenceDetail, EvidenceVersion, Framework, GenerateObligationsResponse,
   DownloadUrlResponse, Obligation, ObligationDetail, PermissionsResponse,
 } from "../types";
@@ -98,20 +98,20 @@ export const api = {
   deleteObligation: (id: string): Promise<null> =>
     request<null>(API_BASE, `/obligations/${id}`, { method: "DELETE" }),
 
-  // Controls
-  getControls: (params: QueryParams = {}): Promise<Control[]> =>
-    request<Control[]>(API_BASE, `/controls${qs(params)}`),
-  getControl: (id: string): Promise<ControlDetail> =>
-    request<ControlDetail>(API_BASE, `/controls/${id}`),
-  createControl: (data: {
+  // Requirements
+  getRequirements: (params: QueryParams = {}): Promise<Requirement[]> =>
+    request<Requirement[]>(API_BASE, `/requirements${qs(params)}`),
+  getRequirement: (id: string): Promise<RequirementDetail> =>
+    request<RequirementDetail>(API_BASE, `/requirements/${id}`),
+  createRequirement: (data: {
     obligation_id: string; title: string; description: string;
     category: string; owner: string; due_date: string | null;
-  }): Promise<Control> =>
-    request<Control>(API_BASE, "/controls", json("POST", data)),
-  updateControl: (id: string, data: Partial<Control>): Promise<Control> =>
-    request<Control>(API_BASE, `/controls/${id}`, json("PUT", data)),
-  deleteControl: (id: string): Promise<null> =>
-    request<null>(API_BASE, `/controls/${id}`, { method: "DELETE" }),
+  }): Promise<Requirement> =>
+    request<Requirement>(API_BASE, "/requirements", json("POST", data)),
+  updateRequirement: (id: string, data: Partial<Requirement>): Promise<Requirement> =>
+    request<Requirement>(API_BASE, `/requirements/${id}`, json("PUT", data)),
+  deleteRequirement: (id: string): Promise<null> =>
+    request<null>(API_BASE, `/requirements/${id}`, { method: "DELETE" }),
 
   // Evidence
   getEvidence: (params: QueryParams = {}): Promise<Evidence[]> =>
@@ -134,10 +134,10 @@ export const api = {
     request<EvidenceVersion[]>(API_BASE, `/evidence/${id}/versions`),
   uploadEvidenceVersion: (id: string, formData: FormData): Promise<EvidenceDetail> =>
     request<EvidenceDetail>(API_BASE, `/evidence/${id}/upload-version`, { method: "POST", body: formData }),
-  linkControl: (evidenceId: string, controlId: string): Promise<EvidenceDetail> =>
-    request<EvidenceDetail>(API_BASE, `/evidence/${evidenceId}/controls/${controlId}`, { method: "POST" }),
-  unlinkControl: (evidenceId: string, controlId: string): Promise<EvidenceDetail> =>
-    request<EvidenceDetail>(API_BASE, `/evidence/${evidenceId}/controls/${controlId}`, { method: "DELETE" }),
+  linkRequirement: (evidenceId: string, requirementId: string): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${evidenceId}/requirements/${requirementId}`, { method: "POST" }),
+  unlinkRequirement: (evidenceId: string, requirementId: string): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${evidenceId}/requirements/${requirementId}`, { method: "DELETE" }),
 
   // Current user's effective permissions — served by the registry backend.
   myPermissions: (): Promise<PermissionsResponse> =>

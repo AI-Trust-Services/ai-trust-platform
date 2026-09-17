@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { EVIDENCE_TYPES, humanize } from "../utils";
+import type { AISystem, Assessment, Requirement } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -39,7 +40,7 @@ const EMPTY: FormState = {
 export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [file, setFile] = useState<File | null>(null);
-  const [selectedControls, setSelectedControls] = useState<string[]>([]);
+  const [selectedRequirements, setSelectedRequirements] = useState<string[]>([]);
   const [drag, setDrag] = useState(false);
   const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -49,10 +50,11 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
     if (!open) return;
     setForm(EMPTY);
     setFile(null);
-    setSelectedControls([]);
+    setSelectedRequirements([]);
   }, [open]);
 
   if (!open) return null;
+
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -62,7 +64,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
 
   async function handleSubmit() {
     if (!form.title.trim()) { showToast("Title is required", true); return; }
-    if (selectedControls.length === 0) { showToast("Link to at least one control", true); return; }
+    if (selectedRequirements.length === 0) { showToast("Link to at least one requirement", true); return; }
     setLoading(true);
     try {
       const fd = new FormData();
@@ -72,7 +74,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
       fd.append("uploaded_by", form.uploaded_by);
       if (form.validity_from) fd.append("validity_from", form.validity_from);
       if (form.validity_until) fd.append("validity_until", form.validity_until);
-      selectedControls.forEach((id) => fd.append("control_ids", id));
+      selectedRequirements.forEach((id) => fd.append("requirement_ids", id));
       if (file) fd.append("file", file);
       await api.uploadEvidence(fd);
       onClose();
@@ -147,10 +149,10 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
               </div>
             </div>
 
-            {/* Right column: control picker */}
+            {/* Right column: requirement picker */}
             <ControlPicker
-              value={selectedControls}
-              onChange={setSelectedControls}
+              value={selectedRequirements}
+              onChange={setSelectedRequirements}
             />
           </div>
         </div>

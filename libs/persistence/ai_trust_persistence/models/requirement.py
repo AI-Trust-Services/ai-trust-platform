@@ -8,14 +8,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 from ai_trust_persistence.database import Base
 
 
-class Control(Base):
+class Requirement(Base):
     """A technical or organisational measure that satisfies one obligation.
 
     Belongs to exactly one obligation (1:N). Effectiveness is driven by linked
-    evidence (see cascade.py): approved evidence -> control becomes 'fulfilled'.
+    evidence (see cascade.py): approved evidence -> requirement becomes 'fulfilled'.
     """
 
-    __tablename__ = "controls"
+    __tablename__ = "requirements"
 
     id: Mapped[str] = mapped_column(String(30), primary_key=True)
     obligation_id: Mapped[str] = mapped_column(
@@ -28,9 +28,11 @@ class Control(Base):
     ai_system_id: Mapped[str | None] = mapped_column(
         String(20), ForeignKey("ai_systems.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    # Stable slug ("{article_ref}:{slug}") for auto-generated controls; carry-forward key
-    # across assessment cycles. NULL for manually-created controls.
-    control_ref: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    # Stable slug ("{article_ref}:{slug}") for auto-generated requirements; used as the
+    # carry-forward key across assessment cycles. NULL for manually-created requirements.
+    # Deliberately non-unique: the same slug recurs each cycle and org-wide requirements
+    # span multiple assessments.
+    requirement_ref: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
     category: Mapped[str] = mapped_column(String(50), default="general")

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { useToast } from "../App";
-import type { AISystem, Assessment, Control } from "../types";
+import type { AISystem, Assessment, Requirement } from "../types";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -9,9 +9,9 @@ import {
 } from "@/components/ui/select";
 
 interface Props {
-  /** Currently selected control IDs. */
+  /** Currently selected requirement IDs. */
   value: string[];
-  /** Called when the user checks/unchecks a control. ids = full list of selected control IDs (e.g. ["CTL-ABC12345"]). */
+  /** Called when the user checks/unchecks a requirement. */
   onChange: (ids: string[]) => void;
 }
 
@@ -22,7 +22,7 @@ export default function ControlPicker({ value, onChange }: Props) {
   const [systemId, setSystemId] = useState("");
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [assessmentId, setAssessmentId] = useState("");
-  const [controlCatalog, setControlCatalog] = useState<Control[]>([]);
+  const [requirementCatalog, setRequirementCatalog] = useState<Requirement[]>([]);
   const [search, setSearch] = useState("");
   const showToast = useToast();
 
@@ -41,16 +41,16 @@ export default function ControlPicker({ value, onChange }: Props) {
   useEffect(() => {
     setAssessments([]);
     setAssessmentId("");
-    setControlCatalog([]);
+    setRequirementCatalog([]);
     if (!systemId) return;
     (async () => {
       try {
-        const [allAssessments, allControls] = await Promise.all([
+        const [allAssessments, allRequirements] = await Promise.all([
           api.getAssessments(systemId),
-          api.getControls({ ai_system_id: systemId }),
+          api.getRequirements({ ai_system_id: systemId }),
         ]);
         setAssessments(allAssessments.filter((a) => a.status !== "archived"));
-        setControlCatalog(allControls);
+        setRequirementCatalog(allRequirements);
       } catch (e) {
         showToast(`Failed to load data: ${(e as Error).message}`, true);
       }
@@ -63,16 +63,16 @@ export default function ControlPicker({ value, onChange }: Props) {
     setSearch("");
   }
 
-  const filtered = controlCatalog
-    .filter((c) => {
-      if (c.assessment_id !== assessmentId) return false;
+  const filtered = requirementCatalog
+    .filter((r) => {
+      if (r.assessment_id !== assessmentId) return false;
       if (!search) return true;
       const q = search.toLowerCase();
-      return c.title.toLowerCase().includes(q) || (c.control_ref ?? "").toLowerCase().includes(q);
+      return r.title.toLowerCase().includes(q) || (r.requirement_ref ?? "").toLowerCase().includes(q);
     })
     .sort((a, b) => {
-      const ra = a.control_ref ?? "￿";
-      const rb = b.control_ref ?? "￿";
+      const ra = a.requirement_ref ?? "￿";
+      const rb = b.requirement_ref ?? "￿";
       if (ra !== rb) return ra.localeCompare(rb);
       return a.title.localeCompare(b.title);
     });
@@ -87,7 +87,7 @@ export default function ControlPicker({ value, onChange }: Props) {
         value={systemId || NONE}
         onValueChange={(v) => { setSystemId(v === NONE ? "" : v); setSearch(""); }}
       >
-        <SelectTrigger><SelectValue placeholder="Select a system to browse controls…" /></SelectTrigger>
+        <SelectTrigger><SelectValue placeholder="Select a system to browse requirements…" /></SelectTrigger>
         <SelectContent>
           <SelectItem value={NONE}>— select a system —</SelectItem>
           {systems.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
@@ -113,7 +113,7 @@ export default function ControlPicker({ value, onChange }: Props) {
       {assessmentId && (
         <>
           <Input
-            placeholder="Search controls…"
+            placeholder="Search requirements…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-8 text-[13px]"
@@ -121,13 +121,13 @@ export default function ControlPicker({ value, onChange }: Props) {
           <div className="max-h-48 overflow-y-auto rounded-md border border-border">
             {filtered.length === 0 ? (
               <div className="p-3 text-center text-xs text-muted-foreground">
-                {search ? "No controls match" : "No controls for this assessment"}
+                {search ? "No requirements match" : "No requirements for this assessment"}
               </div>
-            ) : filtered.map((c) => (
-              <label key={c.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
-                <Checkbox checked={value.includes(c.id)} onCheckedChange={() => toggle(c.id)} />
-                <span className="flex-1 truncate text-[13px] text-foreground">{c.title}</span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">{c.control_ref || c.id}</span>
+            ) : filtered.map((r) => (
+              <label key={r.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
+                <Checkbox checked={value.includes(r.id)} onCheckedChange={() => toggle(r.id)} />
+                <span className="flex-1 truncate text-[13px] text-foreground">{r.title}</span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">{r.requirement_ref || r.id}</span>
               </label>
             ))}
           </div>

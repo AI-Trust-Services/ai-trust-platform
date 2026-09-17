@@ -7,19 +7,19 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
 
-# Evidence links only to controls — controls are the sole attachment point.
-evidence_controls = Table(
-    "evidence_controls",
+# Evidence links only to requirements — requirements are the sole attachment point.
+evidence_requirements = Table(
+    "evidence_requirements",
     Base.metadata,
     Column("evidence_id", String(30), ForeignKey("evidence.id", ondelete="CASCADE"), primary_key=True),
-    Column("control_id", String(30), ForeignKey("controls.id", ondelete="CASCADE"), primary_key=True),
+    Column("requirement_id", String(30), ForeignKey("requirements.id", ondelete="CASCADE"), primary_key=True),
 )
 
 
 class Evidence(Base):
     """An artifact proving a control is implemented.
 
-    Links to controls via evidence_controls. Obligations are derived from
+    Links to requirements via evidence_requirements. Obligations are derived from
     linked controls, never linked directly. When a file is uploaded it is
     stored in MinIO; file_path is the object key within the evidence bucket.
     Approving evidence cascades to control effectiveness.

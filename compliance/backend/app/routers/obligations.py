@@ -10,7 +10,7 @@ from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import ASSESSMENTS_READ, ASSESSMENTS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
-from ai_trust_persistence.models import Assessment, Control, Obligation
+from ai_trust_persistence.models import Assessment, Obligation, Requirement
 from app.cascade import refresh_assessment_score
 from app.ids import new_id
 from app.schemas import (
@@ -36,7 +36,7 @@ async def list_obligations(
     assessment_id: str | None = Query(default=None),
     ai_system_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
-    control_id: str | None = Query(default=None),
+    requirement_id: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[ObligationResponse]:
@@ -48,10 +48,10 @@ async def list_obligations(
             stmt = stmt.where(Obligation.ai_system_id == ai_system_id)
         if status:
             stmt = stmt.where(Obligation.status == status)
-        if control_id:
+        if requirement_id:
             stmt = stmt.join(
-                Control, Control.obligation_id == Obligation.id
-            ).where(Control.id == control_id)
+                Requirement, Requirement.obligation_id == Obligation.id
+            ).where(Requirement.id == requirement_id)
         stmt = stmt.limit(limit).offset(offset)
         result = await session.execute(stmt)
         return [ObligationResponse.model_validate(r) for r in result.scalars().all()]
@@ -97,12 +97,12 @@ async def get_obligation(obligation_id: str) -> ObligationDetailResponse:
         )).scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"Obligation {obligation_id} not found")
-        control_ids = (await session.execute(
-            select(Control.id)
-            .where(Control.obligation_id == obligation_id)
+        requirement_ids = (await session.execute(
+            select(Requirement.id)
+            .where(Requirement.obligation_id == obligation_id)
         )).scalars().all()
         detail = ObligationDetailResponse.model_validate(row)
-        detail.control_ids = list(control_ids)
+        detail.requirement_ids = list(requirement_ids)
         return detail
 
 

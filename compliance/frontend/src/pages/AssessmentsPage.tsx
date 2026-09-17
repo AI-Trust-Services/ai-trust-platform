@@ -121,7 +121,7 @@ function RiskClassificationStep({ system, assessmentId, onClose, onSuccess, show
         await registryClient.submitTechnicalSection(system.id);
       }
       await api.advanceFromClassification(assessmentId);
-      showToast("Risk classification complete — obligations and controls generated");
+      showToast("Risk classification complete — obligations and requirements generated");
       onSuccess();
     } catch (e) {
       showToast(`Classification failed: ${(e as Error).message}`, true);
@@ -143,7 +143,7 @@ function RiskClassificationStep({ system, assessmentId, onClose, onSuccess, show
         await registryClient.submitTechnicalSection(system.id);
       }
       await api.advanceFromClassification(assessmentId);
-      showToast("Risk classification complete — obligations and controls generated");
+      showToast("Risk classification complete — obligations and requirements generated");
       onSuccess();
     } catch (e) {
       showToast(`Classification failed: ${(e as Error).message}`, true);
@@ -158,7 +158,7 @@ function RiskClassificationStep({ system, assessmentId, onClose, onSuccess, show
     try {
       await registryClient.updateSystem(system.id, { tier: externalTier });
       await api.advanceFromClassification(assessmentId);
-      showToast("System tier set — obligations and controls generated");
+      showToast("System tier set — obligations and requirements generated");
       onSuccess();
     } catch (e) {
       showToast(`Update failed: ${(e as Error).message}`, true);
@@ -261,7 +261,7 @@ function RiskClassificationStep({ system, assessmentId, onClose, onSuccess, show
 
         {mode === "external" && (
           <div className="flex flex-col gap-4">
-            <p className="text-sm text-muted-foreground">Select the risk tier that was determined externally. Obligations and controls will be generated for this tier.</p>
+            <p className="text-sm text-muted-foreground">Select the risk tier that was determined externally. Obligations and requirements will be generated for this tier.</p>
             <div className="flex flex-col gap-1.5">
               <Label>Risk Tier <span className="text-destructive">*</span></Label>
               <Select value={externalTier} onValueChange={setExternalTier}>
@@ -410,7 +410,7 @@ export default function AssessmentsPage() {
   const showToast = useToast();
   const { can, username } = usePermissions();
   const mayWrite = can("assessments:write");
-  const mayApprove = can("systems:approve");
+  const mayApprove = can("assessments:approve");
   const noWriteTitle = "Requires permission: assessments:write";
   const noApproveTitle = "Requires permission: assessments:approve";
 

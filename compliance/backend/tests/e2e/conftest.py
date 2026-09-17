@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -35,8 +36,8 @@ os.environ.setdefault("MINIO_REGION", "us-east-1")
 # before any test runs (and before SessionLocal is first used).
 _PG_USER = os.environ.get("POSTGRES_USER", "postgres")
 _PG_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "postgres")
-_PG_HOST = "localhost"
-_PG_PORT = 5432
+_PG_HOST = os.environ.get("POSTGRES_HOST", "localhost")
+_PG_PORT = int(os.environ.get("POSTGRES_PORT", "5432"))
 _TEST_DB = "ai_trust_test"
 _TEST_DATABASE_URL = (
     f"postgresql+asyncpg://{_PG_USER}:{_PG_PASSWORD}@{_PG_HOST}:{_PG_PORT}/{_TEST_DB}"
@@ -70,7 +71,6 @@ import pytest_asyncio
 import httpx
 
 _ALEMBIC_INI = Path(__file__).parents[4] / "libs" / "persistence" / "alembic.ini"
-_ALEMBIC_BIN = Path(__file__).parents[2] / ".venv" / "bin" / "alembic"
 
 
 def _pg_reachable() -> bool:
@@ -103,7 +103,7 @@ def _ensure_test_db() -> None:
 
 def _run_migrations() -> None:
     subprocess.run(
-        [str(_ALEMBIC_BIN), "-c", str(_ALEMBIC_INI), "upgrade", "head"],
+        [sys.executable, "-m", "alembic", "-c", str(_ALEMBIC_INI), "upgrade", "head"],
         env={**os.environ, "DATABASE_URL": _TEST_DATABASE_URL},
         check=True,
     )
@@ -129,8 +129,8 @@ def _truncate() -> None:
     )
     # frameworks is excluded — seeded by migration, never modified by tests.
     cur.execute(
-        "TRUNCATE ai_systems, assessments, obligations, controls, evidence, "
-        "evidence_controls, "
+        "TRUNCATE ai_systems, assessments, obligations, requirements, evidence, "
+        "evidence_requirements, "
         "service_model_baselines RESTART IDENTITY CASCADE"
     )
     cur.close()
@@ -141,7 +141,7 @@ def _truncate() -> None:
 def e2e_setup():
     """Auto-skip if Postgres unreachable; patch MinIO to no-ops for all tests."""
     if not _pg_reachable():
-        pytest.skip("Postgres not reachable at localhost:5432 — start Docker Compose first")
+        pytest.skip(f"Postgres not reachable at {_PG_HOST}:{_PG_PORT} — start Docker Compose first")
     _ensure_test_db()
     _run_migrations()
     os.environ["DATABASE_URL"] = _TEST_DATABASE_URL
@@ -254,45 +254,42 @@ async def create_obligation(client: httpx.AsyncClient, assessment_id: str, **kwa
     return r.json()
 
 
-async def create_control(
+async def create_requirement(
     client: httpx.AsyncClient,
-    system_id: str | None = None,
     obligation_id: str | None = None,
     **kwargs,
 ) -> dict:
-    """Create a control. obligation_id is required by the backend.
+    """Create a requirement. obligation_id is required by the backend.
 
-    When obligation_id is omitted the helper auto-creates a system (if system_id
-    is also omitted), an assessment, and an obligation so callers that only care
-    about having *a* control don't need to do the setup themselves.
+    When obligation_id is omitted the helper auto-creates a system, an assessment,
+    and an obligation so callers that only care about having *a* requirement don't
+    need to do the setup themselves.
     """
     if obligation_id is None:
-        if system_id is None:
-            sys = await create_system()
-            system_id = sys["id"]
-        ass = await create_assessment(client, system_id)
+        sys = await create_system()
+        ass = await create_assessment(client, sys["id"])
         obl = await create_obligation(client, ass["id"])
         obligation_id = obl["id"]
     payload = {
         "obligation_id": obligation_id,
-        "title": "Test Control",
+        "title": "Test Requirement",
         "category": "general",
         **kwargs,
     }
-    r = await client.post("/v1/controls", json=payload)
+    r = await client.post("/v1/requirements", json=payload)
     assert r.status_code == 201, r.text
     return r.json()
 
 
 async def create_evidence(
     client: httpx.AsyncClient,
-    control_ids: list[str] | None = None,
+    requirement_ids: list[str] | None = None,
     **kwargs,
 ) -> dict:
-    """Creates evidence without a file. Auto-creates a control when none given."""
-    if control_ids is None:
-        ctl = await create_control(client)
-        control_ids = [ctl["id"]]
+    """Creates evidence without a file. Auto-creates a requirement when none given."""
+    if requirement_ids is None:
+        req = await create_requirement(client)
+        requirement_ids = [req["id"]]
     # httpx accepts a list of tuples for repeated form fields
     form: list[tuple[str, str]] = [
         ("title", kwargs.pop("title", "Test Evidence")),
@@ -301,8 +298,8 @@ async def create_evidence(
     for k, v in kwargs.items():
         if v is not None:
             form.append((k, str(v)))
-    for cid in control_ids:
-        form.append(("control_ids", cid))
+    for cid in requirement_ids:
+        form.append(("requirement_ids", cid))
     r = await client.post("/v1/evidence", data=form)
     assert r.status_code == 201, r.text
     return r.json()

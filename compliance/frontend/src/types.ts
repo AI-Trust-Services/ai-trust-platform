@@ -43,15 +43,15 @@ export interface Obligation {
 }
 
 export interface ObligationDetail extends Obligation {
-  control_ids: string[];
+  requirement_ids: string[];
 }
 
-export interface Control {
+export interface Requirement {
   id: string;
   obligation_id: string;
   assessment_id: string;
   ai_system_id: string | null;
-  control_ref: string | null;
+  requirement_ref: string | null;
   title: string;
   description: string;
   category: string;
@@ -64,7 +64,7 @@ export interface Control {
   updated_at: string;
 }
 
-export interface ControlDetail extends Control {
+export interface RequirementDetail extends Requirement {
   evidence_count: number;
 }
 
@@ -95,7 +95,7 @@ export interface Evidence {
 }
 
 export interface EvidenceDetail extends Evidence {
-  controls: ControlRef[];
+  requirement_ids: string[];
 }
 
 export interface EvidenceVersion {
