@@ -99,52 +99,79 @@ pods. The deploy step then force-reconciles a `Stalled` HelmRelease and polls it
 ### One cluster, many namespaces
 
 A single shoot cluster runs **one** OCM controller and **one** Flux, both of which manage an
-independent block of objects per namespace — so `main`, and any number of developer/PR deployments,
-coexist on the same cluster without touching each other.
+independent block of objects per namespace, so several deployments coexist on the same cluster
+without touching each other. The two clusters use that capability very differently.
+
+**`ai-trust-main` — production.** The namespace is always `ai-trust`, never derived from the actor.
+Every push to `main` deploys automatically; images, chart and OCM version are prefixed
+`ai-trust-main-<sha>` (not the namespace name) and additionally get a floating `latest` tag.
 
 ```mermaid
-flowchart LR
-    subgraph gha["⚙️ GitHub Actions — one run per namespace"]
-        direction TB
-        t_main["build-push-deploy.yml<br/>push to main<br/>namespace: ai-trust"]
+flowchart TB
+    subgraph gha["⚙️ GitHub Actions — build-push-deploy.yml"]
+        t_main["push to main<br/>cluster: ai-trust-main<br/>tag prefix: ai-trust-main-&lt;sha&gt; + latest"]
+    end
+
+    subgraph cluster["🟪 Gardener shoot: ai-trust-main — production"]
+        subgraph ocmsys["namespace: ocm-system — OCM + Flux"]
+            crs_main["ComponentVersion ai-trust-platform-ai-trust<br/>Resource ai-trust-platform-chart-ai-trust<br/>FluxDeployer + HelmRelease ai-trust-ai-trust<br/>Secret ai-trust-flux-values-ai-trust"]
+        end
+
+        subgraph nss["Workload namespace — fixed, never derived"]
+            ns_main["namespace: ai-trust<br/>release ai-trust-ai-trust<br/>pods · PVCs · secret ai-trust-env<br/>host: shoot-domain"]
+        end
+
+        crs_main -->|helm-controller| ns_main
+    end
+
+    t_main --> crs_main
+
+    classDef nsMain fill:#e7effc,stroke:#8f8f99,stroke-width:1px,color:#202124
+    class t_main,crs_main,ns_main nsMain
+    style gha fill:#fffde7,stroke:#c9c5ae,stroke-width:1px,color:#202124
+    style cluster fill:#fffde7,stroke:#c9c5ae,stroke-width:2px,color:#202124
+    style ocmsys fill:#fffef2,stroke:#d8d3b8,stroke-width:1px,color:#202124
+    style nss fill:#fffef2,stroke:#d8d3b8,stroke-width:1px,color:#202124
+    linkStyle default stroke:#777982,stroke-width:1px
+```
+
+**`ai-trust-test` — development.** One namespace per developer, named after the lowercased GitHub
+actor (or the explicit `namespace` workflow input). Deploys are on demand: commenting
+`/garden-deploy` on a PR builds that PR's branch and rolls it into the author's own namespace
+(`.github/workflows/pr-deployment-test.yml` pins `gardener_cluster: ai-trust-test`). Several
+developers therefore hold independent full-stack environments on the same shoot at the same time.
+
+```mermaid
+flowchart TB
+    subgraph gha["⚙️ GitHub Actions — one run per developer"]
         t_alice["/garden-deploy on PR 101<br/>namespace: alice"]
         t_bob["/garden-deploy on PR 102<br/>namespace: bob"]
     end
 
-    subgraph cluster["🟪 One Gardener shoot cluster"]
-        direction LR
-
+    subgraph cluster["🟪 Gardener shoot: ai-trust-test — development"]
         subgraph ocmsys["namespace: ocm-system — shared OCM controller + Flux, one CR set per namespace"]
-            direction TB
-            crs_main["ComponentVersion ai-trust-platform-ai-trust<br/>Resource ai-trust-platform-chart-ai-trust<br/>FluxDeployer + HelmRelease ai-trust-ai-trust<br/>Secret ai-trust-flux-values-ai-trust"]
             crs_alice["ComponentVersion ai-trust-platform-alice<br/>Resource ai-trust-platform-chart-alice<br/>FluxDeployer + HelmRelease ai-trust-alice<br/>Secret ai-trust-flux-values-alice"]
             crs_bob["ComponentVersion ai-trust-platform-bob<br/>Resource ai-trust-platform-chart-bob<br/>FluxDeployer + HelmRelease ai-trust-bob<br/>Secret ai-trust-flux-values-bob"]
         end
 
-        subgraph nss["Workload namespaces — own pods, DB, storage, URL"]
-            direction TB
-            ns_main["namespace: ai-trust<br/>release ai-trust-ai-trust<br/>pods · PVCs · secret ai-trust-env<br/>host: shoot-domain"]
+        subgraph nss["Workload namespaces — one per developer, own pods, DB, storage, URL"]
             ns_alice["namespace: alice<br/>release ai-trust-alice<br/>pods · PVCs · secret ai-trust-env<br/>host: alice.shoot-domain"]
             ns_bob["namespace: bob<br/>release ai-trust-bob<br/>pods · PVCs · secret ai-trust-env<br/>host: bob.shoot-domain"]
         end
 
-        crs_main -->|helm-controller| ns_main
         crs_alice -->|helm-controller| ns_alice
         crs_bob -->|helm-controller| ns_bob
     end
 
-    t_main --> crs_main
     t_alice --> crs_alice
     t_bob --> crs_bob
 
-    classDef nsMain fill:#e7effc,stroke:#8f8f99,stroke-width:1px,color:#202124
     classDef nsAlice fill:#e6f5ea,stroke:#8f8f99,stroke-width:1px,color:#202124
     classDef nsBob fill:#fdeae2,stroke:#8f8f99,stroke-width:1px,color:#202124
-    class t_main,crs_main,ns_main nsMain
     class t_alice,crs_alice,ns_alice nsAlice
     class t_bob,crs_bob,ns_bob nsBob
     style gha fill:#fffde7,stroke:#c9c5ae,stroke-width:1px,color:#202124
-    style cluster fill:#fffde7,stroke:#c9c5ae,stroke-width:1px,color:#202124
+    style cluster fill:#fffde7,stroke:#c9c5ae,stroke-width:2px,color:#202124
     style ocmsys fill:#fffef2,stroke:#d8d3b8,stroke-width:1px,color:#202124
     style nss fill:#fffef2,stroke:#d8d3b8,stroke-width:1px,color:#202124
     linkStyle default stroke:#777982,stroke-width:1px
