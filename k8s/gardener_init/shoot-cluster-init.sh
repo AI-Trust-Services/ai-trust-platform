@@ -85,9 +85,10 @@ SHOOT_DOMAIN="${APP_HOST#*.}"
 # subdomain derived from the shoot domain so it doesn't collide with ai-trust or
 # with other namespaces on the same cluster.
 if [[ "$NAMESPACE" != "ai-trust" ]]; then
-  APP_HOST="${NAMESPACE}.${APP_HOST}"
-  KEYCLOAK_HOST="${NAMESPACE}.${KEYCLOAK_HOST}"
-  MINIO_HOST="${NAMESPACE}.${MINIO_HOST}"
+  BASE_HOST="$APP_HOST"
+  APP_HOST="${NAMESPACE}.${BASE_HOST}"
+  KEYCLOAK_HOST="keycloak.${NAMESPACE}.${BASE_HOST}"
+  MINIO_HOST="minio.${NAMESPACE}.${BASE_HOST}"
 fi
 
 echo "KUBECONFIG: ${KUBECONFIG:-<not set>}"
@@ -149,7 +150,7 @@ kubectl apply -f - <<EOF
 apiVersion: traefik.io/v1alpha1
 kind: ServersTransport
 metadata:
-  name: ${NAMESPACE}-llm-timeout
+  name: llm-timeout
   namespace: ${NAMESPACE}
 spec:
   forwardingTimeouts:
