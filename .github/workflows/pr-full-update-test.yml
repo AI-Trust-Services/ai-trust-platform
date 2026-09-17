@@ -1,0 +1,331 @@
+name: PR Full Update Test (not-stable)
+
+# Triggered by /garden-deploy comment on a PR.
+# Deploys main to the PR author's namespace on ai-trust-test, then builds and
+# deploys the PR branch to the same namespace, and reports the result.
+#
+# Prerequisites (one-time per developer namespace):
+#   bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-username>
+#
+# Usage: comment "/garden-deploy" on a PR.
+
+on:
+  push:
+    branches:
+      - 193-pre-merge-check-integration-test-deployment
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: write
+  id-token: write
+  packages: write
+  actions: write
+
+jobs:
+  dispatch:
+    name: Parse and authorize /garden-deploy
+    runs-on: ubuntu-latest
+    # Only run on PR comments that start with /garden-deploy (or on push for testing)
+    if: |
+      github.event_name == 'push' ||
+      (github.event.issue.pull_request != null &&
+      startsWith(github.event.comment.body, '/garden-deploy'))
+    outputs:
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      pr_sha: ${{ steps.pr.outputs.pr_sha }}
+      pr_branch: ${{ steps.pr.outputs.pr_branch }}
+      pr_author: ${{ steps.pr.outputs.pr_author }}
+      pr_author_lower: ${{ steps.pr.outputs.pr_author_lower }}
+      main_sha: ${{ steps.main.outputs.main_sha }}
+      main_ocm_version: ${{ steps.main.outputs.main_ocm_version }}
+      authorized: ${{ steps.auth.outputs.authorized }}
+    steps:
+      - name: Get PR details
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            # Test mode: derive PR details from the push context
+            PR_DATA=$(gh api repos/${{ github.repository }}/pulls \
+              --jq "[.[] | select(.head.ref == \"${{ github.ref_name }}\")][0]")
+            PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number')
+            PR_SHA="${{ github.sha }}"
+            PR_BRANCH="${{ github.ref_name }}"
+            PR_AUTHOR="${{ github.actor }}"
+            PR_AUTHOR="sebastian-rochacki-2"
+          else
+            PR_NUMBER="${{ github.event.issue.number }}"
+            PR_DATA=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER})
+            PR_SHA=$(echo "$PR_DATA" | jq -r '.head.sha')
+            PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
+            PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
+          fi
+          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "pr_sha=${PR_SHA}" >> "$GITHUB_OUTPUT"
+          echo "pr_branch=${PR_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "pr_author=${PR_AUTHOR}" >> "$GITHUB_OUTPUT"
+          echo "pr_author_lower=${PR_AUTHOR,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Check authorization (PR author or org member)
+        id: auth
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+            echo "Push event — skipping auth check."
+            exit 0
+          fi
+          ACTOR="${{ github.event.comment.user.login }}"
+          PR_AUTHOR="${{ steps.pr.outputs.pr_author }}"
+          ORG=$(echo "${{ github.repository }}" | cut -d/ -f1)
+
+          if [[ "$ACTOR" == "$PR_AUTHOR" ]]; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+            echo "Actor ${ACTOR} is the PR author — authorized."
+            exit 0
+          fi
+
+          HTTP_STATUS=$(gh api "orgs/${ORG}/members/${ACTOR}" \
+            --silent --include 2>&1 | head -1 | grep -oE '[0-9]{3}' || echo "404")
+          if [[ "$HTTP_STATUS" == "204" ]]; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+            echo "Actor ${ACTOR} is an org member — authorized."
+          else
+            echo "authorized=false" >> "$GITHUB_OUTPUT"
+            echo "Actor ${ACTOR} is not the PR author or an org member — unauthorized."
+          fi
+
+      - name: Reject unauthorized request
+        if: steps.auth.outputs.authorized != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ steps.pr.outputs.pr_number }} \
+            --body "❌ @${{ github.event.comment.user.login }} Only the PR author or org members can trigger \`/garden-deploy\`."
+          exit 1
+
+      - name: Get latest main SHA and verify CI is green
+        id: main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MAIN_SHA=$(gh api repos/${{ github.repository }}/commits/main --jq '.sha')
+          echo "Latest main SHA: ${MAIN_SHA}"
+
+          # Find the most recent successful build-push-deploy.yml run on main
+          RUN=$(gh run list \
+            --repo "${{ github.repository }}" \
+            --workflow "build-push-deploy.yml" \
+            --branch main \
+            --status success \
+            --limit 1 \
+            --json headSha,conclusion,status \
+            --jq '.[0]')
+
+          if [[ -z "$RUN" || "$RUN" == "null" ]]; then
+            gh pr comment ${{ steps.pr.outputs.pr_number }} \
+              --body "❌ No successful \`build-push-deploy\` run found on \`main\`. Fix main first."
+            exit 1
+          fi
+
+          RUN_SHA=$(echo "$RUN" | jq -r '.headSha')
+          if [[ "$RUN_SHA" != "$MAIN_SHA" ]]; then
+            gh pr comment ${{ steps.pr.outputs.pr_number }} \
+              --body "❌ Latest \`main\` commit \`${MAIN_SHA::12}\` has not been built successfully yet (last green build was \`${RUN_SHA::12}\`). Fix main first."
+            exit 1
+          fi
+
+          # ai-trust-main images are tagged ai-trust-main-<sha> (tag_prefix=ai-trust-main, not namespace=ai-trust)
+          MAIN_OCM_VERSION="ai-trust-main-${MAIN_SHA::12}"
+          echo "main_sha=${MAIN_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "main_ocm_version=${MAIN_OCM_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "main is green at ${MAIN_SHA::12} (OCM version: ${MAIN_OCM_VERSION})"
+
+  post-start:
+    name: Post deployment started
+    needs: dispatch
+    if: needs.dispatch.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post "Test deployment started" comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
+          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
+          PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
+          MAIN_SHA: ${{ needs.dispatch.outputs.main_sha }}
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "🚀 Test deployment started — deploying \`main:${MAIN_SHA}\` then \`feature:${PR_SHA::12}\` to namespace \`${PR_AUTHOR_LOWER}\` on \`ai-trust-test\`."
+
+      - name: Set pending commit status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
+        run: |
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${PR_SHA} \
+            -f state=pending \
+            -f context=deploy-test \
+            -f description="Deploy test in progress..." \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  cleanup:
+    name: Delete existing HelmRelease
+    needs: dispatch
+    if: needs.dispatch.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load Gardener connection vars
+        run: |
+          source k8s/env/ai-trust-test/.env
+          echo "GARDENER_SHOOT_API_SERVER=${GARDENER_SHOOT_API_SERVER}" >> "$GITHUB_ENV"
+          echo "GARDENER_CA_DISCOVERY_URL=${GARDENER_CA_DISCOVERY_URL}" >> "$GITHUB_ENV"
+          echo "GARDENER_OIDC_AUDIENCE=${GARDENER_OIDC_AUDIENCE}" >> "$GITHUB_ENV"
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Authenticate to Gardener cluster
+        uses: gardener/cc-utils/.github/actions/kubernetes-auth@1e70b044f4d3305267a559e7ae74b4de57e1fdee
+        with:
+          server: ${{ env.GARDENER_SHOOT_API_SERVER }}
+          server-ca-discovery-url: ${{ env.GARDENER_CA_DISCOVERY_URL }}
+          audience: ${{ env.GARDENER_OIDC_AUDIENCE }}
+          service-account-name: github-actions
+          service-account-namespace: ocm-system
+          service-account-token-expiration: 3600
+
+      - name: Point KUBECONFIG at authenticated kubeconfig
+        run: echo "KUBECONFIG=$GITHUB_WORKSPACE/kubeconfig.yaml" >> "$GITHUB_ENV"
+
+      - name: Delete HelmRelease and FluxDeployer to force clean install from main
+        env:
+          PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
+        run: |
+          RELEASE_NAME="ai-trust-${PR_AUTHOR_LOWER}"
+          APP_NAMESPACE="${PR_AUTHOR_LOWER}"
+          HELM_WAS_PRESENT=false
+
+          # Delete HelmRelease first (Flux's finalizer runs helm uninstall on the app namespace).
+          # --wait=true only waits for the CR to be removed, NOT for pods to finish terminating.
+          if kubectl get helmrelease "${RELEASE_NAME}" -n ocm-system &>/dev/null; then
+            echo "Deleting HelmRelease ${RELEASE_NAME}..."
+            kubectl delete helmrelease "${RELEASE_NAME}" -n ocm-system --wait=true --timeout=120s
+            echo "HelmRelease CR removed (helm uninstall running in background)."
+            HELM_WAS_PRESENT=true
+          else
+            echo "HelmRelease ${RELEASE_NAME} not found — skipping."
+          fi
+
+          # Delete FluxDeployer so OCM controller re-creates it (and the HelmRelease) fresh.
+          # Without this, OCM sees no spec change and never re-creates the HelmRelease.
+          if kubectl get fluxdeployer "${RELEASE_NAME}" -n ocm-system &>/dev/null; then
+            echo "Deleting FluxDeployer ${RELEASE_NAME}..."
+            kubectl delete fluxdeployer "${RELEASE_NAME}" -n ocm-system --wait=true --timeout=60s
+            echo "FluxDeployer deleted — apply-to-cluster will re-create both."
+          else
+            echo "FluxDeployer ${RELEASE_NAME} not found — skipping."
+          fi
+
+          # Wait for all pods in the app namespace to finish terminating before we return.
+          # deploy-main starts immediately after this job; if old pods are still Running when
+          # Flux attempts a fresh helm install, Helm's atomic install times out (InstallFailed).
+          if [[ "${HELM_WAS_PRESENT}" == "true" ]]; then
+            echo "Waiting for pods in namespace ${APP_NAMESPACE} to finish terminating..."
+            DRAIN_TIMEOUT=300  # 5 minutes — uninstall of the full chart should take < 2min
+            ELAPSED=0
+            while true; do
+              POD_COUNT=$(kubectl get pods -n "${APP_NAMESPACE}" --no-headers 2>/dev/null | wc -l || echo "0")
+              if [[ "${POD_COUNT}" -eq 0 ]]; then
+                echo "[${ELAPSED}s] Namespace ${APP_NAMESPACE} is empty — proceeding."
+                break
+              fi
+              echo "[${ELAPSED}s] ${POD_COUNT} pod(s) still present in ${APP_NAMESPACE} — waiting..."
+              if (( ELAPSED >= DRAIN_TIMEOUT )); then
+                echo "Warning: timed out waiting for namespace drain after ${DRAIN_TIMEOUT}s — proceeding anyway."
+                kubectl get pods -n "${APP_NAMESPACE}" --no-headers || true
+                break
+              fi
+              sleep 15
+              ELAPSED=$(( ELAPSED + 15 ))
+            done
+          fi
+
+  deploy-main:
+    name: Deploy main to PR namespace
+    needs: [dispatch, cleanup]
+    if: needs.dispatch.outputs.authorized == 'true'
+    uses: ./.github/workflows/bootstrap-gardener.yml
+    with:
+      cluster: ai-trust-test
+      ocm_version: ${{ needs.dispatch.outputs.main_ocm_version }}
+      namespace: ${{ needs.dispatch.outputs.pr_author_lower }}
+      ref: refs/heads/main
+    secrets: inherit
+
+  deploy-pr-branch:
+    name: Build and deploy PR branch
+    needs: [dispatch, deploy-main]
+    if: needs.dispatch.outputs.authorized == 'true'
+    uses: ./.github/workflows/build-push-deploy.yml
+    with:
+      branch: ${{ needs.dispatch.outputs.pr_branch }}
+      gardener_cluster: ai-trust-test
+      namespace: ${{ needs.dispatch.outputs.pr_author_lower }}
+    secrets: inherit
+
+  post-result:
+    name: Post deployment result
+    needs: [dispatch, deploy-main, deploy-pr-branch]
+    if: always() && needs.dispatch.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post success comment and status
+        if: needs.deploy-pr-branch.result == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
+          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
+          MAIN_SHA: ${{ needs.dispatch.outputs.main_sha }}
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "✅ Test deployment successful: \`main:${MAIN_SHA}\` → \`feature:${PR_SHA::12}\`"
+
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${PR_SHA} \
+            -f state=success \
+            -f context=deploy-test \
+            -f description="Deploy test passed (main:${MAIN_SHA} -> feature:${PR_SHA::12})" \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Post failure comment and status
+        if: needs.deploy-pr-branch.result != 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
+          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
+          MAIN_SHA: ${{ needs.dispatch.outputs.main_sha }}
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "❌ Test deployment failed: \`main:${MAIN_SHA}\` → \`feature:${PR_SHA::12}\` — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${PR_SHA} \
+            -f state=failure \
+            -f context=deploy-test \
+            -f description="Deploy test failed (main:${MAIN_SHA} -> feature:${PR_SHA::12})" \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
