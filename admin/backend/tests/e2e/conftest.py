@@ -34,6 +34,7 @@ os.environ.setdefault("SMTP_FROM", "noreply@ai-trust.local")
 os.environ.setdefault("SMTP_FROM_NAME", "AI Trust Platform")
 os.environ.setdefault("SMTP_SSL", "false")
 os.environ.setdefault("SMTP_STARTTLS", "false")
+os.environ.setdefault("USERS_BACKEND_URL", "http://users-backend:8008")
 
 
 # ---------------------------------------------------------------------------
