@@ -10,11 +10,7 @@ name: PR Full Update Test (not-stable)
 # Usage: comment "/garden-deploy" on a PR.
 
 on:
-  push:
-    branches:
-      - 193-pre-merge-check-integration-test-deployment
-  issue_comment:
-    types: [created]
+  workflow_dispatch:  # manual trigger only — not-stable, disabled from automatic triggers
 
 permissions:
   contents: read
