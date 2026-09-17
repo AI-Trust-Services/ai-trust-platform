@@ -93,7 +93,7 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["helm.toolkit.fluxcd.io"]
     resources: ["helmreleases"]
-    verbs: ["get", "list", "watch", "patch"]
+    verbs: ["get", "list", "watch", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
