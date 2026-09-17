@@ -208,17 +208,27 @@ jobs:
       - name: Point KUBECONFIG at authenticated kubeconfig
         run: echo "KUBECONFIG=$GITHUB_WORKSPACE/kubeconfig.yaml" >> "$GITHUB_ENV"
 
-      - name: Delete HelmRelease to force clean install from main
+      - name: Delete HelmRelease and FluxDeployer to force clean install from main
         env:
           PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
         run: |
           RELEASE_NAME="ai-trust-${PR_AUTHOR_LOWER}"
+          # Delete HelmRelease first (Flux runs helm uninstall)
           if kubectl get helmrelease "${RELEASE_NAME}" -n ocm-system &>/dev/null; then
-            echo "Deleting HelmRelease ${RELEASE_NAME} — deploy-main will do a fresh install."
+            echo "Deleting HelmRelease ${RELEASE_NAME}..."
             kubectl delete helmrelease "${RELEASE_NAME}" -n ocm-system --wait=true --timeout=120s
-            echo "Deleted."
+            echo "HelmRelease deleted."
           else
-            echo "HelmRelease ${RELEASE_NAME} not found — nothing to clean up."
+            echo "HelmRelease ${RELEASE_NAME} not found — skipping."
+          fi
+          # Delete FluxDeployer so OCM controller re-creates it (and the HelmRelease) fresh.
+          # Without this, OCM sees no spec change and never re-creates the HelmRelease.
+          if kubectl get fluxdeployer "${RELEASE_NAME}" -n ocm-system &>/dev/null; then
+            echo "Deleting FluxDeployer ${RELEASE_NAME}..."
+            kubectl delete fluxdeployer "${RELEASE_NAME}" -n ocm-system --wait=true --timeout=60s
+            echo "FluxDeployer deleted — apply-to-cluster will re-create both."
+          else
+            echo "FluxDeployer ${RELEASE_NAME} not found — skipping."
           fi
 
   deploy-main:
