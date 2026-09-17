@@ -28,6 +28,7 @@ async def _get_user_and_role_counts() -> tuple[int, int]:
         if resp.status_code == 200:
             data = resp.json()
             return data.get("user_count", 0), data.get("role_count", 0)
+        logger.warning("admin.stats.users_backend_error", extra={"status_code": resp.status_code})
     except Exception as exc:
         logger.warning("admin.stats.fetch_failed", extra={"error": str(exc)})
     return 0, 0
