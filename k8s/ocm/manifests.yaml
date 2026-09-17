@@ -41,6 +41,10 @@ spec:
   helmReleaseTemplate:
     releaseName: ai-trust-${NAMESPACE}
     targetNamespace: ${NAMESPACE}
+    install:
+      timeout: 15m0s
+    upgrade:
+      timeout: 15m0s
     valuesFrom:
       # ai-trust-flux-values-<namespace> holds the 6 non-sensitive URL/hostname/tag keys needed here.
       # Flux's HelmRelease valuesFrom has no cross-namespace support, so this secret

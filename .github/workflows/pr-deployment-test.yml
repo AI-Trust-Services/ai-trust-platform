@@ -213,14 +213,20 @@ jobs:
           PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
         run: |
           RELEASE_NAME="ai-trust-${PR_AUTHOR_LOWER}"
-          # Delete HelmRelease first (Flux runs helm uninstall)
+          APP_NAMESPACE="${PR_AUTHOR_LOWER}"
+          HELM_WAS_PRESENT=false
+
+          # Delete HelmRelease first (Flux's finalizer runs helm uninstall on the app namespace).
+          # --wait=true only waits for the CR to be removed, NOT for pods to finish terminating.
           if kubectl get helmrelease "${RELEASE_NAME}" -n ocm-system &>/dev/null; then
             echo "Deleting HelmRelease ${RELEASE_NAME}..."
             kubectl delete helmrelease "${RELEASE_NAME}" -n ocm-system --wait=true --timeout=120s
-            echo "HelmRelease deleted."
+            echo "HelmRelease CR removed (helm uninstall running in background)."
+            HELM_WAS_PRESENT=true
           else
             echo "HelmRelease ${RELEASE_NAME} not found — skipping."
           fi
+
           # Delete FluxDeployer so OCM controller re-creates it (and the HelmRelease) fresh.
           # Without this, OCM sees no spec change and never re-creates the HelmRelease.
           if kubectl get fluxdeployer "${RELEASE_NAME}" -n ocm-system &>/dev/null; then
@@ -229,6 +235,30 @@ jobs:
             echo "FluxDeployer deleted — apply-to-cluster will re-create both."
           else
             echo "FluxDeployer ${RELEASE_NAME} not found — skipping."
+          fi
+
+          # Wait for all pods in the app namespace to finish terminating before we return.
+          # deploy-main starts immediately after this job; if old pods are still Running when
+          # Flux attempts a fresh helm install, Helm's atomic install times out (InstallFailed).
+          if [[ "${HELM_WAS_PRESENT}" == "true" ]]; then
+            echo "Waiting for pods in namespace ${APP_NAMESPACE} to finish terminating..."
+            DRAIN_TIMEOUT=300  # 5 minutes — uninstall of the full chart should take < 2min
+            ELAPSED=0
+            while true; do
+              POD_COUNT=$(kubectl get pods -n "${APP_NAMESPACE}" --no-headers 2>/dev/null | wc -l || echo "0")
+              if [[ "${POD_COUNT}" -eq 0 ]]; then
+                echo "[${ELAPSED}s] Namespace ${APP_NAMESPACE} is empty — proceeding."
+                break
+              fi
+              echo "[${ELAPSED}s] ${POD_COUNT} pod(s) still present in ${APP_NAMESPACE} — waiting..."
+              if (( ELAPSED >= DRAIN_TIMEOUT )); then
+                echo "Warning: timed out waiting for namespace drain after ${DRAIN_TIMEOUT}s — proceeding anyway."
+                kubectl get pods -n "${APP_NAMESPACE}" --no-headers || true
+                break
+              fi
+              sleep 15
+              ELAPSED=$(( ELAPSED + 15 ))
+            done
           fi
 
   deploy-main:
