@@ -1,14 +1,14 @@
 """Add risk_registers, risk_entries, misuse_scenarios, mitigation_measures, reassessment_triggers
 
-Revision ID: 0013
-Revises: 0012
+Revision ID: 0022
+Revises: 0021
 Create Date: 2026-09-02
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0013"
-down_revision = "0012"
+revision = "0022"
+down_revision = "0021"
 branch_labels = None
 depends_on = None
 

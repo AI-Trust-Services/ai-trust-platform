@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +23,7 @@ from app.schemas import (
     MitigationMeasureIn,
     MitigationMeasureOut,
 )
+from app.routers.registers import _reopen_if_approved
 
 router = APIRouter(tags=["risks"])
 
@@ -48,6 +51,33 @@ async def _load_risk_full(session, risk_id: str) -> RiskEntry | None:
     return risk
 
 
+async def _register_id_for_risk(session: AsyncSession, risk_id: str) -> str | None:
+    result = await session.execute(select(RiskEntry.register_id).where(RiskEntry.id == risk_id))
+    row = result.scalar_one_or_none()
+    return row
+
+
+async def _register_id_for_mitigation(session: AsyncSession, mitigation_id: str) -> str | None:
+    result = await session.execute(
+        select(RiskEntry.register_id)
+        .join(MitigationMeasure, MitigationMeasure.risk_id == RiskEntry.id)
+        .where(MitigationMeasure.id == mitigation_id)
+    )
+    row = result.scalar_one_or_none()
+    return row
+
+
+async def _register_id_for_misuse(session: AsyncSession, scenario_id: str) -> str | None:
+    result = await session.execute(
+        select(RiskEntry.register_id)
+        .join(MisuseScenario, MisuseScenario.risk_id == RiskEntry.id)
+        .where(MisuseScenario.id == scenario_id)
+    )
+    row = result.scalar_one_or_none()
+    return row
+
+
+
 @router.post("/registers/{register_id}/risks", response_model=RiskEntryOut, status_code=201)
 async def create_risk(
     register_id: str,
@@ -57,6 +87,9 @@ async def create_risk(
     reg_result = await session.execute(select(RiskRegister).where(RiskRegister.id == register_id))
     if reg_result.scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="Register not found")
+    if not body.title or not body.title.strip():
+        raise HTTPException(status_code=422, detail="Risk title is required.")
+    await _reopen_if_approved(session, register_id)
 
     risk = RiskEntry(
         id=new_id("RSK"),
@@ -65,7 +98,6 @@ async def create_risk(
         description=body.description,
         category=body.category,
         article_9_step=body.article_9_step,
-        risk_type=body.risk_type,
         severity=body.severity,
         likelihood=body.likelihood,
         status=body.status,
@@ -82,6 +114,7 @@ async def create_risk(
         residual_likelihood=body.residual_likelihood,
         residual_severity=body.residual_severity,
         final_risk_level=body.final_risk_level,
+        residual_status=body.residual_status,
         date_of_assessment=body.date_of_assessment,
     )
     session.add(risk)
@@ -162,14 +195,26 @@ async def patch_risk(
     if risk is None:
         raise HTTPException(status_code=404, detail="Risk not found")
 
-    for field in ("title", "description", "category", "article_9_step", "risk_type",
+    if body.title is not None and not body.title.strip():
+        raise HTTPException(status_code=422, detail="Risk title cannot be empty.")
+
+    await _reopen_if_approved(session, risk.register_id)
+
+    for field in ("title", "description", "category", "article_9_step",
                   "severity", "likelihood", "status", "review_notes", "affects_vulnerable_groups",
                   "vulnerable_groups", "closure_justification", "source", "taxonomy_mappings",
                   "risk_owner", "ai_lifecycle_phase", "impact", "risk_level_autocalculated",
-                  "residual_likelihood", "residual_severity", "final_risk_level", "date_of_assessment"):
+                  "residual_likelihood", "residual_severity", "final_risk_level", "residual_status",
+                  "engineer_confirmed", "officer_confirmed"):
         val = getattr(body, field, None)
         if val is not None:
             setattr(risk, field, val)
+    if body.date_of_assessment is not None:
+        raw = body.date_of_assessment
+        if isinstance(raw, str):
+            risk.date_of_assessment = date.fromisoformat(raw[:10])
+        else:
+            risk.date_of_assessment = raw
 
     session.add(risk)
     await session.commit()
@@ -182,6 +227,7 @@ async def delete_risk(risk_id: str, session: AsyncSession = Depends(get_session)
     risk = result.scalar_one_or_none()
     if risk is None:
         raise HTTPException(status_code=404, detail="Risk not found")
+    await _reopen_if_approved(session, risk.register_id)
     await session.delete(risk)
     await session.commit()
 
@@ -197,6 +243,9 @@ async def add_misuse_scenario(
     result = await session.execute(select(RiskEntry).where(RiskEntry.id == risk_id))
     if result.scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="Risk not found")
+    if not body.actor or not body.actor.strip():
+        raise HTTPException(status_code=422, detail="Misuse scenario actor is required.")
+    await _reopen_if_approved(session, (await _register_id_for_risk(session, risk_id)) or "")
     ms = MisuseScenario(
         id=new_id("MIS"),
         risk_id=risk_id,
@@ -217,6 +266,9 @@ async def delete_misuse_scenario(scenario_id: str, session: AsyncSession = Depen
     ms = result.scalar_one_or_none()
     if ms is None:
         raise HTTPException(status_code=404, detail="Misuse scenario not found")
+    register_id = await _register_id_for_misuse(session, scenario_id)
+    if register_id:
+        await _reopen_if_approved(session, register_id)
     await session.delete(ms)
     await session.commit()
 
@@ -229,6 +281,8 @@ async def add_mitigation(
     body: MitigationMeasureIn,
     session: AsyncSession = Depends(get_session),
 ):
+    if not body.title or not body.title.strip():
+        raise HTTPException(status_code=422, detail="Mitigation title is required.")
     if body.hierarchy_level not in VALID_HIERARCHY:
         raise HTTPException(
             status_code=422,
@@ -237,6 +291,7 @@ async def add_mitigation(
     result = await session.execute(select(RiskEntry).where(RiskEntry.id == risk_id))
     if result.scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="Risk not found")
+    await _reopen_if_approved(session, (await _register_id_for_risk(session, risk_id)) or "")
     mit = MitigationMeasure(
         id=new_id("MIT"),
         risk_id=risk_id,
@@ -264,6 +319,11 @@ async def patch_mitigation(
     mit = result.scalar_one_or_none()
     if mit is None:
         raise HTTPException(status_code=404, detail="Mitigation not found")
+    register_id = await _register_id_for_mitigation(session, mitigation_id)
+    if register_id:
+        await _reopen_if_approved(session, register_id)
+    if not body.title or not body.title.strip():
+        raise HTTPException(status_code=422, detail="Mitigation title cannot be empty.")
     if body.hierarchy_level not in VALID_HIERARCHY:
         raise HTTPException(status_code=422, detail=f"Invalid hierarchy_level. Must be one of: {sorted(VALID_HIERARCHY)}")
     for field in ("title", "description", "hierarchy_level", "implementation_guidance",
@@ -282,5 +342,8 @@ async def delete_mitigation(mitigation_id: str, session: AsyncSession = Depends(
     mit = result.scalar_one_or_none()
     if mit is None:
         raise HTTPException(status_code=404, detail="Mitigation not found")
+    register_id = await _register_id_for_mitigation(session, mitigation_id)
+    if register_id:
+        await _reopen_if_approved(session, register_id)
     await session.delete(mit)
     await session.commit()

@@ -1,22 +1,64 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { api } from "../api/client";
-import type { RiskRegister, RiskEntry, MisuseScenario, MitigationMeasure, TestReport, PlanTask, WizardStep } from "../types";
-
-const STEPS: { key: WizardStep; label: string }[] = [
-  { key: "scope",    label: "1. Scope" },
-  { key: "identify", label: "2. Identify" },
-  { key: "evaluate", label: "3. Evaluate" },
-  { key: "mitigate", label: "4. Manage risks" },
-  { key: "plan",     label: "5. Plan" },
-  { key: "approve",  label: "6. Approve" },
-];
+import type { RiskRegister, RiskEntry, MisuseScenario, MitigationMeasure, TestReport, PlanTask } from "../types";
 
 const SEV_COLORS: Record<string, string> = {
-  critical: "#8b0000", high: "#8b3a00", medium: "#7a5900", low: "#1a5c35",
+  severe: "#8b0000", significant: "#8b3a00", moderate: "#7a5900", minor: "#1a5c35",
 };
 const SEV_BG: Record<string, string> = {
-  critical: "#ffd5d5", high: "#fde8d0", medium: "#fff3c4", low: "#d5f5e3",
+  severe: "#ffd5d5", significant: "#fde8d0", moderate: "#fff3c4", minor: "#d5f5e3",
 };
+const RISK_LEVEL_COLORS: Record<string, string> = {
+  unacceptable: "#8b0000", substantial: "#8b3a00", moderate: "#7a5900", acceptable: "#1a5c35",
+};
+const RISK_LEVEL_BG: Record<string, string> = {
+  unacceptable: "#ffd5d5", substantial: "#fde8d0", moderate: "#fff3c4", acceptable: "#d5f5e3",
+};
+const RISK_LEVEL_DEFINITIONS = [
+  { value: "unacceptable", label: "Unacceptable", desc: "Severe or significant impact that is likely or very likely to occur." },
+  { value: "substantial",  label: "Substantial",  desc: "Severe impact that may occur, or significant/moderate impact that is likely." },
+  { value: "moderate",     label: "Moderate",     desc: "Limited impact or low probability." },
+  { value: "acceptable",   label: "Acceptable",   desc: "Minor impact with low or very low probability." },
+];
+
+const SEVERITY_DEFINITIONS = [
+  { value: "severe",      label: "Severe",      desc: "Irreversible harm: loss of life, permanent injury, serious violation of fundamental rights (dignity, freedom, non-discrimination)." },
+  { value: "significant", label: "Significant", desc: "Serious but potentially reversible harm: job loss, denial of access to public services, major financial damage, temporary restriction of rights." },
+  { value: "moderate",    label: "Moderate",    desc: "Moderate, remediable harm: limited opportunities, adverse decision with right of appeal, recoverable financial losses." },
+  { value: "minor",       label: "Minor",       desc: "Minimal or negligible harm: inconvenience, short-lived negative consequence with no lasting effects." },
+];
+
+const LIKELIHOOD_DEFINITIONS = [
+  { value: "very_likely", label: "Very likely", desc: "Will occur regularly during normal use of the system." },
+  { value: "likely",      label: "Likely",      desc: "Expected under certain conditions or use errors." },
+  { value: "possible",    label: "Possible",    desc: "May occur, especially during unexpected or improper use." },
+  { value: "unlikely",    label: "Unlikely",    desc: "Would require a particular confluence of circumstances or deliberate misuse." },
+];
+
+function InfoTooltip({ definitions }: { definitions: { value: string; label: string; desc: string }[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span style={{ position: "relative", display: "inline-block", marginLeft: 5, verticalAlign: "middle" }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1, color: "var(--text-secondary)", fontSize: 13, fontWeight: 700 }}
+        aria-label="Show definitions">ⓘ</button>
+      {open && (
+        <div style={{
+          position: "absolute", zIndex: 100, left: 0, top: "calc(100% + 4px)",
+          background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.12)", padding: "10px 14px", minWidth: 320, maxWidth: 380,
+        }}>
+          {definitions.map(d => (
+            <div key={d.value} style={{ marginBottom: 8 }}>
+              <span style={{ fontWeight: 700, fontSize: 12 }}>{d.label}</span>
+              <span style={{ fontSize: 12, color: "var(--text-secondary)", marginLeft: 6 }}>{d.desc}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
 
 function Select({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
   return (
@@ -41,10 +83,10 @@ function Input({ value, onChange, placeholder }: { value: string; onChange: (v: 
   );
 }
 
-function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
+function Label({ children }: { children: React.ReactNode }) {
   return (
     <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", display: "block", marginBottom: 4 }}>
-      {children}{required && <span style={{ color: "#dc2626" }}> *</span>}
+      {children}
     </label>
   );
 }
@@ -62,35 +104,25 @@ function ErrorMsg({ msg }: { msg: string }) {
   return <div style={{ background: "#ffd5d5", color: "#8b0000", borderRadius: 6, padding: "8px 12px", fontSize: 12, marginTop: 8 }}>{msg}</div>;
 }
 
-function ApprovedBanner({ register }: { register: { approver_username?: string | null; approved_at?: string | null } }) {
-  return (
-    <div style={{ background: "#d5f5e3", border: "1px solid #9cdcb8", borderRadius: 8, padding: "10px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
-      <span style={{ fontSize: 18 }}>✅</span>
-      <span style={{ color: "#1a5c35", fontWeight: 700 }}>
-        Approved by {register.approver_username ?? "—"} on {register.approved_at ? new Date(register.approved_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
-      </span>
-      <span style={{ color: "#1a5c35", marginLeft: 4 }}>— viewing in read-only mode 🔒</span>
-    </div>
-  );
-}
+const EXPORT_RISK_CATEGORIES: Record<string, string> = {
+  health: "Health",
+  safety: "Safety",
+  fundamental_rights: "Fundamental Rights",
+  others: "Others",
+};
 
 async function exportReport(systemName: string, register: RiskRegister, risks: RiskEntry[], archived = false, nextRegisterId: string | null = null) {
-  const confirmed = risks.filter(r => r.status === "confirmed");
   const fmtDate = (d?: string | null) => d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-  const levelBadge = (l?: string | null) => {
-    const colors: Record<string, string> = { critical: "#ffd5d5", high: "#fde8d0", medium: "#fff3c4", low: "#d5f5e3" };
-    return l ? `<span style="background:${colors[l] ?? "#eef1f4"};padding:2px 8px;border-radius:10px;font-weight:700;font-size:11px;text-transform:uppercase">${l}</span>` : "—";
-  };
   const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : "—";
-  const np = (s: string | null | undefined) => s?.trim() ? s : `<span style="color:#9ca3af;font-style:italic">Not provided</span>`;
+  const esc = (s: string | null | undefined) => (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const np = (s: string | null | undefined) => s?.trim() ? esc(s) : `<span style="color:#9ca3af;font-style:italic">Not provided</span>`;
 
-  // Fetch plan tasks and incidents for the register
+  // Fetch supporting data
   let planTasks: PlanTask[] = [];
   let incidents: import("../types").Incident[] = [];
   try { planTasks = await api.getPlanTasks(register.id); } catch { /* ignore */ }
   try { incidents = await api.getIncidents(register.id); } catch { /* ignore */ }
 
-  // For archived reports: fetch diff against next version to mark changed fields
   let diffRemovedInNext = new Set<string>();
   let diffChangedInNext = new Map<string, import("../types").RegisterDiffEntry>();
   let diffAddedInNext = new Set<string>();
@@ -106,350 +138,429 @@ async function exportReport(systemName: string, register: RiskRegister, risks: R
   const riskTitleById: Record<string, string> = {};
   risks.forEach(r => { riskTitleById[r.id] = r.title; });
 
-  const changedBadge = `<span style="background:#ffd5d5;color:#8b0000;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:6px;text-transform:uppercase">changed in the next version</span>`;
+  const LEVEL_COLORS: Record<string, { bg: string; color: string }> = {
+    critical: { bg: "#ffd5d5", color: "#8b0000" },
+    high:     { bg: "#fde8d0", color: "#8b3a00" },
+    medium:   { bg: "#fff3c4", color: "#7a5900" },
+    low:      { bg: "#d5f5e3", color: "#1a5c35" },
+  };
+  const levelBadge = (l?: string | null) => {
+    if (!l) return `<span style="color:#9ca3af">—</span>`;
+    const c = LEVEL_COLORS[l] ?? { bg: "#eef1f4", color: "#374151" };
+    return `<span style="background:${c.bg};color:${c.color};padding:2px 8px;border-radius:10px;font-weight:700;font-size:11px;text-transform:uppercase">${l}</span>`;
+  };
+  const residualStatusBadge = (s?: string | null) => {
+    if (!s || s === "none") return `<span style="color:#9ca3af;font-style:italic">No residual risk</span>`;
+    if (s === "acceptable") return `<span style="background:#d5f5e3;color:#1a5c35;padding:2px 9px;border-radius:10px;font-weight:700;font-size:11px">Acceptable</span>`;
+    return `<span style="background:#ffd5d5;color:#8b0000;padding:2px 9px;border-radius:10px;font-weight:700;font-size:11px">Not acceptable</span>`;
+  };
 
-  const risksHtml = confirmed.map((r, idx) => {
+  const allRisks = risks.filter(r => r.status !== "dismissed");
+  const confirmedRisks = risks.filter(r => r.status === "confirmed");
+  const dismissedRisks = risks.filter(r => r.status === "dismissed");
+
+  // ── Status banner ──
+  let statusBanner = "";
+  if (archived) {
+    statusBanner = `<div style="background:#fef9c3;border:2px solid #fde047;border-radius:10px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#713f12;font-weight:700">
+      ⚠ ARCHIVED REPORT — This is a historical record from a previous risk management cycle. It is retained for audit purposes and does not reflect the current state of risk management.
+    </div>`;
+  } else if (register.status === "approved") {
+    const acceptability = register.residual_risk_acceptable === true ? "Acceptable" : register.residual_risk_acceptable === false ? "Not acceptable" : "—";
+    statusBanner = `<div style="background:#d5f5e3;border:1.5px solid #9cdcb8;border-radius:10px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#1a5c35;font-weight:700">
+      ✅ APPROVED — by <strong>${esc(register.approver_username ?? "—")}</strong> on ${fmtDate(register.approved_at)}
+      <span style="font-weight:400;margin-left:16px">Overall residual risk: <strong>${acceptability}</strong></span>
+    </div>`;
+  } else {
+    statusBanner = `<div style="background:#fff3c4;border:1.5px solid #fde047;border-radius:10px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#92400e;font-weight:700">
+      ⏳ ${esc(register.status.toUpperCase().replace(/_/g, " "))} — This register has not yet been approved.
+    </div>`;
+  }
+
+  // ── Per-risk HTML ──
+  const renderRisk = (r: RiskEntry, idx: number) => {
     const isRemovedInNext = diffRemovedInNext.has(r.title);
     const entry = diffChangedInNext.get(r.title);
-    const hasChanges = entry && ((entry.fields ?? []).length > 0 || (entry.mitigations_added ?? []).length > 0 || (entry.mitigations_removed ?? []).length > 0);
-    const riskBorderStyle = isRemovedInNext
-      ? "border:2px solid #f87171;background:#fff5f5"
-      : hasChanges
-        ? "border:2px solid #fbbf24;background:#fffbeb"
-        : "border:1px solid #e4e4e7";
-    const removedBanner = isRemovedInNext
-      ? `<div style="background:#ffd5d5;color:#8b0000;font-size:11px;font-weight:700;padding:6px 10px;border-radius:4px;margin-bottom:10px">⚠ REMOVED IN NEXT VERSION — this risk was not carried forward to the next cycle</div>`
-      : "";
-    const changesBanner = hasChanges && entry
-      ? `<div style="background:#fff3c4;color:#7a5900;font-size:11px;padding:6px 10px;border-radius:4px;margin-bottom:10px">
-          <div style="font-weight:700;margin-bottom:4px">⚠ CHANGED IN NEXT VERSION</div>
-          <table style="border-collapse:collapse;font-size:11px">
-            ${(entry.fields ?? []).map(fc => `<tr>
-              <td style="padding:1px 8px 1px 0;font-weight:600;white-space:nowrap">${fc.field}</td>
-              <td style="padding:1px 6px 1px 0;text-decoration:line-through;color:#8b0000">${fc.from_value}</td>
-              <td style="padding:1px 0;color:#1a5c35">→ ${fc.to_value}</td>
-            </tr>`).join("")}
-            ${(entry.mitigations_added ?? []).map(t => `<tr>
-              <td style="padding:1px 8px 1px 0;font-weight:600;white-space:nowrap;color:#1a5c35">Mitigation added</td>
-              <td colspan="2" style="padding:1px 0;color:#1a5c35">${t}</td>
-            </tr>`).join("")}
-            ${(entry.mitigations_removed ?? []).map(t => `<tr>
-              <td style="padding:1px 8px 1px 0;font-weight:600;white-space:nowrap;color:#8b0000">Mitigation removed</td>
-              <td colspan="2" style="padding:1px 0;text-decoration:line-through;color:#8b0000">${t}</td>
-            </tr>`).join("")}
-          </table>
-        </div>`
-      : "";
+    const hasChanges = !!entry && ((entry.fields ?? []).length > 0 || (entry.mitigations_added ?? []).length > 0 || (entry.mitigations_removed ?? []).length > 0);
+    const borderStyle = isRemovedInNext ? "border:2px solid #f87171;background:#fff5f5" : hasChanges ? "border:2px solid #fbbf24;background:#fffbeb" : "border:1px solid #e4e4e7";
+
+    let vulnerableGroups = "";
+    if (r.affects_vulnerable_groups) {
+      try { const g = JSON.parse(r.vulnerable_groups); vulnerableGroups = Array.isArray(g) ? g.join(", ") : r.vulnerable_groups; } catch { vulnerableGroups = r.vulnerable_groups; }
+    }
+
+    const mitigationsHtml = (r.mitigations ?? []).length > 0
+      ? (r.mitigations ?? []).map(m => `
+        <div style="background:#f0f4ff;border-left:3px solid #93c5fd;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px;font-size:12px">
+          <div><span style="background:#dbeafe;color:#1e40af;padding:1px 7px;border-radius:8px;font-weight:700;font-size:10px;text-transform:uppercase;margin-right:8px">${esc(m.hierarchy_level)}</span><strong>${esc(m.title)}</strong>${m.status ? ` · <span style="color:#556b82">${cap(m.status)}</span>` : ""}</div>
+          ${m.description ? `<div style="color:#374151;margin-top:4px">${np(m.description)}</div>` : ""}
+          ${m.implementation_guidance ? `<div style="color:#556b82;margin-top:3px"><strong>Guidance:</strong> ${np(m.implementation_guidance)}</div>` : ""}
+          <div style="color:#556b82;margin-top:3px"><strong>Assigned to:</strong> ${np(m.assigned_to)}${m.due_date ? ` · Due: ${fmtDate(m.due_date)}` : ""}</div>
+          ${m.override_notes ? `<div style="color:#92400e;margin-top:3px"><strong>Notes:</strong> ${esc(m.override_notes)}</div>` : ""}
+        </div>`).join("")
+      : r.closure_justification
+        ? `<div style="background:#fffbeb;border-radius:6px;padding:8px 12px;font-size:12px;color:#92400e"><strong>No measure applied</strong> — ${esc(r.closure_justification)}</div>`
+        : `<div style="color:#9ca3af;font-size:12px;font-style:italic;padding:4px 0">None documented.</div>`;
+
+    const misusesHtml = (r.misuse_scenarios ?? []).length > 0
+      ? (r.misuse_scenarios ?? []).map(ms => `
+        <div style="background:#fff5f5;border-left:3px solid #fca5a5;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px;font-size:12px">
+          <div><strong>Actor:</strong> ${esc(ms.actor)} · <strong>Likelihood:</strong> ${cap(ms.likelihood)}</div>
+          <div style="margin-top:3px">${esc(ms.description)}</div>
+          ${ms.consequence ? `<div style="margin-top:3px;color:#556b82"><strong>Consequence:</strong> ${esc(ms.consequence)}</div>` : ""}
+          ${ms.vulnerable_group ? `<div style="margin-top:3px;color:#92400e"><strong>Vulnerable group:</strong> ${esc(ms.vulnerable_group)}</div>` : ""}
+        </div>`).join("")
+      : `<div style="color:#9ca3af;font-size:12px;font-style:italic;padding:4px 0">None documented.</div>`;
+
+    const residualBg = r.residual_status === "unacceptable" ? "#fff5f5" : r.residual_status === "acceptable" ? "#f0faf4" : "#f8f9fa";
+
     return `
-    <div style="${riskBorderStyle};border-radius:8px;padding:18px 20px;margin-bottom:16px;page-break-inside:avoid">
-      ${removedBanner}${changesBanner}
-      <div style="font-weight:700;font-size:15px;margin-bottom:10px">${idx + 1}. ${r.title}${isRemovedInNext || hasChanges ? changedBadge : ""}</div>
+    <div style="${borderStyle};border-radius:8px;padding:18px 20px;margin-bottom:14px;page-break-inside:avoid">
+      ${isRemovedInNext ? `<div style="background:#ffd5d5;color:#8b0000;font-size:11px;font-weight:700;padding:5px 10px;border-radius:4px;margin-bottom:10px">⚠ REMOVED IN NEXT VERSION</div>` : ""}
+      ${hasChanges && entry ? `<div style="background:#fff3c4;color:#7a5900;font-size:11px;padding:6px 10px;border-radius:4px;margin-bottom:10px">
+        <div style="font-weight:700;margin-bottom:4px">⚠ CHANGED IN NEXT VERSION</div>
+        <table style="border-collapse:collapse;font-size:11px">
+          ${(entry.fields ?? []).map(fc => `<tr><td style="padding:1px 8px 1px 0;font-weight:600">${esc(fc.field)}</td><td style="text-decoration:line-through;color:#8b0000;padding-right:6px">${esc(fc.from_value)}</td><td style="color:#1a5c35">→ ${esc(fc.to_value)}</td></tr>`).join("")}
+          ${(entry.mitigations_added ?? []).map(t => `<tr><td style="color:#1a5c35;font-weight:600">+ Mitigation added</td><td colspan="2" style="color:#1a5c35">${esc(t)}</td></tr>`).join("")}
+          ${(entry.mitigations_removed ?? []).map(t => `<tr><td style="color:#8b0000;font-weight:600">− Mitigation removed</td><td colspan="2" style="text-decoration:line-through;color:#8b0000">${esc(t)}</td></tr>`).join("")}
+        </table></div>` : ""}
+
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
+        <span style="font-weight:700;font-size:15px">${idx + 1}. ${esc(r.title)}</span>
+        ${r.source === "monitoring" ? `<span style="background:#dbeafe;color:#1e40af;font-size:10px;font-weight:700;padding:1px 7px;border-radius:6px;text-transform:uppercase">monitoring</span>` : ""}
+      </div>
 
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
         <tr>
-          <td style="padding:4px 8px 4px 0;color:#556b82;width:140px">Impact category</td>
-          <td style="padding:4px 0">${RISK_CATEGORIES.find(c => c.value === r.category)?.label ?? cap(r.category)}</td>
-          <td style="padding:4px 8px 4px 16px;color:#556b82;width:140px">Risk type</td>
-          <td style="padding:4px 0">${r.risk_type === "foreseeable" ? "Foreseeable" : r.risk_type === "known" ? "Known" : cap(r.risk_type)}</td>
+          <td style="padding:3px 8px 3px 0;color:#556b82;width:150px">Impact category</td>
+          <td style="padding:3px 0" colspan="3">${r.category.split(",").map((c: string) => EXPORT_RISK_CATEGORIES[c.trim()] ?? cap(c.trim())).join(", ")}</td>
         </tr>
         <tr>
-          <td style="padding:4px 8px 4px 0;color:#556b82">Likelihood</td>
-          <td style="padding:4px 0">${cap(r.likelihood)}</td>
-          <td style="padding:4px 8px 4px 16px;color:#556b82">Severity</td>
-          <td style="padding:4px 0">${cap(r.severity)}</td>
+          <td style="padding:3px 8px 3px 0;color:#556b82">Severity</td><td style="padding:3px 8px 3px 0">${cap(r.severity)}</td>
+          <td style="padding:3px 8px 3px 16px;color:#556b82">Likelihood</td><td style="padding:3px 0">${cap(r.likelihood)}</td>
         </tr>
         <tr>
-          <td style="padding:4px 8px 4px 0;color:#556b82">Risk level</td>
-          <td style="padding:4px 0">${levelBadge(r.risk_level_autocalculated)}</td>
-          <td style="padding:4px 8px 4px 16px;color:#556b82">AI lifecycle phase</td>
-          <td style="padding:4px 0">${np(r.ai_lifecycle_phase)}</td>
+          <td style="padding:3px 8px 3px 0;color:#556b82">Risk level</td>
+          <td style="padding:3px 0" colspan="3">${levelBadge(r.risk_level_autocalculated)}</td>
         </tr>
-        <tr>
-          <td style="padding:4px 8px 4px 0;color:#556b82">Risk owner</td>
-          <td style="padding:4px 0" colspan="3"><strong>${np(r.risk_owner)}</strong></td>
-        </tr>
+        ${r.risk_owner ? `<tr><td style="padding:3px 8px 3px 0;color:#556b82">Risk owner</td><td style="padding:3px 0" colspan="3"><strong>${esc(r.risk_owner)}</strong></td></tr>` : ""}
+        ${r.ai_lifecycle_phase ? `<tr><td style="padding:3px 8px 3px 0;color:#556b82">Lifecycle phase</td><td style="padding:3px 0" colspan="3">${cap(r.ai_lifecycle_phase)}</td></tr>` : ""}
       </table>
 
-      <div style="font-size:12px;margin-bottom:6px"><strong>Description:</strong> ${np(r.description)}</div>
-      <div style="font-size:12px;margin-bottom:8px"><strong>Impact:</strong> ${np(r.impact)}</div>
-
-      <div style="font-size:12px;margin-bottom:8px">
-        <strong>Affects vulnerable groups (Art. 9(9)):</strong>
-        ${r.affects_vulnerable_groups
-          ? `<span style="color:#92400e">Yes — ${(() => { try { const g = JSON.parse(r.vulnerable_groups); return Array.isArray(g) ? g.join(", ") : r.vulnerable_groups; } catch { return r.vulnerable_groups || "Not specified"; } })()}</span>`
-          : `<span style="color:#374151">No</span>`}
-      </div>
+      ${r.description ? `<div style="font-size:12px;margin-bottom:6px"><strong>Description:</strong> ${np(r.description)}</div>` : ""}
+      ${r.impact ? `<div style="font-size:12px;margin-bottom:8px"><strong>Impact:</strong> ${np(r.impact)}</div>` : ""}
+      ${r.affects_vulnerable_groups ? `<div style="font-size:12px;margin-bottom:8px;color:#92400e"><strong>⚠ Affects vulnerable groups (Art. 9(9)):</strong> ${esc(vulnerableGroups) || "Specified"}</div>` : ""}
 
       <div style="margin-top:10px">
         <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Misuse scenarios — Art. 9(2)(a) (${(r.misuse_scenarios ?? []).length})</div>
-        ${(r.misuse_scenarios ?? []).length > 0 ? (r.misuse_scenarios ?? []).map(ms => `
-          <div style="background:#fff5f5;border-left:3px solid #fca5a5;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px;font-size:12px">
-            <div><strong>Actor:</strong> ${ms.actor || "—"} · <strong>Likelihood:</strong> ${cap(ms.likelihood)}</div>
-            <div style="margin-top:3px">${ms.description}</div>
-            <div style="margin-top:3px;color:#556b82"><strong>Consequence:</strong> ${np(ms.consequence)}</div>
-            <div style="margin-top:3px;color:#92400e"><strong>Vulnerable group:</strong> ${ms.vulnerable_group || `<span style="color:#9ca3af;font-style:italic">Not specified</span>`}</div>
-          </div>
-        `).join("") : `<div style="color:#9ca3af;font-size:12px;font-style:italic;padding:6px 0">No misuse scenarios documented.</div>`}
+        ${misusesHtml}
       </div>
 
       <div style="margin-top:10px">
         <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Risk management measures — Art. 9(2)(b)+(c) (${(r.mitigations ?? []).length})</div>
-        ${(r.mitigations ?? []).length > 0 ? (r.mitigations ?? []).map(m => `
-          <div style="background:#f0f4ff;border-left:3px solid #93c5fd;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px;font-size:12px">
-            <div>
-              <span style="background:#dbeafe;color:#1e40af;padding:1px 7px;border-radius:8px;font-weight:700;font-size:10px;text-transform:uppercase;margin-right:8px">${m.hierarchy_level}</span>
-              <strong>${m.title}</strong>
-              ${m.status ? ` · <span style="color:#556b82">${cap(m.status)}</span>` : ""}
-            </div>
-            <div style="color:#374151;margin-top:4px"><strong>Description:</strong> ${np(m.description)}</div>
-            <div style="color:#556b82;margin-top:3px"><strong>Implementation guidance:</strong> ${np(m.implementation_guidance)}</div>
-            <div style="color:#556b82;margin-top:3px"><strong>Assigned to:</strong> ${np(m.assigned_to)} ${m.due_date ? `· Due: ${fmtDate(m.due_date)}` : ""}</div>
-            ${m.override_notes ? `<div style="color:#92400e;margin-top:3px"><strong>Notes:</strong> ${m.override_notes}</div>` : ""}
-          </div>
-        `).join("") : r.closure_justification ? `
-          <div style="background:#fffbeb;border-radius:6px;padding:8px 12px;font-size:12px;color:#92400e">
-            <strong>No risk management measure applied</strong> — justification: ${r.closure_justification}
-          </div>` : `<div style="color:#9ca3af;font-size:12px;font-style:italic;padding:6px 0">No risk management measures documented.</div>`}
+        ${mitigationsHtml}
       </div>
 
-      <div style="margin-top:10px;background:#f8f9fa;border-radius:6px;padding:10px 14px;font-size:12px">
+      <div style="margin-top:10px;background:${residualBg};border-radius:6px;padding:10px 14px;font-size:12px">
         <div style="font-size:11px;font-weight:700;color:#556b82;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px">Residual risk — Art. 9(2)(d)</div>
+        <div style="margin-bottom:6px">${residualStatusBadge(r.residual_status)}</div>
+        ${r.residual_status && r.residual_status !== "none" ? `
         <table style="width:100%;border-collapse:collapse">
           <tr>
-            <td style="padding:3px 8px 3px 0;color:#556b82;width:140px">Residual likelihood</td>
-            <td style="padding:3px 0">${np(r.residual_likelihood)}</td>
-            <td style="padding:3px 8px 3px 16px;color:#556b82;width:140px">Residual severity</td>
-            <td style="padding:3px 0">${np(r.residual_severity)}</td>
+            <td style="padding:2px 8px 2px 0;color:#556b82;width:150px">Severity</td><td style="padding:2px 8px 2px 0">${cap(r.residual_severity ?? "")}</td>
+            <td style="padding:2px 8px 2px 16px;color:#556b82">Likelihood</td><td>${cap(r.residual_likelihood ?? "")}</td>
           </tr>
           <tr>
-            <td style="padding:3px 8px 3px 0;color:#556b82">Residual level</td>
-            <td style="padding:3px 0">${levelBadge(r.final_risk_level)}</td>
-            <td style="padding:3px 8px 3px 16px;color:#556b82">Date of assessment</td>
-            <td style="padding:3px 0">${fmtDate(r.date_of_assessment)}</td>
+            <td style="padding:2px 8px 2px 0;color:#556b82">Residual level</td><td colspan="3">${levelBadge(r.final_risk_level)}</td>
           </tr>
+          ${r.date_of_assessment ? `<tr><td style="padding:2px 8px 2px 0;color:#556b82">Date of identification</td><td colspan="3">${fmtDate(r.date_of_assessment)}</td></tr>` : ""}
         </table>
-        <div style="margin-top:6px;color:#374151"><strong>Justification:</strong> ${np(r.review_notes)}</div>
+        ${r.review_notes ? `<div style="margin-top:6px;color:#374151"><strong>Notes:</strong> ${np(r.review_notes)}</div>` : ""}` : ""}
       </div>
-    </div>
-  `;
-  }).join("");
+    </div>`;
+  };
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>Risk Management Report — ${systemName}</title>
-    <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 960px; margin: 40px auto; color: #111827; }
-      @media print { body { margin: 20px; } .no-print { display: none; } }
-      h1 { font-size: 22px; margin-bottom: 4px; }
-      .meta { font-size: 12px; color: #556b82; margin-bottom: 24px; }
-      .archived-banner { background: #fef9c3; border: 2px solid #fde047; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #713f12; font-weight: 700; }
-      .approved-badge { background: #d5f5e3; border: 1px solid #9cdcb8; border-radius: 8px; padding: 10px 16px; margin-bottom: 20px; font-size: 13px; color: #1a5c35; font-weight: 700; }
-      .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #556b82; margin: 20px 0 10px; border-bottom: 1px solid #e4e4e7; padding-bottom: 6px; }
-      .scope-box { background: #f8f9fa; border-radius: 8px; padding: 14px 16px; font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
-      .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
-      .stat { background: #f8f9fa; border-radius: 8px; padding: 12px; text-align: center; }
-      .stat-val { font-size: 24px; font-weight: 700; color: #1147E9; }
-      .stat-lbl { font-size: 11px; color: #556b82; margin-top: 3px; }
-      .footer { margin-top: 32px; font-size: 11px; color: #9ca3af; border-top: 1px solid #e4e4e7; padding-top: 12px; }
-    </style>
+  const confirmedHtml = confirmedRisks.map((r, i) => renderRisk(r, i)).join("");
+  const pendingRisks = allRisks.filter(r => r.status === "pending");
+  const pendingHtml = pendingRisks.length > 0
+    ? pendingRisks.map((r, i) => renderRisk(r, confirmedRisks.length + i)).join("")
+    : "";
+
+  const tasksHtml = planTasks.length > 0 ? `
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:#f4f4f5">
+        <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Task</th>
+        <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Linked risk</th>
+        <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Assigned to</th>
+        <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Due</th>
+        <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Status</th>
+      </tr></thead>
+      <tbody>${planTasks.map(t => `
+        <tr style="border-bottom:1px solid #e4e4e7">
+          <td style="padding:6px 10px;vertical-align:top"><div style="font-weight:600">${esc(t.title)}</div>${t.description ? `<div style="color:#556b82;margin-top:2px;font-size:11px">${esc(t.description)}</div>` : ""}</td>
+          <td style="padding:6px 10px;vertical-align:top;color:#374151">${t.risk_id && riskTitleById[t.risk_id] ? esc(riskTitleById[t.risk_id]) : "—"}</td>
+          <td style="padding:6px 10px;vertical-align:top;color:#374151">${t.assigned_to ? esc(t.assigned_to) : "—"}</td>
+          <td style="padding:6px 10px;vertical-align:top;white-space:nowrap">${fmtDate(t.due_date)}</td>
+          <td style="padding:6px 10px;vertical-align:top;font-weight:600">${cap(t.status)}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>` : `<div style="color:#9ca3af;font-size:12px;font-style:italic">No tasks recorded.</div>`;
+
+  const incidentsHtml = incidents.length > 0 ? `
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:#fff5f5">
+        <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Incident</th>
+        <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Linked risk</th>
+        <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Reported by</th>
+        <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Occurred</th>
+        <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Status</th>
+      </tr></thead>
+      <tbody>${incidents.map(inc => `
+        <tr style="border-bottom:1px solid #e4e4e7">
+          <td style="padding:6px 10px;vertical-align:top"><div style="font-weight:600">${esc(inc.title)}</div>${inc.description ? `<div style="color:#556b82;margin-top:2px;font-size:11px">${esc(inc.description)}</div>` : ""}</td>
+          <td style="padding:6px 10px;vertical-align:top;color:#374151">${inc.risk_id && riskTitleById[inc.risk_id] ? esc(riskTitleById[inc.risk_id]) : "—"}</td>
+          <td style="padding:6px 10px;vertical-align:top;color:#374151">${inc.reported_by ? esc(inc.reported_by) : "—"}</td>
+          <td style="padding:6px 10px;vertical-align:top;white-space:nowrap">${fmtDate(inc.occurred_at)}</td>
+          <td style="padding:6px 10px;vertical-align:top;font-weight:600">${cap(inc.status)}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>` : `<div style="color:#9ca3af;font-size:12px;font-style:italic">No incidents reported.</div>`;
+
+  // ── Register-level residual risk ──
+  const regResidualHtml = (() => {
+    const s = register.residual_risk_acceptable;
+    if (s === null && !register.residual_severity && !register.residual_likelihood) return "";
+    const statusLabel = s === true ? "Acceptable" : s === false ? "Not acceptable" : "No residual risk";
+    const statusColor = s === true ? "#1a5c35" : s === false ? "#8b0000" : "#6b7280";
+    const statusBg = s === true ? "#d5f5e3" : s === false ? "#ffd5d5" : "#f4f4f5";
+    return `
+      <div style="background:#f8f9fa;border-radius:8px;padding:14px 18px;margin-bottom:16px">
+        <div style="margin-bottom:8px"><span style="background:${statusBg};color:${statusColor};padding:3px 12px;border-radius:10px;font-weight:700;font-size:12px">${statusLabel}</span></div>
+        ${register.residual_severity || register.residual_likelihood ? `
+        <table style="border-collapse:collapse;font-size:12px">
+          <tr>
+            <td style="padding:2px 8px 2px 0;color:#556b82;width:150px">Severity</td><td style="padding:2px 16px 2px 0">${cap(register.residual_severity ?? "")}</td>
+            <td style="padding:2px 8px 2px 0;color:#556b82">Likelihood</td><td>${cap(register.residual_likelihood ?? "")}</td>
+          </tr>
+          ${register.residual_final_risk_level ? `<tr><td style="padding:2px 8px 2px 0;color:#556b82">Risk level</td><td colspan="3">${levelBadge(register.residual_final_risk_level)}</td></tr>` : ""}
+          ${register.residual_date_of_identification ? `<tr><td style="padding:2px 8px 2px 0;color:#556b82">Date of identification</td><td colspan="3">${fmtDate(register.residual_date_of_identification)}</td></tr>` : ""}
+        </table>` : ""}
+        ${register.residual_risk_argument ? `<div style="margin-top:8px;font-size:12px;color:#374151"><strong>Expert argument:</strong> ${np(register.residual_risk_argument)}</div>` : ""}
+      </div>`;
+  })();
+
+  // ── JSON / Markdown helpers ──
+  const buildJson = () => JSON.stringify({
+    generated_at: new Date().toISOString(),
+    system_name: systemName,
+    register_id: register.id,
+    status: register.status,
+    archived,
+    assessment_scope: register.assessment_scope,
+    notes: register.notes,
+    approved_at: register.approved_at,
+    approver_username: register.approver_username,
+    residual_risk_acceptable: register.residual_risk_acceptable,
+    residual_risk_argument: register.residual_risk_argument,
+    residual_severity: register.residual_severity,
+    residual_likelihood: register.residual_likelihood,
+    residual_final_risk_level: register.residual_final_risk_level,
+    residual_date_of_identification: register.residual_date_of_identification,
+    next_review_date: register.next_review_date,
+    risks: risks.map(r => ({
+      id: r.id, title: r.title, status: r.status, category: r.category,
+      severity: r.severity, likelihood: r.likelihood, risk_level: r.risk_level_autocalculated,
+      risk_owner: r.risk_owner, ai_lifecycle_phase: r.ai_lifecycle_phase,
+      description: r.description, impact: r.impact,
+      affects_vulnerable_groups: r.affects_vulnerable_groups, vulnerable_groups: r.vulnerable_groups,
+      residual_status: r.residual_status, residual_severity: r.residual_severity,
+      residual_likelihood: r.residual_likelihood, final_risk_level: r.final_risk_level,
+      date_of_assessment: r.date_of_assessment, review_notes: r.review_notes,
+      misuse_scenarios: r.misuse_scenarios, mitigations: r.mitigations,
+    })),
+    plan_tasks: planTasks,
+    incidents,
+  }, null, 2);
+
+  const buildMarkdown = () => {
+    const lines: string[] = [];
+    lines.push(`# Risk Management Report — ${systemName}`);
+    lines.push(`\n**Register:** ${register.id}  `);
+    lines.push(`**Generated:** ${fmtDate(new Date().toISOString())}  `);
+    lines.push(`**Status:** ${register.status.toUpperCase()}`);
+    if (archived) lines.push(`\n> ⚠ **ARCHIVED** — historical record from a previous cycle.`);
+    if (register.status === "approved") {
+      lines.push(`\n> ✅ **APPROVED** by ${register.approver_username ?? "—"} on ${fmtDate(register.approved_at)}`);
+      lines.push(`> Overall residual risk: **${register.residual_risk_acceptable === true ? "Acceptable" : register.residual_risk_acceptable === false ? "Not acceptable" : "—"}**`);
+    }
+    lines.push(`\n## Assessment scope\n\n${register.assessment_scope || "—"}`);
+    if (register.notes) lines.push(`\n## Notes\n\n${register.notes}`);
+    lines.push(`\n## Summary\n\n- Confirmed risks: ${confirmedRisks.length}\n- Total mitigations: ${confirmedRisks.reduce((a, r) => a + (r.mitigations ?? []).length, 0)}\n- Plan tasks: ${planTasks.length}\n- Incidents: ${incidents.length}`);
+    lines.push(`\n## Confirmed risks`);
+    confirmedRisks.forEach((r, i) => {
+      lines.push(`\n### ${i + 1}. ${r.title}`);
+      lines.push(`**Category:** ${r.category} | **Severity:** ${cap(r.severity)} | **Likelihood:** ${cap(r.likelihood)} | **Level:** ${r.risk_level_autocalculated ?? "—"}`);
+      if (r.risk_owner) lines.push(`**Owner:** ${r.risk_owner}`);
+      if (r.description) lines.push(`\n${r.description}`);
+      if (r.impact) lines.push(`\n**Impact:** ${r.impact}`);
+      if (r.affects_vulnerable_groups) lines.push(`\n⚠ **Affects vulnerable groups**`);
+      if ((r.mitigations ?? []).length > 0) {
+        lines.push(`\n**Mitigations:**`);
+        r.mitigations.forEach(m => lines.push(`- [${m.hierarchy_level.toUpperCase()}] **${m.title}**${m.assigned_to ? ` (${m.assigned_to})` : ""}`));
+      }
+      lines.push(`\n**Residual risk:** ${r.residual_status === "none" || !r.residual_status ? "No residual risk" : cap(r.residual_status)}${r.residual_status && r.residual_status !== "none" && r.residual_severity ? ` — ${cap(r.residual_severity ?? "")}/${cap(r.residual_likelihood ?? "")} → ${r.final_risk_level ?? "—"}` : ""}`);
+      if (r.review_notes) lines.push(`**Notes:** ${r.review_notes}`);
+    });
+    if (register.residual_risk_argument) {
+      lines.push(`\n## Overall residual risk argument\n\n${register.residual_risk_argument}`);
+    }
+    if (planTasks.length > 0) {
+      lines.push(`\n## Action plan tasks\n`);
+      planTasks.forEach(t => lines.push(`- **${t.title}** (${cap(t.status)})${t.assigned_to ? ` — ${t.assigned_to}` : ""}${t.due_date ? ` | due ${fmtDate(t.due_date)}` : ""}`));
+    }
+    if (incidents.length > 0) {
+      lines.push(`\n## Incidents\n`);
+      incidents.forEach(inc => lines.push(`- **${inc.title}** (${cap(inc.status)})${inc.reported_by ? ` — ${inc.reported_by}` : ""}${inc.occurred_at ? ` | ${fmtDate(inc.occurred_at)}` : ""}`));
+    }
+    lines.push(`\n---\n*Generated by AI Trust Platform · EU AI Act Art. 9 Risk Management*`);
+    return lines.join("\n");
+  };
+
+  const safeFileName = systemName.replace(/[^a-z0-9_-]/gi, "_").toLowerCase();
+  const dateStamp = new Date().toISOString().slice(0, 10);
+
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+  <title>Risk Management Report — ${esc(systemName)}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 980px; margin: 0 auto; padding: 32px 24px; color: #111827; background: #fff; }
+    @media print { .no-print { display: none !important; } body { padding: 0; } }
+    h1 { font-size: 24px; font-weight: 800; margin: 0 0 4px; }
+    .meta { font-size: 12px; color: #556b82; margin-bottom: 24px; }
+    .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #556b82; margin: 28px 0 10px; border-bottom: 1px solid #e4e4e7; padding-bottom: 6px; }
+    .scope-box { background: #f8f9fa; border-radius: 8px; padding: 14px 16px; font-size: 13px; line-height: 1.65; margin-bottom: 12px; }
+    .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 20px; }
+    .stat { background: #f8f9fa; border-radius: 8px; padding: 10px 12px; text-align: center; }
+    .stat-val { font-size: 22px; font-weight: 800; color: #1147E9; }
+    .stat-lbl { font-size: 10px; color: #556b82; margin-top: 2px; }
+    .toolbar { display: flex; gap: 8px; align-items: center; padding: 12px 0 20px; border-bottom: 1px solid #e4e4e7; margin-bottom: 24px; flex-wrap: wrap; }
+    .btn { border: none; border-radius: 6px; padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn-primary { background: #1147E9; color: #fff; }
+    .btn-secondary { background: #f4f4f5; color: #374151; }
+    .btn-green { background: #d5f5e3; color: #1a5c35; }
+    .footer { margin-top: 40px; font-size: 11px; color: #9ca3af; border-top: 1px solid #e4e4e7; padding-top: 12px; }
+  </style>
+  <script>
+    function dlJson() {
+      const data = document.getElementById('json-data').textContent;
+      dl(data, 'report_${safeFileName}_${dateStamp}.json', 'application/json');
+    }
+    function dlMd() {
+      const data = document.getElementById('md-data').textContent;
+      dl(data, 'report_${safeFileName}_${dateStamp}.md', 'text/markdown');
+    }
+    function dl(content, filename, mime) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([content], {type: mime}));
+      a.download = filename;
+      a.click();
+    }
+  </script>
   </head><body>
-    <div class="no-print" style="margin-bottom:16px">
-      <button onclick="window.print()" style="background:#1147E9;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;margin-right:8px">🖨 Print / Save as PDF</button>
-      <button onclick="window.close()" style="background:#f4f4f5;color:#374151;border:none;border-radius:6px;padding:8px 16px;font-size:13px;cursor:pointer">Close</button>
-    </div>
-    <h1>Risk Management Report</h1>
-    <div class="meta">System: <strong>${systemName}</strong> · Register: ${register.id} · Generated: ${fmtDate(new Date().toISOString())}</div>
-    ${archived ? `<div class="archived-banner">⚠ ARCHIVED — This report is from a previous risk management cycle. It is retained for audit purposes only and does not reflect the current state of risk management for this system.</div>` : ""}
-    ${register.status === "approved" ? `
-      <div class="approved-badge">✅ APPROVED — by ${register.approver_username ?? "—"} on ${fmtDate(register.approved_at)} · Residual risk: ${register.residual_risk_acceptable ? "Acceptable" : "Not acceptable"}</div>
-    ` : `<div style="background:#fff3c4;border-radius:8px;padding:10px 16px;margin-bottom:20px;font-size:13px;color:#92400e">⚠ Status: ${register.status.toUpperCase()} — not yet approved</div>`}
-    <div class="section-title">Assessment scope</div>
-    <div class="scope-box">${register.assessment_scope || "—"}</div>
-    ${register.notes ? `<div class="section-title">Assessment notes</div><div class="scope-box">${register.notes}</div>` : ""}
-    <div class="stats">
-      <div class="stat"><div class="stat-val">${confirmed.length}</div><div class="stat-lbl">Confirmed risks</div></div>
-      <div class="stat"><div class="stat-val">${confirmed.reduce((a, r) => a + (r.mitigations ?? []).length, 0)}</div><div class="stat-lbl">Measures</div></div>
-      <div class="stat"><div class="stat-val">${confirmed.filter(r => r.affects_vulnerable_groups).length}</div><div class="stat-lbl">Vulnerable group risks</div></div>
-      <div class="stat"><div class="stat-val">${confirmed.reduce((a, r) => a + (r.misuse_scenarios ?? []).length, 0)}</div><div class="stat-lbl">Misuse scenarios</div></div>
-    </div>
-    <div class="section-title">Confirmed risks (${confirmed.length})</div>
-    ${risksHtml || "<p style='color:#9ca3af;font-size:13px'>No confirmed risks.</p>"}
-    ${diffAddedInNext.size > 0 ? `
-      <div style="margin-top:8px">
-        ${[...diffAddedInNext].map(title => `
-          <div style="border:2px dashed #6ee7b7;background:#f0faf4;border-radius:8px;padding:14px 18px;margin-bottom:12px">
-            <div style="font-size:11px;font-weight:700;background:#d5f5e3;color:#1a5c35;display:inline-block;padding:2px 8px;border-radius:6px;margin-bottom:8px;text-transform:uppercase">added in next version</div>
-            <div style="font-weight:700;font-size:15px;color:#1a5c35">${title}</div>
-            <div style="font-size:12px;color:#556b82;margin-top:4px;font-style:italic">This risk did not exist in this version — it was introduced in the next cycle.</div>
-          </div>
-        `).join("")}
-      </div>
-    ` : ""}
-    ${register.residual_risk_argument ? `
-      <div class="section-title">Overall residual risk argument (Art. 9(5))</div>
-      <div class="scope-box">${register.residual_risk_argument}</div>
-    ` : ""}
-    <div class="section-title">Review plan (Art. 9(1))</div>
-    <div class="scope-box">
-      <strong>Scheduled review date:</strong> ${fmtDate(register.next_review_date)}
-    </div>
-    ${planTasks.length > 0 ? `
-      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px">
-        <thead>
-          <tr style="background:#f4f4f5">
-            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Task</th>
-            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Linked risk</th>
-            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Assigned to</th>
-            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Due</th>
-            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${planTasks.map(t => `
-            <tr style="border-bottom:1px solid #e4e4e7">
-              <td style="padding:6px 10px;vertical-align:top">
-                <div style="font-weight:600">${t.title}</div>
-                ${t.description ? `<div style="color:#556b82;margin-top:2px">${t.description}</div>` : ""}
-              </td>
-              <td style="padding:6px 10px;vertical-align:top;color:#374151">${t.risk_id && riskTitleById[t.risk_id] ? riskTitleById[t.risk_id] : "—"}</td>
-              <td style="padding:6px 10px;vertical-align:top;color:#374151">${t.assigned_to || "—"}</td>
-              <td style="padding:6px 10px;vertical-align:top;white-space:nowrap">${fmtDate(t.due_date)}</td>
-              <td style="padding:6px 10px;vertical-align:top;font-weight:600;text-transform:capitalize">${cap(t.status)}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    ` : `<div style="color:#9ca3af;font-size:12px;font-style:italic;padding:4px 0">No tasks recorded.</div>`}
-    ${incidents.length > 0 ? `
-      <div class="section-title">Incidents (${incidents.length})</div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px">
-        <thead>
-          <tr style="background:#f4f4f5">
-            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Incident</th>
-            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Linked risk</th>
-            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Reported by</th>
-            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Occurred</th>
-            <th style="text-align:left;padding:6px 10px;font-weight:700;color:#374151">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${incidents.map(inc => {
-            const linkedRisk = inc.risk_id && riskTitleById[inc.risk_id] ? riskTitleById[inc.risk_id] : "—";
-            return `
-            <tr style="border-bottom:1px solid #e4e4e7">
-              <td style="padding:6px 10px;vertical-align:top">
-                <div style="font-weight:600">${inc.title}</div>
-                ${inc.description ? `<div style="color:#556b82;margin-top:2px">${inc.description}</div>` : ""}
-              </td>
-              <td style="padding:6px 10px;vertical-align:top;color:#374151">${linkedRisk}</td>
-              <td style="padding:6px 10px;vertical-align:top;color:#374151">${inc.reported_by || "—"}</td>
-              <td style="padding:6px 10px;vertical-align:top;white-space:nowrap">${fmtDate(inc.occurred_at)}</td>
-              <td style="padding:6px 10px;vertical-align:top;font-weight:600;text-transform:capitalize">${cap(inc.status)}</td>
-            </tr>
-            `;
-          }).join("")}
-        </tbody>
-      </table>
-    ` : ""}
-    <div class="footer">Generated by AI Trust Platform · EU AI Act Art. 9 Risk Management · ${new Date().getFullYear()}</div>
+
+  <div class="no-print toolbar">
+    <button class="btn btn-primary" onclick="window.print()">🖨 Print / Save as PDF</button>
+    <button class="btn btn-green" onclick="dlJson()">⬇ Download JSON</button>
+    <button class="btn btn-secondary" onclick="dlMd()">⬇ Download Markdown</button>
+    <button class="btn btn-secondary" onclick="window.close()">✕ Close</button>
+  </div>
+
+  <h1>Risk Management Report</h1>
+  <div class="meta">System: <strong>${esc(systemName)}</strong> &nbsp;·&nbsp; Register: ${esc(register.id)} &nbsp;·&nbsp; Generated: ${fmtDate(new Date().toISOString())}</div>
+
+  ${statusBanner}
+
+  <div class="section-title">Assessment scope</div>
+  <div class="scope-box">${np(register.assessment_scope)}</div>
+  ${register.notes ? `<div class="section-title">Notes</div><div class="scope-box">${np(register.notes)}</div>` : ""}
+
+  <div class="stats">
+    <div class="stat"><div class="stat-val">${confirmedRisks.length}</div><div class="stat-lbl">Confirmed risks</div></div>
+    <div class="stat"><div class="stat-val">${confirmedRisks.reduce((a, r) => a + (r.mitigations ?? []).length, 0)}</div><div class="stat-lbl">Mitigations</div></div>
+    <div class="stat"><div class="stat-val">${confirmedRisks.filter(r => r.affects_vulnerable_groups).length}</div><div class="stat-lbl">Vulnerable group risks</div></div>
+    <div class="stat"><div class="stat-val">${planTasks.length}</div><div class="stat-lbl">Action tasks</div></div>
+    <div class="stat"><div class="stat-val">${incidents.length}</div><div class="stat-lbl">Incidents</div></div>
+  </div>
+
+  <div class="section-title">Confirmed risks (${confirmedRisks.length})</div>
+  ${confirmedHtml || "<p style='color:#9ca3af;font-size:13px'>No confirmed risks.</p>"}
+
+  ${pendingRisks.length > 0 ? `<div class="section-title">Pending risks (${pendingRisks.length})</div>${pendingHtml}` : ""}
+
+  ${diffAddedInNext.size > 0 ? `
+    <div class="section-title">Risks added in next version (${diffAddedInNext.size})</div>
+    ${[...diffAddedInNext].map(title => `
+      <div style="border:2px dashed #6ee7b7;background:#f0faf4;border-radius:8px;padding:12px 16px;margin-bottom:10px">
+        <span style="background:#d5f5e3;color:#1a5c35;font-size:10px;font-weight:700;padding:1px 8px;border-radius:6px;text-transform:uppercase;margin-right:8px">added in next version</span>
+        <strong style="color:#1a5c35">${esc(title)}</strong>
+      </div>`).join("")}` : ""}
+
+  ${dismissedRisks.length > 0 ? `
+    <div class="section-title">Dismissed risks (${dismissedRisks.length})</div>
+    ${dismissedRisks.map(r => `<div style="border:1px solid #e4e4e7;border-radius:6px;padding:10px 14px;margin-bottom:6px;opacity:0.6;font-size:12px">
+      <strong>${esc(r.title)}</strong>
+      ${r.closure_justification ? ` — <span style="color:#556b82">${esc(r.closure_justification)}</span>` : ""}
+    </div>`).join("")}` : ""}
+
+  <div class="section-title">Overall residual risk — Art. 9(5)</div>
+  ${regResidualHtml || `<div style="color:#9ca3af;font-size:12px;font-style:italic">Not assessed.</div>`}
+
+  <div class="section-title">Action plan — Art. 9(1)</div>
+  ${register.next_review_date ? `<div style="font-size:12px;margin-bottom:10px"><strong>Scheduled review date:</strong> ${fmtDate(register.next_review_date)}</div>` : ""}
+  ${tasksHtml}
+
+  <div class="section-title">Incidents (${incidents.length})</div>
+  ${incidentsHtml}
+
+  <div class="footer">Generated by AI Trust Platform &nbsp;·&nbsp; EU AI Act Art. 9 Risk Management &nbsp;·&nbsp; ${new Date().getFullYear()}</div>
+
+  <script id="json-data" type="application/json">${esc(buildJson())}</script>
+  <script id="md-data" type="text/plain">${esc(buildMarkdown())}</script>
   </body></html>`;
 
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.target = "_blank";
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-}
-
-// ── Step 1: Scope ─────────────────────────────────────────────────────────────
-function ScopeStep({ register, onNext, onPatch }: {
-  register: RiskRegister | null;
-  onNext: (scope: string, notes: string) => Promise<void>;
-  onPatch: (scope: string, notes: string) => void;
-}) {
-  const [scope, setScope] = useState(register?.assessment_scope ?? "");
-  const [notes, setNotes] = useState(register?.notes ?? "");
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function handleNext() {
-    if (!scope.trim()) { setErr("Assessment scope is required."); return; }
-    setSaving(true);
-    try {
-      onPatch(scope, notes);
-      await onNext(scope, notes);
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setSaving(false);
-    }
+  const win = window.open(url, "_blank", "noopener");
+  if (!win) {
+    const a = document.createElement("a");
+    a.href = url; a.target = "_blank"; a.rel = "noopener";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   }
-
-  return (
-    <div>
-      <Card>
-        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700 }}>Assessment scope (Art. 9(2)(a))</h3>
-        <div style={{ marginBottom: 14 }}>
-          <Label required>Scope description</Label>
-          <Textarea value={scope} onChange={setScope} rows={4}
-            placeholder="Describe what is in scope for this risk assessment: intended purpose, deployment context, data inputs, affected populations, operational environment…" />
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
-            Include both known risks (already documented) and foreseeable risks (reasonably anticipatable misuse or failure modes).
-          </div>
-        </div>
-        <div>
-          <Label>Notes</Label>
-          <Textarea value={notes} onChange={setNotes} rows={2} placeholder="Optional internal notes…" />
-        </div>
-      </Card>
-      <ErrorMsg msg={err} />
-      <button onClick={handleNext} disabled={saving}
-        style={{ background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
-        {saving ? "Saving…" : "Next: Identify risks →"}
-      </button>
-    </div>
-  );
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
-// ── Step 2: Identify ──────────────────────────────────────────────────────────
+// ── Step 1: Scope & Risks ─────────────────────────────────────────────────────
 const RISK_CATEGORIES = [
   { value: "health", label: "Health" },
   { value: "safety", label: "Safety" },
   { value: "fundamental_rights", label: "Fundamental Rights" },
-];
-
-const RISK_TITLE_SUGGESTIONS = [
-  "Discrimination / unfair treatment",
-  "Privacy violation",
-  "Safety / physical harm",
-  "Security / misuse",
-  "Transparency / explainability",
-  "Human oversight failure",
-  "Data quality / bias",
-  "Robustness / reliability",
-  "Legal / regulatory non-compliance",
-  "Vulnerable group impact",
-  "Other",
+  { value: "others", label: "Others" },
 ];
 
 const RISK_LEVEL_MATRIX: Record<string, Record<string, string>> = {
-  critical: { very_likely: "critical", likely: "critical", possible: "high",   unlikely: "medium" },
-  high:     { very_likely: "critical", likely: "high",     possible: "high",   unlikely: "medium" },
-  medium:   { very_likely: "high",     likely: "medium",   possible: "medium", unlikely: "low"    },
-  low:      { very_likely: "medium",   likely: "low",      possible: "low",    unlikely: "low"    },
+  severe:      { very_likely: "unacceptable", likely: "unacceptable", possible: "substantial", unlikely: "moderate"   },
+  significant: { very_likely: "unacceptable", likely: "substantial",  possible: "substantial", unlikely: "moderate"   },
+  moderate:    { very_likely: "substantial",  likely: "moderate",     possible: "moderate",    unlikely: "acceptable" },
+  minor:       { very_likely: "moderate",     likely: "acceptable",   possible: "acceptable",  unlikely: "acceptable" },
 };
 
 function calcRiskLevel(severity: string, likelihood: string): string {
-  return RISK_LEVEL_MATRIX[severity]?.[likelihood] ?? "medium";
+  return RISK_LEVEL_MATRIX[severity]?.[likelihood] ?? "moderate";
 }
 
 function RiskLevelBadge({ level }: { level: string }) {
-  const c = SEV_COLORS[level] ?? "#556b82";
-  const bg = SEV_BG[level] ?? "#eef1f4";
+  const c = RISK_LEVEL_COLORS[level] ?? "#556b82";
+  const bg = RISK_LEVEL_BG[level] ?? "#eef1f4";
   return (
     <span style={{ fontSize: 11, background: bg, color: c, padding: "2px 10px", borderRadius: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
       {level}
@@ -469,40 +580,45 @@ const LIFECYCLE_PHASES = [
 interface DraftRisk {
   title: string;
   description: string;
-  category: string;
-  risk_type: string;
+  categories: string[];
   affects_vulnerable_groups: boolean;
   vulnerable_groups: string;
+  vulnerable_group_impact: string;
   severity: string;
   likelihood: string;
   risk_owner: string;
-  assignee: string;
   due_date: string;
   ai_lifecycle_phase: string;
   impact: string;
+  responsible_role: string[];
+  date_of_identification: string;
 }
 
 const emptyDraft = (): DraftRisk => ({
-  title: "", description: "", category: "health",
-  risk_type: "", affects_vulnerable_groups: false, vulnerable_groups: "",
-  severity: "medium", likelihood: "possible",
-  risk_owner: "", assignee: "", due_date: "", ai_lifecycle_phase: "", impact: "",
+  title: "", description: "", categories: [],
+  affects_vulnerable_groups: false, vulnerable_groups: "", vulnerable_group_impact: "",
+  severity: "moderate", likelihood: "possible",
+  risk_owner: "", due_date: "", ai_lifecycle_phase: "", impact: "",
+  responsible_role: [], date_of_identification: new Date().toISOString().slice(0, 10),
 });
 
 interface DraftMisuseScenario {
   risk_id: string;
-  actor: string;
+  risk_title: string;
+  risk_owner: string;
   description: string;
+  categories: string[];
+  severity: string;
   likelihood: string;
   consequence: string;
+  affects_vulnerable_groups: boolean;
   vulnerable_group: string;
-  assignee: string;
-  due_date: string;
+  vulnerable_group_impact: string;
 }
 
 const emptyMsDraft = (): DraftMisuseScenario => ({
-  risk_id: "", actor: "", description: "", likelihood: "possible",
-  consequence: "", vulnerable_group: "", assignee: "", due_date: "",
+  risk_id: "", risk_title: "", risk_owner: "", description: "", categories: [], severity: "moderate", likelihood: "possible",
+  consequence: "", affects_vulnerable_groups: false, vulnerable_group: "", vulnerable_group_impact: "",
 });
 
 interface DraftMonitoringRisk {
@@ -513,55 +629,453 @@ interface DraftMonitoringRisk {
   severity: string;
   likelihood: string;
   risk_owner: string;
-  assignee: string;
   due_date: string;
+  affects_vulnerable_groups: boolean;
+  vulnerable_groups: string;
+  vulnerable_group_impact: string;
 }
 
 const emptyMonitoringDraft = (): DraftMonitoringRisk => ({
   title: "", description: "", category: "health", observation: "",
-  severity: "medium", likelihood: "possible",
-  risk_owner: "", assignee: "", due_date: "",
+  severity: "moderate", likelihood: "possible",
+  risk_owner: "", due_date: "",
+  affects_vulnerable_groups: false, vulnerable_groups: "", vulnerable_group_impact: "",
 });
 
-function IdentifyStep({ register, risks, onRisksChange, onNext }: {
-  register: RiskRegister;
+const HIERARCHY_LEVELS = [
+  { value: "eliminate", label: "Eliminate", desc: "Remove the risk entirely (design change, feature removal)", color: "#8b0000", bg: "#ffd5d5" },
+  { value: "reduce",    label: "Reduce",    desc: "Reduce severity or likelihood (technical safeguards)", color: "#8b3a00", bg: "#fde8d0" },
+  { value: "mitigate",  label: "Mitigate",  desc: "Detect and contain occurrences (monitoring, human oversight)", color: "#0a6ed1", bg: "#dbeafe" },
+  { value: "inform",    label: "Inform",    desc: "Disclosure and transparency measures to affected parties", color: "#1a5c35", bg: "#d5f5e3" },
+];
+
+function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApprove, onReopen, reopening, onEnsureEditable, systemName, systemId }: {
+  register: RiskRegister | null;
   risks: RiskEntry[];
   onRisksChange: (risks: RiskEntry[]) => void;
-  onNext: () => void;
+  onRegisterUpdated: (r: RiskRegister) => void;
+  onApprove: (acceptable: boolean | null, argument: string, registryInfo?: import("../types").RegistrySystemInfo | null) => Promise<void>;
+  onReopen: () => void;
+  reopening: boolean;
+  onEnsureEditable: () => Promise<{ register: RiskRegister; risks: RiskEntry[] } | null>;
+  systemName: string;
+  systemId: string;
 }) {
+  // ── Scope section state ──
+  const [registryInfo, setRegistryInfo] = useState<import("../types").RegistrySystemInfo | null>(null);
+  const [registryLoading, setRegistryLoading] = useState(true);
+  const [registryErr, setRegistryErr] = useState("");
+
+  useEffect(() => {
+    api.getRegistryInfo(systemId)
+      .then(setRegistryInfo)
+      .catch(e => setRegistryErr(String(e)))
+      .finally(() => setRegistryLoading(false));
+  }, [systemId]);
+  // ── Risk section state ──
   const [activeForm, setActiveForm] = useState<"none" | "risk" | "misuse" | "monitoring">("none");
+  const [expandedRisk, setExpandedRisk] = useState<Record<string, boolean>>({});
+  const [addMit, setAddMit] = useState<Record<string, boolean>>({});
+  const [mitDraft, setMitDraft] = useState<Record<string, Partial<MitigationMeasure>>>({});
+  const [residualDraft, setResidualDraft] = useState<Record<string, { residual_status: string; residual_likelihood: string; residual_severity: string; date_of_assessment: string; review_notes: string }>>({});
+  const [residualSaving, setResidualSaving] = useState<Record<string, boolean>>({});
+  const [mitSaving, setMitSaving] = useState<Record<string, boolean>>({});
+  const [closureNote, setClosureNote] = useState<Record<string, string>>({});
+  const [mitErr, setMitErr] = useState<Record<string, string>>({});
+  const [testReports, setTestReports] = useState<Record<string, TestReport[]>>({});
+  const [addTest, setAddTest] = useState<Record<string, boolean>>({});
+  const [addResidual, setAddResidual] = useState<Record<string, boolean>>({});
+  const [testDraft, setTestDraft] = useState<Record<string, { title: string; summary: string; findings: string; result: string; author: string }>>({});
+  const [testSaving, setTestSaving] = useState<Record<string, boolean>>({});
   const [draft, setDraft] = useState<DraftRisk>(emptyDraft());
   const [msDraft, setMsDraft] = useState<DraftMisuseScenario>(emptyMsDraft());
   const [monDraft, setMonDraft] = useState<DraftMonitoringRisk>(emptyMonitoringDraft());
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
+  // ── Soft-delete state (for approved register) ──
+  const [pendingDeleteRisks, setPendingDeleteRisks] = useState<Set<string>>(new Set());
+  const [pendingDeleteMits, setPendingDeleteMits] = useState<Set<string>>(new Set());
+  const [pendingDeleteMs, setPendingDeleteMs] = useState<Set<string>>(new Set());
+  const [pendingDeleteTasks, setPendingDeleteTasks] = useState<Set<string>>(new Set());
+  const [pendingDeleteIncidents, setPendingDeleteIncidents] = useState<Set<string>>(new Set());
+
+  // ── Action plan section state ──
+  const [tasks, setTasks] = useState<PlanTask[]>([]);
+  const [addingTask, setAddingTask] = useState(false);
+  const [taskDraft, setTaskDraft] = useState<Partial<PlanTask>>({});
+  const [savingTask, setSavingTask] = useState(false);
+  const [taskErr, setTaskErr] = useState("");
+  const [editingTask, setEditingTask] = useState<string | null>(null);
+  const [editTaskDraft, setEditTaskDraft] = useState<Partial<PlanTask>>({});
+  const [savingEditTask, setSavingEditTask] = useState(false);
+
+  // ── Review section state ──
+  const [reviewDate, setReviewDate] = useState(
+    register?.next_review_date ? register.next_review_date.slice(0, 10) : ""
+  );
+  const [reviewDateErr, setReviewDateErr] = useState("");
+  const [savingDate, setSavingDate] = useState(false);
+  const [editingDate, setEditingDate] = useState(!register?.next_review_date);
+  const [reviewer, setReviewer] = useState(register?.reviewer_username ?? register?.created_by ?? "");
+  const [savingReviewer, setSavingReviewer] = useState(false);
+  const [editingReviewer, setEditingReviewer] = useState(!register?.reviewer_username);
+
+  // ── Incidents section state ──
+  const [incidents, setIncidents] = useState<import("../types").Incident[]>([]);
+  // incidentModal: null = closed, string = locked risk_id (from risk card), "other" = Other (no risk), "free" = Report Incident button (free choice)
+  const [incidentModal, setIncidentModal] = useState<null | string | "other" | "free">(null);
+  const [incidentDraft, setIncidentDraft] = useState<Partial<import("../types").Incident>>({});
+  const [savingIncident, setSavingIncident] = useState(false);
+  const [incidentErr, setIncidentErr] = useState("");
+  const [editingIncident, setEditingIncident] = useState<string | null>(null);
+  const [editIncidentDraft, setEditIncidentDraft] = useState<Partial<import("../types").Incident>>({});
+  const [savingEditIncident, setSavingEditIncident] = useState(false);
+  const [showAllIncidents, setShowAllIncidents] = useState(false);
+
+  // ── Approve section state ──
+  const [approveArgument, setApproveArgument] = useState(register?.residual_risk_argument ?? "");
+  const [approveSaving, setApproveSaving] = useState(false);
+  const [approveErr, setApproveErr] = useState("");
+  const [approveErrModal, setApproveErrModal] = useState(false);
+
+  // ── Register-level residual risk draft ──
+  const [regResidualDraft, setRegResidualDraft] = useState<{
+    residual_risk_acceptable: boolean | null;
+    residual_severity: string;
+    residual_likelihood: string;
+    residual_date_of_identification: string;
+    residual_risk_argument: string;
+  }>({
+    residual_risk_acceptable: register?.residual_risk_acceptable ?? null,
+    residual_severity: register?.residual_severity ?? "",
+    residual_likelihood: register?.residual_likelihood ?? "",
+    residual_date_of_identification: register?.residual_date_of_identification ? register.residual_date_of_identification.substring(0, 10) : "",
+    residual_risk_argument: register?.residual_risk_argument ?? "",
+  });
+  const [regResidualSaving, setRegResidualSaving] = useState(false);
+  const [regResidualSaved, setRegResidualSaved] = useState(false);
+
+  useEffect(() => {
+    if (!register) return;
+    api.getPlanTasks(register.id).then(setTasks).catch(() => {});
+    api.checkOverdueTasks(register.id).catch(() => {});
+    api.getIncidents(register.id).then(setIncidents).catch(() => {});
+  }, [register?.id]);
+
+  useEffect(() => {
+    if (!register || !registryInfo) return;
+    const snapshot: Record<string, unknown> = {
+      name: registryInfo.name,
+      description: registryInfo.description,
+      intended_purpose: registryInfo.intended_purpose,
+      tier: registryInfo.tier,
+      lifecycle: registryInfo.lifecycle,
+      org_role: registryInfo.org_role,
+      use_case: registryInfo.use_case,
+      department: registryInfo.department,
+    };
+    api.checkRegistryChanges(register.id, snapshot).catch(() => {});
+  }, [register?.id, registryInfo]);
+
+  const today = new Date();
+  const maxDate = new Date(today);
+  maxDate.setDate(maxDate.getDate() + 180);
+  const maxDateStr = maxDate.toISOString().slice(0, 10);
+  const todayStr = today.toISOString().slice(0, 10);
+
+  async function saveReviewDate(value: string) {
+    if (!register) return;
+    if (!value) { setReviewDateErr("Review date is required."); return; }
+    if (value > maxDateStr) { setReviewDateErr("Review date must be within 6 months from today."); return; }
+    setReviewDateErr("");
+    setSavingDate(true);
+    try {
+      const updated = await api.patchRegister(register.id, { next_review_date: value } as Partial<RiskRegister>);
+      onRegisterUpdated(updated);
+      setEditingDate(false);
+    } finally {
+      setSavingDate(false);
+    }
+  }
+
+  async function saveReviewer(value: string) {
+    if (!register) return;
+    setSavingReviewer(true);
+    try {
+      const updated = await api.patchRegister(register.id, { reviewer_username: value } as Partial<RiskRegister>);
+      onRegisterUpdated(updated);
+      setEditingReviewer(false);
+    } finally {
+      setSavingReviewer(false);
+    }
+  }
+
+  async function addTask() {
+    if (!register) return;
+    if (!taskDraft.title?.trim()) { setTaskErr("Task title is required."); return; }
+    setTaskErr("");
+    setSavingTask(true);
+    try {
+      const editable = await onEnsureEditable();
+      const targetRegister = editable?.register ?? register;
+      if (editable) { onRisksChange(editable.risks); }
+      const task = await api.createPlanTask(targetRegister.id, {
+        title: taskDraft.title ?? "",
+        risk_id: taskDraft.risk_id ?? null,
+        mitigation_id: taskDraft.mitigation_id ?? null,
+        assigned_to: taskDraft.assigned_to ?? null,
+        due_date: taskDraft.due_date ?? null,
+        status: taskDraft.status ?? "open",
+      });
+      setTasks(prev => [...prev, task]);
+      setTaskDraft({});
+      setAddingTask(false);
+    } finally {
+      setSavingTask(false);
+    }
+  }
+
+  async function deleteTask(taskId: string) {
+    if (register?.status === "approved") {
+      setPendingDeleteTasks(s => new Set(s).add(taskId));
+      return;
+    }
+    const task = tasks.find(t => t.id === taskId);
+    if (!window.confirm(`Delete task "${task?.title ?? taskId}"? This cannot be undone.`)) return;
+    await api.deletePlanTask(taskId);
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+  }
+
+  async function confirmDeleteTask(taskId: string) {
+    const originalTask = tasks.find(t => t.id === taskId);
+    const editable = await onEnsureEditable();
+    if (editable) {
+      const allTasks = await api.getPlanTasks(editable.register.id);
+      setTasks(allTasks);
+      const mapped = allTasks.find(t => t.title === originalTask?.title && t.status === originalTask?.status);
+      if (mapped) {
+        await api.deletePlanTask(mapped.id);
+        setTasks(prev => prev.filter(t => t.id !== mapped.id));
+      }
+    } else {
+      await api.deletePlanTask(taskId);
+      setTasks(prev => prev.filter(t => t.id !== taskId));
+    }
+    setPendingDeleteTasks(s => { const n = new Set(s); n.delete(taskId); return n; });
+  }
+
+  async function saveEditTask(taskId: string) {
+    if (!editTaskDraft.title?.trim()) return;
+    setSavingEditTask(true);
+    try {
+      const originalTask = tasks.find(t => t.id === taskId);
+      const editable = await onEnsureEditable();
+      let targetId = taskId;
+      if (editable) {
+        const allTasks = await api.getPlanTasks(editable.register.id);
+        setTasks(allTasks);
+        const mapped = allTasks.find(t => t.title === originalTask?.title && t.status === originalTask?.status);
+        targetId = mapped?.id ?? taskId;
+        onRisksChange(editable.risks);
+      }
+      const updated = await api.patchPlanTask(targetId, {
+        title: editTaskDraft.title,
+        description: editTaskDraft.description ?? "",
+        risk_id: editTaskDraft.risk_id ?? null,
+        assigned_to: editTaskDraft.assigned_to ?? null,
+        due_date: editTaskDraft.due_date ?? null,
+        status: editTaskDraft.status,
+      });
+      setTasks(prev => prev.map(t => t.id === targetId ? updated : t));
+      setEditingTask(null);
+      setEditTaskDraft({});
+    } finally {
+      setSavingEditTask(false);
+    }
+  }
+
+  async function updateTaskStatus(taskId: string, status: string) {
+    const originalTask = tasks.find(t => t.id === taskId);
+    const editable = await onEnsureEditable();
+    let targetId = taskId;
+    if (editable) {
+      const allTasks = await api.getPlanTasks(editable.register.id);
+      setTasks(allTasks);
+      const mapped = allTasks.find(t => t.title === originalTask?.title);
+      targetId = mapped?.id ?? taskId;
+      onRisksChange(editable.risks);
+    }
+    const updated = await api.patchPlanTask(targetId, { status });
+    setTasks(prev => prev.map(t => t.id === targetId ? updated : t));
+  }
+
+  const riskById: Record<string, string> = {};
+  risks.forEach(r => { riskById[r.id] = r.title; });
+
+  const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
+    open:        { bg: "#f4f4f5", color: "#6b7280" },
+    in_progress: { bg: "#eff6ff", color: "#1147E9" },
+    done:        { bg: "#d5f5e3", color: "#1a5c35" },
+    overdue:     { bg: "#ffd5d5", color: "#8b0000" },
+  };
+
+  function taskStatusKey(task: PlanTask): string {
+    if (task.status === "done") return "done";
+    if (task.due_date && task.due_date.slice(0, 10) < todayStr) return "overdue";
+    return task.status;
+  }
+
   function openForm(form: "risk" | "misuse" | "monitoring") {
     setActiveForm(prev => prev === form ? "none" : form);
     setErr("");
   }
 
+  function openIncidentModal(context: string | "other" | "free") {
+    setIncidentModal(context);
+    // pre-fill risk_id unless free choice
+    const riskId = context !== "free" && context !== "other" ? context : null;
+    setIncidentDraft({ risk_id: riskId ?? undefined, status: "open" });
+    setIncidentErr("");
+  }
+
+  function closeIncidentModal() {
+    setIncidentModal(null);
+    setIncidentDraft({});
+    setIncidentErr("");
+  }
+
+  async function addIncident() {
+    if (!register) return;
+    if (!incidentDraft.title?.trim()) { setIncidentErr("Incident title is required."); return; }
+    setIncidentErr("");
+    setSavingIncident(true);
+    try {
+      const editable = await onEnsureEditable();
+      const targetRegister = editable?.register ?? register;
+      if (editable) { onRisksChange(editable.risks); }
+      const incident = await api.createIncident(targetRegister.id, {
+        title: incidentDraft.title ?? "",
+        description: incidentDraft.description ?? "",
+        status: incidentDraft.status ?? "open",
+        risk_id: incidentDraft.risk_id ?? null,
+        reported_by: incidentDraft.reported_by ?? null,
+        occurred_at: incidentDraft.occurred_at ?? null,
+        attachments: incidentDraft.attachments ?? "",
+      });
+      setIncidents(prev => [incident, ...prev]);
+      closeIncidentModal();
+    } finally {
+      setSavingIncident(false);
+    }
+  }
+
+  async function deleteIncident(incidentId: string) {
+    if (register?.status === "approved") {
+      setPendingDeleteIncidents(s => new Set(s).add(incidentId));
+      return;
+    }
+    const incident = incidents.find(i => i.id === incidentId);
+    if (!window.confirm(`Delete incident "${incident?.title ?? incidentId}"? This cannot be undone.`)) return;
+    await api.deleteIncident(incidentId);
+    setIncidents(prev => prev.filter(i => i.id !== incidentId));
+  }
+
+  async function confirmDeleteIncident(incidentId: string) {
+    const originalIncident = incidents.find(i => i.id === incidentId);
+    const editable = await onEnsureEditable();
+    if (editable) {
+      const allInc = await api.getIncidents(editable.register.id);
+      setIncidents(allInc);
+      const mapped = allInc.find(i => i.title === originalIncident?.title);
+      if (mapped) {
+        await api.deleteIncident(mapped.id);
+        setIncidents(prev => prev.filter(i => i.id !== mapped.id));
+      }
+    } else {
+      await api.deleteIncident(incidentId);
+      setIncidents(prev => prev.filter(i => i.id !== incidentId));
+    }
+    setPendingDeleteIncidents(s => { const n = new Set(s); n.delete(incidentId); return n; });
+  }
+
+  async function saveEditIncident(incidentId: string) {
+    if (!editIncidentDraft.title?.trim()) return;
+    setSavingEditIncident(true);
+    try {
+      const originalIncident = incidents.find(i => i.id === incidentId);
+      const editable = await onEnsureEditable();
+      let targetId = incidentId;
+      if (editable) {
+        const allInc = await api.getIncidents(editable.register.id);
+        setIncidents(allInc);
+        const mapped = allInc.find(i => i.title === originalIncident?.title);
+        targetId = mapped?.id ?? incidentId;
+        onRisksChange(editable.risks);
+      }
+      const updated = await api.patchIncident(targetId, {
+        title: editIncidentDraft.title,
+        description: editIncidentDraft.description ?? "",
+        status: editIncidentDraft.status,
+        risk_id: editIncidentDraft.risk_id ?? null,
+        reported_by: editIncidentDraft.reported_by ?? null,
+        occurred_at: editIncidentDraft.occurred_at ?? null,
+        attachments: editIncidentDraft.attachments ?? "",
+      });
+      setIncidents(prev => prev.map(i => i.id === targetId ? updated : i));
+      setEditingIncident(null);
+      setEditIncidentDraft({});
+    } finally {
+      setSavingEditIncident(false);
+    }
+  }
+
+  async function confirmRisk(risk: RiskEntry) {
+    const editable = await onEnsureEditable();
+    const currentRisks = editable?.risks ?? risks;
+    if (editable) { onRisksChange(editable.risks); }
+    const targetId = editable ? (currentRisks.find(r => r.title === risk.title)?.id ?? risk.id) : risk.id;
+    const updated = await api.patchRisk(targetId, { status: "confirmed" });
+    onRisksChange(currentRisks.map(r => r.id === targetId ? { ...r, ...updated, misuse_scenarios: r.misuse_scenarios, mitigations: r.mitigations } : r));
+  }
+
+  async function dismissRisk(risk: RiskEntry) {
+    const editable = await onEnsureEditable();
+    const currentRisks = editable?.risks ?? risks;
+    if (editable) { onRisksChange(editable.risks); }
+    const targetId = editable ? (currentRisks.find(r => r.title === risk.title)?.id ?? risk.id) : risk.id;
+    const updated = await api.patchRisk(targetId, { status: "dismissed" });
+    onRisksChange(currentRisks.map(r => r.id === targetId ? { ...r, ...updated, misuse_scenarios: r.misuse_scenarios, mitigations: r.mitigations } : r));
+  }
+
   async function addRisk() {
-    if (!draft.title.trim()) { setErr("Risk title is required."); return; }
-    if (!draft.risk_type) { setErr("Risk type is required — select Known or Foreseeable (Art. 9(2)(a))."); return; }
-    if (!draft.category) { setErr("Impact category is required — select Health, Safety, or Fundamental Rights."); return; }
+    if (!draft.title.trim()) { setErr("Short description is required."); return; }
+    if (draft.categories.length === 0) { setErr("Impact category is required."); return; }
     if (draft.affects_vulnerable_groups && !draft.vulnerable_groups.trim()) {
       setErr("Vulnerable groups field is mandatory when 'affects vulnerable groups' is checked (Art. 9(9)).");
       return;
     }
     setSaving(true); setErr("");
     try {
-      const created = await api.createRisk(register.id, {
-        ...draft,
+      const editable = await onEnsureEditable();
+      const targetRegister = editable?.register ?? register;
+      if (!targetRegister) { setErr("No register available."); return; }
+      if (editable) { onRisksChange(editable.risks); }
+      const { categories, ...draftRest } = draft;
+      const created = await api.createRisk(targetRegister.id, {
+        ...draftRest,
+        category: categories.join(","),
         vulnerable_groups: JSON.stringify(
           draft.vulnerable_groups ? draft.vulnerable_groups.split(",").map(s => s.trim()).filter(Boolean) : []
         ),
         risk_level_autocalculated: calcRiskLevel(draft.severity, draft.likelihood),
-        assigned_to: draft.assignee || null,
         due_date: draft.due_date || null,
+        responsible_role: draft.responsible_role.length ? draft.responsible_role.join(",") : null,
+        date_of_assessment: draft.date_of_identification || null,
         source: "manual",
       });
-      onRisksChange([...risks, created]);
+      const baseRisks = editable?.risks ?? risks;
+      onRisksChange([...baseRisks, created]);
       setDraft(emptyDraft());
       setActiveForm("none");
     } catch (e) { setErr(String(e)); }
@@ -571,17 +1085,22 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
   async function addMisuseScenario() {
     const d = msDraft;
     if (!d.risk_id) { setErr("Select the risk this scenario belongs to."); return; }
-    if (!d.actor.trim() || !d.description.trim()) { setErr("Actor and scenario description are required."); return; }
+    if (d.risk_id === "other" && !d.risk_title.trim()) { setErr("Short description is required."); return; }
+    if (!d.risk_owner.trim() || !d.description.trim()) { setErr("Risk owner and scenario description are required."); return; }
     setSaving(true); setErr("");
     try {
-      const ms = await api.addMisuseScenario(d.risk_id, {
-        actor: d.actor,
+      const editable = await onEnsureEditable();
+      const currentRisks = editable?.risks ?? risks;
+      if (editable) { onRisksChange(editable.risks); }
+      const targetRiskId = d.risk_id === "other" ? currentRisks[0]?.id : d.risk_id;
+      const ms = await api.addMisuseScenario(targetRiskId ?? d.risk_id, {
+        actor: d.risk_id === "other" ? d.risk_title : d.risk_owner,
         description: d.description,
         likelihood: d.likelihood,
         consequence: d.consequence,
-        vulnerable_group: d.vulnerable_group || null,
+        vulnerable_group: d.affects_vulnerable_groups ? (d.vulnerable_group || null) : null,
       });
-      onRisksChange(risks.map(r => r.id === d.risk_id ? { ...r, misuse_scenarios: [...r.misuse_scenarios, ms] } : r));
+      onRisksChange(currentRisks.map(r => r.id === ms.risk_id ? { ...r, misuse_scenarios: [...r.misuse_scenarios, ms] } : r));
       setMsDraft(emptyMsDraft());
       setActiveForm("none");
     } catch (e) { setErr(String(e)); }
@@ -594,24 +1113,31 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
     if (!d.category) { setErr("Impact category is required."); return; }
     setSaving(true); setErr("");
     try {
-      const created = await api.createRisk(register.id, {
+      const editable = await onEnsureEditable();
+      const targetRegister = editable?.register ?? register;
+      if (!targetRegister) { setErr("No register available."); return; }
+      if (editable) { onRisksChange(editable.risks); }
+      const created = await api.createRisk(targetRegister.id, {
         title: d.title,
         description: `${d.description}${d.observation ? `\n\nObservation: ${d.observation}` : ""}`,
         category: d.category,
-        risk_type: "foreseeable",
         source: "monitoring",
         severity: d.severity,
         likelihood: d.likelihood,
         risk_owner: d.risk_owner,
-        assigned_to: d.assignee || null,
         due_date: d.due_date || null,
         risk_level_autocalculated: calcRiskLevel(d.severity, d.likelihood),
-        affects_vulnerable_groups: false,
-        vulnerable_groups: "[]",
+        affects_vulnerable_groups: d.affects_vulnerable_groups,
+        vulnerable_groups: JSON.stringify(
+          d.affects_vulnerable_groups && d.vulnerable_groups
+            ? d.vulnerable_groups.split(",").map(s => s.trim()).filter(Boolean)
+            : []
+        ),
         ai_lifecycle_phase: "operation",
-        impact: "",
+        impact: d.affects_vulnerable_groups && d.vulnerable_group_impact ? d.vulnerable_group_impact : "",
       });
-      onRisksChange([...risks, created]);
+      const baseRisksM = editable?.risks ?? risks;
+      onRisksChange([...baseRisksM, created]);
       setMonDraft(emptyMonitoringDraft());
       setActiveForm("none");
     } catch (e) { setErr(String(e)); }
@@ -619,57 +1145,727 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
   }
 
   async function removeRisk(id: string) {
+    if (register?.status === "approved") {
+      setPendingDeleteRisks(s => new Set(s).add(id));
+      return;
+    }
+    const risk = risks.find(r => r.id === id);
+    if (!window.confirm(`Delete risk "${risk?.title ?? id}"? This cannot be undone.`)) return;
     await api.deleteRisk(id);
     onRisksChange(risks.filter(r => r.id !== id));
   }
 
+  async function confirmDeleteRisk(id: string) {
+    const originalRisk = risks.find(r => r.id === id);
+    const editable = await onEnsureEditable();
+    const currentRisks = editable?.risks ?? risks;
+    if (editable) { onRisksChange(editable.risks); }
+    const mappedId = editable
+      ? (currentRisks.find(r => r.title === originalRisk?.title)?.id ?? id)
+      : id;
+    await api.deleteRisk(mappedId);
+    onRisksChange(currentRisks.filter(r => r.id !== mappedId));
+    setPendingDeleteRisks(s => { const n = new Set(s); n.delete(id); return n; });
+  }
+
+  async function loadTestReports(riskId: string) {
+    const reports = await api.getTestReports(riskId);
+    setTestReports(t => ({ ...t, [riskId]: reports }));
+  }
+
+  useEffect(() => {
+    risks.forEach(r => loadTestReports(r.id));
+  }, [risks.length]);
+
+  async function saveTestReport(riskId: string) {
+    const d = testDraft[riskId] ?? {};
+    if (!d.title?.trim()) return;
+    setTestSaving(s => ({ ...s, [riskId]: true }));
+    try {
+      const editable = await onEnsureEditable();
+      const currentRisks = editable?.risks ?? risks;
+      if (editable) { onRisksChange(editable.risks); }
+      const targetRiskId = editable
+        ? (currentRisks.find(r => r.title === risks.find(x => x.id === riskId)?.title)?.id ?? riskId)
+        : riskId;
+      const report = await api.createTestReport(targetRiskId, {
+        title: d.title,
+        summary: d.summary ?? "",
+        findings: d.findings ?? "",
+        result: d.result ?? "pass",
+        author: d.author || null,
+        attachments: "",
+        mitigation_id: null,
+      });
+      setTestReports(t => ({ ...t, [targetRiskId]: [report, ...(t[targetRiskId] ?? [])] }));
+      setTestDraft(td => ({ ...td, [riskId]: { title: "", summary: "", findings: "", result: "pass", author: "" } }));
+      setAddTest(a => ({ ...a, [riskId]: false }));
+    } finally {
+      setTestSaving(s => ({ ...s, [riskId]: false }));
+    }
+  }
+
+  async function saveResidual(riskId: string) {
+    const d = residualDraft[riskId] ?? {};
+    const savedRisk = risks.find(x => x.id === riskId);
+    const rs_status = d.residual_status ?? savedRisk?.residual_status ?? "none";
+    const rl = rs_status !== "none" ? (d.residual_likelihood ?? savedRisk?.residual_likelihood ?? "") : "";
+    const rs = rs_status !== "none" ? (d.residual_severity ?? savedRisk?.residual_severity ?? "") : "";
+    setResidualSaving(s => ({ ...s, [riskId]: true }));
+    try {
+      const editable = await onEnsureEditable();
+      const currentRisks = editable?.risks ?? risks;
+      if (editable) { onRisksChange(editable.risks); }
+      const targetRiskId = editable
+        ? (currentRisks.find(r => r.title === (savedRisk?.title ?? ""))?.id ?? riskId)
+        : riskId;
+      const updated = await api.patchRisk(targetRiskId, {
+        residual_status: rs_status,
+        residual_likelihood: rl || null,
+        residual_severity: rs || null,
+        final_risk_level: (rl && rs) ? calcRiskLevel(rs, rl) : null,
+        date_of_assessment: d.date_of_assessment || null,
+        review_notes: d.review_notes ?? undefined,
+      });
+      onRisksChange(currentRisks.map(r => r.id === targetRiskId ? { ...r, ...updated, mitigations: r.mitigations } : r));
+      setAddResidual(a => ({ ...a, [riskId]: false }));
+    } finally {
+      setResidualSaving(s => ({ ...s, [riskId]: false }));
+    }
+  }
+
+  async function saveRegResidual() {
+    if (!register) return;
+    setRegResidualSaving(true);
+    try {
+      const d = regResidualDraft;
+      const patch: Partial<import("../types").RiskRegister> = {
+        residual_risk_acceptable: d.residual_risk_acceptable,
+        residual_risk_argument: d.residual_risk_argument,
+        residual_severity: d.residual_severity || null,
+        residual_likelihood: d.residual_likelihood || null,
+        residual_final_risk_level: (d.residual_severity && d.residual_likelihood)
+          ? calcRiskLevel(d.residual_severity, d.residual_likelihood)
+          : null,
+        residual_date_of_identification: d.residual_date_of_identification || null,
+      } as Partial<import("../types").RiskRegister>;
+      const updated = await api.patchRegister(register.id, patch);
+      onRegisterUpdated(updated);
+      setRegResidualSaved(true);
+      setTimeout(() => setRegResidualSaved(false), 2000);
+    } finally {
+      setRegResidualSaving(false);
+    }
+  }
+
+  async function saveMitigation(riskId: string) {
+    const d = mitDraft[riskId] ?? {};
+    if (!d.title?.trim()) { setMitErr(e => ({ ...e, [riskId]: "Measure title is required." })); return; }
+    if (!d.hierarchy_level) { setMitErr(e => ({ ...e, [riskId]: "Hierarchy level is required." })); return; }
+    setMitSaving(s => ({ ...s, [riskId]: true }));
+    setMitErr(e => ({ ...e, [riskId]: "" }));
+    try {
+      const editable = await onEnsureEditable();
+      const currentRisks = editable?.risks ?? risks;
+      if (editable) { onRisksChange(editable.risks); }
+      const targetRiskId = editable ? (currentRisks.find(r => r.title === risks.find(x => x.id === riskId)?.title)?.id ?? riskId) : riskId;
+      const risk = currentRisks.find(r => r.id === targetRiskId) ?? risks.find(r => r.id === riskId);
+      const mit = await api.addMitigation(targetRiskId, {
+        title: d.title ?? "",
+        description: d.description ?? "",
+        hierarchy_level: d.hierarchy_level ?? "mitigate",
+        implementation_guidance: d.implementation_guidance ?? "",
+        status: "planned",
+        assigned_to: d.assigned_to ?? risk?.risk_owner ?? null,
+        due_date: d.due_date ?? null,
+        override_notes: "",
+      });
+      onRisksChange(currentRisks.map(r => r.id === targetRiskId ? { ...r, mitigations: [...r.mitigations, mit] } : r));
+      setMitDraft(prev => ({ ...prev, [targetRiskId]: {} }));
+      setAddMit(prev => ({ ...prev, [targetRiskId]: false }));
+    } finally {
+      setMitSaving(s => ({ ...s, [riskId]: false }));
+    }
+  }
+
+  const INCIDENT_STATUS: Record<string, { bg: string; color: string; label: string }> = {
+    open:                { bg: "#ffd5d5", color: "#8b0000", label: "Open" },
+    under_investigation: { bg: "#fde8d0", color: "#8b3a00", label: "Under investigation" },
+    resolved:            { bg: "#d5f5e3", color: "#1a5c35", label: "Resolved" },
+    closed:              { bg: "#f4f4f5", color: "#6b7280", label: "Closed" },
+  };
+
+  async function handleApproveSubmit() {
+    if (risks.length === 0) { setApproveErr("Cannot approve: at least one risk is required."); setApproveErrModal(true); return; }
+    if (!approveArgument.trim()) { setApproveErr("Expert sign-off argument is required (Art. 9(5))."); setApproveErrModal(true); return; }
+    // Gate 1: unacceptable residual → must have a plan task linked via risk_id
+    const unacceptableWithoutTask = risks.filter(r => r.residual_status === "unacceptable" && !tasks.some(t => t.risk_id === r.id));
+    if (unacceptableWithoutTask.length > 0) {
+      setApproveErr(`Cannot approve: the following risks have unacceptable residual risk but no linked action plan task: ${unacceptableWithoutTask.map(r => `"${r.title}"`).join(", ")}.`);
+      setApproveErrModal(true);
+      return;
+    }
+    // Gate 2: acceptable residual → every mitigation must have a plan task linked via mitigation_id
+    const acceptableRisks = risks.filter(r => r.residual_status === "acceptable");
+    const mitsMissingTasks = acceptableRisks.flatMap(r => r.mitigations ?? []).filter(m => !tasks.some(t => t.mitigation_id === m.id));
+    if (mitsMissingTasks.length > 0) {
+      setApproveErr(`Cannot approve: every mitigation on a risk with acceptable residual must have a plan task. Missing tasks for: ${mitsMissingTasks.map(m => `"${m.title}"`).slice(0, 3).join(", ")}${mitsMissingTasks.length > 3 ? "…" : ""}.`);
+      setApproveErrModal(true);
+      return;
+    }
+    setApproveSaving(true);
+    setApproveErr("");
+    try {
+      await onApprove(regResidualDraft.residual_risk_acceptable ?? null, approveArgument, registryInfo);
+    } catch (e) {
+      setApproveErr(String(e));
+      setApproveErrModal(true);
+    } finally {
+      setApproveSaving(false);
+    }
+  }
+
   return (
     <div>
-      {/* Existing risks */}
-      {risks.length > 0 && (
+      {/* ── Approved banner ── */}
+      {register?.status === "approved" && (
+        <Card style={{ background: "#d5f5e3", border: "1px solid #9cdcb8", marginBottom: 20 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#1a5c35", marginBottom: 8 }}>✓ Register approved</div>
+          <div style={{ fontSize: 13, color: "#1a5c35" }}>
+            Approved by <strong>{register.approver_username}</strong> on {register.approved_at ? new Date(register.approved_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}.
+          </div>
+          {register.residual_risk_acceptable !== null && (
+            <div style={{ marginTop: 8, fontSize: 13, color: "#1a5c35" }}>
+              Residual risk: <strong>{register.residual_risk_acceptable ? "Acceptable" : "Not acceptable"}</strong>
+            </div>
+          )}
+          {register.residual_risk_argument && (
+            <div style={{ marginTop: 4, fontSize: 12, color: "var(--text)" }}>{register.residual_risk_argument}</div>
+          )}
+        </Card>
+      )}
+
+      {/* ── Reopened banner ── */}
+      {register?.status !== "approved" && register?.last_assessment_completed_at && (
+        <Card style={{ background: "#fff3c4", border: "1px solid #f6c343", marginBottom: 20 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#92400e", marginBottom: 4 }}>⚠ Register reopened</div>
+          <div style={{ fontSize: 13, color: "#92400e" }}>
+            A change was made after the last approval. The register must be reviewed and re-approved before it is considered valid.
+          </div>
+        </Card>
+      )}
+
+      {/* ── Action buttons row ── */}
+      {register && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+          <button onClick={() => exportReport(systemName, register, risks)}
+            style={{ flex: 1, background: "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "10px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            Export Report
+          </button>
+          <button onClick={onReopen} disabled={reopening}
+            style={{ flex: 1, background: reopening ? "#9ca3af" : "#d97706", color: "#fff", border: "none", borderRadius: 6, padding: "10px 8px", fontSize: 13, fontWeight: 700, cursor: reopening ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {reopening ? "Opening…" : "Review Risk Management"}
+          </button>
+          <button onClick={() => openIncidentModal("free")}
+            style={{ flex: 1, background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "10px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            Report Incident
+          </button>
+        </div>
+      )}
+
+      {/* ── Section: Scope ── */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "#556b82", margin: "0 0 10px", borderBottom: "1px solid #e4e4e7", paddingBottom: 6 }}>
+          Risk Management Scope
+        </div>
         <Card>
-          <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700 }}>Identified risks or misuse scenarios ({risks.length})</h3>
-          {risks.map(r => (
-            <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+          {registryLoading ? (
+            <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>Loading system information…</div>
+          ) : registryErr ? (
+            <div style={{ fontSize: 13, color: "#dc2626" }}>Could not load registry data: {registryErr}</div>
+          ) : registryInfo ? (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <tbody>
+                {[
+                  { label: "System name",       value: registryInfo.name },
+                  { label: "Description",        value: registryInfo.description },
+                  { label: "Intended purpose",   value: registryInfo.intended_purpose },
+                  { label: "Use case",           value: registryInfo.use_case },
+                  { label: "Department",         value: registryInfo.department },
+                  { label: "People affected",    value: registryInfo.people_affected },
+                  { label: "Decision context",   value: registryInfo.decision_context },
+                  { label: "Autonomy level",     value: registryInfo.autonomy_level },
+                  { label: "Risk tier",          value: registryInfo.tier },
+                  { label: "Lifecycle",          value: registryInfo.lifecycle },
+                  { label: "Organisation role",  value: registryInfo.org_role },
+                  { label: "Provider",           value: registryInfo.provider },
+                  { label: "Organisation",       value: registryInfo.org_name },
+                  { label: "Version",            value: registryInfo.version },
+                ].filter(row => row.value).map(row => (
+                  <tr key={row.label} style={{ borderBottom: "1px solid #f4f4f5" }}>
+                    <td style={{ padding: "6px 12px 6px 0", color: "var(--text-secondary)", fontWeight: 600, whiteSpace: "nowrap", verticalAlign: "top", width: 180 }}>{row.label}</td>
+                    <td style={{ padding: "6px 0", color: "var(--text)" }}>{row.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+        </Card>
+      </div>
+
+      {/* ── Section: Risks ── */}
+      <div style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "#556b82", margin: "28px 0 10px", borderBottom: "1px solid #e4e4e7", paddingBottom: 6 }}>
+        Identified risks
+      </div>
+
+      {risks.length > 0 && risks.map(r => {
+        const sc = { bg: SEV_BG[r.severity] ?? "#eef1f4", color: SEV_COLORS[r.severity] ?? "#556b82" };
+        const hasMit = r.mitigations.length > 0;
+        const hasResidual = !!(r.residual_status && r.residual_status !== "none");
+        const trCount = (testReports[r.id] ?? []).length;
+        const isExpanded = expandedRisk[r.id] ?? false;
+        const isPendingDelete = pendingDeleteRisks.has(r.id);
+
+        const summaryParts: string[] = [];
+        if (hasMit) summaryParts.push(`${r.mitigations.length} measure${r.mitigations.length !== 1 ? "s" : ""}`);
+        if (hasResidual) summaryParts.push(`residual: ${r.residual_status}${r.residual_severity ? ` (${r.residual_severity}/${r.residual_likelihood})` : ""}`);
+        if (trCount > 0) summaryParts.push(`${trCount} test report${trCount !== 1 ? "s" : ""}`);
+
+        return (
+          <Card key={r.id} style={{ borderLeft: `3px solid ${isPendingDelete ? "#dc2626" : sc.color}`, padding: 0, marginBottom: 8, background: isPendingDelete ? "#fff5f5" : undefined, opacity: isPendingDelete ? 0.85 : 1 }}>
+            {/* Soft-delete banner */}
+            {isPendingDelete && (
+              <div style={{ background: "#dc2626", color: "#fff", fontSize: 12, fontWeight: 700, padding: "6px 16px", display: "flex", alignItems: "center", gap: 12, borderRadius: "10px 10px 0 0" }}>
+                <span>Deleted</span>
+                <button onClick={() => confirmDeleteRisk(r.id)}
+                  style={{ fontSize: 11, background: "#fff", color: "#dc2626", border: "none", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontWeight: 700 }}>
+                  Confirm delete
+                </button>
+                <button onClick={() => setPendingDeleteRisks(s => { const n = new Set(s); n.delete(r.id); return n; })}
+                  style={{ fontSize: 11, background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.5)", borderRadius: 4, padding: "3px 10px", cursor: "pointer" }}>
+                  Cancel
+                </button>
+              </div>
+            )}
+            {/* Header row — click anywhere to expand */}
+            <div
+              onClick={() => setExpandedRisk(e => ({ ...e, [r.id]: !e[r.id] }))}
+              style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 16px", cursor: "pointer", userSelect: "none" }}
+            >
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>
+                  <span style={{ fontSize: 10, color: "var(--text-secondary)", marginRight: 6 }}>{isExpanded ? "▲" : "▼"}</span>
                   {r.title}
                   {r.source === "monitoring" && (
                     <span style={{ marginLeft: 8, fontSize: 10, background: "#dbeafe", color: "#1e40af", padding: "1px 6px", borderRadius: 6, fontWeight: 700, textTransform: "uppercase" }}>monitoring</span>
                   )}
+                  {r.status === "confirmed" && (
+                    <span style={{ marginLeft: 8, fontSize: 11, color: "#16a34a", fontWeight: 600 }}>✓ confirmed</span>
+                  )}
+                  {r.status === "dismissed" && (
+                    <span style={{ marginLeft: 8, fontSize: 11, color: "var(--text-secondary)", fontWeight: 600 }}>dismissed</span>
+                  )}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <span>{RISK_CATEGORIES.find(c => c.value === r.category)?.label ?? r.category} · {r.risk_type === "foreseeable" ? "Foreseeable" : r.risk_type === "known" ? "Known" : r.risk_type}</span>
+                  <span>{r.category.split(",").map(c => RISK_CATEGORIES.find(x => x.value === c.trim())?.label ?? c.trim()).join(", ")}</span>
                   {r.risk_level_autocalculated && <RiskLevelBadge level={r.risk_level_autocalculated} />}
-                  {r.risk_owner && <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>owner: {r.risk_owner}</span>}
-                  {r.assigned_to && <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>assignee: {r.assigned_to}</span>}
                   {r.affects_vulnerable_groups && <span style={{ color: "#8b3a00" }}>⚠ vulnerable groups</span>}
-                  {r.misuse_scenarios.length > 0 && <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{r.misuse_scenarios.length} misuse scenario(s)</span>}
+                  {r.misuse_scenarios.length > 0 && <span>{r.misuse_scenarios.length} misuse scenario(s)</span>}
                 </div>
+                {summaryParts.length > 0 && (
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3 }}>
+                    {summaryParts.join(" · ")}
+                  </div>
+                )}
               </div>
-              <button onClick={() => removeRisk(r.id)}
-                style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: 16 }}>×</button>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                {r.status !== "confirmed" && (
+                  <button onClick={() => confirmRisk(r)}
+                    style={{ fontSize: 11, padding: "4px 10px", background: "#d5f5e3", color: "#1a5c35", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}>
+                    ✓ Confirm
+                  </button>
+                )}
+                {r.status !== "dismissed" && (
+                  <button onClick={() => dismissRisk(r)}
+                    style={{ fontSize: 11, padding: "4px 10px", background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}>
+                    Dismiss
+                  </button>
+                )}
+                <button onClick={() => removeRisk(r.id)}
+                  style={{ background: "transparent", border: "none", cursor: "pointer", color: isPendingDelete ? "#dc2626" : "var(--text-secondary)", fontSize: 16, padding: "0 2px" }}>×</button>
+              </div>
             </div>
-          ))}
-        </Card>
-      )}
+
+            {/* Expandable detail + manage section */}
+            {isExpanded && (
+              <div style={{ padding: "0 16px 16px", borderTop: "1px solid #f4f4f5" }}>
+
+                {/* ── Risk details ── */}
+                <div style={{ marginTop: 12, marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Risk details</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 12 }}>
+                    {r.description && (
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <span style={{ color: "var(--text-secondary)" }}>Description: </span>{r.description}
+                      </div>
+                    )}
+                    {r.impact && (
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <span style={{ color: "var(--text-secondary)" }}>Impact: </span>{r.impact}
+                      </div>
+                    )}
+                    {r.risk_owner && <div><span style={{ color: "var(--text-secondary)" }}>Risk owner: </span>{r.risk_owner}</div>}
+                    {r.ai_lifecycle_phase && <div><span style={{ color: "var(--text-secondary)" }}>Lifecycle phase: </span>{r.ai_lifecycle_phase}</div>}
+                    {r.responsible_role && <div><span style={{ color: "var(--text-secondary)" }}>Risk validator: </span>{r.responsible_role.split(",").map(v => v === "ai_engineer" ? "AI Engineer" : "Compliance Officer").join(", ")}</div>}
+                    {r.deadline && (
+                      <div>
+                        <span style={{ color: "var(--text-secondary)" }}>Deadline: </span>
+                        <span style={{ color: new Date(r.deadline) < new Date() ? "#dc2626" : "inherit" }}>
+                          {new Date(r.deadline).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                        </span>
+                      </div>
+                    )}
+                    {r.affects_vulnerable_groups && r.vulnerable_groups && (
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <span style={{ color: "var(--text-secondary)" }}>Vulnerable groups: </span>
+                        {(() => {
+                          try { return (JSON.parse(r.vulnerable_groups) as string[]).join(", "); }
+                          catch { return r.vulnerable_groups; }
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                  {r.misuse_scenarios.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>Misuse scenarios</div>
+                      {r.misuse_scenarios.map(ms => (
+                        <div key={ms.id} style={{ fontSize: 12, padding: "4px 0", borderBottom: "1px solid #f4f4f5" }}>
+                          <span style={{ fontWeight: 600 }}>{ms.actor}</span>: {ms.description}
+                          {ms.vulnerable_group && <span style={{ marginLeft: 8, fontSize: 11, background: "#fde8d0", color: "#8b3a00", padding: "1px 6px", borderRadius: 8 }}>{ms.vulnerable_group}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Mitigations ── */}
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
+                    Risk management measures
+                  </div>
+                  {HIERARCHY_LEVELS.map(level => {
+                    const items = r.mitigations.filter(m => m.hierarchy_level === level.value);
+                    if (items.length === 0) return null;
+                    return (
+                      <div key={level.value} style={{ marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, background: level.bg, color: level.color, padding: "2px 8px", borderRadius: 6, textTransform: "uppercase" }}>
+                          {level.label}
+                        </span>
+                        {items.map(m => (
+                          <div key={m.id} style={{ fontSize: 12, padding: "5px 0 4px", borderBottom: "1px solid #f4f4f5" }}>
+                            <div style={{ fontWeight: 600 }}>{m.title}</div>
+                            {m.implementation_guidance && <div style={{ color: "var(--text-secondary)", marginTop: 2 }}><span style={{ fontWeight: 500 }}>Implementation guidance: </span>{m.implementation_guidance}</div>}
+                            <div style={{ display: "flex", gap: 12, marginTop: 2, flexWrap: "wrap" }}>
+                              {m.assigned_to && <div><span style={{ color: "var(--text-secondary)" }}>Assignee: </span>{m.assigned_to}</div>}
+                              {m.due_date && <div><span style={{ color: "var(--text-secondary)" }}>Due date: </span>{m.due_date.slice(0, 10)}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                  {!addMit[r.id] ? (
+                    <button onClick={() => setAddMit(a => ({ ...a, [r.id]: true }))}
+                      style={{ fontSize: 12, fontWeight: 600, cursor: "pointer", borderRadius: 6, padding: "6px 14px", border: "none", background: hasMit ? "#f0f4ff" : "var(--brand)", color: hasMit ? "#1147E9" : "#fff" }}>
+                      + Add risk management measure
+                    </button>
+                  ) : (
+                    <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <Label required>Hierarchy level</Label>
+                        <Select value={mitDraft[r.id]?.hierarchy_level ?? ""}
+                          onChange={v => setMitDraft(d => ({ ...d, [r.id]: { ...d[r.id], hierarchy_level: v } }))}
+                          options={[{ value: "", label: "Select…" }, ...HIERARCHY_LEVELS.map(l => ({ value: l.value, label: `${l.label} — ${l.desc}` }))]} />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <Label required>Measure title</Label>
+                        <Input value={mitDraft[r.id]?.title ?? ""}
+                          onChange={v => setMitDraft(d => ({ ...d, [r.id]: { ...d[r.id], title: v } }))}
+                          placeholder="e.g. Implement fairness-aware post-processing" />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <Label>Implementation guidance</Label>
+                        <Textarea value={mitDraft[r.id]?.implementation_guidance ?? ""}
+                          onChange={v => setMitDraft(d => ({ ...d, [r.id]: { ...d[r.id], implementation_guidance: v } }))}
+                          rows={2} placeholder="How to implement this measure…" />
+                      </div>
+                      <div>
+                        <Label>Assignee</Label>
+                        <Input value={mitDraft[r.id]?.assigned_to ?? r.risk_owner ?? ""}
+                          onChange={v => setMitDraft(d => ({ ...d, [r.id]: { ...d[r.id], assigned_to: v } }))}
+                          placeholder={r.risk_owner ? `Default: ${r.risk_owner}` : "Person responsible"} />
+                      </div>
+                      <div>
+                        <Label>Due date</Label>
+                        <input type="date" value={mitDraft[r.id]?.due_date ?? ""}
+                          onChange={e => setMitDraft(d => ({ ...d, [r.id]: { ...d[r.id], due_date: e.target.value } }))}
+                          style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
+                      </div>
+                      {mitErr[r.id] && <ErrorMsg msg={mitErr[r.id]} />}
+                      <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
+                        <button onClick={() => saveMitigation(r.id)} disabled={mitSaving[r.id]}
+                          style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                          {mitSaving[r.id] ? "Saving…" : "Save"}
+                        </button>
+                        <button onClick={() => setAddMit(a => ({ ...a, [r.id]: false }))}
+                          style={{ fontSize: 12, background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Residual risk ── */}
+                {(() => {
+                  const rDraft = residualDraft[r.id] ?? {};
+                  const curStatus = rDraft.residual_status ?? r.residual_status ?? "none";
+                  const curLikelihood = rDraft.residual_likelihood ?? r.residual_likelihood ?? "";
+                  const curSeverity = rDraft.residual_severity ?? r.residual_severity ?? "";
+                  const curDate = rDraft.date_of_assessment ?? (r.date_of_assessment ? r.date_of_assessment.substring(0, 10) : "");
+                  const curNotes = rDraft.review_notes ?? r.review_notes ?? "";
+                  const hasMatrix = curStatus !== "none" && curStatus !== "";
+                  const defaults = { residual_status: curStatus, residual_likelihood: curLikelihood, residual_severity: curSeverity, date_of_assessment: curDate, review_notes: curNotes };
+                  const setRD = (patch: Partial<typeof rDraft>) =>
+                    setResidualDraft(d => ({ ...d, [r.id]: { ...defaults, ...(d[r.id] ?? {}), ...patch } }));
+
+                  const statusColors: Record<string, { bg: string; color: string; label: string }> = {
+                    none:          { bg: "#f4f4f5",  color: "#6b7280",  label: "No residual risk" },
+                    acceptable:    { bg: "#d5f5e3",  color: "#1a5c35",  label: "Acceptable" },
+                    unacceptable:  { bg: "#ffd5d5",  color: "#8b0000",  label: "Not acceptable" },
+                  };
+                  const sc2 = statusColors[r.residual_status] ?? statusColors.none;
+
+                  return (
+                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Residual risk</span>
+                        {r.residual_status && r.residual_status !== "none" && (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 8, background: sc2.bg, color: sc2.color }}>{sc2.label}</span>
+                        )}
+                        {r.final_risk_level && r.residual_status !== "none" && <RiskLevelBadge level={r.final_risk_level} />}
+                        {!addResidual[r.id] && (
+                          <button onClick={() => setAddResidual(a => ({ ...a, [r.id]: true }))}
+                            style={{ fontSize: 11, fontWeight: 600, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 10px", cursor: "pointer" }}>
+                            {r.residual_status && r.residual_status !== "none" ? "Edit" : "+ Add residual risk"}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Summary (read mode) */}
+                      {r.residual_status && r.residual_status !== "none" && !addResidual[r.id] && (
+                        <div style={{ fontSize: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                          {r.residual_severity && <div><span style={{ color: "var(--text-secondary)" }}>Severity: </span>{r.residual_severity}</div>}
+                          {r.residual_likelihood && <div><span style={{ color: "var(--text-secondary)" }}>Likelihood: </span>{r.residual_likelihood}</div>}
+                          {r.date_of_assessment && <div><span style={{ color: "var(--text-secondary)" }}>Date of identification: </span>{new Date(r.date_of_assessment).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>}
+                          {r.review_notes && <div style={{ gridColumn: "1 / -1" }}><span style={{ color: "var(--text-secondary)" }}>Notes: </span>{r.review_notes}</div>}
+                        </div>
+                      )}
+
+                      {/* Edit form */}
+                      {addResidual[r.id] && (
+                        <div>
+                          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                            {[
+                              { value: "none",         label: "No residual risk",  bg: "#f4f4f5",  color: "#6b7280" },
+                              { value: "acceptable",   label: "Acceptable",         bg: "#d5f5e3",  color: "#1a5c35" },
+                              { value: "unacceptable", label: "Not acceptable",     bg: "#ffd5d5",  color: "#8b0000" },
+                            ].map(opt => (
+                              <button key={opt.value} type="button"
+                                onClick={() => setRD({ residual_status: opt.value })}
+                                style={{
+                                  fontSize: 12, padding: "5px 14px", borderRadius: 20, cursor: "pointer", fontWeight: 600,
+                                  border: `2px solid ${curStatus === opt.value ? opt.color : "var(--border)"}`,
+                                  background: curStatus === opt.value ? opt.bg : "var(--surface)",
+                                  color: curStatus === opt.value ? opt.color : "var(--text-secondary)",
+                                }}>
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                          {hasMatrix && (
+                            <>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                                <div>
+                                  <Label>Severity<InfoTooltip definitions={SEVERITY_DEFINITIONS} /></Label>
+                                  <Select value={curSeverity} onChange={v => setRD({ residual_severity: v })}
+                                    options={[{ value: "", label: "— select —" }, { value: "severe", label: "Severe" }, { value: "significant", label: "Significant" }, { value: "moderate", label: "Moderate" }, { value: "minor", label: "Minor" }]} />
+                                </div>
+                                <div>
+                                  <Label>Likelihood<InfoTooltip definitions={LIKELIHOOD_DEFINITIONS} /></Label>
+                                  <Select value={curLikelihood} onChange={v => setRD({ residual_likelihood: v })}
+                                    options={[{ value: "", label: "— select —" }, { value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
+                                </div>
+                                <div>
+                                  <Label>Date of identification</Label>
+                                  <input type="date" value={curDate} onChange={e => setRD({ date_of_assessment: e.target.value })}
+                                    style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
+                                </div>
+                              </div>
+                              {curSeverity && curLikelihood && (
+                                <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                                  <span style={{ fontSize: 12 }}>Residual risk level (auto):</span>
+                                  <RiskLevelBadge level={calcRiskLevel(curSeverity, curLikelihood)} />
+                                </div>
+                              )}
+                              <div style={{ marginTop: 8 }}>
+                                <Label>Notes</Label>
+                                <Textarea value={curNotes} onChange={v => setRD({ review_notes: v })}
+                                  rows={2} placeholder="Explain the residual risk and why it is / is not acceptable…" />
+                              </div>
+                            </>
+                          )}
+                          <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                            <button onClick={() => saveResidual(r.id)} disabled={residualSaving[r.id]}
+                              style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                              {residualSaving[r.id] ? "Saving…" : "Save residual risk"}
+                            </button>
+                            <button onClick={() => setAddResidual(a => ({ ...a, [r.id]: false }))}
+                              style={{ fontSize: 12, background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* ── Test reports ── */}
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Test reports</span>
+                    <button onClick={() => setAddTest(a => ({ ...a, [r.id]: !addTest[r.id] }))}
+                      style={{ fontSize: 11, fontWeight: 600, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 10px", cursor: "pointer" }}>
+                      + Add test report
+                    </button>
+                  </div>
+                  {(testReports[r.id] ?? []).map(tr => (
+                    <div key={tr.id} style={{ fontSize: 12, padding: "6px 0", borderBottom: "1px solid #f4f4f5" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontWeight: 600 }}>{tr.title}</span>
+                        {tr.author && <span style={{ color: "var(--text-secondary)", fontSize: 11 }}>{tr.author}</span>}
+                        <span style={{ color: "var(--text-secondary)", fontSize: 11 }}>{new Date(tr.created_at).toLocaleDateString()}</span>
+                      </div>
+                      {tr.summary && <div style={{ color: "var(--text-secondary)", marginTop: 2 }}>{tr.summary}</div>}
+                      {tr.findings && <div style={{ marginTop: 2, fontStyle: "italic", fontSize: 12 }}>{tr.findings}</div>}
+                    </div>
+                  ))}
+                  {trCount === 0 && !addTest[r.id] && (
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)", fontStyle: "italic" }}>No test reports yet.</div>
+                  )}
+                  {addTest[r.id] && (
+                    <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <Label required>Title</Label>
+                        <Input value={testDraft[r.id]?.title ?? ""}
+                          onChange={v => setTestDraft(d => ({ ...d, [r.id]: { ...d[r.id] ?? { summary: "", findings: "", result: "pass", author: "" }, title: v } }))}
+                          placeholder="e.g. Fairness audit — Q3 2026" />
+                      </div>
+                      <div>
+                        <Label>Author</Label>
+                        <Input value={testDraft[r.id]?.author ?? ""}
+                          onChange={v => setTestDraft(d => ({ ...d, [r.id]: { ...d[r.id] ?? { title: "", summary: "", findings: "", result: "pass" }, author: v } }))}
+                          placeholder="e.g. jane.doe@company.com" />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <Label required>Summary</Label>
+                        <Textarea value={testDraft[r.id]?.summary ?? ""}
+                          onChange={v => setTestDraft(d => ({ ...d, [r.id]: { ...d[r.id] ?? { title: "", findings: "", result: "pass", author: "" }, summary: v } }))}
+                          rows={2} placeholder="Brief summary of what was tested and how…" />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <Label required>Findings</Label>
+                        <Textarea value={testDraft[r.id]?.findings ?? ""}
+                          onChange={v => setTestDraft(d => ({ ...d, [r.id]: { ...d[r.id] ?? { title: "", summary: "", result: "pass", author: "" }, findings: v } }))}
+                          rows={2} placeholder="What did the test reveal? What actions follow?" />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
+                        <button onClick={() => saveTestReport(r.id)}
+                          disabled={testSaving[r.id] || !testDraft[r.id]?.title?.trim() || !testDraft[r.id]?.summary?.trim() || !testDraft[r.id]?.findings?.trim()}
+                          style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                          {testSaving[r.id] ? "Saving…" : "Save test report"}
+                        </button>
+                        <button onClick={() => setAddTest(a => ({ ...a, [r.id]: false }))}
+                          style={{ fontSize: 12, background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Incidents ── */}
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
+                  {(() => {
+                    const riskIncidents = incidents.filter(i => i.risk_id === r.id);
+                    return (
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Incidents</span>
+                          <button
+                            onClick={() => openIncidentModal(r.id)}
+                            style={{ fontSize: 11, fontWeight: 600, background: "#fff0f0", color: "#dc2626", border: "none", borderRadius: 4, padding: "2px 10px", cursor: "pointer" }}>
+                            + Add incident
+                          </button>
+                        </div>
+                        {riskIncidents.length === 0 && (
+                          <div style={{ fontSize: 12, color: "var(--text-secondary)", fontStyle: "italic" }}>No incidents reported.</div>
+                        )}
+                        {riskIncidents.map(inc => {
+                          const isc = INCIDENT_STATUS[inc.status] ?? INCIDENT_STATUS.open;
+                          return (
+                            <div key={inc.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 0", borderBottom: "1px solid #f4f4f5", fontSize: 12 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ fontWeight: 600 }}>{inc.title}</span>
+                                {inc.description && <div style={{ color: "var(--text-secondary)", marginTop: 2 }}>{inc.description}</div>}
+                                {inc.reported_by && <div style={{ color: "var(--text-secondary)", fontSize: 11, marginTop: 2 }}>Reported by: {inc.reported_by}</div>}
+                                {inc.occurred_at && <div style={{ color: "var(--text-secondary)", fontSize: 11 }}>{inc.occurred_at.slice(0, 10)}</div>}
+                              </div>
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 6, background: isc.bg, color: isc.color, whiteSpace: "nowrap" }}>{isc.label}</span>
+                              <button onClick={() => { setEditingIncident(inc.id); setEditIncidentDraft({ ...inc }); }}
+                                style={{ fontSize: 11, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontWeight: 600 }}>Edit</button>
+                              <button onClick={() => deleteIncident(inc.id)}
+                                style={{ fontSize: 11, background: "transparent", border: "none", color: "#9ca3af", cursor: "pointer", padding: "0 2px" }}>✕</button>
+                            </div>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </div>
+
+              </div>
+            )}
+          </Card>
+        );
+      })}
 
       {/* Action buttons */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         {[
-          { key: "risk" as const, label: "+ Add risk", desc: "Known or foreseeable risk (Art. 9(2)(a))" },
-          { key: "misuse" as const, label: "+ Add misuse scenario", desc: "Foreseeable misuse by third parties (Art. 9(2)(b))" },
-          { key: "monitoring" as const, label: "+ Add monitoring risk", desc: "Risk from post-market monitoring (Art. 9(2)(c))" },
+          { key: "risk" as const, label: "+ Add risk" },
+          { key: "misuse" as const, label: "+ Add misuse scenario" },
         ].map(btn => (
           <button key={btn.key} onClick={() => openForm(btn.key)}
             style={{
-              padding: "8px 16px", fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: "pointer",
+              flex: 1, padding: "8px 16px", fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: "pointer",
               border: `1px solid ${activeForm === btn.key ? "var(--brand)" : "var(--border)"}`,
               background: activeForm === btn.key ? "var(--brand)" : "var(--surface)",
               color: activeForm === btn.key ? "#fff" : "var(--text)",
+              display: "flex", alignItems: "center", justifyContent: "center",
             }}>
             {btn.label}
-            <div style={{ fontSize: 10, fontWeight: 400, color: activeForm === btn.key ? "rgba(255,255,255,0.8)" : "var(--text-secondary)", marginTop: 1 }}>{btn.desc}</div>
           </button>
         ))}
       </div>
@@ -680,74 +1876,121 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
           <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Add risk</h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div style={{ gridColumn: "1 / -1" }}>
-              <Label required>Risk title</Label>
-              <input list="risk-title-suggestions" value={draft.title}
+              <Label required>Short description</Label>
+              <input value={draft.title}
                 onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
                 placeholder="e.g. Discriminatory outcomes for applicants with employment gaps"
                 style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
-              <datalist id="risk-title-suggestions">{RISK_TITLE_SUGGESTIONS.map(s => <option key={s} value={s} />)}</datalist>
-            </div>
-            <div>
-              <Label required>Impact category (Art. 9)</Label>
-              <Select value={draft.category} onChange={v => setDraft(d => ({ ...d, category: v }))} options={RISK_CATEGORIES} />
-            </div>
-            <div>
-              <Label required>Risk type (Art. 9(2)(a))</Label>
-              <Select value={draft.risk_type} onChange={v => setDraft(d => ({ ...d, risk_type: v }))}
-                options={[{ value: "", label: "— select —" }, { value: "known", label: "Known risk" }, { value: "foreseeable", label: "Foreseeable risk" }]} />
-            </div>
-            <div>
-              <Label>Severity</Label>
-              <Select value={draft.severity} onChange={v => setDraft(d => ({ ...d, severity: v }))}
-                options={[{ value: "critical", label: "Critical" }, { value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }]} />
-            </div>
-            <div>
-              <Label>Likelihood</Label>
-              <Select value={draft.likelihood} onChange={v => setDraft(d => ({ ...d, likelihood: v }))}
-                options={[{ value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
-            </div>
-            <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600 }}>Risk level (auto):</span>
-              <RiskLevelBadge level={calcRiskLevel(draft.severity, draft.likelihood)} />
-            </div>
-            <div>
-              <Label>Risk owner</Label>
-              <Input value={draft.risk_owner} onChange={v => setDraft(d => ({ ...d, risk_owner: v }))} placeholder="e.g. jane.doe@company.com" />
-            </div>
-            <div>
-              <Label>AI lifecycle phase</Label>
-              <Select value={draft.ai_lifecycle_phase} onChange={v => setDraft(d => ({ ...d, ai_lifecycle_phase: v }))} options={LIFECYCLE_PHASES} />
-            </div>
-            <div>
-              <Label>Assignee</Label>
-              <Input value={draft.assignee} onChange={v => setDraft(d => ({ ...d, assignee: v }))} placeholder="Person responsible for this risk" />
-            </div>
-            <div>
-              <Label>Due date</Label>
-              <input type="date" value={draft.due_date} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value }))}
-                style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Label>Impact description</Label>
-              <Textarea value={draft.impact} onChange={v => setDraft(d => ({ ...d, impact: v }))} rows={2} placeholder="Describe the business, operational, or user impact…" />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
               <Label>Description</Label>
               <Textarea value={draft.description} onChange={v => setDraft(d => ({ ...d, description: v }))} rows={2} placeholder="Describe the risk, its root cause, and potential impact…" />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
+              <Label>Risk owner<InfoTooltip definitions={[{ value: "risk_owner", label: "Risk owner", desc: "Person accountable for managing this risk: assigns mitigation tasks, sets deadlines, monitors progress, and decides on escalation." }]} /></Label>
+              <Input value={draft.risk_owner} onChange={v => setDraft(d => ({ ...d, risk_owner: v }))} placeholder="e.g. jane.doe@company.com" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label>Potential risk occurrence phase</Label>
+              <Select value={draft.ai_lifecycle_phase} onChange={v => setDraft(d => ({ ...d, ai_lifecycle_phase: v }))} options={LIFECYCLE_PHASES} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label required>Impact category</Label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                {RISK_CATEGORIES.map(cat => {
+                  const checked = draft.categories.includes(cat.value);
+                  return (
+                    <button key={cat.value} type="button"
+                      onClick={() => setDraft(d => ({
+                        ...d,
+                        categories: checked
+                          ? d.categories.filter(c => c !== cat.value)
+                          : [...d.categories, cat.value],
+                      }))}
+                      style={{
+                        padding: "5px 14px", fontSize: 13, borderRadius: 20, cursor: "pointer",
+                        border: `1px solid ${checked ? "var(--brand)" : "var(--border)"}`,
+                        background: checked ? "var(--brand)" : "var(--surface)",
+                        color: checked ? "#fff" : "var(--text)",
+                        fontWeight: checked ? 600 : 400,
+                        transition: "all 0.1s",
+                      }}>
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <Label>Severity<InfoTooltip definitions={SEVERITY_DEFINITIONS} /></Label>
+              <Select value={draft.severity} onChange={v => setDraft(d => ({ ...d, severity: v }))}
+                options={[{ value: "severe", label: "Severe" }, { value: "significant", label: "Significant" }, { value: "moderate", label: "Moderate" }, { value: "minor", label: "Minor" }]} />
+            </div>
+            <div>
+              <Label>Likelihood<InfoTooltip definitions={LIKELIHOOD_DEFINITIONS} /></Label>
+              <Select value={draft.likelihood} onChange={v => setDraft(d => ({ ...d, likelihood: v }))}
+                options={[{ value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
+            </div>
+            <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Risk level:<InfoTooltip definitions={RISK_LEVEL_DEFINITIONS} /></span>
+              <RiskLevelBadge level={calcRiskLevel(draft.severity, draft.likelihood)} />
+            </div>
+            <div>
+              <Label>Risk validator<InfoTooltip definitions={[{ value: "approver_role", label: "Risk validator", desc: "Role responsible for reviewing and confirming that this risk is valid and correctly assessed." }]} /></Label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                {[{ value: "ai_engineer", label: "AI Engineer" }, { value: "ai_compliance_officer", label: "Compliance Officer" }].map(opt => {
+                  const checked = draft.responsible_role.includes(opt.value);
+                  return (
+                    <button key={opt.value} type="button"
+                      onClick={() => setDraft(d => ({
+                        ...d,
+                        responsible_role: checked
+                          ? d.responsible_role.filter(r => r !== opt.value)
+                          : [...d.responsible_role, opt.value],
+                      }))}
+                      style={{
+                        padding: "5px 14px", fontSize: 13, borderRadius: 20, cursor: "pointer",
+                        border: `1px solid ${checked ? "var(--brand)" : "var(--border)"}`,
+                        background: checked ? "var(--brand)" : "var(--surface)",
+                        color: checked ? "#fff" : "var(--text)",
+                        fontWeight: checked ? 600 : 400,
+                        transition: "all 0.1s",
+                      }}>
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label>Impact description</Label>
+              <Textarea value={draft.impact} onChange={v => setDraft(d => ({ ...d, impact: v }))} rows={2} placeholder="Describe the business, operational, or user impact…" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
                 <input type="checkbox" checked={draft.affects_vulnerable_groups}
                   onChange={e => setDraft(d => ({ ...d, affects_vulnerable_groups: e.target.checked }))} />
-                <span>Affects vulnerable groups or children (Art. 9(9)) <span style={{ color: "#dc2626" }}>*</span></span>
+                <span>Affects vulnerable groups or children <span style={{ color: "#dc2626" }}>*</span></span>
               </label>
               {draft.affects_vulnerable_groups && (
-                <div style={{ marginTop: 8 }}>
-                  <Label required>Vulnerable groups affected</Label>
-                  <Input value={draft.vulnerable_groups} onChange={v => setDraft(d => ({ ...d, vulnerable_groups: v }))}
-                    placeholder="e.g. Children, elderly persons, people with disabilities (comma-separated)" />
+                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div>
+                    <Label required>Vulnerable groups affected</Label>
+                    <Input value={draft.vulnerable_groups} onChange={v => setDraft(d => ({ ...d, vulnerable_groups: v }))}
+                      placeholder="e.g. Children, elderly persons, people with disabilities (comma-separated)" />
+                  </div>
+                  <div>
+                    <Label>Impact on these groups</Label>
+                    <Textarea value={draft.vulnerable_group_impact} onChange={v => setDraft(d => ({ ...d, vulnerable_group_impact: v }))}
+                      rows={2} placeholder="Describe how the risk specifically impacts these groups…" />
+                  </div>
                 </div>
               )}
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label>Date of identification</Label>
+              <input type="date" value={draft.date_of_identification} onChange={e => setDraft(d => ({ ...d, date_of_identification: e.target.value }))}
+                style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
             </div>
           </div>
           <ErrorMsg msg={err} />
@@ -769,38 +2012,87 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
               <div style={{ gridColumn: "1 / -1" }}>
                 <Label required>Linked risk</Label>
                 <Select value={msDraft.risk_id} onChange={v => setMsDraft(d => ({ ...d, risk_id: v }))}
-                  options={[{ value: "", label: "— select risk —" }, ...risks.map(r => ({ value: r.id, label: r.title }))]} />
+                  options={[{ value: "", label: "— select risk —" }, ...risks.map(r => ({ value: r.id, label: r.title })), { value: "other", label: "Other" }]} />
               </div>
-              <div>
-                <Label required>Actor</Label>
-                <Input value={msDraft.actor} onChange={v => setMsDraft(d => ({ ...d, actor: v }))} placeholder="e.g. Malicious hiring manager" />
-              </div>
-              <div>
-                <Label>Likelihood</Label>
-                <Select value={msDraft.likelihood} onChange={v => setMsDraft(d => ({ ...d, likelihood: v }))}
-                  options={[{ value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
-              </div>
+              {msDraft.risk_id === "other" && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <Label required>Short description</Label>
+                  <Input value={msDraft.risk_title} onChange={v => setMsDraft(d => ({ ...d, risk_title: v }))} placeholder="e.g. Social engineering via AI assistant" />
+                </div>
+              )}
               <div style={{ gridColumn: "1 / -1" }}>
-                <Label required>Scenario description</Label>
+                <Label required>Description</Label>
                 <Textarea value={msDraft.description} onChange={v => setMsDraft(d => ({ ...d, description: v }))} rows={2}
                   placeholder="Describe how this actor could misuse the system…" />
               </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Label required>Impact category</Label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                  {RISK_CATEGORIES.map(cat => {
+                    const checked = msDraft.categories.includes(cat.value);
+                    return (
+                      <button key={cat.value} type="button"
+                        onClick={() => setMsDraft(d => ({
+                          ...d,
+                          categories: checked
+                            ? d.categories.filter(c => c !== cat.value)
+                            : [...d.categories, cat.value],
+                        }))}
+                        style={{
+                          padding: "5px 14px", fontSize: 13, borderRadius: 20, cursor: "pointer",
+                          border: `1px solid ${checked ? "var(--brand)" : "var(--border)"}`,
+                          background: checked ? "var(--brand)" : "var(--surface)",
+                          color: checked ? "#fff" : "var(--text)",
+                          fontWeight: checked ? 600 : 400,
+                          transition: "all 0.1s",
+                        }}>
+                        {cat.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div>
+                <Label required>Risk owner<InfoTooltip definitions={[{ value: "risk_owner", label: "Risk owner", desc: "Person accountable for managing this risk: assigns mitigation tasks, sets deadlines, monitors progress, and decides on escalation." }]} /></Label>
+                <Input value={msDraft.risk_owner} onChange={v => setMsDraft(d => ({ ...d, risk_owner: v }))} placeholder="e.g. Malicious hiring manager" />
+              </div>
+              <div>
+                <Label>Severity<InfoTooltip definitions={SEVERITY_DEFINITIONS} /></Label>
+                <Select value={msDraft.severity} onChange={v => setMsDraft(d => ({ ...d, severity: v }))}
+                  options={[{ value: "severe", label: "Severe" }, { value: "significant", label: "Significant" }, { value: "moderate", label: "Moderate" }, { value: "minor", label: "Minor" }]} />
+              </div>
+              <div>
+                <Label>Likelihood<InfoTooltip definitions={LIKELIHOOD_DEFINITIONS} /></Label>
+                <Select value={msDraft.likelihood} onChange={v => setMsDraft(d => ({ ...d, likelihood: v }))}
+                  options={[{ value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
+              </div>
+              <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>Risk level:<InfoTooltip definitions={RISK_LEVEL_DEFINITIONS} /></span>
+                <RiskLevelBadge level={calcRiskLevel(msDraft.severity, msDraft.likelihood)} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
                 <Label>Consequence</Label>
                 <Input value={msDraft.consequence} onChange={v => setMsDraft(d => ({ ...d, consequence: v }))} placeholder="e.g. Systematic rejection of qualified candidates" />
               </div>
-              <div>
-                <Label>Vulnerable group (if applicable)</Label>
-                <Input value={msDraft.vulnerable_group} onChange={v => setMsDraft(d => ({ ...d, vulnerable_group: v }))} placeholder="e.g. Pregnant women" />
-              </div>
-              <div>
-                <Label>Assignee</Label>
-                <Input value={msDraft.assignee} onChange={v => setMsDraft(d => ({ ...d, assignee: v }))} placeholder="Person responsible" />
-              </div>
-              <div>
-                <Label>Due date</Label>
-                <input type="date" value={msDraft.due_date} onChange={e => setMsDraft(d => ({ ...d, due_date: e.target.value }))}
-                  style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                  <input type="checkbox" checked={msDraft.affects_vulnerable_groups}
+                    onChange={e => setMsDraft(d => ({ ...d, affects_vulnerable_groups: e.target.checked }))} />
+                  <span>Affects vulnerable groups or children</span>
+                </label>
+                {msDraft.affects_vulnerable_groups && (
+                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div>
+                      <Label>Vulnerable groups affected</Label>
+                      <Input value={msDraft.vulnerable_group} onChange={v => setMsDraft(d => ({ ...d, vulnerable_group: v }))} placeholder="e.g. Pregnant women, people with disabilities" />
+                    </div>
+                    <div>
+                      <Label>Impact on these groups</Label>
+                      <Textarea value={msDraft.vulnerable_group_impact} onChange={v => setMsDraft(d => ({ ...d, vulnerable_group_impact: v }))}
+                        rows={2} placeholder="Describe how the misuse specifically impacts these groups…" />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -814,722 +2106,15 @@ function IdentifyStep({ register, risks, onRisksChange, onNext }: {
         </Card>
       )}
 
-      {/* Form: Add monitoring risk */}
-      {activeForm === "monitoring" && (
-        <Card>
-          <h3 style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 700 }}>Add monitoring risk <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-secondary)" }}>Art. 9(2)(c)</span></h3>
-          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 14 }}>Risk identified from post-market monitoring. Type is automatically set to Foreseeable.</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Label required>Risk title</Label>
-              <input list="risk-title-suggestions" value={monDraft.title}
-                onChange={e => setMonDraft(d => ({ ...d, title: e.target.value }))}
-                placeholder="e.g. Model drift causing biased outcomes in production"
-                style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
-            </div>
-            <div>
-              <Label required>Impact category (Art. 9)</Label>
-              <Select value={monDraft.category} onChange={v => setMonDraft(d => ({ ...d, category: v }))} options={RISK_CATEGORIES} />
-            </div>
-            <div>
-              <Label>Severity</Label>
-              <Select value={monDraft.severity} onChange={v => setMonDraft(d => ({ ...d, severity: v }))}
-                options={[{ value: "critical", label: "Critical" }, { value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }]} />
-            </div>
-            <div>
-              <Label>Likelihood</Label>
-              <Select value={monDraft.likelihood} onChange={v => setMonDraft(d => ({ ...d, likelihood: v }))}
-                options={[{ value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
-            </div>
-            <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600 }}>Risk level (auto):</span>
-              <RiskLevelBadge level={calcRiskLevel(monDraft.severity, monDraft.likelihood)} />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Label>Observation</Label>
-              <Textarea value={monDraft.observation} onChange={v => setMonDraft(d => ({ ...d, observation: v }))} rows={2}
-                placeholder="Describe what was observed in monitoring that triggered this risk…" />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Label>Description</Label>
-              <Textarea value={monDraft.description} onChange={v => setMonDraft(d => ({ ...d, description: v }))} rows={2}
-                placeholder="Describe the risk…" />
-            </div>
-            <div>
-              <Label>Risk owner</Label>
-              <Input value={monDraft.risk_owner} onChange={v => setMonDraft(d => ({ ...d, risk_owner: v }))} placeholder="e.g. jane.doe@company.com" />
-            </div>
-            <div>
-              <Label>Assignee</Label>
-              <Input value={monDraft.assignee} onChange={v => setMonDraft(d => ({ ...d, assignee: v }))} placeholder="Person responsible for this risk" />
-            </div>
-            <div>
-              <Label>Due date</Label>
-              <input type="date" value={monDraft.due_date} onChange={e => setMonDraft(d => ({ ...d, due_date: e.target.value }))}
-                style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
-            </div>
-          </div>
-          <ErrorMsg msg={err} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={addMonitoringRisk} disabled={saving} className="btn-primary btn-sm">{saving ? "Adding…" : "+ Add monitoring risk"}</button>
-            <button onClick={() => setActiveForm("none")} className="btn-ghost btn-sm">Cancel</button>
-          </div>
-        </Card>
-      )}
-
-      <button onClick={onNext} disabled={risks.length === 0}
-        style={{ background: risks.length === 0 ? "#9ca3af" : "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: risks.length === 0 ? "not-allowed" : "pointer" }}>
-        Next: Evaluate ({risks.length} risk{risks.length !== 1 ? "s" : ""}) →
-      </button>
-    </div>
-  );
-}
-
-// ── Step 3: Evaluate ──────────────────────────────────────────────────────────
-function EvaluateStep({ risks, onRisksChange, onNext }: {
-  risks: RiskEntry[];
-  onRisksChange: (r: RiskEntry[]) => void;
-  onNext: () => void;
-}) {
-  const [saving, setSaving] = useState<Record<string, boolean>>({});
-
-  async function confirmRisk(risk: RiskEntry) {
-    const updated = await api.patchRisk(risk.id, { status: "confirmed" });
-    onRisksChange(risks.map(r => r.id === risk.id ? { ...r, ...updated, misuse_scenarios: r.misuse_scenarios, mitigations: r.mitigations } : r));
-  }
-
-  async function dismissRisk(risk: RiskEntry) {
-    const updated = await api.patchRisk(risk.id, { status: "dismissed" });
-    onRisksChange(risks.map(r => r.id === risk.id ? { ...r, ...updated, misuse_scenarios: r.misuse_scenarios, mitigations: r.mitigations } : r));
-  }
-
-  const confirmed = risks.filter(r => r.status === "confirmed").length;
-  const regularRisks = risks.filter(r => r.source !== "monitoring");
-  const monitoringRisks = risks.filter(r => r.source === "monitoring");
-  const allMisuseScenarios = risks.flatMap(r => r.misuse_scenarios.map(ms => ({ ...ms, riskTitle: r.title })));
-
-  return (
-    <div>
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        {[
-          { label: "Total", value: risks.length, color: "#1147E9" },
-          { label: "Confirmed", value: confirmed, color: "#16a34a" },
-          { label: "Dismissed", value: risks.filter(r => r.status === "dismissed").length, color: "var(--text-secondary)" },
-          { label: "Pending", value: risks.filter(r => r.status === "identified").length, color: "#f59e0b" },
-        ].map(k => (
-          <div key={k.label} style={{ flex: 1, minWidth: 90, background: "var(--bg)", borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>{k.label}</div>
-          </div>
-        ))}
+      {/* ── Section: Action plan ── */}
+      <div style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "#556b82", margin: "28px 0 10px", borderBottom: "1px solid #e4e4e7", paddingBottom: 6 }}>
+        Action plan
       </div>
 
-      {risks.map(risk => {
-        const sc = { bg: SEV_BG[risk.severity] ?? "#eef1f4", color: SEV_COLORS[risk.severity] ?? "#556b82" };
-        return (
-          <Card key={risk.id} style={{ borderLeft: `3px solid ${sc.color}`, padding: "0" }}>
-            {/* Header — always visible, no collapse */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px" }}>
-              <div style={{ flex: 1 }}>
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{risk.title}</span>
-                {risk.source === "monitoring" && (
-                  <span style={{ marginLeft: 8, fontSize: 10, background: "#dbeafe", color: "#1e40af", padding: "1px 6px", borderRadius: 6, fontWeight: 700, textTransform: "uppercase" }}>monitoring</span>
-                )}
-                <span style={{ marginLeft: 8, fontSize: 11, background: sc.bg, color: sc.color, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
-                  {risk.severity}
-                </span>
-                {risk.affects_vulnerable_groups && (
-                  <span style={{ marginLeft: 6, fontSize: 11, background: "#fde8d0", color: "#8b3a00", padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
-                    vulnerable groups
-                  </span>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                {risk.status !== "confirmed" && (
-                  <button onClick={() => confirmRisk(risk)}
-                    style={{ fontSize: 11, padding: "4px 10px", background: "#d5f5e3", color: "#1a5c35", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}>
-                    ✓ Confirm
-                  </button>
-                )}
-                {risk.status !== "dismissed" && (
-                  <button onClick={() => dismissRisk(risk)}
-                    style={{ fontSize: 11, padding: "4px 10px", background: "var(--bg)", color: "var(--text-secondary)", border: "none", borderRadius: 4, cursor: "pointer" }}>
-                    Dismiss
-                  </button>
-                )}
-                {risk.status === "confirmed" && (
-                  <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 600 }}>✓ confirmed</span>
-                )}
-              </div>
-            </div>
-
-            {/* Body — always expanded */}
-            <div style={{ padding: "0 20px 16px", borderTop: "1px solid #f4f4f5" }}>
-              {/* Risk details */}
-              <div style={{ marginTop: 12, marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>Risk</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, background: "var(--bg)", color: "var(--text-secondary)", padding: "2px 8px", borderRadius: 10 }}>
-                    {risk.risk_type === "foreseeable" ? "⚡ Foreseeable" : "📋 Known"}
-                  </span>
-                  <span style={{ fontSize: 11, background: "var(--bg)", color: "var(--text-secondary)", padding: "2px 8px", borderRadius: 10 }}>
-                    Likelihood: {risk.likelihood}
-                  </span>
-                  {risk.category && (
-                    <span style={{ fontSize: 11, background: "var(--bg)", color: "var(--text-secondary)", padding: "2px 8px", borderRadius: 10 }}>
-                      {RISK_CATEGORIES.find(c => c.value === risk.category)?.label ?? risk.category}
-                    </span>
-                  )}
-                </div>
-                {risk.description && <p style={{ fontSize: 12, color: "var(--text)", margin: 0 }}>{risk.description}</p>}
-              </div>
-
-              {/* Misuse scenarios — only if any exist */}
-              {risk.misuse_scenarios.length > 0 && (
-                <div style={{ marginBottom: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
-                    Misuse scenarios
-                  </div>
-                  {risk.misuse_scenarios.map(ms => (
-                    <div key={ms.id} style={{ fontSize: 12, padding: "6px 0", borderBottom: "1px solid #f4f4f5" }}>
-                      <span style={{ fontWeight: 600 }}>{ms.actor}</span>: {ms.description}
-                      {ms.vulnerable_group && (
-                        <span style={{ marginLeft: 8, fontSize: 11, background: "#fde8d0", color: "#8b3a00", padding: "1px 6px", borderRadius: 8 }}>
-                          {ms.vulnerable_group}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Monitoring observation — only for monitoring risks */}
-              {risk.source === "monitoring" && (risk as any).observation && (
-                <div style={{ marginBottom: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
-                    Monitoring observation
-                  </div>
-                  <p style={{ fontSize: 12, color: "var(--text)", margin: 0 }}>{(risk as any).observation}</p>
-                </div>
-              )}
-            </div>
-          </Card>
-        );
-      })}
-
-      <button onClick={onNext} disabled={confirmed === 0}
-        style={{ background: confirmed === 0 ? "#9ca3af" : "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: confirmed === 0 ? "not-allowed" : "pointer" }}>
-        Next: Add risk management measures ({confirmed} confirmed) →
-      </button>
-    </div>
-  );
-}
-
-// ── Step 4: Mitigate ──────────────────────────────────────────────────────────
-const HIERARCHY_LEVELS = [
-  { value: "eliminate", label: "Eliminate", desc: "Remove the risk entirely (design change, feature removal)", color: "#8b0000", bg: "#ffd5d5" },
-  { value: "reduce",    label: "Reduce",    desc: "Reduce severity or likelihood (technical safeguards)", color: "#8b3a00", bg: "#fde8d0" },
-  { value: "mitigate",  label: "Mitigate",  desc: "Detect and contain occurrences (monitoring, human oversight)", color: "#0a6ed1", bg: "#dbeafe" },
-  { value: "inform",    label: "Inform",    desc: "Disclosure and transparency measures to affected parties", color: "#1a5c35", bg: "#d5f5e3" },
-];
-
-function MitigateStep({ risks, onRisksChange, onNext }: {
-  risks: RiskEntry[];
-  onRisksChange: (r: RiskEntry[]) => void;
-  onNext: () => void;
-}) {
-  const confirmedRisks = risks.filter(r => r.status === "confirmed");
-  const [addMit, setAddMit] = useState<Record<string, boolean>>({});
-  const [mitDraft, setMitDraft] = useState<Record<string, Partial<MitigationMeasure>>>({});
-  const [residualDraft, setResidualDraft] = useState<Record<string, { residual_likelihood: string; residual_severity: string; date_of_assessment: string; review_notes: string }>>({});
-  const [residualSaving, setResidualSaving] = useState<Record<string, boolean>>({});
-  const [saving, setSaving] = useState<Record<string, boolean>>({});
-  const [closureNote, setClosureNote] = useState<Record<string, string>>({});
-  const [err, setErr] = useState<Record<string, string>>({});
-  const [testReports, setTestReports] = useState<Record<string, TestReport[]>>({});
-  const [addTest, setAddTest] = useState<Record<string, boolean>>({});
-  const [testDraft, setTestDraft] = useState<Record<string, { title: string; summary: string; findings: string; result: string; author: string }>>({});
-  const [testSaving, setTestSaving] = useState<Record<string, boolean>>({});
-
-  async function loadTestReports(riskId: string) {
-    const reports = await api.getTestReports(riskId);
-    setTestReports(t => ({ ...t, [riskId]: reports }));
-  }
-
-  useEffect(() => {
-    confirmedRisks.forEach(r => loadTestReports(r.id));
-  }, [risks.length]);
-
-  async function saveTestReport(riskId: string) {
-    const d = testDraft[riskId] ?? {};
-    if (!d.title?.trim()) return;
-    setTestSaving(s => ({ ...s, [riskId]: true }));
-    try {
-      const report = await api.createTestReport(riskId, {
-        title: d.title,
-        summary: d.summary ?? "",
-        findings: d.findings ?? "",
-        result: d.result ?? "pass",
-        author: d.author || null,
-        attachments: "",
-        mitigation_id: null,
-      });
-      setTestReports(t => ({ ...t, [riskId]: [report, ...(t[riskId] ?? [])] }));
-      setTestDraft(td => ({ ...td, [riskId]: { title: "", summary: "", findings: "", result: "pass", author: "" } }));
-      setAddTest(a => ({ ...a, [riskId]: false }));
-    } finally {
-      setTestSaving(s => ({ ...s, [riskId]: false }));
-    }
-  };
-
-  async function saveResidual(riskId: string) {
-    const d = residualDraft[riskId] ?? {};
-    const rl = d.residual_likelihood ?? "";
-    const rs = d.residual_severity ?? "";
-    setResidualSaving(s => ({ ...s, [riskId]: true }));
-    try {
-      const updated = await api.patchRisk(riskId, {
-        residual_likelihood: rl || null,
-        residual_severity: rs || null,
-        final_risk_level: (rl && rs) ? calcRiskLevel(rs, rl) : null,
-        date_of_assessment: d.date_of_assessment || null,
-        review_notes: d.review_notes ?? undefined,
-      });
-      onRisksChange(risks.map(r => r.id === riskId ? { ...r, ...updated, mitigations: r.mitigations } : r));
-    } finally {
-      setResidualSaving(s => ({ ...s, [riskId]: false }));
-    }
-  }
-
-  async function saveMitigation(riskId: string) {
-    const d = mitDraft[riskId] ?? {};
-    if (!d.title?.trim()) { setErr(e => ({ ...e, [riskId]: "Measure title is required." })); return; }
-    if (!d.hierarchy_level) { setErr(e => ({ ...e, [riskId]: "Hierarchy level is required." })); return; }
-    setSaving(s => ({ ...s, [riskId]: true }));
-    setErr(e => ({ ...e, [riskId]: "" }));
-    try {
-      const mit = await api.addMitigation(riskId, {
-        title: d.title ?? "",
-        description: d.description ?? "",
-        hierarchy_level: d.hierarchy_level ?? "mitigate",
-        implementation_guidance: d.implementation_guidance ?? "",
-        status: "planned",
-        assigned_to: d.assigned_to ?? null,
-        due_date: d.due_date ?? null,
-        override_notes: "",
-      });
-      onRisksChange(risks.map(r => r.id === riskId ? { ...r, mitigations: [...r.mitigations, mit] } : r));
-      setMitDraft(prev => ({ ...prev, [riskId]: {} }));
-      setAddMit(prev => ({ ...prev, [riskId]: false }));
-    } finally {
-      setSaving(s => ({ ...s, [riskId]: false }));
-    }
-  }
-
-  async function saveClosureJustification(riskId: string) {
-    const note = closureNote[riskId] ?? "";
-    if (!note.trim()) { setErr(e => ({ ...e, [riskId]: "Closure justification is required when no risk management measure is provided." })); return; }
-    await api.patchRisk(riskId, { closure_justification: note });
-    onRisksChange(risks.map(r => r.id === riskId ? { ...r, closure_justification: note } : r));
-    setErr(e => ({ ...e, [riskId]: "" }));
-  }
-
-  // Completeness: every confirmed risk must have mitigation OR closure justification
-  const incomplete = confirmedRisks.filter(r => r.mitigations.length === 0 && !r.closure_justification?.trim());
-
-  return (
-    <div>
-      <div style={{ background: "var(--bg)", borderRadius: 8, padding: "12px 16px", marginBottom: 16, fontSize: 12, color: "var(--text)" }}>
-        <strong>Risk management measures:</strong> Apply measures in order: <strong>Eliminate</strong> (preferred) →
-        <strong> Reduce</strong> → <strong>Mitigate</strong> → <strong>Inform</strong>. Every confirmed risk must have at least one measure
-        or a documented justification for not applying any.
-      </div>
-
-      {confirmedRisks.map(risk => {
-        const hasMit = risk.mitigations.length > 0;
-        const hasJustification = !!risk.closure_justification?.trim();
-        const complete = hasMit || hasJustification;
-        return (
-          <Card key={risk.id} style={{ borderLeft: `3px solid ${complete ? "#16a34a" : "#f59e0b"}`, padding: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px" }}>
-              <div style={{ flex: 1 }}>
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{risk.title}</span>
-                <span style={{ marginLeft: 10, fontSize: 11, color: "var(--text-secondary)" }}>{risk.mitigations.length} measure(s)</span>
-                {complete && <span style={{ marginLeft: 8, fontSize: 11, color: "#16a34a", fontWeight: 600 }}>✓</span>}
-                {!complete && <span style={{ marginLeft: 8, fontSize: 11, color: "#f59e0b", fontWeight: 600 }}>⚠ needs risk management measure</span>}
-              </div>
-            </div>
-
-            <div style={{ padding: "0 20px 16px", borderTop: "1px solid #f4f4f5" }}>
-                {/* Existing mitigations grouped by level */}
-                {HIERARCHY_LEVELS.map(level => {
-                  const items = risk.mitigations.filter(m => m.hierarchy_level === level.value);
-                  if (items.length === 0) return null;
-                  return (
-                    <div key={level.value} style={{ marginBottom: 10 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, background: level.bg, color: level.color, padding: "2px 8px", borderRadius: 6, textTransform: "uppercase" }}>
-                        {level.label}
-                      </span>
-                      {items.map(m => (
-                        <div key={m.id} style={{ fontSize: 12, padding: "6px 0 4px", borderBottom: "1px solid #f4f4f5" }}>
-                          <div style={{ fontWeight: 600 }}>{m.title}</div>
-                          {m.implementation_guidance && <div style={{ color: "var(--text-secondary)", marginTop: 2 }}>{m.implementation_guidance}</div>}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
-
-                {/* Add mitigation */}
-                {!addMit[risk.id] ? (
-                  <button onClick={() => setAddMit(a => ({ ...a, [risk.id]: true }))}
-                    style={{
-                      fontSize: 12, fontWeight: 600, cursor: "pointer", borderRadius: 6,
-                      padding: "7px 16px", border: "none",
-                      ...(hasMit
-                        ? { background: "#f0f4ff", color: "#1147E9" }
-                        : { background: "var(--brand)", color: "#fff" }),
-                    }}>
-                    + Add risk management measure
-                  </button>
-                ) : (
-                  <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      <Label required>Hierarchy level</Label>
-                      <Select value={mitDraft[risk.id]?.hierarchy_level ?? ""}
-                        onChange={v => setMitDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], hierarchy_level: v } }))}
-                        options={[{ value: "", label: "Select…" }, ...HIERARCHY_LEVELS.map(l => ({ value: l.value, label: `${l.label} — ${l.desc}` }))]} />
-                    </div>
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      <Label required>Measure title</Label>
-                      <Input value={mitDraft[risk.id]?.title ?? ""} onChange={v => setMitDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], title: v } }))}
-                        placeholder="e.g. Implement fairness-aware post-processing" />
-                    </div>
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      <Label>Implementation guidance</Label>
-                      <Textarea value={mitDraft[risk.id]?.implementation_guidance ?? ""}
-                        onChange={v => setMitDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], implementation_guidance: v } }))}
-                        rows={2} placeholder="How to implement this measure…" />
-                    </div>
-                    <div>
-                      <Label>Assignee</Label>
-                      <Input
-                        value={mitDraft[risk.id]?.assigned_to ?? risk.risk_owner ?? ""}
-                        onChange={v => setMitDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], assigned_to: v } }))}
-                        placeholder={risk.risk_owner ? `Default: ${risk.risk_owner}` : "Person responsible"} />
-                    </div>
-                    <div>
-                      <Label>Due date</Label>
-                      <input type="date"
-                        value={mitDraft[risk.id]?.due_date ?? ""}
-                        onChange={e => setMitDraft(d => ({ ...d, [risk.id]: { ...d[risk.id], due_date: e.target.value } }))}
-                        style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
-                    </div>
-                    <ErrorMsg msg={err[risk.id] ?? ""} />
-                    <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
-                      <button onClick={() => saveMitigation(risk.id)} disabled={saving[risk.id]}
-                        style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
-                        Save
-                      </button>
-                      <button onClick={() => setAddMit(a => ({ ...a, [risk.id]: false }))}
-                        style={{ fontSize: 12, background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Test reports */}
-                <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #f4f4f5" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Test reports</span>
-                    <button onClick={() => setAddTest(a => ({ ...a, [risk.id]: !addTest[risk.id] }))}
-                      style={{ fontSize: 11, fontWeight: 600, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 10px", cursor: "pointer" }}>
-                      + Add test report
-                    </button>
-                  </div>
-                  {(testReports[risk.id] ?? []).map(tr => (
-                    <div key={tr.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "1px solid #f4f4f5" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontWeight: 600 }}>{tr.title}</span>
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 6, textTransform: "uppercase",
-                          background: tr.result === "pass" ? "#d5f5e3" : tr.result === "fail" ? "#fee2e2" : "#fde8d0",
-                          color: tr.result === "pass" ? "#1a5c35" : tr.result === "fail" ? "#991b1b" : "#8b3a00",
-                        }}>{tr.result}</span>
-                        {tr.author && <span style={{ color: "var(--text-secondary)", fontSize: 11 }}>{tr.author}</span>}
-                        <span style={{ color: "var(--text-secondary)", fontSize: 11 }}>{new Date(tr.created_at).toLocaleDateString()}</span>
-                      </div>
-                      {tr.summary && <div style={{ color: "var(--text-secondary)", marginTop: 3 }}>{tr.summary}</div>}
-                      {tr.findings && <div style={{ marginTop: 3, fontStyle: "italic" }}>{tr.findings}</div>}
-                    </div>
-                  ))}
-                  {(testReports[risk.id] ?? []).length === 0 && !addTest[risk.id] && (
-                    <div style={{ fontSize: 12, color: "var(--text-secondary)", fontStyle: "italic" }}>No test reports yet.</div>
-                  )}
-                  {addTest[risk.id] && (
-                    <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <div style={{ gridColumn: "1 / -1" }}>
-                        <Label required>Title</Label>
-                        <Input value={testDraft[risk.id]?.title ?? ""}
-                          onChange={v => setTestDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { summary: "", findings: "", result: "pass", author: "" }, title: v } }))}
-                          placeholder="e.g. Fairness audit — Q3 2026" />
-                      </div>
-                      <div>
-                        <Label>Result</Label>
-                        <Select value={testDraft[risk.id]?.result ?? "pass"}
-                          onChange={v => setTestDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { title: "", summary: "", findings: "", author: "" }, result: v } }))}
-                          options={[{ value: "pass", label: "Pass" }, { value: "fail", label: "Fail" }, { value: "inconclusive", label: "Inconclusive" }]} />
-                      </div>
-                      <div>
-                        <Label>Author</Label>
-                        <Input value={testDraft[risk.id]?.author ?? ""}
-                          onChange={v => setTestDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { title: "", summary: "", findings: "", result: "pass" }, author: v } }))}
-                          placeholder="e.g. jane.doe@company.com" />
-                      </div>
-                      <div style={{ gridColumn: "1 / -1" }}>
-                        <Label required>Summary</Label>
-                        <Textarea value={testDraft[risk.id]?.summary ?? ""}
-                          onChange={v => setTestDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { title: "", findings: "", result: "pass", author: "" }, summary: v } }))}
-                          rows={2} placeholder="Brief summary of what was tested and how…" />
-                      </div>
-                      <div style={{ gridColumn: "1 / -1" }}>
-                        <Label required>Findings / conclusions</Label>
-                        <Textarea value={testDraft[risk.id]?.findings ?? ""}
-                          onChange={v => setTestDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { title: "", summary: "", result: "pass", author: "" }, findings: v } }))}
-                          rows={2} placeholder="What did the test reveal? What actions follow?" />
-                      </div>
-                      <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
-                        <button onClick={() => saveTestReport(risk.id)}
-                          disabled={testSaving[risk.id] || !testDraft[risk.id]?.title?.trim() || !testDraft[risk.id]?.summary?.trim() || !testDraft[risk.id]?.findings?.trim()}
-                          style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
-                          {testSaving[risk.id] ? "Saving…" : "Save test report"}
-                        </button>
-                        <button onClick={() => setAddTest(a => ({ ...a, [risk.id]: false }))}
-                          style={{ fontSize: 12, background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Closure justification (alternative to mitigation) */}
-                {!hasMit && (
-                  <div style={{ marginTop: 12, padding: "10px 14px", background: "#fffbeb", borderRadius: 6, border: "1px solid #fde68a" }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#92400e", marginBottom: 6 }}>
-                      No measure provided — document justification (completeness check)
-                    </div>
-                    <Textarea value={closureNote[risk.id] ?? risk.closure_justification ?? ""}
-                      onChange={v => setClosureNote(n => ({ ...n, [risk.id]: v }))}
-                      rows={2} placeholder="Explain why no mitigation is required or possible for this risk…" />
-                    <button onClick={() => saveClosureJustification(risk.id)}
-                      style={{ marginTop: 6, fontSize: 12, background: "#92400e", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer" }}>
-                      Save justification
-                    </button>
-                  </div>
-                )}
-
-                {/* Residual risk (post-mitigation) */}
-                <div style={{ marginTop: 14, padding: "10px 14px", background: "var(--bg)", borderRadius: 6, border: "1px solid var(--border)" }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.4px" }}>
-                    Residual risk (post-mitigation)
-                    {risk.final_risk_level && (
-                      <span style={{ marginLeft: 10 }}><RiskLevelBadge level={risk.final_risk_level} /></span>
-                    )}
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                    <div>
-                      <Label>Residual likelihood</Label>
-                      <Select
-                        value={residualDraft[risk.id]?.residual_likelihood ?? risk.residual_likelihood ?? ""}
-                        onChange={v => setResidualDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { residual_severity: "", date_of_assessment: "" }, residual_likelihood: v } }))}
-                        options={[
-                          { value: "", label: "— select —" },
-                          { value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" },
-                          { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" },
-                        ]} />
-                    </div>
-                    <div>
-                      <Label>Residual severity</Label>
-                      <Select
-                        value={residualDraft[risk.id]?.residual_severity ?? risk.residual_severity ?? ""}
-                        onChange={v => setResidualDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { residual_likelihood: "", date_of_assessment: "" }, residual_severity: v } }))}
-                        options={[
-                          { value: "", label: "— select —" },
-                          { value: "critical", label: "Critical" }, { value: "high", label: "High" },
-                          { value: "medium", label: "Medium" }, { value: "low", label: "Low" },
-                        ]} />
-                    </div>
-                    <div>
-                      <Label>Date of assessment</Label>
-                      <input type="date"
-                        value={residualDraft[risk.id]?.date_of_assessment ?? (risk.date_of_assessment ? risk.date_of_assessment.substring(0, 10) : "")}
-                        onChange={e => setResidualDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { residual_likelihood: "", residual_severity: "" }, date_of_assessment: e.target.value } }))}
-                        style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
-                    </div>
-                  </div>
-                  {(() => {
-                    const rl = residualDraft[risk.id]?.residual_likelihood ?? risk.residual_likelihood ?? "";
-                    const rs = residualDraft[risk.id]?.residual_severity ?? risk.residual_severity ?? "";
-                    return (rl && rs) ? (
-                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 12, color: "var(--text)" }}>Residual risk level (auto):</span>
-                        <RiskLevelBadge level={calcRiskLevel(rs, rl)} />
-                      </div>
-                    ) : null;
-                  })()}
-                  <div style={{ marginTop: 8 }}>
-                    <Label>Justification / notes</Label>
-                    <Textarea
-                      value={residualDraft[risk.id]?.review_notes ?? risk.review_notes ?? ""}
-                      onChange={v => setResidualDraft(d => ({ ...d, [risk.id]: { ...d[risk.id] ?? { residual_likelihood: "", residual_severity: "", date_of_assessment: "" }, review_notes: v } }))}
-                      rows={2}
-                      placeholder="Explain why the residual risk level is acceptable…" />
-                  </div>
-                  <button onClick={() => saveResidual(risk.id)} disabled={residualSaving[risk.id]}
-                    style={{ marginTop: 10, fontSize: 11, background: "transparent", color: "var(--text-secondary)", border: "1px solid #d1d5db", borderRadius: 4, padding: "4px 12px", cursor: "pointer" }}>
-                    {residualSaving[risk.id] ? "Saving…" : "Save residual risk"}
-                  </button>
-                </div>
-            </div>
-          </Card>
-        );
-      })}
-
-      {incomplete.length > 0 && (
-        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#92400e" }}>
-          ⚠ {incomplete.length} risk(s) still need a risk management measure or documented justification before you can approve.
-        </div>
-      )}
-
-      <button onClick={onNext} disabled={incomplete.length > 0}
-        style={{ background: incomplete.length > 0 ? "#9ca3af" : "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: incomplete.length > 0 ? "not-allowed" : "pointer" }}>
-        Next: Approve register →
-      </button>
-    </div>
-  );
-}
-
-// ── Step 5: Plan ─────────────────────────────────────────────────────────────
-function PlanStep({ register, risks, onRegisterUpdated, onNext }: {
-  register: RiskRegister;
-  risks: RiskEntry[];
-  onRegisterUpdated: (r: RiskRegister) => void;
-  onNext: () => void;
-}) {
-  const [tasks, setTasks] = useState<PlanTask[]>([]);
-  const [addingTask, setAddingTask] = useState(false);
-  const [taskDraft, setTaskDraft] = useState<Partial<PlanTask>>({});
-  const [savingTask, setSavingTask] = useState(false);
-  const [taskErr, setTaskErr] = useState("");
-  const [reviewDate, setReviewDate] = useState(
-    register.next_review_date ? register.next_review_date.slice(0, 10) : ""
-  );
-  const [reviewDateErr, setReviewDateErr] = useState("");
-  const [savingDate, setSavingDate] = useState(false);
-
-  useEffect(() => {
-    api.getPlanTasks(register.id).then(setTasks).catch(() => {});
-    api.checkOverdueTasks(register.id).catch(() => {});
-  }, [register.id]);
-
-  const today = new Date();
-  const maxDate = new Date(today);
-  maxDate.setDate(maxDate.getDate() + 180);
-  const maxDateStr = maxDate.toISOString().slice(0, 10);
-  const todayStr = today.toISOString().slice(0, 10);
-
-  async function saveReviewDate(value: string) {
-    if (!value) { setReviewDateErr("Review date is required."); return; }
-    if (value > maxDateStr) { setReviewDateErr("Review date must be within 6 months from today."); return; }
-    setReviewDateErr("");
-    setSavingDate(true);
-    try {
-      const updated = await api.patchRegister(register.id, { next_review_date: value } as Partial<RiskRegister>);
-      onRegisterUpdated(updated);
-    } finally {
-      setSavingDate(false);
-    }
-  }
-
-  async function addTask() {
-    if (!taskDraft.title?.trim()) { setTaskErr("Task title is required."); return; }
-    setTaskErr("");
-    setSavingTask(true);
-    try {
-      const task = await api.createPlanTask(register.id, {
-        title: taskDraft.title ?? "",
-        risk_id: taskDraft.risk_id ?? null,
-        assigned_to: taskDraft.assigned_to ?? null,
-        due_date: taskDraft.due_date ?? null,
-        status: taskDraft.status ?? "open",
-      });
-      setTasks(prev => [...prev, task]);
-      setTaskDraft({});
-      setAddingTask(false);
-    } finally {
-      setSavingTask(false);
-    }
-  }
-
-  async function deleteTask(taskId: string) {
-    await api.deletePlanTask(taskId);
-    setTasks(prev => prev.filter(t => t.id !== taskId));
-  }
-
-  async function updateTaskStatus(taskId: string, status: string) {
-    const updated = await api.patchPlanTask(taskId, { status });
-    setTasks(prev => prev.map(t => t.id === taskId ? updated : t));
-  }
-
-  const riskById: Record<string, string> = {};
-  risks.forEach(r => { riskById[r.id] = r.title; });
-
-  const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-    open:        { bg: "#f4f4f5", color: "#6b7280" },
-    in_progress: { bg: "#eff6ff", color: "#1147E9" },
-    done:        { bg: "#d5f5e3", color: "#1a5c35" },
-    overdue:     { bg: "#ffd5d5", color: "#8b0000" },
-  };
-
-  function taskStatusKey(task: PlanTask): string {
-    if (task.status === "done") return "done";
-    if (task.due_date && task.due_date.slice(0, 10) < todayStr) return "overdue";
-    return task.status;
-  }
-
-  return (
-    <div>
-      {/* Review date */}
-      <Card>
-        <h3 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 700 }}>Scheduled review date</h3>
-        <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--text-secondary)" }}>
-          Set the date for the next scheduled review of this risk management cycle. Must be within 6 months.
-        </p>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <input
-            type="date"
-            value={reviewDate}
-            min={todayStr}
-            max={maxDateStr}
-            onChange={e => { setReviewDate(e.target.value); setReviewDateErr(""); }}
-            onBlur={e => saveReviewDate(e.target.value)}
-            style={{ fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}
-          />
-          {savingDate && <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Saving…</span>}
-          {reviewDate && !reviewDateErr && !savingDate && (
-            <span style={{ fontSize: 12, color: "#1a5c35" }}>✓ Set</span>
-          )}
-        </div>
-        {reviewDateErr && <div style={{ marginTop: 6, fontSize: 12, color: "#dc2626" }}>{reviewDateErr}</div>}
-      </Card>
-
-      {/* Tasks */}
       <Card>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Tasks</h3>
-          {!addingTask && (
+          {!addingTask && register && (
             <button onClick={() => setAddingTask(true)}
               style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontWeight: 600 }}>
               + Add task
@@ -1544,8 +2129,78 @@ function PlanStep({ register, risks, onRegisterUpdated, onNext }: {
         {tasks.map(task => {
           const sk = taskStatusKey(task);
           const sc = STATUS_COLORS[sk] ?? STATUS_COLORS.open;
+          if (editingTask === task.id) {
+            return (
+              <div key={task.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                <div style={{ padding: "12px", background: "var(--bg)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <Label required>Task title</Label>
+                      <Input value={editTaskDraft.title ?? ""} onChange={v => setEditTaskDraft(d => ({ ...d, title: v }))} placeholder="e.g. Conduct bias audit" />
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <Label>Description</Label>
+                      <Textarea value={editTaskDraft.description ?? ""} onChange={v => setEditTaskDraft(d => ({ ...d, description: v }))} rows={2} />
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <Label>Linked risk</Label>
+                      <select value={editTaskDraft.risk_id ?? ""} onChange={e => setEditTaskDraft(d => ({ ...d, risk_id: e.target.value || null }))}
+                        style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+                        <option value="">— None —</option>
+                        {risks.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <Label>Assigned to</Label>
+                      <Input value={editTaskDraft.assigned_to ?? ""} onChange={v => setEditTaskDraft(d => ({ ...d, assigned_to: v }))} placeholder="Username" />
+                    </div>
+                    <div>
+                      <Label>Due date</Label>
+                      <input type="date" value={editTaskDraft.due_date?.slice(0, 10) ?? ""}
+                        onChange={e => setEditTaskDraft(d => ({ ...d, due_date: e.target.value || null }))}
+                        style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }} />
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <Label>Status</Label>
+                      <select value={editTaskDraft.status ?? "open"} onChange={e => setEditTaskDraft(d => ({ ...d, status: e.target.value }))}
+                        style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+                        <option value="open">Open</option>
+                        <option value="in_progress">In progress</option>
+                        <option value="done">Done</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => saveEditTask(task.id)} disabled={savingEditTask}
+                      style={{ fontSize: 12, background: savingEditTask ? "#9ca3af" : "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 16px", cursor: savingEditTask ? "not-allowed" : "pointer", fontWeight: 600 }}>
+                      {savingEditTask ? "Saving…" : "Save"}
+                    </button>
+                    <button onClick={() => { setEditingTask(null); setEditTaskDraft({}); }}
+                      style={{ fontSize: 12, background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 16px", cursor: "pointer", color: "var(--text)" }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
           return (
-            <div key={task.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+            <div key={task.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)", fontSize: 13, background: pendingDeleteTasks.has(task.id) ? "#fff5f5" : undefined, borderRadius: pendingDeleteTasks.has(task.id) ? 6 : undefined, paddingLeft: pendingDeleteTasks.has(task.id) ? 8 : undefined }}>
+              {pendingDeleteTasks.has(task.id) ? (
+                <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontWeight: 600, color: "#dc2626", textDecoration: "line-through", fontSize: 13 }}>{task.title}</span>
+                  <span style={{ fontSize: 11, background: "#dc2626", color: "#fff", borderRadius: 4, padding: "2px 8px", fontWeight: 700 }}>Deleted</span>
+                  <button onClick={() => confirmDeleteTask(task.id)}
+                    style={{ fontSize: 11, background: "#dc2626", color: "#fff", border: "none", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontWeight: 700 }}>
+                    Confirm delete
+                  </button>
+                  <button onClick={() => setPendingDeleteTasks(s => { const n = new Set(s); n.delete(task.id); return n; })}
+                    style={{ fontSize: 11, background: "#f4f4f5", color: "#374151", border: "1px solid var(--border)", borderRadius: 4, padding: "3px 10px", cursor: "pointer" }}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+              <>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, marginBottom: 2 }}>{task.title}</div>
                 {task.description && <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 2 }}>{task.description}</div>}
@@ -1559,13 +2214,13 @@ function PlanStep({ register, risks, onRegisterUpdated, onNext }: {
                     )}
                     {task.assigned_to && (
                       <tr>
-                        <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>👤 Assigned</td>
+                        <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>Assigned to</td>
                         <td>{task.assigned_to}</td>
                       </tr>
                     )}
                     {task.due_date && (
                       <tr>
-                        <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>📅 Due</td>
+                        <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>Due date</td>
                         <td>{task.due_date.slice(0, 10)}</td>
                       </tr>
                     )}
@@ -1580,8 +2235,14 @@ function PlanStep({ register, risks, onRegisterUpdated, onNext }: {
                 <option value="in_progress">In progress</option>
                 <option value="done">Done</option>
               </select>
+              <button onClick={() => { setEditingTask(task.id); setEditTaskDraft({ ...task }); }}
+                style={{ fontSize: 11, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontWeight: 600 }}>
+                Edit
+              </button>
               <button onClick={() => deleteTask(task.id)}
                 style={{ fontSize: 11, background: "transparent", border: "none", color: "#9ca3af", cursor: "pointer", padding: "0 4px" }}>✕</button>
+              </>
+              )}
             </div>
           );
         })}
@@ -1601,12 +2262,25 @@ function PlanStep({ register, risks, onRegisterUpdated, onNext }: {
                 <Label>Linked risk</Label>
                 <select
                   value={taskDraft.risk_id ?? ""}
-                  onChange={e => setTaskDraft(d => ({ ...d, risk_id: e.target.value || null }))}
+                  onChange={e => setTaskDraft(d => ({ ...d, risk_id: e.target.value || null, mitigation_id: null }))}
                   style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
                   <option value="">— None —</option>
                   {risks.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
                 </select>
               </div>
+              {taskDraft.risk_id && (() => {
+                const riskMits = risks.find(r => r.id === taskDraft.risk_id)?.mitigations ?? [];
+                return riskMits.length > 0 ? (
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <Label>Linked measure (optional)</Label>
+                    <select value={taskDraft.mitigation_id ?? ""} onChange={e => setTaskDraft(d => ({ ...d, mitigation_id: e.target.value || null }))}
+                      style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+                      <option value="">— None —</option>
+                      {riskMits.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+                    </select>
+                  </div>
+                ) : null;
+              })()}
               <div>
                 <Label>Assigned to</Label>
                 <Input value={taskDraft.assigned_to ?? ""} onChange={v => setTaskDraft(d => ({ ...d, assigned_to: v }))} placeholder="Username" />
@@ -1644,299 +2318,483 @@ function PlanStep({ register, risks, onRegisterUpdated, onNext }: {
         )}
       </Card>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-        <button onClick={onNext}
-          style={{ background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          Next: Approve →
-        </button>
+      {/* ── Section: Review ── */}
+      <div style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "#556b82", margin: "28px 0 10px", borderBottom: "1px solid #e4e4e7", paddingBottom: 6 }}>
+        Review
       </div>
-    </div>
-  );
-}
 
-// ── Step 6: Approve ───────────────────────────────────────────────────────────
-function ApproveStep({ register, risks, onApprove }: {
-  register: RiskRegister;
-  risks: RiskEntry[];
-  onApprove: (acceptable: boolean, argument: string) => Promise<void>;
-}) {
-  const [acceptable, setAcceptable] = useState(true);
-  const [argument, setArgument] = useState(register.residual_risk_argument ?? "");
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-
-  // Incidents state
-  const [incidents, setIncidents] = useState<import("../types").Incident[]>([]);
-  const [addingIncident, setAddingIncident] = useState(false);
-  const [incidentDraft, setIncidentDraft] = useState<Partial<import("../types").Incident>>({});
-  const [savingIncident, setSavingIncident] = useState(false);
-  const [incidentErr, setIncidentErr] = useState("");
-
-  useEffect(() => {
-    api.getIncidents(register.id).then(setIncidents).catch(() => {});
-  }, [register.id]);
-
-  const confirmedRisks = risks.filter(r => r.status === "confirmed");
-  const totalMitigations = confirmedRisks.reduce((acc, r) => acc + r.mitigations.length, 0);
-  const vulnerableGroupRisks = confirmedRisks.filter(r => r.affects_vulnerable_groups);
-
-  async function addIncident() {
-    if (!incidentDraft.title?.trim()) { setIncidentErr("Incident title is required."); return; }
-    setIncidentErr("");
-    setSavingIncident(true);
-    try {
-      const incident = await api.createIncident(register.id, {
-        title: incidentDraft.title ?? "",
-        description: incidentDraft.description ?? "",
-        status: incidentDraft.status ?? "open",
-        risk_id: incidentDraft.risk_id ?? null,
-        reported_by: incidentDraft.reported_by ?? null,
-        occurred_at: incidentDraft.occurred_at ?? null,
-        attachments: incidentDraft.attachments ?? "",
-      });
-      setIncidents(prev => [incident, ...prev]);
-      setIncidentDraft({});
-      setAddingIncident(false);
-    } finally {
-      setSavingIncident(false);
-    }
-  }
-
-  async function deleteIncident(id: string) {
-    await api.deleteIncident(id);
-    setIncidents(prev => prev.filter(i => i.id !== id));
-  }
-
-  async function handleApprove() {
-    if (!argument.trim()) { setErr("Residual risk argument is required (Art. 9(5))."); return; }
-    setSaving(true);
-    setErr("");
-    try {
-      await onApprove(acceptable, argument);
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const incidentsSection = (
-    <Card>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Incidents</h3>
-        {!addingIncident && (
-          <button onClick={() => setAddingIncident(true)}
-            style={{ fontSize: 12, background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontWeight: 600 }}>
-            + Report incident
-          </button>
+      <Card>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Reviewer<InfoTooltip definitions={[{ value: "reviewer", label: "Reviewer", desc: "Person responsible for conducting the periodic management review of the entire risk register when it comes due." }]} /></h3>
+          {!editingReviewer && reviewer && (
+            <button onClick={() => setEditingReviewer(true)}
+              style={{ fontSize: 12, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontWeight: 600 }}>
+              Edit
+            </button>
+          )}
+        </div>
+        <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--text-secondary)" }}>
+          Designate the person responsible for reviewing this risk management cycle.
+        </p>
+        {!editingReviewer && reviewer ? (
+          <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>{reviewer}</div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <input
+              type="text"
+              value={reviewer}
+              onChange={e => setReviewer(e.target.value)}
+              placeholder="e.g. jane.doe@company.com"
+              style={{ flex: 1, fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}
+            />
+            <button onClick={() => saveReviewer(reviewer)} disabled={savingReviewer}
+              style={{ fontSize: 12, background: savingReviewer ? "#9ca3af" : "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: savingReviewer ? "not-allowed" : "pointer", fontWeight: 600 }}>
+              {savingReviewer ? "Saving…" : "Save"}
+            </button>
+            {register?.reviewer_username && (
+              <button onClick={() => { setReviewer(register!.reviewer_username!); setEditingReviewer(false); }}
+                style={{ fontSize: 12, background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 14px", cursor: "pointer", color: "var(--text-secondary)" }}>
+                Cancel
+              </button>
+            )}
+          </div>
         )}
+      </Card>
+
+      <Card>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Scheduled review date</h3>
+          {!editingDate && reviewDate && (
+            <button onClick={() => setEditingDate(true)}
+              style={{ fontSize: 12, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontWeight: 600 }}>
+              Edit
+            </button>
+          )}
+        </div>
+        <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--text-secondary)" }}>
+          Set the date for the next scheduled review of this risk management cycle. Must be within 6 months.
+        </p>
+        {!editingDate && reviewDate ? (
+          <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
+            {new Date(reviewDate).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <input
+                type="date"
+                value={reviewDate}
+                min={todayStr}
+                max={maxDateStr}
+                onChange={e => { setReviewDate(e.target.value); setReviewDateErr(""); }}
+                style={{ fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}
+              />
+              <button onClick={() => saveReviewDate(reviewDate)} disabled={savingDate}
+                style={{ fontSize: 12, background: savingDate ? "#9ca3af" : "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: savingDate ? "not-allowed" : "pointer", fontWeight: 600 }}>
+                {savingDate ? "Saving…" : "Save"}
+              </button>
+              {register?.next_review_date && (
+                <button onClick={() => { setReviewDate(register!.next_review_date!.slice(0, 10)); setReviewDateErr(""); setEditingDate(false); }}
+                  style={{ fontSize: 12, background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 14px", cursor: "pointer", color: "var(--text-secondary)" }}>
+                  Cancel
+                </button>
+              )}
+            </div>
+            {reviewDateErr && <div style={{ marginTop: 6, fontSize: 12, color: "#dc2626" }}>{reviewDateErr}</div>}
+          </>
+        )}
+      </Card>
+
+      {/* ── Section: Register-level residual risk ── */}
+      <div style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "#556b82", margin: "28px 0 10px", borderBottom: "1px solid #e4e4e7", paddingBottom: 6 }}>
+        Overall residual risk
       </div>
-      <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--text-secondary)" }}>
-        Record situations where an identified risk materialized. Each incident should be investigated and linked to a specific risk if applicable.
-      </p>
-      {incidents.length === 0 && !addingIncident && (
-        <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0 }}>No incidents reported.</p>
-      )}
-      {incidents.map(incident => {
-        const INCIDENT_STATUS: Record<string, { bg: string; color: string; label: string }> = {
-          open:                { bg: "#ffd5d5", color: "#8b0000", label: "Open" },
-          under_investigation: { bg: "#fde8d0", color: "#8b3a00", label: "Under investigation" },
-          resolved:            { bg: "#d5f5e3", color: "#1a5c35", label: "Resolved" },
-          closed:              { bg: "#f4f4f5", color: "#6b7280", label: "Closed" },
-        };
-        const sc = INCIDENT_STATUS[incident.status] ?? INCIDENT_STATUS.open;
-        const linkedRisk = risks.find(r => r.id === incident.risk_id);
-        return (
-          <div key={incident.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, marginBottom: 2 }}>{incident.title}</div>
-              {incident.description && <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 2 }}>{incident.description}</div>}
-              <table style={{ fontSize: 11, color: "var(--text-secondary)", borderCollapse: "collapse", marginTop: 2 }}>
-                <tbody>
-                  {linkedRisk && (
-                    <tr>
-                      <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>Risk</td>
-                      <td>{linkedRisk.title}</td>
-                    </tr>
-                  )}
-                  {incident.reported_by && (
-                    <tr>
-                      <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>👤 Reported by</td>
-                      <td>{incident.reported_by}</td>
-                    </tr>
-                  )}
-                  {incident.occurred_at && (
-                    <tr>
-                      <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>📅 Occurred</td>
-                      <td>{incident.occurred_at.slice(0, 10)}</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <select
-              value={incident.status}
-              onChange={async e => {
-                const updated = await api.patchIncident(incident.id, { status: e.target.value });
-                setIncidents(prev => prev.map(i => i.id === incident.id ? updated : i));
-              }}
-              style={{ fontSize: 11, padding: "3px 6px", borderRadius: 6, border: "none", background: sc.bg, color: sc.color, fontWeight: 600, cursor: "pointer" }}>
-              <option value="open">Open</option>
-              <option value="under_investigation">Under investigation</option>
-              <option value="resolved">Resolved</option>
-              <option value="closed">Closed</option>
-            </select>
-            <button onClick={() => deleteIncident(incident.id)}
-              style={{ fontSize: 11, background: "transparent", border: "none", color: "#9ca3af", cursor: "pointer", padding: "0 4px" }}>✕</button>
-          </div>
-        );
-      })}
-      {addingIncident && (
-        <div style={{ marginTop: 12, padding: "12px", background: "var(--bg)", borderRadius: 8, border: "1px solid var(--border)" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Label required>Incident title</Label>
-              <Input value={incidentDraft.title ?? ""} onChange={v => setIncidentDraft(d => ({ ...d, title: v }))} placeholder="e.g. Biased output causing incorrect decision" />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Label>Description</Label>
-              <Textarea value={incidentDraft.description ?? ""} onChange={v => setIncidentDraft(d => ({ ...d, description: v }))} rows={3} placeholder="Describe what happened, the impact, and context…" />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Label>Linked risk</Label>
-              <select value={incidentDraft.risk_id ?? ""} onChange={e => setIncidentDraft(d => ({ ...d, risk_id: e.target.value || null }))}
-                style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
-                <option value="">— None —</option>
-                {risks.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
-              </select>
-            </div>
-            <div>
-              <Label>Reported by</Label>
-              <Input value={incidentDraft.reported_by ?? ""} onChange={v => setIncidentDraft(d => ({ ...d, reported_by: v }))} placeholder="Username" />
-            </div>
-            <div>
-              <Label>Date occurred</Label>
-              <input type="date" value={incidentDraft.occurred_at?.slice(0, 10) ?? ""}
-                onChange={e => setIncidentDraft(d => ({ ...d, occurred_at: e.target.value || null }))}
-                style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }} />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Label>Attachments / document references</Label>
-              <Textarea value={incidentDraft.attachments ?? ""} onChange={v => setIncidentDraft(d => ({ ...d, attachments: v }))} rows={2} placeholder="List document names or URLs (one per line)…" />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Label>Status</Label>
-              <select value={incidentDraft.status ?? "open"} onChange={e => setIncidentDraft(d => ({ ...d, status: e.target.value }))}
-                style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
-                <option value="open">Open</option>
-                <option value="under_investigation">Under investigation</option>
-                <option value="resolved">Resolved</option>
-                <option value="closed">Closed</option>
-              </select>
-            </div>
-          </div>
-          {incidentErr && <div style={{ marginBottom: 8, fontSize: 12, color: "#dc2626" }}>{incidentErr}</div>}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={addIncident} disabled={savingIncident}
-              style={{ fontSize: 12, background: savingIncident ? "#9ca3af" : "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "6px 16px", cursor: savingIncident ? "not-allowed" : "pointer", fontWeight: 600 }}>
-              {savingIncident ? "Saving…" : "Report incident"}
-            </button>
-            <button onClick={() => { setAddingIncident(false); setIncidentDraft({}); setIncidentErr(""); }}
-              style={{ fontSize: 12, background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 16px", cursor: "pointer", color: "var(--text)" }}>
-              Cancel
-            </button>
+      <Card>
+        <div style={{ marginBottom: 12 }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700 }}>Register-level residual risk</h3>
+          <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)" }}>
+            Overall residual risk for this entire risk register, after all individual risk mitigations have been applied.
+          </p>
+        </div>
+
+        {/* Status radio */}
+        <div style={{ marginBottom: 14 }}>
+          <Label>Residual risk status</Label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+            {[
+              { value: "none",   label: "No residual risk",  bg: "#f4f4f5", color: "#6b7280" },
+              { value: "true",   label: "Acceptable",        bg: "#d5f5e3", color: "#1a5c35" },
+              { value: "false",  label: "Not acceptable",    bg: "#ffd5d5", color: "#8b0000" },
+            ].map(opt => {
+              const curVal = regResidualDraft.residual_risk_acceptable === null ? "none"
+                           : regResidualDraft.residual_risk_acceptable === true ? "true" : "false";
+              const isActive = curVal === opt.value;
+              return (
+                <button key={opt.value} type="button"
+                  onClick={() => {
+                    const v = opt.value === "none" ? null : opt.value === "true";
+                    setRegResidualDraft(d => ({ ...d, residual_risk_acceptable: v }));
+                  }}
+                  style={{
+                    fontSize: 12, padding: "5px 14px", borderRadius: 20, cursor: "pointer", fontWeight: 600,
+                    border: `2px solid ${isActive ? opt.color : "var(--border)"}`,
+                    background: isActive ? opt.bg : "var(--surface)",
+                    color: isActive ? opt.color : "var(--text-secondary)",
+                  }}>
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
         </div>
-      )}
-    </Card>
-  );
 
-  if (register.status === "approved") {
-    return (
-      <div>
-        <Card style={{ background: "#d5f5e3", border: "1px solid #9cdcb8" }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#1a5c35", marginBottom: 8 }}>✓ Register approved</div>
-          <div style={{ fontSize: 13, color: "#1a5c35" }}>
-            Approved by <strong>{register.approver_username}</strong> on {register.approved_at ? new Date(register.approved_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}.
+        {/* Matrix + date — only when not "no residual risk" */}
+        {regResidualDraft.residual_risk_acceptable !== null && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+              <div>
+                <Label>Severity<InfoTooltip definitions={SEVERITY_DEFINITIONS} /></Label>
+                <Select value={regResidualDraft.residual_severity} onChange={v => setRegResidualDraft(d => ({ ...d, residual_severity: v }))}
+                  options={[{ value: "", label: "— select —" }, { value: "severe", label: "Severe" }, { value: "significant", label: "Significant" }, { value: "moderate", label: "Moderate" }, { value: "minor", label: "Minor" }]} />
+              </div>
+              <div>
+                <Label>Likelihood<InfoTooltip definitions={LIKELIHOOD_DEFINITIONS} /></Label>
+                <Select value={regResidualDraft.residual_likelihood} onChange={v => setRegResidualDraft(d => ({ ...d, residual_likelihood: v }))}
+                  options={[{ value: "", label: "— select —" }, { value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
+              </div>
+              <div>
+                <Label>Date of identification</Label>
+                <input type="date" value={regResidualDraft.residual_date_of_identification}
+                  onChange={e => setRegResidualDraft(d => ({ ...d, residual_date_of_identification: e.target.value }))}
+                  style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
+              </div>
+            </div>
+            {regResidualDraft.residual_severity && regResidualDraft.residual_likelihood && (
+              <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 12 }}>Overall residual risk level (auto):</span>
+                <RiskLevelBadge level={calcRiskLevel(regResidualDraft.residual_severity, regResidualDraft.residual_likelihood)} />
+              </div>
+            )}
+            <div>
+              <Label>Expert sign-off argument</Label>
+              <Textarea value={regResidualDraft.residual_risk_argument} onChange={v => setRegResidualDraft(d => ({ ...d, residual_risk_argument: v }))}
+                rows={3} placeholder="Describe why the overall residual risk is or is not acceptable: evidence, assumptions, open issues, safeguards in place…" />
+            </div>
+          </>
+        )}
+
+        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={saveRegResidual} disabled={regResidualSaving}
+            style={{ background: regResidualSaving ? "#9ca3af" : "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: regResidualSaving ? "not-allowed" : "pointer" }}>
+            {regResidualSaving ? "Saving…" : "Save"}
+          </button>
+          {regResidualSaved && <span style={{ fontSize: 12, color: "#16a34a", fontWeight: 600 }}>Saved ✓</span>}
+        </div>
+      </Card>
+
+      {/* ── Section: Incidents ── */}
+      <div style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "#556b82", margin: "28px 0 10px", borderBottom: "1px solid #e4e4e7", paddingBottom: 6 }}>
+        Incidents
+      </div>
+
+      <Card>
+        {(() => {
+          const otherIncidents = incidents.filter(i => !i.risk_id || !risks.find(r => r.id === i.risk_id));
+          const displayedIncidents = showAllIncidents ? incidents : otherIncidents;
+          const cardTitle = showAllIncidents ? "All incidents" : "Other incidents";
+          return (
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{cardTitle}</h3>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button onClick={() => setShowAllIncidents(s => !s)}
+                    style={{ fontSize: 12, background: showAllIncidents ? "#f4f4f5" : "#f0f4ff", color: showAllIncidents ? "#374151" : "#1147E9", border: "none", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
+                    {showAllIncidents ? "Show other incidents" : "Show all incidents"}
+                  </button>
+                  {register && (
+                    <button onClick={() => openIncidentModal("other")}
+                      style={{ fontSize: 12, background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontWeight: 600 }}>
+                      + Report incident
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--text-secondary)" }}>
+                {showAllIncidents
+                  ? "All incidents reported for this risk register."
+                  : "Incidents not linked to a specific risk, or linked to a risk not in this register."}
+              </p>
+              {displayedIncidents.length === 0 && (
+                <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0 }}>No incidents reported.</p>
+              )}
+              {displayedIncidents.map(incident => {
+                const isc = INCIDENT_STATUS[incident.status] ?? INCIDENT_STATUS.open;
+                const linkedRisk = risks.find(r => r.id === incident.risk_id);
+                if (editingIncident === incident.id) {
+                  return (
+                    <div key={incident.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                      <div style={{ padding: "12px", background: "var(--bg)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                          <div style={{ gridColumn: "1 / -1" }}>
+                            <Label required>Incident title</Label>
+                            <Input value={editIncidentDraft.title ?? ""} onChange={v => setEditIncidentDraft(d => ({ ...d, title: v }))} placeholder="e.g. Biased output causing incorrect decision" />
+                          </div>
+                          <div style={{ gridColumn: "1 / -1" }}>
+                            <Label>Description</Label>
+                            <Textarea value={editIncidentDraft.description ?? ""} onChange={v => setEditIncidentDraft(d => ({ ...d, description: v }))} rows={3} />
+                          </div>
+                          <div style={{ gridColumn: "1 / -1" }}>
+                            <Label>Linked risk</Label>
+                            <select value={editIncidentDraft.risk_id ?? ""} onChange={e => setEditIncidentDraft(d => ({ ...d, risk_id: e.target.value || null }))}
+                              style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+                              <option value="">— Other —</option>
+                              {risks.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <Label>Reported by</Label>
+                            <Input value={editIncidentDraft.reported_by ?? ""} onChange={v => setEditIncidentDraft(d => ({ ...d, reported_by: v }))} placeholder="Username" />
+                          </div>
+                          <div>
+                            <Label>Date occurred</Label>
+                            <input type="date" value={editIncidentDraft.occurred_at?.slice(0, 10) ?? ""}
+                              onChange={e => setEditIncidentDraft(d => ({ ...d, occurred_at: e.target.value || null }))}
+                              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }} />
+                          </div>
+                          <div style={{ gridColumn: "1 / -1" }}>
+                            <Label>Attachments / document references</Label>
+                            <Textarea value={editIncidentDraft.attachments ?? ""} onChange={v => setEditIncidentDraft(d => ({ ...d, attachments: v }))} rows={2} placeholder="List document names or URLs (one per line)…" />
+                          </div>
+                          <div style={{ gridColumn: "1 / -1" }}>
+                            <Label>Status</Label>
+                            <select value={editIncidentDraft.status ?? "open"} onChange={e => setEditIncidentDraft(d => ({ ...d, status: e.target.value }))}
+                              style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+                              <option value="open">Open</option>
+                              <option value="under_investigation">Under investigation</option>
+                              <option value="resolved">Resolved</option>
+                              <option value="closed">Closed</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={() => saveEditIncident(incident.id)} disabled={savingEditIncident}
+                            style={{ fontSize: 12, background: savingEditIncident ? "#9ca3af" : "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 16px", cursor: savingEditIncident ? "not-allowed" : "pointer", fontWeight: 600 }}>
+                            {savingEditIncident ? "Saving…" : "Save"}
+                          </button>
+                          <button onClick={() => { setEditingIncident(null); setEditIncidentDraft({}); }}
+                            style={{ fontSize: 12, background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 16px", cursor: "pointer", color: "var(--text)" }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={incident.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)", fontSize: 13, background: pendingDeleteIncidents.has(incident.id) ? "#fff5f5" : undefined, borderRadius: pendingDeleteIncidents.has(incident.id) ? 6 : undefined, paddingLeft: pendingDeleteIncidents.has(incident.id) ? 8 : undefined }}>
+                    {pendingDeleteIncidents.has(incident.id) ? (
+                      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontWeight: 600, color: "#dc2626", textDecoration: "line-through", fontSize: 13 }}>{incident.title}</span>
+                        <span style={{ fontSize: 11, background: "#dc2626", color: "#fff", borderRadius: 4, padding: "2px 8px", fontWeight: 700 }}>Deleted</span>
+                        <button onClick={() => confirmDeleteIncident(incident.id)}
+                          style={{ fontSize: 11, background: "#dc2626", color: "#fff", border: "none", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontWeight: 700 }}>
+                          Confirm delete
+                        </button>
+                        <button onClick={() => setPendingDeleteIncidents(s => { const n = new Set(s); n.delete(incident.id); return n; })}
+                          style={{ fontSize: 11, background: "#f4f4f5", color: "#374151", border: "1px solid var(--border)", borderRadius: 4, padding: "3px 10px", cursor: "pointer" }}>
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                    <>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 2 }}>{incident.title}</div>
+                      {incident.description && <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 2 }}>{incident.description}</div>}
+                      <table style={{ fontSize: 11, color: "var(--text-secondary)", borderCollapse: "collapse", marginTop: 2 }}>
+                        <tbody>
+                          {linkedRisk && (
+                            <tr>
+                              <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>Risk</td>
+                              <td>{linkedRisk.title}</td>
+                            </tr>
+                          )}
+                          {incident.reported_by && (
+                            <tr>
+                              <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>Reported by</td>
+                              <td>{incident.reported_by}</td>
+                            </tr>
+                          )}
+                          {incident.occurred_at && (
+                            <tr>
+                              <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>Date occurred</td>
+                              <td>{incident.occurred_at.slice(0, 10)}</td>
+                            </tr>
+                          )}
+                          {incident.attachments && (
+                            <tr>
+                              <td style={{ paddingRight: 8, whiteSpace: "nowrap", fontWeight: 500 }}>Attachments</td>
+                              <td style={{ whiteSpace: "pre-wrap" }}>{incident.attachments}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: isc.bg, color: isc.color, whiteSpace: "nowrap" }}>{isc.label}</span>
+                    <button onClick={() => { setEditingIncident(incident.id); setEditIncidentDraft({ ...incident }); }}
+                      style={{ fontSize: 11, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontWeight: 600 }}>
+                      Edit
+                    </button>
+                    <button onClick={() => deleteIncident(incident.id)}
+                      style={{ fontSize: 11, background: "transparent", border: "none", color: "#9ca3af", cursor: "pointer", padding: "0 4px" }}>✕</button>
+                    </>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          );
+        })()}
+      </Card>
+
+      {/* ── Approve / Review Risk Management ── */}
+      {register?.status !== "approved" ? (
+        <Card>
+          <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>Approve risk register</h3>
+          <div>
+            <Label required>Expert sign-off argument</Label>
+            <Textarea value={approveArgument} onChange={setApproveArgument} rows={4}
+              placeholder="Final justification for approving this risk register — confirmation that all risks have been assessed, mitigations are in place, and residual risk is acceptable…" />
           </div>
-          <div style={{ marginTop: 8, fontSize: 13, color: "#1a5c35" }}>
-            Residual risk: <strong>{register.residual_risk_acceptable ? "Acceptable" : "Not acceptable"}</strong>
-          </div>
-          <div style={{ marginTop: 4, fontSize: 12, color: "var(--text)" }}>{register.residual_risk_argument}</div>
-          <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-secondary)" }}>
-            Next re-assessment scheduled in 6 months (automatic trigger created).
+          <ErrorMsg msg="" />
+          <div style={{ marginTop: 14 }}>
+            <button onClick={handleApproveSubmit} disabled={approveSaving}
+              style={{ background: approveSaving ? "#9ca3af" : "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: approveSaving ? "not-allowed" : "pointer" }}>
+              {approveSaving ? "Approving…" : "Approve register"}
+            </button>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
+              Approving creates a 6-month re-assessment trigger.
+            </div>
           </div>
         </Card>
-        {incidentsSection}
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {/* Summary */}
-      <Card>
-        <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>Cycle summary</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10, marginBottom: 14 }}>
-          {[
-            { label: "Confirmed risks", value: confirmedRisks.length },
-            { label: "Measures", value: totalMitigations },
-            { label: "Vulnerable group risks", value: vulnerableGroupRisks.length },
-            { label: "Misuse scenarios", value: confirmedRisks.reduce((a, r) => a + r.misuse_scenarios.length, 0) },
-          ].map(k => (
-            <div key={k.label} style={{ background: "var(--bg)", borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: "#1147E9" }}>{k.value}</div>
-              <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3 }}>{k.label}</div>
-            </div>
-          ))}
-        </div>
-
-        <h4 style={{ fontSize: 13, fontWeight: 700, margin: "0 0 10px", color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-          Confirmed risks
-        </h4>
-        {confirmedRisks.map(r => (
-          <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #f4f4f5", fontSize: 13 }}>
-            <span style={{ flex: 1 }}>{r.title}</span>
-            <span style={{ fontSize: 11, background: SEV_BG[r.severity] ?? "#eef1f4", color: SEV_COLORS[r.severity] ?? "#556b82", padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
-              {r.severity}
-            </span>
-            <span style={{ fontSize: 11, color: "#16a34a" }}>{r.mitigations.length} mit.</span>
-          </div>
-        ))}
-      </Card>
-
-      {incidentsSection}
-
-      {/* Residual risk argument */}
-      <Card>
-        <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>Residual risk argument</h3>
-        <div style={{ marginBottom: 14 }}>
-          <Label>Residual risk acceptability</Label>
-          <div style={{ display: "flex", gap: 12 }}>
-            {[true, false].map(v => (
-              <label key={String(v)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
-                <input type="radio" checked={acceptable === v} onChange={() => setAcceptable(v)} />
-                {v ? "✓ Acceptable" : "✗ Not acceptable"}
-              </label>
-            ))}
-          </div>
-        </div>
-        <div>
-          <Label required>Expert sign-off argument</Label>
-          <Textarea value={argument} onChange={setArgument} rows={4}
-            placeholder="Describe why the residual risk is acceptable (or not): evidence, assumptions, open issues, safeguards in place…" />
-        </div>
-        <ErrorMsg msg={err} />
-        <div style={{ marginTop: 14 }}>
-          <button onClick={handleApprove} disabled={saving}
-            style={{ background: saving ? "#9ca3af" : "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
-            {saving ? "Approving…" : "Approve register"}
+      ) : (
+        <div style={{ marginTop: 24 }}>
+          <button onClick={onReopen} disabled={reopening}
+            style={{ background: reopening ? "#9ca3af" : "#d97706", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: reopening ? "not-allowed" : "pointer" }}>
+            {reopening ? "Opening…" : "Review Risk Management"}
           </button>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
-            Approving creates a 6-month re-assessment trigger.
+        </div>
+      )}
+
+      {/* ── Incident modal ── */}
+      {incidentModal !== null && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1000,
+          background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={e => { if (e.target === e.currentTarget) closeIncidentModal(); }}>
+          <div style={{
+            background: "var(--surface)", borderRadius: 12, boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+            padding: "24px 28px", width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Report incident</h3>
+              <button onClick={closeIncidentModal} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--text-secondary)", lineHeight: 1 }}>✕</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Label required>Incident title</Label>
+                <Input value={incidentDraft.title ?? ""} onChange={v => setIncidentDraft(d => ({ ...d, title: v }))} placeholder="e.g. Biased output causing incorrect decision" />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Label>Description</Label>
+                <Textarea value={incidentDraft.description ?? ""} onChange={v => setIncidentDraft(d => ({ ...d, description: v }))} rows={3} placeholder="Describe what happened, the impact, and context…" />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Label>Linked risk</Label>
+                {incidentModal !== "free" ? (
+                  <div style={{
+                    width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6,
+                    border: "1px solid var(--border)", background: "#f4f4f5", color: "var(--text-secondary)",
+                    boxSizing: "border-box",
+                  }}>
+                    {incidentModal === "other"
+                      ? "— Other —"
+                      : (risks.find(r => r.id === incidentModal)?.title ?? incidentModal)}
+                  </div>
+                ) : (
+                  <select
+                    value={incidentDraft.risk_id ?? ""}
+                    onChange={e => setIncidentDraft(d => ({ ...d, risk_id: e.target.value || null }))}
+                    style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+                    <option value="">— Other —</option>
+                    {risks.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
+                  </select>
+                )}
+              </div>
+              <div>
+                <Label>Reported by</Label>
+                <Input value={incidentDraft.reported_by ?? ""} onChange={v => setIncidentDraft(d => ({ ...d, reported_by: v }))} placeholder="Username" />
+              </div>
+              <div>
+                <Label>Date occurred</Label>
+                <input type="date" value={incidentDraft.occurred_at?.slice(0, 10) ?? ""}
+                  onChange={e => setIncidentDraft(d => ({ ...d, occurred_at: e.target.value || null }))}
+                  style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Label>Attachments / document references</Label>
+                <Textarea value={incidentDraft.attachments ?? ""} onChange={v => setIncidentDraft(d => ({ ...d, attachments: v }))} rows={2} placeholder="List document names or URLs (one per line)…" />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Label>Status</Label>
+                <select value={incidentDraft.status ?? "open"} onChange={e => setIncidentDraft(d => ({ ...d, status: e.target.value }))}
+                  style={{ width: "100%", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+                  <option value="open">Open</option>
+                  <option value="under_investigation">Under investigation</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
+            </div>
+            {incidentErr && <div style={{ marginTop: 8, fontSize: 12, color: "#dc2626" }}>{incidentErr}</div>}
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button onClick={addIncident} disabled={savingIncident}
+                style={{ fontSize: 13, background: savingIncident ? "#9ca3af" : "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "8px 20px", cursor: savingIncident ? "not-allowed" : "pointer", fontWeight: 600 }}>
+                {savingIncident ? "Saving…" : "Report incident"}
+              </button>
+              <button onClick={closeIncidentModal}
+                style={{ fontSize: 13, background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: "8px 20px", cursor: "pointer", color: "var(--text)" }}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
-      </Card>
+      )}
+
+      {/* ── Approval error modal ── */}
+      {approveErrModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1100,
+          background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={() => setApproveErrModal(false)}>
+          <div style={{
+            background: "var(--surface)", borderRadius: 12, boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+            padding: "24px 28px", width: "100%", maxWidth: 480,
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#8b0000" }}>Cannot approve register</h3>
+              <button onClick={() => setApproveErrModal(false)} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--text-secondary)", lineHeight: 1 }}>✕</button>
+            </div>
+            <div style={{ fontSize: 13, color: "#374151", background: "#ffd5d5", borderRadius: 6, padding: "10px 14px" }}>{approveErr}</div>
+            <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={() => setApproveErrModal(false)}
+                style={{ fontSize: 13, background: "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "8px 20px", cursor: "pointer", fontWeight: 600 }}>
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -2012,7 +2870,7 @@ function ArchivedRegisterCard({ reg, systemName, nextRegisterId }: { reg: RiskRe
               }}>
                 <div style={{ fontWeight: 600, marginBottom: hasFieldChanges ? 4 : 0 }}>
                   {r.title}
-                  <span style={{ marginLeft: 8, fontWeight: 400, color: "var(--text-secondary)" }}>{r.category} · {r.severity}</span>
+                  <span style={{ marginLeft: 8, fontWeight: 400, color: "var(--text-secondary)" }}>{r.category.split(",").map(c => RISK_CATEGORIES.find(x => x.value === c.trim())?.label ?? c.trim()).join(", ")} · {r.severity}</span>
                   {wasRemoved && <span style={{ marginLeft: 8, fontSize: 11, color: "#8b0000", fontWeight: 600 }}>removed in next version</span>}
                   {r.mitigations.length > 0 && <span style={{ marginLeft: 8, color: "#1a5c35", fontWeight: 400 }}>{r.mitigations.length} measure(s)</span>}
                 </div>
@@ -2075,7 +2933,6 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
   systemName: string;
   onBack: () => void;
 }) {
-  const [step, setStep] = useState<WizardStep>("scope");
   const [register, setRegister] = useState<RiskRegister | null>(null);
   const [archivedRegisters, setArchivedRegisters] = useState<RiskRegister[]>([]);
   const [risks, setRisks] = useState<RiskEntry[]>([]);
@@ -2095,11 +2952,6 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
         if (active) {
           setRegister(active);
           setRisks(active.risks);
-          if (active.status === "approved") setStep("approve");
-          else if (active.risks.some(r => r.mitigations.length > 0)) setStep("mitigate");
-          else if (active.risks.some(r => r.status === "confirmed")) setStep("evaluate");
-          else if (active.risks.length > 0) setStep("identify");
-          else setStep("scope");
         }
       })
       .catch(() => { /* start fresh */ })
@@ -2115,21 +2967,16 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
       setRegister(created);
       setRisks([]);
     }
-    setStep("identify");
   }
 
-  const handlePatchScope = useCallback((scope: string, notes: string) => {
-    if (register) setRegister(r => r ? { ...r, assessment_scope: scope, notes } : r);
-  }, [register]);
-
-  async function handleApprove(acceptable: boolean, argument: string) {
+  async function handleApprove(acceptable: boolean | null, argument: string, registryInfo?: import("../types").RegistrySystemInfo | null) {
     if (!register) return;
     const updated = await api.approveRegister(register.id, {
-      residual_risk_acceptable: acceptable,
+      residual_risk_acceptable: acceptable ?? undefined,
       residual_risk_argument: argument,
+      registry_snapshot: registryInfo ? JSON.stringify(registryInfo) : undefined,
     });
     setRegister(updated);
-    setStep("approve");
   }
 
   async function handleReopen() {
@@ -2137,32 +2984,9 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
     setReopening(true);
     setErr("");
     try {
-      // Archive current register by creating new one (backend archives the old one automatically)
-      const prev = register;
-      const created = await api.createRegister(systemId, {
-        assessment_scope: prev.assessment_scope,
-        notes: prev.notes,
-      });
-      // Pre-fill risks from previous register
-      for (const r of prev.risks.filter(r => r.status === "confirmed")) {
-        await api.createRisk(created.id, {
-          title: r.title,
-          description: r.description,
-          category: r.category,
-          risk_type: r.risk_type,
-          severity: r.severity,
-          likelihood: r.likelihood,
-          risk_owner: r.risk_owner ?? undefined,
-          ai_lifecycle_phase: r.ai_lifecycle_phase ?? undefined,
-          impact: r.impact,
-          affects_vulnerable_groups: r.affects_vulnerable_groups,
-          vulnerable_groups: r.vulnerable_groups,
-          risk_level_autocalculated: r.risk_level_autocalculated ?? undefined,
-        });
-      }
-      // Reload all registers
+      const { new_register_id } = await api.cloneRegister(register.id);
       const allRegs = await api.getRegisters(systemId);
-      const newActive = allRegs.find(r => r.status !== "archived");
+      const newActive = allRegs.find(r => r.id === new_register_id) ?? allRegs.find(r => r.status !== "archived");
       const archived = allRegs.filter(r => r.status === "archived").sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
@@ -2171,12 +2995,28 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
         setRegister(newActive);
         setRisks(newActive.risks);
       }
-      setStep("scope");
     } catch (e) {
       setErr(String(e));
     } finally {
       setReopening(false);
     }
+  }
+
+  async function handleEnsureEditable() {
+    if (!register || register.status !== "approved") return null;
+    const { new_register_id } = await api.cloneRegister(register.id);
+    const allRegs = await api.getRegisters(systemId);
+    const newActive = allRegs.find(r => r.id === new_register_id) ?? allRegs.find(r => r.status !== "archived");
+    const archived = allRegs.filter(r => r.status === "archived").sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    setArchivedRegisters(archived);
+    if (newActive) {
+      setRegister(newActive);
+      setRisks(newActive.risks);
+      return { register: newActive, risks: newActive.risks };
+    }
+    return null;
   }
 
   if (loading) return (
@@ -2186,8 +3026,6 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
-
-  const currentIdx = STEPS.findIndex(s => s.key === step);
 
   return (
     <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", maxWidth: 900, margin: "0 auto", padding: "24px 20px" }}>
@@ -2199,74 +3037,30 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
         </button>
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: "var(--text)" }}>
-            Risk Assessment — {systemName}
+            Risk Management — {systemName}
           </h1>
-          <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "2px 0 0" }}>Art. 9 EU AI Act</p>
         </div>
         {register && (
           <span style={{ fontSize: 11, background: "var(--bg)", color: "var(--text-secondary)", padding: "4px 10px", borderRadius: 8 }}>
             {register.id} · {register.status}
           </span>
         )}
-        {register && (
-          <button onClick={() => exportReport(systemName, register, risks)}
-            style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, color: "var(--text)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-            📄 Export report
-          </button>
-        )}
-        {register?.status === "approved" && (
-          <button onClick={handleReopen} disabled={reopening}
-            style={{ background: reopening ? "#9ca3af" : "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: reopening ? "not-allowed" : "pointer" }}>
-            {reopening ? "Opening…" : "🔄 Restart"}
-          </button>
-        )}
-      </div>
-
-      {/* Stepper */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 24 }}>
-        {STEPS.map((s, i) => {
-          const isApproved = register?.status === "approved";
-          const isActive = step === s.key;
-          const isPast = i < currentIdx;
-          const clickable = (isPast || isApproved) && !!register;
-          return (
-            <div key={s.key} style={{
-              flex: 1, textAlign: "center", padding: "8px 4px", fontSize: 12, fontWeight: 600, borderRadius: 6,
-              background: isActive ? "#1147E9" : (isPast || isApproved) ? "#d5f5e3" : "#f4f4f5",
-              color: isActive ? "#fff" : (isPast || isApproved) ? "#1a5c35" : "#9ca3af",
-              cursor: clickable ? "pointer" : "default",
-            }}
-            onClick={() => { if (clickable) setStep(s.key); }}>
-              {(isPast || (isApproved && !isActive)) ? "✓ " : ""}{s.label}
-            </div>
-          );
-        })}
       </div>
 
       {err && <ErrorMsg msg={err} />}
 
-      {register?.status === "approved" && step !== "approve" && (
-        <ApprovedBanner register={register} />
-      )}
-
-      {step === "scope" && (
-        <ScopeStep register={register} onNext={handleScopeNext} onPatch={handlePatchScope} />
-      )}
-      {step === "identify" && register && (
-        <IdentifyStep register={register} risks={risks} onRisksChange={setRisks} onNext={() => setStep("evaluate")} />
-      )}
-      {step === "evaluate" && (
-        <EvaluateStep risks={risks} onRisksChange={setRisks} onNext={() => setStep("mitigate")} />
-      )}
-      {step === "mitigate" && (
-        <MitigateStep risks={risks} onRisksChange={setRisks} onNext={() => setStep("plan")} />
-      )}
-      {step === "plan" && register && (
-        <PlanStep register={register} risks={risks} onRegisterUpdated={setRegister} onNext={() => setStep("approve")} />
-      )}
-      {step === "approve" && register && (
-        <ApproveStep register={register} risks={risks} onApprove={handleApprove} />
-      )}
+      <IdentifyStep
+        register={register}
+        risks={risks}
+        onRisksChange={setRisks}
+        onRegisterUpdated={setRegister}
+        onApprove={handleApprove}
+        onReopen={handleReopen}
+        reopening={reopening}
+        onEnsureEditable={handleEnsureEditable}
+        systemName={systemName}
+        systemId={systemId}
+      />
 
       {/* Previous cycles */}
       {archivedRegisters.length > 0 && (

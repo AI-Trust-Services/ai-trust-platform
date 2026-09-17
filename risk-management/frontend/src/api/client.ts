@@ -9,6 +9,7 @@ import type {
   PlanTask,
   RegisterDiff,
   Incident,
+  RegistrySystemInfo,
 } from "../types";
 
 const BASE = import.meta.env.VITE_RISK_MANAGEMENT_API_BASE ?? "/api/risk-management/v1";
@@ -45,8 +46,10 @@ export const api = {
     request<RiskRegister>(`/systems/${systemId}/registers`, { method: "POST", ...json(body) }),
   patchRegister: (registerId: string, body: Partial<RiskRegister>) =>
     request<RiskRegister>(`/registers/${registerId}`, { method: "PATCH", ...json(body) }),
-  approveRegister: (registerId: string, body: { residual_risk_acceptable: boolean; residual_risk_argument: string }) =>
+  approveRegister: (registerId: string, body: { residual_risk_acceptable?: boolean | null; residual_risk_argument: string; registry_snapshot?: string | null }) =>
     request<RiskRegister>(`/registers/${registerId}/approve`, { method: "POST", ...json(body) }),
+  cloneRegister: (registerId: string) =>
+    request<{ new_register_id: string }>(`/registers/${registerId}/clone`, { method: "POST" }),
 
   // Risks
   getRisks: (registerId: string) => request<RiskEntry[]>(`/registers/${registerId}/risks`),
@@ -82,7 +85,7 @@ export const api = {
 
   // Plan tasks
   getPlanTasks: (registerId: string) => request<PlanTask[]>(`/registers/${registerId}/plan-tasks`),
-  createPlanTask: (registerId: string, body: Omit<PlanTask, "id" | "register_id" | "created_at" | "updated_at">) =>
+  createPlanTask: (registerId: string, body: Omit<PlanTask, "id" | "register_id" | "created_at" | "updated_at"> & { mitigation_id?: string | null }) =>
     request<PlanTask>(`/registers/${registerId}/plan-tasks`, { method: "POST", ...json(body) }),
   patchPlanTask: (taskId: string, body: Partial<PlanTask>) =>
     request<PlanTask>(`/plan-tasks/${taskId}`, { method: "PATCH", ...json(body) }),
@@ -93,6 +96,10 @@ export const api = {
   // Register diff
   getRegisterDiff: (registerId: string) => request<RegisterDiff>(`/registers/${registerId}/diff`),
 
+  // Registry changes check
+  checkRegistryChanges: (registerId: string, currentData: Record<string, unknown>) =>
+    request<{ changed: boolean; fields: string[] }>(`/registers/${registerId}/check-registry-changes`, { method: "POST", ...json(currentData) }),
+
   // Incidents
   getIncidents: (registerId: string) => request<Incident[]>(`/registers/${registerId}/incidents`),
   createIncident: (registerId: string, body: Omit<Incident, "id" | "register_id" | "created_at" | "updated_at">) =>
@@ -100,4 +107,7 @@ export const api = {
   patchIncident: (incidentId: string, body: Partial<Incident>) =>
     request<Incident>(`/incidents/${incidentId}`, { method: "PATCH", ...json(body) }),
   deleteIncident: (incidentId: string) => request<void>(`/incidents/${incidentId}`, { method: "DELETE" }),
+
+  // Registry proxy
+  getRegistryInfo: (systemId: string) => request<RegistrySystemInfo>(`/systems/${systemId}/registry-info`),
 };

@@ -6,9 +6,15 @@ from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.risk_management import Incident, RiskRegister
 from app.ids import new_id
 from app.schemas import IncidentIn, IncidentOut, IncidentPatch
+from app.routers.registers import _reopen_if_approved
 from sqlalchemy import select
 
 router = APIRouter(tags=["incidents"])
+
+
+async def _register_id_for_incident(session, incident_id: str) -> str | None:
+    result = await session.execute(select(Incident.register_id).where(Incident.id == incident_id))
+    return result.scalar_one_or_none()
 
 
 @router.get("/registers/{register_id}/incidents", response_model=list[IncidentOut])
@@ -28,6 +34,9 @@ async def create_incident(register_id: str, body: IncidentIn):
         register = await session.get(RiskRegister, register_id)
         if not register:
             raise HTTPException(status_code=404, detail="Register not found")
+        if not body.title or not body.title.strip():
+            raise HTTPException(status_code=422, detail="Incident title is required.")
+        await _reopen_if_approved(session, register_id)
         incident = Incident(
             id=new_id("INC"),
             register_id=register_id,
@@ -51,7 +60,13 @@ async def patch_incident(incident_id: str, body: IncidentPatch):
         incident = await session.get(Incident, incident_id)
         if not incident:
             raise HTTPException(status_code=404, detail="Incident not found")
-        for field, value in body.model_dump(exclude_unset=True).items():
+        register_id = await _register_id_for_incident(session, incident_id)
+        if register_id:
+            await _reopen_if_approved(session, register_id)
+        patch_data = body.model_dump(exclude_unset=True)
+        if "title" in patch_data and not (patch_data["title"] or "").strip():
+            raise HTTPException(status_code=422, detail="Incident title cannot be empty.")
+        for field, value in patch_data.items():
             setattr(incident, field, value)
         session.add(incident)
         await session.commit()
@@ -65,5 +80,8 @@ async def delete_incident(incident_id: str):
         incident = await session.get(Incident, incident_id)
         if not incident:
             raise HTTPException(status_code=404, detail="Incident not found")
+        register_id = await _register_id_for_incident(session, incident_id)
+        if register_id:
+            await _reopen_if_approved(session, register_id)
         await session.delete(incident)
         await session.commit()

@@ -1,13 +1,19 @@
 export interface SystemRiskSummary {
   system_id: string;
   system_name: string;
-  system_tier: string;
+  system_tier: string | null;
   system_lifecycle: string;
+  system_org_role: string | null;
   active_register_id: string | null;
   active_register_status: string | null;
   last_assessment_completed_at: string | null;
+  valid_since: string | null;
+  valid_until: string | null;
   unacknowledged_triggers: number;
   reassessment_needed: boolean;
+  registry_changed: boolean;
+  unconfirmed_risks: number;
+  traffic_light: "red" | "orange" | "green";
 }
 
 export interface MisuseScenario {
@@ -43,7 +49,6 @@ export interface RiskEntry {
   description: string;
   category: string;
   article_9_step: string;
-  risk_type: string;
   severity: string;
   likelihood: string;
   status: string;
@@ -61,7 +66,13 @@ export interface RiskEntry {
   residual_likelihood: string | null;
   residual_severity: string | null;
   final_risk_level: string | null;
+  residual_status: string; // "none" | "acceptable" | "unacceptable"
   date_of_assessment: string | null;
+  // Issue #187: responsible role, deadline, confirmation
+  responsible_role: string | null;
+  deadline: string | null;
+  engineer_confirmed: boolean;
+  officer_confirmed: boolean;
   misuse_scenarios: MisuseScenario[];
   mitigations: MitigationMeasure[];
   created_at: string;
@@ -75,8 +86,14 @@ export interface RiskRegister {
   assessment_scope: string;
   residual_risk_acceptable: boolean | null;
   residual_risk_argument: string;
+  residual_severity: string | null;
+  residual_likelihood: string | null;
+  residual_final_risk_level: string | null;
+  residual_date_of_identification: string | null;
   approver_username: string | null;
   approved_at: string | null;
+  reviewer_username: string | null;
+  registry_snapshot: string | null;
   notes: string;
   created_by: string;
   created_at: string;
@@ -116,6 +133,7 @@ export interface PlanTask {
   id: string;
   register_id: string;
   risk_id: string | null;
+  mitigation_id: string | null;
   title: string;
   description: string;
   assigned_to: string | null;
@@ -145,6 +163,23 @@ export interface RegisterDiff {
   mitigations_delta: number;
 }
 
+export interface RegistrySystemInfo {
+  name: string;
+  description: string;
+  intended_purpose: string;
+  department: string | null;
+  use_case: string | null;
+  people_affected: string | null;
+  decision_context: string | null;
+  autonomy_level: string | null;
+  tier: string;
+  lifecycle: string;
+  org_role: string;
+  provider: string | null;
+  org_name: string | null;
+  version: string | null;
+}
+
 export interface Incident {
   id: string;
   register_id: string;
@@ -159,4 +194,4 @@ export interface Incident {
   updated_at: string;
 }
 
-export type WizardStep = "scope" | "identify" | "evaluate" | "mitigate" | "plan" | "approve";
+

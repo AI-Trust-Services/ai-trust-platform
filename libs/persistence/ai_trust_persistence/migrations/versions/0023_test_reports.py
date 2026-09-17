@@ -1,14 +1,14 @@
 """Add test_reports table
 
-Revision ID: 0014
-Revises: 0013
+Revision ID: 0023
+Revises: 0022
 Create Date: 2026-09-08
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0014"
-down_revision = "0013"
+revision = "0023"
+down_revision = "0022"
 branch_labels = None
 depends_on = None
 

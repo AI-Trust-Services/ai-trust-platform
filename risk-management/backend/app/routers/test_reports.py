@@ -7,8 +7,23 @@ from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.risk_management import RiskEntry, TestReport
 from app.ids import new_id
 from app.schemas import TestReportIn, TestReportOut
+from app.routers.registers import _reopen_if_approved
 
 router = APIRouter(tags=["test_reports"])
+
+
+async def _register_id_for_risk(session, risk_id: str) -> str | None:
+    result = await session.execute(select(RiskEntry.register_id).where(RiskEntry.id == risk_id))
+    return result.scalar_one_or_none()
+
+
+async def _register_id_for_report(session, report_id: str) -> str | None:
+    result = await session.execute(
+        select(RiskEntry.register_id)
+        .join(TestReport, TestReport.risk_id == RiskEntry.id)
+        .where(TestReport.id == report_id)
+    )
+    return result.scalar_one_or_none()
 
 
 @router.get("/risks/{risk_id}/test-reports", response_model=list[TestReportOut])
@@ -26,6 +41,11 @@ async def create_test_report(risk_id: str, body: TestReportIn):
         risk = await session.get(RiskEntry, risk_id)
         if not risk:
             raise HTTPException(status_code=404, detail="Risk not found")
+        if not body.title or not body.title.strip():
+            raise HTTPException(status_code=422, detail="Test report title is required.")
+        register_id = await _register_id_for_risk(session, risk_id)
+        if register_id:
+            await _reopen_if_approved(session, register_id)
         row = TestReport(
             id=new_id("TRP"),
             risk_id=risk_id,
@@ -49,5 +69,8 @@ async def delete_test_report(report_id: str):
         row = await session.get(TestReport, report_id)
         if not row:
             raise HTTPException(status_code=404, detail="Test report not found")
+        register_id = await _register_id_for_report(session, report_id)
+        if register_id:
+            await _reopen_if_approved(session, register_id)
         await session.delete(row)
         await session.commit()

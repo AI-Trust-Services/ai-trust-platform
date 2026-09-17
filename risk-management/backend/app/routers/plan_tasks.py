@@ -13,8 +13,14 @@ from ai_trust_persistence.models.risk_management import (
 )
 from app.ids import new_id
 from app.schemas import PlanTaskIn, PlanTaskOut, PlanTaskPatch
+from app.routers.registers import _reopen_if_approved
 
 router = APIRouter(tags=["plan_tasks"])
+
+
+async def _register_id_for_task(session, task_id: str) -> str | None:
+    result = await session.execute(select(PlanTask.register_id).where(PlanTask.id == task_id))
+    return result.scalar_one_or_none()
 
 
 @router.get("/registers/{register_id}/plan-tasks", response_model=list[PlanTaskOut])
@@ -34,10 +40,14 @@ async def create_plan_task(register_id: str, body: PlanTaskIn):
         register = await session.get(RiskRegister, register_id)
         if not register:
             raise HTTPException(status_code=404, detail="Register not found")
+        if not body.title or not body.title.strip():
+            raise HTTPException(status_code=422, detail="Task title is required.")
+        await _reopen_if_approved(session, register_id)
         task = PlanTask(
             id=new_id("PTK"),
             register_id=register_id,
             risk_id=body.risk_id,
+            mitigation_id=body.mitigation_id,
             title=body.title,
             assigned_to=body.assigned_to,
             due_date=body.due_date,
@@ -55,12 +65,19 @@ async def patch_plan_task(task_id: str, body: PlanTaskPatch):
         task = await session.get(PlanTask, task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
+        register_id = await _register_id_for_task(session, task_id)
+        if register_id:
+            await _reopen_if_approved(session, register_id)
+        if body.title is not None and not body.title.strip():
+            raise HTTPException(status_code=422, detail="Task title cannot be empty.")
         if body.title is not None:
             task.title = body.title
         if body.description is not None:
             task.description = body.description
         if body.risk_id is not None:
             task.risk_id = body.risk_id
+        if body.mitigation_id is not None:
+            task.mitigation_id = body.mitigation_id
         if body.assigned_to is not None:
             task.assigned_to = body.assigned_to
         if body.due_date is not None:
@@ -79,6 +96,9 @@ async def delete_plan_task(task_id: str):
         task = await session.get(PlanTask, task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
+        register_id = await _register_id_for_task(session, task_id)
+        if register_id:
+            await _reopen_if_approved(session, register_id)
         await session.delete(task)
         await session.commit()
 

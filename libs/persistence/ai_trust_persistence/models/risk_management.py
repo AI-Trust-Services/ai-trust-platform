@@ -30,9 +30,17 @@ class RiskRegister(Base):
     # Residual risk acceptability (Art. 9(5))
     residual_risk_acceptable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     residual_risk_argument: Mapped[str] = mapped_column(Text, default="")
+    # Register-level residual risk assessment
+    residual_severity: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    residual_likelihood: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    residual_final_risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    residual_date_of_identification: Mapped[datetime | None] = mapped_column(Date, nullable=True)
     # Named approver (Art. 9(5) — expert sign-off)
     approver_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Designated reviewer
+    reviewer_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    registry_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     notes: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(200), default="")
@@ -70,10 +78,6 @@ class RiskEntry(Base):
     category: Mapped[str] = mapped_column(String(100), default="")
     article_9_step: Mapped[str] = mapped_column(String(20), default="9(2)(a)")
 
-    # Art. 9(2)(a): known vs foreseeable distinction
-    risk_type: Mapped[str] = mapped_column(String(20), default="known")
-    # "known" | "foreseeable"
-
     # Severity × Likelihood matrix
     severity: Mapped[str] = mapped_column(String(20), default="medium")
     # "critical" | "high" | "medium" | "low"
@@ -106,12 +110,23 @@ class RiskEntry(Base):
     residual_severity: Mapped[str | None] = mapped_column(String(20), nullable=True)
     final_risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # Auto-calculated from residual_likelihood × residual_severity
+    residual_status: Mapped[str] = mapped_column(String(20), default="none")
+    # "none" | "acceptable" | "unacceptable"
     date_of_assessment: Mapped[datetime | None] = mapped_column(Date, nullable=True)
 
     # Source metadata
     source: Mapped[str] = mapped_column(String(50), default="manual")
     taxonomy_mappings: Mapped[str] = mapped_column(Text, default="")
     # JSON-serialized list of {taxonomy, category, identifier}
+
+    # Issue #187: responsible role and deadline per risk
+    responsible_role: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # "ai_engineer" | "ai_compliance_officer" | "both"
+    deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Issue #187: dual-role confirmation (AI Engineer + Compliance Officer)
+    engineer_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    officer_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -251,6 +266,9 @@ class PlanTask(Base):
     )
     risk_id: Mapped[str | None] = mapped_column(
         String(30), ForeignKey("risk_entries.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    mitigation_id: Mapped[str | None] = mapped_column(
+        String(30), ForeignKey("mitigation_measures.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     title: Mapped[str] = mapped_column(String(500), nullable=False)

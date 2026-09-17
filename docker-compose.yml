@@ -783,6 +783,7 @@ services:
       REGISTRY_API_BASE: "http://ai-system-registry-backend:8001"
       RISK_API_BASE: "http://risk-management-backend:8009"
       SEED_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:-admin}
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/ai_trust"
     depends_on:
       ai-system-registry-backend:
         condition: service_healthy

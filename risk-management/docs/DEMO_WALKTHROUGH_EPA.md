@@ -9,8 +9,13 @@ This guide walks you through a complete risk management cycle for the **Employee
 
 1. Open [http://localhost:8080](http://localhost:8080) and log in.
 2. Click **Risk Management** in the left sidebar (shield icon).
-3. Find **Employee Performance Analytics** in the list — it shows a red status dot, badge **"No risk management"**, and a green **Start** button.
-4. Click **Start**.
+3. The systems list shows traffic light indicators (●) for each system:
+   - 🔴 Red — high-risk system with no assessment, or overdue assessment
+   - 🟠 Orange — pending classification, assessment in progress, or risks not fully confirmed
+   - 🟢 Green — valid assessment with all risks confirmed by both roles
+4. Click the **Action Required** KPI tile to filter to red systems only.
+5. Find **Employee Performance Analytics** — it shows 🔴 red, tier **HIGH**, and a green **Start** button.
+6. Click **Start**.
 
 ---
 
@@ -28,7 +33,7 @@ Leave **Notes** empty. Click **Next**.
 
 ## Step 2 — Identify risks
 
-**What to say:** *"We now identify every foreseeable risk. The form captures the risk type (known vs foreseeable — an Art. 9(2)(a) distinction), severity and likelihood, and whether vulnerable groups are affected (Art. 9(9))."*
+**What to say:** *"We now identify every foreseeable risk. The form captures the risk type (known vs foreseeable — an Art. 9(2)(a) distinction), severity and likelihood, whether vulnerable groups are affected (Art. 9(9)), and who is responsible for addressing the risk."*
 
 ### Risk 1
 
@@ -41,9 +46,12 @@ Leave **Notes** empty. Click **Next**.
 | Likelihood | Likely |
 | Severity | High |
 | Risk owner | hr.director@company.com |
+| AI lifecycle phase | Operation |
 | Impact | Employees from protected groups receive unfair performance evaluations, leading to wrongful dismissal or missed promotions. Exposes the company to discrimination liability. |
 | Affects vulnerable groups | ✓ Check |
 | Vulnerable groups | Elderly, Minorities, People with disabilities |
+| **Responsible role** | **Both** |
+| **Deadline for resolution** | **30 days from today** |
 
 Click **Add risk**.
 
@@ -59,6 +67,8 @@ Click **Add risk**.
 | Severity | Medium |
 | Risk owner | hr.director@company.com |
 | Impact | Violates GDPR Art. 22 right to explanation for automated decisions. Creates legal exposure in employment disputes. |
+| **Responsible role** | **Compliance Officer** |
+| **Deadline for resolution** | **45 days from today** |
 
 Click **Add risk**. Then click **Next**.
 
@@ -77,7 +87,7 @@ Click **Next**.
 
 ## Step 4 — Mitigate
 
-**What to say:** *"The mitigation step enforces the EU AI Act Art. 9(2)(b)+(c) hierarchy: first try to eliminate the risk at source, then reduce it, then mitigate residual effects, and only if nothing else works — inform users. The tool enforces this order."*
+**What to say:** *"The mitigation step enforces the EU AI Act Art. 9(2)(b)+(c) hierarchy: first try to eliminate the risk at source, then reduce it, then mitigate residual effects, and only if nothing else works — inform users. This step also supports dual-role confirmation — both the AI Engineer and Compliance Officer must sign off before the traffic light turns green."*
 
 ### Mitigation for Risk 1 — Biased scoring
 
@@ -99,6 +109,12 @@ Click **Add mitigation**, then add a second:
 - Residual likelihood: **Unlikely**
 - Residual severity: **Low**
 
+**Dual-role confirmation for Risk 1:**
+- Click **Confirm as AI Engineer**
+- Click **Confirm as Compliance Officer**
+
+**What to say:** *"Both roles must confirm each risk. Until both confirm, the system traffic light stays orange. Once both confirm all risks, it turns green."*
+
 ### Mitigation for Risk 2 — Lack of explainability
 
 | Field | Value |
@@ -110,6 +126,10 @@ Click **Add mitigation**, then add a second:
 **Residual risk for Risk 2:**
 - Residual likelihood: **Unlikely**
 - Residual severity: **Low**
+
+**Dual-role confirmation for Risk 2:**
+- Click **Confirm as AI Engineer**
+- Click **Confirm as Compliance Officer**
 
 Click **Next**.
 
@@ -194,6 +214,7 @@ Click **Approve**.
 - Point out the green **Approved** banner and the locked steps.
 - Scroll down to show that this first cycle is now stored as version 1.
 - Show the Incidents card with the reported incident and its status.
+- Return to the **systems list** and notice that the traffic light for Employee Performance Analytics has turned **🟢 green** — both risks were confirmed by both roles.
 
 ---
 
@@ -202,8 +223,23 @@ Click **Approve**.
 | Wizard step | EU AI Act obligation |
 |---|---|
 | Scope | Art. 9(2)(a) — define what is assessed |
-| Identify | Art. 9(2)(a) — known and foreseeable risks; Art. 9(9) — vulnerable groups |
+| Identify | Art. 9(2)(a) — known and foreseeable risks; Art. 9(9) — vulnerable groups; responsible role + deadline per risk |
 | Evaluate | Art. 9(2)(b) — decide which risks to address; review risk descriptions |
-| Mitigate | Art. 9(2)(b)+(c) — mitigation hierarchy; Art. 9(2)(d) — residual risk |
+| Mitigate | Art. 9(2)(b)+(c) — mitigation hierarchy; Art. 9(2)(d) — residual risk; dual-role confirmation (AI Engineer + Compliance Officer) |
 | Plan | Art. 9(1) — iterative monitoring; scheduled review date ≤6 months; task tracking with owners and deadlines |
 | Approve | Art. 9(5) — expert sign-off; Art. 9(12) — documentation; incident recording |
+
+## Traffic light states visible in the demo seed
+
+| System | State | Reason |
+|---|---|---|
+| HR Candidate Screening AI | 🟢 Green | High-risk, approved, all risks dual-confirmed |
+| Meeting Transcription Tool | 🟢 Green | Minimal risk, voluntary register approved, risk confirmed |
+| Credit Risk Assessment Model | 🔴 Red | High-risk, reassessment trigger fired (stale >6 months) |
+| Loan Approval Automation | 🔴 Red | High-risk, approved but >8 months ago (overdue) |
+| Medical Image Diagnosis Assistant | 🟠 Orange | High-risk, assessment in progress (draft register) |
+| Customer Support Chatbot | 🟠 Orange | Limited risk, assessment >9 months old (optional but stale) |
+| Social Scoring Pilot | 🟠 Orange | Prohibited, register not approved as acceptable |
+| Employee Performance Analytics | 🔴 Red | High-risk, no register (before walkthrough) |
+| Internal Knowledge Base Search | 🟢 Green | Minimal risk, no register needed |
+

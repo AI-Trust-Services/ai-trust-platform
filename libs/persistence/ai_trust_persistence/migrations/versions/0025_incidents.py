@@ -1,14 +1,14 @@
 """Add incidents table
 
-Revision ID: 0016
-Revises: 0015
+Revision ID: 0025
+Revises: 0024
 Create Date: 2026-09-08
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0016"
-down_revision = "0015"
+revision = "0025"
+down_revision = "0024"
 branch_labels = None
 depends_on = None
 
