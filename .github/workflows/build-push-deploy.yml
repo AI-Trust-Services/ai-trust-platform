@@ -83,7 +83,7 @@ on:
         required: true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.gardener_cluster || 'auto' }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.gardener_cluster || 'auto' }}-${{ inputs.namespace || 'default' }}
   cancel-in-progress: true
 
 permissions:
