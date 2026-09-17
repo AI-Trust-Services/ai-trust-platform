@@ -403,9 +403,51 @@ async def upload_evidence_version(
     if old_file_path and old_file_path != new_file_path:
         await minio_client.delete_file(old_file_path)
 
-    logger.info("evidence.version_uploaded", extra={
-        "evidence_id": evidence_id, "version_label": version_label,
-    })
     detail = EvidenceDetailResponse.model_validate(row)
     detail.requirement_ids = linked_requirement_ids
+    return detail
+
+
+@router.post("/evidence/{evidence_id}/requirements/{requirement_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def link_requirement(evidence_id: str, requirement_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        await _load(session, evidence_id)
+        req = (await session.execute(select(Requirement).where(Requirement.id == requirement_id))).scalar_one_or_none()
+        if not req:
+            raise HTTPException(404, f"Requirement {requirement_id} not found")
+        await session.execute(
+            pg_insert(evidence_requirements)
+            .values(evidence_id=evidence_id, requirement_id=requirement_id)
+            .on_conflict_do_nothing()
+        )
+        await _cascade_from_evidence(session, evidence_id)
+        await session.commit()
+        req_ids = await _linked_requirement_ids(session, evidence_id)
+        row = await _load(session, evidence_id)
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.requirement_ids = req_ids
+    return detail
+
+
+@router.delete("/evidence/{evidence_id}/requirements/{requirement_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def unlink_requirement(evidence_id: str, requirement_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        await _load(session, evidence_id)
+        current = await _linked_requirement_ids(session, evidence_id)
+        if requirement_id not in current:
+            raise HTTPException(404, f"Requirement {requirement_id} is not linked to this evidence")
+        if len(current) <= 1:
+            raise HTTPException(409, "Cannot unlink the last requirement — evidence must stay linked to at least one")
+        await session.execute(
+            evidence_requirements.delete().where(
+                evidence_requirements.c.evidence_id == evidence_id,
+                evidence_requirements.c.requirement_id == requirement_id,
+            )
+        )
+        await _cascade_from_evidence(session, evidence_id)
+        await session.commit()
+        req_ids = await _linked_requirement_ids(session, evidence_id)
+        row = await _load(session, evidence_id)
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.requirement_ids = req_ids
     return detail
