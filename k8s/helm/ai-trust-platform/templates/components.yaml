@@ -47,14 +47,15 @@ spec:
             - name: {{ $k }}
               value: {{ $v | quote }}
             {{- end }}
+            {{- if $c.openfgaConfig }}
+            - name: OPENFGA_STORE_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: openfga-config
+                  key: store_id
+            {{- end }}
           ports:
             - containerPort: {{ $c.backendPort }}
-          {{- if $c.openfgaConfig }}
-          volumeMounts:
-            - name: openfga-config
-              mountPath: /config
-              readOnly: true
-          {{- end }}
           readinessProbe:
             httpGet:
               path: /health
@@ -67,12 +68,6 @@ spec:
               port: {{ $c.backendPort }}
             initialDelaySeconds: 20
             periodSeconds: 15
-      {{- if $c.openfgaConfig }}
-      volumes:
-        - name: openfga-config
-          persistentVolumeClaim:
-            claimName: openfga-config
-      {{- end }}
 ---
 apiVersion: v1
 kind: Service

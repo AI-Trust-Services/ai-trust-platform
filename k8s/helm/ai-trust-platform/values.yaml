@@ -83,7 +83,6 @@ keycloak:
 
 openfga:
   image: openfga/openfga:v1.18.1
-  storageSize: 64Mi # openfga-config volume: just the provisioned store_id file
 
 oauthProxy:
   image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
@@ -120,7 +119,7 @@ ollama:
 #   (mirrors compose `depends_on: condition: service_healthy`)
 # extraEnv: plain (non-secret) env vars specific to this backend - every backend
 #   also gets `envFrom: secretRef: ai-trust-env` for credentials (see components.yaml)
-# openfgaConfig: mount the openfga-config PVC read-only at /config
+# openfgaConfig: inject OPENFGA_STORE_ID from the openfga-config ConfigMap (written by openfga-provision)
 components:
   - name: ai-system-registry
     backendPort: 8001

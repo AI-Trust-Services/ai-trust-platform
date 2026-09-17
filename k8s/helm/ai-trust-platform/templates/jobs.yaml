@@ -180,10 +180,10 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
       {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         {{- include "ai-trust.waitForTcp" (dict "name" "openfga" "port" 8081 "image" .Values.waitImages.busybox) | nindent 8 }}
-      containers:
         - name: openfga-provision
           image: {{ .Values.image.repository }}/openfga-provision:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -197,10 +197,24 @@ spec:
           volumeMounts:
             - name: openfga-config
               mountPath: /config
+      containers:
+        # publishes the store_id written by the openfga-provision initContainer as a
+        # ConfigMap, so backends can read it via env without a shared RWO volume
+        - name: publish-store-id
+          image: {{ .Values.waitImages.kubectl }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              kubectl create configmap openfga-config \
+                --from-file=store_id=/config/store_id \
+                --dry-run=client -o yaml | kubectl apply -f -
+          volumeMounts:
+            - name: openfga-config
+              mountPath: /config
+              readOnly: true
       volumes:
         - name: openfga-config
-          persistentVolumeClaim:
-            claimName: openfga-config
+          emptyDir: {}
 {{- if .Values.ollama.enabled }}
 ---
 apiVersion: batch/v1
