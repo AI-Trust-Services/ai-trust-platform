@@ -16,8 +16,7 @@ name: Deployment Workflow
 # <namespace>-<sha> where namespace is derived from the cluster and actor.
 #
 # PR deploy (workflow_call from pr-deployment-test.yml): pass namespace and
-# gardener_cluster explicitly. Use skip_build_new_version=true to deploy
-# already-published images without rebuilding.
+# gardener_cluster explicitly.
 
 on:
   push:
@@ -43,14 +42,6 @@ on:
         description: "Namespace to deploy into (derived from actor when blank)"
         required: false
         default: ""
-      skip_build_new_version:
-        description: "Skip building new images and deploy already-published images"
-        required: false
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
   workflow_call:
     inputs:
       branch:
@@ -67,11 +58,6 @@ on:
         required: false
         default: ""
         type: string
-      skip_build_new_version:
-        description: "Skip building new images and deploy already-published images"
-        required: false
-        default: false
-        type: boolean
     secrets:
       GHCR_PULL_TOKEN:
         required: false
@@ -182,7 +168,6 @@ jobs:
 
   build-push:
     needs: prepare
-    if: inputs.skip_build_new_version != 'true' && inputs.skip_build_new_version != true
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -351,7 +336,6 @@ jobs:
     steps:
       - name: Check result
         run: |
-          # build-push is skipped when skip_build_new_version=true — that is not a failure
           if [[ "${{ needs.build-push.result }}" == "failure" ]]; then
             echo "::error::One or more image builds did not succeed"
             exit 1
@@ -361,7 +345,7 @@ jobs:
   package-chart:
     name: Package and Push Helm Chart
     needs: [prepare, images-published]
-    if: needs.images-published.result == 'success' && inputs.skip_build_new_version != 'true' && inputs.skip_build_new_version != true
+    if: needs.images-published.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -391,7 +375,7 @@ jobs:
   publish-ocm:
     name: Build and Push OCM Component
     needs: [prepare, images-published, package-chart]
-    if: needs.images-published.result == 'success' && needs.package-chart.result == 'success' && inputs.skip_build_new_version != 'true' && inputs.skip_build_new_version != true
+    if: needs.images-published.result == 'success' && needs.package-chart.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository

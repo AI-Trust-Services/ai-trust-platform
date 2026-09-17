@@ -39,6 +39,7 @@ jobs:
       pr_sha: ${{ steps.pr.outputs.pr_sha }}
       pr_branch: ${{ steps.pr.outputs.pr_branch }}
       pr_author: ${{ steps.pr.outputs.pr_author }}
+      pr_author_lower: ${{ steps.pr.outputs.pr_author_lower }}
       main_sha: ${{ steps.main.outputs.main_sha }}
       main_ocm_version: ${{ steps.main.outputs.main_ocm_version }}
       authorized: ${{ steps.auth.outputs.authorized }}
@@ -68,6 +69,7 @@ jobs:
           echo "pr_sha=${PR_SHA}" >> "$GITHUB_OUTPUT"
           echo "pr_branch=${PR_BRANCH}" >> "$GITHUB_OUTPUT"
           echo "pr_author=${PR_AUTHOR}" >> "$GITHUB_OUTPUT"
+          echo "pr_author_lower=${PR_AUTHOR,,}" >> "$GITHUB_OUTPUT"
 
       - name: Check authorization (PR author or org member)
         id: auth
@@ -154,30 +156,29 @@ jobs:
           echo "main_ocm_version=${MAIN_OCM_VERSION}" >> "$GITHUB_OUTPUT"
           echo "main is green at ${MAIN_SHA::12} (OCM version: ${MAIN_OCM_VERSION})"
 
-  deploy:
-    name: Deploy main → PR branch
+  post-start:
+    name: Post deployment started
     needs: dispatch
     if: needs.dispatch.outputs.authorized == 'true'
     runs-on: ubuntu-latest
-    env:
-      PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
-      PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
-      PR_BRANCH: ${{ needs.dispatch.outputs.pr_branch }}
-      PR_AUTHOR: ${{ needs.dispatch.outputs.pr_author }}
-      MAIN_SHA: ${{ needs.dispatch.outputs.main_sha }}
-      MAIN_OCM_VERSION: ${{ needs.dispatch.outputs.main_ocm_version }}
     steps:
       - name: Post "Test deployment started" comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
+          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
+          PR_BRANCH: ${{ needs.dispatch.outputs.pr_branch }}
+          PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
+          MAIN_SHA: ${{ needs.dispatch.outputs.main_sha }}
         run: |
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
-            --body "🚀 Test deployment started — deploying \`main:${MAIN_SHA}\` then \`feature:${PR_SHA::12}\` to namespace \`${PR_AUTHOR,,}\` on \`ai-trust-test\`."
+            --body "🚀 Test deployment started — deploying \`main:${MAIN_SHA}\` then \`feature:${PR_SHA::12}\` to namespace \`${PR_AUTHOR_LOWER}\` on \`ai-trust-test\`."
 
       - name: Set pending commit status
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
         run: |
           gh api \
             --method POST \
@@ -187,131 +188,42 @@ jobs:
             -f description="Deploy test in progress..." \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-      - name: Deploy main to PR namespace (skip build — images already published)
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const run = await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'build-push-deploy.yml',
-              ref: process.env.PR_BRANCH,
-              inputs: {
-                gardener_cluster: 'ai-trust-test',
-                namespace: process.env.PR_AUTHOR.toLowerCase(),
-                skip_build_new_version: 'true',
-              },
-            });
-            core.info(`Triggered build-push-deploy.yml on ${process.env.PR_BRANCH} for main deploy (skip_build_new_version=true)`);
+  deploy-main:
+    name: Deploy main to PR namespace
+    needs: dispatch
+    if: needs.dispatch.outputs.authorized == 'true'
+    uses: ./.github/workflows/bootstrap-gardener.yml
+    with:
+      cluster: ai-trust-test
+      ocm_version: ${{ needs.dispatch.outputs.main_ocm_version }}
+      namespace: ${{ needs.dispatch.outputs.pr_author_lower }}
+      ref: refs/heads/main
+    secrets: inherit
 
-      - name: Wait for main deploy to complete
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Waiting for main deploy run to appear and complete..."
-          sleep 30  # Give GitHub time to register the triggered run
+  deploy-pr-branch:
+    name: Build and deploy PR branch
+    needs: [dispatch, deploy-main]
+    if: needs.dispatch.outputs.authorized == 'true'
+    uses: ./.github/workflows/build-push-deploy.yml
+    with:
+      branch: ${{ needs.dispatch.outputs.pr_branch }}
+      gardener_cluster: ai-trust-test
+      namespace: ${{ needs.dispatch.outputs.pr_author_lower }}
+    secrets: inherit
 
-          TIMEOUT=1200
-          ELAPSED=0
-          INTERVAL=30
-          while true; do
-            RUN=$(gh run list \
-              --repo "${{ github.repository }}" \
-              --workflow "build-push-deploy.yml" \
-              --branch "${PR_BRANCH}" \
-              --limit 1 \
-              --json status,conclusion,databaseId \
-              --jq '.[0]')
-
-            STATUS=$(echo "$RUN" | jq -r '.status')
-            CONCLUSION=$(echo "$RUN" | jq -r '.conclusion')
-            RUN_ID=$(echo "$RUN" | jq -r '.databaseId')
-
-            echo "[${ELAPSED}s] main deploy run ${RUN_ID}: status=${STATUS} conclusion=${CONCLUSION}"
-
-            if [[ "$STATUS" == "completed" ]]; then
-              if [[ "$CONCLUSION" != "success" ]]; then
-                echo "error: main deploy failed with conclusion=${CONCLUSION}" >&2
-                exit 1
-              fi
-              echo "main deploy completed successfully."
-              break
-            fi
-
-            if (( ELAPSED >= TIMEOUT )); then
-              echo "error: timed out waiting for main deploy to complete" >&2
-              exit 1
-            fi
-            sleep "$INTERVAL"
-            ELAPSED=$(( ELAPSED + INTERVAL ))
-          done
-
-      - name: Build and deploy PR branch
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const run = await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'build-push-deploy.yml',
-              ref: process.env.PR_BRANCH,
-              inputs: {
-                branch: process.env.PR_BRANCH,
-                gardener_cluster: 'ai-trust-test',
-                namespace: process.env.PR_AUTHOR.toLowerCase(),
-                skip_build_new_version: 'false',
-              },
-            });
-            core.info(`Triggered build-push-deploy.yml for PR branch deploy`);
-
-      - name: Wait for PR branch deploy to complete
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Waiting for PR branch deploy run to appear and complete..."
-          sleep 30
-
-          TIMEOUT=1800
-          ELAPSED=0
-          INTERVAL=30
-          while true; do
-            RUN=$(gh run list \
-              --repo "${{ github.repository }}" \
-              --workflow "build-push-deploy.yml" \
-              --branch "${PR_BRANCH}" \
-              --limit 1 \
-              --json status,conclusion,databaseId \
-              --jq '.[0]')
-
-            STATUS=$(echo "$RUN" | jq -r '.status')
-            CONCLUSION=$(echo "$RUN" | jq -r '.conclusion')
-            RUN_ID=$(echo "$RUN" | jq -r '.databaseId')
-
-            echo "[${ELAPSED}s] PR branch deploy run ${RUN_ID}: status=${STATUS} conclusion=${CONCLUSION}"
-
-            if [[ "$STATUS" == "completed" ]]; then
-              if [[ "$CONCLUSION" != "success" ]]; then
-                echo "error: PR branch deploy failed with conclusion=${CONCLUSION}" >&2
-                exit 1
-              fi
-              echo "PR branch deploy completed successfully."
-              break
-            fi
-
-            if (( ELAPSED >= TIMEOUT )); then
-              echo "error: timed out waiting for PR branch deploy to complete" >&2
-              exit 1
-            fi
-            sleep "$INTERVAL"
-            ELAPSED=$(( ELAPSED + INTERVAL ))
-          done
-
+  post-result:
+    name: Post deployment result
+    needs: [dispatch, deploy-main, deploy-pr-branch]
+    if: always() && needs.dispatch.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    steps:
       - name: Post success comment and status
-        if: success()
+        if: needs.deploy-pr-branch.result == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
+          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
+          MAIN_SHA: ${{ needs.dispatch.outputs.main_sha }}
         run: |
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
@@ -326,9 +238,12 @@ jobs:
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Post failure comment and status
-        if: failure()
+        if: needs.deploy-pr-branch.result != 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
+          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
+          MAIN_SHA: ${{ needs.dispatch.outputs.main_sha }}
         run: |
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
