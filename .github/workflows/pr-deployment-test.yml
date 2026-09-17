@@ -178,9 +178,52 @@ jobs:
             -f description="Deploy test in progress..." \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
+  cleanup:
+    name: Delete existing HelmRelease
+    needs: dispatch
+    if: needs.dispatch.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load Gardener connection vars
+        run: |
+          source k8s/env/ai-trust-test/.env
+          echo "GARDENER_SHOOT_API_SERVER=${GARDENER_SHOOT_API_SERVER}" >> "$GITHUB_ENV"
+          echo "GARDENER_CA_DISCOVERY_URL=${GARDENER_CA_DISCOVERY_URL}" >> "$GITHUB_ENV"
+          echo "GARDENER_OIDC_AUDIENCE=${GARDENER_OIDC_AUDIENCE}" >> "$GITHUB_ENV"
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Authenticate to Gardener cluster
+        uses: gardener/cc-utils/.github/actions/kubernetes-auth@1e70b044f4d3305267a559e7ae74b4de57e1fdee
+        with:
+          server: ${{ env.GARDENER_SHOOT_API_SERVER }}
+          server-ca-discovery-url: ${{ env.GARDENER_CA_DISCOVERY_URL }}
+          audience: ${{ env.GARDENER_OIDC_AUDIENCE }}
+          service-account-name: github-actions
+          service-account-namespace: ocm-system
+          service-account-token-expiration: 3600
+
+      - name: Point KUBECONFIG at authenticated kubeconfig
+        run: echo "KUBECONFIG=$GITHUB_WORKSPACE/kubeconfig.yaml" >> "$GITHUB_ENV"
+
+      - name: Delete HelmRelease to force clean install from main
+        env:
+          PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
+        run: |
+          RELEASE_NAME="ai-trust-${PR_AUTHOR_LOWER}"
+          if kubectl get helmrelease "${RELEASE_NAME}" -n ocm-system &>/dev/null; then
+            echo "Deleting HelmRelease ${RELEASE_NAME} — deploy-main will do a fresh install."
+            kubectl delete helmrelease "${RELEASE_NAME}" -n ocm-system --wait=true --timeout=120s
+            echo "Deleted."
+          else
+            echo "HelmRelease ${RELEASE_NAME} not found — nothing to clean up."
+          fi
+
   deploy-main:
     name: Deploy main to PR namespace
-    needs: dispatch
+    needs: [dispatch, cleanup]
     if: needs.dispatch.outputs.authorized == 'true'
     uses: ./.github/workflows/bootstrap-gardener.yml
     with:
