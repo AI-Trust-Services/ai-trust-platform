@@ -1,5 +1,6 @@
 # CI/CD Pipeline
 
+
 ## Deploy flow
 
 Every deploy is **namespace-scoped**: one workflow run builds and deploys exactly one namespace, and
