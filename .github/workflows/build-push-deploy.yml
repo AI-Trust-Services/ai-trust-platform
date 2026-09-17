@@ -426,7 +426,7 @@ jobs:
     if: |
       needs.images-published.result == 'success' &&
       needs.images-published.outputs.deploy == 'true' &&
-      (needs.publish-ocm.result == 'success' || needs.publish-ocm.result == 'skipped')
+      needs.publish-ocm.result == 'success'
     uses: ./.github/workflows/bootstrap-gardener.yml
     with:
       cluster: ${{ needs.images-published.outputs.cluster }}

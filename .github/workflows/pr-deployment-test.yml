@@ -40,8 +40,6 @@ jobs:
       pr_branch: ${{ steps.pr.outputs.pr_branch }}
       pr_author: ${{ steps.pr.outputs.pr_author }}
       pr_author_lower: ${{ steps.pr.outputs.pr_author_lower }}
-      main_sha: ${{ steps.main.outputs.main_sha }}
-      main_ocm_version: ${{ steps.main.outputs.main_ocm_version }}
       authorized: ${{ steps.auth.outputs.authorized }}
     steps:
       - name: Get PR details
@@ -110,52 +108,6 @@ jobs:
             --body "❌ @${{ github.event.comment.user.login }} Only the PR author or org members can trigger \`/garden-deploy\`."
           exit 1
 
-      - name: Check namespace exists on ai-trust-test
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_AUTHOR="${{ steps.pr.outputs.pr_author }}"
-          # We cannot kubectl here (no cluster auth in dispatch job), so we post a
-          # reminder. The actual namespace check happens in the deploy job via bootstrap.
-          echo "Namespace check will be performed during deploy (namespace: ${PR_AUTHOR,,})"
-          echo "If namespace is not initialized, deploy will fail with a clear error."
-
-      - name: Get latest main SHA and verify CI is green
-        id: main
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          MAIN_SHA=$(gh api repos/${{ github.repository }}/commits/main --jq '.sha')
-          echo "Latest main SHA: ${MAIN_SHA}"
-
-          # Find the most recent successful build-push-deploy.yml run on main
-          RUN=$(gh run list \
-            --repo "${{ github.repository }}" \
-            --workflow "build-push-deploy.yml" \
-            --branch main \
-            --status success \
-            --limit 1 \
-            --json headSha,conclusion,status \
-            --jq '.[0]')
-
-          if [[ -z "$RUN" || "$RUN" == "null" ]]; then
-            gh pr comment ${{ steps.pr.outputs.pr_number }} \
-              --body "❌ No successful \`build-push-deploy\` run found on \`main\`. Fix main first."
-            exit 1
-          fi
-
-          RUN_SHA=$(echo "$RUN" | jq -r '.headSha')
-          if [[ "$RUN_SHA" != "$MAIN_SHA" ]]; then
-            gh pr comment ${{ steps.pr.outputs.pr_number }} \
-              --body "❌ Latest \`main\` commit \`${MAIN_SHA::12}\` has not been built successfully yet (last green build was \`${RUN_SHA::12}\`). Fix main first."
-            exit 1
-          fi
-
-          MAIN_OCM_VERSION="main-${MAIN_SHA::12}"
-          echo "main_sha=${MAIN_SHA::12}" >> "$GITHUB_OUTPUT"
-          echo "main_ocm_version=${MAIN_OCM_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "main is green at ${MAIN_SHA::12} (OCM version: ${MAIN_OCM_VERSION})"
-
   post-start:
     name: Post deployment started
     needs: dispatch
@@ -167,13 +119,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
           PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
-          PR_BRANCH: ${{ needs.dispatch.outputs.pr_branch }}
           PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
-          MAIN_SHA: ${{ needs.dispatch.outputs.main_sha }}
         run: |
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
-            --body "🚀 Test deployment started — deploying \`main:${MAIN_SHA}\` then \`feature:${PR_SHA::12}\` to namespace \`${PR_AUTHOR_LOWER}\` on \`ai-trust-test\`."
+            --body "🚀 Test deployment started — deploying \`main\` then \`feature:${PR_SHA::12}\` to namespace \`${PR_AUTHOR_LOWER}\` on \`ai-trust-test\`."
 
       - name: Set pending commit status
         env:
@@ -189,15 +139,14 @@ jobs:
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   deploy-main:
-    name: Deploy main to PR namespace
+    name: Build and deploy main to PR namespace
     needs: dispatch
     if: needs.dispatch.outputs.authorized == 'true'
-    uses: ./.github/workflows/bootstrap-gardener.yml
+    uses: ./.github/workflows/build-push-deploy.yml
     with:
-      cluster: ai-trust-test
-      ocm_version: ${{ needs.dispatch.outputs.main_ocm_version }}
+      branch: main
+      gardener_cluster: ai-trust-test
       namespace: ${{ needs.dispatch.outputs.pr_author_lower }}
-      ref: refs/heads/main
     secrets: inherit
 
   deploy-pr-branch:
@@ -223,18 +172,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
           PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
-          MAIN_SHA: ${{ needs.dispatch.outputs.main_sha }}
         run: |
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
-            --body "✅ Test deployment successful: \`main:${MAIN_SHA}\` → \`feature:${PR_SHA::12}\`"
+            --body "✅ Test deployment successful: \`main\` → \`feature:${PR_SHA::12}\`"
 
           gh api \
             --method POST \
             repos/${{ github.repository }}/statuses/${PR_SHA} \
             -f state=success \
             -f context=deploy-test \
-            -f description="Deploy test passed (main:${MAIN_SHA} -> feature:${PR_SHA::12})" \
+            -f description="Deploy test passed (main -> feature:${PR_SHA::12})" \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Post failure comment and status
@@ -243,16 +191,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
           PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
-          MAIN_SHA: ${{ needs.dispatch.outputs.main_sha }}
         run: |
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
-            --body "❌ Test deployment failed: \`main:${MAIN_SHA}\` → \`feature:${PR_SHA::12}\` — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            --body "❌ Test deployment failed: \`main\` → \`feature:${PR_SHA::12}\` — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
 
           gh api \
             --method POST \
             repos/${{ github.repository }}/statuses/${PR_SHA} \
             -f state=failure \
             -f context=deploy-test \
-            -f description="Deploy test failed (main:${MAIN_SHA} -> feature:${PR_SHA::12})" \
+            -f description="Deploy test failed (main -> feature:${PR_SHA::12})" \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
