@@ -116,14 +116,12 @@ jobs:
           fi
 
           # Determine target cluster and whether to trigger a deploy
-          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
+          if [[ -n "${{ inputs.gardener_cluster }}" && "${{ inputs.gardener_cluster }}" != "none" ]]; then
+            # Explicit cluster input (workflow_dispatch or workflow_call) always wins
+            cluster="${{ inputs.gardener_cluster }}"
+            deploy="true"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
             cluster="ai-trust-main"
-            deploy="true"
-          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ inputs.gardener_cluster }}" != "none" ]]; then
-            cluster="${{ inputs.gardener_cluster }}"
-            deploy="true"
-          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_call" && -n "${{ inputs.gardener_cluster }}" && "${{ inputs.gardener_cluster }}" != "none" ]]; then
-            cluster="${{ inputs.gardener_cluster }}"
             deploy="true"
           else
             cluster="none"
