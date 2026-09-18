@@ -5,7 +5,7 @@ import httpx
 
 from tests.e2e.conftest import (
     create_assessment,
-    create_control,
+    create_requirement,
     create_evidence,
     create_obligation,
     create_system,
@@ -16,19 +16,19 @@ from tests.e2e.conftest import (
 # POST /evidence
 # ---------------------------------------------------------------------------
 
-async def test_create_evidence_linked_to_control(client: httpx.AsyncClient):
+async def test_create_evidence_linked_to_requirement(client: httpx.AsyncClient):
     system = await create_system()
-    ctl = await create_control(client, system["id"])
+    req = await create_requirement(client, system["id"])
     r = await client.post("/v1/evidence", data={
         "title": "My Evidence",
         "evidence_type": "document",
-        "control_ids": ctl["id"],
+        "requirement_ids": req["id"],
     })
     assert r.status_code == 201
     body = r.json()
     assert body["id"].startswith("EVD-")
     assert body["status"] == "awaiting_review"
-    assert ctl["id"] in body["control_ids"]
+    assert req["id"] in body["requirement_ids"]
 
 
 async def test_create_evidence_linked_to_obligation(client: httpx.AsyncClient):
@@ -58,21 +58,21 @@ async def test_create_evidence_requires_link_target(client: httpx.AsyncClient):
     assert r.status_code == 422
 
 
-async def test_create_evidence_404_on_missing_control(client: httpx.AsyncClient):
+async def test_create_evidence_404_on_missing_requirement(client: httpx.AsyncClient):
     r = await client.post("/v1/evidence", data={
         "title": "X",
         "evidence_type": "document",
-        "control_ids": "CTL-NOTFOUND",
+        "requirement_ids": "REQ-NOTFOUND",
     })
     assert r.status_code == 404
 
 
 async def test_create_evidence_rejects_disallowed_extension(client: httpx.AsyncClient):
     system = await create_system()
-    ctl = await create_control(client, system["id"])
+    req = await create_requirement(client, system["id"])
     r = await client.post(
         "/v1/evidence",
-        data={"title": "X", "evidence_type": "document", "control_ids": ctl["id"]},
+        data={"title": "X", "evidence_type": "document", "requirement_ids": req["id"]},
         files={"file": ("malware.exe", b"bad content", "application/octet-stream")},
     )
     assert r.status_code == 422
@@ -80,10 +80,10 @@ async def test_create_evidence_rejects_disallowed_extension(client: httpx.AsyncC
 
 async def test_create_evidence_with_valid_file(client: httpx.AsyncClient):
     system = await create_system()
-    ctl = await create_control(client, system["id"])
+    req = await create_requirement(client, system["id"])
     r = await client.post(
         "/v1/evidence",
-        data={"title": "Policy Doc", "evidence_type": "code", "control_ids": ctl["id"]},
+        data={"title": "Policy Doc", "evidence_type": "code", "requirement_ids": req["id"]},
         files={"file": ("policy.pdf", b"%PDF-fake", "application/pdf")},
     )
     assert r.status_code == 201
@@ -106,13 +106,13 @@ async def test_create_evidence_rejects_invalid_type(client: httpx.AsyncClient):
 # GET /evidence
 # ---------------------------------------------------------------------------
 
-async def test_list_evidence_filter_by_control(client: httpx.AsyncClient):
+async def test_list_evidence_filter_by_requirement(client: httpx.AsyncClient):
     system = await create_system()
-    ctl = await create_control(client, system["id"])
-    await create_evidence(client, control_ids=[ctl["id"]])
+    req = await create_requirement(client, system["id"])
+    await create_evidence(client, requirement_ids=[req["id"]])
     await create_evidence(client, ai_system_id=system["id"])
 
-    r = await client.get(f"/v1/evidence?control_id={ctl['id']}")
+    r = await client.get(f"/v1/evidence?requirement_id={req['id']}")
     assert r.status_code == 200
     assert len(r.json()) == 1
 
@@ -136,7 +136,7 @@ async def test_get_evidence_returns_detail(client: httpx.AsyncClient):
     assert r.status_code == 200
     body = r.json()
     assert body["id"] == evd["id"]
-    assert "control_ids" in body
+    assert "requirement_ids" in body
     assert "obligation_ids" in body
 
 
@@ -199,24 +199,24 @@ async def test_reject_evidence(client: httpx.AsyncClient):
     assert r.json()["status"] == "rejected"
 
 
-async def test_approve_evidence_promotes_linked_control_to_effective(client: httpx.AsyncClient):
+async def test_approve_evidence_promotes_linked_requirement_to_effective(client: httpx.AsyncClient):
     system = await create_system()
-    ctl = await create_control(client, system["id"])
-    evd = await create_evidence(client, control_ids=[ctl["id"]])
+    req = await create_requirement(client, system["id"])
+    evd = await create_evidence(client, requirement_ids=[req["id"]])
 
     await client.post(f"/v1/evidence/{evd['id']}/approve")
 
-    r = await client.get(f"/v1/controls/{ctl['id']}")
+    r = await client.get(f"/v1/requirements/{req['id']}")
     assert r.json()["status"] == "fulfilled"
 
 
-async def test_approve_evidence_fulfills_obligation_via_effective_control(client: httpx.AsyncClient):
+async def test_approve_evidence_fulfills_obligation_via_effective_requirement(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
-    ctl = await create_control(client, system["id"])
-    await client.post(f"/v1/controls/{ctl['id']}/link/{obl['id']}")
-    evd = await create_evidence(client, control_ids=[ctl["id"]])
+    req = await create_requirement(client, system["id"])
+    await client.post(f"/v1/requirements/{req['id']}/link/{obl['id']}")
+    evd = await create_evidence(client, requirement_ids=[req["id"]])
 
     await client.post(f"/v1/evidence/{evd['id']}/approve")
 
@@ -224,20 +224,20 @@ async def test_approve_evidence_fulfills_obligation_via_effective_control(client
     assert r.json()["status"] == "fulfilled"
 
 
-async def test_reject_evidence_demotes_control_from_effective(client: httpx.AsyncClient):
+async def test_reject_evidence_demotes_requirement_from_effective(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
-    ctl = await create_control(client, system["id"])
-    await client.post(f"/v1/controls/{ctl['id']}/link/{obl['id']}")
-    evd = await create_evidence(client, control_ids=[ctl["id"]])
+    req = await create_requirement(client, system["id"])
+    await client.post(f"/v1/requirements/{req['id']}/link/{obl['id']}")
+    evd = await create_evidence(client, requirement_ids=[req["id"]])
     await client.post(f"/v1/evidence/{evd['id']}/approve")
 
-    # Now reject — control should drop from fulfilled
+    # Now reject — requirement should drop from fulfilled
     await client.post(f"/v1/evidence/{evd['id']}/reject")
 
-    ctl_r = await client.get(f"/v1/controls/{ctl['id']}")
-    assert ctl_r.json()["status"] != "fulfilled"
+    req_r = await client.get(f"/v1/requirements/{req['id']}")
+    assert req_r.json()["status"] != "fulfilled"
 
     obl_r = await client.get(f"/v1/obligations/{obl['id']}")
     assert obl_r.json()["status"] != "fulfilled"
@@ -249,10 +249,10 @@ async def test_reject_evidence_demotes_control_from_effective(client: httpx.Asyn
 
 async def test_download_url_returned_for_evidence_with_file(client: httpx.AsyncClient):
     system = await create_system()
-    ctl = await create_control(client, system["id"])
+    req = await create_requirement(client, system["id"])
     r = await client.post(
         "/v1/evidence",
-        data={"title": "Doc", "evidence_type": "document", "control_ids": ctl["id"]},
+        data={"title": "Doc", "evidence_type": "document", "requirement_ids": req["id"]},
         files={"file": ("doc.pdf", b"%PDF-fake", "application/pdf")},
     )
     evd_id = r.json()["id"]
@@ -271,10 +271,10 @@ async def test_download_url_404_for_evidence_without_file(client: httpx.AsyncCli
 async def test_evidence_response_does_not_expose_internal_file_path(client: httpx.AsyncClient):
     """file_path is an internal MinIO key and must not appear in list/get responses."""
     system = await create_system()
-    ctl = await create_control(client, system["id"])
+    req = await create_requirement(client, system["id"])
     r = await client.post(
         "/v1/evidence",
-        data={"title": "Doc", "evidence_type": "document", "control_ids": ctl["id"]},
+        data={"title": "Doc", "evidence_type": "document", "requirement_ids": req["id"]},
         files={"file": ("policy.pdf", b"%PDF-fake", "application/pdf")},
     )
     assert r.status_code == 201
@@ -287,11 +287,11 @@ async def test_evidence_response_does_not_expose_internal_file_path(client: http
 
 async def test_upload_evidence_rejects_oversized_file(client: httpx.AsyncClient):
     system = await create_system()
-    ctl = await create_control(client, system["id"])
+    req = await create_requirement(client, system["id"])
     oversized = b"x" * (100 * 1024 * 1024 + 1)  # 1 byte over the 100 MB limit
     r = await client.post(
         "/v1/evidence",
-        data={"title": "Big file", "evidence_type": "document", "control_ids": ctl["id"]},
+        data={"title": "Big file", "evidence_type": "document", "requirement_ids": req["id"]},
         files={"file": ("big.pdf", oversized, "application/pdf")},
         timeout=30,
     )
@@ -300,8 +300,8 @@ async def test_upload_evidence_rejects_oversized_file(client: httpx.AsyncClient)
 
 async def test_evidence_versions_empty_on_fresh_item(client: httpx.AsyncClient):
     system = await create_system()
-    ctl = await create_control(client, system["id"])
-    evd = await create_evidence(client, control_ids=[ctl["id"]])
+    req = await create_requirement(client, system["id"])
+    evd = await create_evidence(client, requirement_ids=[req["id"]])
 
     r = await client.get(f"/v1/evidence/{evd['id']}/versions")
     assert r.status_code == 200
@@ -310,10 +310,10 @@ async def test_evidence_versions_empty_on_fresh_item(client: httpx.AsyncClient):
 
 async def test_upload_version_updates_evidence_and_records_history(client: httpx.AsyncClient):
     system = await create_system()
-    ctl = await create_control(client, system["id"])
+    req = await create_requirement(client, system["id"])
     r = await client.post(
         "/v1/evidence",
-        data={"title": "Versioned Doc", "evidence_type": "document", "control_ids": ctl["id"]},
+        data={"title": "Versioned Doc", "evidence_type": "document", "requirement_ids": req["id"]},
         files={"file": ("v1.pdf", b"%PDF-v1", "application/pdf")},
     )
     assert r.status_code == 201

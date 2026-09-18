@@ -9,7 +9,7 @@ import UploadEvidenceModal from "../components/UploadEvidenceModal";
 import UploadVersionModal from "../components/UploadVersionModal";
 import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, OBLIGATION_STATUS_META, fmtDate, humanize, evidenceTypeLabel } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
-import type { AISystem, Control, Evidence, EvidenceDetail, EvidenceVersion, Obligation } from "../types";
+import type { AISystem, Requirement, Evidence, EvidenceDetail, EvidenceVersion, Obligation } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -35,7 +35,7 @@ export default function EvidencePage() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<EvidenceDetail | null>(null);
-  const [detailControls, setDetailControls] = useState<Control[]>([]);
+  const [detailRequirements, setDetailRequirements] = useState<Requirement[]>([]);
   const [detailObligations, setDetailObligations] = useState<Obligation[]>([]);
   const [versions, setVersions] = useState<EvidenceVersion[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -64,12 +64,12 @@ export default function EvidencePage() {
     try {
       const det = await api.getEvidenceItem(e.id);
       setDetail(det);
-      const [controls, obligations, vers] = await Promise.all([
-        api.getControls({ evidence_id: e.id }),
+      const [requirements, obligations, vers] = await Promise.all([
+        api.getRequirements({ evidence_id: e.id }),
         api.getObligations({ evidence_id: e.id }),
         api.getEvidenceVersions(e.id),
       ]);
-      setDetailControls(controls);
+      setDetailRequirements(requirements);
       setDetailObligations(obligations);
       setVersions(vers);
     } catch (err) {
@@ -304,12 +304,12 @@ export default function EvidencePage() {
               <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
             </DetailSection>
           )}
-          {(detailControls.length > 0 || detailObligations.length > 0 || detail.assessment_id) && (
+          {(detailRequirements.length > 0 || detailObligations.length > 0 || detail.assessment_id) && (
             <DetailSection title="Linked To">
-              {detailControls.length > 0 && (
+              {detailRequirements.length > 0 && (
                 <>
                   <div className="pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">Requirements</div>
-                  <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
+                  <ul className="flex flex-col gap-1.5">{detailRequirements.map((c) => (
                     <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
                   ))}</ul>
                 </>

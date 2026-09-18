@@ -28,8 +28,8 @@ from ai_trust_logging import get_logger
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.alert_rule import AlertRule
-from ai_trust_persistence.models.control import Control, control_obligations
-from ai_trust_persistence.models.evidence import Evidence, evidence_controls
+from ai_trust_persistence.models.requirement import Requirement, requirement_obligations
+from ai_trust_persistence.models.evidence import Evidence, evidence_requirements
 from ai_trust_persistence.models.obligation import Obligation
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = get_logger(__name__)
@@ -396,15 +396,15 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
                 select(AISystem.id, AISystem.name).where(AISystem.id.in_(sys_ids))
             )).all()}
 
-        # Collect all linked control IDs in one query before any status mutations.
+        # Collect all linked requirement IDs in one query before any status mutations.
         evd_ids = [r.id for r in rows]
         ctrl_links = (await session.execute(
-            select(evidence_controls.c.evidence_id, evidence_controls.c.control_id)
-            .where(evidence_controls.c.evidence_id.in_(evd_ids))
+            select(evidence_requirements.c.evidence_id, evidence_requirements.c.requirement_id)
+            .where(evidence_requirements.c.evidence_id.in_(evd_ids))
         )).all()
-        evd_ctrl_ids: dict[str, list[str]] = {r.id: [] for r in rows}
+        evd_req_ids: dict[str, list[str]] = {r.id: [] for r in rows}
         for link in ctrl_links:
-            evd_ctrl_ids[link.evidence_id].append(link.control_id)
+            evd_req_ids[link.evidence_id].append(link.requirement_id)
 
         # Bulk-mark all expiring evidence as expired in one statement, then cascade.
         expired_ids = [evd.id for evd in rows]
@@ -415,24 +415,24 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
 
         results: list[EvalResult] = []
         for evd in rows:
-            ctrl_ids = evd_ctrl_ids[evd.id]
+            ctrl_ids = evd_req_ids[evd.id]
 
-            # Cascade: for each linked control, re-check approved evidence count.
+            # Cascade: for each linked requirement, re-check approved evidence count.
             # If none remain, demote from fulfilled → planned.
             # Then re-evaluate linked obligations.
 
             for cid in ctrl_ids:
                 ctrl = (await session.execute(
-                    select(Control).where(Control.id == cid)
+                    select(Requirement).where(Requirement.id == cid)
                 )).scalar_one_or_none()
                 if ctrl is None or ctrl.status in ("deactivated", "ineffective"):
                     continue
 
                 approved_count = (await session.execute(
                     select(func.count())
-                    .select_from(evidence_controls)
-                    .join(Evidence, Evidence.id == evidence_controls.c.evidence_id)
-                    .where(evidence_controls.c.control_id == cid)
+                    .select_from(evidence_requirements)
+                    .join(Evidence, Evidence.id == evidence_requirements.c.evidence_id)
+                    .where(evidence_requirements.c.requirement_id == cid)
                     .where(Evidence.status == "approved")
                 )).scalar_one()
 
@@ -440,10 +440,10 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
                     ctrl.status = "planned"
                     await session.flush()
 
-                # Re-evaluate obligations linked to this control
+                # Re-evaluate obligations linked to this requirement
                 obl_ids = (await session.execute(
-                    select(control_obligations.c.obligation_id)
-                    .where(control_obligations.c.control_id == cid)
+                    select(requirement_obligations.c.obligation_id)
+                    .where(requirement_obligations.c.requirement_id == cid)
                 )).scalars().all()
                 for oid in obl_ids:
                     obl = (await session.execute(
@@ -452,9 +452,9 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
                     if obl is None or obl.status in ("not_applicable", "overdue"):
                         continue
                     ctrl_statuses = (await session.execute(
-                        select(Control.status)
-                        .join(control_obligations, control_obligations.c.control_id == Control.id)
-                        .where(control_obligations.c.obligation_id == oid)
+                        select(Requirement.status)
+                        .join(requirement_obligations, requirement_obligations.c.requirement_id == Requirement.id)
+                        .where(requirement_obligations.c.obligation_id == oid)
                     )).scalars().all()
                     if not ctrl_statuses:
                         obl.status = "applicable"

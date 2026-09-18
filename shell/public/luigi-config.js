@@ -29,8 +29,8 @@
   }
 
   // pathSegment → permissions that make the node visible (ANY of them suffices).
-  // A pathSegment absent from this map is always visible (e.g. "overview").
   const PAGE_PERMISSIONS = {
+    "overview": ["systems:read", "systems:write", "assessments:read", "assessments:write", "assessments:approve", "evidence:read", "evidence:write", "evidence:approve", "monitoring:read", "alerts:read", "alerts:handle", "alerts:manage_rules", "audit:read"],
     "ai-system-registry": ["systems:read", "systems:write"],
     "model-catalog": ["systems:read", "systems:write"],
     // DTA has no dedicated permission — reuse monitoring:read (same audience).
@@ -39,10 +39,12 @@
     "alerts": ["alerts:read", "alerts:handle", "alerts:manage_rules"],
     "assessments": ["assessments:read", "assessments:write", "assessments:approve"],
     "obligations": ["assessments:read", "assessments:write", "assessments:approve"],
-    "controls": ["assessments:read", "assessments:write", "assessments:approve"],
+    "requirements": ["assessments:read", "assessments:write", "assessments:approve"],
     "evidence": ["evidence:read", "evidence:write", "evidence:approve"],
     "users": ["iam:manage"],
+    "users-roles": ["iam:manage"],
     "audit": ["audit:read"],
+    "admin-home": ["iam:manage"],
     "mail-service": ["iam:manage"],
     "admin-settings": ["iam:manage"],
   };
@@ -108,11 +110,11 @@
         navigationContext: "obligations",
       },
       {
-        pathSegment: "controls",
+        pathSegment: "requirements",
         label: "Requirements",
         icon: "shield",
-        viewUrl: "/compliance/#/controls",
-        navigationContext: "controls",
+        viewUrl: "/compliance/#/requirements",
+        navigationContext: "requirements",
       },
       {
         pathSegment: "evidence",
@@ -122,11 +124,27 @@
         navigationContext: "evidence",
       },
       {
+        pathSegment: "admin-home",
+        label: "Administration",
+        icon: "customer-order-entry",
+        viewUrl: "/admin/#/admin-home",
+        navigationContext: "admin-home",
+        viewGroup: "admin",
+      },
+      {
         pathSegment: "users",
         label: "Users & Roles",
         icon: "employee",
         viewUrl: "/users/",
         navigationContext: "users",
+        viewGroup: "users",
+      },
+      {
+        pathSegment: "users-roles",
+        label: "Roles & Permissions",
+        hideFromNav: true,
+        viewUrl: "/users/#/roles",
+        navigationContext: "users-roles",
         viewGroup: "users",
       },
       {
@@ -796,6 +814,7 @@
           bell.addEventListener("mouseleave", () => { bell.style.background = "transparent"; });
 
           async function fetchAlertCount() {
+            if (!permissions.includes("alerts:read")) return;
             try {
               const res = await fetch("/api/alerts/v1/count", { cache: "no-store" });
               if (res.ok) {

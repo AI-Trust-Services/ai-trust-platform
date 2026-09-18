@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import (
+    ASSESSMENTS_APPROVE,
     ASSESSMENTS_READ,
     ASSESSMENTS_WRITE,
-    SYSTEMS_APPROVE,
     SYSTEMS_WRITE,
 )
 from ai_trust_logging import get_logger
@@ -20,13 +20,13 @@ from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models import (
     AISystem,
     Assessment,
-    Control,
     Framework,
     Obligation,
-    control_obligations,
+    Requirement,
+    requirement_obligations,
 )
 from app.cascade import refresh_assessment_score, refresh_obligation, sync_system_compliance
-from app.control_templates import cluster_articles, controls_for
+from app.requirement_templates import cluster_articles, requirements_for
 from app.ids import new_id
 from app.obligation_templates import obligations_for
 from app.schemas import (
@@ -34,8 +34,8 @@ from app.schemas import (
     AssessmentDetailResponse,
     AssessmentResponse,
     AssessmentUpdate,
-    ControlResponse,
-    GenerateControlsResponse,
+    RequirementResponse,
+    GenerateRequirementsResponse,
     GenerateObligationsResponse,
     ObligationResponse,
 )
@@ -141,7 +141,7 @@ async def create_assessment(body: AssessmentCreate, request: Request) -> Assessm
                 "tier": system.tier, "org_role": system.org_role,
             })
         else:
-            await _generate_controls_in_session(session, created, system.tier, system.org_role)
+            await _generate_requirements_in_session(session, created, system.tier, system.org_role)
         log_audit_event(
             session,
             actor=current_user,
@@ -235,21 +235,21 @@ async def _generate_obligations_in_session(
     return created, bool(prior_by_ref)
 
 
-async def _generate_controls_in_session(
+async def _generate_requirements_in_session(
     session: AsyncSession, obligations: list[Obligation], tier: str, org_role: str = "provider"
-) -> list[Control]:
-    """Generate + link controls for the given obligations within the caller's txn.
+) -> list[Requirement]:
+    """Generate + link requirements for the given obligations within the caller's txn.
 
-    For each obligation, `controls_for(cluster_id, tier, org_role)` yields the
-    tier- and role-scoped control templates; each becomes a Control row linked to
-    the obligation via control_obligations. The control_ref is the template's
+    For each obligation, `requirements_for(cluster_id, tier, org_role)` yields the
+    tier- and role-scoped requirement templates; each becomes a Requirement row linked to
+    the obligation via requirement_obligations. The requirement_ref is the template's
     explicit Requirement ID (EU CSV sets) or, for retained sets, the derived
     "{article_ref}:{slug}". Owner is carried forward from the most recent prior
-    control with the same control_ref (see _prior_owners_by_ref).
+    requirement with the same requirement_ref (see _prior_owners_by_ref).
 
     After linking, each touched obligation is refreshed so its status reflects the
-    new controls (applicable -> in_progress). If this raises, the whole transaction
-    rolls back. Returns the created Control rows.
+    new requirements (applicable -> in_progress). If this raises, the whole transaction
+    rolls back. Returns the created Requirement rows.
     """
     if not obligations:
         return []
@@ -257,41 +257,41 @@ async def _generate_controls_in_session(
     ai_system_id = obligations[0].ai_system_id
     prior_owner_by_ref = await _prior_owners_by_ref(session, ai_system_id)
 
-    created: list[Control] = []
+    created: list[Requirement] = []
     for obl in obligations:
-        templates = controls_for(obl.cluster_id or obl.article_ref, tier, org_role)
+        templates = requirements_for(obl.cluster_id or obl.article_ref, tier, org_role)
         if not templates:
-            logger.warning("assessment.control_template_missing", extra={
+            logger.warning("assessment.requirement_template_missing", extra={
                 "assessment_id": obl.assessment_id, "cluster_id": obl.cluster_id,
                 "article_ref": obl.article_ref, "tier": tier, "org_role": org_role,
             })
             continue
         for j, t in enumerate(templates):
-            control_ref = t.get("control_ref") or f"{obl.article_ref}:{t['slug']}"
-            control = Control(
-                id=new_id("CTL"),
+            requirement_ref = t.get("requirement_ref") or f"{obl.article_ref}:{t['slug']}"
+            requirement = Requirement(
+                id=new_id("REQ"),
                 ai_system_id=ai_system_id,
-                control_ref=control_ref,
+                requirement_ref=requirement_ref,
                 article_ref=t.get("article"),
                 title=t["title"],
                 description=t["description"],
                 category=t.get("category", "general"),
                 status="open",
                 effectiveness="medium",
-                owner=prior_owner_by_ref.get(control_ref, ""),
-                # Order controls after their obligation's position, then by template
-                # order within the cluster (headroom of 100 controls per cluster).
+                owner=prior_owner_by_ref.get(requirement_ref, ""),
+                # Order requirements after their obligation's position, then by template
+                # order within the cluster (headroom of 100 requirements per cluster).
                 sort_order=obl.sort_order * 100 + j,
             )
-            session.add(control)
-            await session.flush()  # assign control.id before linking
+            session.add(requirement)
+            await session.flush()  # assign requirement.id before linking
             await session.execute(
-                pg_insert(control_obligations)
-                .values(control_id=control.id, obligation_id=obl.id)
+                pg_insert(requirement_obligations)
+                .values(requirement_id=requirement.id, obligation_id=obl.id)
                 .on_conflict_do_nothing()
             )
-            created.append(control)
-        # Recompute the obligation's status now that controls are linked.
+            created.append(requirement)
+        # Recompute the obligation's status now that requirements are linked.
         await session.flush()
         await refresh_obligation(session, obl.id)
 
@@ -301,21 +301,21 @@ async def _generate_controls_in_session(
 async def _prior_owners_by_ref(
     session: AsyncSession, ai_system_id: str
 ) -> dict[str, str]:
-    """Map control_ref -> owner from the most recent prior controls for this system.
+    """Map requirement_ref -> owner from the most recent prior requirements for this system.
 
-    Controls carry no assessment_id, so "prior controls" are those linked (via
-    control_obligations) to obligations of the same system. We keep the owner from
-    the most recently-created control per control_ref, ignoring blank owners so an
-    unassigned prior control does not shadow an assignment from an earlier cycle.
+    Requirements carry no assessment_id, so "prior requirements" are those linked (via
+    requirement_obligations) to obligations of the same system. We keep the owner from
+    the most recently-created requirement per requirement_ref, ignoring blank owners so an
+    unassigned prior requirement does not shadow an assignment from an earlier cycle.
     """
     rows = (await session.execute(
-        select(Control.control_ref, Control.owner)
-        .join(control_obligations, control_obligations.c.control_id == Control.id)
-        .join(Obligation, Obligation.id == control_obligations.c.obligation_id)
+        select(Requirement.requirement_ref, Requirement.owner)
+        .join(requirement_obligations, requirement_obligations.c.requirement_id == Requirement.id)
+        .join(Obligation, Obligation.id == requirement_obligations.c.obligation_id)
         .where(Obligation.ai_system_id == ai_system_id)
-        .where(Control.control_ref.is_not(None))
-        .where(Control.owner != "")
-        .order_by(Control.created_at.asc())
+        .where(Requirement.requirement_ref.is_not(None))
+        .where(Requirement.owner != "")
+        .order_by(Requirement.created_at.asc())
     )).all()
     # asc() order means later rows overwrite earlier ones -> newest owner wins.
     return {ref: owner for ref, owner in rows}
@@ -325,7 +325,7 @@ async def _prior_owners_by_ref(
 async def advance_from_classification(assessment_id: str) -> AssessmentResponse:
     """Called after risk classification sets the system tier.
 
-    Generates obligations + controls for the now-known tier, then advances
+    Generates obligations + requirements for the now-known tier, then advances
     the assessment from questionnaire_pending to pending_review.
     """
     async with SessionLocal() as session:
@@ -351,7 +351,7 @@ async def advance_from_classification(assessment_id: str) -> AssessmentResponse:
         if existing == 0:
             created, _ = await _generate_obligations_in_session(session, row, system)
             if created:
-                await _generate_controls_in_session(
+                await _generate_requirements_in_session(
                     session, created, system.tier, getattr(system, "org_role", "provider") or "provider"
                 )
 
@@ -450,7 +450,7 @@ async def delete_assessment(assessment_id: str, request: Request) -> dict:
             select(AISystem).where(AISystem.id == ai_system_id)
         )).scalar_one_or_none()
 
-        deleted_controls = await _delete_generated_controls(session, assessment_id)
+        deleted_requirements = await _delete_generated_requirements(session, assessment_id)
 
         await session.delete(row)
         await session.flush()
@@ -466,27 +466,27 @@ async def delete_assessment(assessment_id: str, request: Request) -> dict:
         )
         await session.commit()
     logger.info("assessment.deleted", extra={
-        "assessment_id": assessment_id, "controls_deleted": deleted_controls,
+        "assessment_id": assessment_id, "requirements_deleted": deleted_requirements,
     })
-    return {"status": "deleted", "id": assessment_id, "controls_deleted": deleted_controls}
+    return {"status": "deleted", "id": assessment_id, "requirements_deleted": deleted_requirements}
 
 
-async def _delete_generated_controls(session: AsyncSession, assessment_id: str) -> int:
-    """Delete controls that were auto-generated for this assessment's obligations.
+async def _delete_generated_requirements(session: AsyncSession, assessment_id: str) -> int:
+    """Delete requirements that were auto-generated for this assessment's obligations.
 
-    Scoped so manual and shared controls are never removed: a control is deleted
-    only if it is auto-generated (control_ref is not null) AND every obligation it
+    Scoped so manual and shared requirements are never removed: a requirement is deleted
+    only if it is auto-generated (requirement_ref is not null) AND every obligation it
     links to belongs to this assessment (not shared with another assessment). Runs
     before the assessment is deleted, while its obligations and links still exist.
-    Returns the number of controls deleted.
+    Returns the number of requirements deleted.
     """
-    # Candidate controls: auto-generated and linked to an obligation of this assessment.
+    # Candidate requirements: auto-generated and linked to an obligation of this assessment.
     candidates = (await session.execute(
-        select(Control.id)
-        .join(control_obligations, control_obligations.c.control_id == Control.id)
-        .join(Obligation, Obligation.id == control_obligations.c.obligation_id)
+        select(Requirement.id)
+        .join(requirement_obligations, requirement_obligations.c.requirement_id == Requirement.id)
+        .join(Obligation, Obligation.id == requirement_obligations.c.obligation_id)
         .where(Obligation.assessment_id == assessment_id)
-        .where(Control.control_ref.is_not(None))
+        .where(Requirement.requirement_ref.is_not(None))
         .distinct()
     )).scalars().all()
     if not candidates:
@@ -494,17 +494,17 @@ async def _delete_generated_controls(session: AsyncSession, assessment_id: str) 
 
     # Keep any candidate that is also linked to an obligation outside this assessment.
     shared = set((await session.execute(
-        select(control_obligations.c.control_id)
-        .join(Obligation, Obligation.id == control_obligations.c.obligation_id)
-        .where(control_obligations.c.control_id.in_(candidates))
+        select(requirement_obligations.c.requirement_id)
+        .join(Obligation, Obligation.id == requirement_obligations.c.obligation_id)
+        .where(requirement_obligations.c.requirement_id.in_(candidates))
         .where(Obligation.assessment_id != assessment_id)
     )).scalars().all())
 
-    to_delete = [cid for cid in candidates if cid not in shared]
+    to_delete = [rid for rid in candidates if rid not in shared]
     if not to_delete:
         return 0
 
-    await session.execute(Control.__table__.delete().where(Control.id.in_(to_delete)))
+    await session.execute(Requirement.__table__.delete().where(Requirement.id.in_(to_delete)))
     return len(to_delete)
 
 
@@ -549,8 +549,8 @@ async def generate_obligations(assessment_id: str) -> GenerateObligationsRespons
         )
 
 
-@router.post("/assessments/{assessment_id}/generate-controls", response_model=GenerateControlsResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def generate_controls(assessment_id: str) -> GenerateControlsResponse:
+@router.post("/assessments/{assessment_id}/generate-requirements", response_model=GenerateRequirementsResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
+async def generate_requirements(assessment_id: str) -> GenerateRequirementsResponse:
     async with SessionLocal() as session:
         assessment = await _load(session, assessment_id)
         if assessment.status == "approved":
@@ -566,35 +566,35 @@ async def generate_controls(assessment_id: str) -> GenerateControlsResponse:
             select(Obligation).where(Obligation.assessment_id == assessment_id)
         )).scalars().all()
         if not obligations:
-            raise HTTPException(422, "No obligations to generate controls for — generate obligations first")
+            raise HTTPException(422, "No obligations to generate requirements for — generate obligations first")
 
-        # Idempotent: skip any obligation that already has >=1 linked control.
+        # Idempotent: skip any obligation that already has >=1 linked requirement.
         linked_obl_ids = set((await session.execute(
-            select(control_obligations.c.obligation_id).where(
-                control_obligations.c.obligation_id.in_([o.id for o in obligations])
+            select(requirement_obligations.c.obligation_id).where(
+                requirement_obligations.c.obligation_id.in_([o.id for o in obligations])
             )
         )).scalars().all())
         targets = [o for o in obligations if o.id not in linked_obl_ids]
 
-        created = await _generate_controls_in_session(session, targets, system.tier, system.org_role)
+        created = await _generate_requirements_in_session(session, targets, system.tier, system.org_role)
         await session.commit()
         for r in created:
             await session.refresh(r)
 
         skipped = len(obligations) - len(targets)
         if not created:
-            message = "No new controls generated — all obligations already have controls or none are defined."
+            message = "No new requirements generated — all obligations already have requirements or none are defined."
         else:
-            message = f"Generated {len(created)} control(s) for tier '{system.tier}'."
+            message = f"Generated {len(created)} requirement(s) for tier '{system.tier}'."
             if skipped:
-                message += f" Skipped {skipped} obligation(s) that already had controls."
+                message += f" Skipped {skipped} obligation(s) that already had requirements.."
 
-        logger.info("assessment.controls_generated", extra={
+        logger.info("assessment.requirements_generated", extra={
             "assessment_id": assessment_id, "tier": system.tier,
             "count": len(created), "skipped": skipped,
         })
-        return GenerateControlsResponse(
-            created=[ControlResponse.model_validate(r) for r in created],
+        return GenerateRequirementsResponse(
+            created=[RequirementResponse.model_validate(r) for r in created],
             message=message,
         )
 
@@ -634,7 +634,7 @@ async def submit_assessment(assessment_id: str, request: Request) -> AssessmentR
     return AssessmentResponse.model_validate(row)
 
 
-@router.post("/assessments/{assessment_id}/approve", response_model=AssessmentResponse, dependencies=[Depends(require_permission(SYSTEMS_APPROVE))])
+@router.post("/assessments/{assessment_id}/approve", response_model=AssessmentResponse, dependencies=[Depends(require_permission(ASSESSMENTS_APPROVE))])
 async def approve_assessment(assessment_id: str, request: Request) -> AssessmentResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:

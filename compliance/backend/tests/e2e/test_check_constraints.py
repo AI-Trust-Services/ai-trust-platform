@@ -95,18 +95,18 @@ async def test_invalid_obligation_status_rejected():
 
 
 # ---------------------------------------------------------------------------
-# controls.status
+# requirements.status
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_invalid_control_status_rejected():
+async def test_invalid_requirement_status_rejected():
     system = await create_system()
-    with pytest.raises(IntegrityError, match="ck_controls_status"):
+    with pytest.raises(IntegrityError, match="ck_requirements_status"):
         await _insert_raw(
-            "controls",
-            id=new_id("CTL"),
+            "requirements",
+            id=new_id("REQ"),
             ai_system_id=system["id"],
-            title="Bad Control",
+            title="Bad Requirement",
             description="",
             category="general",
             status="broken",   # not in the allowed set

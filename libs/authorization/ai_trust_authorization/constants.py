@@ -78,10 +78,10 @@ PLATFORM_OBJECT = "platform:global"
 
 # Built-in roles and the permissions each grants. Seeded by openfga-provision.
 ROLE_PERMISSIONS = {
-    "platform_administrator": ALL_PERMISSIONS,
+    "platform_administrator": [IAM_MANAGE],
     "ai_engineer": [
         SYSTEMS_READ, SYSTEMS_WRITE,
-        ASSESSMENTS_READ,
+        ASSESSMENTS_READ, ASSESSMENTS_WRITE,
         EVIDENCE_READ, EVIDENCE_WRITE,
         ALERTS_READ, ALERTS_HANDLE,
         MONITORING_READ,
@@ -90,7 +90,7 @@ ROLE_PERMISSIONS = {
     "ai_compliance_officer": [
         SYSTEMS_READ,
         SYSTEMS_APPROVE,
-        ASSESSMENTS_READ, ASSESSMENTS_WRITE,
+        ASSESSMENTS_READ, ASSESSMENTS_WRITE, ASSESSMENTS_APPROVE,
         EVIDENCE_READ, EVIDENCE_WRITE, EVIDENCE_APPROVE,
         ALERTS_READ, ALERTS_HANDLE,
         AUDIT_READ,
@@ -99,8 +99,8 @@ ROLE_PERMISSIONS = {
         SYSTEMS_READ,
         SYSTEMS_WRITE,
         SYSTEMS_APPROVE,
-        ASSESSMENTS_READ, ASSESSMENTS_APPROVE,
-        EVIDENCE_READ, EVIDENCE_APPROVE,
+        ASSESSMENTS_READ, ASSESSMENTS_WRITE,
+        EVIDENCE_READ, EVIDENCE_WRITE, EVIDENCE_APPROVE,
         ALERTS_READ,
     ],
     "auditor": [

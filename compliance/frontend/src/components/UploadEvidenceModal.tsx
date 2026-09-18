@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { EVIDENCE_TYPES, evidenceTypeLabel, expectedEvidence } from "../utils";
-import type { AISystem, Assessment, Control, Obligation } from "../types";
+import type { AISystem, Assessment, Requirement, Obligation } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -48,9 +48,9 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
   const [file, setFile] = useState<File | null>(null);
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
-  const [controls, setControls] = useState<Control[]>([]);
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [obligations, setObligations] = useState<Obligation[]>([]);
-  const [selectedControls, setSelectedControls] = useState<Set<string>>(new Set());
+  const [selectedRequirements, setSelectedRequirements] = useState<Set<string>>(new Set());
   const [selectedObligations, setSelectedObligations] = useState<Set<string>>(new Set());
   const [drag, setDrag] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -62,9 +62,9 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
     if (!open) return;
     setForm(EMPTY);
     setFile(null);
-    setSelectedControls(new Set());
+    setSelectedRequirements(new Set());
     setSelectedObligations(new Set());
-    setControls([]);
+    setRequirements([]);
     setObligations([]);
     setAssessments([]);
     (async () => {
@@ -77,21 +77,21 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
     })();
   }, [open, showToast]);
 
-  // When system changes: load its assessments and controls
+  // When system changes: load its assessments and requirements
   useEffect(() => {
-    setSelectedControls(new Set());
+    setSelectedRequirements(new Set());
     setSelectedObligations(new Set());
     setObligations([]);
     setAssessments([]);
     setForm((f) => ({ ...f, assessment_id: "" }));
-    if (!form.ai_system_id) { setControls([]); return; }
+    if (!form.ai_system_id) { setRequirements([]); return; }
     (async () => {
       try {
         const [ctl, assess] = await Promise.all([
-          api.getControls({ ai_system_id: form.ai_system_id }),
+          api.getRequirements({ ai_system_id: form.ai_system_id }),
           api.getAssessments(form.ai_system_id),
         ]);
-        setControls(ctl);
+        setRequirements(ctl);
         setAssessments(assess);
       } catch (e) {
         showToast(`Failed to load options: ${(e as Error).message}`, true);
@@ -115,8 +115,8 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
 
   if (!open) return null;
 
-  function toggleControl(id: string) {
-    setSelectedControls((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  function toggleRequirement(id: string) {
+    setSelectedRequirements((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
   function toggleObligation(id: string) {
@@ -131,7 +131,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
 
   async function handleSubmit() {
     if (!form.title.trim()) { showToast("Title is required", true); return; }
-    if (selectedControls.size === 0 && selectedObligations.size === 0 && !form.ai_system_id && !form.assessment_id) {
+    if (selectedRequirements.size === 0 && selectedObligations.size === 0 && !form.ai_system_id && !form.assessment_id) {
       showToast("Link to at least one requirement, obligation, AI system, or assessment", true); return;
     }
     setLoading(true);
@@ -145,7 +145,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
       if (form.assessment_id) fd.append("assessment_id", form.assessment_id);
       if (form.validity_from) fd.append("validity_from", form.validity_from);
       if (form.validity_until) fd.append("validity_until", form.validity_until);
-      selectedControls.forEach((id) => fd.append("control_ids", id));
+      selectedRequirements.forEach((id) => fd.append("requirement_ids", id));
       selectedObligations.forEach((id) => fd.append("obligation_ids", id));
       if (file) fd.append("file", file);
       await api.uploadEvidence(fd);
@@ -236,22 +236,22 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
 
             {/* Right column: linking */}
             <div className="flex flex-col gap-4">
-              {/* Controls checklist */}
+              {/* Requirements checklist */}
               <div className="flex flex-col gap-1.5">
                 <Label className="flex items-center gap-1.5">
                   Link to Requirements
-                  {selectedControls.size > 0 && <Badge variant="secondary" className="rounded-full font-medium">{selectedControls.size} selected</Badge>}
+                  {selectedRequirements.size > 0 && <Badge variant="secondary" className="rounded-full font-medium">{selectedRequirements.size} selected</Badge>}
                 </Label>
                 <div className="max-h-40 overflow-y-auto rounded-md border border-border">
                   {!form.ai_system_id ? (
                     <div className="p-4 text-center text-xs text-muted-foreground">Select an AI system to see its requirements</div>
-                  ) : controls.length === 0 ? (
+                  ) : requirements.length === 0 ? (
                     <div className="p-4 text-center text-xs text-muted-foreground">No requirements for this system</div>
-                  ) : controls.map((c) => {
+                  ) : requirements.map((c) => {
                     const expected = expectedEvidence(c.description);
                     return (
                     <label key={c.id} className="flex cursor-pointer items-start gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
-                      <Checkbox className="mt-0.5" checked={selectedControls.has(c.id)} onCheckedChange={() => toggleControl(c.id)} />
+                      <Checkbox className="mt-0.5" checked={selectedRequirements.has(c.id)} onCheckedChange={() => toggleRequirement(c.id)} />
                       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="truncate text-[13px] text-foreground">{c.title}</span>
                         {expected && (

@@ -7,14 +7,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
 
-# Evidence links (many-to-many) — one evidence item can prove multiple controls
+# Evidence links (many-to-many) — one evidence item can prove multiple requirements
 # and multiple obligations (spec EVD-FR-02). Direct ai_system_id / assessment_id
 # links live on the evidence row itself for scope-level evidence.
-evidence_controls = Table(
-    "evidence_controls",
+evidence_requirements = Table(
+    "evidence_requirements",
     Base.metadata,
     Column("evidence_id", String(30), ForeignKey("evidence.id", ondelete="CASCADE"), primary_key=True),
-    Column("control_id", String(30), ForeignKey("controls.id", ondelete="CASCADE"), primary_key=True),
+    Column("requirement_id", String(30), ForeignKey("requirements.id", ondelete="CASCADE"), primary_key=True),
 )
 
 evidence_obligations = Table(

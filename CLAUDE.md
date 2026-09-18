@@ -74,9 +74,9 @@ Codebase-specific decisions. Follow them even where an external pattern is more 
 
 - **DB sessions** — use `async with SessionLocal() as session` directly in each router (not `Depends()`). Helper functions (e.g. `cascade.py`) never `commit()` — only `flush()` if they need a row ID. The router owns the transaction and is always the one to `commit()`, keeping each request atomic.
 - **Logging** — event names follow `resource.action` (e.g. `assessment.created`, `evidence.status_changed`). Contextual fields go in `extra={}`, never interpolated into the message: `logger.info("assessment.created", extra={"assessment_id": row.id})`.
-- **ID generation** — all domain IDs use `new_id("PREFIX")` from `compliance/backend/app/ids.py` (e.g. `new_id("ASS")` → `ASS-XXXXXXXX`). Never `uuid4()` directly. Prefixes: `ASS`, `OBL`, `CTL`, `EVD`. Add new prefixes to `ids.py`.
+- **ID generation** — all domain IDs use `new_id("PREFIX")` from `compliance/backend/app/ids.py` (e.g. `new_id("ASS")` → `ASS-XXXXXXXX`). Never `uuid4()` directly. Prefixes: `ASS`, `OBL`, `REQ`, `EVD`. Add new prefixes to `ids.py`.
 - **E2E helpers** — `conftest.py` exposes module-level async functions (`create_system`, `create_assessment`, etc.). Import and call them directly; don't inline HTTP calls or wrap them in fixtures. `create_system()` in compliance tests writes directly to the DB (no HTTP intake endpoint in compliance).
-- **M2M linking** — many-to-many joins (`control_obligations`, `evidence_controls`, `evidence_obligations`) use raw `pg_insert(...).on_conflict_do_nothing()`, not ORM `relationship(secondary=)`. Don't add ORM relationships to M2M tables.
+- **M2M linking** — many-to-many joins (`requirement_obligations`, `evidence_requirements`, `evidence_obligations`) use raw `pg_insert(...).on_conflict_do_nothing()`, not ORM `relationship(secondary=)`. Don't add ORM relationships to M2M tables.
 - **Frontend API client** — every React frontend has `src/api/client.ts` with a typed `request<T>()` wrapper, `json()`/`qs()` helpers, and an `api` object with one method per endpoint. All calls go through `request<T>()` — never raw `fetch()` in components. `formatDetail` normalises FastAPI validation errors. Reference: `compliance/frontend/src/api/client.ts`.
 - **Pydantic schemas** — response schemas set `model_config = {"from_attributes": True}`. Convert rows with `Schema.model_validate(row)` — never `.from_orm()` (Pydantic v1, removed in v2).
 - **CLAUDE.md** — update it as part of any PR that adds or changes a feature, service, endpoint, env var, migration, or architectural pattern. It is the primary reference for AI assistants working in this repo — stale docs cause wrong suggestions and wasted effort.
@@ -286,24 +286,24 @@ Trace viewer for GenAI spans, reads ClickHouse only.
 - `GET /api/v1/traces` — groups spans by `trace_id`, paginated. Dev: `vite.config.ts` proxies `/api/*` → `http://localhost:8006`. Prod: nginx proxies `/api/` → `decision-trace-analyzer-backend:8006`.
 
 ### compliance/ (port 8007, `/api/compliance/`)
-Governance chain — assessments, obligations, controls, evidence for EU AI Act / NIST / ISO. Reads/writes Postgres; evidence files in MinIO.
+Governance chain — assessments, obligations, requirements, evidence for EU AI Act / NIST / ISO. Reads/writes Postgres; evidence files in MinIO.
 
 Backend (`compliance/backend/app/`):
-- `cascade.py` — status cascade + score recalc: approved evidence → effective control → fulfilled obligation → assessment score → `ai_systems.compliance`. Caller owns the transaction; cascade never commits.
-- `obligation_templates.py` — hardcoded obligation sets per (framework, tier, org_role). EU AI Act High/Limited are **obligation clusters** (keyed by a stable `cluster_id` like `P-RM`, `D-LIM`) translated from the AI Act Requirements catalogue; a cluster is emitted for a (tier, org_role) only when ≥1 of its controls survives `controls_for(...)`. NIST AI RMF + ISO/IEC 42001 apply their full set regardless of tier/role. `obligations_for(framework, tier, org_role="provider")`; minimal/prohibited/GPAI/unknown tiers yield no EU obligations.
-- `control_templates.py` — hardcoded per-requirement control templates keyed by obligation `cluster_id`, filtered by risk tier **and** org_role via `controls_for(cluster_id, tier, org_role)`. `control_ref` is the Requirement ID (e.g. `P-RM-01`); retained NIST/ISO sets carry no `role` and match any org_role. `cluster_articles(...)` aggregates a cluster's distinct top-level AI Act articles for display.
+- `cascade.py` — status cascade + score recalc: approved evidence → fulfilled requirement → fulfilled obligation → assessment score → `ai_systems.compliance`. Caller owns the transaction; cascade never commits.
+- `obligation_templates.py` — hardcoded obligation sets per (framework, tier, org_role). EU AI Act High/Limited are **obligation clusters** (keyed by a stable `cluster_id` like `P-RM`, `D-LIM`) translated from the AI Act Requirements catalogue; a cluster is emitted for a (tier, org_role) only when ≥1 of its requirements survives `requirements_for(...)`. NIST AI RMF + ISO/IEC 42001 apply their full set regardless of tier/role. `obligations_for(framework, tier, org_role="provider")`; minimal/prohibited/GPAI/unknown tiers yield no EU obligations.
+- `requirement_templates.py` — hardcoded per-requirement templates keyed by obligation `cluster_id`, filtered by risk tier **and** org_role via `requirements_for(cluster_id, tier, org_role)`. `requirement_ref` is the Requirement ID (e.g. `P-RM-01`); retained NIST/ISO sets carry no `role` and match any org_role. `cluster_articles(...)` aggregates a cluster's distinct top-level AI Act articles for display.
 - `minio_client.py` — async wrapper over the sync `minio` SDK (blocking calls in `asyncio.to_thread`). Two clients: `_client` (in-cluster, uploads) and `_presign_client` (public, presigned download URLs).
-- Routers: `frameworks.py`, `assessments.py` (CRUD + `/generate-obligations`, `/generate-controls`, `/submit`, `/approve`), `obligations.py`, `controls.py` (CRUD + `/link/{obligation_id}` POST/DELETE), `evidence.py` (multipart + CRUD + `/approve`, `/reject`, `/download-url`, `/versions`, `/upload-version`).
+- Routers: `frameworks.py`, `assessments.py` (CRUD + `/generate-obligations`, `/generate-requirements`, `/submit`, `/approve`), `obligations.py`, `requirements.py` (CRUD + `/link/{obligation_id}` POST/DELETE), `evidence.py` (multipart + CRUD + `/approve`, `/reject`, `/download-url`, `/versions`, `/upload-version`).
 
-**Governance chain** — `POST /api/v1/assessments` is the entry point: it auto-generates obligations **and** controls in one transaction. Obligations come from `obligation_templates.py` by (tier, org_role), with owner/not-applicable pre-filled from the most recent approved prior assessment for the same (system, framework). For each obligation, `controls_for(cluster_id, tier, org_role)` yields controls (stable `control_ref` = the Requirement ID, e.g. `P-RM-01`) linked via `control_obligations`; a fresh control is `not_started`, so the cascade immediately moves each obligation `applicable → in_progress`. Owner (only) is carried forward from the most recent prior control with the same `control_ref` for that system. `POST /assessments/{id}/generate-controls` re-runs for API consumers and is idempotent (skips obligations that already have a control). Controls can also be linked manually via `POST /controls/{id}/link/{obligation_id}`. Approving evidence cascades automatically.
+**Governance chain** — `POST /api/v1/assessments` is the entry point: it auto-generates obligations **and** requirements in one transaction. Obligations come from `obligation_templates.py` by (tier, org_role), with owner/not-applicable pre-filled from the most recent approved prior assessment for the same (system, framework). For each obligation, `requirements_for(cluster_id, tier, org_role)` yields requirements (stable `requirement_ref` = the Requirement ID, e.g. `P-RM-01`) linked via `requirement_obligations`; a fresh requirement is `open`, so the cascade immediately moves each obligation `applicable → in_progress`. Owner (only) is carried forward from the most recent prior requirement with the same `requirement_ref` for that system. `POST /assessments/{id}/generate-requirements` re-runs for API consumers and is idempotent (skips obligations that already have a requirement). Requirements can also be linked manually via `POST /requirements/{id}/link/{obligation_id}`. Approving evidence cascades automatically.
 
-**Delete** — `DELETE /api/v1/assessments/{id}` cascades obligations (FK `ondelete=CASCADE`) and removes auto-generated controls (`control_ref` not null) linked **only** to that assessment's obligations. Manual controls (`control_ref` null) and shared controls are kept. Response includes `controls_deleted`.
+**Delete** — `DELETE /api/v1/assessments/{id}` cascades obligations (FK `ondelete=CASCADE`) and removes auto-generated requirements (`requirement_ref` not null) linked **only** to that assessment's obligations. Manual requirements (`requirement_ref` null) and shared requirements are kept. Response includes `requirements_deleted`.
 
-**Evidence** — `POST /api/v1/evidence` accepts `control_ids` and `obligation_ids` as repeated form fields (multi-value, one M2M row each); at least one of `control_ids`/`obligation_ids`/`ai_system_id`/`assessment_id` required. Versioned: `/upload-version` snapshots current file metadata to `evidence_versions` before replacing (old MinIO file deleted, snapshot retained); `/versions` returns history oldest-first; `version_label` tracks the current label. Stored in MinIO bucket `evidence-files`, key `evidence/{evidence_id}/{filename}`.
+**Evidence** — `POST /api/v1/evidence` accepts `requirement_ids` and `obligation_ids` as repeated form fields (multi-value, one M2M row each); at least one of `requirement_ids`/`obligation_ids`/`ai_system_id`/`assessment_id` required. Versioned: `/upload-version` snapshots current file metadata to `evidence_versions` before replacing (old MinIO file deleted, snapshot retained); `/versions` returns history oldest-first; `version_label` tracks the current label. Stored in MinIO bucket `evidence-files`, key `evidence/{evidence_id}/{filename}`.
 
 #### Evidence expiry (policy-checker-worker)
 Three alert rules seeded in migration `0004` drive evidence expiry:
-- `evidence_expired` — marks approved evidence past `validity_until` as `expired`, cascades control effectiveness + obligation status, fires alert
+- `evidence_expired` — marks approved evidence past `validity_until` as `expired`, cascades requirement effectiveness + obligation status, fires alert
 - `evidence_expiring_30d` — fires warning for approved evidence expiring in 8–30 days
 - `evidence_expiring_7d` — fires warning for approved evidence expiring in 1–7 days; replaces the 30-day alert when evidence enters the 7-day window (auto-resolves the 30-day alert)
 
@@ -318,14 +318,20 @@ Immutable audit trail — records who did what and when across all platform acti
 - `GET /v1/events` — paginated list with filters: `ai_system_id`, `action`, `actor`, `resource_type`, `from`, `to`, `search` (case-insensitive across action/actor/system name), `limit`/`offset`/`sort`
 - `GET /v1/events/{id}` — full detail including `changes` dict
 - `GET /v1/systems` — distinct AI systems present in audit log, filtered by same params as list (used to populate the UI dropdown)
-- `GET /v1/stats` — KPI counts with trend vs. previous equal-length window: `total`, `system_events` (resource_type=ai_system), `risk_and_compliance` (assessment/evidence/control/obligation)
+- `GET /v1/stats` — KPI counts with trend vs. previous equal-length window: `total`, `system_events` (resource_type=ai_system), `risk_and_compliance` (assessment/evidence/requirement/obligation)
 
 **Authorization** — all endpoints require `audit:read` (OpenFGA). Assigned to `platform_administrator`, `ai_compliance_officer`, `auditor`, `ai_engineer`.
 
 **audit-flush-worker/** — standalone asyncio worker (no HTTP port). `AUDIT_FLUSH_INTERVAL` (default 5s), `AUDIT_FLUSH_BATCH_SIZE` (default 500). On ClickHouse failure the exception is caught in the main loop, logged, and retried next cycle — rows stay in Postgres safely.
 
 ### admin/ (port 8010, `/api/admin/`)
-Platform administration — SMTP mail service configuration and general platform settings. Access restricted to `platform_administrator` role via `iam:manage` permission.
+Platform administration — SMTP mail service configuration, general platform settings, and a summary dashboard. Access restricted to `platform_administrator` role via `iam:manage` permission.
+
+**Screens** — all gated on `iam:manage`:
+- `/admin-home` — Platform Administration dashboard: KPI tiles (user/role counts, mail status) + cards linking to each section.
+- `/mail-service` — SMTP configuration.
+- `/admin-settings` — General platform settings.
+- Users & Roles — served by the separate IAM MFE (`/users/`).
 
 **Data model** — single-row `platform_settings` table (migration `0020`, always `id=1`). Seeded from env vars on first startup; once a row exists the DB is the source of truth and env vars are ignored. Password is stored in the row but **never returned** by GET endpoints — only `has_password: bool` is exposed.
 
@@ -333,6 +339,7 @@ Platform administration — SMTP mail service configuration and general platform
 - `GET/PUT /v1/smtp` — SMTP configuration (host, port, user, password, from, from_name, ssl, starttls). PUT preserves the existing password when `smtp_password` is absent from the body.
 - `POST /v1/smtp/test` — sends a real test email using the **saved** settings (save first, then test). Returns `{success, message}` with a descriptive error for each failure type (auth, connection refused, recipient rejected, timeout).
 - `GET/PUT /v1/settings` — general platform settings (platform_name, support_email).
+- `GET /v1/stats` — dashboard KPIs: user/role counts (via internal call to users backend), mail configured flag.
 - `startup.py` — `seed_settings_from_env()` called via FastAPI lifespan; reads `SMTP_*`, `PLATFORM_NAME`, `SUPPORT_EMAIL` env vars and inserts the row only if none exists.
 
 ## Environment variables

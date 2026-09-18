@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import httpx
 
-from tests.e2e.conftest import create_assessment, create_control, create_evidence, create_obligation, create_system
+from tests.e2e.conftest import create_assessment, create_requirement, create_evidence, create_obligation, create_system
 
 
 # ---------------------------------------------------------------------------
@@ -78,15 +78,15 @@ async def test_list_obligations_filter_by_assessment(client: httpx.AsyncClient):
     assert len(r2.json()) == 15  # only auto-generated
 
 
-async def test_list_obligations_filter_by_control(client: httpx.AsyncClient):
+async def test_list_obligations_filter_by_requirement(client: httpx.AsyncClient):
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    # Link a control to exactly one of the assessment's obligations.
-    ctl = await create_control(client, system["id"])
-    await client.post(f"/v1/controls/{ctl['id']}/link/{obs[0]['id']}")
+    # Link a requirement to exactly one of the assessment's obligations.
+    req = await create_requirement(client, system["id"])
+    await client.post(f"/v1/requirements/{req['id']}/link/{obs[0]['id']}")
 
-    r = await client.get(f"/v1/obligations?control_id={ctl['id']}")
+    r = await client.get(f"/v1/obligations?requirement_id={req['id']}")
     assert r.status_code == 200
     body = r.json()
     assert len(body) == 1
@@ -129,7 +129,7 @@ async def test_get_obligation_returns_detail(client: httpx.AsyncClient):
     assert r.status_code == 200
     body = r.json()
     assert body["id"] == obl["id"]
-    assert "control_ids" in body
+    assert "requirement_ids" in body
 
 
 async def test_get_obligation_404_on_missing(client: httpx.AsyncClient):
