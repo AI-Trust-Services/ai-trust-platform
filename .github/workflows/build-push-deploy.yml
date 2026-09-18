@@ -138,7 +138,7 @@ jobs:
           echo "deploy=${deploy}" >> "$GITHUB_OUTPUT"
 
           # Namespace derivation:
-          #   - ai-trust-main → always "ai-trust" (the cluster's long-running K8s namespace)
+          #   - ai-trust-main → always "ai-trust"
           #   - ai-trust-test / other → explicit input or github.actor (lowercase)
           if [[ "${cluster}" == "ai-trust-main" ]]; then
             namespace="ai-trust"
