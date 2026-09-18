@@ -69,6 +69,12 @@ jobs:
           echo "pr_branch=${PR_BRANCH}" >> "$GITHUB_OUTPUT"
           echo "pr_author=${PR_AUTHOR}" >> "$GITHUB_OUTPUT"
           echo "pr_author_lower=${PR_AUTHOR,,}" >> "$GITHUB_OUTPUT"
+          echo "--- PR details ---"
+          echo "pr_number:      ${PR_NUMBER}"
+          echo "pr_branch:      ${PR_BRANCH}"
+          echo "pr_author:      ${PR_AUTHOR}"
+          echo "pr_author_lower:${PR_AUTHOR,,}"
+          echo "pr_sha:         ${PR_SHA}"
 
       - name: Check authorization (PR author or org member)
         id: auth
