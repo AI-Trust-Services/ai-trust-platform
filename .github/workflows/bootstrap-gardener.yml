@@ -21,10 +21,16 @@ on:
         type: choice
         options:
           - ai-trust-main
+          - ai-trust-test
           - sr-test
       ocm_version:
-        description: "Exact OCM component version to pin (e.g. ai-trust-main-abc123def456)"
+        description: "Exact OCM component version to pin (e.g. main-abc123def456)"
         required: true
+        type: string
+      namespace:
+        description: "Namespace to deploy into (default: K8S_NAMESPACE from the cluster env file, e.g. ai-trust for ai-trust-main)"
+        required: false
+        default: ""
         type: string
   workflow_call:
     inputs:
@@ -33,11 +39,16 @@ on:
         required: true
         type: string
       ocm_version:
-        description: "Exact OCM component version to pin (e.g. ai-trust-main-abc123def456)"
+        description: "Exact OCM component version to pin (e.g. main-abc123def456)"
         required: true
         type: string
       ref:
         description: "Git ref that triggered the build (used to select the GitHub environment)"
+        required: false
+        default: ""
+        type: string
+      namespace:
+        description: "Namespace to deploy into (e.g. ai-trust, alice)"
         required: false
         default: ""
         type: string
@@ -70,6 +81,7 @@ jobs:
         with:
           cluster: ${{ inputs.cluster }}
           ocm_version: ${{ inputs.ocm_version }}
+          namespace: ${{ inputs.namespace }}
           github_actor: ${{ github.actor }}
           ghcr_pull_token: ${{ secrets.GHCR_PULL_TOKEN }}
           app_admin_password: ${{ secrets.APP_ADMIN_PASSWORD }}
@@ -86,7 +98,7 @@ jobs:
   bootstrap-other:
     name: Bootstrap (${{ inputs.cluster }})
     runs-on: ubuntu-latest
-    # all other deploys (sr-test cluster, or feature-branch manual runs to ai-trust-main)
+    # all other deploys (ai-trust-test cluster, or feature-branch manual runs to ai-trust-main)
     if: inputs.cluster != 'ai-trust-main' || (inputs.ref != 'refs/heads/main' && inputs.ref != 'main')
     steps:
       - name: Check out repository
@@ -97,6 +109,7 @@ jobs:
         with:
           cluster: ${{ inputs.cluster }}
           ocm_version: ${{ inputs.ocm_version }}
+          namespace: ${{ inputs.namespace }}
           github_actor: ${{ github.actor }}
           ghcr_pull_token: ${{ secrets.GHCR_PULL_TOKEN }}
           app_admin_password: ${{ secrets.APP_ADMIN_PASSWORD }}

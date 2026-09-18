@@ -6,8 +6,12 @@ inputs:
     description: "Target cluster name (must match a directory under k8s/env/)"
     required: true
   ocm_version:
-    description: "Exact OCM component version to pin (e.g. ai-trust-main-abc123def456)"
+    description: "Exact OCM component version to pin (e.g. main-abc123def456)"
     required: true
+  namespace:
+    description: "Namespace to deploy into (e.g. main, alice). Defaults to K8S_NAMESPACE from the cluster env file."
+    required: false
+    default: ""
   github_actor:
     description: "GitHub actor for ghcr.io pull secret (pass github.actor)"
     required: true
@@ -68,15 +72,29 @@ runs:
           echo "error: $ENV_FILE not found — create it from k8s/env/ai-trust-main/.env" >&2
           exit 1
         fi
-        set -a
-        # shellcheck disable=SC1090
-        set +u
+
+        # Resolve namespace: explicit input wins, else fall back to K8S_NAMESPACE in env file
+        INPUT_NAMESPACE="${{ inputs.namespace }}"
+        if [[ -n "$INPUT_NAMESPACE" ]]; then
+          export NAMESPACE="$INPUT_NAMESPACE"
+        else
+          # Extract K8S_NAMESPACE from the env file before substitution
+          RAW_NS=$(grep -E '^K8S_NAMESPACE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+          export NAMESPACE="${RAW_NS:-ai-trust}"
+        fi
+
+        # Substitute ${NAMESPACE} in URL vars before sourcing
         _env_tmp=$(mktemp)
-        tr -d '\r' < "$ENV_FILE" > "$_env_tmp"
+        tr -d '\r' < "$ENV_FILE" | NAMESPACE="$NAMESPACE" envsubst '${NAMESPACE}' > "$_env_tmp"
+
+        set -a
+        set +u
         source "$_env_tmp"
         rm -f "$_env_tmp"
         set -u
         set +a
+
+        # Inject GitHub secrets (override blank placeholders in env file)
         APP_ADMIN_PASSWORD="$SECRET_APP_ADMIN_PASSWORD"
         CLICKHOUSE_PASSWORD="$SECRET_CLICKHOUSE_PASSWORD"
         KEYCLOAK_ADMIN_PASSWORD="$SECRET_KEYCLOAK_ADMIN_PASSWORD"
@@ -87,13 +105,14 @@ runs:
         RABBITMQ_PASSWORD="$SECRET_RABBITMQ_PASSWORD"
         SMTP_PASSWORD="$SECRET_SMTP_PASSWORD"
         USERS_BACKEND_CLIENT_SECRET="$SECRET_USERS_BACKEND_CLIENT_SECRET"
+
         while IFS='=' read -r key _; do
           [[ -z "$key" || "$key" == \#* ]] && continue
           value=$(printenv "$key" 2>/dev/null || true)
           echo "${key}=${value}" >> "$GITHUB_ENV"
-        done < <(tr -d '\r' < "$ENV_FILE" | grep -v '^\s*#' | grep -v '^\s*$')
-        echo "NAMESPACE=${K8S_NAMESPACE:-ai-trust}" >> "$GITHUB_ENV"
-        echo "Loaded env from $ENV_FILE"
+        done < <(grep -v '^\s*#' "$ENV_FILE" | grep -v '^\s*$' | tr -d '\r')
+        echo "NAMESPACE=${NAMESPACE}" >> "$GITHUB_ENV"
+        echo "Loaded env from $ENV_FILE (namespace=${NAMESPACE})"
 
     - name: Set up kubectl
       uses: azure/setup-kubectl@v4
@@ -132,7 +151,8 @@ runs:
       shell: bash
       run: |
         umask 077
-        cp "k8s/env/${{ inputs.cluster }}/.env" .env
+        # Substitute ${NAMESPACE} in URL vars before injecting secrets
+        NAMESPACE="$NAMESPACE" envsubst '${NAMESPACE}' < "k8s/env/${{ inputs.cluster }}/.env" > .env
         inject() {
           local key="$1" val="$2"
           if grep -q "^${key}=" .env; then
@@ -198,8 +218,8 @@ runs:
           echo "error: ocm_version input is required to pin the ComponentVersion" >&2
           exit 1
         fi
-        envsubst '${OCM_VERSION}' < k8s/ocm/manifests.yaml | kubectl apply -f -
-        echo "Applied OCM CRs with ComponentVersion pinned to ${OCM_VERSION}"
+        envsubst '${OCM_VERSION} ${NAMESPACE}' < k8s/ocm/manifests.yaml | kubectl apply -f -
+        echo "Applied OCM CRs with ComponentVersion pinned to ${OCM_VERSION} in namespace ${NAMESPACE}"
 
     - name: Remediate stalled HelmRelease
       shell: bash
@@ -209,7 +229,7 @@ runs:
         # explicitly told to retry — new OCM component versions are silently ignored.
         # Annotating with reconcile.fluxcd.io/requestedAt clears the Stalled condition
         # and forces an immediate reconcile, so the new chart version is picked up.
-        HR=$(kubectl get helmrelease ai-trust-platform -n ocm-system -o json 2>/dev/null || echo "")
+        HR=$(kubectl get helmrelease "ai-trust-${NAMESPACE}" -n ocm-system -o json 2>/dev/null || echo "")
         if [[ -z "$HR" ]]; then
           echo "HelmRelease not found — skipping remediation (first install)."
           exit 0
@@ -217,7 +237,7 @@ runs:
         STALLED=$(echo "$HR" | jq -r '.status.conditions[]? | select(.type=="Stalled") | .status' 2>/dev/null || echo "")
         if [[ "$STALLED" == "True" ]]; then
           echo "HelmRelease is Stalled — annotating to force reconcile..."
-          kubectl annotate helmrelease ai-trust-platform -n ocm-system \
+          kubectl annotate helmrelease "ai-trust-${NAMESPACE}" -n ocm-system \
             reconcile.fluxcd.io/requestedAt="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --overwrite
           echo "Annotation applied — Flux will retry the upgrade."
@@ -230,12 +250,13 @@ runs:
       env:
         EXPECTED_VERSION: ${{ inputs.ocm_version }}
       run: |
+        RELEASE_NAME="ai-trust-${NAMESPACE}"
         TIMEOUT=900    # 15 minutes
         INTERVAL=60
         ELAPSED=0
-        echo "Waiting for HelmRelease ai-trust-platform in namespace ocm-system to reach version ${EXPECTED_VERSION}..."
+        echo "Waiting for HelmRelease ${RELEASE_NAME} in namespace ocm-system to reach version ${EXPECTED_VERSION}..."
         while true; do
-          HR=$(kubectl get helmrelease ai-trust-platform -n ocm-system -o json 2>/tmp/hr_err) || true
+          HR=$(kubectl get helmrelease "${RELEASE_NAME}" -n ocm-system -o json 2>/tmp/hr_err) || true
           if [[ -s /tmp/hr_err ]]; then
             echo "[${ELAPSED}s] kubectl error: $(cat /tmp/hr_err)"
           fi
@@ -274,7 +295,7 @@ runs:
           if (( ELAPSED >= TIMEOUT )); then
             echo "error: timed out after ${TIMEOUT}s waiting for HelmRelease to reach version ${EXPECTED_VERSION}" >&2
             echo "Last known HelmRelease status:" >&2
-            kubectl get helmrelease ai-trust-platform -n ocm-system -o yaml >&2 || true
+            kubectl get helmrelease "${RELEASE_NAME}" -n ocm-system -o yaml >&2 || true
             exit 1
           fi
           sleep "$INTERVAL"

@@ -96,7 +96,7 @@ no direct Kubernetes equivalent, and none of the app images were changed to add 
 
 - Deployments that need another **service** to be reachable first get a small `busybox`
   initContainer that polls it (TCP or HTTP) until it responds.
-- Deployments/Jobs that need a one-shot **Job** to have finished first get a `bitnami/kubectl`
+- Deployments/Jobs that need a one-shot **Job** to have finished first get a `rancher/kubectl`
   initContainer running `kubectl wait --for=condition=complete job/<name>`, using the `job-waiter`
   ServiceAccount created by `bootstrap.sh`.
 
@@ -113,54 +113,84 @@ A third path, alongside docker-compose and local `kind`. The platform is package
 
 ```
 build-push-deploy.yml
-  ├─ build & push ~22 Docker images  →  ghcr.io/ai-trust-services/ai-trust-platform/<name>:<cluster>-<sha>
-  ├─ build & push Helm chart OCI     →  ghcr.io/ai-trust-services/charts/ai-trust-platform:0.0.0-<cluster>-<sha>
+  ├─ resolve namespace: ai-trust-main → "ai-trust"; ai-trust-test → PR author / github.actor
+  ├─ build & push ~22 Docker images  →  ghcr.io/ai-trust-services/ai-trust-platform/<name>:<namespace>-<sha>
+  ├─ build & push Helm chart OCI     →  ghcr.io/ai-trust-services/charts/ai-trust-platform:0.0.0-<namespace>-<sha>
   ├─ publish OCM component           →  ghcr.io/ai-trust-services/ocm  (references images + chart by digest)
   └─ calls bootstrap-gardener.yml
        ├─ creates namespace/secrets/RBAC via bootstrap.sh
-       └─ applies k8s/ocm/ CRs (ComponentVersion, Resource, FluxDeployer),
+       └─ applies k8s/ocm/ CRs (ComponentVersion, Resource, FluxDeployer), named
+          `ai-trust-platform-<namespace>` / `ai-trust-platform-chart-<namespace>` / `ai-trust-<namespace>`,
           substituting the exact built version into ComponentVersion.spec.version.semver
 
-On the cluster (OCM controller + Flux):
+On the cluster (OCM controller + Flux), all scoped to one namespace:
   ComponentVersion  →  resolves the exact pinned OCM component version
   Resource          →  exposes the ai-trust-platform-chart resource
-  FluxDeployer      →  creates/updates a HelmRelease in ocm-system
-  Flux helm-controller  →  helm upgrade --install ai-trust in ai-trust namespace
+  FluxDeployer      →  creates/updates a HelmRelease (release name ai-trust-<namespace>) in ocm-system
+  Flux helm-controller  →  helm upgrade --install ai-trust-<namespace> in <namespace>
 ```
+
+Deployments are **namespace-scoped**, so a single cluster can host several concurrent
+deployments side by side. Two namespace conventions are in use today:
+- `ai-trust-main` always deploys to namespace **`ai-trust`** — the platform's existing,
+  long-running namespace, kept as the default so this cluster is never re-provisioned
+  from scratch.
+- `ai-trust-test` hosts one namespace per developer/PR, derived from the PR author or
+  `github.actor` (see **PR deployment test** below) — multiple people can test
+  concurrently on the same cluster without colliding.
 
 ### Workflows
 
-- **`build-push-deploy.yml`** — runs on every push to `main`, on version tags (`v*.*.*`), or manually
-  via `workflow_dispatch` (inputs: `branch`, `gardener_cluster`). Tags images
-  `<cluster>-<short-sha>` (isolated per cluster); `ai-trust-main` builds additionally tag `latest`.
-  OCM component version: `0.0.0-<cluster>-<sha>`. Feature branch pushes build images but do NOT
-  publish OCM or trigger a deploy (set `gardener_cluster=sr-test` in `workflow_dispatch` to deploy
-  from a feature branch).
+- **`build-push-deploy.yml`** — runs on every push to `main`, on version tags (`v*.*.*`), manually via
+  `workflow_dispatch` (inputs: `branch`, `gardener_cluster`, `namespace`), or via `workflow_call` from
+  `pr-deployment-test.yml` (adds `skip_build_new_version` to redeploy already-published images without
+  rebuilding). Namespace is resolved first — `ai-trust-main` always resolves to `ai-trust`; any other
+  cluster uses the explicit `namespace` input, falling back to `github.actor` (lowercase). Tags images
+  `<namespace>-<short-sha>` (isolated per namespace, so concurrent namespaces on one cluster never
+  collide); only `ai-trust-main` builds additionally tag `latest`. OCM component version:
+  `0.0.0-<namespace>-<sha>`. Feature branch pushes build images but do NOT publish OCM or trigger a
+  deploy unless a target cluster is given (`gardener_cluster=sr-test` in `workflow_dispatch`, or via
+  `workflow_call`).
 
-- **`bootstrap-gardener.yml`** — called by `build-push-deploy.yml` after successful publish, or manually.
-  Contains two jobs — `bootstrap-main` (runs under the `main` GitHub environment, so deploys appear
-  in the GitHub Deployments sidebar) and `bootstrap-other` (all other clusters/branches, no
-  environment). Both jobs delegate to the **`.github/actions/apply-to-cluster`** composite action,
-  which: authenticates via Gardener Structured Auth + GitHub OIDC (no stored kubeconfig); runs
-  `k8s/scripts/bootstrap.sh` (namespace, `ai-trust-env` secret, `ai-trust-flux-values` secret in
-  `ocm-system`, ConfigMaps, RBAC); applies `k8s/ocm/` with the exact built version substituted into
-  `ComponentVersion.spec.version.semver` (an exact-match pin, not a range); then **polls the
-  HelmRelease** every 60 s until it reaches `Ready=True` at the expected version — failing fast on
-  `InstallFailed`/`UpgradeFailed` and timing out after 30 minutes.
+- **`bootstrap-gardener.yml`** — called by `build-push-deploy.yml` after successful publish, or manually
+  (`workflow_dispatch` inputs: `cluster`, `ocm_version`, `namespace`). Contains two jobs —
+  `bootstrap-main` (runs under the `main` GitHub environment for `ai-trust-main` deploys triggered by a
+  push to `main`, so they appear in the GitHub Deployments sidebar) and `bootstrap-other` (everything
+  else — other clusters, manual runs, PR-branch deploys). Both jobs delegate to the
+  **`.github/actions/apply-to-cluster`** composite action, which: resolves the namespace (explicit
+  `namespace` input wins, else `K8S_NAMESPACE` from that cluster's `k8s/env/<cluster>/.env`, else
+  `ai-trust`); authenticates via Gardener Structured Auth + GitHub OIDC (no stored kubeconfig); runs
+  `k8s/scripts/bootstrap.sh` (namespace, `ai-trust-env` secret, `ai-trust-flux-values-<namespace>`
+  secret in `ocm-system`, ConfigMaps, RBAC); applies `k8s/ocm/` with the namespace and exact built
+  version substituted into the CR names and `ComponentVersion.spec.version.semver` (an exact-match pin,
+  not a range); then **polls the HelmRelease** `ai-trust-<namespace>` every 60 s until it reaches
+  `Ready=True` at the expected version — failing fast on `InstallFailed`/`UpgradeFailed` and timing out
+  after 30 minutes.
 
-**Two secrets, two namespaces:** bootstrap.sh creates two distinct secrets per cluster:
-- `ai-trust-env` in `ai-trust` — the full credential set from `.env` (plus computed connection
+**Two secrets, two namespaces:** bootstrap.sh creates two distinct secrets per cluster+namespace:
+- `ai-trust-env` in `<namespace>` — the full credential set from `.env` (plus computed connection
   strings). Used by Helm chart pods via `envFrom`.
-- `ai-trust-flux-values` in `ocm-system` — only the 6 non-sensitive URL/hostname/tag values
+- `ai-trust-flux-values-<namespace>` in `ocm-system` — only the 6 non-sensitive URL/hostname/tag values
   (`APP_PUBLIC_URL`, `KEYCLOAK_PUBLIC_URL`, `INGRESS_*`, `IMAGE_TAG`). Used by the FluxDeployer's
   `valuesFrom`.
 
   The split is necessary because Flux's `HelmRelease` object is created in `ocm-system` (same
   namespace as the FluxDeployer), and Flux resolves `valuesFrom` secrets relative to the
   HelmRelease's own namespace. Flux v2 `ValuesReference` has no `namespace` override field, so
-  there is no way to reference a secret in `ai-trust` from a `valuesFrom` entry — the secret
+  there is no way to reference a secret in `<namespace>` from a `valuesFrom` entry — the secret
   must live in `ocm-system`. Credentials stay only in `ai-trust-env` to avoid storing them in
   the FluxDeployer's namespace unnecessarily.
+
+### PR deployment test
+
+Commenting `/garden-deploy` on a PR (`.github/workflows/pr-deployment-test.yml`) deploys latest `main`
+and then the PR branch to a namespace derived from the PR author, on `ai-trust-test` — so several PRs
+or developers can test concurrently without colliding. The namespace must be initialized once before
+first use:
+```bash
+bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-username>
+```
+The workflow reports progress via PR comments and a `deploy-test` commit status check.
 
 ### OCM component structure
 
@@ -169,52 +199,58 @@ copies) to the images and chart already pushed by the build step. Nothing is dup
 registry. The component constructor is `.ocm/component-constructor.yaml`.
 
 `k8s/ocm/manifests.yaml` pins `ComponentVersion.spec.version.semver` via a `${OCM_VERSION}`
-placeholder — `bootstrap-gardener.yml` substitutes the exact built version at apply time. To
-apply it by hand, supply the version yourself (a bare `kubectl apply -f k8s/ocm/` would apply
-the literal placeholder and fail):
+placeholder, and names every CR (ComponentVersion, Resource, FluxDeployer, HelmRelease) via
+`${NAMESPACE}` — `bootstrap-gardener.yml` substitutes both at apply time. To apply it by hand,
+supply both yourself (a bare `kubectl apply -f k8s/ocm/` would apply the literal placeholders and
+fail):
 ```bash
-OCM_VERSION=0.0.0-<cluster>-<sha> envsubst '${OCM_VERSION}' < k8s/ocm/manifests.yaml | kubectl apply -f -
+OCM_VERSION=0.0.0-<namespace>-<sha> NAMESPACE=<namespace> \
+  envsubst '${OCM_VERSION} ${NAMESPACE}' < k8s/ocm/manifests.yaml | kubectl apply -f -
 ```
 
 To inspect published versions:
 ```bash
 ocm get componentversions ghcr.io/ai-trust-services/ocm//github.com/ai-trust-services/ai-trust-platform
-ocm get resources ghcr.io/ai-trust-services/ocm//github.com/ai-trust-services/ai-trust-platform:0.0.0-<cluster>-<sha>
+ocm get resources ghcr.io/ai-trust-services/ocm//github.com/ai-trust-services/ai-trust-platform:0.0.0-<namespace>-<sha>
 ```
 
 ### Checking OCM/Flux deploy status on a cluster
 
+Substitute `<namespace>` below (`ai-trust` on `ai-trust-main`, or the developer/PR namespace on
+`ai-trust-test`):
+
 ```bash
 # Which version is reconciled
-kubectl get componentversion ai-trust-platform -n ocm-system \
+kubectl get componentversion ai-trust-platform-<namespace> -n ocm-system \
   -o jsonpath='{.status.reconciledVersion}{"\n"}'
 
 # HelmRelease status (shows chart version + success/failure message)
-kubectl get helmrelease ai-trust-platform -n ocm-system -o wide
+kubectl get helmrelease ai-trust-<namespace> -n ocm-system -o wide
 
 # Pod image tags (verify the correct SHA is running)
-kubectl get pods -n ai-trust \
+kubectl get pods -n <namespace> \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
 
 # Events from the OCM controller
-kubectl describe componentversion ai-trust-platform -n ocm-system | tail -20
+kubectl describe componentversion ai-trust-platform-<namespace> -n ocm-system | tail -20
 ```
 
 Note: the `Applied version:` column in `kubectl get componentversion` output is blank due to a
 known display bug in ocm-controller v0.33. The correct value is in `.status.reconciledVersion`.
 
-### Version isolation between branches and clusters
+### Version isolation between namespaces and clusters
 
 | Scenario | OCM version published | Deploys to |
 |---|---|---|
-| Push to `main` | `0.0.0-ai-trust-main-<sha>` + `0.0.0-latest` | `ai-trust-main` |
-| `workflow_dispatch` → sr-test | `0.0.0-sr-test-<sha>` | `sr-test` |
-| Feature branch push | *(not published)* | nowhere |
+| Push to `main` | `0.0.0-ai-trust-<sha>` + `0.0.0-latest` | `ai-trust-main`, namespace `ai-trust` |
+| `/garden-deploy` on a PR | `0.0.0-<pr-author>-<sha>` | `ai-trust-test`, namespace `<pr-author>` |
+| `workflow_dispatch` → sr-test | `0.0.0-<namespace>-<sha>` | `sr-test`, namespace `github.actor` (or explicit `namespace` input) |
+| Feature branch push (no cluster) | *(not published)* | nowhere |
 | `workflow_dispatch` gardener_cluster=none | *(not published)* | nowhere |
 
-Per-cluster SHA prefixes ensure versions never collide. `--overwrite` in the publish step is safe
-because re-running the same workflow on the same commit is the only case that hits the same version
-string.
+Per-namespace SHA prefixes ensure versions never collide, even across concurrent namespaces on the
+same cluster. `--overwrite` in the publish step is safe because re-running the same workflow on the
+same commit is the only case that hits the same version string.
 
 ### Per-revision Job names (one-shot Jobs)
 
@@ -258,17 +294,23 @@ bash k8s/gardener_init/garden-cluster-init.sh <cluster-name>
 
 # Step 2 — Shoot cluster: install OCM controller + Flux, Traefik, DNS + TLS cert, RBAC
 export KUBECONFIG=/path/to/kubeconfig-<shoot>.yaml
-bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>
+bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name> [--namespace=<namespace>]
 # Hostnames read from k8s/gardener_init/env/<cluster-name>/.env
+# --namespace defaults to "ai-trust"; pass it to additionally provision a
+# developer/PR namespace on a shared cluster (e.g. ai-trust-test --namespace=alice)
 ```
 
-`shoot-cluster-init.sh` installs:
+`shoot-cluster-init.sh` runs the same 5 steps for every namespace (nothing is special-cased) and
+installs:
 - **Traefik** ingress controller (if not present)
+- A per-namespace Gardener-managed TLS certificate (DNS-01, Let's Encrypt, stored in
+  `<namespace>/ai-trust-tls`) and Traefik `ServersTransport` for LLM-backed routes
+- DNS: merges this namespace's hostnames into the Traefik LB Service's
+  `dns.gardener.cloud/dnsnames` annotation (rather than overwriting it), so multiple namespaces
+  sharing one cluster keep resolving
 - **OCM controller** via `ocm controller install`
 - **Flux** via `flux install` (source-controller + helm-controller)
-- Gardener-managed TLS certificate (DNS-01, Let's Encrypt, stored in `ai-trust/ai-trust-tls`)
-- DNS annotations on the Traefik LB Service
-- RBAC for the GitHub Actions OIDC identity
+- RBAC for the GitHub Actions OIDC identity, scoped to this namespace + `ocm-system`
 
 > **Do not install cert-manager manually.** Gardener provisions and manages it automatically in a
 > dedicated `cert-manager` namespace. If you see cert-manager pods CrashLooping in the `default`
@@ -287,20 +329,18 @@ All other config lives in `k8s/env/<cluster>/.env` (committed). No per-cluster G
 
 1. Run `bash k8s/gardener_init/garden-cluster-init.sh <cluster-name>` (Garden cluster — structured auth)
 2. Copy `k8s/gardener_init/env/example/.env` → `k8s/gardener_init/env/<cluster-name>/.env` and fill in hostnames
-3. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>` (installs OCM controller, Flux, Traefik, DNS, TLS cert, RBAC)
+3. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>` (installs OCM controller, Flux, Traefik, DNS, TLS cert, RBAC for the default `ai-trust` namespace; pass `--namespace=<name>` for additional namespaces)
 4. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/sr-test/.env`, fill in Gardener connection vars and hostnames)
 5. Add `<cluster-name>` to the `options` list in `build-push-deploy.yml` and `bootstrap-gardener.yml` `workflow_dispatch` inputs
 6. Trigger `build-push-deploy.yml` with `gardener_cluster=<cluster-name>`
 
 ## Known limitations / gaps as of local-dev scope (same as docker-compose today)
 
-- Single-node only: `openfga-config`, `postgres-data`, `clickhouse-data`, and `minio-data` are all
-  `ReadWriteOnce` PVCs on kind's default local-path-provisioner - fine on a single schedulable node
-  (kind's default), but won't work if you add worker nodes to `kind-config.yaml`.
+- Single-node only for kind: `postgres-data`, `clickhouse-data`, `minio-data`, and `ollama-data`
+  are `ReadWriteOnce` PVCs on kind's default local-path-provisioner — fine on a single schedulable
+  node (kind's default), but won't work if you add worker nodes to `kind-config.yaml`.
+  On Gardener (multi-node), all four are managed as **StatefulSet `volumeClaimTemplates`** so the
+  CSI driver handles detach/reattach when a pod reschedules to a different node.
 - No resource `requests`/`limits` (docker-compose doesn't set any either).
 - No HTTPS / `cookie-secure=true` - same as docker-compose's local-dev oauth2-proxy config.
-- mino scaling: handling multiple volumes - based on that decide how to makr those PVC.
-- scaling postgres - define the configuration of volumes.
-- ReadWriteOnce access mode:can not scale the deployment that mounts such volume.
-- horizontal pod autoscalers.
-- NodePort to replace by ClusterIP. ✓ Done — ClusterIP is now the default for all services; `values-kind.yaml` opt-in for local dev.
+- No horizontal pod autoscalers.

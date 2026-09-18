@@ -45,7 +45,7 @@ ingress:
 
 waitImages:
   busybox: busybox:1.36 # TCP/HTTP "wait for dependency" initContainers
-  kubectl: rancher/kubectl:v1.31.0 # "wait for job completion" initContainers
+  kubectl: rancher/kubectl:v1.31.0 # "wait for job completion" initContainers (FROM scratch, no shell)
   postgres: postgres:16-alpine # psql one-off queries
 
 serviceAccount:
@@ -83,7 +83,6 @@ keycloak:
 
 openfga:
   image: openfga/openfga:v1.18.1
-  storageSize: 64Mi # openfga-config volume: just the provisioned store_id file
 
 oauthProxy:
   image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
