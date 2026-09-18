@@ -51,45 +51,9 @@ _LIMITED = [
      "description": "Inform users that they are interacting with an AI system.", "roles": "both"},
 ]
 
-_MINIMAL = [
-    {"title": "Adopt voluntary code of conduct", "article_ref": "Art. 69",
-     "description": "Consider adopting a voluntary code of conduct.", "roles": "both"},
-    {"title": "Maintain basic technical documentation", "article_ref": "Art. 69(a) (voluntary)",
-     "description": "Voluntarily maintain lightweight documentation.", "roles": "both"},
-    {"title": "Establish basic monitoring", "article_ref": "Art. 69(b) (voluntary)",
-     "description": "Voluntarily monitor the system in production.", "roles": "both"},
-]
-
-_PROHIBITED = [
-    {"title": "Cease deployment — prohibited practice", "article_ref": "Art. 5",
-     "description": "This system falls under a prohibited AI practice.", "roles": "both"},
-]
-
-_GPAI = [
-    {"title": "Maintain GPAI technical documentation", "article_ref": "Art. 53",
-     "description": "Draw up and keep up to date GPAI model technical documentation.", "roles": "provider"},
-    {"title": "Publish training content summary", "article_ref": "Art. 53(1)(d)",
-     "description": "Make publicly available a summary of training content.", "roles": "provider"},
-    {"title": "Establish copyright compliance policy", "article_ref": "Art. 53(1)(c)",
-     "description": "Put in place a policy to comply with Union copyright law.", "roles": "provider"},
-]
-
-_GPAI_SYSTEMIC = _GPAI + [
-    {"title": "Perform model evaluation and adversarial testing", "article_ref": "Art. 55",
-     "description": "Perform model evaluation including adversarial testing.", "roles": "provider"},
-    {"title": "Report serious incidents (GPAI systemic)", "article_ref": "Art. 55(1)(c)",
-     "description": "Track, document and report serious incidents.", "roles": "provider"},
-    {"title": "Ensure cybersecurity protection", "article_ref": "Art. 55(1)(d)",
-     "description": "Ensure adequate cybersecurity protection.", "roles": "provider"},
-]
-
 _BY_TIER: dict[str, list[dict]] = {
     "high": _HIGH,
     "limited": _LIMITED,
-    "minimal": _MINIMAL,
-    "prohibited": _PROHIBITED,
-    "gpai-standard": _GPAI,
-    "gpai-systemic": _GPAI_SYSTEMIC,
 }
 
 

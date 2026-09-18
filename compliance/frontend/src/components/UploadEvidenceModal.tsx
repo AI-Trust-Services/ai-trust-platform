@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
-import { EVIDENCE_TYPES, humanize } from "../utils";
+import { EVIDENCE_TYPES, evidenceTypeLabel, expectedEvidence } from "../utils";
 import type { AISystem, Assessment, Requirement, Obligation } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -197,7 +197,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
                 <Select value={form.evidence_type} onValueChange={(v) => setForm((f) => ({ ...f, evidence_type: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {EVIDENCE_TYPES.map((t) => <SelectItem key={t} value={t}>{humanize(t)}</SelectItem>)}
+                    {EVIDENCE_TYPES.map((t) => <SelectItem key={t} value={t}>{evidenceTypeLabel(t)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -245,15 +245,25 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
                 <div className="max-h-40 overflow-y-auto rounded-md border border-border">
                   {!form.ai_system_id ? (
                     <div className="p-4 text-center text-xs text-muted-foreground">Select an AI system to see its requirements</div>
-                  ): requirements.length === 0 ? (
+                  ) : requirements.length === 0 ? (
                     <div className="p-4 text-center text-xs text-muted-foreground">No requirements for this system</div>
-                  ): requirements.map((c) => (
-                    <label key={c.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
-                      <Checkbox checked={selectedRequirements.has(c.id)} onCheckedChange={() => toggleRequirement(c.id)} />
-                      <span className="flex-1 truncate text-[13px] text-foreground">{c.title}</span>
+                  ) : requirements.map((c) => {
+                    const expected = expectedEvidence(c.description);
+                    return (
+                    <label key={c.id} className="flex cursor-pointer items-start gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
+                      <Checkbox className="mt-0.5" checked={selectedRequirements.has(c.id)} onCheckedChange={() => toggleRequirement(c.id)} />
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="truncate text-[13px] text-foreground">{c.title}</span>
+                        {expected && (
+                          <span className="text-[11px] leading-snug text-muted-foreground">
+                            <span className="font-medium">Expected:</span> {expected}
+                          </span>
+                        )}
+                      </div>
                       <span className="shrink-0 text-[11px] text-muted-foreground">{c.id}</span>
                     </label>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

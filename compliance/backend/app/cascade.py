@@ -77,8 +77,8 @@ async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
     """Recompute an obligation's status from its linked requirements, then rescore.
 
     - no requirements linked           -> revert to 'applicable' (unless locked)
-    - >=1 linked, all 'effective'  -> 'fulfilled'
-    - >=1 linked, not all effective-> 'in_progress'
+    - >=1 linked, all 'fulfilled'  -> 'fulfilled'
+    - >=1 linked, not all fulfilled-> 'in_progress'
     """
     obligation = (await session.execute(
         select(Obligation).where(Obligation.id == obligation_id)

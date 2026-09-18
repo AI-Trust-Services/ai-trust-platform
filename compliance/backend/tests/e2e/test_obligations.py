@@ -62,24 +62,24 @@ async def test_create_obligation_blank_title_returns_422(client: httpx.AsyncClie
 # ---------------------------------------------------------------------------
 
 async def test_list_obligations_filter_by_assessment(client: httpx.AsyncClient):
-    system = await create_system()
+    system = await create_system(tier="high")
     ass1 = await create_assessment(client, system["id"])
     ass2 = await create_assessment(client, system["id"])
-    # Auto-generation creates 3 obligations per assessment (minimal tier).
+    # Auto-generation creates 15 obligations per assessment (EU high-risk provider).
     # Add 2 more manually to ass1 so we can assert the filter is working.
     await create_obligation(client, ass1["id"])
     await create_obligation(client, ass1["id"])
 
     r = await client.get(f"/v1/obligations?assessment_id={ass1['id']}")
     assert r.status_code == 200
-    assert len(r.json()) == 5  # 3 auto-generated + 2 manual
+    assert len(r.json()) == 17  # 15 auto-generated + 2 manual
 
     r2 = await client.get(f"/v1/obligations?assessment_id={ass2['id']}")
-    assert len(r2.json()) == 3  # only auto-generated
+    assert len(r2.json()) == 15  # only auto-generated
 
 
 async def test_list_obligations_filter_by_requirement(client: httpx.AsyncClient):
-    system = await create_system()
+    system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
     # Link a requirement to exactly one of the assessment's obligations.
@@ -215,9 +215,9 @@ async def test_delete_obligation_404_on_missing(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_marking_obligation_fulfilled_updates_score(client: httpx.AsyncClient):
-    system = await create_system()
+    system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
-    # Auto-generation creates 3 obligations (minimal tier). Mark all fulfilled.
+    # Auto-generation creates 15 obligations (EU high-risk provider). Mark all fulfilled.
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
     for o in obs:
         await client.put(f"/v1/obligations/{o['id']}", json={"status": "fulfilled"})

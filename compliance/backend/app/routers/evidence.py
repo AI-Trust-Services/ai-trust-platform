@@ -291,7 +291,7 @@ async def delete_evidence(evidence_id: str, request: Request) -> dict:
         requirement_ids, _ = await _linked_ids(session, evidence_id)
         await session.delete(row)
         await session.flush()
-        # Removing evidence may drop a requirement below 'effective'.
+        # Removing evidence may drop a requirement below 'fulfilled'.
         for cid in requirement_ids:
             await refresh_requirement_effectiveness(session, cid)
             await refresh_obligations_for_requirement(session, cid)

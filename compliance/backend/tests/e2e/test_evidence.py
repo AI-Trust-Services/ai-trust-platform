@@ -83,13 +83,23 @@ async def test_create_evidence_with_valid_file(client: httpx.AsyncClient):
     req = await create_requirement(client, system["id"])
     r = await client.post(
         "/v1/evidence",
-        data={"title": "Policy Doc", "evidence_type": "policy_document", "requirement_ids": req["id"]},
+        data={"title": "Policy Doc", "evidence_type": "code", "requirement_ids": req["id"]},
         files={"file": ("policy.pdf", b"%PDF-fake", "application/pdf")},
     )
     assert r.status_code == 201
     body = r.json()
     assert body["file_name"] == "policy.pdf"
     assert body["file_size"] == len(b"%PDF-fake")
+
+
+async def test_create_evidence_rejects_invalid_type(client: httpx.AsyncClient):
+    system = await create_system()
+    ctl = await create_control(client, system["id"])
+    r = await client.post(
+        "/v1/evidence",
+        data={"title": "X", "evidence_type": "policy_document", "control_ids": ctl["id"]},
+    )
+    assert r.status_code == 422
 
 
 # ---------------------------------------------------------------------------

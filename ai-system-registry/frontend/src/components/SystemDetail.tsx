@@ -666,9 +666,6 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
           <select className={SELECT_CLASS} id="edit_org_role" value={form.org_role} onChange={set("org_role")}>
             <option value="provider">Provider</option>
             <option value="deployer">Deployer</option>
-            <option value="importer">Importer</option>
-            <option value="distributor">Distributor</option>
-            <option value="authorised_representative">Authorised Representative</option>
           </select>
         </div>
         <div className="flex flex-col gap-1.5"><Label htmlFor="edit_country">Country</Label><Input type="text" id="edit_country" value={form.provider_country} onChange={set("provider_country")} maxLength={2} /></div>

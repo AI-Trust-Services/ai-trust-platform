@@ -34,8 +34,8 @@ export default function RequirementsPage() {
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [systemFilter, setSystemFilter] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -96,8 +96,8 @@ export default function RequirementsPage() {
     const s = search.toLowerCase();
     return requirements.filter((c) =>
       (!s || c.title.toLowerCase().includes(s) || c.id.toLowerCase().includes(s)) &&
-      (!categoryFilter || c.category === categoryFilter) &&
       (!statusFilter || c.status === statusFilter) &&
+      (!categoryFilter || c.category === categoryFilter) &&
       (!systemFilter || (systemFilter === "__org__" ? !c.ai_system_id : c.ai_system_id === systemFilter))
     );
   }, [requirements, search, categoryFilter, statusFilter, systemFilter]);
@@ -201,6 +201,8 @@ export default function RequirementsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Requirement</TableHead>
+                <TableHead>Requirement ID</TableHead>
+                <TableHead>Article</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>AI System</TableHead>
                 <TableHead>Owner</TableHead>
@@ -211,10 +213,12 @@ export default function RequirementsPage() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No requirements yet.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="py-8 text-center text-muted-foreground">No requirements yet.</TableCell></TableRow>
               ) : paged.map((c) => (
                 <TableRow key={c.id} data-state={selected === c.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(c)}>
                   <TableCell><div className="font-medium text-foreground">{c.title}</div><div className="text-xs text-muted-foreground">{c.id}</div></TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{c.control_ref || "—"}</TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{c.article_ref || "—"}</TableCell>
                   <TableCell className="text-[13px]">{humanize(c.category)}</TableCell>
                   <TableCell>{c.ai_system_id ? (systemsById[c.ai_system_id]?.name ?? c.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{c.owner || "—"}</TableCell>
@@ -222,8 +226,10 @@ export default function RequirementsPage() {
                   <TableCell className="text-[13px] text-muted-foreground">{fmtDate(c.due_date)}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
-                      <Button variant="ghost" size="sm" disabled={!mayWrite} title={mayWrite ? "Link or unlink obligations" : noWriteTitle}
-                        onClick={() => setLinkRequirement(c)}>Link Obligations</Button>
+                      {!c.requirement_ref && (
+                        <Button variant="ghost" size="sm" disabled={!mayWrite} title={mayWrite ? "Link or unlink obligations" : noWriteTitle}
+                          onClick={() => setLinkRequirement(c)}>Link Obligations</Button>
+                      )}
                       <Select value={c.status} disabled={!mayWrite} onValueChange={(v) => changeStatus(c.id, v)}>
                         <SelectTrigger className="h-8 w-[150px]" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -256,7 +262,6 @@ export default function RequirementsPage() {
       <DetailPanel
         open={!!detail}
         title={detail?.title ?? ""}
-        subtitle={detail ? humanize(detail.category) : undefined}
         badge={detail ? CONTROL_STATUS_META[detail.status]?.label : undefined}
         onClose={closePanel}
       >
@@ -264,7 +269,6 @@ export default function RequirementsPage() {
           <>
             <DetailSection title="General Information">
               <DetailField label="ID">{detail.id}</DetailField>
-              <DetailField label="Category">{humanize(detail.category)}</DetailField>
               <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</DetailField>
               <DetailField label="Owner">{detail.owner || "—"}</DetailField>
               <DetailField label="Status"><StatusBadge meta={CONTROL_STATUS_META} value={detail.status} /></DetailField>
@@ -277,7 +281,7 @@ export default function RequirementsPage() {
             )}
             <DetailSection title={`Related Obligations (${detailObligations.length})`}>
               {detailObligations.length === 0
-                ? <p className="text-[13px] text-muted-foreground">No obligations linked. Use "Link Obligations".</p>
+                ? <p className="text-[13px] text-muted-foreground">{detail.requirement_ref ? "No obligations linked." : 'No obligations linked. Use "Link Obligations".'}</p>
                 : <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
                     <li key={o.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
                   ))}</ul>
@@ -292,8 +296,10 @@ export default function RequirementsPage() {
               }
             </DetailSection>
             <div className="flex items-center gap-2 px-5 pt-4">
-              <Button variant="outline" size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-                onClick={() => setLinkRequirement(detail)}>Link Obligations</Button>
+              {!detail.requirement_ref && (
+                <Button variant="outline" size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
+                  onClick={() => setLinkRequirement(detail)}>Link Obligations</Button>
+              )}
               <Select value={detail.status} disabled={!mayWrite}
                 onValueChange={async (v: string) => {
                   await changeStatus(detail.id, v);

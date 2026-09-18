@@ -1,7 +1,7 @@
 """POST /api/v1/intake — register an AI system (name + description only)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_WRITE
@@ -13,6 +13,7 @@ from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from app.classifier import ClassificationResult
 from app.ids import new_id
 from app.schemas import AISystemCreate, AISystemResponse, IntakeResponse
+from app.schemas.ai_system import VALID_ROLES
 from app import email_sender
 
 router = APIRouter(tags=["intake"])
@@ -22,7 +23,8 @@ logger = get_logger(__name__)
 @router.post("/intake", response_model=IntakeResponse, status_code=201, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
 async def intake_system(body: AISystemCreate, request: Request, background_tasks: BackgroundTasks) -> IntakeResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
-
+    if body.org_role and body.org_role not in VALID_ROLES:
+        raise HTTPException(422, f"Invalid org_role '{body.org_role}'")
     system_id = new_id("SYS")
     step_id = new_id("SWS")
 
@@ -38,6 +40,7 @@ async def intake_system(body: AISystemCreate, request: Request, background_tasks
         annex_iii_area=None,
         compliance=0.0,
         workflow_status="draft",
+        org_role=body.org_role or "provider",
         registration_mode="ai",
     )
 
