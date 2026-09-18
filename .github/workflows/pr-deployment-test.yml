@@ -8,6 +8,7 @@ name: PR Deployment Test
 #
 # Usage: comment "/garden-deploy" on a PR.
 
+# Trigger on push to branch left intentionally, will be deleted after merge to main
 on:
   push:
     branches:
