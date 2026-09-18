@@ -6,7 +6,9 @@ spec:
   serviceName: postgres
   replicas: 1
   updateStrategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       {{- include "ai-trust.labels" (dict "name" "postgres") | nindent 6 }}

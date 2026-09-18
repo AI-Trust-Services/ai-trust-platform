@@ -10,7 +10,9 @@ spec:
   serviceName: ollama
   replicas: 1
   updateStrategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       {{- include "ai-trust.labels" (dict "name" "ollama") | nindent 6 }}
