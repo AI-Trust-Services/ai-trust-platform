@@ -445,6 +445,10 @@ async def unlink_requirement(evidence_id: str, requirement_id: str) -> EvidenceD
             )
         )
         await _cascade_from_evidence(session, evidence_id)
+        # Also refresh the unlinked requirement — _cascade_from_evidence only
+        # touches requirements still linked after the delete.
+        await refresh_requirement_effectiveness(session, requirement_id)
+        await refresh_obligations_for_requirement(session, requirement_id)
         await session.commit()
         req_ids = await _linked_requirement_ids(session, evidence_id)
         row = await _load(session, evidence_id)

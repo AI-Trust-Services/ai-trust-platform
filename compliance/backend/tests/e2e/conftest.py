@@ -290,16 +290,12 @@ async def create_evidence(
     if requirement_ids is None:
         req = await create_requirement(client)
         requirement_ids = [req["id"]]
-    # httpx accepts a list of tuples for repeated form fields
-    form: list[tuple[str, str]] = [
-        ("title", kwargs.pop("title", "Test Evidence")),
-        ("evidence_type", kwargs.pop("evidence_type", "document")),
-    ]
-    for k, v in kwargs.items():
-        if v is not None:
-            form.append((k, str(v)))
-    for cid in requirement_ids:
-        form.append(("requirement_ids", cid))
-    r = await client.post("/v1/evidence", data=form)
+    data: dict = {
+        "title": kwargs.pop("title", "Test Evidence"),
+        "evidence_type": kwargs.pop("evidence_type", "document"),
+        **{k: str(v) for k, v in kwargs.items() if v is not None},
+        "requirement_ids": requirement_ids,
+    }
+    r = await client.post("/v1/evidence", data=data)
     assert r.status_code == 201, r.text
     return r.json()

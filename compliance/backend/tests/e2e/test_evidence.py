@@ -18,11 +18,11 @@ from tests.e2e.conftest import (
 
 async def test_create_evidence_linked_to_requirement(client: httpx.AsyncClient):
     req = await create_requirement(client)
-    r = await client.post("/v1/evidence", data=[
-        ("title", "My Evidence"),
-        ("evidence_type", "document"),
-        ("requirement_ids", req["id"]),
-    ])
+    r = await client.post("/v1/evidence", data={
+        "title": "My Evidence",
+        "evidence_type": "document",
+        "requirement_ids": [req["id"]],
+    })
     assert r.status_code == 201
     body = r.json()
     assert body["id"].startswith("EVD-")
@@ -49,11 +49,21 @@ async def test_create_evidence_404_on_missing_requirement(client: httpx.AsyncCli
 
 async def test_create_evidence_rejects_disallowed_extension(client: httpx.AsyncClient):
     req = await create_requirement(client)
+    r = await client.post("/v1/evidence", data={
+        "title": "Bad Extension",
+        "evidence_type": "document",
+        "requirement_ids": [req["id"]],
+    }, files={"file": ("malware.exe", b"BINARY", "application/octet-stream")})
     assert r.status_code == 422
 
 
 async def test_create_evidence_with_valid_file(client: httpx.AsyncClient):
     req = await create_requirement(client)
+    r = await client.post("/v1/evidence", data={
+        "title": "Valid PDF",
+        "evidence_type": "document",
+        "requirement_ids": [req["id"]],
+    }, files={"file": ("policy.pdf", b"%PDF-fake", "application/pdf")})
     assert r.status_code == 201
     body = r.json()
     assert body["file_name"] == "policy.pdf"
@@ -64,6 +74,7 @@ async def test_create_evidence_with_valid_file(client: httpx.AsyncClient):
 # GET /evidence
 # ---------------------------------------------------------------------------
 
+async def test_list_evidence_filter_by_requirement(client: httpx.AsyncClient):
     req = await create_requirement(client)
     await create_evidence(client, requirement_ids=[req["id"]])
     await create_evidence(client)
@@ -75,7 +86,9 @@ async def test_create_evidence_with_valid_file(client: httpx.AsyncClient):
 
 async def test_list_evidence_filter_by_system(client: httpx.AsyncClient):
     system = await create_system()
-    req = await create_requirement(client, system_id=system["id"])
+    ass = await create_assessment(client, system["id"])
+    obl = await create_obligation(client, ass["id"])
+    req = await create_requirement(client, obligation_id=obl["id"])
     await create_evidence(client, requirement_ids=[req["id"]])
 
     r = await client.get(f"/v1/evidence?system_id={system['id']}")
@@ -184,7 +197,14 @@ async def test_reject_evidence_demotes_obligation_from_fulfilled(client: httpx.A
 # ---------------------------------------------------------------------------
 
 async def test_download_url_returned_for_evidence_with_file(client: httpx.AsyncClient):
+    # create_evidence() sets no file — backend returns 404 when file_path is empty
     req = await create_requirement(client)
+    r = await client.post("/v1/evidence", data={
+        "title": "Downloadable",
+        "evidence_type": "document",
+        "requirement_ids": [req["id"]],
+    }, files={"file": ("report.pdf", b"%PDF-1", "application/pdf")})
+    assert r.status_code == 201
     evd_id = r.json()["id"]
     r = await client.get(f"/v1/evidence/{evd_id}/download-url")
     assert r.status_code == 200
@@ -199,7 +219,13 @@ async def test_download_url_404_for_evidence_without_file(client: httpx.AsyncCli
 
 async def test_evidence_response_does_not_expose_internal_file_path(client: httpx.AsyncClient):
     """file_path is an internal MinIO key and must not appear in list/get responses."""
+    # create_evidence() sets no file — use direct POST so file_path is populated in DB
     req = await create_requirement(client)
+    r = await client.post("/v1/evidence", data={
+        "title": "File Path Test",
+        "evidence_type": "document",
+        "requirement_ids": [req["id"]],
+    }, files={"file": ("doc.pdf", b"%PDF-1", "application/pdf")})
     assert r.status_code == 201
     body = r.json()
     assert "file_path" not in body
@@ -313,7 +339,8 @@ async def test_unlink_requirement_triggers_cascade(client: httpx.AsyncClient):
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
     req = await create_requirement(client, obligation_id=obl["id"])
-    evd = await create_evidence(client, requirement_ids=[req["id"]])
+    req2 = await create_requirement(client)  # dummy — satisfies last-link guard
+    evd = await create_evidence(client, requirement_ids=[req["id"], req2["id"]])
     await client.post(f"/v1/evidence/{evd['id']}/approve")
     assert (await client.get(f"/v1/obligations/{obl['id']}")).json()["status"] == "fulfilled"
 
