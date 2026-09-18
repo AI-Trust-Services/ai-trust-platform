@@ -28,7 +28,7 @@ from ai_trust_logging import get_logger
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.alert_rule import AlertRule
-from ai_trust_persistence.models.requirement import Requirement, requirement_obligations
+from ai_trust_persistence.models.requirement import Requirement
 from ai_trust_persistence.models.evidence import Evidence, evidence_requirements
 from ai_trust_persistence.models.obligation import Obligation
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -380,7 +380,7 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
     today = date.today()
     async with SessionLocal() as session:
         rows = (await session.execute(
-            select(Evidence.id, Evidence.title, Evidence.ai_system_id)
+            select(Evidence.id, Evidence.title)
             .where(Evidence.validity_until.is_not(None))
             .where(Evidence.validity_until < today)
             .where(Evidence.status == "approved")
@@ -389,14 +389,6 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
         if not rows:
             return []
 
-        sys_ids = [r.ai_system_id for r in rows if r.ai_system_id]
-        sys_map: dict[str, str] = {}
-        if sys_ids:
-            sys_map = {r.id: r.name for r in (await session.execute(
-                select(AISystem.id, AISystem.name).where(AISystem.id.in_(sys_ids))
-            )).all()}
-
-        # Collect all linked requirement IDs in one query before any status mutations.
         evd_ids = [r.id for r in rows]
         ctrl_links = (await session.execute(
             select(evidence_requirements.c.evidence_id, evidence_requirements.c.requirement_id)
@@ -440,34 +432,25 @@ async def eval_evidence_expired(rule: AlertRule, ch) -> list[EvalResult]:
                     ctrl.status = "planned"
                     await session.flush()
 
-                # Re-evaluate obligations linked to this requirement
-                obl_ids = (await session.execute(
-                    select(requirement_obligations.c.obligation_id)
-                    .where(requirement_obligations.c.requirement_id == cid)
-                )).scalars().all()
-                for oid in obl_ids:
+                # Re-evaluate obligation linked to this requirement
+                if ctrl.obligation_id:
                     obl = (await session.execute(
-                        select(Obligation).where(Obligation.id == oid)
+                        select(Obligation).where(Obligation.id == ctrl.obligation_id)
                     )).scalar_one_or_none()
-                    if obl is None or obl.status in ("not_applicable", "overdue"):
-                        continue
-                    ctrl_statuses = (await session.execute(
-                        select(Requirement.status)
-                        .join(requirement_obligations, requirement_obligations.c.requirement_id == Requirement.id)
-                        .where(requirement_obligations.c.obligation_id == oid)
-                    )).scalars().all()
-                    if not ctrl_statuses:
-                        obl.status = "applicable"
-                    elif all(s == "fulfilled" for s in ctrl_statuses):
-                        obl.status = "fulfilled"
-                    else:
-                        obl.status = "in_progress"
-                    await session.flush()
+                    if obl is not None and obl.status not in ("not_applicable", "overdue"):
+                        req_statuses = (await session.execute(
+                            select(Requirement.status)
+                            .where(Requirement.obligation_id == ctrl.obligation_id)
+                        )).scalars().all()
+                        if not req_statuses:
+                            obl.status = "applicable"
+                        elif all(s == "fulfilled" for s in req_statuses):
+                            obl.status = "fulfilled"
+                        else:
+                            obl.status = "in_progress"
+                        await session.flush()
 
-            sys_name = sys_map.get(evd.ai_system_id, "") if evd.ai_system_id else ""
             desc = f"Evidence expired: '{evd.title}'"
-            if sys_name:
-                desc += f" — {sys_name}"
             results.append(EvalResult(
                 triggered=True, value=1.0, description=desc,
                 entity_id=evd.id, entity_type="evidence",
@@ -485,7 +468,7 @@ async def _eval_evidence_expiring(min_days: int, max_days: int) -> list[EvalResu
 
     async with SessionLocal() as session:
         rows = (await session.execute(
-            select(Evidence.id, Evidence.title, Evidence.ai_system_id, Evidence.validity_until)
+            select(Evidence.id, Evidence.title, Evidence.validity_until)
             .where(Evidence.status == "approved")
             .where(Evidence.validity_until.is_not(None))
             .where(Evidence.validity_until >= cutoff_far)
@@ -495,20 +478,10 @@ async def _eval_evidence_expiring(min_days: int, max_days: int) -> list[EvalResu
         if not rows:
             return []
 
-        sys_ids = [r.ai_system_id for r in rows if r.ai_system_id]
-        sys_map: dict[str, str] = {}
-        if sys_ids:
-            sys_map = {r.id: r.name for r in (await session.execute(
-                select(AISystem.id, AISystem.name).where(AISystem.id.in_(sys_ids))
-            )).all()}
-
     results: list[EvalResult] = []
     for evd in rows:
         days_left = (evd.validity_until - today).days
-        sys_name = sys_map.get(evd.ai_system_id, "") if evd.ai_system_id else ""
         desc = f"Evidence expiring in {days_left} day(s): '{evd.title}'"
-        if sys_name:
-            desc += f" — {sys_name}"
         results.append(EvalResult(
             triggered=True, value=float(days_left), description=desc,
             entity_id=evd.id, entity_type="evidence",

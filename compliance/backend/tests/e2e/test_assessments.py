@@ -278,26 +278,6 @@ async def test_delete_assessment_keeps_manual_requirements(client: httpx.AsyncCl
     assert ids == [manual["id"]]
 
 
-async def test_delete_assessment_keeps_shared_requirements(client: httpx.AsyncClient):
-    # A generated requirement also linked to another assessment's obligation is kept.
-    system = await create_system(tier="minimal")
-    ass1 = await create_assessment(client, system["id"])
-    ass2 = await create_assessment(client, system["id"])
-
-    # Pick a generated requirement from ass1 and link it to an obligation of ass2.
-    requirements = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
-    obs2 = (await client.get(f"/v1/obligations?assessment_id={ass2['id']}")).json()
-    shared = requirements[0]
-    await client.post(f"/v1/requirements/{shared['id']}/link/{obs2[0]['id']}")
-
-    r = await client.delete(f"/v1/assessments/{ass1['id']}")
-    assert r.status_code == 200
-
-    # The shared requirement must survive because it still links to ass2.
-    remaining_ids = [c["id"] for c in
-                     (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()]
-    assert shared["id"] in remaining_ids
-
 
 # ---------------------------------------------------------------------------
 # POST /assessments/{id}/generate-obligations
@@ -624,14 +604,14 @@ async def test_advance_from_classification_is_idempotent_after_reopen(client: ht
     r = await client.post(f"/v1/assessments/{ass['id']}/advance-from-classification")
     assert r.status_code == 200, r.text
     obs1 = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    ctl1 = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
+    req1 = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
     assert len(obs1) > 0
 
-    # Bounce back and re-advance — obligations/controls must NOT be duplicated.
+    # Bounce back and re-advance — obligations/requirements must NOT be duplicated.
     await client.post(f"/v1/assessments/{ass['id']}/reopen")
     r = await client.post(f"/v1/assessments/{ass['id']}/advance-from-classification")
     assert r.status_code == 200, r.text
     obs2 = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    ctl2 = (await client.get(f"/v1/controls?ai_system_id={system['id']}")).json()
+    req2 = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
     assert len(obs2) == len(obs1)
-    assert len(ctl2) == len(ctl1)
+    assert len(req2) == len(req1)

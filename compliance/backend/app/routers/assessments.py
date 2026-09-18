@@ -4,7 +4,6 @@ from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_authorization import require_permission
@@ -23,7 +22,6 @@ from ai_trust_persistence.models import (
     Framework,
     Obligation,
     Requirement,
-    requirement_obligations,
 )
 from app.cascade import refresh_assessment_score, refresh_obligation, sync_system_compliance
 from app.requirement_templates import requirements_for
@@ -221,7 +219,7 @@ async def _generate_requirements_in_session(
 
     For each obligation, `requirements_for(article_ref, tier)` yields the tier-scoped
     requirement templates; each becomes a Requirement row (requirement_ref = "{article_ref}:{slug}")
-    linked to the obligation via requirement_obligations. Owner is carried forward from
+    linked to the obligation via obligation_id FK (1:N). Owner is carried forward from
     the most recent prior requirement with the same requirement_ref (see _prior_owners_by_ref).
 
     After linking, each touched obligation is refreshed so its status reflects the
@@ -246,6 +244,8 @@ async def _generate_requirements_in_session(
             requirement_ref = f"{obl.article_ref}:{t['slug']}"
             requirement = Requirement(
                 id=new_id("REQ"),
+                obligation_id=obl.id,
+                assessment_id=obl.assessment_id,
                 ai_system_id=ai_system_id,
                 requirement_ref=requirement_ref,
                 title=t["title"],
@@ -256,14 +256,7 @@ async def _generate_requirements_in_session(
                 owner=prior_owner_by_ref.get(requirement_ref, ""),
             )
             session.add(requirement)
-            await session.flush()  # assign requirement.id before linking
-            await session.execute(
-                pg_insert(requirement_obligations)
-                .values(requirement_id=requirement.id, obligation_id=obl.id)
-                .on_conflict_do_nothing()
-            )
             created.append(requirement)
-        # Recompute the obligation's status now that requirements are linked.
         await session.flush()
         await refresh_obligation(session, obl.id)
 
@@ -273,18 +266,10 @@ async def _generate_requirements_in_session(
 async def _prior_owners_by_ref(
     session: AsyncSession, ai_system_id: str
 ) -> dict[str, str]:
-    """Map requirement_ref -> owner from the most recent prior requirements for this system.
-
-    Requirements carry no assessment_id, so "prior requirements" are those linked (via
-    requirement_obligations) to obligations of the same system. We keep the owner from
-    the most recently-created requirement per requirement_ref, ignoring blank owners so an
-    unassigned prior requirement does not shadow an assignment from an earlier cycle.
-    """
+    """Map requirement_ref -> owner from the most recent prior requirements for this system."""
     rows = (await session.execute(
         select(Requirement.requirement_ref, Requirement.owner)
-        .join(requirement_obligations, requirement_obligations.c.requirement_id == Requirement.id)
-        .join(Obligation, Obligation.id == requirement_obligations.c.obligation_id)
-        .where(Obligation.ai_system_id == ai_system_id)
+        .where(Requirement.ai_system_id == ai_system_id)
         .where(Requirement.requirement_ref.is_not(None))
         .where(Requirement.owner != "")
         .order_by(Requirement.created_at.asc())
@@ -442,38 +427,18 @@ async def delete_assessment(assessment_id: str, request: Request) -> dict:
 
 
 async def _delete_generated_requirements(session: AsyncSession, assessment_id: str) -> int:
-    """Delete requirements that were auto-generated for this assessment's obligations.
+    """Delete auto-generated requirements for this assessment.
 
-    Scoped so manual and shared requirements are never removed: a requirement is deleted
-    only if it is auto-generated (requirement_ref is not null) AND every obligation it
-    links to belongs to this assessment (not shared with another assessment). Runs
-    before the assessment is deleted, while its obligations and links still exist.
-    Returns the number of requirements deleted.
+    Auto-generated = requirement_ref is not null. With 1:N, a requirement belongs to
+    exactly one assessment, so no shared-requirement check is needed.
     """
-    # Candidate requirements: auto-generated and linked to an obligation of this assessment.
-    candidates = (await session.execute(
+    to_delete = (await session.execute(
         select(Requirement.id)
-        .join(requirement_obligations, requirement_obligations.c.requirement_id == Requirement.id)
-        .join(Obligation, Obligation.id == requirement_obligations.c.obligation_id)
-        .where(Obligation.assessment_id == assessment_id)
+        .where(Requirement.assessment_id == assessment_id)
         .where(Requirement.requirement_ref.is_not(None))
-        .distinct()
     )).scalars().all()
-    if not candidates:
-        return 0
-
-    # Keep any candidate that is also linked to an obligation outside this assessment.
-    shared = set((await session.execute(
-        select(requirement_obligations.c.requirement_id)
-        .join(Obligation, Obligation.id == requirement_obligations.c.obligation_id)
-        .where(requirement_obligations.c.requirement_id.in_(candidates))
-        .where(Obligation.assessment_id != assessment_id)
-    )).scalars().all())
-
-    to_delete = [rid for rid in candidates if rid not in shared]
     if not to_delete:
         return 0
-
     await session.execute(Requirement.__table__.delete().where(Requirement.id.in_(to_delete)))
     return len(to_delete)
 
@@ -540,8 +505,8 @@ async def generate_requirements(assessment_id: str) -> GenerateRequirementsRespo
 
         # Idempotent: skip any obligation that already has >=1 linked requirement.
         linked_obl_ids = set((await session.execute(
-            select(requirement_obligations.c.obligation_id).where(
-                requirement_obligations.c.obligation_id.in_([o.id for o in obligations])
+            select(Requirement.obligation_id).where(
+                Requirement.obligation_id.in_([o.id for o in obligations])
             )
         )).scalars().all())
         targets = [o for o in obligations if o.id not in linked_obl_ids]
