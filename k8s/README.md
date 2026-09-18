@@ -96,7 +96,7 @@ no direct Kubernetes equivalent, and none of the app images were changed to add 
 
 - Deployments that need another **service** to be reachable first get a small `busybox`
   initContainer that polls it (TCP or HTTP) until it responds.
-- Deployments/Jobs that need a one-shot **Job** to have finished first get a `bitnami/kubectl`
+- Deployments/Jobs that need a one-shot **Job** to have finished first get a `rancher/kubectl`
   initContainer running `kubectl wait --for=condition=complete job/<name>`, using the `job-waiter`
   ServiceAccount created by `bootstrap.sh`.
 
@@ -336,13 +336,11 @@ All other config lives in `k8s/env/<cluster>/.env` (committed). No per-cluster G
 
 ## Known limitations / gaps as of local-dev scope (same as docker-compose today)
 
-- Single-node only: `openfga-config`, `postgres-data`, `clickhouse-data`, and `minio-data` are all
-  `ReadWriteOnce` PVCs on kind's default local-path-provisioner - fine on a single schedulable node
-  (kind's default), but won't work if you add worker nodes to `kind-config.yaml`.
+- Single-node only for kind: `postgres-data`, `clickhouse-data`, `minio-data`, and `ollama-data`
+  are `ReadWriteOnce` PVCs on kind's default local-path-provisioner — fine on a single schedulable
+  node (kind's default), but won't work if you add worker nodes to `kind-config.yaml`.
+  On Gardener (multi-node), all four are managed as **StatefulSet `volumeClaimTemplates`** so the
+  CSI driver handles detach/reattach when a pod reschedules to a different node.
 - No resource `requests`/`limits` (docker-compose doesn't set any either).
 - No HTTPS / `cookie-secure=true` - same as docker-compose's local-dev oauth2-proxy config.
-- mino scaling: handling multiple volumes - based on that decide how to makr those PVC.
-- scaling postgres - define the configuration of volumes.
-- ReadWriteOnce access mode:can not scale the deployment that mounts such volume.
-- horizontal pod autoscalers.
-- NodePort to replace by ClusterIP. ✓ Done — ClusterIP is now the default for all services; `values-kind.yaml` opt-in for local dev.
+- No horizontal pod autoscalers.

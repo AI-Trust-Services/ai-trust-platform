@@ -24,6 +24,10 @@ permissions:
   packages: write
   actions: write
 
+concurrency:
+  group: ${{ github.actor }}
+  cancel-in-progress: true
+
 jobs:
   dispatch:
     name: Parse and authorize /garden-deploy
