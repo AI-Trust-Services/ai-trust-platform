@@ -8,13 +8,14 @@ name: PR Deployment Test
 #
 # Usage: comment "/garden-deploy" on a PR.
 
-# Trigger on push to branch left intentionally, will be deleted after merge to main
 on:
-  push:
-    branches:
-      - 193-pre-merge-check-integration-test-deployment
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to deploy (required for manual trigger)"
+        required: true
 
 permissions:
   contents: read
@@ -34,7 +35,7 @@ jobs:
     name: Parse and authorize /garden-deploy
     runs-on: ubuntu-latest
     if: |
-      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
       (github.event.issue.pull_request != null &&
       startsWith(github.event.comment.body, '/garden-deploy'))
     outputs:
@@ -50,13 +51,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            PR_DATA=$(gh api repos/${{ github.repository }}/pulls \
-              --jq "[.[] | select(.head.ref == \"${{ github.ref_name }}\")][0]")
-            PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number')
-            PR_SHA="${{ github.sha }}"
-            PR_BRANCH="${{ github.ref_name }}"
-            PR_AUTHOR="${{ github.actor }}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            PR_NUMBER="${{ inputs.pr_number }}"
+            PR_DATA=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER})
+            PR_SHA=$(echo "$PR_DATA" | jq -r '.head.sha')
+            PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
+            PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
           else
             PR_NUMBER="${{ github.event.issue.number }}"
             PR_DATA=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER})
@@ -81,9 +81,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "authorized=true" >> "$GITHUB_OUTPUT"
-            echo "Push event — skipping auth check."
+            echo "Manual workflow_dispatch by ${{ github.actor }} — skipping auth check."
             exit 0
           fi
           ACTOR="${{ github.event.comment.user.login }}"
