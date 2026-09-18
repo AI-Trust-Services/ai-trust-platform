@@ -165,7 +165,7 @@ jobs:
         run: |
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
-            --body "✅ Test deployment successful: \`feature:${PR_SHA::12}\` deployed to \`${{ needs.dispatch.outputs.pr_author_lower }}\`."
+            --body "✅ Test deployment successful: \`feature:${PR_SHA::12}\` deployed to namespace \`${{ needs.dispatch.outputs.pr_author_lower }}\` on \`ai-trust-test\`."
 
           gh api \
             --method POST \
