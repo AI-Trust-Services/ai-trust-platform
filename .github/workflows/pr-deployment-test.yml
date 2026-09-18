@@ -90,12 +90,6 @@ jobs:
           PR_AUTHOR="${{ steps.pr.outputs.pr_author }}"
           ORG=$(echo "${{ github.repository }}" | cut -d/ -f1)
 
-          if [[ "$ACTOR" == "$PR_AUTHOR" ]]; then
-            echo "authorized=true" >> "$GITHUB_OUTPUT"
-            echo "Actor ${ACTOR} is the PR author — authorized."
-            exit 0
-          fi
-
           HTTP_STATUS=$(gh api "orgs/${ORG}/members/${ACTOR}" \
             --silent --include 2>&1 | head -1 | grep -oE '[0-9]{3}' || echo "404")
           if [[ "$HTTP_STATUS" == "204" ]]; then
