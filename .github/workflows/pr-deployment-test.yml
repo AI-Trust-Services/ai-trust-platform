@@ -172,9 +172,7 @@ jobs:
           APP_URL="https://${PR_AUTHOR_LOWER}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
-            --body "✅ Test deployment successful: \`feature:${PR_SHA::12}\` deployed to namespace \`${PR_AUTHOR_LOWER}\` on \`ai-trust-test\`.
-
-🔗 ${APP_URL}"
+            --body "✅ Test deployment successful: \`feature:${PR_SHA::12}\` deployed to namespace \`${PR_AUTHOR_LOWER}\` on \`ai-trust-test\`."$'\n\n'"🔗 ${APP_URL}"
 
           gh api \
             --method POST \
