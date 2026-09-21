@@ -162,10 +162,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
           PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
+          PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
         run: |
+          APP_URL="https://${PR_AUTHOR_LOWER}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
-            --body "✅ Test deployment successful: \`feature:${PR_SHA::12}\` deployed to namespace \`${{ needs.dispatch.outputs.pr_author_lower }}\` on \`ai-trust-test\`."
+            --body "✅ Test deployment successful: \`feature:${PR_SHA::12}\` deployed to namespace \`${PR_AUTHOR_LOWER}\` on \`ai-trust-test\`.
+
+🔗 ${APP_URL}"
 
           gh api \
             --method POST \
