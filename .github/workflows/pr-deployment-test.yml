@@ -16,11 +16,6 @@ on:
       pr_number:
         description: "PR number to deploy (required for manual trigger)"
         required: true
-  # Intentionally left
-  # Remove after merging to main (workflow_dispatch will work from any ref once file is on main).
-  push:
-    branches:
-      - 193-pre-merge-check-integration-test-deployment
 
 permissions:
   contents: read
