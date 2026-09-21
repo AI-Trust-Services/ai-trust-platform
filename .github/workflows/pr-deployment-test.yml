@@ -16,7 +16,7 @@ on:
       pr_number:
         description: "PR number to deploy (required for manual trigger)"
         required: true
-  # Temporary push trigger — allows workflow_dispatch from this feature branch before merge to main.
+  # Intentionally left
   # Remove after merging to main (workflow_dispatch will work from any ref once file is on main).
   push:
     branches:
