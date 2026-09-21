@@ -46,3 +46,9 @@ class GeneralSettingsResponse(BaseModel):
 class GeneralSettingsUpdate(BaseModel):
     platform_name: str | None = None
     support_email: str | None = None
+
+
+class AdminStatsResponse(BaseModel):
+    user_count: int
+    role_count: int
+    mail_configured: bool

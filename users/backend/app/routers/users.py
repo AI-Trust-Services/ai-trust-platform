@@ -4,7 +4,7 @@ import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import select, func as sa_func
 
 from app.keycloak import admin_client, current_realm
 from ai_trust_logging import get_logger
@@ -333,3 +333,22 @@ async def email_lookup(username: str = Body(..., embed=True)) -> dict:
     if not users:
         return {"email": None}
     return {"email": users[0].get("email") or None}
+
+
+@internal_router.get("/stats")
+async def internal_stats() -> dict:
+    """User and role counts for the admin dashboard — no auth, internal only."""
+    with admin_client(current_realm()) as kc:
+        count_resp = kc.get("/users/count")
+        count_resp.raise_for_status()
+        sa_count_resp = kc.get("/users/count", params={"search": "service-account-"})
+        sa_count_resp.raise_for_status()
+        user_count = max(0, count_resp.json() - sa_count_resp.json())
+
+    async with SessionLocal() as session:
+        custom_count = await session.scalar(sa_func.count(CustomRole.id)) or 0
+
+    return {
+        "user_count": user_count,
+        "role_count": len(BUILT_IN_ROLES) + custom_count,
+    }
