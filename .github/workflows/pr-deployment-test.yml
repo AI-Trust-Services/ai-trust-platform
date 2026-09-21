@@ -177,6 +177,32 @@ jobs:
             -f description="Deploy test passed (feature:${PR_SHA::12})" \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
+      - name: Post app URL to linked issues
+        if: needs.deploy.result == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
+          PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
+          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
+        run: |
+          APP_URL="https://${PR_AUTHOR_LOWER}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          ISSUES=$(gh api graphql -f query='
+            {
+              repository(owner: "${{ github.repository_owner }}", name: "${{ github.event.repository.name }}") {
+                pullRequest(number: '"${PR_NUMBER}"') {
+                  closingIssuesReferences(first: 10) {
+                    nodes { number }
+                  }
+                }
+              }
+            }' --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[].number')
+          for ISSUE in $ISSUES; do
+            gh issue comment "${ISSUE}" \
+              --repo "${{ github.repository }}" \
+              --body "🚀 Test deployment for PR #${PR_NUMBER} (\`feature:${PR_SHA::12}\`) is live:"$'\n\n'"🔗 ${APP_URL}"
+            echo "Posted to issue #${ISSUE}"
+          done
+
       - name: Post failure comment and status
         if: needs.deploy.result != 'success'
         env:
