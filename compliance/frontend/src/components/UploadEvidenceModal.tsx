@@ -132,7 +132,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
   async function handleSubmit() {
     if (!form.title.trim()) { showToast("Title is required", true); return; }
     if (selectedControls.size === 0 && selectedObligations.size === 0 && !form.ai_system_id && !form.assessment_id) {
-      showToast("Link to at least one control, obligation, AI system, or assessment", true); return;
+      showToast("Link to at least one requirement, obligation, AI system, or assessment", true); return;
     }
     setLoading(true);
     try {
@@ -236,17 +236,17 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
 
             {/* Right column: linking */}
             <div className="flex flex-col gap-4">
-              {/* Controls checklist */}
+              {/* Requirements checklist */}
               <div className="flex flex-col gap-1.5">
                 <Label className="flex items-center gap-1.5">
-                  Link to Controls
+                  Link to Requirements
                   {selectedControls.size > 0 && <Badge variant="secondary" className="rounded-full font-medium">{selectedControls.size} selected</Badge>}
                 </Label>
                 <div className="max-h-40 overflow-y-auto rounded-md border border-border">
                   {!form.ai_system_id ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground">Select an AI system to see its controls</div>
+                    <div className="p-4 text-center text-xs text-muted-foreground">Select an AI system to see its requirements</div>
                   ) : controls.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground">No controls for this system</div>
+                    <div className="p-4 text-center text-xs text-muted-foreground">No requirements for this system</div>
                   ) : controls.map((c) => (
                     <label key={c.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
                       <Checkbox checked={selectedControls.has(c.id)} onCheckedChange={() => toggleControl(c.id)} />

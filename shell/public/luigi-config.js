@@ -160,7 +160,7 @@
       },
       {
         pathSegment: "controls",
-        label: "Controls",
+        label: "Requirements",
         icon: "shield",
         viewUrl: base + "/compliance/#/controls",
         navigationContext: "controls",
@@ -1072,7 +1072,7 @@
             { type: 'nav', icon: '📊', label: 'Overview Dashboard', description: 'Compliance posture overview', path: '#/home/overview' },
             { type: 'nav', icon: '📝', label: 'Assessments', description: 'Compliance assessments', path: '#/home/assessments', segment: 'assessments' },
             { type: 'nav', icon: '✅', label: 'Obligations', description: 'Regulatory obligations', path: '#/home/obligations', segment: 'obligations' },
-            { type: 'nav', icon: '🛡️', label: 'Controls', description: 'Security and compliance controls', path: '#/home/controls', segment: 'controls' },
+            { type: 'nav', icon: '🛡️', label: 'Requirements', description: 'Technical and organizational requirements', path: '#/home/controls', segment: 'controls' },
             { type: 'nav', icon: '📎', label: 'Evidence', description: 'Compliance evidence files', path: '#/home/evidence', segment: 'evidence' },
             { type: 'divider', label: 'Operations' },
             { type: 'nav', icon: '🔍', label: 'Trace Explorer', description: 'Decision trace analyzer', path: '#/home/decision-trace-analyzer', segment: 'decision-trace-analyzer' },

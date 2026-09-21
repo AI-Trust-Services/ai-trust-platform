@@ -1758,7 +1758,7 @@ export default function SystemWorkspace() {
                 <Tabs defaultValue="obligations" className="space-y-4">
                   <TabsList>
                     <TabsTrigger value="obligations">Obligations</TabsTrigger>
-                    <TabsTrigger value="controls">Controls</TabsTrigger>
+                    <TabsTrigger value="controls">Requirements</TabsTrigger>
                   </TabsList>
                   <TabsContent value="obligations">
                     <ObligationsTab systemId={system.id} systemName={system.name} />

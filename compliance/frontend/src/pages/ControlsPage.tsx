@@ -27,7 +27,7 @@ const STATUS_OPTIONS = [
   "under_review", "effective", "ineffective", "deactivated",
 ] as const;
 // Radix Select disallows an empty-string item value — sentinel for "All". Note
-// "__org__" is a real filter value (org-wide controls), distinct from this.
+// "__org__" is a real filter value (org-wide requirements), distinct from this.
 const ALL = "__all__";
 
 export default function ControlsPage() {
@@ -119,7 +119,7 @@ export default function ControlsPage() {
 
   const categories = useMemo(() => [...new Set(controls.map((c) => c.category))].sort(), [controls]);
   const systemOptions = useMemo(() => {
-    // Only systems that have controls; ordered latest-first (API returns systems
+    // Only systems that have requirements; ordered latest-first (API returns systems
     // ordered by created_at desc, so preserve that order rather than re-sorting).
     const withControls = new Set<string>();
     controls.forEach((c) => { if (c.ai_system_id) withControls.add(c.ai_system_id); });
@@ -151,24 +151,24 @@ export default function ControlsPage() {
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
             <ShieldCheck className="size-5" />
           </span>
-          <h1 className="text-lg font-semibold text-foreground">Controls</h1>
+          <h1 className="text-lg font-semibold text-foreground">Requirements</h1>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load}><RotateCw /> Refresh</Button>
           <Button size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-            onClick={() => setCreateOpen(true)}><Plus /> New Control</Button>
+            onClick={() => setCreateOpen(true)}><Plus /> New Requirement</Button>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-3 px-5 pt-4">
-        <KpiCard label="Total" value={kpis.total} icon={ShieldCheck} color="#71717a" sub="all controls" />
-        <KpiCard label="Effective" value={kpis.effective} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.effective / kpis.total * 100) : 0}% of total`} />
-        <KpiCard label="Implemented" value={kpis.implemented} icon={Layers} color="#1147E9" sub="ready for review" />
-        <KpiCard label="Not Started" value={kpis.notStarted} icon={Clock} color="#e05c00" sub="pending action" />
+        <KpiCard label="Total" value={kpis.total} icon={ShieldCheck} color="#71717a" sub="all requirements" />
+        <KpiCard label="Fulfilled" value={kpis.effective} icon={CheckCircle2} color="#16a34a" sub={`${kpis.total ? Math.round(kpis.effective / kpis.total * 100) : 0}% of total`} />
+        <KpiCard label="Under Review" value={kpis.implemented} icon={Layers} color="#1147E9" sub="ready for review" />
+        <KpiCard label="Open" value={kpis.notStarted} icon={Clock} color="#e05c00" sub="pending action" />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-5 pt-3">
-        <Input className="max-w-xs" placeholder="Search controls…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Input className="max-w-xs" placeholder="Search requirements…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <Select value={statusFilter || ALL} onValueChange={(v) => setStatusFilter(v === ALL ? "" : v)}>
           <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -210,7 +210,7 @@ export default function ControlsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Control</TableHead>
+                <TableHead>Requirement</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>AI System</TableHead>
                 <TableHead>Owner</TableHead>
@@ -222,7 +222,7 @@ export default function ControlsPage() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No controls yet.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No requirements yet.</TableCell></TableRow>
               ) : paged.map((c) => (
                 <TableRow key={c.id} data-state={selected === c.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(c)}>
                   <TableCell><div className="font-medium text-foreground">{c.title}</div><div className="text-xs text-muted-foreground">{c.id}</div></TableCell>
@@ -243,7 +243,7 @@ export default function ControlsPage() {
                         </SelectContent>
                       </Select>
                       <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"
-                        disabled={!mayWrite} title={mayWrite ? "Delete this control" : noWriteTitle}
+                        disabled={!mayWrite} title={mayWrite ? "Delete this requirement" : noWriteTitle}
                         onClick={async () => {
                           if (!confirm(`Delete "${c.title}"?`)) return;
                           try { await api.deleteControl(c.id); showToast("Deleted"); load(); closePanel(); }

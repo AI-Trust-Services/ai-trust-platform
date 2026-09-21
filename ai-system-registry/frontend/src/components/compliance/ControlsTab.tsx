@@ -1,6 +1,6 @@
 /**
- * ControlsTab — Embedded controls view for SystemWorkspace.
- * Displays controls filtered by the current AI system.
+ * ControlsTab — Embedded requirements view for SystemWorkspace.
+ * Displays requirements (controls) filtered by the current AI system.
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -47,7 +47,7 @@ export default function ControlsTab({ systemId, systemName }: ControlsTabProps) 
       const ctl = await api.compliance.getControls({ ai_system_id: systemId });
       setControls(ctl);
     } catch (e) {
-      console.error("Failed to load controls:", e);
+      console.error("Failed to load requirements:", e);
     } finally {
       setLoading(false);
     }
@@ -66,7 +66,7 @@ export default function ControlsTab({ systemId, systemName }: ControlsTabProps) 
       setDetailObligations(obligations);
       setDetailEvidence(evidence);
     } catch (e) {
-      console.error("Failed to load control detail:", e);
+      console.error("Failed to load requirement detail:", e);
     }
   }
 
@@ -111,8 +111,8 @@ export default function ControlsTab({ systemId, systemName }: ControlsTabProps) 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Controls</h2>
-          <p className="text-sm text-muted-foreground">Security and compliance controls for {systemName}</p>
+          <h2 className="text-lg font-semibold">Requirements</h2>
+          <p className="text-sm text-muted-foreground">Technical and organizational requirements for {systemName}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load}>
@@ -144,7 +144,7 @@ export default function ControlsTab({ systemId, systemName }: ControlsTabProps) 
             </div>
             <div>
               <p className="text-2xl font-semibold">{kpis.effective}</p>
-              <p className="text-xs text-muted-foreground">Effective</p>
+              <p className="text-xs text-muted-foreground">Fulfilled</p>
             </div>
           </div>
         </Card>
@@ -155,7 +155,7 @@ export default function ControlsTab({ systemId, systemName }: ControlsTabProps) 
             </div>
             <div>
               <p className="text-2xl font-semibold">{kpis.implemented}</p>
-              <p className="text-xs text-muted-foreground">Implemented</p>
+              <p className="text-xs text-muted-foreground">Under Review</p>
             </div>
           </div>
         </Card>
@@ -166,7 +166,7 @@ export default function ControlsTab({ systemId, systemName }: ControlsTabProps) 
             </div>
             <div>
               <p className="text-2xl font-semibold">{kpis.notStarted}</p>
-              <p className="text-xs text-muted-foreground">Not Started</p>
+              <p className="text-xs text-muted-foreground">Open</p>
             </div>
           </div>
         </Card>
@@ -176,7 +176,7 @@ export default function ControlsTab({ systemId, systemName }: ControlsTabProps) 
       <div className="flex items-center gap-2">
         <Input
           className="max-w-xs"
-          placeholder="Search controls…"
+          placeholder="Search requirements…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -206,7 +206,7 @@ export default function ControlsTab({ systemId, systemName }: ControlsTabProps) 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Control</TableHead>
+              <TableHead>Requirement</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Owner</TableHead>
               <TableHead>Status</TableHead>
@@ -220,8 +220,8 @@ export default function ControlsTab({ systemId, systemName }: ControlsTabProps) 
               <TableRow>
                 <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                   {controls.length === 0
-                    ? "No controls yet. Generate them from an assessment."
-                    : "No controls match your filters."}
+                    ? "No requirements yet. Generate them from an assessment."
+                    : "No requirements match your filters."}
                 </TableCell>
               </TableRow>
             ) : filtered.map((c) => (
