@@ -218,6 +218,7 @@ components:
     rootPath: /api/admin
     extraEnv:
       OPENFGA_URL: http://openfga:8080
-    dependsOnJobs: [db-migrate, openfga-provision]
+      MINIO_ENDPOINT: minio:9000
+    dependsOnJobs: [db-migrate, minio-init, openfga-provision]
     dependsOnServices: []
     openfgaConfig: true

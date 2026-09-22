@@ -153,6 +153,8 @@ services:
       - --pass-authorization-header=true
       - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout?id_token_hint={id_token}
       - --upstream-timeout=300s
+      # Public branding endpoints — no auth required for shell to fetch branding at startup
+      - --skip-auth-route=^/api/admin/v1/branding/public
     depends_on:
       keycloak-provision:
         condition: service_completed_successfully
@@ -345,6 +347,14 @@ services:
       ALLOWED_ORIGINS: "http://localhost:8080"
       ROOT_PATH: "/api/admin"
       OPENFGA_URL: http://openfga:8080
+      USERS_BACKEND_URL: http://users-backend:8008
+      # MinIO for branding assets
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_SECURE: ${MINIO_SECURE}
+      MINIO_REGION: ${MINIO_REGION}
       # Seeds the platform_settings row on first startup only; DB is source of truth after that.
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
@@ -359,6 +369,8 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
+      minio:
+        condition: service_healthy
       openfga-provision:
         condition: service_completed_successfully
     healthcheck:
@@ -634,7 +646,8 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
       mc mb --ignore-existing local/clickhouse &&
-      mc mb --ignore-existing local/evidence-files
+      mc mb --ignore-existing local/evidence-files &&
+      mc mb --ignore-existing local/branding-assets
       "
     restart: on-failure
 

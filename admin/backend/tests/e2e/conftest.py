@@ -27,6 +27,13 @@ os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:8080")
 os.environ.setdefault("OPENFGA_URL", "http://openfga:8080")
 os.environ.setdefault("OPENFGA_STORE_ID", "test-store-id")
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
+# MinIO env vars for branding storage
+os.environ.setdefault("MINIO_ENDPOINT", "minio:9000")
+os.environ.setdefault("MINIO_PUBLIC_ENDPOINT", "localhost:9000")
+os.environ.setdefault("MINIO_ROOT_USER", "minioadmin")
+os.environ.setdefault("MINIO_ROOT_PASSWORD", "minioadmin")
+os.environ.setdefault("MINIO_SECURE", "false")
+os.environ.setdefault("MINIO_REGION", "us-east-1")
 # SMTP env vars used by startup seed
 os.environ.setdefault("SMTP_HOST", "mailpit")
 os.environ.setdefault("SMTP_PORT", "1025")
@@ -54,6 +61,29 @@ def _default_settings():
     row.smtp_from_name = "AI Trust Platform"
     row.smtp_ssl = False
     row.smtp_starttls = False
+    # Branding - published values
+    row.org_name = "AI Trust"
+    row.logo_horizontal_light = None
+    row.logo_horizontal_dark = None
+    row.logo_icon = None
+    row.favicon = None
+    row.primary_color = None
+    row.secondary_color = None
+    row.accent_color = None
+    row.warning_color = None
+    # Branding - draft values
+    row.org_name_draft = None
+    row.logo_horizontal_light_draft = None
+    row.logo_horizontal_dark_draft = None
+    row.logo_icon_draft = None
+    row.favicon_draft = None
+    row.primary_color_draft = None
+    row.secondary_color_draft = None
+    row.accent_color_draft = None
+    row.warning_color_draft = None
+    # Branding publish metadata
+    row.branding_published_at = None
+    row.branding_published_by = None
     return row
 
 

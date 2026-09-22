@@ -3,6 +3,7 @@ import { Outlet } from "react-router";
 import { Loader2 } from "lucide-react";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { useTheme } from './hooks/useTheme';
+import { useBranding } from './hooks/useBranding';
 import { HEALTH_URL } from "./api/client";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,7 @@ export default function App() {
 
   useLuigiInit(() => {});
   useTheme();
+  useBranding();
 
   const checkHealth = useCallback(async () => {
     if (healthTimer.current) clearTimeout(healthTimer.current);

@@ -7,11 +7,18 @@
   let permissions = [];
   let currentUser = { username: "", firstName: "", lastName: "" };
   let platformName = "AI Trust";
+  let branding = null;
+
+  // Check if we're in preview mode (draft branding for admin preview)
+  const urlParams = new URLSearchParams(window.location.search);
+  const isPreview = urlParams.get('preview') === 'true';
+
   try {
-    const [permRes, meRes, settingsRes] = await Promise.all([
+    const [permRes, meRes, settingsRes, brandingRes] = await Promise.all([
       fetch("/api/users/v1/me/permissions", { cache: "no-store" }),
       fetch("/api/users/v1/me", { cache: "no-store" }),
       fetch("/api/admin/v1/settings", { cache: "no-store" }),
+      fetch(`/api/admin/v1/branding/public${isPreview ? '?preview=true' : ''}`, { cache: "no-store" }),
     ]);
     if (permRes.ok) {
       const data = await permRes.json();
@@ -23,6 +30,13 @@
     if (settingsRes.ok) {
       const s = await settingsRes.json();
       if (s.platform_name) platformName = s.platform_name;
+    }
+    if (brandingRes.ok) {
+      branding = await brandingRes.json();
+      // Use org_name from branding if available
+      if (branding.org_name) platformName = branding.org_name;
+      // Store branding in localStorage for MFEs to pick up
+      localStorage.setItem('trust-platform-branding', JSON.stringify(branding));
     }
   } catch (e) {
     permissions = [];
@@ -47,6 +61,7 @@
     "admin-home": ["iam:manage"],
     "mail-service": ["iam:manage"],
     "admin-settings": ["iam:manage"],
+    "branding": ["iam:manage"],
   };
   const canSee = (seg) =>
     !PAGE_PERMISSIONS[seg] || PAGE_PERMISSIONS[seg].some((p) => permissions.includes(p));
@@ -171,6 +186,14 @@
         navigationContext: "admin-settings",
         viewGroup: "admin",
       },
+      {
+        pathSegment: "branding",
+        label: "Branding",
+        icon: "palette",
+        viewUrl: "/admin/#/branding",
+        navigationContext: "branding",
+        viewGroup: "admin",
+      },
   ].filter((node) => canSee(node.pathSegment));
 
   Luigi.setConfig({
@@ -219,16 +242,112 @@
   lifecycleHooks: {
     luigiAfterInit: () => {
       document.title = platformName;
+
+      // Apply custom favicon if branding has one
+      if (branding?.favicon) {
+        const link = document.querySelector("link[rel*='icon']") || document.createElement('link');
+        link.type = 'image/x-icon';
+        link.rel = 'shortcut icon';
+        link.href = `/api/admin/v1/branding/public/asset/${branding.favicon}`;
+        document.head.appendChild(link);
+      }
+
+      // Apply custom branding colors as CSS variables
+      // This block runs BEFORE the main styles are added, setting CSS variables
+      // that the main styles will reference
+      const brandingVars = {};
+      const brandingVarsDark = {};
+      if (branding) {
+        // Brand colors (light mode)
+        if (branding.primary_color) {
+          brandingVars['--brand-primary'] = branding.primary_color;
+          brandingVars['--primary'] = branding.primary_color;
+          brandingVars['--brand'] = branding.primary_color;
+        }
+        if (branding.secondary_color) {
+          brandingVars['--secondary'] = branding.secondary_color;
+        }
+        if (branding.accent_color) {
+          brandingVars['--accent'] = branding.accent_color;
+        }
+        if (branding.warning_color) {
+          brandingVars['--warning'] = branding.warning_color;
+        }
+        // Brand colors (dark mode)
+        if (branding.primary_color_dark) {
+          brandingVarsDark['--primary'] = branding.primary_color_dark;
+          brandingVarsDark['--brand'] = branding.primary_color_dark;
+        }
+        if (branding.secondary_color_dark) {
+          brandingVarsDark['--secondary'] = branding.secondary_color_dark;
+        }
+        if (branding.accent_color_dark) {
+          brandingVarsDark['--accent'] = branding.accent_color_dark;
+        }
+        if (branding.warning_color_dark) {
+          brandingVarsDark['--warning'] = branding.warning_color_dark;
+        }
+        // Shell colors (light mode)
+        if (branding.sidebar_bg) {
+          brandingVars['--sidebar-bg'] = branding.sidebar_bg;
+        }
+        if (branding.header_bg) {
+          brandingVars['--header-bg'] = branding.header_bg;
+        }
+        // Shell colors (dark mode)
+        if (branding.sidebar_bg_dark) {
+          brandingVarsDark['--sidebar-bg'] = branding.sidebar_bg_dark;
+        }
+        if (branding.header_bg_dark) {
+          brandingVarsDark['--header-bg'] = branding.header_bg_dark;
+        }
+        // UI element colors (light mode)
+        if (branding.button_bg) {
+          brandingVars['--button-bg'] = branding.button_bg;
+        }
+        if (branding.button_text) {
+          brandingVars['--button-text'] = branding.button_text;
+        }
+        if (branding.table_header_bg) {
+          brandingVars['--table-header-bg'] = branding.table_header_bg;
+        }
+        if (branding.table_border) {
+          brandingVars['--table-border'] = branding.table_border;
+        }
+        // UI element colors (dark mode)
+        if (branding.button_bg_dark) {
+          brandingVarsDark['--button-bg'] = branding.button_bg_dark;
+        }
+        if (branding.button_text_dark) {
+          brandingVarsDark['--button-text'] = branding.button_text_dark;
+        }
+        if (branding.table_header_bg_dark) {
+          brandingVarsDark['--table-header-bg'] = branding.table_header_bg_dark;
+        }
+        if (branding.table_border_dark) {
+          brandingVarsDark['--table-border'] = branding.table_border_dark;
+        }
+      }
+
+      // Default values (used when branding is not set)
+      const sidebarBg = brandingVars['--sidebar-bg'] || '#0f172a';
+      const headerBg = brandingVars['--header-bg'] || '#ffffff';
+      // Dark mode defaults - use custom dark values or fall back to light values or defaults
+      const sidebarBgDark = brandingVarsDark['--sidebar-bg'] || sidebarBg;
+      const headerBgDark = brandingVarsDark['--header-bg'] || '#09090b';
+
       const style = document.createElement("style");
       style.textContent = `:root {
-          --luigi-nav-bg: #0f172a;
+          --luigi-nav-bg: ${sidebarBg};
           --luigi-nav-width: 256px;
           --luigi__shellbar--height: 48px;
+          --sidebar-bg: ${sidebarBg};
+          --header-bg: ${headerBg};
         }
 
         /* ── Shell bar ── */
         .fd-shellbar {
-          background: #ffffff !important;
+          background: ${headerBg} !important;
           border-bottom: none !important;
           box-shadow: none !important;
           height: 48px !important;
@@ -313,8 +432,8 @@
         [class*="side-nav"],
         [class*="lui-nav"],
         nav.fd-navigation {
-          background: #0f172a !important;
-          background-color: #0f172a !important;
+          background: ${sidebarBg} !important;
+          background-color: ${sidebarBg} !important;
           border-right: none !important;
           box-shadow: none !important;
           overflow: hidden !important;
@@ -334,18 +453,18 @@
         }
         .lui-side-nav--collapsed,
         .lui-side-nav {
-          background: #0f172a !important;
-          background-color: #0f172a !important;
+          background: ${sidebarBg} !important;
+          background-color: ${sidebarBg} !important;
         }
         .fd-app__sidebar,
         .lui-nav-container {
-          --fdSideNavBackground: #0f172a !important;
-          --fdShellbarBackground: #0f172a !important;
-          --sapShellColor: #0f172a !important;
-          --sapBaseColor: #0f172a !important;
-          --sapBackgroundColor: #0f172a !important;
-          --sapNeutralBackground: #0f172a !important;
-          --sapContent_ForegroundBackgroundColor: #0f172a !important;
+          --fdSideNavBackground: ${sidebarBg} !important;
+          --fdShellbarBackground: ${sidebarBg} !important;
+          --sapShellColor: ${sidebarBg} !important;
+          --sapBaseColor: ${sidebarBg} !important;
+          --sapBackgroundColor: ${sidebarBg} !important;
+          --sapNeutralBackground: ${sidebarBg} !important;
+          --sapContent_ForegroundBackgroundColor: ${sidebarBg} !important;
         }
 
         /* ── Nav items ── */
@@ -485,10 +604,10 @@
         }
         body { background: #ffffff !important; }
         .fd-app, .lui-app, #app {
-          background: linear-gradient(to right, #0f172a 256px, #ffffff 256px) !important;
+          background: linear-gradient(to right, ${sidebarBg} 256px, #ffffff 256px) !important;
         }
         body.semiCollapsed .fd-app, body.semiCollapsed .lui-app, body.semiCollapsed #app {
-          background: linear-gradient(to right, #0f172a 48px, #ffffff 48px) !important;
+          background: linear-gradient(to right, ${sidebarBg} 48px, #ffffff 48px) !important;
         }
 
         /* ── Dark mode baked into static CSS — active immediately via html.dark ── */
@@ -500,6 +619,14 @@
           --sapContent_ForegroundBackgroundColor: #09090b;
           --sapPageHeader_Background: #09090b;
         }
+        html.dark .fd-shellbar {
+          background: ${headerBgDark} !important;
+        }
+        html.dark .fd-shellbar__title,
+        html.dark .lui-shellbar__title,
+        html.dark .shellbar-title {
+          color: #e5e5e5 !important;
+        }
         html.dark body,
         html.dark .fd-shell, html.dark .fd-shell__content, html.dark .fd-shell__body,
         html.dark .fd-app__main, html.dark .fd-app__main-container,
@@ -509,10 +636,39 @@
           background-color: #09090b !important;
         }
         html.dark .fd-app, html.dark .lui-app, html.dark #app {
-          background: linear-gradient(to right, #0f172a 256px, #09090b 256px) !important;
+          background: linear-gradient(to right, ${sidebarBgDark} 256px, #09090b 256px) !important;
         }
         html.dark body.semiCollapsed .fd-app, html.dark body.semiCollapsed .lui-app, html.dark body.semiCollapsed #app {
-          background: linear-gradient(to right, #0f172a 48px, #09090b 48px) !important;
+          background: linear-gradient(to right, ${sidebarBgDark} 48px, #09090b 48px) !important;
+        }
+        html.dark .fd-app__sidebar,
+        html.dark .fd-app__split-view,
+        html.dark .fd-side-nav,
+        html.dark .lui-side-nav,
+        html.dark .lui-nav-container,
+        html.dark .lui-nav,
+        html.dark .lui-nav__list-wrapper,
+        html.dark .fd-nested-list,
+        html.dark .fd-nested-list__group,
+        html.dark .fd-nested-list__item,
+        html.dark .fd-navigation__list,
+        html.dark [class*="side-nav"],
+        html.dark [class*="lui-nav"],
+        html.dark nav.fd-navigation,
+        html.dark .lui-side-nav--collapsed,
+        html.dark .lui-side-nav {
+          background: ${sidebarBgDark} !important;
+          background-color: ${sidebarBgDark} !important;
+        }
+        html.dark .fd-app__sidebar,
+        html.dark .lui-nav-container {
+          --fdSideNavBackground: ${sidebarBgDark} !important;
+          --fdShellbarBackground: ${sidebarBgDark} !important;
+          --sapShellColor: ${sidebarBgDark} !important;
+          --sapBaseColor: ${sidebarBgDark} !important;
+          --sapBackgroundColor: ${sidebarBgDark} !important;
+          --sapNeutralBackground: ${sidebarBgDark} !important;
+          --sapContent_ForegroundBackgroundColor: ${sidebarBgDark} !important;
         }
 
         /* ── Collapsed: icons only, centered ── */
@@ -682,28 +838,40 @@
 
       // Inject brand icon shown in place of the title when collapsed
       const waitForBranding = setInterval(() => {
-        const branding = document.querySelector(".fd-shellbar__branding");
-        if (!branding) return;
+        const brandingEl = document.querySelector(".fd-shellbar__branding");
+        if (!brandingEl) return;
         clearInterval(waitForBranding);
         const icon = document.createElement("span");
         icon.className = "luigi-brand-icon";
+
+        // Use custom branding logos if available, otherwise fall back to defaults
+        const logoLightUrl = branding?.logo_horizontal_light
+          ? `/api/admin/v1/branding/public/asset/${branding.logo_horizontal_light}`
+          : "/brand/svg/horizontal_color.svg";
+        const logoDarkUrl = branding?.logo_horizontal_dark
+          ? `/api/admin/v1/branding/public/asset/${branding.logo_horizontal_dark}`
+          : "/brand/svg/horizontal_color_dark.svg";
+        const logoIconUrl = branding?.logo_icon
+          ? `/api/admin/v1/branding/public/asset/${branding.logo_icon}`
+          : "/brand/svg/Icon_color.svg";
+
         const imgFull = document.createElement("img");
-        imgFull.src = "/brand/svg/horizontal_color.svg";
+        imgFull.src = logoLightUrl;
         imgFull.alt = platformName;
         imgFull.className = "brand-logo-full";
         const imgFullDark = document.createElement("img");
-        imgFullDark.src = "/brand/svg/horizontal_color_dark.svg";
+        imgFullDark.src = logoDarkUrl;
         imgFullDark.alt = platformName;
         imgFullDark.className = "brand-logo-full--dark";
         const imgIcon = document.createElement("img");
-        imgIcon.src = "/brand/svg/Icon_color.svg";
+        imgIcon.src = logoIconUrl;
         imgIcon.alt = platformName;
         imgIcon.className = "brand-logo-icon";
         icon.appendChild(imgFull);
         icon.appendChild(imgFullDark);
         icon.appendChild(imgIcon);
-        branding.appendChild(icon);
-        branding.addEventListener("click", () => {
+        brandingEl.appendChild(icon);
+        brandingEl.addEventListener("click", () => {
           window.location.hash = '/home/overview';
         });
       }, 200);
@@ -918,16 +1086,19 @@
           function applyShellTheme(dark) {
             document.documentElement.classList.toggle('dark', dark);
             let ov = document.getElementById('luigi-dark-overrides');
+            // Use branding sidebar color or default
+            const navBg = (branding && branding.sidebar_bg) || '#0f172a';
+            const headerBgDark = (branding && branding.header_bg) || '#0f172a';
             if (dark) {
               if (!ov) { ov = document.createElement('style'); ov.id = 'luigi-dark-overrides'; document.head.appendChild(ov); }
               ov.textContent = `
-                .fd-shellbar { background: #0f172a !important; border-bottom: none !important; }
+                .fd-shellbar { background: ${headerBgDark} !important; border-bottom: none !important; }
                 html, body { background: #09090b !important; }
                 .fd-app, .lui-app, #app {
-                  background: linear-gradient(to right, #0f172a 256px, #09090b 256px) !important;
+                  background: linear-gradient(to right, ${navBg} 256px, #09090b 256px) !important;
                 }
                 body.semiCollapsed .fd-app, body.semiCollapsed .lui-app, body.semiCollapsed #app {
-                  background: linear-gradient(to right, #0f172a 48px, #09090b 48px) !important;
+                  background: linear-gradient(to right, ${navBg} 48px, #09090b 48px) !important;
                 }
                 .fd-shell, .fd-shell__content, .fd-shell__body,
                 .fd-app__main, .fd-app__main-container,
@@ -954,7 +1125,12 @@
 
           darkToggle.addEventListener('click', () => {
             const nowDark = !document.documentElement.classList.contains('dark');
-            localStorage.setItem(THEME_KEY, nowDark ? 'dark' : 'light');
+            // In preview mode, only toggle locally without affecting main UI's localStorage
+            if (isPreview) {
+              console.log('[Shell] Preview mode - skipping localStorage theme write');
+            } else {
+              localStorage.setItem(THEME_KEY, nowDark ? 'dark' : 'light');
+            }
             applyShellTheme(nowDark);
           });
           darkToggle.addEventListener('mouseenter', () => { darkToggle.style.background = document.documentElement.classList.contains('dark') ? 'rgba(255,255,255,0.07)' : '#f3f4f6'; });

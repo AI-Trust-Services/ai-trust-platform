@@ -3,6 +3,8 @@ uvicorn[standard]==0.32.1
 pydantic[email]==2.10.3
 aiosmtplib==3.0.1
 httpx==0.28.1
+minio==7.2.12
+python-multipart==0.0.20
 -e /app/libs/logging
 -e /app/libs/authorization
 -e /app/libs/tenancy

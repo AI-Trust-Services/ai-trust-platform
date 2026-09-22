@@ -3,6 +3,7 @@ import { ClipboardList, Loader2 } from "lucide-react";
 import { api, HEALTH_URL } from "./api/client";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { useTheme } from "./hooks/useTheme";
+import { useBranding } from './hooks/useBranding';
 import { usePermissions } from "./hooks/usePermissions";
 import { NoAccess } from "./components/NoAccess";
 import { AuditLogs } from "./views/AuditLogs";
@@ -10,6 +11,7 @@ import { AuditLogs } from "./views/AuditLogs";
 export default function App() {
   useLuigiInit(() => {});
   useTheme();
+  useBranding();
 
   const { can, loading: permsLoading } = usePermissions();
   const mayView = can("audit:read");
