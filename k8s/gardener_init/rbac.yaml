@@ -4,6 +4,10 @@
 # bootstrap-gardener.yml needs: bootstrap.sh's namespace/Secret/ConfigMap/RBAC setup, plus
 # applying OCM component CRs in ocm-system. Deliberately not cluster-admin.
 #
+# Also grants the read + DNS-annotation permissions shoot-cluster-init.sh needs in the `default`
+# namespace (Traefik check + LB Service annotate) and `flux-system` (Flux version check), so the
+# garden-init workflow can run the script with scoped CI credentials.
+#
 # NOTE: the target namespace is NOT created here — bootstrap.sh creates it idempotently
 # on every deploy. The ClusterRole grants create+patch so bootstrap can run from scratch.
 ---
@@ -161,4 +165,93 @@ subjects:
 roleRef:
   kind: Role
   name: ai-trust-ci-ocm-manager
+  apiGroup: rbac.authorization.k8s.io
+---
+# Permissions for shoot-cluster-init.sh in the `default` namespace:
+#   - get/list deployments (Traefik presence check + wait)
+#   - get/list/patch services (read Traefik LB DNS annotation + overwrite it)
+# Helm release state (secrets/configmaps) is NOT needed here because the Traefik
+# install step is skipped when the deployment already exists (idempotent check).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ai-trust-ci-traefik-reader
+  namespace: default
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ai-trust-ci-traefik-reader
+  namespace: default
+subjects:
+  - kind: User
+    name: "github.com:284992593:1285188431"
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: ai-trust-ci-traefik-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ai-trust-ci-traefik-reader-sa
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: github-actions
+    namespace: ocm-system
+roleRef:
+  kind: Role
+  name: ai-trust-ci-traefik-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# Permissions for shoot-cluster-init.sh in `flux-system`:
+#   - get/list deployments (Flux version check; install skipped if already at target version)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ai-trust-ci-flux-reader
+  namespace: flux-system
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ai-trust-ci-flux-reader
+  namespace: flux-system
+subjects:
+  - kind: User
+    name: "github.com:284992593:1285188431"
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: ai-trust-ci-flux-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ai-trust-ci-flux-reader-sa
+  namespace: flux-system
+subjects:
+  - kind: ServiceAccount
+    name: github-actions
+    namespace: ocm-system
+roleRef:
+  kind: Role
+  name: ai-trust-ci-flux-reader
   apiGroup: rbac.authorization.k8s.io
