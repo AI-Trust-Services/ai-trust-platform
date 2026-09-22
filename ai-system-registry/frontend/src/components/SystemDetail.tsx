@@ -5,7 +5,7 @@ import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS, TIER_META } from "../utils";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary, QuestionAssignment } from "../types";
+import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary } from "../types";
 import {
   BUSINESS_QUESTIONS,
   AI_TECHNICAL_QUESTIONS,
@@ -152,7 +152,6 @@ function WorkflowProgress({
   const [resubmitNote, setResubmitNote] = useState("");
   const [acting, setActing] = useState(false);
   const [steps, setSteps] = useState<WorkflowStep[]>([]);
-  const [questionAssignments, setQuestionAssignments] = useState<QuestionAssignment[]>([]);
   const [delegateUser, setDelegateUser] = useState("");
   const [delegatePool, setDelegatePool] = useState<UserSummary[]>([]);
   const { username, mayWrite } = useModalControls();
@@ -185,10 +184,8 @@ function WorkflowProgress({
   useEffect(() => {
     if (system.workflow_status === "business_pending" || system.workflow_status === "technical_pending") {
       api.getWorkflow(system.id).then(setSteps).catch(() => setSteps([]));
-      api.getQuestionAssignments(system.id).then(setQuestionAssignments).catch(() => setQuestionAssignments([]));
     } else {
       setSteps([]);
-      setQuestionAssignments([]);
     }
   }, [system.id, system.workflow_status]);
 

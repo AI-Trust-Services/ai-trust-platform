@@ -164,8 +164,6 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
         if (v !== undefined && v !== null && v !== "") savedFields[k] = v;
       }
     }
-    const hasSavedFields = Object.keys(savedFields).length > 0;
-
     setFields(savedFields);
     setConfirmed(system.field_confirmations ?? {});
     setStep(0);
