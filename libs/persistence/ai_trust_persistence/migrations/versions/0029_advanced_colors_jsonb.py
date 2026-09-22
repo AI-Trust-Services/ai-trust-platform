@@ -3,8 +3,8 @@
 Stores customizable colors for: tier badges, lifecycle badges, chart palette,
 alert severity, workflow status, and progress indicators.
 
-Revision ID: 0027
-Revises: 0026
+Revision ID: 0029
+Revises: 0028
 Create Date: 2026-09-22
 """
 from alembic import op
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 
-revision = "0027"
-down_revision = "0026"
+revision = "0029"
+down_revision = "0028"
 branch_labels = None
 depends_on = None
 

@@ -49,6 +49,18 @@ ALLOWED_CONTENT_TYPES = {
 }
 MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB
 
+# SVG elements and attributes that can execute scripts (XSS vectors)
+_SVG_DANGEROUS_TAGS = frozenset([
+    "script", "handler", "listener",
+])
+_SVG_DANGEROUS_ATTRS = frozenset([
+    "onload", "onerror", "onclick", "onmouseover", "onmouseout", "onmousedown",
+    "onmouseup", "onmousemove", "onfocus", "onblur", "onchange", "onsubmit",
+    "onreset", "onselect", "onkeydown", "onkeypress", "onkeyup", "onabort",
+    "ondblclick", "onresize", "onscroll", "onunload", "onbeforeunload",
+])
+_SVG_DANGEROUS_ATTR_VALUES = re.compile(r"javascript:", re.IGNORECASE)
+
 _client: Minio | None = None
 _presign_client: Minio | None = None
 
@@ -148,6 +160,95 @@ def validate_upload(asset_type: str, content_type: str, size: int) -> None:
         )
 
 
+def sanitize_svg(data: bytes) -> bytes:
+    """Sanitize SVG content by removing dangerous elements and attributes.
+
+    Removes:
+    - <script> tags and other executable elements
+    - Event handler attributes (onclick, onload, etc.)
+    - javascript: URIs in attribute values
+
+    Raises HTTPException if the SVG cannot be parsed or contains unremovable threats.
+    """
+    try:
+        import xml.etree.ElementTree as ET
+    except ImportError:
+        # If xml parsing not available, reject SVG entirely
+        raise HTTPException(
+            status_code=400,
+            detail="SVG processing not available. Please upload PNG instead.",
+        )
+
+    try:
+        # Parse the SVG
+        root = ET.fromstring(data)
+    except ET.ParseError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid SVG: {e}",
+        )
+
+    # Track if we modified anything
+    modified = False
+
+    def clean_element(elem: ET.Element) -> bool:
+        """Clean an element and its children. Returns True if element should be removed."""
+        nonlocal modified
+
+        # Get tag name without namespace
+        tag = elem.tag.split("}")[-1].lower() if "}" in elem.tag else elem.tag.lower()
+
+        # Remove dangerous elements entirely
+        if tag in _SVG_DANGEROUS_TAGS:
+            logger.warning("branding.svg_dangerous_tag_removed", extra={"tag": tag})
+            return True
+
+        # Remove dangerous attributes
+        attrs_to_remove = []
+        for attr, value in elem.attrib.items():
+            attr_name = attr.split("}")[-1].lower() if "}" in attr else attr.lower()
+
+            # Remove event handlers
+            if attr_name in _SVG_DANGEROUS_ATTRS or attr_name.startswith("on"):
+                attrs_to_remove.append(attr)
+                continue
+
+            # Remove javascript: URIs
+            if _SVG_DANGEROUS_ATTR_VALUES.search(value):
+                attrs_to_remove.append(attr)
+                continue
+
+        for attr in attrs_to_remove:
+            del elem.attrib[attr]
+            modified = True
+            logger.warning("branding.svg_dangerous_attr_removed", extra={"attr": attr})
+
+        # Recursively clean children
+        children_to_remove = []
+        for child in elem:
+            if clean_element(child):
+                children_to_remove.append(child)
+
+        for child in children_to_remove:
+            elem.remove(child)
+            modified = True
+
+        return False
+
+    # Clean the root element
+    if clean_element(root):
+        raise HTTPException(
+            status_code=400,
+            detail="SVG root element is not allowed",
+        )
+
+    if modified:
+        logger.info("branding.svg_sanitized")
+
+    # Re-serialize
+    return ET.tostring(root, encoding="unicode").encode("utf-8")
+
+
 def _upload_sync(bucket: str, key: str, data: bytes, content_type: str) -> None:
     _get_client().put_object(
         bucket,
@@ -163,7 +264,13 @@ async def upload_file(asset_type: str, filename: str, data: bytes, content_type:
 
     By default uploads to the draft namespace (draft=True) so live assets are not overwritten.
     On publish, call copy_draft_to_published() to promote the draft asset.
+
+    SVG files are sanitized to remove script tags and event handlers before storage.
     """
+    # Sanitize SVG files to prevent XSS attacks
+    if content_type == "image/svg+xml":
+        data = sanitize_svg(data)
+
     bucket = bucket_name()
     await ensure_bucket()
     key = object_key(asset_type, filename, draft=draft)

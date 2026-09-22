@@ -1,15 +1,15 @@
 """Add dark mode branding color columns.
 
-Revision ID: 0025
-Revises: 0024
+Revision ID: 0027
+Revises: 0026
 Create Date: 2026-09-21
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0025"
-down_revision = "0024"
+revision = "0027"
+down_revision = "0026"
 branch_labels = None
 depends_on = None
 

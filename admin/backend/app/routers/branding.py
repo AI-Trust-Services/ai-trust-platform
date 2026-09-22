@@ -16,6 +16,7 @@ from ai_trust_authorization.constants import IAM_MANAGE
 from ai_trust_authorization.permissions import get_current_user, require_permission
 from ai_trust_logging import get_logger
 from ai_trust_persistence.database import SessionLocal
+from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models.platform_settings import PlatformSettings
 
 from app import branding_storage
@@ -388,6 +389,16 @@ async def publish_branding(
         row.branding_published_at = now
         row.branding_published_by = username
 
+        # Audit log
+        log_audit_event(
+            session,
+            actor=username,
+            action="branding.published",
+            resource_type="platform_settings",
+            resource_id="branding",
+            changes={"published_by": username},
+        )
+
         await session.commit()
         await session.refresh(row)
         logger.info("branding.published", extra={"published_by": username})
@@ -494,6 +505,16 @@ async def reset_branding(
         now = datetime.now(timezone.utc)
         row.branding_published_at = now
         row.branding_published_by = username
+
+        # Audit log
+        log_audit_event(
+            session,
+            actor=username,
+            action="branding.reset",
+            resource_type="platform_settings",
+            resource_id="branding",
+            changes={"reset_by": username},
+        )
 
         await session.commit()
         await session.refresh(row)

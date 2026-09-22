@@ -154,7 +154,8 @@ services:
       - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout?id_token_hint={id_token}
       - --upstream-timeout=300s
       # Public branding endpoints — no auth required for shell to fetch branding at startup
-      - --skip-auth-route=^/api/admin/v1/branding/public
+      # Anchored regex: ^...(/|$) matches /public and /public/asset/... but not /public-secret
+      - --skip-auth-route=^/api/admin/v1/branding/public(/|$)
     depends_on:
       keycloak-provision:
         condition: service_completed_successfully
