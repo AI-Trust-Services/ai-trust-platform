@@ -196,7 +196,7 @@ jobs:
             echo "Posted to issue #${ISSUE}"
           done
 
-      - name: Post failure comment and status
+      - name: Post failure comment and its status
         if: needs.deploy.result != 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
