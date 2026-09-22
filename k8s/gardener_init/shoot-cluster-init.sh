@@ -11,13 +11,11 @@
 #   export KUBECONFIG=/path/to/shoot-kubeconfig.yaml
 #   bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name> [--namespace=<namespace>]
 #
-# --namespace (default: ai-trust):
-#   "ai-trust" is the platform's existing, long-running namespace (currently
-#   deployed on ai-trust-main) — the default when no --namespace flag is given.
-#   All 5 steps run identically for every namespace, ai-trust included — nothing
-#   is special-cased. Pass --namespace=<name> to additionally provision a
-#   developer/PR namespace on a shared cluster (e.g. ai-trust-test), derived
-#   from the PR author, so it can coexist with others:
+# --namespace (default: DEFAULT_NAMESPACE from k8s/gardener_init/env/<cluster>/.env, or "ai-trust" for legacy clusters):
+#   The canonical long-running namespace for a cluster (e.g. "main" for ai-trust-main)
+#   uses the hostnames declared in the cluster env file verbatim.
+#   Pass --namespace=<name> to additionally provision a developer/PR namespace on a
+#   shared cluster (e.g. ai-trust-test), derived from the PR author, so it can coexist:
 #     bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=alice
 #   Steps are idempotent — safe to re-run for a namespace that's already set up.
 #
@@ -43,12 +41,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLUSTER_NAME="${1:-}"
-NAMESPACE="ai-trust"
 
-# Parse optional --namespace=<value> argument
+# Parse optional --namespace=<value> argument (resolved after sourcing the env file)
+NAMESPACE_OVERRIDE=""
 for arg in "${@:2}"; do
   case "$arg" in
-    --namespace=*) NAMESPACE="${arg#--namespace=}" ;;
+    --namespace=*) NAMESPACE_OVERRIDE="${arg#--namespace=}" ;;
     *) echo "warning: unknown argument: $arg" >&2 ;;
   esac
 done
@@ -72,6 +70,12 @@ APP_HOST="${APP_HOST:-}"
 KEYCLOAK_HOST="${KEYCLOAK_HOST:-}"
 MINIO_HOST="${MINIO_HOST:-}"
 
+# DEFAULT_NAMESPACE: the canonical long-running namespace for this cluster.
+# New cluster env files set it explicitly (e.g. DEFAULT_NAMESPACE=main for ai-trust-main).
+# Older env files without it fall back to "ai-trust" for backwards compatibility.
+DEFAULT_NAMESPACE="${DEFAULT_NAMESPACE:-ai-trust}"
+NAMESPACE="${NAMESPACE_OVERRIDE:-$DEFAULT_NAMESPACE}"
+
 if [[ -z "$APP_HOST" || -z "$KEYCLOAK_HOST" ]]; then
   echo "error: APP_HOST and KEYCLOAK_HOST must be set in $ENV_FILE" >&2
   exit 1
@@ -80,11 +84,9 @@ fi
 # Derive the shoot base domain from the app host (everything after the first label)
 SHOOT_DOMAIN="${APP_HOST#*.}"
 
-# ai-trust's hostnames come straight from the cluster's .env file (the platform's
-# canonical, already-registered domain). Any other namespace gets its own
-# subdomain derived from the shoot domain so it doesn't collide with ai-trust or
-# with other namespaces on the same cluster.
-if [[ "$NAMESPACE" != "ai-trust" ]]; then
+# The DEFAULT_NAMESPACE uses the cluster's canonical hostnames from the env file.
+# Any other namespace gets derived subdomains so it doesn't collide.
+if [[ "$NAMESPACE" != "$DEFAULT_NAMESPACE" ]]; then
   BASE_HOST="$APP_HOST"
   APP_HOST="${NAMESPACE}.${BASE_HOST}"
   KEYCLOAK_HOST="keycloak.${NAMESPACE}.${BASE_HOST}"

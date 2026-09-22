@@ -24,7 +24,7 @@ Manifests live in `k8s/helm/ai-trust-platform/`. Every k8s Service name matches 
 **OpenFGA store ID** is distributed as a Kubernetes `Secret` (`openfga-store-id`) rather than a PVC. The `openfga-provision` Job writes the store ID to the Secret; all backends mount it read-only at `/config/store_id` via a `secret` volume. This avoids the RWO multi-node attach conflict that a shared PVC would cause when backends land on different nodes.
 
 ### Deploy to Gardener (OCM + Flux + GitHub Actions)
-The platform is packaged as an OCM component and deployed to Gardener shoot clusters via Flux HelmRelease. Deployments are **namespace-scoped** — a cluster can host several concurrent namespaces: `ai-trust` (the platform's existing, long-running namespace, default on `ai-trust-main`) plus per-developer/PR namespaces derived from the GitHub username (used on `ai-trust-test`). See [k8s/README.md](k8s/README.md) for the full guide.
+The platform is packaged as an OCM component and deployed to Gardener shoot clusters via Flux HelmRelease. Deployments are **namespace-scoped** — a cluster can host several concurrent namespaces: `main` (the platform's long-running namespace on `ai-trust-main`) plus per-developer/PR namespaces derived from the GitHub username (used on `ai-trust-test`). See [k8s/README.md](k8s/README.md) for the full guide.
 ```bash
 # Trigger a build + deploy to a specific cluster/namespace from any branch:
 gh workflow run build-push-deploy.yml \
@@ -32,7 +32,7 @@ gh workflow run build-push-deploy.yml \
   --field gardener_cluster=ai-trust-test \
   --field namespace=<namespace>
 
-# Check deploy status on the cluster (namespace defaults to "ai-trust" on ai-trust-main):
+# Check deploy status on the cluster (namespace defaults to "main" on ai-trust-main):
 kubectl get componentversion,resource,fluxdeployer -n ocm-system
 kubectl get helmrelease ai-trust-<namespace> -n ocm-system -o wide
 kubectl get pods -n <namespace>
@@ -40,7 +40,7 @@ kubectl get pods -n <namespace>
 - OCM component descriptor: `.ocm/component-constructor.yaml`
 - OCM CRs (ComponentVersion, Resource, FluxDeployer), all named per `${NAMESPACE}`: `k8s/ocm/manifests.yaml`
 - Per-cluster env: `k8s/env/<cluster>/.env` (`K8S_NAMESPACE` sets that cluster's default namespace)
-- One-time cluster/namespace setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster> [--namespace=<namespace>]` (installs OCM controller, Flux, Traefik, per-namespace DNS + TLS cert, RBAC — default namespace `ai-trust`; pass `--namespace=<name>` to additionally provision a developer/PR namespace on a shared cluster)
+- One-time cluster/namespace setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster> [--namespace=<namespace>]` (installs OCM controller, Flux, Traefik, per-namespace DNS + TLS cert, RBAC — default namespace read from `DEFAULT_NAMESPACE` in `k8s/gardener_init/env/<cluster>/.env`; pass `--namespace=<name>` to additionally provision a developer/PR namespace on a shared cluster)
 - **PR deployment test** — commenting `/garden-deploy` on a PR (`.github/workflows/pr-deployment-test.yml`) deploys latest `main`, then the PR branch, to a namespace derived from the PR author on `ai-trust-test`. That namespace must be initialized once via `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`.
 
 ### Run tests (any backend)
