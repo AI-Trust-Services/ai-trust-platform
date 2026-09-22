@@ -81,6 +81,8 @@ on:
         required: true
       USERS_BACKEND_CLIENT_SECRET:
         required: true
+      DEV_USER_PASSWORD:
+        required: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.gardener_cluster || 'auto' }}-${{ inputs.namespace || 'default' }}

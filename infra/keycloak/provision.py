@@ -29,6 +29,8 @@ APP_ADMIN_PASSWORD           = os.environ["APP_ADMIN_PASSWORD"]
 REALM = "ai-trust"
 KEYCLOAK_PUBLIC_URL = os.environ.get("KEYCLOAK_PUBLIC_URL", "")
 
+DEV_USER_PASSWORD = os.environ.get("DEV_USER_PASSWORD", "")
+
 DEV_USERS = [
     {"username": "dev-owner",      "firstName": "Dev", "lastName": "Business Owner"},
     {"username": "dev-engineer",   "firstName": "Dev", "lastName": "AI Engineer"},
@@ -195,13 +197,21 @@ def ensure_admin_user(client: httpx.Client) -> None:
 def ensure_dev_users(client: httpx.Client) -> None:
     if os.environ.get("SEED_DEV_USERS", "").lower() != "true":
         return
+    if not DEV_USER_PASSWORD:
+        print("SEED_DEV_USERS=true but DEV_USER_PASSWORD is unset — skipping dev user creation.")
+        return
     for user in DEV_USERS:
         existing = client.get(
             f"{KEYCLOAK_URL}/admin/realms/{REALM}/users",
             params={"username": user["username"], "exact": "true"},
         ).json()
         if existing:
-            print(f"Dev user '{user['username']}' already exists, skipping.")
+            user_id = existing[0]["id"]
+            print(f"Dev user '{user['username']}' already exists, resetting password...")
+            client.put(
+                f"{KEYCLOAK_URL}/admin/realms/{REALM}/users/{user_id}/reset-password",
+                json={"type": "password", "value": DEV_USER_PASSWORD, "temporary": False},
+            ).raise_for_status()
             continue
         print(f"Creating dev user '{user['username']}'...")
         client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", json={
@@ -211,7 +221,7 @@ def ensure_dev_users(client: httpx.Client) -> None:
             "lastName":      user["lastName"],
             "enabled":       True,
             "emailVerified": True,
-            "credentials":   [{"type": "password", "value": "password", "temporary": False}],
+            "credentials":   [{"type": "password", "value": DEV_USER_PASSWORD, "temporary": False}],
         }).raise_for_status()
 
 
