@@ -1,4 +1,5 @@
 """Unit tests for otel-pipeline/rmq-bridge — pure logic, no RabbitMQ required."""
+
 from __future__ import annotations
 
 
@@ -21,5 +22,6 @@ def test_exchange_name():
 
 def test_connect_retries_default():
     import os
+
     retries = int(os.environ.get("RMQ_CONNECT_RETRIES", 10))
     assert retries == 10

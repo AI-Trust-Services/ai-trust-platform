@@ -19,6 +19,7 @@ extended ``{flags, confidence, reasoning, missing_info}`` rationale shape.
 transition (e.g. ``"busines_pending"``) is now rejected at the DB layer rather than
 surfacing only when the state machine reads the value. Mirrors ``ck_ai_systems_tier``.
 """
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -29,15 +30,22 @@ branch_labels = None
 depends_on = None
 
 _WORKFLOW_STATUSES = (
-    "draft", "business_pending", "technical_pending",
-    "pending_review", "info_requested", "approved", "rejected",
+    "draft",
+    "business_pending",
+    "technical_pending",
+    "pending_review",
+    "info_requested",
+    "approved",
+    "rejected",
 )
 
 
 def upgrade() -> None:
     op.add_column(
         "ai_systems",
-        sa.Column("registration_mode", sa.String(30), nullable=False, server_default="ai"),
+        sa.Column(
+            "registration_mode", sa.String(30), nullable=False, server_default="ai"
+        ),
     )
     op.add_column(
         "ai_systems",

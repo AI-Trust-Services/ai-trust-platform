@@ -1,18 +1,36 @@
 """Pydantic v2 schemas for Requirement."""
+
 from __future__ import annotations
 
 from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-VALID_REQUIREMENT_CATEGORIES = frozenset({
-    "human_oversight", "documentation", "monitoring", "security", "fairness",
-    "data_governance", "logging", "testing", "change_management",
-    "incident_response", "general",
-})
-VALID_REQUIREMENT_STATUSES = frozenset({
-    "open", "planned", "under_review", "fulfilled", "ineffective", "deactivated",
-})
+VALID_REQUIREMENT_CATEGORIES = frozenset(
+    {
+        "human_oversight",
+        "documentation",
+        "monitoring",
+        "security",
+        "fairness",
+        "data_governance",
+        "logging",
+        "testing",
+        "change_management",
+        "incident_response",
+        "general",
+    }
+)
+VALID_REQUIREMENT_STATUSES = frozenset(
+    {
+        "open",
+        "planned",
+        "under_review",
+        "fulfilled",
+        "ineffective",
+        "deactivated",
+    }
+)
 VALID_EFFECTIVENESS = frozenset({"high", "medium", "low"})
 
 

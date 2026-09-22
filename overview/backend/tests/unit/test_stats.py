@@ -1,4 +1,5 @@
 """Unit tests for overview stats — pure logic, no DB required."""
+
 from __future__ import annotations
 
 

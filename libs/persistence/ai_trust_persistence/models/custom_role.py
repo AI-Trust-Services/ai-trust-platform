@@ -8,4 +8,6 @@ class CustomRole(Base):
     id = Column(String(64), primary_key=True)
     name = Column(String(128), nullable=False, unique=True)
     description = Column(Text(), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

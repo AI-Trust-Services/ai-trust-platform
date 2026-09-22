@@ -6,6 +6,7 @@ single-tenant dev, but must never reach a shared multi-tenant deployment. This c
 called from each backend's main.py; it raises (aborting startup) if any known-default
 secret is still set AND TENANCY_MODE != single.
 """
+
 from __future__ import annotations
 
 import os
@@ -30,7 +31,8 @@ def check_no_default_secrets() -> None:
     if MODE == "single":
         return
     offenders = [
-        name for name, default in _KNOWN_DEFAULTS.items()
+        name
+        for name, default in _KNOWN_DEFAULTS.items()
         if os.environ.get(name, "") == default
     ]
     if offenders:

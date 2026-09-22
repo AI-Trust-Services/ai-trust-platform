@@ -1,4 +1,5 @@
 """Unit tests for monitoring — pure logic, no DB or ClickHouse required."""
+
 from __future__ import annotations
 
 
@@ -20,7 +21,11 @@ def test_lifecycle_filter_empty_string_means_all():
         {"id": "SYS-2", "lifecycle": "market"},
     ]
     lifecycle = ""
-    filtered = systems if not lifecycle else [s for s in systems if s["lifecycle"] == lifecycle]
+    filtered = (
+        systems
+        if not lifecycle
+        else [s for s in systems if s["lifecycle"] == lifecycle]
+    )
     assert len(filtered) == 2
 
 

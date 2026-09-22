@@ -4,6 +4,7 @@ If no row exists in the DB, insert one using the current env var values.
 If a row already exists, leave it untouched — the DB is the source of truth
 after the first deployment.
 """
+
 from __future__ import annotations
 
 import os
@@ -19,15 +20,20 @@ logger = get_logger(__name__)
 
 async def seed_settings_from_env() -> None:
     async with SessionLocal() as session:
-        existing = await session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
+        existing = await session.scalar(
+            select(PlatformSettings).where(PlatformSettings.id == 1)
+        )
         if existing is not None:
-            logger.info("admin.settings.seed_skipped", extra={"reason": "row already exists"})
+            logger.info(
+                "admin.settings.seed_skipped", extra={"reason": "row already exists"}
+            )
             return
 
         smtp_port_raw = os.environ.get("SMTP_PORT", "").strip()
         row = PlatformSettings(
             id=1,
-            platform_name=os.environ.get("PLATFORM_NAME", "AI Trust Platform").strip() or "AI Trust Platform",
+            platform_name=os.environ.get("PLATFORM_NAME", "AI Trust Platform").strip()
+            or "AI Trust Platform",
             support_email=os.environ.get("SUPPORT_EMAIL", "").strip() or None,
             smtp_host=os.environ.get("SMTP_HOST", "").strip() or None,
             smtp_port=int(smtp_port_raw) if smtp_port_raw.isdigit() else None,
@@ -40,4 +46,6 @@ async def seed_settings_from_env() -> None:
         )
         session.add(row)
         await session.commit()
-        logger.info("admin.settings.seeded", extra={"smtp_enabled": bool(row.smtp_host)})
+        logger.info(
+            "admin.settings.seeded", extra={"smtp_enabled": bool(row.smtp_host)}
+        )

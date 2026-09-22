@@ -22,7 +22,10 @@ class Assessment(Base):
 
     id: Mapped[str] = mapped_column(String(30), primary_key=True)
     ai_system_id: Mapped[str] = mapped_column(
-        String(20), ForeignKey("ai_systems.id", ondelete="CASCADE"), nullable=False, index=True
+        String(20),
+        ForeignKey("ai_systems.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     framework_id: Mapped[str] = mapped_column(
         String(30), ForeignKey("frameworks.id"), nullable=False, index=True
@@ -33,7 +36,9 @@ class Assessment(Base):
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

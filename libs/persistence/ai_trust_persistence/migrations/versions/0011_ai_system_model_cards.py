@@ -4,6 +4,7 @@ Revision ID: 0011
 Revises: 0010
 Create Date: 2026-08-18
 """
+
 import sqlalchemy as sa
 from alembic import op
 
@@ -16,8 +17,18 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "ai_system_model_cards",
-        sa.Column("system_id", sa.String(20), sa.ForeignKey("ai_systems.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("model_card_id", sa.String(20), sa.ForeignKey("model_cards.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "system_id",
+            sa.String(20),
+            sa.ForeignKey("ai_systems.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "model_card_id",
+            sa.String(20),
+            sa.ForeignKey("model_cards.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
         sa.Column("role", sa.String(100), nullable=True),
     )
 
@@ -48,8 +59,10 @@ def downgrade() -> None:
 
     op.create_foreign_key(
         "ai_systems_model_id_fkey",
-        "ai_systems", "model_cards",
-        ["model_id"], ["id"],
+        "ai_systems",
+        "model_cards",
+        ["model_id"],
+        ["id"],
         ondelete="SET NULL",
     )
 

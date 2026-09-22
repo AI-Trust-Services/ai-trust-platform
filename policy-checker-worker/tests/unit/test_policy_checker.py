@@ -1,10 +1,13 @@
 """Unit tests for policy-checker-worker — pure logic, no DB or ClickHouse required."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 
 
-def _is_within_suppression_window(handled_at: datetime | None, window_hours: int = 24) -> bool:
+def _is_within_suppression_window(
+    handled_at: datetime | None, window_hours: int = 24
+) -> bool:
     if handled_at is None:
         return False
     now = datetime.now(timezone.utc)

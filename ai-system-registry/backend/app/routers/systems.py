@@ -7,7 +7,11 @@ from sqlalchemy import select, delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_trust_authorization import require_permission
-from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE, SYSTEMS_APPROVE
+from ai_trust_authorization.constants import (
+    SYSTEMS_READ,
+    SYSTEMS_WRITE,
+    SYSTEMS_APPROVE,
+)
 from ai_trust_logging import get_logger
 from app.classifier import classify, CLASSIFIER_INPUTS
 from ai_trust_persistence import SessionLocal
@@ -37,10 +41,23 @@ logger = get_logger(__name__)
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
 
 # Supporting documents accepted for full-manual registration (extension allowlist).
-_ALLOWED_DOC_EXTENSIONS = frozenset({
-    ".pdf", ".doc", ".docx", ".txt", ".md", ".ppt", ".pptx",
-    ".xls", ".xlsx", ".csv", ".png", ".jpg", ".jpeg",
-})
+_ALLOWED_DOC_EXTENSIONS = frozenset(
+    {
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".txt",
+        ".md",
+        ".ppt",
+        ".pptx",
+        ".xls",
+        ".xlsx",
+        ".csv",
+        ".png",
+        ".jpg",
+        ".jpeg",
+    }
+)
 
 # Cap on registration-document uploads. Checked against Content-Length (early reject)
 # and the actual read length (guards a missing/spoofed header) so a large upload can't
@@ -52,7 +69,9 @@ MAX_DOC_SIZE = 20 * 1024 * 1024  # 20 MB
 _SECTION_STATUS = {"business": "business_pending", "technical": "technical_pending"}
 
 
-async def _assert_can_edit_section(session, row: AISystem, section: str, current_user: str) -> None:
+async def _assert_can_edit_section(
+    session, row: AISystem, section: str, current_user: str
+) -> None:
     """Enforce the section edit-lock: while a sub-assignment is active, only the
     contributor holding the token may edit; otherwise only the section owner may.
 
@@ -63,22 +82,35 @@ async def _assert_can_edit_section(session, row: AISystem, section: str, current
     if holder is None:
         holder = section_owner(row, section)
     if holder and current_user != holder:
-        raise HTTPException(403, f"The '{section}' section is currently assigned to {holder}")
+        raise HTTPException(
+            403, f"The '{section}' section is currently assigned to {holder}"
+        )
 
 
-@router.get("/systems", response_model=list[AISystemResponse], dependencies=[Depends(require_permission(SYSTEMS_READ))])
+@router.get(
+    "/systems",
+    response_model=list[AISystemResponse],
+    dependencies=[Depends(require_permission(SYSTEMS_READ))],
+)
 async def list_systems(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[AISystemResponse]:
     async with SessionLocal() as session:
         result = await session.execute(
-            select(AISystem).order_by(AISystem.created_at.desc()).limit(limit).offset(offset)
+            select(AISystem)
+            .order_by(AISystem.created_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
         return [AISystemResponse.model_validate(r) for r in result.scalars().all()]
 
 
-@router.get("/systems/{system_id}", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_READ))])
+@router.get(
+    "/systems/{system_id}",
+    response_model=AISystemResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_READ))],
+)
 async def get_system(system_id: str) -> AISystemResponse:
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
@@ -88,14 +120,23 @@ async def get_system(system_id: str) -> AISystemResponse:
         return AISystemResponse.model_validate(row)
 
 
-@router.put("/systems/{system_id}", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
-async def update_system(system_id: str, body: AISystemUpdate, request: Request) -> AISystemResponse:
+@router.put(
+    "/systems/{system_id}",
+    response_model=AISystemResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
+async def update_system(
+    system_id: str, body: AISystemUpdate, request: Request
+) -> AISystemResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     updates = body.model_dump(exclude_none=True)
 
     immutable_attempted = _IMMUTABLE_FIELDS & updates.keys()
     if immutable_attempted:
-        raise HTTPException(422, f"Fields are immutable (use /reclassify): {sorted(immutable_attempted)}")
+        raise HTTPException(
+            422,
+            f"Fields are immutable (use /reclassify): {sorted(immutable_attempted)}",
+        )
 
     if body.lifecycle and body.lifecycle not in VALID_LIFECYCLES:
         raise HTTPException(422, f"Invalid lifecycle '{body.lifecycle}'")
@@ -112,7 +153,8 @@ async def update_system(system_id: str, body: AISystemUpdate, request: Request) 
         # The technical section (manual_questionnaire flag checkboxes) is editable in
         # technical_pending, and while an info request has reopened the technical section.
         technical_reopened = (
-            row.workflow_status == "info_requested" and row.info_requested_section == "technical"
+            row.workflow_status == "info_requested"
+            and row.info_requested_section == "technical"
         )
         technical_section_edit = bool(flag_updates) and (
             row.workflow_status == "technical_pending" or technical_reopened
@@ -126,8 +168,15 @@ async def update_system(system_id: str, body: AISystemUpdate, request: Request) 
         elif row.assignee_username and current_user != row.assignee_username:
             raise HTTPException(403, "Only the assigned user may update this system")
 
-        if flag_updates and row.workflow_status not in ("draft", "rejected", "technical_pending") and not technical_reopened:
-            raise HTTPException(422, "Risk flags can only be changed while the system is in draft, rejected, or technical_pending state")
+        if (
+            flag_updates
+            and row.workflow_status not in ("draft", "rejected", "technical_pending")
+            and not technical_reopened
+        ):
+            raise HTTPException(
+                422,
+                "Risk flags can only be changed while the system is in draft, rejected, or technical_pending state",
+            )
 
         for field, value in updates.items():
             setattr(row, field, value)
@@ -142,11 +191,16 @@ async def update_system(system_id: str, body: AISystemUpdate, request: Request) 
         await session.commit()
         await session.refresh(row)
 
-    logger.info("system.updated", extra={"system_id": system_id, "fields": sorted(updates.keys())})
+    logger.info(
+        "system.updated",
+        extra={"system_id": system_id, "fields": sorted(updates.keys())},
+    )
     return AISystemResponse.model_validate(row)
 
 
-@router.delete("/systems/{system_id}", dependencies=[Depends(require_permission(SYSTEMS_APPROVE))])
+@router.delete(
+    "/systems/{system_id}", dependencies=[Depends(require_permission(SYSTEMS_APPROVE))]
+)
 async def delete_system(system_id: str, request: Request) -> dict:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
@@ -170,7 +224,11 @@ async def delete_system(system_id: str, request: Request) -> dict:
     return {"status": "deleted", "id": system_id, "name": name}
 
 
-@router.post("/systems/{system_id}/reclassify", response_model=IntakeResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+@router.post(
+    "/systems/{system_id}/reclassify",
+    response_model=IntakeResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
 async def reclassify_system(system_id: str, request: Request) -> IntakeResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
@@ -195,17 +253,22 @@ async def reclassify_system(system_id: str, request: Request) -> IntakeResponse:
             resource_id=system_id,
             ai_system_id=system_id,
             ai_system_name=row.name,
-            changes={"tier": {"before": old_tier, "after": classification.tier}} if old_tier != classification.tier else None,
+            changes={"tier": {"before": old_tier, "after": classification.tier}}
+            if old_tier != classification.tier
+            else None,
         )
         await session.commit()
         await session.refresh(row)
 
-    logger.info("system.reclassified", extra={
-        "system_id": system_id,
-        "old_tier": old_tier,
-        "new_tier": classification.tier,
-        "basis": classification.basis,
-    })
+    logger.info(
+        "system.reclassified",
+        extra={
+            "system_id": system_id,
+            "old_tier": old_tier,
+            "new_tier": classification.tier,
+            "basis": classification.basis,
+        },
+    )
 
     return IntakeResponse(
         system=AISystemResponse.model_validate(row),
@@ -213,42 +276,63 @@ async def reclassify_system(system_id: str, request: Request) -> IntakeResponse:
     )
 
 
-@router.get("/systems/{system_id}/models", response_model=list[SystemModelResponse], dependencies=[Depends(require_permission(SYSTEMS_READ))])
+@router.get(
+    "/systems/{system_id}/models",
+    response_model=list[SystemModelResponse],
+    dependencies=[Depends(require_permission(SYSTEMS_READ))],
+)
 async def list_system_models(system_id: str) -> list[SystemModelResponse]:
     async with SessionLocal() as session:
-        sys_result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        sys_result = await session.execute(
+            select(AISystem).where(AISystem.id == system_id)
+        )
         if not sys_result.scalar_one_or_none():
             raise HTTPException(404, f"System {system_id} not found")
 
         result = await session.execute(
             select(ModelCard, AISystemModelCard.__table__.c.role)
-            .join(AISystemModelCard.__table__, ModelCard.id == AISystemModelCard.__table__.c.model_card_id)
+            .join(
+                AISystemModelCard.__table__,
+                ModelCard.id == AISystemModelCard.__table__.c.model_card_id,
+            )
             .where(AISystemModelCard.__table__.c.system_id == system_id)
             .order_by(ModelCard.name)
         )
         return [
-            SystemModelResponse.from_card(card, role)
-            for card, role in result.all()
+            SystemModelResponse.from_card(card, role) for card, role in result.all()
         ]
 
 
-@router.post("/systems/{system_id}/models", response_model=SystemModelResponse, status_code=200, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
-async def add_system_model(system_id: str, body: SystemModelLinkBody) -> SystemModelResponse:
+@router.post(
+    "/systems/{system_id}/models",
+    response_model=SystemModelResponse,
+    status_code=200,
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
+async def add_system_model(
+    system_id: str, body: SystemModelLinkBody
+) -> SystemModelResponse:
     # Upsert: creates the link on first call, updates role on repeat. Always 200 —
     # distinguishing insert from update requires xmax trickery the frontend doesn't need.
     async with SessionLocal() as session:
-        sys_result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        sys_result = await session.execute(
+            select(AISystem).where(AISystem.id == system_id)
+        )
         if not sys_result.scalar_one_or_none():
             raise HTTPException(404, f"System {system_id} not found")
 
-        mdl_result = await session.execute(select(ModelCard).where(ModelCard.id == body.model_card_id))
+        mdl_result = await session.execute(
+            select(ModelCard).where(ModelCard.id == body.model_card_id)
+        )
         card = mdl_result.scalar_one_or_none()
         if not card:
             raise HTTPException(404, f"Model card {body.model_card_id} not found")
 
         await session.execute(
             pg_insert(AISystemModelCard.__table__)
-            .values(system_id=system_id, model_card_id=body.model_card_id, role=body.role)
+            .values(
+                system_id=system_id, model_card_id=body.model_card_id, role=body.role
+            )
             .on_conflict_do_update(
                 index_elements=["system_id", "model_card_id"],
                 set_={"role": body.role},
@@ -257,11 +341,21 @@ async def add_system_model(system_id: str, body: SystemModelLinkBody) -> SystemM
         await session.commit()
         response = SystemModelResponse.from_card(card, body.role)
 
-    logger.info("system.model_linked", extra={"system_id": system_id, "model_card_id": body.model_card_id, "role": body.role})
+    logger.info(
+        "system.model_linked",
+        extra={
+            "system_id": system_id,
+            "model_card_id": body.model_card_id,
+            "role": body.role,
+        },
+    )
     return response
 
 
-@router.delete("/systems/{system_id}/models/{model_card_id}", dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+@router.delete(
+    "/systems/{system_id}/models/{model_card_id}",
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
 async def remove_system_model(system_id: str, model_card_id: str) -> dict:
     async with SessionLocal() as session:
         result = await session.execute(
@@ -271,15 +365,30 @@ async def remove_system_model(system_id: str, model_card_id: str) -> dict:
             .returning(AISystemModelCard.__table__.c.model_card_id)
         )
         if not result.fetchone():
-            raise HTTPException(404, f"Link between {system_id} and {model_card_id} not found")
+            raise HTTPException(
+                404, f"Link between {system_id} and {model_card_id} not found"
+            )
         await session.commit()
 
-    logger.info("system.model_unlinked", extra={"system_id": system_id, "model_card_id": model_card_id})
-    return {"status": "unlinked", "system_id": system_id, "model_card_id": model_card_id}
+    logger.info(
+        "system.model_unlinked",
+        extra={"system_id": system_id, "model_card_id": model_card_id},
+    )
+    return {
+        "status": "unlinked",
+        "system_id": system_id,
+        "model_card_id": model_card_id,
+    }
 
 
-@router.patch("/systems/{system_id}/questionnaire", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
-async def patch_questionnaire_answers(system_id: str, body: QuestionnaireAnswersPatch, request: Request) -> AISystemResponse:
+@router.patch(
+    "/systems/{system_id}/questionnaire",
+    response_model=AISystemResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
+async def patch_questionnaire_answers(
+    system_id: str, body: QuestionnaireAnswersPatch, request: Request
+) -> AISystemResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
 
     async with SessionLocal() as session:
@@ -292,7 +401,11 @@ async def patch_questionnaire_answers(system_id: str, body: QuestionnaireAnswers
         # technical answers only in technical_pending. During an info request the CO has
         # reopened exactly one section (info_requested_section) for revision. The section
         # edit-lock then decides who (owner vs active sub-assignee) may actually write.
-        allowed_states = ("draft", "business_pending") if body.section == "business" else ("technical_pending",)
+        allowed_states = (
+            ("draft", "business_pending")
+            if body.section == "business"
+            else ("technical_pending",)
+        )
         info_reopened = (
             row.workflow_status == "info_requested"
             and row.info_requested_section == body.section
@@ -317,13 +430,22 @@ async def patch_questionnaire_answers(system_id: str, body: QuestionnaireAnswers
         await session.commit()
         await session.refresh(row)
 
-    logger.info("system.questionnaire_updated", extra={
-        "system_id": system_id, "section": body.section, "keys": sorted(body.answers.keys()),
-    })
+    logger.info(
+        "system.questionnaire_updated",
+        extra={
+            "system_id": system_id,
+            "section": body.section,
+            "keys": sorted(body.answers.keys()),
+        },
+    )
     return AISystemResponse.model_validate(row)
 
 
-@router.post("/systems/{system_id}/documents", response_model=AISystemResponse, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
+@router.post(
+    "/systems/{system_id}/documents",
+    response_model=AISystemResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
 async def upload_registration_document(
     system_id: str,
     request: Request,
@@ -340,10 +462,17 @@ async def upload_registration_document(
         raise HTTPException(422, "A filename is required")
     ext = os.path.splitext(filename)[1].lower()
     if ext not in _ALLOWED_DOC_EXTENSIONS:
-        raise HTTPException(422, f"Unsupported file type '{ext}'. Allowed: {sorted(_ALLOWED_DOC_EXTENSIONS)}")
+        raise HTTPException(
+            422,
+            f"Unsupported file type '{ext}'. Allowed: {sorted(_ALLOWED_DOC_EXTENSIONS)}",
+        )
 
     content_length = request.headers.get("content-length")
-    if content_length and content_length.isdigit() and int(content_length) > MAX_DOC_SIZE:
+    if (
+        content_length
+        and content_length.isdigit()
+        and int(content_length) > MAX_DOC_SIZE
+    ):
         raise HTTPException(413, "File exceeds the maximum allowed size (20 MB)")
 
     data = await file.read()
@@ -355,22 +484,31 @@ async def upload_registration_document(
     # Single session, row locked for update: validate → upload → write is atomic, so the
     # system can't be deleted or switched away from full_manual between check and write.
     async with SessionLocal() as session:
-        result = await session.execute(select(AISystem).where(AISystem.id == system_id).with_for_update())
+        result = await session.execute(
+            select(AISystem).where(AISystem.id == system_id).with_for_update()
+        )
         row = result.scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.registration_mode != "full_manual":
-            raise HTTPException(422, "Supporting documents may only be uploaded for full-manual registrations")
+            raise HTTPException(
+                422,
+                "Supporting documents may only be uploaded for full-manual registrations",
+            )
 
-        key = await minio_client.upload_file(system_id, filename, data, file.content_type or "application/octet-stream")
+        key = await minio_client.upload_file(
+            system_id, filename, data, file.content_type or "application/octet-stream"
+        )
 
         try:
             docs = list(row.registration_documents or [])
-            docs.append(RegistrationDocument(
-                filename=filename,
-                minio_key=key,
-                uploaded_at=datetime.now(timezone.utc),
-            ).model_dump(mode="json"))
+            docs.append(
+                RegistrationDocument(
+                    filename=filename,
+                    minio_key=key,
+                    uploaded_at=datetime.now(timezone.utc),
+                ).model_dump(mode="json")
+            )
             row.registration_documents = docs
             row.updated_at = datetime.now(timezone.utc)
             await session.commit()
@@ -379,14 +517,25 @@ async def upload_registration_document(
             await minio_client.delete_file(key)
             raise
 
-    logger.info("system.document_uploaded", extra={
-        "system_id": system_id, "file_name": filename, "by": current_user,
-    })
+    logger.info(
+        "system.document_uploaded",
+        extra={
+            "system_id": system_id,
+            "file_name": filename,
+            "by": current_user,
+        },
+    )
     return AISystemResponse.model_validate(row)
 
 
-@router.get("/systems/{system_id}/documents/{doc_index}/download-url", response_model=DownloadUrlResponse, dependencies=[Depends(require_permission(SYSTEMS_READ))])
-async def get_document_download_url(system_id: str, doc_index: int) -> DownloadUrlResponse:
+@router.get(
+    "/systems/{system_id}/documents/{doc_index}/download-url",
+    response_model=DownloadUrlResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_READ))],
+)
+async def get_document_download_url(
+    system_id: str, doc_index: int
+) -> DownloadUrlResponse:
     """Return a short-lived presigned GET URL for a registration document by array index."""
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
@@ -396,9 +545,10 @@ async def get_document_download_url(system_id: str, doc_index: int) -> DownloadU
 
         docs = row.registration_documents or []
         if doc_index < 0 or doc_index >= len(docs):
-            raise HTTPException(404, f"Document {doc_index} not found for system {system_id}")
+            raise HTTPException(
+                404, f"Document {doc_index} not found for system {system_id}"
+            )
         key = docs[doc_index]["minio_key"]
 
     url = await minio_client.get_presigned_url(key)
     return DownloadUrlResponse(url=url)
-

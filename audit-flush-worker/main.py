@@ -8,6 +8,7 @@ Every FLUSH_INTERVAL seconds:
 Postgres is the write-ahead log (atomic with business actions).
 ClickHouse is the queryable archive with TTL → MinIO cold storage.
 """
+
 import asyncio
 import json
 import logging
@@ -23,15 +24,16 @@ from ai_trust_persistence.models.audit_event import AuditEvent
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = get_logger(__name__)
 
-DATABASE_URL   = os.environ["DATABASE_URL"]
+DATABASE_URL = os.environ["DATABASE_URL"]
 FLUSH_INTERVAL = int(os.environ.get("AUDIT_FLUSH_INTERVAL", "5"))
-BATCH_SIZE     = int(os.environ.get("AUDIT_FLUSH_BATCH_SIZE", "500"))
+BATCH_SIZE = int(os.environ.get("AUDIT_FLUSH_BATCH_SIZE", "500"))
 
-engine       = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 try:
     from ai_trust_tenancy import install_tenant_scoping
+
     install_tenant_scoping(engine)
 except ImportError:
     pass
@@ -40,7 +42,9 @@ except ImportError:
 def _to_ch_row(event: AuditEvent) -> list:
     return [
         event.id,
-        event.created_at.replace(tzinfo=None) if event.created_at.tzinfo else event.created_at,
+        event.created_at.replace(tzinfo=None)
+        if event.created_at.tzinfo
+        else event.created_at,
         event.actor_username,
         event.action,
         event.resource_type,
@@ -54,21 +58,27 @@ def _to_ch_row(event: AuditEvent) -> list:
 
 async def flush_once(ch_client) -> int:
     async with SessionLocal() as session:
-        rows = (await session.execute(
-            select(AuditEvent)
-            .order_by(AuditEvent.created_at)
-            .limit(BATCH_SIZE)
-        )).scalars().all()
+        rows = (
+            (
+                await session.execute(
+                    select(AuditEvent).order_by(AuditEvent.created_at).limit(BATCH_SIZE)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
         if not rows:
             return 0
 
-        ch_client.insert(AUDIT_EVENTS, [_to_ch_row(r) for r in rows], column_names=AUDIT_EVENTS_COLUMNS)
+        ch_client.insert(
+            AUDIT_EVENTS,
+            [_to_ch_row(r) for r in rows],
+            column_names=AUDIT_EVENTS_COLUMNS,
+        )
 
         ids = [r.id for r in rows]
-        await session.execute(
-            delete(AuditEvent).where(AuditEvent.id.in_(ids))
-        )
+        await session.execute(delete(AuditEvent).where(AuditEvent.id.in_(ids)))
         await session.commit()
 
     log.info("audit.flushed", extra={"count": len(rows)})
@@ -77,7 +87,11 @@ async def flush_once(ch_client) -> int:
 
 async def main() -> None:
     ch_client = get_client(database="otel")
-    log.info("Audit flush worker started (interval=%ds, batch=%d)", FLUSH_INTERVAL, BATCH_SIZE)
+    log.info(
+        "Audit flush worker started (interval=%ds, batch=%d)",
+        FLUSH_INTERVAL,
+        BATCH_SIZE,
+    )
 
     while True:
         await asyncio.sleep(FLUSH_INTERVAL)

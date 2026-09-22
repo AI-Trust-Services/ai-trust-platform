@@ -10,6 +10,7 @@ Two role variants share the same internal helpers:
   - questionnaire: /intake/assist/questionnaire/{system_id}/turn, /intake/assist/questionnaire/{system_id}/extract
     (stateful: fetches existing answers/flags from DB as context for the chatbot)
 """
+
 from __future__ import annotations
 
 import os
@@ -70,7 +71,9 @@ async def _run_assist_turn(
 ) -> AssistTurnResponse:
     """Shared turn logic for owner, engineer, and questionnaire flows."""
     try:
-        result = await chat(build_messages_fn(transcript, fields), json_mode=True, task=task)
+        result = await chat(
+            build_messages_fn(transcript, fields), json_mode=True, task=task
+        )
         parsed = await parse_json_response(result["text"], task=task)
     except (LLMParseError, Exception) as exc:  # noqa: BLE001
         logger.error("intake_assist.turn_failed", extra={"error": str(exc)})
@@ -99,9 +102,17 @@ async def _run_assist_turn(
     if complete and not degraded and run_flag_inference:
         inference_fields = {**(infer_fields or {}), **fields}
         try:
-            flags_result = await chat(build_infer_flags_messages(inference_fields), json_mode=True, task="infer_flags")
-            flags_parsed = await parse_json_response(flags_result["text"], task="infer_flags")
-            inferred = [InferredFlag(**f) for f in flags_parsed.get("inferred_flags", [])]
+            flags_result = await chat(
+                build_infer_flags_messages(inference_fields),
+                json_mode=True,
+                task="infer_flags",
+            )
+            flags_parsed = await parse_json_response(
+                flags_result["text"], task="infer_flags"
+            )
+            inferred = [
+                InferredFlag(**f) for f in flags_parsed.get("inferred_flags", [])
+            ]
         except (LLMParseError, Exception) as exc:  # noqa: BLE001
             logger.error("intake_assist.infer_flags_failed", extra={"error": str(exc)})
             raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
@@ -142,13 +153,20 @@ async def _run_assist_extract(
         result = await chat(messages, model=model, json_mode=True, task=task)
         parsed = await parse_json_response(result["text"], task=task)
     except (LLMParseError, Exception) as exc:  # noqa: BLE001
-        logger.error("intake_assist.extract_failed", extra={"error": str(exc), "file_name": file.filename})
+        logger.error(
+            "intake_assist.extract_failed",
+            extra={"error": str(exc), "file_name": file.filename},
+        )
         raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
 
     extracted = parsed.get("extracted_fields") or {}
     logger.info(
         "intake_assist.extracted",
-        extra={"file_name": file.filename, "is_image": doc.is_image, "field_count": len(extracted)},
+        extra={
+            "file_name": file.filename,
+            "is_image": doc.is_image,
+            "field_count": len(extracted),
+        },
     )
     return AssistExtractResponse(extracted_fields=extracted, notes=parsed.get("notes"))
 
@@ -156,6 +174,7 @@ async def _run_assist_extract(
 # ---------------------------------------------------------------------------
 # Owner endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.post(
     "/intake/assist/turn",
@@ -181,12 +200,15 @@ async def assist_extract(file: UploadFile = File(...)) -> AssistExtractResponse:
 # Engineer endpoints
 # ---------------------------------------------------------------------------
 
+
 @router.post(
     "/intake/assist/engineer/{system_id}/turn",
     response_model=AssistTurnResponse,
     dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
 )
-async def engineer_assist_turn(system_id: str, body: AssistTurnRequest) -> AssistTurnResponse:
+async def engineer_assist_turn(
+    system_id: str, body: AssistTurnRequest
+) -> AssistTurnResponse:
     transcript = [{"role": m.role, "content": m.content} for m in body.transcript]
     fields = dict(body.fields)
 
@@ -206,7 +228,9 @@ async def engineer_assist_turn(system_id: str, body: AssistTurnRequest) -> Assis
         "human_involvement": row.autonomy_level,
     }
 
-    return await _run_assist_turn(transcript, fields, build_engineer_turn_messages, infer_fields=owner_fields)
+    return await _run_assist_turn(
+        transcript, fields, build_engineer_turn_messages, infer_fields=owner_fields
+    )
 
 
 @router.post(
@@ -214,7 +238,9 @@ async def engineer_assist_turn(system_id: str, body: AssistTurnRequest) -> Assis
     response_model=AssistExtractResponse,
     dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
 )
-async def engineer_assist_extract(system_id: str, file: UploadFile = File(...)) -> AssistExtractResponse:
+async def engineer_assist_extract(
+    system_id: str, file: UploadFile = File(...)
+) -> AssistExtractResponse:
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
         row = result.scalar_one_or_none()
@@ -228,13 +254,21 @@ async def engineer_assist_extract(system_id: str, file: UploadFile = File(...)) 
 # Questionnaire endpoints (stateful — system must exist)
 # ---------------------------------------------------------------------------
 
+
 @router.post(
     "/intake/assist/questionnaire/{system_id}/turn",
     response_model=AssistTurnResponse,
     dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
 )
-async def questionnaire_turn(system_id: str, body: QuestionnaireTurnRequest) -> AssistTurnResponse:
-    transcript = [{"role": m["role"], "content": m["content"]} if isinstance(m, dict) else {"role": m.role, "content": m.content} for m in body.transcript]
+async def questionnaire_turn(
+    system_id: str, body: QuestionnaireTurnRequest
+) -> AssistTurnResponse:
+    transcript = [
+        {"role": m["role"], "content": m["content"]}
+        if isinstance(m, dict)
+        else {"role": m.role, "content": m.content}
+        for m in body.transcript
+    ]
     fields = dict(body.fields)
     section = body.section
 
@@ -259,7 +293,9 @@ async def questionnaire_turn(system_id: str, body: QuestionnaireTurnRequest) -> 
         def build_fn(t: list[dict], f: dict[str, Any]) -> list[dict]:
             return build_questionnaire_turn_messages("business", t, f, existing_data)
 
-        return await _run_assist_turn(transcript, fields, build_fn, task=task, run_flag_inference=False)
+        return await _run_assist_turn(
+            transcript, fields, build_fn, task=task, run_flag_inference=False
+        )
 
     else:
         # Seed context from existing boolean flag values.
@@ -280,7 +316,14 @@ async def questionnaire_turn(system_id: str, body: QuestionnaireTurnRequest) -> 
         def build_fn(t: list[dict], f: dict[str, Any]) -> list[dict]:  # type: ignore[misc]
             return build_questionnaire_turn_messages("technical", t, f, existing_flags)
 
-        return await _run_assist_turn(transcript, fields, build_fn, infer_fields=owner_fields, task=task, run_flag_inference=True)
+        return await _run_assist_turn(
+            transcript,
+            fields,
+            build_fn,
+            infer_fields=owner_fields,
+            task=task,
+            run_flag_inference=True,
+        )
 
 
 @router.post(

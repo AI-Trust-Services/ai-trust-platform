@@ -4,6 +4,7 @@ Revision ID: 0010
 Revises: 0009
 Create Date: 2026-08-18
 """
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -19,7 +20,10 @@ def upgrade() -> None:
     op.add_column("ai_systems", sa.Column("use_case", sa.Text(), nullable=True))
     op.add_column("ai_systems", sa.Column("people_affected", sa.Text(), nullable=True))
     op.add_column("ai_systems", sa.Column("decision_context", sa.Text(), nullable=True))
-    op.add_column("ai_systems", sa.Column("classification_rationale", postgresql.JSONB(), nullable=True))
+    op.add_column(
+        "ai_systems",
+        sa.Column("classification_rationale", postgresql.JSONB(), nullable=True),
+    )
 
 
 def downgrade() -> None:

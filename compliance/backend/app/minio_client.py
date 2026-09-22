@@ -4,6 +4,7 @@ The `minio` SDK is synchronous; all blocking calls are wrapped in
 ``asyncio.to_thread`` so they can be awaited from async request handlers without
 blocking the event loop. Credentials are read from the environment (fail-fast).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,7 +30,9 @@ except ImportError:  # libs/tenancy not installed
 
 logger = get_logger(__name__)
 
-SINGLE_TENANT_BUCKET = "evidence-files"  # used only in TENANCY_MODE=single (and local dev)
+SINGLE_TENANT_BUCKET = (
+    "evidence-files"  # used only in TENANCY_MODE=single (and local dev)
+)
 # MinIO/S3 bucket names: lowercase, 3-63 chars, DNS-safe. tenant-<org> with '_'→'-'.
 _SAFE_BUCKET = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
 
@@ -52,10 +55,15 @@ def bucket_name() -> str:
         return SINGLE_TENANT_BUCKET
     tenant = _current_tenant()
     if not tenant:
-        raise HTTPException(status_code=400, detail="No tenant in request context — cannot resolve evidence bucket.")
+        raise HTTPException(
+            status_code=400,
+            detail="No tenant in request context — cannot resolve evidence bucket.",
+        )
     name = "tenant-" + tenant.lower().replace("_", "-")
     if not _SAFE_BUCKET.match(name):
-        raise HTTPException(status_code=400, detail="Tenant does not map to a valid bucket name.")
+        raise HTTPException(
+            status_code=400, detail="Tenant does not map to a valid bucket name."
+        )
     return name
 
 
@@ -118,12 +126,16 @@ def _upload_sync(bucket: str, key: str, data: bytes, content_type: str) -> None:
     )
 
 
-async def upload_file(evidence_id: str, filename: str, data: bytes, content_type: str) -> str:
+async def upload_file(
+    evidence_id: str, filename: str, data: bytes, content_type: str
+) -> str:
     """Upload file bytes to the current tenant's bucket. Returns the stored object key."""
     bucket = bucket_name()
     key = object_key(evidence_id, filename)
     await asyncio.to_thread(_upload_sync, bucket, key, data, content_type)
-    logger.info("minio.file_uploaded", extra={"bucket": bucket, "key": key, "size": len(data)})
+    logger.info(
+        "minio.file_uploaded", extra={"bucket": bucket, "key": key, "size": len(data)}
+    )
     return key
 
 
@@ -133,7 +145,9 @@ def _presigned_sync(bucket: str, key: str, expires: timedelta) -> str:
 
 async def get_presigned_url(key: str, expires_hours: int = 1) -> str:
     """Return a presigned GET URL for the object in the current tenant's bucket."""
-    return await asyncio.to_thread(_presigned_sync, bucket_name(), key, timedelta(hours=expires_hours))
+    return await asyncio.to_thread(
+        _presigned_sync, bucket_name(), key, timedelta(hours=expires_hours)
+    )
 
 
 def _delete_sync(bucket: str, key: str) -> None:

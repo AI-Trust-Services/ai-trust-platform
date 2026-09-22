@@ -1,4 +1,5 @@
 """Unit tests for the startup seed logic."""
+
 from __future__ import annotations
 
 import os
@@ -17,6 +18,7 @@ async def test_seed_inserts_row_when_none_exists():
 
     with patch("app.startup.SessionLocal", return_value=session):
         from app.startup import seed_settings_from_env
+
         await seed_settings_from_env()
 
     session.add.assert_called_once()
@@ -36,6 +38,7 @@ async def test_seed_skips_when_row_already_exists():
 
     with patch("app.startup.SessionLocal", return_value=session):
         from app.startup import seed_settings_from_env
+
         await seed_settings_from_env()
 
     session.add.assert_not_called()
@@ -58,6 +61,7 @@ async def test_seed_reads_smtp_env_vars(monkeypatch):
 
     import importlib
     import app.startup as startup_mod
+
     importlib.reload(startup_mod)
 
     with patch("app.startup.SessionLocal", return_value=session):
@@ -84,6 +88,7 @@ async def test_seed_handles_missing_smtp_port_gracefully(monkeypatch):
 
     import importlib
     import app.startup as startup_mod
+
     importlib.reload(startup_mod)
 
     with patch("app.startup.SessionLocal", return_value=session):

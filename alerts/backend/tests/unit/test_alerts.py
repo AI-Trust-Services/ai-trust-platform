@@ -1,10 +1,13 @@
 """Unit tests for alerts — pure logic, no DB or ClickHouse required."""
+
 from __future__ import annotations
 
 
 def _enrich(rows: list[dict], name_map: dict[str, str]) -> list[dict]:
     for row in rows:
-        row["entity_display_name"] = name_map.get(row.get("entity_id", ""), row.get("entity_id", ""))
+        row["entity_display_name"] = name_map.get(
+            row.get("entity_id", ""), row.get("entity_id", "")
+        )
     return rows
 
 

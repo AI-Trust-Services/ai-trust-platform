@@ -17,11 +17,17 @@ router = APIRouter(prefix="/v1/settings", tags=["settings"])
 
 
 @router.get("", response_model=GeneralSettingsResponse)
-async def get_settings(_: str = Depends(require_permission(IAM_MANAGE))) -> GeneralSettingsResponse:
+async def get_settings(
+    _: str = Depends(require_permission(IAM_MANAGE)),
+) -> GeneralSettingsResponse:
     async with SessionLocal() as session:
-        row = await session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
+        row = await session.scalar(
+            select(PlatformSettings).where(PlatformSettings.id == 1)
+        )
         if row is None:
-            raise HTTPException(status_code=503, detail="Platform settings not initialised")
+            raise HTTPException(
+                status_code=503, detail="Platform settings not initialised"
+            )
         return GeneralSettingsResponse.model_validate(row)
 
 
@@ -31,9 +37,13 @@ async def update_settings(
     _: str = Depends(require_permission(IAM_MANAGE)),
 ) -> GeneralSettingsResponse:
     async with SessionLocal() as session:
-        row = await session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
+        row = await session.scalar(
+            select(PlatformSettings).where(PlatformSettings.id == 1)
+        )
         if row is None:
-            raise HTTPException(status_code=503, detail="Platform settings not initialised")
+            raise HTTPException(
+                status_code=503, detail="Platform settings not initialised"
+            )
 
         if body.platform_name is not None:
             row.platform_name = body.platform_name

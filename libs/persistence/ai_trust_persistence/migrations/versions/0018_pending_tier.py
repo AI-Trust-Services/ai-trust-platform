@@ -7,6 +7,7 @@ Create Date: 2026-09-03
 Systems registered with only a name+description start with tier='pending' until
 risk classification is completed in Assessments.
 """
+
 from alembic import op
 
 revision = "0018"

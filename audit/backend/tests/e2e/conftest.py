@@ -7,6 +7,7 @@ Requires:
 
 Auto-skips if ClickHouse is not reachable.
 """
+
 from __future__ import annotations
 
 import json
@@ -28,8 +29,10 @@ _CH_PASSWORD = os.environ.get("CLICKHOUSE_PASSWORD", "")
 def _ch_reachable() -> bool:
     try:
         client = clickhouse_connect.get_client(
-            host=_CH_HOST, port=_CH_PORT,
-            username=_CH_USER, password=_CH_PASSWORD,
+            host=_CH_HOST,
+            port=_CH_PORT,
+            username=_CH_USER,
+            password=_CH_PASSWORD,
         )
         client.command("SELECT 1")
         return True
@@ -39,8 +42,10 @@ def _ch_reachable() -> bool:
 
 def _ch_client():
     return clickhouse_connect.get_client(
-        host=_CH_HOST, port=_CH_PORT,
-        username=_CH_USER, password=_CH_PASSWORD,
+        host=_CH_HOST,
+        port=_CH_PORT,
+        username=_CH_USER,
+        password=_CH_PASSWORD,
         database="otel",
     )
 
@@ -87,22 +92,31 @@ def insert_event(
     ts = created_at if created_at is not None else datetime.now(timezone.utc)
     _ch_client().insert(
         "otel.audit_events",
-        [[
-            event_id,
-            ts.replace(tzinfo=None),
-            actor_username,
-            action,
-            resource_type,
-            resource_id or uuid.uuid4().hex,
-            ai_system_id,
-            ai_system_name,
-            json.dumps(changes or {}),
-            source,
-        ]],
+        [
+            [
+                event_id,
+                ts.replace(tzinfo=None),
+                actor_username,
+                action,
+                resource_type,
+                resource_id or uuid.uuid4().hex,
+                ai_system_id,
+                ai_system_name,
+                json.dumps(changes or {}),
+                source,
+            ]
+        ],
         column_names=[
-            "id", "created_at", "actor_username", "action",
-            "resource_type", "resource_id", "ai_system_id",
-            "ai_system_name", "changes", "source",
+            "id",
+            "created_at",
+            "actor_username",
+            "action",
+            "resource_type",
+            "resource_id",
+            "ai_system_id",
+            "ai_system_name",
+            "changes",
+            "source",
         ],
     )
     return event_id
@@ -111,7 +125,9 @@ def insert_event(
 @pytest.fixture(scope="session", autouse=True)
 def e2e_setup():
     if not _ch_reachable():
-        pytest.skip("ClickHouse not reachable at localhost:8123 — start Docker Compose first")
+        pytest.skip(
+            "ClickHouse not reachable at localhost:8123 — start Docker Compose first"
+        )
 
     _ensure_table()
     _truncate_ch()
@@ -136,6 +152,7 @@ def truncate_tables(e2e_setup):
 @pytest_asyncio.fixture
 async def client():
     from app.main import app
+
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",

@@ -22,6 +22,7 @@ Conventions:
 
 Module is intentionally one file; mirrors `ai-system-registry/backend/app/classifier.py`.
 """
+
 from __future__ import annotations
 
 import json
@@ -72,21 +73,24 @@ class DecisionStep(BaseModel):
     in execution order. Multiple consecutive spans with the same name collapse
     into one step (`count`); this is the same de-duplication ConversationGraph
     does on the frontend, so the two surfaces tell the same story."""
-    kind: str                       # llm | tool | retriever | reranker | guardrail | agent | other
-    name: str                       # tool/retriever/guardrail name, or span_name
-    count: int = 1                  # number of contiguous spans collapsed
-    detail: Optional[str] = None    # short context (tool args snippet, etc.) — optional
+
+    kind: str  # llm | tool | retriever | reranker | guardrail | agent | other
+    name: str  # tool/retriever/guardrail name, or span_name
+    count: int = 1  # number of contiguous spans collapsed
+    detail: Optional[str] = None  # short context (tool args snippet, etc.) — optional
 
 
 # --- Flag taxonomy -----------------------------------------------------------
 
+
 # Flag IDs are stable strings; the frontend matches on them to choose the icon
 # / colour. Severity is rendered as the badge tint (warning vs. info).
 class DecisionFlag(BaseModel):
-    id: str                          # stable id, see _FLAG_* constants below
+    id: str  # stable id, see _FLAG_* constants below
     severity: Literal["info", "warning"]
-    label: str                       # short UI label
-    detail: str                      # one-sentence explanation
+    label: str  # short UI label
+    detail: str  # one-sentence explanation
+
 
 FLAG_TRUNCATED_OUTPUT = "truncated_output"
 FLAG_TOOL_FAILURE = "tool_failure"
@@ -136,6 +140,7 @@ def _is_plumbing(span: Span) -> bool:
 
 # --- Per-invocation memoisation ---------------------------------------------
 
+
 class _SpanCache:
     """Per-`build_summary` cache of the two expensive per-span derivations.
 
@@ -184,8 +189,15 @@ def _cache_for(spans: list["Span"], cache: Optional["_SpanCache"]) -> "_SpanCach
 Span = dict[str, Any]
 
 SpanKind = Literal[
-    "tool", "llm", "agent", "chain", "retriever",
-    "embedding", "reranker", "guardrail", "other",
+    "tool",
+    "llm",
+    "agent",
+    "chain",
+    "retriever",
+    "embedding",
+    "reranker",
+    "guardrail",
+    "other",
 ]
 
 
@@ -209,7 +221,16 @@ def classify_kind(span: Span) -> SpanKind:
 
     attrs = span.get("attributes") or {}
     oi = (attrs.get("openinference.span.kind") or "").lower()
-    if oi in ("tool", "llm", "agent", "chain", "retriever", "embedding", "reranker", "guardrail"):
+    if oi in (
+        "tool",
+        "llm",
+        "agent",
+        "chain",
+        "retriever",
+        "embedding",
+        "reranker",
+        "guardrail",
+    ):
         return oi  # type: ignore[return-value]
 
     name = f"{op} {(span.get('span_name') or '').lower()}"
@@ -239,7 +260,7 @@ def _strip_op_prefix(span: Span) -> str:
     name = span.get("span_name") or ""
     op = span.get("operation_name") or ""
     if op and name.startswith(op + " "):
-        return name[len(op) + 1:].strip() or name
+        return name[len(op) + 1 :].strip() or name
     return name
 
 
@@ -253,6 +274,7 @@ def _truncate(text: str, limit: int) -> tuple[str, bool]:
 
 
 # --- Message extraction ------------------------------------------------------
+
 
 def _parse_otel_messages(raw: str) -> list[dict[str, Any]]:
     """OTel GenAI semconv stores messages as a JSON array string.
@@ -314,7 +336,9 @@ def _message_content(msg: dict[str, Any]) -> str:
     return ""
 
 
-def _messages_from_span(span: Span, direction: Literal["input", "output"]) -> list[dict[str, str]]:
+def _messages_from_span(
+    span: Span, direction: Literal["input", "output"]
+) -> list[dict[str, str]]:
     """Return [{role, content}, ...] from a span, regardless of instrumentation.
 
     Order: OTel GenAI JSON first, then OpenInference numbered attributes."""
@@ -324,7 +348,8 @@ def _messages_from_span(span: Span, direction: Literal["input", "output"]) -> li
     if parsed:
         return [
             {"role": str(m.get("role") or ""), "content": _message_content(m)}
-            for m in parsed if isinstance(m, dict)
+            for m in parsed
+            if isinstance(m, dict)
         ]
 
     # OTel GenAI also lives under attributes when the consumer didn't promote
@@ -336,7 +361,8 @@ def _messages_from_span(span: Span, direction: Literal["input", "output"]) -> li
         if parsed:
             return [
                 {"role": str(m.get("role") or ""), "content": _message_content(m)}
-                for m in parsed if isinstance(m, dict)
+                for m in parsed
+                if isinstance(m, dict)
             ]
 
     # OpenInference numbered fallback — keeps LangChain traces useful even
@@ -346,7 +372,7 @@ def _messages_from_span(span: Span, direction: Literal["input", "output"]) -> li
     for k in attrs.keys():
         if not k.startswith(prefix):
             continue
-        m = re.match(r"^(\d+)\.", k[len(prefix):])
+        m = re.match(r"^(\d+)\.", k[len(prefix) :])
         if m:
             indices.add(int(m.group(1)))
     if not indices:
@@ -361,6 +387,7 @@ def _messages_from_span(span: Span, direction: Literal["input", "output"]) -> li
 
 
 # --- Goal / Final Answer extraction -----------------------------------------
+
 
 def _root_span(spans: list[Span]) -> Optional[Span]:
     for s in spans:
@@ -383,7 +410,9 @@ def _last_llm(spans: list[Span], cache: _SpanCache) -> Optional[Span]:
     return None
 
 
-def extract_goal(spans: list[Span], _cache: Optional[_SpanCache] = None) -> tuple[Optional[str], bool]:
+def extract_goal(
+    spans: list[Span], _cache: Optional[_SpanCache] = None
+) -> tuple[Optional[str], bool]:
     """Pick the user's question. Root span first; fall back to the first LLM span.
     From the message list, take the LAST `user`-role message — that's the
     current turn, not a prior history entry or the system prompt.
@@ -396,14 +425,18 @@ def extract_goal(spans: list[Span], _cache: Optional[_SpanCache] = None) -> tupl
         if not candidate:
             continue
         msgs = _messages_from_span(candidate, "input")
-        users = [m for m in msgs if m.get("role", "").lower() == "user" and m.get("content")]
+        users = [
+            m for m in msgs if m.get("role", "").lower() == "user" and m.get("content")
+        ]
         if not users:
             continue
         return _truncate(users[-1]["content"], GOAL_MAX_CHARS)
     return None, False
 
 
-def extract_final_answer(spans: list[Span], _cache: Optional[_SpanCache] = None) -> tuple[Optional[str], bool]:
+def extract_final_answer(
+    spans: list[Span], _cache: Optional[_SpanCache] = None
+) -> tuple[Optional[str], bool]:
     """Pick the assistant's final answer. Root span output first; fall back to
     the last LLM span's output. Take the last assistant message (multi-turn
     conversations end with an assistant reply)."""
@@ -414,7 +447,9 @@ def extract_final_answer(spans: list[Span], _cache: Optional[_SpanCache] = None)
         msgs = _messages_from_span(candidate, "output")
         # Some output_messages have role="assistant", some have no role at all
         # (single-message outputs). Accept both — anything with content counts.
-        non_empty = [m for m in msgs if m.get("content") and m.get("role", "").lower() != "user"]
+        non_empty = [
+            m for m in msgs if m.get("content") and m.get("role", "").lower() != "user"
+        ]
         if not non_empty:
             continue
         return _truncate(non_empty[-1]["content"], FINAL_ANSWER_MAX_CHARS)
@@ -465,7 +500,9 @@ def _finish_reasons(span: Span) -> list[str]:
     raw_lower = raw.lower()
     # finish_reasons stored as free-form text — could be "stop", "stop,length",
     # "['stop']" etc. Split on common separators.
-    return [r.strip().strip("'\"[]") for r in re.split(r"[,\s]+", raw_lower) if r.strip()]
+    return [
+        r.strip().strip("'\"[]") for r in re.split(r"[,\s]+", raw_lower) if r.strip()
+    ]
 
 
 def _is_guardrail_triggered(span: Span, cache: _SpanCache) -> tuple[bool, bool]:
@@ -481,7 +518,10 @@ def _is_guardrail_triggered(span: Span, cache: _SpanCache) -> tuple[bool, bool]:
     raw = str(attrs.get("guardrail.triggered") or "").strip().lower()
     if raw in {"true", "1", "yes"}:
         return True, False
-    if cache.kind(span) == "guardrail" and int(span.get("status_code") or 0) == STATUS_ERROR:
+    if (
+        cache.kind(span) == "guardrail"
+        and int(span.get("status_code") or 0) == STATUS_ERROR
+    ):
         return True, True
     return False, False
 
@@ -498,7 +538,9 @@ def _root_produced_output(root: Optional[Span], last_llm: Optional[Span]) -> boo
     return False
 
 
-def classify_outcome(spans: list[Span], _cache: Optional[_SpanCache] = None) -> tuple[Outcome, str, bool]:
+def classify_outcome(
+    spans: list[Span], _cache: Optional[_SpanCache] = None
+) -> tuple[Outcome, str, bool]:
     """Waterfall — first rule wins.
 
     Returns (outcome, reason_sentence, heuristic_flag). The flag is True when
@@ -515,17 +557,23 @@ def classify_outcome(spans: list[Span], _cache: Optional[_SpanCache] = None) -> 
     # --- 1) errored — root or any LLM/agent span failed
     if root and int(root.get("status_code") or 0) == STATUS_ERROR:
         msg = (root.get("status_message") or "").strip()
-        return ("errored",
-                f"Trace failed with error: {msg}" if msg else "Trace failed at the root span.",
-                False)
+        return (
+            "errored",
+            f"Trace failed with error: {msg}"
+            if msg
+            else "Trace failed at the root span.",
+            False,
+        )
     for s in spans:
         kind = cache.kind(s)
         if kind in ("llm", "agent") and int(s.get("status_code") or 0) == STATUS_ERROR:
             msg = (s.get("status_message") or "").strip()
             label = s.get("span_name") or kind
-            return ("errored",
-                    f"{label} failed: {msg}" if msg else f"{label} failed.",
-                    False)
+            return (
+                "errored",
+                f"{label} failed: {msg}" if msg else f"{label} failed.",
+                False,
+            )
 
     # --- 2) refused — guardrail trigger (hybrid) or LLM safety finish_reason
     for s in spans:
@@ -533,16 +581,16 @@ def classify_outcome(spans: list[Span], _cache: Optional[_SpanCache] = None) -> 
         if triggered:
             name = _guardrail_name(s)
             suffix = " (heuristic)" if was_heur else ""
-            return ("refused",
-                    f"Output blocked by guardrail '{name}'{suffix}.",
-                    was_heur)
+            return (
+                "refused",
+                f"Output blocked by guardrail '{name}'{suffix}.",
+                was_heur,
+            )
 
     if last_llm:
         for reason in _finish_reasons(last_llm):
             if reason in _REFUSAL_FINISH_REASONS:
-                return ("refused",
-                        f"Model refused: finish_reason={reason}.",
-                        False)
+                return ("refused", f"Model refused: finish_reason={reason}.", False)
 
     # --- 3) partial — truncation always wins. Tool failures only count as
     # partial when the trace did NOT recover (i.e. the root/last LLM never
@@ -551,31 +599,41 @@ def classify_outcome(spans: list[Span], _cache: Optional[_SpanCache] = None) -> 
     if last_llm:
         for reason in _finish_reasons(last_llm):
             if reason in _TRUNCATION_FINISH_REASONS:
-                return ("partial",
-                        f"Response truncated (finish_reason={reason}).",
-                        False)
+                return (
+                    "partial",
+                    f"Response truncated (finish_reason={reason}).",
+                    False,
+                )
 
     has_output = _root_produced_output(root, last_llm)
 
     if not has_output:
         for s in spans:
-            if cache.kind(s) == "tool" and int(s.get("status_code") or 0) == STATUS_ERROR:
+            if (
+                cache.kind(s) == "tool"
+                and int(s.get("status_code") or 0) == STATUS_ERROR
+            ):
                 name = _tool_name(s)
-                return ("partial",
-                        f"Tool '{name}' failed; no final answer produced.",
-                        False)
+                return (
+                    "partial",
+                    f"Tool '{name}' failed; no final answer produced.",
+                    False,
+                )
 
     # --- 4) answered — root finished OK and produced an assistant output
     if root and int(root.get("status_code") or 0) != STATUS_ERROR and has_output:
         return ("answered", "Completed; final response delivered.", False)
 
     # --- 5) unknown
-    return ("unknown",
-            "Insufficient telemetry to classify (no errors, no output captured).",
-            False)
+    return (
+        "unknown",
+        "Insufficient telemetry to classify (no errors, no output captured).",
+        False,
+    )
 
 
 # --- Name extraction (OTel-GenAI-first) -------------------------------------
+
 
 def _tool_name(span: Span) -> str:
     attrs = span.get("attributes") or {}
@@ -626,7 +684,9 @@ def _kind_name(span: Span, kind: SpanKind) -> str:
 _PATH_KINDS = {"llm", "tool", "retriever", "reranker", "guardrail", "agent"}
 
 
-def extract_decision_path(spans: list[Span], _cache: Optional[_SpanCache] = None) -> list[DecisionStep]:
+def extract_decision_path(
+    spans: list[Span], _cache: Optional[_SpanCache] = None
+) -> list[DecisionStep]:
     """Reduce the span list to a flat, ordered list of meaningful operations.
 
     Mirrors ConversationGraph: drop LangChain plumbing, keep decision-relevant
@@ -671,7 +731,10 @@ def extract_decision_path(spans: list[Span], _cache: Optional[_SpanCache] = None
 
 # --- Flags ------------------------------------------------------------------
 
-def _retry_loop_repeats(spans: list[Span], cache: _SpanCache) -> Optional[tuple[str, int]]:
+
+def _retry_loop_repeats(
+    spans: list[Span], cache: _SpanCache
+) -> Optional[tuple[str, int]]:
     """Find the worst retry hotspot: any (kind, name) pair that fired more than
     3 times. Returns (label, count) or None.
 
@@ -720,38 +783,47 @@ def compute_flags(
 
     # --- tool_failure (warning) ---
     failed_tools = [
-        _tool_name(s) for s in spans
+        _tool_name(s)
+        for s in spans
         if cache.kind(s) == "tool" and int(s.get("status_code") or 0) == STATUS_ERROR
     ]
     if failed_tools:
         unique_failed = sorted(set(failed_tools))
-        flags.append(DecisionFlag(
-            id=FLAG_TOOL_FAILURE,
-            severity="warning",
-            label="Tool failure",
-            detail=f"{len(failed_tools)} tool call(s) errored: {', '.join(unique_failed)}.",
-        ))
+        flags.append(
+            DecisionFlag(
+                id=FLAG_TOOL_FAILURE,
+                severity="warning",
+                label="Tool failure",
+                detail=f"{len(failed_tools)} tool call(s) errored: {', '.join(unique_failed)}.",
+            )
+        )
 
     # --- retry_loop (warning) ---
     retry = _retry_loop_repeats(spans, cache)
     if retry:
         label, n = retry
-        flags.append(DecisionFlag(
-            id=FLAG_RETRY_LOOP,
-            severity="warning",
-            label="Retry loop",
-            detail=f"{label} fired {n} times — possible loop or stuck agent.",
-        ))
+        flags.append(
+            DecisionFlag(
+                id=FLAG_RETRY_LOOP,
+                severity="warning",
+                label="Retry loop",
+                detail=f"{label} fired {n} times — possible loop or stuck agent.",
+            )
+        )
 
     # --- truncated_output (warning) ---
     last_llm = _last_llm(spans, cache)
-    if last_llm and any(r in _TRUNCATION_FINISH_REASONS for r in _finish_reasons(last_llm)):
-        flags.append(DecisionFlag(
-            id=FLAG_TRUNCATED_OUTPUT,
-            severity="warning",
-            label="Truncated output",
-            detail="The model stopped at the token limit; the response is incomplete.",
-        ))
+    if last_llm and any(
+        r in _TRUNCATION_FINISH_REASONS for r in _finish_reasons(last_llm)
+    ):
+        flags.append(
+            DecisionFlag(
+                id=FLAG_TRUNCATED_OUTPUT,
+                severity="warning",
+                label="Truncated output",
+                detail="The model stopped at the token limit; the response is incomplete.",
+            )
+        )
 
     # --- near_context_limit (info) ---
     # input_tokens > 80% of declared max_tokens on any LLM span. The OTel
@@ -769,38 +841,45 @@ def compute_flags(
             continue
         in_t = int(s.get("input_tokens") or 0)
         if max_t > 0 and in_t > int(max_t * 0.8):
-            flags.append(DecisionFlag(
-                id=FLAG_NEAR_CONTEXT_LIMIT,
-                severity="info",
-                label="Near context limit",
-                detail=(
-                    f"Input was {in_t} tokens against a {max_t}-token limit "
-                    f"(>80%) — risk of dropped context next turn."
-                ),
-            ))
+            flags.append(
+                DecisionFlag(
+                    id=FLAG_NEAR_CONTEXT_LIMIT,
+                    severity="info",
+                    label="Near context limit",
+                    detail=(
+                        f"Input was {in_t} tokens against a {max_t}-token limit "
+                        f"(>80%) — risk of dropped context next turn."
+                    ),
+                )
+            )
             break  # one occurrence is enough; don't spam the badge list
 
     # --- instrumentation_gap (info) ---
     # Aggregable signal that the upstream app didn't set
     # OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true.
     if goal is None and final_answer is None and spans:
-        flags.append(DecisionFlag(
-            id=FLAG_INSTRUMENTATION_GAP,
-            severity="info",
-            label="Instrumentation gap",
-            detail=(
-                "No prompt/response content captured. Set "
-                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true on "
-                "the instrumented app to enable audit-grade traces."
-            ),
-        ))
+        flags.append(
+            DecisionFlag(
+                id=FLAG_INSTRUMENTATION_GAP,
+                severity="info",
+                label="Instrumentation gap",
+                detail=(
+                    "No prompt/response content captured. Set "
+                    "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true on "
+                    "the instrumented app to enable audit-grade traces."
+                ),
+            )
+        )
 
     return flags
 
 
 # --- Aggregations ------------------------------------------------------------
 
-def aggregate_tools(spans: list[Span], _cache: Optional[_SpanCache] = None) -> list[ToolUsage]:
+
+def aggregate_tools(
+    spans: list[Span], _cache: Optional[_SpanCache] = None
+) -> list[ToolUsage]:
     cache = _cache_for(spans, _cache)
     by_name: dict[str, dict[str, int]] = {}
     for s in spans:
@@ -817,7 +896,9 @@ def aggregate_tools(spans: list[Span], _cache: Optional[_SpanCache] = None) -> l
     ]
 
 
-def aggregate_retrievals(spans: list[Span], _cache: Optional[_SpanCache] = None) -> list[RetrievalUsage]:
+def aggregate_retrievals(
+    spans: list[Span], _cache: Optional[_SpanCache] = None
+) -> list[RetrievalUsage]:
     cache = _cache_for(spans, _cache)
     counts: dict[str, int] = {}
     for s in spans:
@@ -827,7 +908,9 @@ def aggregate_retrievals(spans: list[Span], _cache: Optional[_SpanCache] = None)
     return [RetrievalUsage(name=n, calls=c) for n, c in sorted(counts.items())]
 
 
-def aggregate_guardrails(spans: list[Span], _cache: Optional[_SpanCache] = None) -> list[GuardrailUsage]:
+def aggregate_guardrails(
+    spans: list[Span], _cache: Optional[_SpanCache] = None
+) -> list[GuardrailUsage]:
     # Triggered status is per-name aggregated: any triggered call → triggered.
     cache = _cache_for(spans, _cache)
     by_name: dict[str, bool] = {}
@@ -868,8 +951,13 @@ def compute_metrics(spans: list[Span]) -> Metrics:
         starts.append(ms)
         ends.append(ms + d)
     duration_ms = int(round(max(ends) - min(starts))) if starts else 0
-    total_tokens = sum(int(s.get("input_tokens") or 0) + int(s.get("output_tokens") or 0) for s in spans)
-    error_count = sum(1 for s in spans if int(s.get("status_code") or 0) == STATUS_ERROR)
+    total_tokens = sum(
+        int(s.get("input_tokens") or 0) + int(s.get("output_tokens") or 0)
+        for s in spans
+    )
+    error_count = sum(
+        1 for s in spans if int(s.get("status_code") or 0) == STATUS_ERROR
+    )
     return Metrics(
         duration_ms=duration_ms,
         total_tokens=total_tokens,
@@ -893,6 +981,7 @@ def _iso_to_ms(value: Any) -> Optional[float]:
     if value is None:
         return None
     from datetime import datetime, timezone
+
     try:
         # ClickHouse usually omits a `T` separator — fromisoformat needs it
         # since Python 3.10 to handle the space variant. fromisoformat in 3.11+
@@ -907,6 +996,7 @@ def _iso_to_ms(value: Any) -> Optional[float]:
 
 
 # --- Public entry point ------------------------------------------------------
+
 
 def build_summary(spans: Iterable[Span]) -> DecisionRecord:
     """Top-level orchestrator — pure function of the span list.

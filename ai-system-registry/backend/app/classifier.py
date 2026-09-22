@@ -2,6 +2,7 @@
 
 Waterfall: Art. 5 (prohibited) → GPAI → Annex III (high-risk) → Art. 50 (limited) → minimal
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -42,7 +43,10 @@ _ANNEX_III_AREAS = {
     "is_biometric_identification": (1, "Biometric identification & categorisation"),
     "is_critical_infrastructure": (2, "Critical infrastructure management"),
     "is_education_related": (3, "Education & vocational training"),
-    "is_employment_related": (4, "Employment, workers management & access to self-employment"),
+    "is_employment_related": (
+        4,
+        "Employment, workers management & access to self-employment",
+    ),
     "is_credit_scoring": (5, "Access to essential private services (credit scoring)"),
     "is_public_service": (5, "Access to essential public services"),
     "is_law_enforcement": (6, "Law enforcement"),
@@ -56,11 +60,20 @@ _PROHIBITED_FLAGS = [
     ("subliminal_manipulation", "Art. 5(1)(a) subliminal manipulation"),
     ("exploits_vulnerability", "Art. 5(1)(b) exploits vulnerability"),
     ("social_scoring_public", "Art. 5(1)(c) social scoring by public authority"),
-    ("real_time_biometric_public", "Art. 5(1)(d) real-time remote biometric ID in public"),
-    ("emotion_recognition_workplace", "Art. 5(1)(f) emotion recognition in workplace/education"),
+    (
+        "real_time_biometric_public",
+        "Art. 5(1)(d) real-time remote biometric ID in public",
+    ),
+    (
+        "emotion_recognition_workplace",
+        "Art. 5(1)(f) emotion recognition in workplace/education",
+    ),
     ("untargeted_facial_scraping", "Art. 5(1)(e) untargeted facial image scraping"),
     ("predictive_policing", "Art. 5(1)(d) predictive policing"),
-    ("biometric_categorisation_sensitive", "Art. 5(1)(g) biometric categorisation (sensitive)"),
+    (
+        "biometric_categorisation_sensitive",
+        "Art. 5(1)(g) biometric categorisation (sensitive)",
+    ),
 ]
 
 
@@ -74,25 +87,28 @@ CLASSIFIER_INPUTS = frozenset(
 )
 
 
-
 def classify(body: Any) -> ClassificationResult:
     # Art. 5 — prohibited practices
-    triggered = [label for attr, label in _PROHIBITED_FLAGS if getattr(body, attr, False)]
+    triggered = [
+        label for attr, label in _PROHIBITED_FLAGS if getattr(body, attr, False)
+    ]
     if triggered:
         return ClassificationResult(
             tier="prohibited",
             basis=f"Prohibited under EU AI Act Art. 5: {'; '.join(triggered)}",
-            obligations=["Art. 5 — System must not be placed on market or put into service"],
+            obligations=[
+                "Art. 5 — System must not be placed on market or put into service"
+            ],
         )
 
     # GPAI
     if body.is_gpai:
         systemic = body.training_compute_flops >= _GPAI_SYSTEMIC_FLOPS_THRESHOLD
         tier = "gpai-systemic" if systemic else "gpai-standard"
-        obligations = _GPAI_SYSTEMIC_OBLIGATIONS if systemic else _GPAI_STANDARD_OBLIGATIONS
-        basis = (
-            f"General-purpose AI model — {'systemic risk (Art. 51, ≥10²⁵ FLOPs)' if systemic else 'standard (Art. 53)'}"
+        obligations = (
+            _GPAI_SYSTEMIC_OBLIGATIONS if systemic else _GPAI_STANDARD_OBLIGATIONS
         )
+        basis = f"General-purpose AI model — {'systemic risk (Art. 51, ≥10²⁵ FLOPs)' if systemic else 'standard (Art. 53)'}"
         return ClassificationResult(tier=tier, basis=basis, obligations=obligations)
 
     # Annex III — high-risk
@@ -171,7 +187,9 @@ async def classify_ai_questionnaire(row: Any) -> tuple[ClassificationResult, dic
         **answers,
     }
 
-    messages = build_classify_questionnaire_messages(business_answers, technical_answers)
+    messages = build_classify_questionnaire_messages(
+        business_answers, technical_answers
+    )
     result = await chat(messages, json_mode=True, task="classify_questionnaire")
     parsed = await parse_json_response(result["text"], task="classify_questionnaire")
 
@@ -181,7 +199,9 @@ async def classify_ai_questionnaire(row: Any) -> tuple[ClassificationResult, dic
     confidence = parsed.get("confidence")
     rationale = {
         "flags": [f.model_dump() for f in inferred],
-        "confidence": float(confidence) if isinstance(confidence, (int, float)) else None,
+        "confidence": float(confidence)
+        if isinstance(confidence, (int, float))
+        else None,
         "reasoning": parsed.get("reasoning"),
         "missing_info": parsed.get("missing_info") or [],
         "org_role": parsed.get("org_role"),

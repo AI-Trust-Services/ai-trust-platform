@@ -9,6 +9,7 @@
 Fail-closed: any error reaching OpenFGA (down, misconfigured, timeout) results
 in 403, never an open door.
 """
+
 import logging
 
 from fastapi import Depends, Request
@@ -51,19 +52,27 @@ async def check_permission(user: str, permission: str) -> bool:
     try:
         return await openfga_client.check(f"user:{user}", relation, PLATFORM_OBJECT)
     except Exception:
-        log.exception("authz.check_failed", extra={"user": user, "permission": permission})
+        log.exception(
+            "authz.check_failed", extra={"user": user, "permission": permission}
+        )
         return False
 
 
 def require_permission(permission: str):
     """Return a FastAPI dependency enforcing `permission` on the current user."""
 
-    async def dependency(request: Request, user: str = Depends(get_current_user)) -> str:
+    async def dependency(
+        request: Request, user: str = Depends(get_current_user)
+    ) -> str:
         allowed = await check_permission(user, permission)
         if not allowed:
             log.warning(
                 "authz.denied",
-                extra={"user": user, "permission": permission, "path": request.url.path},
+                extra={
+                    "user": user,
+                    "permission": permission,
+                    "path": request.url.path,
+                },
             )
             raise HTTPException(status_code=403, detail="Permission denied")
         return user

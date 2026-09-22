@@ -1,4 +1,5 @@
 """Unit tests for audit — pure logic, no ClickHouse required."""
+
 from __future__ import annotations
 
 import json

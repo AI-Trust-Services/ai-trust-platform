@@ -6,6 +6,7 @@ are not_applicable, etc.
 
 Each test uses the db_session fixture (rollback after test — no truncate needed).
 """
+
 from __future__ import annotations
 
 from sqlalchemy import insert
@@ -34,6 +35,7 @@ from app.ids import new_id
 # Helpers — insert rows directly without HTTP
 # ---------------------------------------------------------------------------
 
+
 async def _system(session: AsyncSession, tier: str = "minimal") -> AISystem:
     row = AISystem(id=new_id("SYS"), name="Cascade Test System", tier=tier)
     session.add(row)
@@ -55,7 +57,9 @@ async def _assessment(session: AsyncSession, system: AISystem) -> Assessment:
     return row
 
 
-async def _obligation(session: AsyncSession, assessment: Assessment, status: str = "applicable") -> Obligation:
+async def _obligation(
+    session: AsyncSession, assessment: Assessment, status: str = "applicable"
+) -> Obligation:
     row = Obligation(
         id=new_id("OBL"),
         assessment_id=assessment.id,
@@ -69,7 +73,9 @@ async def _obligation(session: AsyncSession, assessment: Assessment, status: str
     return row
 
 
-async def _requirement(session: AsyncSession, system: AISystem, status: str = "under_review") -> Requirement:
+async def _requirement(
+    session: AsyncSession, system: AISystem, status: str = "under_review"
+) -> Requirement:
     row = Requirement(
         id=new_id("REQ"),
         ai_system_id=system.id,
@@ -100,16 +106,24 @@ async def _evidence(session: AsyncSession, status: str = "awaiting_review") -> E
     return row
 
 
-async def _link_evidence_requirement(session: AsyncSession, evidence_id: str, requirement_id: str) -> None:
+async def _link_evidence_requirement(
+    session: AsyncSession, evidence_id: str, requirement_id: str
+) -> None:
     await session.execute(
-        insert(evidence_requirements).values(evidence_id=evidence_id, requirement_id=requirement_id)
+        insert(evidence_requirements).values(
+            evidence_id=evidence_id, requirement_id=requirement_id
+        )
     )
     await session.flush()
 
 
-async def _link_requirement_obligation(session: AsyncSession, requirement_id: str, obligation_id: str) -> None:
+async def _link_requirement_obligation(
+    session: AsyncSession, requirement_id: str, obligation_id: str
+) -> None:
     await session.execute(
-        insert(requirement_obligations).values(requirement_id=requirement_id, obligation_id=obligation_id)
+        insert(requirement_obligations).values(
+            requirement_id=requirement_id, obligation_id=obligation_id
+        )
     )
     await session.flush()
 
@@ -118,7 +132,10 @@ async def _link_requirement_obligation(session: AsyncSession, requirement_id: st
 # refresh_requirement_effectiveness
 # ---------------------------------------------------------------------------
 
-async def test_approved_evidence_promotes_requirement_to_fulfilled(db_session: AsyncSession):
+
+async def test_approved_evidence_promotes_requirement_to_fulfilled(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
     req = await _requirement(db_session, system, status="under_review")
     evd = await _evidence(db_session, status="approved")
@@ -129,7 +146,9 @@ async def test_approved_evidence_promotes_requirement_to_fulfilled(db_session: A
     assert req.status == "fulfilled"
 
 
-async def test_no_approved_evidence_leaves_non_fulfilled_requirement_unchanged(db_session: AsyncSession):
+async def test_no_approved_evidence_leaves_non_fulfilled_requirement_unchanged(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
     req = await _requirement(db_session, system, status="under_review")
     evd = await _evidence(db_session, status="awaiting_review")
@@ -140,7 +159,9 @@ async def test_no_approved_evidence_leaves_non_fulfilled_requirement_unchanged(d
     assert req.status == "under_review"
 
 
-async def test_removing_approved_evidence_demotes_fulfilled_requirement(db_session: AsyncSession):
+async def test_removing_approved_evidence_demotes_fulfilled_requirement(
+    db_session: AsyncSession,
+):
     """Requirement promoted to fulfilled, then its evidence is rejected → should demote."""
     system = await _system(db_session)
     req = await _requirement(db_session, system, status="fulfilled")
@@ -184,6 +205,7 @@ async def test_missing_requirement_is_silently_ignored(db_session: AsyncSession)
 # refresh_obligation
 # ---------------------------------------------------------------------------
 
+
 async def test_all_fulfilled_requirements_fulfill_obligation(db_session: AsyncSession):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
@@ -196,7 +218,9 @@ async def test_all_fulfilled_requirements_fulfill_obligation(db_session: AsyncSe
     assert obl.status == "fulfilled"
 
 
-async def test_mixed_requirement_statuses_set_obligation_in_progress(db_session: AsyncSession):
+async def test_mixed_requirement_statuses_set_obligation_in_progress(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass)
@@ -210,7 +234,9 @@ async def test_mixed_requirement_statuses_set_obligation_in_progress(db_session:
     assert obl.status == "in_progress"
 
 
-async def test_no_requirements_reverts_obligation_to_applicable(db_session: AsyncSession):
+async def test_no_requirements_reverts_obligation_to_applicable(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass, status="in_progress")
@@ -248,7 +274,10 @@ async def test_locked_overdue_obligation_not_changed(db_session: AsyncSession):
 # refresh_assessment_score
 # ---------------------------------------------------------------------------
 
-async def test_score_is_none_when_all_obligations_not_applicable(db_session: AsyncSession):
+
+async def test_score_is_none_when_all_obligations_not_applicable(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     await _obligation(db_session, ass, status="not_applicable")
@@ -312,6 +341,7 @@ async def test_missing_assessment_is_silently_ignored(db_session: AsyncSession):
 # sync_system_compliance
 # ---------------------------------------------------------------------------
 
+
 async def test_sync_compliance_averages_approved_assessments(db_session: AsyncSession):
     system = await _system(db_session)
 
@@ -329,7 +359,9 @@ async def test_sync_compliance_averages_approved_assessments(db_session: AsyncSe
     assert system.compliance == 70.0
 
 
-async def test_sync_compliance_ignores_non_approved_assessments(db_session: AsyncSession):
+async def test_sync_compliance_ignores_non_approved_assessments(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
 
     ass1 = await _assessment(db_session, system)
@@ -346,7 +378,9 @@ async def test_sync_compliance_ignores_non_approved_assessments(db_session: Asyn
     assert system.compliance == 80.0
 
 
-async def test_sync_compliance_is_zero_with_no_approved_assessments(db_session: AsyncSession):
+async def test_sync_compliance_is_zero_with_no_approved_assessments(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
     system.compliance = 99.0  # stale value
     await db_session.flush()
@@ -377,7 +411,10 @@ async def test_sync_compliance_ignores_null_scores(db_session: AsyncSession):
 # refresh_obligations_for_requirement
 # ---------------------------------------------------------------------------
 
-async def test_refresh_obligations_for_requirement_updates_all_linked(db_session: AsyncSession):
+
+async def test_refresh_obligations_for_requirement_updates_all_linked(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl1 = await _obligation(db_session, ass)
@@ -390,4 +427,3 @@ async def test_refresh_obligations_for_requirement_updates_all_linked(db_session
 
     assert obl1.status == "fulfilled"
     assert obl2.status == "fulfilled"
-

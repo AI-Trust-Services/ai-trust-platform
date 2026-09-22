@@ -1,4 +1,5 @@
 """Workflow endpoints — submit, approve, reject, history, questionnaire section transitions."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -6,12 +7,18 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import select, delete
 
 from ai_trust_authorization import require_permission
-from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE, SYSTEMS_APPROVE
+from ai_trust_authorization.constants import (
+    SYSTEMS_READ,
+    SYSTEMS_WRITE,
+    SYSTEMS_APPROVE,
+)
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
-from ai_trust_persistence.models.question_assignment import QuestionAssignment as QuestionAssignmentModel
+from ai_trust_persistence.models.question_assignment import (
+    QuestionAssignment as QuestionAssignmentModel,
+)
 from app.classifier import classify, classify_ai_questionnaire
 from app.ids import new_id
 from app.questionnaire_required import QUESTION_LABEL, missing_for_approval
@@ -50,7 +57,10 @@ _SUB_STEPS = ("sub_assigned", "sub_completed", "sub_reclaimed")
 # The pending status each section owns — a section may only be sub-assigned while it is
 # the active step of the workflow.
 _SECTION_STATUS = {"business": "business_pending", "technical": "technical_pending"}
-_SECTION_LABEL = {"business": "Use Case & Context", "technical": "AI Risk Classification"}
+_SECTION_LABEL = {
+    "business": "Use Case & Context",
+    "technical": "AI Risk Classification",
+}
 
 
 def _current_user(request: Request) -> str:
@@ -70,7 +80,10 @@ async def _creator_username(session, system_id: str) -> str | None:
     """The username of whoever created the system (the `registered` step actor)."""
     result = await session.execute(
         select(SystemWorkflowStep)
-        .where(SystemWorkflowStep.system_id == system_id, SystemWorkflowStep.step == "registered")
+        .where(
+            SystemWorkflowStep.system_id == system_id,
+            SystemWorkflowStep.step == "registered",
+        )
         .order_by(SystemWorkflowStep.created_at)
         .limit(1)
     )
@@ -116,7 +129,9 @@ def _apply_tier_override(row: AISystem, tier: str, actor: str) -> None:
         row.annex_iii_area = None
 
 
-def _active_sub_assignment(steps: list[WorkflowStepResponse], section: str) -> str | None:
+def _active_sub_assignment(
+    steps: list[WorkflowStepResponse], section: str
+) -> str | None:
     """Return the contributor holding the edit token for ``section`` via an active
     sub-assignment, or ``None``.
 
@@ -134,7 +149,9 @@ def _active_sub_assignment(steps: list[WorkflowStepResponse], section: str) -> s
 
 
 @router.get("/systems/{system_id}/workflow", response_model=list[WorkflowStepResponse])
-async def get_workflow(system_id: str, _: str = Depends(require_permission(SYSTEMS_READ))):
+async def get_workflow(
+    system_id: str, _: str = Depends(require_permission(SYSTEMS_READ))
+):
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
         if not result.scalar_one_or_none():
@@ -156,17 +173,24 @@ async def reset_workflow(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status in ("approved", "rejected"):
-            raise HTTPException(422, f"Cannot reset workflow from terminal status '{row.workflow_status}'")
+            raise HTTPException(
+                422,
+                f"Cannot reset workflow from terminal status '{row.workflow_status}'",
+            )
         row.workflow_status = "draft"
         row.business_assignee_username = None
         row.technical_assignee_username = None
         row.assignee_username = None
         await session.commit()
-        logger.info("system.workflow_reset", extra={"system_id": system_id, "by": current_user})
+        logger.info(
+            "system.workflow_reset", extra={"system_id": system_id, "by": current_user}
+        )
         return {"status": "reset"}
 
 
-@router.post("/systems/{system_id}/workflow/assign", response_model=list[WorkflowStepResponse])
+@router.post(
+    "/systems/{system_id}/workflow/assign", response_model=list[WorkflowStepResponse]
+)
 async def assign_sections(
     system_id: str,
     body: WorkflowAssignRequest,
@@ -182,7 +206,9 @@ async def assign_sections(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status != "draft":
-            raise HTTPException(422, f"Cannot assign from status '{row.workflow_status}'")
+            raise HTTPException(
+                422, f"Cannot assign from status '{row.workflow_status}'"
+            )
 
         row.business_assignee_username = body.business_assignee_username
         row.technical_assignee_username = body.technical_assignee_username
@@ -205,12 +231,15 @@ async def assign_sections(
         await session.commit()
         result_steps = await _get_steps(session, system_id)
 
-    logger.info("system.sections_assigned", extra={
-        "system_id": system_id,
-        "business_assignee": body.business_assignee_username,
-        "technical_assignee": body.technical_assignee_username,
-        "co": body.compliance_officer_username,
-    })
+    logger.info(
+        "system.sections_assigned",
+        extra={
+            "system_id": system_id,
+            "business_assignee": body.business_assignee_username,
+            "technical_assignee": body.technical_assignee_username,
+            "co": body.compliance_officer_username,
+        },
+    )
 
     if body.business_assignee_username:
         background_tasks.add_task(
@@ -229,7 +258,10 @@ async def assign_sections(
     return result_steps
 
 
-@router.post("/systems/{system_id}/workflow/submit-business", response_model=list[WorkflowStepResponse])
+@router.post(
+    "/systems/{system_id}/workflow/submit-business",
+    response_model=list[WorkflowStepResponse],
+)
 async def submit_business_section(
     system_id: str,
     body: WorkflowSubmitSectionRequest,
@@ -245,9 +277,17 @@ async def submit_business_section(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status != "business_pending":
-            raise HTTPException(422, f"Cannot submit business section from status '{row.workflow_status}'")
-        if row.business_assignee_username and current_user != row.business_assignee_username:
-            raise HTTPException(403, "Only the business section assignee may submit this section")
+            raise HTTPException(
+                422,
+                f"Cannot submit business section from status '{row.workflow_status}'",
+            )
+        if (
+            row.business_assignee_username
+            and current_user != row.business_assignee_username
+        ):
+            raise HTTPException(
+                403, "Only the business section assignee may submit this section"
+            )
 
         row.workflow_status = "technical_pending"
         row.assignee_username = row.technical_assignee_username
@@ -266,7 +306,10 @@ async def submit_business_section(
         await session.commit()
         result_steps = await _get_steps(session, system_id)
 
-    logger.info("system.business_section_submitted", extra={"system_id": system_id, "by": current_user})
+    logger.info(
+        "system.business_section_submitted",
+        extra={"system_id": system_id, "by": current_user},
+    )
 
     if technical_assignee:
         background_tasks.add_task(
@@ -285,7 +328,10 @@ async def submit_business_section(
     return result_steps
 
 
-@router.post("/systems/{system_id}/workflow/submit-technical", response_model=list[WorkflowStepResponse])
+@router.post(
+    "/systems/{system_id}/workflow/submit-technical",
+    response_model=list[WorkflowStepResponse],
+)
 async def submit_technical_section(
     system_id: str,
     body: WorkflowSubmitSectionRequest,
@@ -301,9 +347,17 @@ async def submit_technical_section(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status != "technical_pending":
-            raise HTTPException(422, f"Cannot submit technical section from status '{row.workflow_status}'")
-        if row.technical_assignee_username and current_user != row.technical_assignee_username:
-            raise HTTPException(403, "Only the technical section assignee may submit this section")
+            raise HTTPException(
+                422,
+                f"Cannot submit technical section from status '{row.workflow_status}'",
+            )
+        if (
+            row.technical_assignee_username
+            and current_user != row.technical_assignee_username
+        ):
+            raise HTTPException(
+                403, "Only the technical section assignee may submit this section"
+            )
 
         # Mode-aware classification. For AI mode this makes an LLM call, which we run
         # BEFORE any status mutation so a 502 leaves the row at technical_pending.
@@ -312,7 +366,10 @@ async def submit_technical_section(
         except HTTPException:
             raise
         except (LLMParseError, Exception) as exc:  # noqa: BLE001
-            logger.error("system.reclassify_failed", extra={"system_id": system_id, "error": str(exc)})
+            logger.error(
+                "system.reclassify_failed",
+                extra={"system_id": system_id, "error": str(exc)},
+            )
             raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
 
         row.workflow_status = "pending_review"
@@ -332,9 +389,14 @@ async def submit_technical_section(
         await session.commit()
         result_steps = await _get_steps(session, system_id)
 
-    logger.info("system.technical_section_submitted", extra={
-        "system_id": system_id, "by": current_user, "tier": classification.tier,
-    })
+    logger.info(
+        "system.technical_section_submitted",
+        extra={
+            "system_id": system_id,
+            "by": current_user,
+            "tier": classification.tier,
+        },
+    )
 
     if co_username:
         background_tasks.add_task(
@@ -353,7 +415,9 @@ async def submit_technical_section(
     return result_steps
 
 
-@router.post("/systems/{system_id}/workflow/submit", response_model=list[WorkflowStepResponse])
+@router.post(
+    "/systems/{system_id}/workflow/submit", response_model=list[WorkflowStepResponse]
+)
 async def submit_for_review(
     system_id: str,
     body: WorkflowSubmitRequest,
@@ -369,9 +433,13 @@ async def submit_for_review(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.assignee_username and current_user != row.assignee_username:
-            raise HTTPException(403, "Only the assigned engineer may submit this system for review")
+            raise HTTPException(
+                403, "Only the assigned engineer may submit this system for review"
+            )
         if row.workflow_status not in ("draft", "rejected"):
-            raise HTTPException(422, f"Cannot submit from status '{row.workflow_status}'")
+            raise HTTPException(
+                422, f"Cannot submit from status '{row.workflow_status}'"
+            )
 
         step = SystemWorkflowStep(
             id=new_id("SWS"),
@@ -389,7 +457,10 @@ async def submit_for_review(
         await session.commit()
         result_steps = await _get_steps(session, system_id)
 
-    logger.info("system.submitted_for_review", extra={"system_id": system_id, "assignee": body.assignee_username})
+    logger.info(
+        "system.submitted_for_review",
+        extra={"system_id": system_id, "assignee": body.assignee_username},
+    )
 
     background_tasks.add_task(
         email_sender.notify,
@@ -406,7 +477,9 @@ async def submit_for_review(
     return result_steps
 
 
-@router.post("/systems/{system_id}/workflow/approve", response_model=list[WorkflowStepResponse])
+@router.post(
+    "/systems/{system_id}/workflow/approve", response_model=list[WorkflowStepResponse]
+)
 async def approve_system(
     system_id: str,
     body: WorkflowApproveRequest,
@@ -422,9 +495,13 @@ async def approve_system(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.assignee_username and current_user != row.assignee_username:
-            raise HTTPException(403, "Only the assigned compliance officer may approve this system")
+            raise HTTPException(
+                403, "Only the assigned compliance officer may approve this system"
+            )
         if row.workflow_status != "pending_review":
-            raise HTTPException(422, f"Cannot approve from status '{row.workflow_status}'")
+            raise HTTPException(
+                422, f"Cannot approve from status '{row.workflow_status}'"
+            )
 
         # The compliance officer is the last person and must ensure everything is filled —
         # the business/technical assignees may submit partial sections, but approval is gated.
@@ -441,22 +518,35 @@ async def approve_system(
             if body.tier not in VALID_TIERS:
                 raise HTTPException(422, f"Invalid tier '{body.tier}'")
             _apply_tier_override(row, body.tier, current_user)
-            logger.info("system.tier_overridden", extra={
-                "system_id": system_id, "tier": body.tier, "by": current_user,
-            })
+            logger.info(
+                "system.tier_overridden",
+                extra={
+                    "system_id": system_id,
+                    "tier": body.tier,
+                    "by": current_user,
+                },
+            )
 
         # Optional CO org_role override.
         if body.org_role is not None and body.org_role != row.org_role:
             if body.org_role not in VALID_ROLES:
                 raise HTTPException(422, f"Invalid org_role '{body.org_role}'")
             row.org_role = body.org_role
-            logger.info("system.org_role_overridden", extra={
-                "system_id": system_id, "org_role": body.org_role, "by": current_user,
-            })
+            logger.info(
+                "system.org_role_overridden",
+                extra={
+                    "system_id": system_id,
+                    "org_role": body.org_role,
+                    "by": current_user,
+                },
+            )
 
         owner_result = await session.execute(
             select(SystemWorkflowStep)
-            .where(SystemWorkflowStep.system_id == system_id, SystemWorkflowStep.step == "registered")
+            .where(
+                SystemWorkflowStep.system_id == system_id,
+                SystemWorkflowStep.step == "registered",
+            )
             .order_by(SystemWorkflowStep.created_at)
             .limit(1)
         )
@@ -477,7 +567,9 @@ async def approve_system(
         await session.commit()
         result_steps = await _get_steps(session, system_id)
 
-    logger.info("system.approved", extra={"system_id": system_id, "approved_by": current_user})
+    logger.info(
+        "system.approved", extra={"system_id": system_id, "approved_by": current_user}
+    )
 
     if owner_username:
         background_tasks.add_task(
@@ -495,7 +587,9 @@ async def approve_system(
     return result_steps
 
 
-@router.post("/systems/{system_id}/workflow/reject", response_model=list[WorkflowStepResponse])
+@router.post(
+    "/systems/{system_id}/workflow/reject", response_model=list[WorkflowStepResponse]
+)
 async def reject_system(
     system_id: str,
     body: WorkflowRejectRequest,
@@ -511,9 +605,13 @@ async def reject_system(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.assignee_username and current_user != row.assignee_username:
-            raise HTTPException(403, "Only the assigned compliance officer may reject this system")
+            raise HTTPException(
+                403, "Only the assigned compliance officer may reject this system"
+            )
         if row.workflow_status != "pending_review":
-            raise HTTPException(422, f"Cannot reject from status '{row.workflow_status}'")
+            raise HTTPException(
+                422, f"Cannot reject from status '{row.workflow_status}'"
+            )
 
         if row.registration_mode == "full_manual":
             # Full-manual systems have no questionnaire sections — a rejection sends the
@@ -545,10 +643,15 @@ async def reject_system(
         await session.commit()
         result_steps = await _get_steps(session, system_id)
 
-    logger.info("system.rejected", extra={
-        "system_id": system_id, "rejected_by": current_user,
-        "send_to": body.send_to, "target_assignee": target_assignee,
-    })
+    logger.info(
+        "system.rejected",
+        extra={
+            "system_id": system_id,
+            "rejected_by": current_user,
+            "send_to": body.send_to,
+            "target_assignee": target_assignee,
+        },
+    )
 
     if target_assignee:
         background_tasks.add_task(
@@ -568,7 +671,10 @@ async def reject_system(
     return result_steps
 
 
-@router.post("/systems/{system_id}/workflow/request-info", response_model=list[WorkflowStepResponse])
+@router.post(
+    "/systems/{system_id}/workflow/request-info",
+    response_model=list[WorkflowStepResponse],
+)
 async def request_info(
     system_id: str,
     body: WorkflowRequestInfoRequest,
@@ -586,13 +692,20 @@ async def request_info(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.assignee_username and current_user != row.assignee_username:
-            raise HTTPException(403, "Only the assigned compliance officer may request information")
+            raise HTTPException(
+                403, "Only the assigned compliance officer may request information"
+            )
         if row.workflow_status != "pending_review":
-            raise HTTPException(422, f"Cannot request info from status '{row.workflow_status}'")
+            raise HTTPException(
+                422, f"Cannot request info from status '{row.workflow_status}'"
+            )
 
         target_assignee = section_owner(row, body.section)
         if not target_assignee:
-            raise HTTPException(422, f"The '{body.section}' section has no assigned owner to return it to")
+            raise HTTPException(
+                422,
+                f"The '{body.section}' section has no assigned owner to return it to",
+            )
 
         row.workflow_status = "info_requested"
         row.info_requested_section = body.section
@@ -611,10 +724,15 @@ async def request_info(
         await session.commit()
         result_steps = await _get_steps(session, system_id)
 
-    logger.info("system.info_requested", extra={
-        "system_id": system_id, "by": current_user,
-        "section": body.section, "contributor": target_assignee,
-    })
+    logger.info(
+        "system.info_requested",
+        extra={
+            "system_id": system_id,
+            "by": current_user,
+            "section": body.section,
+            "contributor": target_assignee,
+        },
+    )
 
     background_tasks.add_task(
         email_sender.notify,
@@ -633,7 +751,10 @@ async def request_info(
     return result_steps
 
 
-@router.post("/systems/{system_id}/workflow/submit-info", response_model=list[WorkflowStepResponse])
+@router.post(
+    "/systems/{system_id}/workflow/submit-info",
+    response_model=list[WorkflowStepResponse],
+)
 async def submit_info(
     system_id: str,
     body: WorkflowSubmitSectionRequest,
@@ -650,9 +771,13 @@ async def submit_info(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status != "info_requested":
-            raise HTTPException(422, f"Cannot submit info from status '{row.workflow_status}'")
+            raise HTTPException(
+                422, f"Cannot submit info from status '{row.workflow_status}'"
+            )
         if row.assignee_username and current_user != row.assignee_username:
-            raise HTTPException(403, "Only the requested contributor may submit this information")
+            raise HTTPException(
+                403, "Only the requested contributor may submit this information"
+            )
 
         # The contributor may have changed questionnaire answers / flags — re-run the
         # mode-aware classification before handing back (full_manual keeps its manual tier).
@@ -663,7 +788,10 @@ async def submit_info(
             except HTTPException:
                 raise
             except (LLMParseError, Exception) as exc:  # noqa: BLE001
-                logger.error("system.reclassify_failed", extra={"system_id": system_id, "error": str(exc)})
+                logger.error(
+                    "system.reclassify_failed",
+                    extra={"system_id": system_id, "error": str(exc)},
+                )
                 raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
 
         row.workflow_status = "pending_review"
@@ -684,10 +812,14 @@ async def submit_info(
         await session.commit()
         result_steps = await _get_steps(session, system_id)
 
-    logger.info("system.info_submitted", extra={
-        "system_id": system_id, "by": current_user,
-        "tier": classification.tier if classification else row.tier,
-    })
+    logger.info(
+        "system.info_submitted",
+        extra={
+            "system_id": system_id,
+            "by": current_user,
+            "tier": classification.tier if classification else row.tier,
+        },
+    )
 
     if co_username:
         background_tasks.add_task(
@@ -705,7 +837,10 @@ async def submit_info(
     return result_steps
 
 
-@router.post("/systems/{system_id}/workflow/sub-assign", response_model=list[WorkflowStepResponse])
+@router.post(
+    "/systems/{system_id}/workflow/sub-assign",
+    response_model=list[WorkflowStepResponse],
+)
 async def sub_assign_section(
     system_id: str,
     body: WorkflowSubAssignRequest,
@@ -722,10 +857,15 @@ async def sub_assign_section(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status != _SECTION_STATUS[body.section]:
-            raise HTTPException(422, f"Cannot sub-assign '{body.section}' from status '{row.workflow_status}'")
+            raise HTTPException(
+                422,
+                f"Cannot sub-assign '{body.section}' from status '{row.workflow_status}'",
+            )
         owner = section_owner(row, body.section)
         if owner and current_user != owner:
-            raise HTTPException(403, "Only the section owner may sub-assign this section")
+            raise HTTPException(
+                403, "Only the section owner may sub-assign this section"
+            )
 
         step = SystemWorkflowStep(
             id=new_id("SWS"),
@@ -740,10 +880,15 @@ async def sub_assign_section(
         await session.commit()
         result_steps = await _get_steps(session, system_id)
 
-    logger.info("system.section_sub_assigned", extra={
-        "system_id": system_id, "section": body.section,
-        "by": current_user, "sub_assignee": body.sub_assignee_username,
-    })
+    logger.info(
+        "system.section_sub_assigned",
+        extra={
+            "system_id": system_id,
+            "section": body.section,
+            "by": current_user,
+            "sub_assignee": body.sub_assignee_username,
+        },
+    )
 
     background_tasks.add_task(
         email_sender.notify,
@@ -761,7 +906,10 @@ async def sub_assign_section(
     return result_steps
 
 
-@router.post("/systems/{system_id}/workflow/sub-complete", response_model=list[WorkflowStepResponse])
+@router.post(
+    "/systems/{system_id}/workflow/sub-complete",
+    response_model=list[WorkflowStepResponse],
+)
 async def sub_complete_section(
     system_id: str,
     body: WorkflowSubReclaimRequest,
@@ -778,14 +926,21 @@ async def sub_complete_section(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status != _SECTION_STATUS[body.section]:
-            raise HTTPException(422, f"Cannot complete '{body.section}' from status '{row.workflow_status}'")
+            raise HTTPException(
+                422,
+                f"Cannot complete '{body.section}' from status '{row.workflow_status}'",
+            )
 
         steps = await _get_steps(session, system_id)
         active = _active_sub_assignment(steps, body.section)
         if active is None:
-            raise HTTPException(422, f"No active sub-assignment for the '{body.section}' section")
+            raise HTTPException(
+                422, f"No active sub-assignment for the '{body.section}' section"
+            )
         if current_user != active:
-            raise HTTPException(403, "Only the active contributor may complete this sub-assignment")
+            raise HTTPException(
+                403, "Only the active contributor may complete this sub-assignment"
+            )
 
         owner = section_owner(row, body.section)
         step = SystemWorkflowStep(
@@ -801,9 +956,14 @@ async def sub_complete_section(
         await session.commit()
         result_steps = await _get_steps(session, system_id)
 
-    logger.info("system.section_sub_completed", extra={
-        "system_id": system_id, "section": body.section, "by": current_user,
-    })
+    logger.info(
+        "system.section_sub_completed",
+        extra={
+            "system_id": system_id,
+            "section": body.section,
+            "by": current_user,
+        },
+    )
 
     if owner:
         background_tasks.add_task(
@@ -822,7 +982,10 @@ async def sub_complete_section(
     return result_steps
 
 
-@router.post("/systems/{system_id}/workflow/sub-reclaim", response_model=list[WorkflowStepResponse])
+@router.post(
+    "/systems/{system_id}/workflow/sub-reclaim",
+    response_model=list[WorkflowStepResponse],
+)
 async def sub_reclaim_section(
     system_id: str,
     body: WorkflowSubReclaimRequest,
@@ -839,7 +1002,10 @@ async def sub_reclaim_section(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status != _SECTION_STATUS[body.section]:
-            raise HTTPException(422, f"Cannot reclaim '{body.section}' from status '{row.workflow_status}'")
+            raise HTTPException(
+                422,
+                f"Cannot reclaim '{body.section}' from status '{row.workflow_status}'",
+            )
         owner = section_owner(row, body.section)
         if owner and current_user != owner:
             raise HTTPException(403, "Only the section owner may reclaim this section")
@@ -847,7 +1013,9 @@ async def sub_reclaim_section(
         steps = await _get_steps(session, system_id)
         active = _active_sub_assignment(steps, body.section)
         if active is None:
-            raise HTTPException(422, f"No active sub-assignment for the '{body.section}' section")
+            raise HTTPException(
+                422, f"No active sub-assignment for the '{body.section}' section"
+            )
 
         step = SystemWorkflowStep(
             id=new_id("SWS"),
@@ -862,10 +1030,15 @@ async def sub_reclaim_section(
         await session.commit()
         result_steps = await _get_steps(session, system_id)
 
-    logger.info("system.section_sub_reclaimed", extra={
-        "system_id": system_id, "section": body.section,
-        "by": current_user, "former_sub_assignee": active,
-    })
+    logger.info(
+        "system.section_sub_reclaimed",
+        extra={
+            "system_id": system_id,
+            "section": body.section,
+            "by": current_user,
+            "former_sub_assignee": active,
+        },
+    )
 
     if active:
         background_tasks.add_task(
@@ -903,27 +1076,42 @@ async def get_rce_summary(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
 
-    is_assigned_co = bool(row.compliance_officer_username) and user == row.compliance_officer_username
-    obligations = obligations_for_tier(row.tier or "minimal", row.org_role or "provider")
+    is_assigned_co = (
+        bool(row.compliance_officer_username)
+        and user == row.compliance_officer_username
+    )
+    obligations = obligations_for_tier(
+        row.tier or "minimal", row.org_role or "provider"
+    )
     return {
         "tier": row.tier,
         "org_role": row.org_role,
         "registration_mode": row.registration_mode,
-        "classification_rationale": row.classification_rationale if is_assigned_co else None,
+        "classification_rationale": row.classification_rationale
+        if is_assigned_co
+        else None,
         "obligations": [
-            {"title": o["title"], "article_ref": o["article_ref"], "description": o["description"]}
+            {
+                "title": o["title"],
+                "article_ref": o["article_ref"],
+                "description": o["description"],
+            }
             for o in obligations
         ],
     }
 
 
-async def _get_question_assignments(session, system_id: str) -> list[QuestionAssignmentResponse]:
+async def _get_question_assignments(
+    session, system_id: str
+) -> list[QuestionAssignmentResponse]:
     result = await session.execute(
         select(QuestionAssignmentModel)
         .where(QuestionAssignmentModel.system_id == system_id)
         .order_by(QuestionAssignmentModel.assigned_at)
     )
-    return [QuestionAssignmentResponse.model_validate(row) for row in result.scalars().all()]
+    return [
+        QuestionAssignmentResponse.model_validate(row) for row in result.scalars().all()
+    ]
 
 
 @router.get(
@@ -962,7 +1150,10 @@ async def question_assign(
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
         if row.workflow_status != _SECTION_STATUS[body.section]:
-            raise HTTPException(422, f"Cannot assign questions for '{body.section}' from status '{row.workflow_status}'")
+            raise HTTPException(
+                422,
+                f"Cannot assign questions for '{body.section}' from status '{row.workflow_status}'",
+            )
         owner = section_owner(row, body.section)
         if owner and current_user != owner:
             raise HTTPException(403, "Only the section owner may assign questions")
@@ -971,7 +1162,10 @@ async def question_assign(
         # the contributor holds the whole section already.
         steps = await _get_steps(session, system_id)
         if _active_sub_assignment(steps, body.section) is not None:
-            raise HTTPException(422, "Cannot assign individual questions while the section is sub-assigned")
+            raise HTTPException(
+                422,
+                "Cannot assign individual questions while the section is sub-assigned",
+            )
 
         # Upsert: if the same (system, section, question_key) already exists, update it.
         existing = await session.execute(
@@ -1001,10 +1195,16 @@ async def question_assign(
         await session.commit()
         assignments = await _get_question_assignments(session, system_id)
 
-    logger.info("system.question_assigned", extra={
-        "system_id": system_id, "section": body.section,
-        "question_key": body.question_key, "assignee": body.assignee_username, "by": current_user,
-    })
+    logger.info(
+        "system.question_assigned",
+        extra={
+            "system_id": system_id,
+            "section": body.section,
+            "question_key": body.question_key,
+            "assignee": body.assignee_username,
+            "by": current_user,
+        },
+    )
 
     background_tasks.add_task(
         email_sender.notify_question_assigned,
@@ -1038,7 +1238,9 @@ async def question_unassign(
             raise HTTPException(404, f"System {system_id} not found")
         owner = section_owner(row, body.section)
         if owner and current_user != owner:
-            raise HTTPException(403, "Only the section owner may remove question assignments")
+            raise HTTPException(
+                403, "Only the section owner may remove question assignments"
+            )
 
         await session.execute(
             delete(QuestionAssignmentModel).where(
@@ -1050,10 +1252,15 @@ async def question_unassign(
         await session.commit()
         assignments = await _get_question_assignments(session, system_id)
 
-    logger.info("system.question_unassigned", extra={
-        "system_id": system_id, "section": body.section,
-        "question_key": body.question_key, "by": current_user,
-    })
+    logger.info(
+        "system.question_unassigned",
+        extra={
+            "system_id": system_id,
+            "section": body.section,
+            "question_key": body.question_key,
+            "by": current_user,
+        },
+    )
 
     return assignments
 
@@ -1085,17 +1292,26 @@ async def question_answer(
         )
         qa_row = qa_result.scalar_one_or_none()
         if not qa_row:
-            raise HTTPException(404, f"No assignment found for question '{body.question_key}'")
+            raise HTTPException(
+                404, f"No assignment found for question '{body.question_key}'"
+            )
         if qa_row.assignee_username != current_user:
-            raise HTTPException(403, "Only the assigned user may mark this question as answered")
+            raise HTTPException(
+                403, "Only the assigned user may mark this question as answered"
+            )
 
         qa_row.answered_at = datetime.now(timezone.utc)
         await session.commit()
         assignments = await _get_question_assignments(session, system_id)
 
-    logger.info("system.question_answered", extra={
-        "system_id": system_id, "section": body.section,
-        "question_key": body.question_key, "by": current_user,
-    })
+    logger.info(
+        "system.question_answered",
+        extra={
+            "system_id": system_id,
+            "section": body.section,
+            "question_key": body.question_key,
+            "by": current_user,
+        },
+    )
 
     return assignments

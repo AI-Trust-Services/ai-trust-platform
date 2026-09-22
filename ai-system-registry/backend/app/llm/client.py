@@ -11,6 +11,7 @@ Providers, switched by LLM_PROVIDER:
 
 All providers return: ``{text, input_tokens, output_tokens, finish_reason}``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,6 +28,7 @@ logger = get_logger(__name__)
 
 class LLMResponseError(Exception):
     """Raised when the external provider returns an unexpected response shape."""
+
 
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "stub")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://ollama:11434/v1")
@@ -68,17 +70,25 @@ if LLM_PROVIDER == "external":
 # OpenAI-compatible backend (ollama, vLLM, or any /v1/chat/completions endpoint)
 # ---------------------------------------------------------------------------
 
-_openai_client: Any = None  # AsyncOpenAI singleton — reuses the connection pool across calls
+_openai_client: Any = (
+    None  # AsyncOpenAI singleton — reuses the connection pool across calls
+)
 
 
-async def _chat_completions(messages: list[dict], model: str, max_tokens: int, json_mode: bool) -> dict:
+async def _chat_completions(
+    messages: list[dict], model: str, max_tokens: int, json_mode: bool
+) -> dict:
     global _openai_client
     from openai import AsyncOpenAI
 
     if _openai_client is None:
         _openai_client = AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
     client = _openai_client
-    kwargs: dict[str, Any] = {"model": model, "messages": messages, "max_tokens": max_tokens}
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+    }
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
     response = await client.chat.completions.create(**kwargs)
@@ -115,7 +125,9 @@ async def _get_token() -> str:
         data = resp.json()
         _token = data["access_token"]
         _token_expiry = time.monotonic() + data.get("expires_in", 43200)
-        logger.info("llm.token_refreshed", extra={"expires_in": data.get("expires_in", 43200)})
+        logger.info(
+            "llm.token_refreshed", extra={"expires_in": data.get("expires_in", 43200)}
+        )
         return _token
 
 
@@ -174,7 +186,7 @@ async def _chat_external(messages: list[dict], model: str, max_tokens: int) -> d
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
             last_exc = exc
             if attempt < _EXTERNAL_RETRIES:
-                wait = 2 ** attempt
+                wait = 2**attempt
                 logger.warning(
                     "llm.external_retry",
                     extra={"attempt": attempt + 1, "wait_s": wait, "error": str(exc)},
@@ -188,6 +200,7 @@ async def _chat_external(messages: list[dict], model: str, max_tokens: int) -> d
 # ---------------------------------------------------------------------------
 # Public interface
 # ---------------------------------------------------------------------------
+
 
 async def chat(
     messages: list[dict],
@@ -215,7 +228,12 @@ async def chat(
     except Exception as exc:
         logger.error(
             "llm.request_failed",
-            extra={"provider": LLM_PROVIDER, "model": model, "task": task, "error": str(exc)},
+            extra={
+                "provider": LLM_PROVIDER,
+                "model": model,
+                "task": task,
+                "error": str(exc),
+            },
         )
         raise
 

@@ -1,4 +1,5 @@
 """E2E tests for GET/PATCH /v1/frameworks."""
+
 from __future__ import annotations
 
 import httpx

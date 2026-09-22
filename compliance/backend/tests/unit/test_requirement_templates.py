@@ -1,7 +1,12 @@
 """Unit tests for requirement_templates.requirements_for() and the tier filter."""
+
 from __future__ import annotations
 
-from app.requirement_templates import _REQUIREMENT_TEMPLATES, _tier_allows, requirements_for
+from app.requirement_templates import (
+    _REQUIREMENT_TEMPLATES,
+    _tier_allows,
+    requirements_for,
+)
 from app.obligation_templates import obligations_for
 from app.schemas.requirement import VALID_REQUIREMENT_CATEGORIES
 
@@ -10,8 +15,16 @@ from app.schemas.requirement import VALID_REQUIREMENT_CATEGORIES
 # _tier_allows
 # ---------------------------------------------------------------------------
 
+
 def test_all_applies_to_every_tier():
-    for tier in ("high", "limited", "minimal", "prohibited", "gpai-standard", "gpai-systemic"):
+    for tier in (
+        "high",
+        "limited",
+        "minimal",
+        "prohibited",
+        "gpai-standard",
+        "gpai-systemic",
+    ):
         assert _tier_allows("All", tier)
 
 
@@ -54,11 +67,16 @@ def test_unknown_tier_allows_only_all():
 # requirements_for — EU high-risk (counts mirror the source library mapping)
 # ---------------------------------------------------------------------------
 
+
 def test_art9_high_risk_controls():
     ctls = requirements_for("Art. 9", "high")
     assert len(ctls) == 5
     assert {c["slug"] for c in ctls} == {
-        "AISEC-RM-002", "AISEC-RM-003", "AISEC-RM-004", "AISEC-RM-005", "AISEC-RM-006",
+        "AISEC-RM-002",
+        "AISEC-RM-003",
+        "AISEC-RM-004",
+        "AISEC-RM-005",
+        "AISEC-RM-006",
     }
 
 
@@ -95,6 +113,7 @@ def test_controls_have_required_fields():
 # ---------------------------------------------------------------------------
 # requirements_for — tier scoping
 # ---------------------------------------------------------------------------
+
 
 def test_prohibited_controls_only_for_prohibited_tier():
     assert len(requirements_for("Art. 5", "prohibited")) == 8
@@ -139,6 +158,7 @@ def test_iso_controls_tier_independent():
 # requirements_for — unknown refs / independence
 # ---------------------------------------------------------------------------
 
+
 def test_unknown_article_ref_returns_empty():
     assert requirements_for("Art. 999", "high") == []
 
@@ -154,8 +174,16 @@ def test_returns_independent_lists():
 # at its own tier (the "100% coverage" goal).
 # ---------------------------------------------------------------------------
 
+
 def test_every_eu_obligation_has_controls_at_its_tier():
-    tiers = ["prohibited", "gpai-systemic", "gpai-standard", "high", "limited", "minimal"]
+    tiers = [
+        "prohibited",
+        "gpai-systemic",
+        "gpai-standard",
+        "high",
+        "limited",
+        "minimal",
+    ]
     gaps = []
     for tier in tiers:
         for ob in obligations_for("FRM-EU-AI-ACT", tier):
@@ -185,4 +213,6 @@ def test_all_categories_are_valid():
     # ControlUpdate validation error (schemas.control.VALID_REQUIREMENT_CATEGORIES).
     for ref, templates in _REQUIREMENT_TEMPLATES.items():
         for t in templates:
-            assert t["category"] in VALID_REQUIREMENT_CATEGORIES, f"{ref}: {t['category']}"
+            assert t["category"] in VALID_REQUIREMENT_CATEGORIES, (
+                f"{ref}: {t['category']}"
+            )

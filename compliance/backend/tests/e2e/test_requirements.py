@@ -1,22 +1,33 @@
 """E2E tests for /v1/requirements."""
+
 from __future__ import annotations
 
 import httpx
 
-from tests.e2e.conftest import create_assessment, create_requirement, create_evidence, create_obligation, create_system
+from tests.e2e.conftest import (
+    create_assessment,
+    create_requirement,
+    create_evidence,
+    create_obligation,
+    create_system,
+)
 
 
 # ---------------------------------------------------------------------------
 # POST /requirements
 # ---------------------------------------------------------------------------
 
+
 async def test_create_requirement_returns_201(client: httpx.AsyncClient):
     system = await create_system()
-    r = await client.post("/v1/requirements", json={
-        "ai_system_id": system["id"],
-        "title": "My Requirement",
-        "category": "documentation",
-    })
+    r = await client.post(
+        "/v1/requirements",
+        json={
+            "ai_system_id": system["id"],
+            "title": "My Requirement",
+            "category": "documentation",
+        },
+    )
     assert r.status_code == 201
     body = r.json()
     assert body["id"].startswith("REQ-")
@@ -25,20 +36,26 @@ async def test_create_requirement_returns_201(client: httpx.AsyncClient):
 
 
 async def test_create_org_wide_requirement_no_system(client: httpx.AsyncClient):
-    r = await client.post("/v1/requirements", json={
-        "title": "Org-wide Requirement",
-        "category": "general",
-    })
+    r = await client.post(
+        "/v1/requirements",
+        json={
+            "title": "Org-wide Requirement",
+            "category": "general",
+        },
+    )
     assert r.status_code == 201
     assert r.json()["ai_system_id"] is None
 
 
 async def test_create_requirement_404_on_missing_system(client: httpx.AsyncClient):
-    r = await client.post("/v1/requirements", json={
-        "ai_system_id": "SYS-NOTFOUND",
-        "title": "X",
-        "category": "general",
-    })
+    r = await client.post(
+        "/v1/requirements",
+        json={
+            "ai_system_id": "SYS-NOTFOUND",
+            "title": "X",
+            "category": "general",
+        },
+    )
     assert r.status_code == 404
 
 
@@ -46,7 +63,10 @@ async def test_create_requirement_404_on_missing_system(client: httpx.AsyncClien
 # GET /requirements
 # ---------------------------------------------------------------------------
 
-async def test_list_requirements_for_system_includes_org_wide(client: httpx.AsyncClient):
+
+async def test_list_requirements_for_system_includes_org_wide(
+    client: httpx.AsyncClient,
+):
     system = await create_system()
     await create_requirement(client, system["id"])
     await create_requirement(client)  # org-wide
@@ -86,6 +106,7 @@ async def test_list_requirements_filter_by_obligation(client: httpx.AsyncClient)
 # GET /requirements/{id}
 # ---------------------------------------------------------------------------
 
+
 async def test_get_requirement_returns_detail(client: httpx.AsyncClient):
     system = await create_system()
     req = await create_requirement(client, system["id"])
@@ -106,6 +127,7 @@ async def test_get_requirement_404_on_missing(client: httpx.AsyncClient):
 # PUT /requirements/{id}
 # ---------------------------------------------------------------------------
 
+
 async def test_update_requirement_title(client: httpx.AsyncClient):
     system = await create_system()
     req = await create_requirement(client, system["id"])
@@ -117,7 +139,9 @@ async def test_update_requirement_title(client: httpx.AsyncClient):
 async def test_update_requirement_status(client: httpx.AsyncClient):
     system = await create_system()
     req = await create_requirement(client, system["id"])
-    r = await client.put(f"/v1/requirements/{req['id']}", json={"status": "under_review"})
+    r = await client.put(
+        f"/v1/requirements/{req['id']}", json={"status": "under_review"}
+    )
     assert r.status_code == 200
     assert r.json()["status"] == "under_review"
 
@@ -130,6 +154,7 @@ async def test_update_requirement_404_on_missing(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # DELETE /requirements/{id}
 # ---------------------------------------------------------------------------
+
 
 async def test_delete_requirement(client: httpx.AsyncClient):
     system = await create_system()
@@ -147,6 +172,7 @@ async def test_delete_requirement_404_on_missing(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # POST /requirements/{id}/link/{obligation_id}
 # ---------------------------------------------------------------------------
+
 
 async def test_link_requirement_to_obligation(client: httpx.AsyncClient):
     system = await create_system()
@@ -190,6 +216,7 @@ async def test_link_404_on_missing_obligation(client: httpx.AsyncClient):
 # DELETE /requirements/{id}/link/{obligation_id}
 # ---------------------------------------------------------------------------
 
+
 async def test_unlink_requirement_from_obligation(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
@@ -202,7 +229,9 @@ async def test_unlink_requirement_from_obligation(client: httpx.AsyncClient):
     assert obl["id"] not in r.json()["obligation_ids"]
 
 
-async def test_linking_effective_requirement_fulfills_obligation(client: httpx.AsyncClient):
+async def test_linking_effective_requirement_fulfills_obligation(
+    client: httpx.AsyncClient,
+):
     """An effective requirement linked to an obligation should fulfill it."""
     system = await create_system()
     ass = await create_assessment(client, system["id"])

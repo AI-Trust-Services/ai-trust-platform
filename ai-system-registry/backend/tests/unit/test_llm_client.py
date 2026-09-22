@@ -1,4 +1,5 @@
 """Unit tests for the LLM client response validation."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -15,11 +16,13 @@ async def test_chat_external_raises_on_missing_content_key():
     mock_resp.raise_for_status = MagicMock()
     mock_resp.json.return_value = {"error": "quota exceeded"}
 
-    with patch("app.llm.client._get_token", return_value="tok"), \
-         patch("httpx.AsyncClient") as mock_client_cls:
-        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
-            post=AsyncMock(return_value=mock_resp)
-        ))
+    with (
+        patch("app.llm.client._get_token", return_value="tok"),
+        patch("httpx.AsyncClient") as mock_client_cls,
+    ):
+        mock_client_cls.return_value.__aenter__ = AsyncMock(
+            return_value=MagicMock(post=AsyncMock(return_value=mock_resp))
+        )
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
         with pytest.raises(LLMResponseError, match="unexpected shape"):
@@ -33,11 +36,13 @@ async def test_chat_external_raises_on_empty_content_list():
     mock_resp.raise_for_status = MagicMock()
     mock_resp.json.return_value = {"content": [], "stop_reason": "end_turn"}
 
-    with patch("app.llm.client._get_token", return_value="tok"), \
-         patch("httpx.AsyncClient") as mock_client_cls:
-        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
-            post=AsyncMock(return_value=mock_resp)
-        ))
+    with (
+        patch("app.llm.client._get_token", return_value="tok"),
+        patch("httpx.AsyncClient") as mock_client_cls,
+    ):
+        mock_client_cls.return_value.__aenter__ = AsyncMock(
+            return_value=MagicMock(post=AsyncMock(return_value=mock_resp))
+        )
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
         with pytest.raises(LLMResponseError, match="unexpected shape"):
@@ -55,11 +60,13 @@ async def test_chat_external_succeeds_with_valid_response():
         "usage": {"input_tokens": 10, "output_tokens": 5},
     }
 
-    with patch("app.llm.client._get_token", return_value="tok"), \
-         patch("httpx.AsyncClient") as mock_client_cls:
-        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
-            post=AsyncMock(return_value=mock_resp)
-        ))
+    with (
+        patch("app.llm.client._get_token", return_value="tok"),
+        patch("httpx.AsyncClient") as mock_client_cls,
+    ):
+        mock_client_cls.return_value.__aenter__ = AsyncMock(
+            return_value=MagicMock(post=AsyncMock(return_value=mock_resp))
+        )
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
         result = await _chat_external([{"role": "user", "content": "hi"}], "model", 100)

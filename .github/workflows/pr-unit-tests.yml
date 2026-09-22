@@ -38,6 +38,8 @@ jobs:
 
       - name: Install dependencies and run unit tests
         working-directory: ${{ matrix.component }}
+        env:
+          DATABASE_URL: "postgresql+asyncpg://ci:ci@localhost/ci"
         run: |
           make setup
           make test-unit

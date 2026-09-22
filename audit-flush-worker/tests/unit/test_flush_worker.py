@@ -2,6 +2,7 @@
 
 No Docker needed — both ClickHouse client and SQLAlchemy session are mocked.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,6 +46,7 @@ def _mock_session(rows: list) -> AsyncMock:
 # flush_once — no rows
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_flush_once_no_rows_returns_zero():
     session = _mock_session([])
@@ -52,6 +54,7 @@ async def test_flush_once_no_rows_returns_zero():
 
     with patch("main.SessionLocal", MagicMock(return_value=session)):
         from main import flush_once
+
         result = await flush_once(ch)
 
     assert result == 0
@@ -63,6 +66,7 @@ async def test_flush_once_no_rows_returns_zero():
 # flush_once — inserts into ClickHouse and deletes from Postgres
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_flush_once_inserts_into_clickhouse():
     session = _mock_session([_make_event()])
@@ -70,6 +74,7 @@ async def test_flush_once_inserts_into_clickhouse():
 
     with patch("main.SessionLocal", MagicMock(return_value=session)):
         from main import flush_once
+
         result = await flush_once(ch)
 
     assert result == 1
@@ -82,14 +87,14 @@ async def test_flush_once_inserts_into_clickhouse():
     assert table_name == "audit_events"
     assert len(rows) == 1
     row = rows[0]
-    assert row[0] == "EVT-00000001"       # id
-    assert row[2] == "alice"              # actor_username
+    assert row[0] == "EVT-00000001"  # id
+    assert row[2] == "alice"  # actor_username
     assert row[3] == "system.registered"  # action
-    assert row[4] == "ai_system"          # resource_type
-    assert row[6] == "SYS-00000001"       # ai_system_id
-    assert row[7] == "Test System"        # ai_system_name
+    assert row[4] == "ai_system"  # resource_type
+    assert row[6] == "SYS-00000001"  # ai_system_id
+    assert row[7] == "Test System"  # ai_system_name
     assert json.loads(row[8]) == {"tier": {"before": None, "after": "minimal"}}
-    assert row[9] == "ui"                 # source
+    assert row[9] == "ui"  # source
     assert "id" in columns
 
 
@@ -100,6 +105,7 @@ async def test_flush_once_deletes_rows_from_postgres():
 
     with patch("main.SessionLocal", MagicMock(return_value=session)):
         from main import flush_once
+
         await flush_once(ch)
 
     # execute called twice: SELECT then DELETE
@@ -114,6 +120,7 @@ async def test_flush_once_commits_after_delete():
 
     with patch("main.SessionLocal", MagicMock(return_value=session)):
         from main import flush_once
+
         await flush_once(ch)
 
     session.commit.assert_called_once()
@@ -123,6 +130,7 @@ async def test_flush_once_commits_after_delete():
 # flush_once — ClickHouse failure leaves Postgres untouched
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_flush_once_clickhouse_failure_does_not_delete():
     session = _mock_session([_make_event()])
@@ -131,6 +139,7 @@ async def test_flush_once_clickhouse_failure_does_not_delete():
 
     with patch("main.SessionLocal", MagicMock(return_value=session)):
         from main import flush_once
+
         with pytest.raises(RuntimeError, match="ClickHouse unavailable"):
             await flush_once(ch)
 
@@ -143,14 +152,18 @@ async def test_flush_once_clickhouse_failure_does_not_delete():
 # flush_once — correct row shape
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_flush_once_strips_timezone_from_created_at():
-    event = _make_event(created_at=datetime(2026, 6, 15, 10, 30, 0, tzinfo=timezone.utc))
+    event = _make_event(
+        created_at=datetime(2026, 6, 15, 10, 30, 0, tzinfo=timezone.utc)
+    )
     session = _mock_session([event])
     ch = MagicMock()
 
     with patch("main.SessionLocal", MagicMock(return_value=session)):
         from main import flush_once
+
         await flush_once(ch)
 
     row = ch.insert.call_args[0][1][0]
@@ -159,16 +172,19 @@ async def test_flush_once_strips_timezone_from_created_at():
 
 @pytest.mark.asyncio
 async def test_flush_once_null_fields_become_empty_strings():
-    event = _make_event(ai_system_id=None, ai_system_name=None, changes=None, source=None)
+    event = _make_event(
+        ai_system_id=None, ai_system_name=None, changes=None, source=None
+    )
     session = _mock_session([event])
     ch = MagicMock()
 
     with patch("main.SessionLocal", MagicMock(return_value=session)):
         from main import flush_once
+
         await flush_once(ch)
 
     row = ch.insert.call_args[0][1][0]
-    assert row[6] == ""    # ai_system_id
-    assert row[7] == ""    # ai_system_name
+    assert row[6] == ""  # ai_system_id
+    assert row[7] == ""  # ai_system_name
     assert row[8] == "{}"  # changes
     assert row[9] == "ui"  # source

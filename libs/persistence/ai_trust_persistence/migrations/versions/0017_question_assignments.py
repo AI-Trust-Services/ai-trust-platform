@@ -9,6 +9,7 @@ question (identified by section + question_key) to another user to answer.
 When the assignee provides their answer, answered_at is set. The section owner
 can unassign (delete the row) or overwrite the answer at any time.
 """
+
 from alembic import op
 import sqlalchemy as sa
 
