@@ -346,7 +346,7 @@ jobs:
     steps:
       - name: Check result
         run: |
-          if [[ "${{ needs.build-push.result }}" == "failure" ]]; then
+          if [[ "${{ needs.build-push.result }}" != "success" ]]; then
             echo "::error::One or more image builds did not succeed"
             exit 1
           fi
