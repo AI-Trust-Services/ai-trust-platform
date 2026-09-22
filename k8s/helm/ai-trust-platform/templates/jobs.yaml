@@ -196,6 +196,8 @@ spec:
               value: http://openfga:8080
             - name: INITIAL_ADMIN_USER
               valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: APP_ADMIN_USERNAME } }
+            - name: SEED_DEV_USERS
+              valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: SEED_DEV_USERS, optional: true } }
           volumeMounts:
             - name: openfga-config
               mountPath: /config
