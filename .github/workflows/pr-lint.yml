@@ -6,7 +6,7 @@ on:
 
 jobs:
   lint:
-    name: Lint / ruff
+    name: "Pre-merge check: lint"
     runs-on: ubuntu-latest
 
     steps:
