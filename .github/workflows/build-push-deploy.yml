@@ -6,14 +6,17 @@ name: Deployment Workflow
 # not built here - the Helm chart pulls them straight from their upstream
 # registries, same as docker-compose.
 #
-# Automatic (push to main): builds images tagged ai-trust-main-<sha>, packages
+# Automatic (push to main): builds images tagged main-<sha>, packages
 # the Helm chart, builds an OCM component, and triggers bootstrap-gardener.yml
-# to sync the cluster.
+# to sync the ai-trust-main cluster (namespace=ai-trust — the platform's
+# long-running namespace on that cluster; not to be confused with the git branch).
 #
 # Manual (workflow_dispatch): optional branch (default: main) and
 # gardener_cluster (default: ai-trust-main) inputs. Images are tagged
-# <cluster>-<sha> so each cluster has its own isolated image path in the
-# registry and will never accidentally pull another cluster's latest image.
+# <namespace>-<sha> where namespace is derived from the cluster and actor.
+#
+# PR deploy (workflow_call from pr-deployment-test.yml): pass namespace and
+# gardener_cluster explicitly.
 
 on:
   push:
@@ -32,11 +35,55 @@ on:
         type: choice
         options:
           - ai-trust-main
+          - ai-trust-test
           - sr-test
           - none
+      namespace:
+        description: "Namespace to deploy into (derived from actor when blank)"
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      branch:
+        description: "Branch to build"
+        required: false
+        default: ""
+        type: string
+      gardener_cluster:
+        description: "Target Gardener cluster"
+        required: true
+        type: string
+      namespace:
+        description: "Namespace to deploy into"
+        required: false
+        default: ""
+        type: string
+    secrets:
+      GHCR_PULL_TOKEN:
+        required: false
+      APP_ADMIN_PASSWORD:
+        required: true
+      CLICKHOUSE_PASSWORD:
+        required: true
+      KEYCLOAK_ADMIN_PASSWORD:
+        required: true
+      KEYCLOAK_CLIENT_SECRET:
+        required: true
+      MINIO_ROOT_PASSWORD:
+        required: true
+      OAUTH2_PROXY_COOKIE_SECRET:
+        required: true
+      POSTGRES_PASSWORD:
+        required: true
+      RABBITMQ_PASSWORD:
+        required: true
+      SMTP_PASSWORD:
+        required: true
+      USERS_BACKEND_CLIENT_SECRET:
+        required: true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.gardener_cluster || 'auto' }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.gardener_cluster || 'auto' }}-${{ inputs.namespace || 'default' }}
   cancel-in-progress: true
 
 permissions:
@@ -52,10 +99,11 @@ jobs:
       tag: ${{ steps.vars.outputs.tag }}
       latest_tag: ${{ steps.vars.outputs.latest_tag }}
       cluster: ${{ steps.vars.outputs.cluster }}
+      namespace: ${{ steps.vars.outputs.namespace }}
       deploy: ${{ steps.vars.outputs.deploy }}
       ref: ${{ steps.vars.outputs.ref }}
     steps:
-      - name: Compute image owner / tag / cluster
+      - name: Compute image owner / tag / cluster / namespace
         id: vars
         run: |
           echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
@@ -68,29 +116,56 @@ jobs:
           fi
 
           # Determine target cluster and whether to trigger a deploy
-          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            cluster="ai-trust-main"
-            deploy="true"
-          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ inputs.gardener_cluster }}" != "none" ]]; then
+          if [[ -n "${{ inputs.gardener_cluster }}" && "${{ inputs.gardener_cluster }}" != "none" ]]; then
+            # Explicit cluster input (workflow_dispatch or workflow_call) always wins
             cluster="${{ inputs.gardener_cluster }}"
+            deploy="true"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            cluster="ai-trust-main"
             deploy="true"
           else
             cluster="none"
             deploy="false"
           fi
+
+          # workflow_call without a cluster is always a misconfiguration
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_call" && "${deploy}" == "false" ]]; then
+            echo "::error::workflow_call requires gardener_cluster to be set and not 'none'"
+            exit 1
+          fi
+
           echo "cluster=${cluster}" >> "$GITHUB_OUTPUT"
           echo "deploy=${deploy}" >> "$GITHUB_OUTPUT"
 
-          # Image tag:
-          #   - git version tag  → the version string (e.g. v1.2.3)
-          #   - cluster deploy   → <cluster>-<short-sha>  (isolated per cluster)
-          #   - build-only       → <short-sha>
+          # Namespace derivation:
+          #   - ai-trust-main → always "ai-trust"
+          #   - ai-trust-test / other → explicit input or github.actor (lowercase)
+          if [[ "${cluster}" == "ai-trust-main" ]]; then
+            namespace="ai-trust"
+          elif [[ -n "${{ inputs.namespace }}" ]]; then
+            namespace="${{ inputs.namespace }}"
+          else
+            namespace="${GITHUB_ACTOR,,}"
+          fi
+          echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
+
+          # Image tag: <tag_prefix>-<short-sha>, isolating images per cluster/namespace.
+          # ai-trust-main uses "ai-trust-main" as tag prefix (not the K8s namespace "ai-trust")
+          # to avoid collisions with ai-trust-test images. All other clusters use namespace as prefix.
+          # ai-trust-main additionally gets a floating "latest" tag.
+          # Git version tags use the version string directly.
+          # build-only (workflow_dispatch gardener_cluster=none) tags with bare <short-sha>.
+          if [[ "${cluster}" == "ai-trust-main" ]]; then
+            tag_prefix="ai-trust-main"
+          else
+            tag_prefix="${namespace}"
+          fi
+
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
             echo "latest_tag=" >> "$GITHUB_OUTPUT"
           elif [[ "${deploy}" == "true" ]]; then
-            echo "tag=${cluster}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-            # Only ai-trust-main gets a floating latest tag; other clusters use sha only
+            echo "tag=${tag_prefix}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
             if [[ "${cluster}" == "ai-trust-main" ]]; then
               echo "latest_tag=latest" >> "$GITHUB_OUTPUT"
             else
@@ -264,6 +339,7 @@ jobs:
     outputs:
       deploy: ${{ needs.prepare.outputs.deploy }}
       cluster: ${{ needs.prepare.outputs.cluster }}
+      namespace: ${{ needs.prepare.outputs.namespace }}
       tag: ${{ needs.prepare.outputs.tag }}
       ref: ${{ needs.prepare.outputs.ref }}
     runs-on: ubuntu-latest
@@ -357,10 +433,14 @@ jobs:
   deploy:
     name: Bootstrap Gardener (${{ needs.images-published.outputs.cluster }})
     needs: [images-published, publish-ocm]
-    if: needs.images-published.result == 'success' && needs.publish-ocm.result == 'success' && needs.images-published.outputs.deploy == 'true'
+    if: |
+      needs.images-published.result == 'success' &&
+      needs.images-published.outputs.deploy == 'true' &&
+      needs.publish-ocm.result == 'success'
     uses: ./.github/workflows/bootstrap-gardener.yml
     with:
       cluster: ${{ needs.images-published.outputs.cluster }}
       ocm_version: ${{ needs.images-published.outputs.tag }}
       ref: ${{ needs.images-published.outputs.ref }}
+      namespace: ${{ needs.images-published.outputs.namespace }}
     secrets: inherit

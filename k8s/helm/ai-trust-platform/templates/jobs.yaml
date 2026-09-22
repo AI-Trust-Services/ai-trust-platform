@@ -181,10 +181,11 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
       {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         {{- include "ai-trust.waitForTcp" (dict "name" "openfga" "port" 8081 "image" .Values.waitImages.busybox) | nindent 8 }}
-      containers:
+        # runs the provision binary; writes /config/store_id to the shared emptyDir
         - name: openfga-provision
           image: {{ .Values.image.repository }}/openfga-provision:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -198,10 +199,40 @@ spec:
           volumeMounts:
             - name: openfga-config
               mountPath: /config
+        # builds the Secret YAML from /config/store_id into /secret/secret.yaml
+        # using busybox (has shell); rancher/kubectl has no shell so we pre-render the file
+        - name: build-secret-yaml
+          image: {{ .Values.waitImages.busybox }}
+          command:
+            - sh
+            - -c
+            - |
+              NS=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+              STORE_ID=$(cat /config/store_id)
+              printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: openfga-store-id\n  namespace: %s\nstringData:\n  store_id: "%s"\n' "$NS" "$STORE_ID" > /secret/secret.yaml
+          volumeMounts:
+            - name: openfga-config
+              mountPath: /config
+              readOnly: true
+            - name: secret-yaml
+              mountPath: /secret
+      containers:
+        # applies the pre-rendered Secret YAML using rancher/kubectl (already on nodes, no pull needed)
+        - name: write-secret
+          image: {{ .Values.waitImages.kubectl }}
+          args:
+            - apply
+            - -f
+            - /secret/secret.yaml
+          volumeMounts:
+            - name: secret-yaml
+              mountPath: /secret
+              readOnly: true
       volumes:
         - name: openfga-config
-          persistentVolumeClaim:
-            claimName: openfga-config
+          emptyDir: {}
+        - name: secret-yaml
+          emptyDir: {}
 {{- if .Values.ollama.enabled }}
 ---
 apiVersion: batch/v1
