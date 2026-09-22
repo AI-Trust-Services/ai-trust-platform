@@ -1,0 +1,43 @@
+name: "Pre-merge check: unit tests"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  unit-tests:
+    name: Unit tests / ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - admin/backend
+          - ai-system-registry/backend
+          - alerts/backend
+          - audit/backend
+          - audit-flush-worker
+          - compliance/backend
+          - consumers/clickhouse-consumer
+          - decision-trace-analyzer/backend
+          - libs/authorization
+          - monitoring/backend
+          - otel-pipeline/rmq-bridge
+          - overview/backend
+          - policy-checker-worker
+          - users/backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ${{ matrix.component }}/requirements*.txt
+
+      - name: Install dependencies and run unit tests
+        working-directory: ${{ matrix.component }}
+        run: |
+          make setup
+          make test-unit
