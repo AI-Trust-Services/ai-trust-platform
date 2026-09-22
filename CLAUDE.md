@@ -41,19 +41,14 @@ kubectl get pods -n ai-trust
 ```bash
 cd <component>/backend   # e.g. cd compliance/backend
 make setup               # first time only — creates .venv, installs deps
-make test-unit           # no Docker needed (where available)
+make test-unit           # no Docker needed
 make test-e2e            # requires Postgres: docker compose up -d postgres
 make test                # all tests
 ```
 - `tests/unit/` — pure unit tests, no DB
 - `tests/e2e/` — full stack via ASGITransport, requires Postgres only (no running server); auto-creates `ai_trust_test` DB and runs migrations on first run
 
-### Consumer tests
-```bash
-cd consumers/clickhouse-consumer
-make setup
-make test-unit
-```
+Workers (`audit-flush-worker`, `policy-checker-worker`, `consumers/clickhouse-consumer`) follow the same pattern but live without a `backend/` subdirectory — `cd <worker-dir>` instead of `cd <component>/backend`.
 
 ### Migrations
 ```bash
@@ -79,6 +74,8 @@ Codebase-specific decisions. Follow them even where an external pattern is more 
 - **M2M linking** — many-to-many joins (`requirement_obligations`, `evidence_requirements`, `evidence_obligations`) use raw `pg_insert(...).on_conflict_do_nothing()`, not ORM `relationship(secondary=)`. Don't add ORM relationships to M2M tables.
 - **Frontend API client** — every React frontend has `src/api/client.ts` with a typed `request<T>()` wrapper, `json()`/`qs()` helpers, and an `api` object with one method per endpoint. All calls go through `request<T>()` — never raw `fetch()` in components. `formatDetail` normalises FastAPI validation errors. Reference: `compliance/frontend/src/api/client.ts`.
 - **Pydantic schemas** — response schemas set `model_config = {"from_attributes": True}`. Convert rows with `Schema.model_validate(row)` — never `.from_orm()` (Pydantic v1, removed in v2).
+- **Test deps** — `requirements-test.txt` lists PyPI deps only; never `-r requirements.txt`. Editable libs (`-e ../libs/…`) are installed by `make setup`, not from this file. The service `requirements.txt` uses Docker-path `-e /app/libs/…` which is invalid outside containers and would break CI.
+- **Lint** — `pyproject.toml` at repo root configures ruff. Run `ruff check .` and `ruff format --check .` before pushing; both run as PR gates. Rules F401/F811/E402/E701/E712 are suppressed for pre-existing violations — don't add new suppressions for new code.
 - **CLAUDE.md** — update it as part of any PR that adds or changes a feature, service, endpoint, env var, migration, or architectural pattern. It is the primary reference for AI assistants working in this repo — stale docs cause wrong suggestions and wasted effort.
 
 ---
