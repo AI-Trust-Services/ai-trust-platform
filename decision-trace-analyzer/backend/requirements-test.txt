@@ -1,4 +1,10 @@
--r requirements.txt
+# PyPI deps only — editable libs are installed via `make setup` using relative paths.
+# (requirements.txt uses Docker paths /app/libs/... which are not valid locally.)
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+clickhouse-connect==0.8.17
+PyJWT[crypto]==2.13.0
+httpx==0.28.1
 pytest==9.0.3
 pytest-asyncio==1.4.0
-httpx==0.28.1

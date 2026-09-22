@@ -1,0 +1,5 @@
+# PyPI deps only — editable lib installed via `make setup` using relative paths.
+# (requirements.txt uses Docker path /app/libs/clickhouse which is not valid locally.)
+aio-pika==9.4.3
+pytest==9.0.3
+pytest-asyncio==1.4.0
