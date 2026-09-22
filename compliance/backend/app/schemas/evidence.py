@@ -16,7 +16,7 @@ VALID_EVIDENCE_TYPES = frozenset({
     "certificate", "screenshot", "api_log",
 })
 VALID_EVIDENCE_STATUSES = frozenset({
-    "awaiting_review", "under_review", "approved", "rejected", "expired",
+    "awaiting_review", "approved", "rejected", "expired",
 })
 
 
@@ -45,8 +45,6 @@ class EvidenceUpdate(BaseModel):
 
 class EvidenceResponse(BaseModel):
     id: str
-    ai_system_id: str | None
-    assessment_id: str | None
     title: str
     description: str
     evidence_type: str
@@ -58,6 +56,7 @@ class EvidenceResponse(BaseModel):
     mime_type: str
     uploaded_by: str
     version_label: str
+    control_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -66,7 +65,6 @@ class EvidenceResponse(BaseModel):
 
 class EvidenceDetailResponse(EvidenceResponse):
     requirement_ids: list[str] = []
-    obligation_ids: list[str] = []
 
 
 class EvidenceVersionResponse(BaseModel):

@@ -6,7 +6,6 @@ import { StatusBadge } from "../components/Badges";
 import KpiCard from "../components/KpiCard";
 import DetailPanel, { DetailField, DetailSection } from "../components/DetailPanel";
 import CreateRequirementModal from "../components/CreateRequirementModal";
-import LinkObligationModal from "../components/LinkObligationModal";
 import Pagination from "../components/Pagination";
 import { CONTROL_STATUS_META, OBLIGATION_STATUS_META, EVIDENCE_STATUS_META, fmtDate, humanize } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
@@ -44,7 +43,6 @@ export default function RequirementsPage() {
   const [detailObligations, setDetailObligations] = useState<Obligation[]>([]);
   const [detailEvidence, setDetailEvidence] = useState<Evidence[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
-  const [linkRequirement, setLinkRequirement] = useState<Requirement | null>(null);
   const showToast = useToast();
   const { can } = usePermissions();
   const mayWrite = can("assessments:write");
@@ -222,8 +220,6 @@ export default function RequirementsPage() {
                   <TableCell className="text-[13px] text-muted-foreground">{fmtDate(c.due_date)}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
-                      <Button variant="ghost" size="sm" disabled={!mayWrite} title={mayWrite ? "Link or unlink obligations" : noWriteTitle}
-                        onClick={() => setLinkRequirement(c)}>Link Obligations</Button>
                       <Select value={c.status} disabled={!mayWrite} onValueChange={(v) => changeStatus(c.id, v)}>
                         <SelectTrigger className="h-8 w-[150px]" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -277,7 +273,7 @@ export default function RequirementsPage() {
             )}
             <DetailSection title={`Related Obligations (${detailObligations.length})`}>
               {detailObligations.length === 0
-                ? <p className="text-[13px] text-muted-foreground">No obligations linked. Use "Link Obligations".</p>
+                ? <p className="text-[13px] text-muted-foreground">No obligations linked.</p>
                 : <ul className="flex flex-col gap-1.5">{detailObligations.map((o) => (
                     <li key={o.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{o.title}</span><StatusBadge meta={OBLIGATION_STATUS_META} value={o.status} /></li>
                   ))}</ul>
@@ -292,8 +288,6 @@ export default function RequirementsPage() {
               }
             </DetailSection>
             <div className="flex items-center gap-2 px-5 pt-4">
-              <Button variant="outline" size="sm" disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
-                onClick={() => setLinkRequirement(detail)}>Link Obligations</Button>
               <Select value={detail.status} disabled={!mayWrite}
                 onValueChange={async (v: string) => {
                   await changeStatus(detail.id, v);
@@ -310,12 +304,6 @@ export default function RequirementsPage() {
       </DetailPanel>
 
       <CreateRequirementModal open={createOpen} onClose={() => setCreateOpen(false)} onSuccess={load} />
-      <LinkObligationModal
-        open={!!linkRequirement}
-        requirement={linkRequirement}
-        onClose={() => setLinkRequirement(null)}
-        onSuccess={() => { load(); if (selected && detail) openDetail(detail); }}
-      />
     </>
   );
 }
