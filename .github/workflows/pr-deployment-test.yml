@@ -90,14 +90,19 @@ jobs:
           PR_AUTHOR="${{ steps.pr.outputs.pr_author }}"
           ORG=$(echo "${{ github.repository }}" | cut -d/ -f1)
 
-          HTTP_STATUS=$(gh api "orgs/${ORG}/members/${ACTOR}" \
-            --silent --include 2>&1 | head -1 | grep -oE '[0-9]{3}' || echo "404")
-          if [[ "$HTTP_STATUS" == "204" ]]; then
+          if [[ "$ACTOR" == "$PR_AUTHOR" ]]; then
             echo "authorized=true" >> "$GITHUB_OUTPUT"
-            echo "Actor ${ACTOR} is an org member — authorized."
+            echo "Actor ${ACTOR} is the PR author — authorized."
           else
-            echo "authorized=false" >> "$GITHUB_OUTPUT"
-            echo "Actor ${ACTOR} is not the PR author or an org member — unauthorized."
+            HTTP_STATUS=$(gh api "orgs/${ORG}/members/${ACTOR}" \
+              --silent --include 2>&1 | head -1 | grep -oE '[0-9]{3}' || echo "404")
+            if [[ "$HTTP_STATUS" == "204" ]]; then
+              echo "authorized=true" >> "$GITHUB_OUTPUT"
+              echo "Actor ${ACTOR} is an org member — authorized."
+            else
+              echo "authorized=false" >> "$GITHUB_OUTPUT"
+              echo "Actor ${ACTOR} is not the PR author or an org member — unauthorized."
+            fi
           fi
 
       - name: Reject unauthorized request
