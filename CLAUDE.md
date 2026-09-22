@@ -41,7 +41,7 @@ kubectl get pods -n <namespace>
 - OCM CRs (ComponentVersion, Resource, FluxDeployer), all named per `${NAMESPACE}`: `k8s/ocm/manifests.yaml`
 - Per-cluster env: `k8s/env/<cluster>/.env` (`K8S_NAMESPACE` sets that cluster's default namespace)
 - One-time cluster/namespace setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster> [--namespace=<namespace>]` (installs OCM controller, Flux, Traefik, per-namespace DNS + TLS cert, RBAC — default namespace `ai-trust`; pass `--namespace=<name>` to additionally provision a developer/PR namespace on a shared cluster)
-- **PR deployment test** — commenting `/garden-deploy` on a PR (`.github/workflows/pr-deployment-test.yml`) deploys latest `main`, then the PR branch, to a namespace derived from the PR author on `ai-trust-test`. That namespace must be initialized once via `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`.
+- **PR deployment test** — commenting `/garden-deploy` on a PR (`.github/workflows/pr-deployment-test.yml`) deploys latest `main`, then the PR branch, to a namespace derived from the PR author on `ai-trust-test`. That namespace must be initialized once — add the `garden-init` label to your PR (self-service, `.github/workflows/garden-init.yml`) or run `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>` manually.
 
 ### Run tests (any backend)
 ```bash

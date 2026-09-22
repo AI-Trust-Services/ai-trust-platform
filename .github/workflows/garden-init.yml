@@ -1,0 +1,161 @@
+name: Garden Init
+
+# Triggered by adding the "garden-init" label to a PR, or manually via workflow_dispatch.
+# Runs shoot-cluster-init.sh to provision a developer namespace on ai-trust-test (idempotent).
+#
+# Label trigger: namespace derived from PR author (lowercase). Auth-checked.
+# workflow_dispatch: namespace passed directly as input. No auth check.
+#
+# Prerequisites (one-time per cluster):
+#   bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test
+#   (installs Traefik, OCM controller, Flux at the cluster level)
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: "Namespace to initialize on ai-trust-test"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  dispatch:
+    name: Parse garden-init
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event.label.name == 'garden-init'
+    outputs:
+      namespace: ${{ steps.resolve.outputs.namespace }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      authorized: ${{ steps.auth.outputs.authorized }}
+    steps:
+      - name: Check authorization (org members only)
+        id: auth
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" \
+            --jq '.permission' 2>/dev/null || echo "none")
+          if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "write" || "$PERMISSION" == "maintain" ]]; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+            echo "${{ github.actor }} has ${PERMISSION} permission — authorized."
+          else
+            echo "authorized=false" >> "$GITHUB_OUTPUT"
+            echo "${{ github.actor }} has ${PERMISSION} permission — unauthorized."
+          fi
+
+      - name: Reject unauthorized request
+        if: steps.auth.outputs.authorized != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "❌ @${{ github.actor }} Only org members can trigger namespace initialization."
+          exit 1
+
+      - name: Resolve namespace and PR details
+        id: resolve
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "namespace=${{ inputs.namespace }}" >> "$GITHUB_OUTPUT"
+            echo "pr_number=" >> "$GITHUB_OUTPUT"
+          else
+            PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+            echo "namespace=${PR_AUTHOR,,}" >> "$GITHUB_OUTPUT"
+            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  post-start:
+    name: Post initialization started
+    needs: dispatch
+    if: needs.dispatch.outputs.authorized == 'true' && needs.dispatch.outputs.pr_number != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post "initialization started" comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment "${{ needs.dispatch.outputs.pr_number }}" \
+            --repo "${{ github.repository }}" \
+            --body "🔧 Namespace \`${{ needs.dispatch.outputs.namespace }}\` initialization started."
+
+  init:
+    name: Initialize namespace
+    needs: [dispatch, post-start]
+    if: |
+      always() &&
+      needs.dispatch.result == 'success' &&
+      needs.dispatch.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Load cluster env
+        shell: bash
+        run: |
+          ENV_FILE="k8s/env/ai-trust-test/.env"
+          set -a
+          source "$ENV_FILE"
+          set +a
+          echo "GARDENER_SHOOT_API_SERVER=${GARDENER_SHOOT_API_SERVER}" >> "$GITHUB_ENV"
+          echo "GARDENER_CA_DISCOVERY_URL=${GARDENER_CA_DISCOVERY_URL}" >> "$GITHUB_ENV"
+          echo "GARDENER_OIDC_AUDIENCE=${GARDENER_OIDC_AUDIENCE}" >> "$GITHUB_ENV"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Authenticate to Gardener cluster (SA token, 1h)
+        uses: gardener/cc-utils/.github/actions/kubernetes-auth@1e70b044f4d3305267a559e7ae74b4de57e1fdee
+        with:
+          server: ${{ env.GARDENER_SHOOT_API_SERVER }}
+          server-ca-discovery-url: ${{ env.GARDENER_CA_DISCOVERY_URL }}
+          audience: ${{ env.GARDENER_OIDC_AUDIENCE }}
+          service-account-name: github-actions
+          service-account-namespace: ocm-system
+          service-account-token-expiration: 3600
+
+      - name: Point KUBECONFIG at the authenticated kubeconfig
+        run: echo "KUBECONFIG=$GITHUB_WORKSPACE/kubeconfig.yaml" >> "$GITHUB_ENV"
+
+      - name: Run shoot-cluster-init.sh
+        run: |
+          bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test \
+            --namespace=${{ needs.dispatch.outputs.namespace }}
+
+  post-result:
+    name: Post initialization result
+    needs: [dispatch, init]
+    if: always() && needs.dispatch.outputs.authorized == 'true' && needs.dispatch.outputs.pr_number != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post success comment
+        if: needs.init.result == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment "${{ needs.dispatch.outputs.pr_number }}" \
+            --repo "${{ github.repository }}" \
+            --body "✅ Namespace \`${{ needs.dispatch.outputs.namespace }}\` initialization finished with success. You can now apply the \`garden-deploy\` label."
+
+      - name: Post failure comment
+        if: needs.init.result != 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment "${{ needs.dispatch.outputs.pr_number }}" \
+            --repo "${{ github.repository }}" \
+            --body "❌ Namespace \`${{ needs.dispatch.outputs.namespace }}\` initialization failed — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})."
