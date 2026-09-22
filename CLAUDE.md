@@ -69,6 +69,8 @@ alembic revision --autogenerate -m "description"
 alembic downgrade -1
 ```
 
+**After merging main into a feature branch:** if revision IDs collide, renumber all feature migrations to follow the new main head (rename file + update `revision`/`down_revision`). Then check whether any feature migration touches the same table/column as the new main migrations — warn if so, don't auto-fix.
+
 ### VS Code debugging (any backend)
 Stop the Docker backend (`docker compose stop <service>`), `cd <component>/backend`, `make setup`, then press F5 — `launch.json` is pre-configured in each backend.
 
