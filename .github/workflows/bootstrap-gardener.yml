@@ -94,6 +94,7 @@ jobs:
           rabbitmq_password: ${{ secrets.RABBITMQ_PASSWORD }}
           smtp_password: ${{ secrets.SMTP_PASSWORD }}
           users_backend_client_secret: ${{ secrets.USERS_BACKEND_CLIENT_SECRET }}
+          dev_user_password: ${{ secrets.DEV_USER_PASSWORD }}
 
   bootstrap-other:
     name: Bootstrap (${{ inputs.cluster }})
@@ -122,3 +123,4 @@ jobs:
           rabbitmq_password: ${{ secrets.RABBITMQ_PASSWORD }}
           smtp_password: ${{ secrets.SMTP_PASSWORD }}
           users_backend_client_secret: ${{ secrets.USERS_BACKEND_CLIENT_SECRET }}
+          dev_user_password: ${{ secrets.DEV_USER_PASSWORD }}
