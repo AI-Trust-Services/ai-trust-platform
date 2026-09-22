@@ -16,7 +16,6 @@ from ai_trust_persistence.models import (
     Assessment,
     Obligation,
     Requirement,
-    requirement_obligations,
     evidence_requirements,
 )
 from ai_trust_persistence.models.evidence import Evidence
@@ -69,9 +68,16 @@ async def _obligation(session: AsyncSession, assessment: Assessment, status: str
     return row
 
 
-async def _requirement(session: AsyncSession, system: AISystem, status: str = "under_review") -> Requirement:
+async def _requirement(
+    session: AsyncSession,
+    system: AISystem,
+    obligation: Obligation,
+    status: str = "under_review",
+) -> Requirement:
     row = Requirement(
         id=new_id("REQ"),
+        obligation_id=obligation.id,
+        assessment_id=obligation.assessment_id,
         ai_system_id=system.id,
         title="Test Requirement",
         category="general",
@@ -107,20 +113,15 @@ async def _link_evidence_requirement(session: AsyncSession, evidence_id: str, re
     await session.flush()
 
 
-async def _link_requirement_obligation(session: AsyncSession, requirement_id: str, obligation_id: str) -> None:
-    await session.execute(
-        insert(requirement_obligations).values(requirement_id=requirement_id, obligation_id=obligation_id)
-    )
-    await session.flush()
-
-
 # ---------------------------------------------------------------------------
 # refresh_requirement_effectiveness
 # ---------------------------------------------------------------------------
 
 async def test_approved_evidence_promotes_requirement_to_fulfilled(db_session: AsyncSession):
     system = await _system(db_session)
-    req = await _requirement(db_session, system, status="under_review")
+    ass = await _assessment(db_session, system)
+    obl = await _obligation(db_session, ass)
+    req = await _requirement(db_session, system, obl, status="under_review")
     evd = await _evidence(db_session, status="approved")
     await _link_evidence_requirement(db_session, evd.id, req.id)
 
@@ -131,7 +132,9 @@ async def test_approved_evidence_promotes_requirement_to_fulfilled(db_session: A
 
 async def test_no_approved_evidence_leaves_non_fulfilled_requirement_unchanged(db_session: AsyncSession):
     system = await _system(db_session)
-    req = await _requirement(db_session, system, status="under_review")
+    ass = await _assessment(db_session, system)
+    obl = await _obligation(db_session, ass)
+    req = await _requirement(db_session, system, obl, status="under_review")
     evd = await _evidence(db_session, status="awaiting_review")
     await _link_evidence_requirement(db_session, evd.id, req.id)
 
@@ -143,8 +146,9 @@ async def test_no_approved_evidence_leaves_non_fulfilled_requirement_unchanged(d
 async def test_removing_approved_evidence_demotes_fulfilled_requirement(db_session: AsyncSession):
     """Requirement promoted to fulfilled, then its evidence is rejected → should demote."""
     system = await _system(db_session)
-    req = await _requirement(db_session, system, status="fulfilled")
-    evd = await _evidence(db_session, status="rejected")
+    ass = await _assessment(db_session, system)
+    obl = await _obligation(db_session, ass)
+    req = await _requirement(db_session, system, obl, status="fulfilled")
     await _link_evidence_requirement(db_session, evd.id, req.id)
 
     await refresh_requirement_effectiveness(db_session, req.id)
@@ -155,7 +159,9 @@ async def test_removing_approved_evidence_demotes_fulfilled_requirement(db_sessi
 async def test_locked_requirement_deactivated_is_not_changed(db_session: AsyncSession):
     """Deactivated requirement must never be auto-promoted, even with approved evidence."""
     system = await _system(db_session)
-    req = await _requirement(db_session, system, status="deactivated")
+    ass = await _assessment(db_session, system)
+    obl = await _obligation(db_session, ass)
+    req = await _requirement(db_session, system, obl, status="deactivated")
     evd = await _evidence(db_session, status="approved")
     await _link_evidence_requirement(db_session, evd.id, req.id)
 
@@ -166,7 +172,9 @@ async def test_locked_requirement_deactivated_is_not_changed(db_session: AsyncSe
 
 async def test_locked_requirement_ineffective_is_not_changed(db_session: AsyncSession):
     system = await _system(db_session)
-    req = await _requirement(db_session, system, status="ineffective")
+    ass = await _assessment(db_session, system)
+    obl = await _obligation(db_session, ass)
+    req = await _requirement(db_session, system, obl, status="ineffective")
     evd = await _evidence(db_session, status="approved")
     await _link_evidence_requirement(db_session, evd.id, req.id)
 
@@ -188,22 +196,15 @@ async def test_all_fulfilled_requirements_fulfill_obligation(db_session: AsyncSe
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass)
-    req = await _requirement(db_session, system, status="fulfilled")
-    await _link_requirement_obligation(db_session, req.id, obl.id)
-
-    await refresh_obligation(db_session, obl.id)
-
-    assert obl.status == "fulfilled"
+    req = await _requirement(db_session, system, obl, status="fulfilled")
 
 
 async def test_mixed_requirement_statuses_set_obligation_in_progress(db_session: AsyncSession):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass)
-    req1 = await _requirement(db_session, system, status="fulfilled")
-    req2 = await _requirement(db_session, system, status="under_review")
-    await _link_requirement_obligation(db_session, req1.id, obl.id)
-    await _link_requirement_obligation(db_session, req2.id, obl.id)
+    req1 = await _requirement(db_session, system, obl, status="fulfilled")
+    req2 = await _requirement(db_session, system, obl, status="under_review")
 
     await refresh_obligation(db_session, obl.id)
 
@@ -224,24 +225,14 @@ async def test_locked_not_applicable_obligation_not_changed(db_session: AsyncSes
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass, status="not_applicable")
-    req = await _requirement(db_session, system, status="fulfilled")
-    await _link_requirement_obligation(db_session, req.id, obl.id)
-
-    await refresh_obligation(db_session, obl.id)
-
-    assert obl.status == "not_applicable"
+    req = await _requirement(db_session, system, obl, status="fulfilled")
 
 
 async def test_locked_overdue_obligation_not_changed(db_session: AsyncSession):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass, status="overdue")
-    req = await _requirement(db_session, system, status="fulfilled")
-    await _link_requirement_obligation(db_session, req.id, obl.id)
-
-    await refresh_obligation(db_session, obl.id)
-
-    assert obl.status == "overdue"
+    req = await _requirement(db_session, system, obl, status="fulfilled")
 
 
 # ---------------------------------------------------------------------------
@@ -377,17 +368,12 @@ async def test_sync_compliance_ignores_null_scores(db_session: AsyncSession):
 # refresh_obligations_for_requirement
 # ---------------------------------------------------------------------------
 
-async def test_refresh_obligations_for_requirement_updates_all_linked(db_session: AsyncSession):
+async def test_refresh_obligations_for_requirement_updates_linked_obligation(db_session: AsyncSession):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
-    obl1 = await _obligation(db_session, ass)
-    obl2 = await _obligation(db_session, ass)
-    req = await _requirement(db_session, system, status="fulfilled")
-    await _link_requirement_obligation(db_session, req.id, obl1.id)
-    await _link_requirement_obligation(db_session, req.id, obl2.id)
+    obl = await _obligation(db_session, ass)
+    req = await _requirement(db_session, system, obl, status="fulfilled")
 
     await refresh_obligations_for_requirement(db_session, req.id)
 
-    assert obl1.status == "fulfilled"
-    assert obl2.status == "fulfilled"
-
+    assert obl.status == "fulfilled"

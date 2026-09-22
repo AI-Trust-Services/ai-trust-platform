@@ -10,7 +10,8 @@ from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
-from ai_trust_persistence.models.evidence import Evidence, evidence_obligations
+from ai_trust_persistence.models.requirement import Requirement
+from ai_trust_persistence.models.evidence import Evidence, evidence_requirements
 from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.obligation import Obligation
@@ -192,15 +193,16 @@ async def get_compliance_stats(
             )
         )).scalar_one()
 
-        # Obligations with no approved evidence linked — NOT EXISTS subquery
+        # Obligations with no approved evidence via linked controls — NOT EXISTS subquery
         missing_count = (await session.execute(
             select(func.count()).select_from(Obligation).where(
                 Obligation.status.not_in(["fulfilled", "not_applicable"]),
                 ~(
-                    select(evidence_obligations.c.obligation_id)
-                    .join(Evidence, Evidence.id == evidence_obligations.c.evidence_id)
+                    select(evidence_requirements.c.evidence_id)
+                    .join(Requirement, Requirement.id == evidence_requirements.c.requirement_id)
+                    .join(Evidence, Evidence.id == evidence_requirements.c.evidence_id)
                     .where(
-                        evidence_obligations.c.obligation_id == Obligation.id,
+                        Requirement.obligation_id == Obligation.id,
                         Evidence.status == "approved",
                     )
                     .correlate(Obligation)
@@ -235,6 +237,8 @@ async def get_compliance_stats(
 
         # Expiring evidence — approved evidence with validity_until within the window,
         # soonest first. (Powers the "Evidence Expiring Soon" widget.)
+        # ai_system_id is resolved via evidence_requirements → Requirement.ai_system_id
+        evd_req = aliased(Requirement)
         evd_sys = aliased(AISystem)
         evd_deadlines = (await session.execute(
             select(
@@ -242,16 +246,19 @@ async def get_compliance_stats(
                 Evidence.title,
                 Evidence.validity_until.label("due_date"),
                 Evidence.status,
-                Evidence.ai_system_id,
+                evd_req.ai_system_id,
                 evd_sys.name.label("ai_system_name"),
             )
-            .join(evd_sys, evd_sys.id == Evidence.ai_system_id)
+            .join(evidence_requirements, evidence_requirements.c.evidence_id == Evidence.id)
+            .join(evd_req, evd_req.id == evidence_requirements.c.requirement_id)
+            .join(evd_sys, evd_sys.id == evd_req.ai_system_id)
             .where(
                 Evidence.validity_until >= today,
                 Evidence.validity_until < window_end,
                 Evidence.status == "approved",
             )
-            .order_by(Evidence.validity_until.asc())
+            .distinct(Evidence.id)
+            .order_by(Evidence.id, Evidence.validity_until.asc())
             .limit(30)
         )).all()
 

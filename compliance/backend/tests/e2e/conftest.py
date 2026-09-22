@@ -130,7 +130,7 @@ def _truncate() -> None:
     # frameworks is excluded — seeded by migration, never modified by tests.
     cur.execute(
         "TRUNCATE ai_systems, assessments, obligations, requirements, evidence, "
-        "requirement_obligations, evidence_requirements, evidence_obligations, "
+        "evidence_requirements, "
         "service_model_baselines RESTART IDENTITY CASCADE"
     )
     cur.close()
@@ -254,22 +254,48 @@ async def create_obligation(client: httpx.AsyncClient, assessment_id: str, **kwa
     return r.json()
 
 
-async def create_requirement(client: httpx.AsyncClient, system_id: str | None = None, **kwargs) -> dict:
+async def create_requirement(
+    client: httpx.AsyncClient,
+    obligation_id: str | None = None,
+    **kwargs,
+) -> dict:
+    """Create a requirement. obligation_id is required by the backend.
+
+    When obligation_id is omitted the helper auto-creates a system, an assessment,
+    and an obligation so callers that only care about having *a* requirement don't
+    need to do the setup themselves.
+    """
+    if obligation_id is None:
+        sys = await create_system()
+        ass = await create_assessment(client, sys["id"])
+        obl = await create_obligation(client, ass["id"])
+        obligation_id = obl["id"]
     payload = {
+        "obligation_id": obligation_id,
         "title": "Test Requirement",
         "category": "general",
         **kwargs,
     }
-    if system_id:
-        payload["ai_system_id"] = system_id
     r = await client.post("/v1/requirements", json=payload)
     assert r.status_code == 201, r.text
     return r.json()
 
 
-async def create_evidence(client: httpx.AsyncClient, **kwargs) -> dict:
-    """Creates evidence without a file. At least one link target required."""
-    data = {"title": "Test Evidence", "evidence_type": "document", **kwargs}
+async def create_evidence(
+    client: httpx.AsyncClient,
+    requirement_ids: list[str] | None = None,
+    **kwargs,
+) -> dict:
+    """Creates evidence without a file. Auto-creates a requirement when none given."""
+    if requirement_ids is None:
+        req = await create_requirement(client)
+        requirement_ids = [req["id"]]
+    data: dict = {
+        "title": kwargs.pop("title", "Test Evidence"),
+        "evidence_type": kwargs.pop("evidence_type", "document"),
+        **{k: str(v) for k, v in kwargs.items() if v is not None},
+        "requirement_ids": requirement_ids,
+    }
     r = await client.post("/v1/evidence", data=data)
     assert r.status_code == 201, r.text
     return r.json()
