@@ -206,7 +206,12 @@ def ensure_dev_users(client: httpx.Client) -> None:
             params={"username": user["username"], "exact": "true"},
         ).json()
         if existing:
-            print(f"Dev user '{user['username']}' already exists, skipping.")
+            user_id = existing[0]["id"]
+            print(f"Dev user '{user['username']}' already exists, resetting password...")
+            client.put(
+                f"{KEYCLOAK_URL}/admin/realms/{REALM}/users/{user_id}/reset-password",
+                json={"type": "password", "value": DEV_USER_PASSWORD, "temporary": False},
+            ).raise_for_status()
             continue
         print(f"Creating dev user '{user['username']}'...")
         client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", json={
