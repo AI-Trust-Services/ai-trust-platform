@@ -1,0 +1,34 @@
+name: "Pre-merge check: typecheck"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  typecheck:
+    name: Typecheck / ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - admin/frontend
+          - ai-system-registry/frontend
+          - alerts/frontend
+          - audit/frontend
+          - compliance/frontend
+          - decision-trace-analyzer/frontend
+          - monitoring/frontend
+          - users/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ${{ matrix.component }}/package-lock.json
+      - name: Install dependencies and run typecheck
+        working-directory: ${{ matrix.component }}
+        run: |
+          npm ci
+          npm run typecheck
