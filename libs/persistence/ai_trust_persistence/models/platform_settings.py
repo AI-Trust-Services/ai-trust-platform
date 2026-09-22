@@ -1,6 +1,8 @@
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
@@ -41,23 +43,29 @@ class PlatformSettings(Base):
 
     # Shell colors (light mode)
     sidebar_bg: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    sidebar_text: Mapped[str | None] = mapped_column(String(20), nullable=True)
     header_bg: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    header_text: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Shell colors (dark mode)
     sidebar_bg_dark: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    sidebar_text_dark: Mapped[str | None] = mapped_column(String(20), nullable=True)
     header_bg_dark: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    header_text_dark: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # UI element colors (light mode)
     button_bg: Mapped[str | None] = mapped_column(String(20), nullable=True)
     button_text: Mapped[str | None] = mapped_column(String(20), nullable=True)
     table_header_bg: Mapped[str | None] = mapped_column(String(20), nullable=True)
     table_border: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    mfe_bg: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # UI element colors (dark mode)
     button_bg_dark: Mapped[str | None] = mapped_column(String(20), nullable=True)
     button_text_dark: Mapped[str | None] = mapped_column(String(20), nullable=True)
     table_header_bg_dark: Mapped[str | None] = mapped_column(String(20), nullable=True)
     table_border_dark: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    mfe_bg_dark: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Branding - Draft values (for preview before publishing)
     org_name_draft: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -74,17 +82,27 @@ class PlatformSettings(Base):
     accent_color_dark_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     warning_color_dark_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     sidebar_bg_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    sidebar_text_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     header_bg_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    header_text_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     sidebar_bg_dark_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    sidebar_text_dark_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     header_bg_dark_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    header_text_dark_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     button_bg_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     button_text_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     table_header_bg_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     table_border_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    mfe_bg_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     button_bg_dark_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     button_text_dark_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     table_header_bg_dark_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
     table_border_dark_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    mfe_bg_dark_draft: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Advanced colors (JSONB for flexibility) - tier badges, lifecycle, charts, alerts, etc.
+    advanced_colors: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    advanced_colors_draft: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Branding publish metadata
     branding_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

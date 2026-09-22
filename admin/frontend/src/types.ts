@@ -65,20 +65,28 @@ export interface Branding {
   warning_color_dark: string | null;
   // Shell colors (light mode)
   sidebar_bg: string | null;
+  sidebar_text: string | null;
   header_bg: string | null;
+  header_text: string | null;
   // Shell colors (dark mode)
   sidebar_bg_dark: string | null;
+  sidebar_text_dark: string | null;
   header_bg_dark: string | null;
+  header_text_dark: string | null;
   // UI element colors (light mode)
   button_bg: string | null;
   button_text: string | null;
   table_header_bg: string | null;
   table_border: string | null;
+  mfe_bg: string | null;
   // UI element colors (dark mode)
   button_bg_dark: string | null;
   button_text_dark: string | null;
   table_header_bg_dark: string | null;
   table_border_dark: string | null;
+  mfe_bg_dark: string | null;
+  // Advanced colors (tier badges, lifecycle, charts, alerts, etc.)
+  advanced_colors: Record<string, string> | null;
   // Metadata
   published_at: string | null;
   published_by: string | null;
@@ -97,20 +105,28 @@ export interface BrandingUpdate {
   warning_color_dark?: string | null;
   // Shell colors (light mode)
   sidebar_bg?: string | null;
+  sidebar_text?: string | null;
   header_bg?: string | null;
+  header_text?: string | null;
   // Shell colors (dark mode)
   sidebar_bg_dark?: string | null;
+  sidebar_text_dark?: string | null;
   header_bg_dark?: string | null;
+  header_text_dark?: string | null;
   // UI element colors (light mode)
   button_bg?: string | null;
   button_text?: string | null;
   table_header_bg?: string | null;
   table_border?: string | null;
+  mfe_bg?: string | null;
   // UI element colors (dark mode)
   button_bg_dark?: string | null;
   button_text_dark?: string | null;
   table_header_bg_dark?: string | null;
   table_border_dark?: string | null;
+  mfe_bg_dark?: string | null;
+  // Advanced colors (tier badges, lifecycle, charts, alerts, etc.)
+  advanced_colors?: Record<string, string> | null;
 }
 
 export interface BrandingStatus {

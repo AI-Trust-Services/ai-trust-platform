@@ -95,20 +95,28 @@ class BrandingResponse(BaseModel):
     warning_color_dark: str | None = None
     # Shell colors (light mode)
     sidebar_bg: str | None = None
+    sidebar_text: str | None = None
     header_bg: str | None = None
+    header_text: str | None = None
     # Shell colors (dark mode)
     sidebar_bg_dark: str | None = None
+    sidebar_text_dark: str | None = None
     header_bg_dark: str | None = None
+    header_text_dark: str | None = None
     # UI element colors (light mode)
     button_bg: str | None = None
     button_text: str | None = None
     table_header_bg: str | None = None
     table_border: str | None = None
+    mfe_bg: str | None = None
     # UI element colors (dark mode)
     button_bg_dark: str | None = None
     button_text_dark: str | None = None
     table_header_bg_dark: str | None = None
     table_border_dark: str | None = None
+    mfe_bg_dark: str | None = None
+    # Advanced colors (tier badges, lifecycle, charts, alerts, etc.)
+    advanced_colors: dict[str, str] | None = None
     # Metadata
     published_at: str | None = None  # ISO datetime
     published_by: str | None = None
@@ -132,20 +140,28 @@ class BrandingUpdate(BaseModel):
     warning_color_dark: str | None = None
     # Shell colors (light mode)
     sidebar_bg: str | None = None
+    sidebar_text: str | None = None
     header_bg: str | None = None
+    header_text: str | None = None
     # Shell colors (dark mode)
     sidebar_bg_dark: str | None = None
+    sidebar_text_dark: str | None = None
     header_bg_dark: str | None = None
+    header_text_dark: str | None = None
     # UI element colors (light mode)
     button_bg: str | None = None
     button_text: str | None = None
     table_header_bg: str | None = None
     table_border: str | None = None
+    mfe_bg: str | None = None
     # UI element colors (dark mode)
     button_bg_dark: str | None = None
     button_text_dark: str | None = None
     table_header_bg_dark: str | None = None
     table_border_dark: str | None = None
+    mfe_bg_dark: str | None = None
+    # Advanced colors (tier badges, lifecycle, charts, alerts, etc.)
+    advanced_colors: dict[str, str] | None = None
 
 
 class BrandingStatusResponse(BaseModel):

@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Palette, Upload, X, Eye, EyeOff, RefreshCw, RotateCcw, Sun, Moon, ZoomIn, ZoomOut } from "lucide-react";
+import { Palette, Upload, X, Eye, EyeOff, RefreshCw, RotateCcw, Sun, Moon, ZoomIn, ZoomOut, Sliders } from "lucide-react";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AdvancedColorsModal } from "@/components/AdvancedColorsModal";
 import type { Branding, BrandingUpdate, BrandingStatus } from "@/types";
 import { useToast } from "@/App";
 
@@ -30,7 +31,9 @@ const COLOR_GROUPS = [
     themeSpecific: true,
     fields: [
       { key: "sidebar_bg", keyDark: "sidebar_bg_dark", label: "Sidebar Background", description: "Background color of the navigation sidebar" },
+      { key: "sidebar_text", keyDark: "sidebar_text_dark", label: "Sidebar Text", description: "Text color of sidebar navigation items" },
       { key: "header_bg", keyDark: "header_bg_dark", label: "Header Background", description: "Background color of the top header bar" },
+      { key: "header_text", keyDark: "header_text_dark", label: "Header Text", description: "Text color in the header bar" },
     ],
   },
   {
@@ -38,6 +41,7 @@ const COLOR_GROUPS = [
     description: "Buttons, tables, and other components",
     themeSpecific: true,
     fields: [
+      { key: "mfe_bg", keyDark: "mfe_bg_dark", label: "Content Background", description: "Background color for main content area (MFE views)" },
       { key: "button_bg", keyDark: "button_bg_dark", label: "Button Background", description: "Background color for primary buttons" },
       { key: "button_text", keyDark: "button_text_dark", label: "Button Text", description: "Text color for primary buttons" },
       { key: "table_header_bg", keyDark: "table_header_bg_dark", label: "Table Header", description: "Background color for table headers" },
@@ -79,6 +83,8 @@ export default function BrandingPage() {
   const [draft, setDraft] = useState<Branding | null>(null);
   const [status, setStatus] = useState<BrandingStatus | null>(null);
   const [form, setForm] = useState<BrandingUpdate>({});
+  const [advancedColors, setAdvancedColors] = useState<Record<string, string>>({});
+  const [showAdvancedModal, setShowAdvancedModal] = useState(false);
 
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -113,6 +119,8 @@ export default function BrandingPage() {
         formData[key as keyof BrandingUpdate] = draftData[key as keyof Branding] as string ?? "";
       }
       setForm(formData);
+      // Initialize advanced colors
+      setAdvancedColors(draftData.advanced_colors || {});
     } catch {
       showToast("Failed to load branding settings", true);
     } finally {
@@ -125,7 +133,12 @@ export default function BrandingPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      const updated = await api.updateBranding(form);
+      // Include advanced colors in the update
+      const updatePayload: BrandingUpdate = {
+        ...form,
+        advanced_colors: Object.keys(advancedColors).length > 0 ? advancedColors : null,
+      };
+      const updated = await api.updateBranding(updatePayload);
       setDraft(updated);
       const newStatus = await api.getBrandingStatus();
       setStatus(newStatus);
@@ -412,6 +425,31 @@ export default function BrandingPage() {
                   </div>
                 </div>
               ))}
+
+              {/* Advanced Colors Button */}
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-semibold">Advanced Customization</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Customize tier badges, lifecycle badges, charts, alerts, and progress indicators.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAdvancedModal(true)}
+                  >
+                    <Sliders className="size-4 mr-1.5" />
+                    Customize More
+                  </Button>
+                </div>
+                {Object.keys(advancedColors).length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {Object.keys(advancedColors).length} custom color{Object.keys(advancedColors).length !== 1 ? "s" : ""} configured
+                  </p>
+                )}
+              </div>
+
               <Button onClick={handleSave} disabled={saving}>
                 {saving ? "Saving…" : "Save Draft"}
               </Button>
@@ -500,6 +538,14 @@ export default function BrandingPage() {
           {status.published_by && ` by ${status.published_by}`}
         </div>
       )}
+
+      {/* Advanced Colors Modal */}
+      <AdvancedColorsModal
+        isOpen={showAdvancedModal}
+        onClose={() => setShowAdvancedModal(false)}
+        values={advancedColors}
+        onChange={setAdvancedColors}
+      />
     </div>
   );
 }

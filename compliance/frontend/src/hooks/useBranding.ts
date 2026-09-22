@@ -6,27 +6,38 @@ const THEME_KEY = 'trust-platform-theme';
 
 interface Branding {
   org_name: string;
-  // Brand colors
+  // Brand colors (light mode)
   primary_color: string | null;
   secondary_color: string | null;
   accent_color: string | null;
   warning_color: string | null;
+  // Brand colors (dark mode)
+  primary_color_dark: string | null;
+  secondary_color_dark: string | null;
+  accent_color_dark: string | null;
+  warning_color_dark: string | null;
   // Shell colors (light mode)
   sidebar_bg: string | null;
+  sidebar_text: string | null;
   header_bg: string | null;
+  header_text: string | null;
   // Shell colors (dark mode)
   sidebar_bg_dark: string | null;
+  sidebar_text_dark: string | null;
   header_bg_dark: string | null;
+  header_text_dark: string | null;
   // UI element colors (light mode)
   button_bg: string | null;
   button_text: string | null;
   table_header_bg: string | null;
   table_border: string | null;
+  mfe_bg: string | null;
   // UI element colors (dark mode)
   button_bg_dark: string | null;
   button_text_dark: string | null;
   table_header_bg_dark: string | null;
   table_border_dark: string | null;
+  mfe_bg_dark: string | null;
 }
 
 /**
@@ -49,20 +60,33 @@ export function useBranding(): void {
         const root = document.documentElement;
         const isDark = localStorage.getItem(THEME_KEY) === 'dark' || root.classList.contains('dark');
 
-        // Set CSS variables for brand colors
-        if (b.primary_color) {
-          root.style.setProperty('--primary', b.primary_color);
-          root.style.setProperty('--brand', b.primary_color);
+        // Set CSS variables for brand colors (theme-aware)
+        const primaryColor = isDark ? (b.primary_color_dark || b.primary_color) : b.primary_color;
+        const secondaryColor = isDark ? (b.secondary_color_dark || b.secondary_color) : b.secondary_color;
+        const accentColor = isDark ? (b.accent_color_dark || b.accent_color) : b.accent_color;
+        const warningColor = isDark ? (b.warning_color_dark || b.warning_color) : b.warning_color;
+
+        if (primaryColor) {
+          root.style.setProperty('--primary', primaryColor);
+          root.style.setProperty('--brand', primaryColor);
         }
-        if (b.secondary_color) {
-          root.style.setProperty('--secondary', b.secondary_color);
+        if (secondaryColor) {
+          root.style.setProperty('--secondary', secondaryColor);
         }
-        if (b.accent_color) {
-          root.style.setProperty('--accent', b.accent_color);
+        if (accentColor) {
+          root.style.setProperty('--accent', accentColor);
         }
-        if (b.warning_color) {
-          root.style.setProperty('--warning', b.warning_color);
-          root.style.setProperty('--destructive', b.warning_color);
+        if (warningColor) {
+          root.style.setProperty('--warning', warningColor);
+          root.style.setProperty('--destructive', warningColor);
+        }
+
+        // Apply MFE background color (this is the content area background)
+        const mfeBg = isDark ? (b.mfe_bg_dark || b.mfe_bg) : b.mfe_bg;
+        if (mfeBg) {
+          root.style.setProperty('--background', mfeBg);
+          root.style.backgroundColor = mfeBg;
+          document.body.style.backgroundColor = mfeBg;
         }
 
         // Build CSS rules for buttons and tables
@@ -73,6 +97,15 @@ export function useBranding(): void {
         const tableBorder = isDark ? (b.table_border_dark || b.table_border) : b.table_border;
 
         let css = '';
+
+        // MFE background - ensure it applies to html and body
+        if (mfeBg) {
+          css += `
+            html, body, #root, .min-h-screen {
+              background-color: ${mfeBg} !important;
+            }
+          `;
+        }
 
         // Button styling - target shadcn button variants
         if (btnBg || btnText) {

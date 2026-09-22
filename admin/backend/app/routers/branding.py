@@ -48,20 +48,26 @@ BRANDING_FIELDS = [
     "warning_color_dark",
     # Shell colors (light mode)
     "sidebar_bg",
+    "sidebar_text",
     "header_bg",
+    "header_text",
     # Shell colors (dark mode)
     "sidebar_bg_dark",
+    "sidebar_text_dark",
     "header_bg_dark",
+    "header_text_dark",
     # UI element colors (light mode)
     "button_bg",
     "button_text",
     "table_header_bg",
     "table_border",
+    "mfe_bg",
     # UI element colors (dark mode)
     "button_bg_dark",
     "button_text_dark",
     "table_header_bg_dark",
     "table_border_dark",
+    "mfe_bg_dark",
 ]
 
 
@@ -72,6 +78,18 @@ async def _get_settings() -> PlatformSettings:
         if row is None:
             raise HTTPException(status_code=503, detail="Platform settings not initialised")
         return row
+
+
+def _merge_advanced_colors(
+    published: dict | None, draft: dict | None
+) -> dict[str, str] | None:
+    """Merge draft advanced colors over published, returning combined dict."""
+    if not published and not draft:
+        return None
+    result = dict(published or {})
+    if draft:
+        result.update(draft)
+    return result if result else None
 
 
 def _build_response(row: PlatformSettings, mode: Literal["published", "draft"]) -> BrandingResponse:
@@ -101,20 +119,28 @@ def _build_response(row: PlatformSettings, mode: Literal["published", "draft"]) 
             warning_color_dark=row.warning_color_dark_draft or row.warning_color_dark,
             # Shell colors (light)
             sidebar_bg=row.sidebar_bg_draft or row.sidebar_bg,
+            sidebar_text=row.sidebar_text_draft or row.sidebar_text,
             header_bg=row.header_bg_draft or row.header_bg,
+            header_text=row.header_text_draft or row.header_text,
             # Shell colors (dark)
             sidebar_bg_dark=row.sidebar_bg_dark_draft or row.sidebar_bg_dark,
+            sidebar_text_dark=row.sidebar_text_dark_draft or row.sidebar_text_dark,
             header_bg_dark=row.header_bg_dark_draft or row.header_bg_dark,
+            header_text_dark=row.header_text_dark_draft or row.header_text_dark,
             # UI element colors (light)
             button_bg=row.button_bg_draft or row.button_bg,
             button_text=row.button_text_draft or row.button_text,
             table_header_bg=row.table_header_bg_draft or row.table_header_bg,
             table_border=row.table_border_draft or row.table_border,
+            mfe_bg=row.mfe_bg_draft or row.mfe_bg,
             # UI element colors (dark)
             button_bg_dark=row.button_bg_dark_draft or row.button_bg_dark,
             button_text_dark=row.button_text_dark_draft or row.button_text_dark,
             table_header_bg_dark=row.table_header_bg_dark_draft or row.table_header_bg_dark,
             table_border_dark=row.table_border_dark_draft or row.table_border_dark,
+            mfe_bg_dark=row.mfe_bg_dark_draft or row.mfe_bg_dark,
+            # Advanced colors
+            advanced_colors=_merge_advanced_colors(row.advanced_colors, row.advanced_colors_draft),
             published_at=row.branding_published_at.isoformat() if row.branding_published_at else None,
             published_by=row.branding_published_by,
         )
@@ -137,20 +163,28 @@ def _build_response(row: PlatformSettings, mode: Literal["published", "draft"]) 
         warning_color_dark=row.warning_color_dark,
         # Shell colors (light)
         sidebar_bg=row.sidebar_bg,
+        sidebar_text=row.sidebar_text,
         header_bg=row.header_bg,
+        header_text=row.header_text,
         # Shell colors (dark)
         sidebar_bg_dark=row.sidebar_bg_dark,
+        sidebar_text_dark=row.sidebar_text_dark,
         header_bg_dark=row.header_bg_dark,
+        header_text_dark=row.header_text_dark,
         # UI element colors (light)
         button_bg=row.button_bg,
         button_text=row.button_text,
         table_header_bg=row.table_header_bg,
         table_border=row.table_border,
+        mfe_bg=row.mfe_bg,
         # UI element colors (dark)
         button_bg_dark=row.button_bg_dark,
         button_text_dark=row.button_text_dark,
         table_header_bg_dark=row.table_header_bg_dark,
         table_border_dark=row.table_border_dark,
+        mfe_bg_dark=row.mfe_bg_dark,
+        # Advanced colors
+        advanced_colors=row.advanced_colors,
         published_at=row.branding_published_at.isoformat() if row.branding_published_at else None,
         published_by=row.branding_published_by,
     )
@@ -163,6 +197,9 @@ def _has_unpublished_changes(row: PlatformSettings) -> bool:
         draft = getattr(row, f"{field}_draft")
         if draft is not None and draft != published:
             return True
+    # Also check advanced_colors
+    if row.advanced_colors_draft:
+        return True
     return False
 
 
@@ -211,13 +248,21 @@ async def update_branding(
         # Shell colors (light)
         if body.sidebar_bg is not None:
             row.sidebar_bg_draft = body.sidebar_bg
+        if body.sidebar_text is not None:
+            row.sidebar_text_draft = body.sidebar_text
         if body.header_bg is not None:
             row.header_bg_draft = body.header_bg
+        if body.header_text is not None:
+            row.header_text_draft = body.header_text
         # Shell colors (dark)
         if body.sidebar_bg_dark is not None:
             row.sidebar_bg_dark_draft = body.sidebar_bg_dark
+        if body.sidebar_text_dark is not None:
+            row.sidebar_text_dark_draft = body.sidebar_text_dark
         if body.header_bg_dark is not None:
             row.header_bg_dark_draft = body.header_bg_dark
+        if body.header_text_dark is not None:
+            row.header_text_dark_draft = body.header_text_dark
         # UI element colors (light)
         if body.button_bg is not None:
             row.button_bg_draft = body.button_bg
@@ -227,6 +272,8 @@ async def update_branding(
             row.table_header_bg_draft = body.table_header_bg
         if body.table_border is not None:
             row.table_border_draft = body.table_border
+        if body.mfe_bg is not None:
+            row.mfe_bg_draft = body.mfe_bg
         # UI element colors (dark)
         if body.button_bg_dark is not None:
             row.button_bg_dark_draft = body.button_bg_dark
@@ -236,6 +283,13 @@ async def update_branding(
             row.table_header_bg_dark_draft = body.table_header_bg_dark
         if body.table_border_dark is not None:
             row.table_border_dark_draft = body.table_border_dark
+        if body.mfe_bg_dark is not None:
+            row.mfe_bg_dark_draft = body.mfe_bg_dark
+        # Advanced colors (merge into existing draft)
+        if body.advanced_colors is not None:
+            existing = row.advanced_colors_draft or {}
+            existing.update(body.advanced_colors)
+            row.advanced_colors_draft = existing
 
         await session.commit()
         await session.refresh(row)
@@ -308,6 +362,13 @@ async def publish_branding(
                 setattr(row, field, draft_value)
                 setattr(row, f"{field}_draft", None)  # Clear draft after publish
 
+        # Publish advanced colors (merge draft into published)
+        if row.advanced_colors_draft:
+            existing = row.advanced_colors or {}
+            existing.update(row.advanced_colors_draft)
+            row.advanced_colors = existing
+            row.advanced_colors_draft = None
+
         # Update publish metadata
         now = datetime.now(timezone.utc)
         row.branding_published_at = now
@@ -337,6 +398,8 @@ async def discard_branding(
         # Clear all draft fields
         for field in BRANDING_FIELDS:
             setattr(row, f"{field}_draft", None)
+        # Clear advanced colors draft
+        row.advanced_colors_draft = None
 
         await session.commit()
         await session.refresh(row)
@@ -386,22 +449,32 @@ async def reset_branding(
         row.warning_color_dark = None
         # Shell colors
         row.sidebar_bg = None
+        row.sidebar_text = None
         row.header_bg = None
+        row.header_text = None
         row.sidebar_bg_dark = None
+        row.sidebar_text_dark = None
         row.header_bg_dark = None
+        row.header_text_dark = None
         # UI element colors
         row.button_bg = None
         row.button_text = None
         row.table_header_bg = None
         row.table_border = None
+        row.mfe_bg = None
         row.button_bg_dark = None
         row.button_text_dark = None
         row.table_header_bg_dark = None
         row.table_border_dark = None
+        row.mfe_bg_dark = None
 
         # Clear all draft fields
         for field in BRANDING_FIELDS:
             setattr(row, f"{field}_draft", None)
+
+        # Clear advanced colors
+        row.advanced_colors = None
+        row.advanced_colors_draft = None
 
         # Update publish metadata
         now = datetime.now(timezone.utc)

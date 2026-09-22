@@ -179,19 +179,19 @@
         viewGroup: "admin",
       },
       {
-        pathSegment: "admin-settings",
-        label: "Settings",
-        icon: "action-settings",
-        viewUrl: "/admin/#/admin-settings",
-        navigationContext: "admin-settings",
-        viewGroup: "admin",
-      },
-      {
         pathSegment: "branding",
         label: "Branding",
         icon: "palette",
         viewUrl: "/admin/#/branding",
         navigationContext: "branding",
+        viewGroup: "admin",
+      },
+      {
+        pathSegment: "admin-settings",
+        label: "Settings",
+        icon: "action-settings",
+        viewUrl: "/admin/#/admin-settings",
+        navigationContext: "admin-settings",
         viewGroup: "admin",
       },
   ].filter((node) => canSee(node.pathSegment));
@@ -291,15 +291,27 @@
         if (branding.sidebar_bg) {
           brandingVars['--sidebar-bg'] = branding.sidebar_bg;
         }
+        if (branding.sidebar_text) {
+          brandingVars['--sidebar-text'] = branding.sidebar_text;
+        }
         if (branding.header_bg) {
           brandingVars['--header-bg'] = branding.header_bg;
+        }
+        if (branding.header_text) {
+          brandingVars['--header-text'] = branding.header_text;
         }
         // Shell colors (dark mode)
         if (branding.sidebar_bg_dark) {
           brandingVarsDark['--sidebar-bg'] = branding.sidebar_bg_dark;
         }
+        if (branding.sidebar_text_dark) {
+          brandingVarsDark['--sidebar-text'] = branding.sidebar_text_dark;
+        }
         if (branding.header_bg_dark) {
           brandingVarsDark['--header-bg'] = branding.header_bg_dark;
+        }
+        if (branding.header_text_dark) {
+          brandingVarsDark['--header-text'] = branding.header_text_dark;
         }
         // UI element colors (light mode)
         if (branding.button_bg) {
@@ -314,6 +326,9 @@
         if (branding.table_border) {
           brandingVars['--table-border'] = branding.table_border;
         }
+        if (branding.mfe_bg) {
+          brandingVars['--mfe-bg'] = branding.mfe_bg;
+        }
         // UI element colors (dark mode)
         if (branding.button_bg_dark) {
           brandingVarsDark['--button-bg'] = branding.button_bg_dark;
@@ -327,14 +342,23 @@
         if (branding.table_border_dark) {
           brandingVarsDark['--table-border'] = branding.table_border_dark;
         }
+        if (branding.mfe_bg_dark) {
+          brandingVarsDark['--mfe-bg'] = branding.mfe_bg_dark;
+        }
       }
 
       // Default values (used when branding is not set)
       const sidebarBg = brandingVars['--sidebar-bg'] || '#0f172a';
+      const sidebarText = brandingVars['--sidebar-text'] || '#94a3b8';
       const headerBg = brandingVars['--header-bg'] || '#ffffff';
+      const headerText = brandingVars['--header-text'] || '#111827';
+      const mfeBg = brandingVars['--mfe-bg'] || '#ffffff';
       // Dark mode defaults - use custom dark values or fall back to light values or defaults
       const sidebarBgDark = brandingVarsDark['--sidebar-bg'] || sidebarBg;
+      const sidebarTextDark = brandingVarsDark['--sidebar-text'] || sidebarText;
       const headerBgDark = brandingVarsDark['--header-bg'] || '#09090b';
+      const headerTextDark = brandingVarsDark['--header-text'] || '#e5e7eb';
+      const mfeBgDark = brandingVarsDark['--mfe-bg'] || '#09090b';
 
       const style = document.createElement("style");
       style.textContent = `:root {
@@ -342,7 +366,10 @@
           --luigi-nav-width: 256px;
           --luigi__shellbar--height: 48px;
           --sidebar-bg: ${sidebarBg};
+          --sidebar-text: ${sidebarText};
           --header-bg: ${headerBg};
+          --header-text: ${headerText};
+          --mfe-bg: ${mfeBg};
         }
 
         /* ── Shell bar ── */
@@ -356,7 +383,7 @@
         .fd-shellbar__title,
         .lui-shellbar__title,
         .shellbar-title {
-          color: #111827 !important;
+          color: ${headerText} !important;
           font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
           font-weight: 600 !important;
           font-size: 14px !important;
@@ -473,7 +500,7 @@
         .lui-navigation-list-item a,
         li.fd-navigation__list-item a,
         .fd-nested-list__link {
-          color: #94a3b8 !important;
+          color: ${sidebarText} !important;
           font-weight: 400 !important;
           font-size: 13px !important;
           font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
@@ -581,14 +608,14 @@
 
         /* ── App / iframe ── */
         html {
-          background: #ffffff !important;
+          background: ${mfeBg} !important;
         }
         :root {
-          --sapBackgroundColor: #ffffff;
-          --sapShellColor: #ffffff;
-          --sapBaseColor: #ffffff;
-          --sapContent_ForegroundBackgroundColor: #ffffff;
-          --sapPageHeader_Background: #ffffff;
+          --sapBackgroundColor: ${mfeBg};
+          --sapShellColor: ${mfeBg};
+          --sapBaseColor: ${mfeBg};
+          --sapContent_ForegroundBackgroundColor: ${mfeBg};
+          --sapPageHeader_Background: ${mfeBg};
         }
         .fd-app__main,
         .fd-app__main-container,
@@ -598,26 +625,26 @@
         [class*="app__main"],
         [class*="main-container"],
         [class*="main-frame"] {
-          background: #ffffff !important;
-          background-color: #ffffff !important;
+          background: ${mfeBg} !important;
+          background-color: ${mfeBg} !important;
           border: none !important;
         }
-        body { background: #ffffff !important; }
+        body { background: ${mfeBg} !important; }
         .fd-app, .lui-app, #app {
-          background: linear-gradient(to right, ${sidebarBg} 256px, #ffffff 256px) !important;
+          background: linear-gradient(to right, ${sidebarBg} 256px, ${mfeBg} 256px) !important;
         }
         body.semiCollapsed .fd-app, body.semiCollapsed .lui-app, body.semiCollapsed #app {
-          background: linear-gradient(to right, ${sidebarBg} 48px, #ffffff 48px) !important;
+          background: linear-gradient(to right, ${sidebarBg} 48px, ${mfeBg} 48px) !important;
         }
 
         /* ── Dark mode baked into static CSS — active immediately via html.dark ── */
         html.dark {
-          background: #09090b !important;
-          --sapBackgroundColor: #09090b;
-          --sapShellColor: #09090b;
-          --sapBaseColor: #09090b;
-          --sapContent_ForegroundBackgroundColor: #09090b;
-          --sapPageHeader_Background: #09090b;
+          background: ${mfeBgDark} !important;
+          --sapBackgroundColor: ${mfeBgDark};
+          --sapShellColor: ${mfeBgDark};
+          --sapBaseColor: ${mfeBgDark};
+          --sapContent_ForegroundBackgroundColor: ${mfeBgDark};
+          --sapPageHeader_Background: ${mfeBgDark};
         }
         html.dark .fd-shellbar {
           background: ${headerBgDark} !important;
@@ -625,21 +652,21 @@
         html.dark .fd-shellbar__title,
         html.dark .lui-shellbar__title,
         html.dark .shellbar-title {
-          color: #e5e5e5 !important;
+          color: ${headerTextDark} !important;
         }
         html.dark body,
         html.dark .fd-shell, html.dark .fd-shell__content, html.dark .fd-shell__body,
         html.dark .fd-app__main, html.dark .fd-app__main-container,
         html.dark [class*="app__main"], html.dark [class*="main-container"], html.dark [class*="main-frame"],
         html.dark .fd-busy-indicator, html.dark [class*="loading-indicator"], html.dark [class*="busy-indicator"] {
-          background: #09090b !important;
-          background-color: #09090b !important;
+          background: ${mfeBgDark} !important;
+          background-color: ${mfeBgDark} !important;
         }
         html.dark .fd-app, html.dark .lui-app, html.dark #app {
-          background: linear-gradient(to right, ${sidebarBgDark} 256px, #09090b 256px) !important;
+          background: linear-gradient(to right, ${sidebarBgDark} 256px, ${mfeBgDark} 256px) !important;
         }
         html.dark body.semiCollapsed .fd-app, html.dark body.semiCollapsed .lui-app, html.dark body.semiCollapsed #app {
-          background: linear-gradient(to right, ${sidebarBgDark} 48px, #09090b 48px) !important;
+          background: linear-gradient(to right, ${sidebarBgDark} 48px, ${mfeBgDark} 48px) !important;
         }
         html.dark .fd-app__sidebar,
         html.dark .fd-app__split-view,
