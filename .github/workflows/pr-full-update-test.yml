@@ -208,7 +208,7 @@ jobs:
         env:
           PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
         run: |
-          RELEASE_NAME="ai-trust-${PR_AUTHOR_LOWER}"
+          RELEASE_NAME="${PR_AUTHOR_LOWER}"
           APP_NAMESPACE="${PR_AUTHOR_LOWER}"
           HELM_WAS_PRESENT=false
 

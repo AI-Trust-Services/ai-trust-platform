@@ -120,14 +120,14 @@ build-push-deploy.yml
   └─ calls bootstrap-gardener.yml
        ├─ creates namespace/secrets/RBAC via bootstrap.sh
        └─ applies k8s/ocm/ CRs (ComponentVersion, Resource, FluxDeployer), named
-          `ai-trust-platform-<namespace>` / `ai-trust-platform-chart-<namespace>` / `ai-trust-<namespace>`,
+          `<namespace>` / `<namespace>-chart` / `<namespace>`,
           substituting the exact built version into ComponentVersion.spec.version.semver
 
 On the cluster (OCM controller + Flux), all scoped to one namespace:
   ComponentVersion  →  resolves the exact pinned OCM component version
   Resource          →  exposes the ai-trust-platform-chart resource
-  FluxDeployer      →  creates/updates a HelmRelease (release name ai-trust-<namespace>) in ocm-system
-  Flux helm-controller  →  helm upgrade --install ai-trust-<namespace> in <namespace>
+  FluxDeployer      →  creates/updates a HelmRelease (release name `<namespace>`) in ocm-system
+  Flux helm-controller  →  helm upgrade --install `<namespace>` in `<namespace>`
 ```
 
 Deployments are **namespace-scoped**, so a single cluster can host several concurrent
@@ -163,7 +163,7 @@ deployments side by side. Two namespace conventions are in use today:
   `k8s/scripts/bootstrap.sh` (namespace, `ai-trust-env` secret, `ai-trust-flux-values-<namespace>`
   secret in `ocm-system`, ConfigMaps, RBAC); applies `k8s/ocm/` with the namespace and exact built
   version substituted into the CR names and `ComponentVersion.spec.version.semver` (an exact-match pin,
-  not a range); then **polls the HelmRelease** `ai-trust-<namespace>` every 60 s until it reaches
+  not a range); then **polls the HelmRelease** `<namespace>` every 60 s until it reaches
   `Ready=True` at the expected version — failing fast on `InstallFailed`/`UpgradeFailed` and timing out
   after 30 minutes.
 
@@ -221,18 +221,18 @@ Substitute `<namespace>` below (`ai-trust` on `ai-trust-main`, or the developer/
 
 ```bash
 # Which version is reconciled
-kubectl get componentversion ai-trust-platform-<namespace> -n ocm-system \
+kubectl get componentversion <namespace> -n ocm-system \
   -o jsonpath='{.status.reconciledVersion}{"\n"}'
 
 # HelmRelease status (shows chart version + success/failure message)
-kubectl get helmrelease ai-trust-<namespace> -n ocm-system -o wide
+kubectl get helmrelease <namespace> -n ocm-system -o wide
 
 # Pod image tags (verify the correct SHA is running)
 kubectl get pods -n <namespace> \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
 
 # Events from the OCM controller
-kubectl describe componentversion ai-trust-platform-<namespace> -n ocm-system | tail -20
+kubectl describe componentversion <namespace> -n ocm-system | tail -20
 ```
 
 Note: the `Applied version:` column in `kubectl get componentversion` output is blank due to a
