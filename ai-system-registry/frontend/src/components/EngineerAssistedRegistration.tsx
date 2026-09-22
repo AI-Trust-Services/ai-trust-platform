@@ -134,7 +134,6 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
   const [fields, setFields] = useState<Record<string, unknown>>({});
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [complete, setComplete] = useState(false);
   const [degraded, setDegraded] = useState(false);
 
   const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
@@ -212,7 +211,6 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
       if (res.message) setTranscript([...nextTranscript, { role: "assistant", content: res.message }]);
       else setTranscript(nextTranscript);
       if (res.complete) {
-        setComplete(true);
         setDegraded(res.degraded);
         setInferredFlags(res.inferred_flags || []);
         setClassification(res.classification);

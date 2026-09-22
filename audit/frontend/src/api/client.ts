@@ -64,6 +64,6 @@ export const api = {
 
   myPermissions: () => requestBase<PermissionsResponse>(USERS_API_BASE, "/me/permissions"),
 
-  getSystems: (filters: Pick<AuditFilters, "action" | "resource_type" | "from" | "to" | "search"> = {}) =>
+  getSystems: (filters: Partial<AuditFilters> = {}) =>
     request<AISystem[]>(`/systems${buildQuery(filters)}`),
 };

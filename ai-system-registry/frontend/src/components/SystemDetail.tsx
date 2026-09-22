@@ -180,8 +180,6 @@ function WorkflowProgress({
   // The owner may fill only while holding the token (no active delegate); the delegate
   // may fill while it holds the token. Question assignees may always open their section.
   // This mirrors the backend section edit-lock.
-  const canFillSection = !!pendingSection && ((isSectionOwner && !activeSub) || isDelegate || iAmQuestionAssignee);
-
   // The CO cannot approve until every required question is answered (backend enforces a
   // 422 as the safety net). Booleans/numbers and full_manual systems never contribute gaps.
   const bizMissing = missingRequired(BUSINESS_QUESTIONS, getBusinessFieldValues(system));

@@ -77,7 +77,7 @@ export default function EvidencePage() {
     }
   }
 
-  function closePanel() { setSelected(null); setDetail(null); setDetailControls([]); setDetailObligations([]); setVersions([]); }
+  function closePanel() { setSelected(null); setDetail(null); setDetailObligations([]); setVersions([]); }
 
   async function act(fn: (id: string) => Promise<Evidence>, id: string, msg: string) {
     try {
