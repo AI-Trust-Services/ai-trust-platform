@@ -54,14 +54,14 @@ jobs:
             echo "authorized=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          HTTP_STATUS=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}" \
-            --silent --include 2>&1 | head -1 | grep -oE '[0-9]{3}' || echo "404")
-          if [[ "$HTTP_STATUS" == "204" ]]; then
+          PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" \
+            --jq '.permission' 2>/dev/null || echo "none")
+          if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "write" || "$PERMISSION" == "maintain" ]]; then
             echo "authorized=true" >> "$GITHUB_OUTPUT"
-            echo "${{ github.actor }} is a repo collaborator — authorized."
+            echo "${{ github.actor }} has ${PERMISSION} permission — authorized."
           else
             echo "authorized=false" >> "$GITHUB_OUTPUT"
-            echo "${{ github.actor }} is not a repo collaborator — unauthorized."
+            echo "${{ github.actor }} has ${PERMISSION} permission — unauthorized."
           fi
 
       - name: Reject unauthorized request
