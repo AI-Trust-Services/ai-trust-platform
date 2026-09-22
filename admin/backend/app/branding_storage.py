@@ -111,15 +111,21 @@ async def ensure_bucket() -> None:
     await asyncio.to_thread(_ensure_bucket_sync, bucket_name())
 
 
-def object_key(asset_type: str, filename: str) -> str:
+def object_key(asset_type: str, filename: str, *, draft: bool = False) -> str:
     """Deterministic, path-traversal-safe object key for branding assets.
 
-    Key format: `branding/{asset_type}/{safe_filename}`
+    Key format: `branding/{asset_type}/{safe_filename}` (published)
+             or `branding/{asset_type}/draft/{safe_filename}` (draft)
+
+    Draft uploads use a separate namespace so they cannot overwrite live assets.
+    On publish, the draft key is copied to the published key.
     """
     safe_name = os.path.basename(filename).replace("..", "").strip() or "file"
     # Limit filename length
     if len(safe_name) > 100:
         safe_name = safe_name[:100]
+    if draft:
+        return f"branding/{asset_type}/draft/{safe_name}"
     return f"branding/{asset_type}/{safe_name}"
 
 
@@ -152,13 +158,17 @@ def _upload_sync(bucket: str, key: str, data: bytes, content_type: str) -> None:
     )
 
 
-async def upload_file(asset_type: str, filename: str, data: bytes, content_type: str) -> str:
-    """Upload branding asset to the tenant's bucket. Returns the stored object key."""
+async def upload_file(asset_type: str, filename: str, data: bytes, content_type: str, *, draft: bool = True) -> str:
+    """Upload branding asset to the tenant's bucket. Returns the stored object key.
+
+    By default uploads to the draft namespace (draft=True) so live assets are not overwritten.
+    On publish, call copy_draft_to_published() to promote the draft asset.
+    """
     bucket = bucket_name()
     await ensure_bucket()
-    key = object_key(asset_type, filename)
+    key = object_key(asset_type, filename, draft=draft)
     await asyncio.to_thread(_upload_sync, bucket, key, data, content_type)
-    logger.info("branding.file_uploaded", extra={"bucket": bucket, "key": key, "size": len(data)})
+    logger.info("branding.file_uploaded", extra={"bucket": bucket, "key": key, "size": len(data), "draft": draft})
     return key
 
 
@@ -205,3 +215,39 @@ async def delete_file(key: str) -> None:
         logger.info("branding.file_deleted", extra={"key": key})
     except Exception as e:  # noqa: BLE001 — deletion is best-effort
         logger.warning("branding.file_delete_failed", extra={"key": key, "error": str(e)})
+
+
+def _copy_sync(bucket: str, src_key: str, dst_key: str) -> None:
+    """Copy an object within the same bucket."""
+    from minio.commonconfig import CopySource
+
+    _get_client().copy_object(
+        bucket,
+        dst_key,
+        CopySource(bucket, src_key),
+    )
+
+
+async def copy_draft_to_published(draft_key: str) -> str:
+    """Copy a draft asset to its published location. Returns the published key.
+
+    Draft key format: branding/{asset_type}/draft/{filename}
+    Published key format: branding/{asset_type}/{filename}
+    """
+    # Parse the draft key to derive the published key
+    # branding/logo_icon/draft/icon.svg -> branding/logo_icon/icon.svg
+    parts = draft_key.split("/")
+    if len(parts) >= 4 and parts[2] == "draft":
+        published_key = f"{parts[0]}/{parts[1]}/{'/'.join(parts[3:])}"
+    else:
+        # Already a published key or unexpected format — just use as-is
+        published_key = draft_key
+
+    bucket = bucket_name()
+    try:
+        await asyncio.to_thread(_copy_sync, bucket, draft_key, published_key)
+        logger.info("branding.draft_promoted", extra={"draft_key": draft_key, "published_key": published_key})
+        return published_key
+    except Exception as e:
+        logger.error("branding.draft_promote_failed", extra={"draft_key": draft_key, "error": str(e)})
+        raise HTTPException(status_code=500, detail=f"Failed to publish asset: {e}") from e

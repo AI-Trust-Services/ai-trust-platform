@@ -10,6 +10,7 @@
   let branding = null;
 
   // Check if we're in preview mode (draft branding for admin preview)
+  // Preview mode uses a separate authenticated endpoint to fetch draft branding
   const urlParams = new URLSearchParams(window.location.search);
   const isPreview = urlParams.get('preview') === 'true';
 
@@ -18,7 +19,10 @@
       fetch("/api/users/v1/me/permissions", { cache: "no-store" }),
       fetch("/api/users/v1/me", { cache: "no-store" }),
       fetch("/api/admin/v1/settings", { cache: "no-store" }),
-      fetch(`/api/admin/v1/branding/public${isPreview ? '?preview=true' : ''}`, { cache: "no-store" }),
+      // Preview mode fetches draft via authenticated endpoint; normal mode uses public endpoint
+      isPreview
+        ? fetch("/api/admin/v1/branding?mode=draft", { cache: "no-store" })
+        : fetch("/api/admin/v1/branding/public", { cache: "no-store" }),
     ]);
     if (permRes.ok) {
       const data = await permRes.json();
@@ -1113,24 +1117,31 @@
           function applyShellTheme(dark) {
             document.documentElement.classList.toggle('dark', dark);
             let ov = document.getElementById('luigi-dark-overrides');
-            // Use branding sidebar color or default
-            const navBg = (branding && branding.sidebar_bg) || '#0f172a';
-            const headerBgDark = (branding && branding.header_bg) || '#0f172a';
+            // Use configured branding colors, preferring *_dark variants in dark mode
+            const navBg = dark
+              ? (branding?.sidebar_bg_dark || branding?.sidebar_bg || '#0f172a')
+              : (branding?.sidebar_bg || '#0f172a');
+            const headerBgColor = dark
+              ? (branding?.header_bg_dark || '#09090b')
+              : (branding?.header_bg || '#ffffff');
+            const mfeBgColor = dark
+              ? (branding?.mfe_bg_dark || '#09090b')
+              : (branding?.mfe_bg || '#ffffff');
             if (dark) {
               if (!ov) { ov = document.createElement('style'); ov.id = 'luigi-dark-overrides'; document.head.appendChild(ov); }
               ov.textContent = `
-                .fd-shellbar { background: ${headerBgDark} !important; border-bottom: none !important; }
-                html, body { background: #09090b !important; }
+                .fd-shellbar { background: ${headerBgColor} !important; border-bottom: none !important; }
+                html, body { background: ${mfeBgColor} !important; }
                 .fd-app, .lui-app, #app {
-                  background: linear-gradient(to right, ${navBg} 256px, #09090b 256px) !important;
+                  background: linear-gradient(to right, ${navBg} 256px, ${mfeBgColor} 256px) !important;
                 }
                 body.semiCollapsed .fd-app, body.semiCollapsed .lui-app, body.semiCollapsed #app {
-                  background: linear-gradient(to right, ${navBg} 48px, #09090b 48px) !important;
+                  background: linear-gradient(to right, ${navBg} 48px, ${mfeBgColor} 48px) !important;
                 }
                 .fd-shell, .fd-shell__content, .fd-shell__body,
                 .fd-app__main, .fd-app__main-container,
                 [class*="app__main"], [class*="main-container"], [class*="main-frame"] {
-                  background: #09090b !important;
+                  background: ${mfeBgColor} !important;
                 }
                 #luigi-account-dropdown { background: #18181b !important; border-color: rgba(255,255,255,0.08) !important; box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3) !important; }
                 #luigi-account-dropdown .lui-name { color: #f9fafb !important; }

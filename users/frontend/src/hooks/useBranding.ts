@@ -47,11 +47,28 @@ interface Branding {
  */
 export function useBranding(): void {
   useEffect(() => {
+    // CSS variables that may have been set on :root by branding
+    const BRANDING_CSS_VARS = [
+      '--primary', '--brand', '--secondary', '--accent', '--warning', '--destructive', '--background'
+    ];
+
+    function clearBranding() {
+      // Remove the style element
+      document.getElementById(BRANDING_STYLE_ID)?.remove();
+      // Clear any inline CSS variables set on :root
+      const root = document.documentElement;
+      for (const v of BRANDING_CSS_VARS) {
+        root.style.removeProperty(v);
+      }
+      // Reset background colors
+      root.style.backgroundColor = '';
+      document.body.style.backgroundColor = '';
+    }
+
     function apply() {
       const raw = localStorage.getItem(BRANDING_KEY);
       if (!raw) {
-        // Remove any existing branding overrides
-        document.getElementById(BRANDING_STYLE_ID)?.remove();
+        clearBranding();
         return;
       }
 

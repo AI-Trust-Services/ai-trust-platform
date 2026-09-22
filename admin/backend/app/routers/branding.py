@@ -10,6 +10,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, Response, UploadFile
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 
 from ai_trust_authorization.constants import IAM_MANAGE
 from ai_trust_authorization.permissions import get_current_user, require_permission
@@ -287,9 +288,12 @@ async def update_branding(
             row.mfe_bg_dark_draft = body.mfe_bg_dark
         # Advanced colors (merge into existing draft)
         if body.advanced_colors is not None:
-            existing = row.advanced_colors_draft or {}
+            # Copy the dict to ensure SQLAlchemy detects the change
+            existing = dict(row.advanced_colors_draft or {})
             existing.update(body.advanced_colors)
             row.advanced_colors_draft = existing
+            # Flag as modified so SQLAlchemy flushes the change
+            flag_modified(row, "advanced_colors_draft")
 
         await session.commit()
         await session.refresh(row)
@@ -355,19 +359,29 @@ async def publish_branding(
         if row is None:
             raise HTTPException(status_code=503, detail="Platform settings not initialised")
 
+        # Logo fields that need MinIO copy from draft to published namespace
+        logo_fields = ["logo_horizontal_light", "logo_horizontal_dark", "logo_icon", "favicon"]
+
         # Copy all draft values to published (only where draft differs)
         for field in BRANDING_FIELDS:
             draft_value = getattr(row, f"{field}_draft")
             if draft_value is not None:
-                setattr(row, field, draft_value)
+                # For logo fields, copy the file from draft namespace to published namespace
+                if field in logo_fields and "/draft/" in draft_value:
+                    published_key = await branding_storage.copy_draft_to_published(draft_value)
+                    setattr(row, field, published_key)
+                else:
+                    setattr(row, field, draft_value)
                 setattr(row, f"{field}_draft", None)  # Clear draft after publish
 
         # Publish advanced colors (merge draft into published)
         if row.advanced_colors_draft:
-            existing = row.advanced_colors or {}
+            # Copy dicts to ensure SQLAlchemy detects the changes
+            existing = dict(row.advanced_colors or {})
             existing.update(row.advanced_colors_draft)
             row.advanced_colors = existing
             row.advanced_colors_draft = None
+            flag_modified(row, "advanced_colors")
 
         # Update publish metadata
         now = datetime.now(timezone.utc)
@@ -506,16 +520,14 @@ async def get_asset(
 
 
 @router.get("/public", response_model=BrandingResponse)
-async def get_public_branding(
-    preview: bool = Query(False, description="If true, return draft branding for preview mode"),
-) -> BrandingResponse:
+async def get_public_branding() -> BrandingResponse:
     """Get published branding for shell/MFEs. No authentication required.
 
-    In preview mode (?preview=true), returns draft values merged over published.
+    Always returns published values only — draft preview is handled via the
+    authenticated `/branding?mode=draft` endpoint for admin preview iframes.
     """
     row = await _get_settings()
-    mode: Literal["published", "draft"] = "draft" if preview else "published"
-    return _build_response(row, mode)
+    return _build_response(row, "published")
 
 
 @router.get("/public/asset/{asset_key:path}")
