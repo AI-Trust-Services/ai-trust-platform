@@ -343,4 +343,5 @@ All other config lives in `k8s/env/<cluster>/.env` (committed). No per-cluster G
   CSI driver handles detach/reattach when a pod reschedules to a different node.
 - No resource `requests`/`limits` (docker-compose doesn't set any either).
 - No HTTPS / `cookie-secure=true` - same as docker-compose's local-dev oauth2-proxy config.
+- ReadWriteOnce access mode can not scale the deployment that mounts such volume. Apply ReadWriteMany for scalable application.
 - No horizontal pod autoscalers.
