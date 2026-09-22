@@ -6,22 +6,20 @@ import { Label } from "@/components/ui/label";
 
 // Default colors for each category - these become CSS variables
 export const ADVANCED_COLOR_DEFAULTS: Record<string, string> = {
-  // Risk Tier Badges
+  // Risk Tier Badges (aligned with EU AI Act terminology from product-terminology-2026-08-28.md)
   tier_prohibited_bg: "#fef2f2",
   tier_prohibited_text: "#b91c1c",
   tier_high_bg: "#fff7ed",
   tier_high_text: "#c2410c",
-  tier_gpai_systemic_bg: "#f0e8ff",
-  tier_gpai_systemic_text: "#4108A0",
-  tier_gpai_standard_bg: "#f4edff",
-  tier_gpai_standard_text: "#6C1AF4",
-  tier_limited_bg: "#fffbeb",
-  tier_limited_text: "#b45309",
-  tier_minimal_bg: "#f0fdf4",
-  tier_minimal_text: "#15803d",
+  tier_high_transparency_bg: "#fef3f2",
+  tier_high_transparency_text: "#c2410c",
+  tier_transparency_bg: "#fffbeb",
+  tier_transparency_text: "#b45309",
+  tier_limited_no_bg: "#f0fdf4",
+  tier_limited_no_text: "#15803d",
   tier_pending_bg: "#f4f4f5",
   tier_pending_text: "#71717a",
-  // Lifecycle Badges
+  // Lifecycle Badges (aligned with terminology)
   lifecycle_development_bg: "#eff6ff",
   lifecycle_development_text: "#1147E9",
   lifecycle_testing_bg: "#fffbeb",
@@ -32,6 +30,8 @@ export const ADVANCED_COLOR_DEFAULTS: Record<string, string> = {
   lifecycle_market_text: "#15803d",
   lifecycle_service_bg: "#f0fdf4",
   lifecycle_service_text: "#166534",
+  lifecycle_updated_bg: "#eff6ff",
+  lifecycle_updated_text: "#1e40af",
   lifecycle_decommissioned_bg: "#f4f4f5",
   lifecycle_decommissioned_text: "#71717a",
   // Chart Palette
@@ -63,18 +63,16 @@ const CATEGORIES = [
     label: "Risk Tiers",
     description: "EU AI Act risk classification badges",
     fields: [
-      { key: "tier_prohibited_bg", label: "Prohibited Bg" },
-      { key: "tier_prohibited_text", label: "Prohibited Text" },
+      { key: "tier_prohibited_bg", label: "Prohibited Practice Bg" },
+      { key: "tier_prohibited_text", label: "Prohibited Practice Text" },
       { key: "tier_high_bg", label: "High Risk Bg" },
       { key: "tier_high_text", label: "High Risk Text" },
-      { key: "tier_gpai_systemic_bg", label: "GPAI Systemic Bg" },
-      { key: "tier_gpai_systemic_text", label: "GPAI Systemic Text" },
-      { key: "tier_gpai_standard_bg", label: "GPAI Standard Bg" },
-      { key: "tier_gpai_standard_text", label: "GPAI Standard Text" },
-      { key: "tier_limited_bg", label: "Limited Bg" },
-      { key: "tier_limited_text", label: "Limited Text" },
-      { key: "tier_minimal_bg", label: "Minimal Bg" },
-      { key: "tier_minimal_text", label: "Minimal Text" },
+      { key: "tier_high_transparency_bg", label: "High Risk + Transparency Bg" },
+      { key: "tier_high_transparency_text", label: "High Risk + Transparency Text" },
+      { key: "tier_transparency_bg", label: "Transparency Obligations Bg" },
+      { key: "tier_transparency_text", label: "Transparency Obligations Text" },
+      { key: "tier_limited_no_bg", label: "Limited/No Risk Bg" },
+      { key: "tier_limited_no_text", label: "Limited/No Risk Text" },
       { key: "tier_pending_bg", label: "Pending Bg" },
       { key: "tier_pending_text", label: "Pending Text" },
     ],
@@ -82,18 +80,20 @@ const CATEGORIES = [
   {
     id: "lifecycle",
     label: "Lifecycle",
-    description: "System lifecycle status badges",
+    description: "AI system lifecycle status badges",
     fields: [
       { key: "lifecycle_development_bg", label: "Development Bg" },
       { key: "lifecycle_development_text", label: "Development Text" },
       { key: "lifecycle_testing_bg", label: "Testing Bg" },
       { key: "lifecycle_testing_text", label: "Testing Text" },
-      { key: "lifecycle_prod_ready_bg", label: "Prod Ready Bg" },
-      { key: "lifecycle_prod_ready_text", label: "Prod Ready Text" },
+      { key: "lifecycle_prod_ready_bg", label: "Production Ready Bg" },
+      { key: "lifecycle_prod_ready_text", label: "Production Ready Text" },
       { key: "lifecycle_market_bg", label: "On Market Bg" },
       { key: "lifecycle_market_text", label: "On Market Text" },
       { key: "lifecycle_service_bg", label: "In Service Bg" },
       { key: "lifecycle_service_text", label: "In Service Text" },
+      { key: "lifecycle_updated_bg", label: "Updated Bg" },
+      { key: "lifecycle_updated_text", label: "Updated Text" },
       { key: "lifecycle_decommissioned_bg", label: "Decommissioned Bg" },
       { key: "lifecycle_decommissioned_text", label: "Decommissioned Text" },
     ],
@@ -293,16 +293,23 @@ export function AdvancedColorsModal({
             <div className="mt-6 p-4 rounded-lg border border-border bg-muted/30">
               <p className="text-xs font-medium mb-3">Preview</p>
               <div className="flex flex-wrap gap-2">
-                {["prohibited", "high", "gpai_systemic", "gpai_standard", "limited", "minimal", "pending"].map((tier) => (
+                {[
+                  { key: "prohibited", label: "Prohibited Practice" },
+                  { key: "high", label: "High Risk" },
+                  { key: "high_transparency", label: "High Risk + Transparency" },
+                  { key: "transparency", label: "Transparency" },
+                  { key: "limited_no", label: "Limited/No Risk" },
+                  { key: "pending", label: "Pending" },
+                ].map((tier) => (
                   <span
-                    key={tier}
+                    key={tier.key}
                     className="px-2.5 py-1 rounded-full text-xs font-medium"
                     style={{
-                      backgroundColor: getColorValue(`tier_${tier}_bg`),
-                      color: getColorValue(`tier_${tier}_text`),
+                      backgroundColor: getColorValue(`tier_${tier.key}_bg`),
+                      color: getColorValue(`tier_${tier.key}_text`),
                     }}
                   >
-                    {tier.replace(/_/g, " ")}
+                    {tier.label}
                   </span>
                 ))}
               </div>
@@ -313,16 +320,24 @@ export function AdvancedColorsModal({
             <div className="mt-6 p-4 rounded-lg border border-border bg-muted/30">
               <p className="text-xs font-medium mb-3">Preview</p>
               <div className="flex flex-wrap gap-2">
-                {["development", "testing", "prod_ready", "market", "service", "decommissioned"].map((lc) => (
+                {[
+                  { key: "development", label: "Development" },
+                  { key: "testing", label: "Testing" },
+                  { key: "prod_ready", label: "Production Ready" },
+                  { key: "market", label: "On Market" },
+                  { key: "service", label: "In Service" },
+                  { key: "updated", label: "Updated" },
+                  { key: "decommissioned", label: "Decommissioned" },
+                ].map((lc) => (
                   <span
-                    key={lc}
+                    key={lc.key}
                     className="px-2.5 py-1 rounded-full text-xs font-medium"
                     style={{
-                      backgroundColor: getColorValue(`lifecycle_${lc}_bg`),
-                      color: getColorValue(`lifecycle_${lc}_text`),
+                      backgroundColor: getColorValue(`lifecycle_${lc.key}_bg`),
+                      color: getColorValue(`lifecycle_${lc.key}_text`),
                     }}
                   >
-                    {lc.replace(/_/g, " ")}
+                    {lc.label}
                   </span>
                 ))}
               </div>
