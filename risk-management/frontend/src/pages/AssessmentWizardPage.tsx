@@ -595,6 +595,10 @@ export interface DraftRisk {
   library_risk_id?: string;
   engineer_email: string;
   officer_email: string;
+  residual_status: string;
+  residual_severity: string;
+  residual_likelihood: string;
+  review_notes: string;
 }
 
 const emptyDraft = (): DraftRisk => ({
@@ -604,6 +608,7 @@ const emptyDraft = (): DraftRisk => ({
   risk_owner: "", due_date: "", ai_lifecycle_phase: "", impact: "",
   responsible_role: [], date_of_identification: new Date().toISOString().slice(0, 10),
   engineer_email: "", officer_email: "",
+  residual_status: "none", residual_severity: "", residual_likelihood: "", review_notes: "",
 });
 
 interface DraftMisuseScenario {
@@ -681,6 +686,15 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   const [draft, setDraft] = useState<DraftRisk>(() => prefillRisk ? { ...emptyDraft(), ...prefillRisk, risk_owner: "" } : emptyDraft());
   const [msDraft, setMsDraft] = useState<DraftMisuseScenario>(emptyMsDraft());
   const [saving, setSaving] = useState(false);
+  // ── Add-risk form: inline measures / residual risk / test reports ──
+  const [draftMitigations, setDraftMitigations] = useState<Partial<MitigationMeasure>[]>([]);
+  const [showDraftMit, setShowDraftMit] = useState(false);
+  const [draftMitDraft, setDraftMitDraft] = useState<Partial<MitigationMeasure>>({});
+  const [draftMitErr, setDraftMitErr] = useState("");
+  const [showDraftResidual, setShowDraftResidual] = useState(false);
+  const [draftTestReports, setDraftTestReports] = useState<Partial<TestReport>[]>([]);
+  const [showDraftTest, setShowDraftTest] = useState(false);
+  const [draftTestDraft, setDraftTestDraft] = useState<Partial<TestReport>>({});
   const [err, setErr] = useState("");
   const [libraryRisks, setLibraryRisks] = useState<LibraryRisk[] | null>(null);
   const [libraryLoading, setLibraryLoading] = useState(false);
@@ -736,6 +750,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   const [editIncidentDraft, setEditIncidentDraft] = useState<Partial<import("../types").Incident>>({});
   const [savingEditIncident, setSavingEditIncident] = useState(false);
   const [showAllIncidents, setShowAllIncidents] = useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   // ── Approve section state ──
   const [approveArgument, setApproveArgument] = useState(register?.residual_risk_argument ?? "");
@@ -946,7 +961,17 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     setActiveForm("none");
     setErr("");
     setLibraryRisks(null);
-    if (form === "risk") setDraft(emptyDraft());
+    if (form === "risk") {
+      setDraft(emptyDraft());
+      setDraftMitigations([]);
+      setDraftTestReports([]);
+      setShowDraftMit(false);
+      setShowDraftResidual(false);
+      setShowDraftTest(false);
+      setDraftMitDraft({});
+      setDraftTestDraft({});
+      setDraftMitErr("");
+    }
     if (form === "misuse") setMsDraft(emptyMsDraft());
   }
 
@@ -1173,6 +1198,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
       let libraryRiskId = draft.library_risk_id;
       const pendingLibraryUpload = uploadToLibrary && !libraryRiskId;
 
+      const hasResidual = draft.residual_status !== "none";
       const created = await api.createRisk(targetRegister.id, {
         ...draftRest,
         category: categories.join(","),
@@ -1187,10 +1213,49 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
         date_of_assessment: draft.date_of_identification || null,
         source: pendingLibraryUpload ? "pending_library" : "manual",
         library_risk_id: libraryRiskId ?? null,
+        residual_status: draft.residual_status,
+        residual_severity: hasResidual ? (draft.residual_severity || null) : null,
+        residual_likelihood: hasResidual ? (draft.residual_likelihood || null) : null,
+        final_risk_level: (hasResidual && draft.residual_severity && draft.residual_likelihood)
+          ? calcRiskLevel(draft.residual_severity, draft.residual_likelihood)
+          : null,
+        review_notes: draft.review_notes || undefined,
       });
+
+      const newMitigations: MitigationMeasure[] = [];
+      for (const m of draftMitigations) {
+        const mit = await api.addMitigation(created.id, {
+          title: m.title ?? "",
+          description: m.description ?? "",
+          hierarchy_level: m.hierarchy_level ?? "mitigate",
+          implementation_guidance: m.implementation_guidance ?? "",
+          status: "planned",
+          assigned_to: m.assigned_to ?? draft.risk_owner ?? null,
+          due_date: m.due_date ?? null,
+          override_notes: "",
+        });
+        newMitigations.push(mit);
+      }
+      for (const t of draftTestReports) {
+        await api.createTestReport(created.id, {
+          title: t.title ?? "",
+          summary: t.summary ?? "",
+          findings: t.findings ?? "",
+          result: t.result ?? "pass",
+          author: t.author || null,
+          mitigation_id: null,
+          attachments: "",
+        });
+      }
+
       const baseRisks = editable?.risks ?? risks;
-      onRisksChange([...baseRisks, created]);
+      onRisksChange([...baseRisks, { ...created, mitigations: newMitigations }]);
       setDraft(emptyDraft());
+      setDraftMitigations([]);
+      setDraftTestReports([]);
+      setShowDraftMit(false);
+      setShowDraftResidual(false);
+      setShowDraftTest(false);
       setActiveForm("none");
     } catch (e) { setErr(String(e)); }
     finally { setSaving(false); }
@@ -1216,6 +1281,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
       library_risk_id: r.library_risk_id ?? undefined,
       engineer_email: r.engineer_email ?? "",
       officer_email: r.officer_email ?? "",
+      residual_status: r.residual_status ?? "none",
+      residual_severity: r.residual_severity ?? "",
+      residual_likelihood: r.residual_likelihood ?? "",
+      review_notes: r.review_notes ?? "",
     });
     setEditRiskErr("");
     setEditingRiskId(r.id);
@@ -2168,6 +2237,47 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                   )}
                 </div>
 
+                {/* ── Tasks ── */}
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
+                  {(() => {
+                    const riskTasks = tasks.filter(t => t.risk_id === r.id);
+                    return (
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Tasks</span>
+                          <button
+                            onClick={() => { setTaskDraft({ risk_id: r.id }); setAddingTask(true); }}
+                            style={{ fontSize: 11, fontWeight: 600, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 10px", cursor: "pointer" }}>
+                            + Add task
+                          </button>
+                        </div>
+                        {riskTasks.length === 0 && (
+                          <div style={{ fontSize: 12, color: "var(--text-secondary)", fontStyle: "italic" }}>No tasks yet.</div>
+                        )}
+                        {riskTasks.map(task => {
+                          const sk = taskStatusKey(task);
+                          const sc = STATUS_COLORS[sk] ?? STATUS_COLORS.open;
+                          return (
+                            <div key={task.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 0", borderBottom: "1px solid #f4f4f5", fontSize: 12 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ fontWeight: 600 }}>{task.title}</span>
+                                {task.description && <div style={{ color: "var(--text-secondary)", marginTop: 2 }}>{task.description}</div>}
+                                {task.assigned_to && <div style={{ color: "var(--text-secondary)", fontSize: 11, marginTop: 2 }}>Assigned to: {task.assigned_to}</div>}
+                                {task.due_date && <div style={{ color: "var(--text-secondary)", fontSize: 11 }}>Due: {task.due_date.slice(0, 10)}</div>}
+                              </div>
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 6, background: sc.bg, color: sc.color, whiteSpace: "nowrap" }}>{sk.replace("_", " ")}</span>
+                              <button onClick={() => { setEditingTask(task.id); setEditTaskDraft({ ...task }); }}
+                                style={{ fontSize: 11, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontWeight: 600 }}>Edit</button>
+                              <button onClick={() => deleteTask(task.id)}
+                                style={{ fontSize: 11, background: "transparent", border: "none", color: "#9ca3af", cursor: "pointer", padding: "0 2px" }}>✕</button>
+                            </div>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </div>
+
                 {/* ── Incidents ── */}
                 <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
                   {(() => {
@@ -2405,11 +2515,19 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
               <Textarea value={draft.impact} onChange={v => setDraft(d => ({ ...d, impact: v }))} rows={2} placeholder="Describe the business, operational, or user impact…" />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-                <input type="checkbox" checked={draft.affects_vulnerable_groups}
-                  onChange={e => setDraft(d => ({ ...d, affects_vulnerable_groups: e.target.checked }))} />
-                <span>Affects vulnerable groups or children <span style={{ color: "#dc2626" }}>*</span></span>
-              </label>
+              <Label>Vulnerable groups / children <span style={{ color: "#dc2626" }}>*</span></Label>
+              <button type="button"
+                onClick={() => setDraft(d => ({ ...d, affects_vulnerable_groups: !d.affects_vulnerable_groups }))}
+                style={{
+                  padding: "5px 14px", fontSize: 13, borderRadius: 20, cursor: "pointer",
+                  border: `1px solid ${draft.affects_vulnerable_groups ? "var(--brand)" : "var(--border)"}`,
+                  background: draft.affects_vulnerable_groups ? "var(--brand)" : "var(--surface)",
+                  color: draft.affects_vulnerable_groups ? "#fff" : "var(--text)",
+                  fontWeight: draft.affects_vulnerable_groups ? 600 : 400,
+                  transition: "all 0.1s",
+                }}>
+                ⚠ Affects vulnerable groups or children
+              </button>
               {draft.affects_vulnerable_groups && (
                 <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
                   <div>
@@ -2431,7 +2549,221 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                 style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
             </div>
           </div>
-          <ErrorMsg msg={err} />
+
+          {/* ── Risk management measures ── */}
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
+              Risk management measures
+            </div>
+            {draftMitigations.map((m, i) => {
+              const level = HIERARCHY_LEVELS.find(l => l.value === m.hierarchy_level);
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12, padding: "5px 0", borderBottom: "1px solid #f4f4f5" }}>
+                  <div style={{ flex: 1 }}>
+                    {level && <span style={{ fontSize: 11, fontWeight: 700, background: level.bg, color: level.color, padding: "2px 8px", borderRadius: 6, textTransform: "uppercase", marginRight: 6 }}>{level.label}</span>}
+                    <span style={{ fontWeight: 600 }}>{m.title}</span>
+                    {m.implementation_guidance && <div style={{ color: "var(--text-secondary)", marginTop: 2 }}>{m.implementation_guidance}</div>}
+                  </div>
+                  <button onClick={() => setDraftMitigations(prev => prev.filter((_, idx) => idx !== i))}
+                    style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: 14, padding: "0 2px" }}>×</button>
+                </div>
+              );
+            })}
+            {!showDraftMit ? (
+              <button onClick={() => setShowDraftMit(true)} type="button"
+                style={{ fontSize: 12, fontWeight: 600, cursor: "pointer", borderRadius: 6, padding: "6px 14px", border: "none", background: draftMitigations.length ? "#f0f4ff" : "var(--brand)", color: draftMitigations.length ? "#1147E9" : "#fff" }}>
+                + Add measure
+              </button>
+            ) : (
+              <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <Label required>Hierarchy level</Label>
+                  <Select value={draftMitDraft.hierarchy_level ?? ""}
+                    onChange={v => setDraftMitDraft(d => ({ ...d, hierarchy_level: v }))}
+                    options={[{ value: "", label: "Select…" }, ...HIERARCHY_LEVELS.map(l => ({ value: l.value, label: `${l.label} — ${l.desc}` }))]} />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <Label required>Measure title</Label>
+                  <Input value={draftMitDraft.title ?? ""}
+                    onChange={v => setDraftMitDraft(d => ({ ...d, title: v }))}
+                    placeholder="e.g. Implement fairness-aware post-processing" />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <Label>Implementation guidance</Label>
+                  <Textarea value={draftMitDraft.implementation_guidance ?? ""}
+                    onChange={v => setDraftMitDraft(d => ({ ...d, implementation_guidance: v }))}
+                    rows={2} placeholder="How to implement this measure…" />
+                </div>
+                <div>
+                  <Label>Assignee</Label>
+                  <Input value={draftMitDraft.assigned_to ?? ""}
+                    onChange={v => setDraftMitDraft(d => ({ ...d, assigned_to: v }))}
+                    placeholder={draft.risk_owner ? `Default: ${draft.risk_owner}` : "Person responsible"} />
+                </div>
+                <div>
+                  <Label>Due date</Label>
+                  <input type="date" value={draftMitDraft.due_date ?? ""}
+                    onChange={e => setDraftMitDraft(d => ({ ...d, due_date: e.target.value }))}
+                    style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
+                </div>
+                {draftMitErr && <div style={{ gridColumn: "1 / -1" }}><ErrorMsg msg={draftMitErr} /></div>}
+                <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
+                  <button onClick={() => {
+                    if (!draftMitDraft.title?.trim()) { setDraftMitErr("Measure title is required."); return; }
+                    if (!draftMitDraft.hierarchy_level) { setDraftMitErr("Hierarchy level is required."); return; }
+                    setDraftMitErr("");
+                    setDraftMitigations(prev => [...prev, draftMitDraft]);
+                    setDraftMitDraft({});
+                    setShowDraftMit(false);
+                  }} style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                    Add measure
+                  </button>
+                  <button onClick={() => { setShowDraftMit(false); setDraftMitDraft({}); setDraftMitErr(""); }}
+                    style={{ fontSize: 12, background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Residual risk ── */}
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Residual risk</span>
+              {!showDraftResidual && draft.residual_status === "none" && (
+                <button onClick={() => setShowDraftResidual(true)} type="button"
+                  style={{ fontSize: 11, fontWeight: 600, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 10px", cursor: "pointer" }}>
+                  + Add residual risk
+                </button>
+              )}
+            </div>
+            {(showDraftResidual || draft.residual_status !== "none") && (
+              <div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                  {[
+                    { value: "none",         label: "No residual risk",  bg: "#f4f4f5",  color: "#6b7280" },
+                    { value: "acceptable",   label: "Acceptable",         bg: "#d5f5e3",  color: "#1a5c35" },
+                    { value: "unacceptable", label: "Not acceptable",     bg: "#ffd5d5",  color: "#8b0000" },
+                  ].map(opt => (
+                    <button key={opt.value} type="button"
+                      onClick={() => setDraft(d => ({ ...d, residual_status: opt.value }))}
+                      style={{
+                        fontSize: 12, padding: "5px 14px", borderRadius: 20, cursor: "pointer", fontWeight: 600,
+                        border: `2px solid ${draft.residual_status === opt.value ? opt.color : "var(--border)"}`,
+                        background: draft.residual_status === opt.value ? opt.bg : "var(--surface)",
+                        color: draft.residual_status === opt.value ? opt.color : "var(--text-secondary)",
+                      }}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {draft.residual_status !== "none" && (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <div>
+                        <Label>Severity<InfoTooltip definitions={SEVERITY_DEFINITIONS} /></Label>
+                        <Select value={draft.residual_severity} onChange={v => setDraft(d => ({ ...d, residual_severity: v }))}
+                          options={[{ value: "", label: "— select —" }, { value: "severe", label: "Severe" }, { value: "significant", label: "Significant" }, { value: "moderate", label: "Moderate" }, { value: "minor", label: "Minor" }]} />
+                      </div>
+                      <div>
+                        <Label>Likelihood<InfoTooltip definitions={LIKELIHOOD_DEFINITIONS} /></Label>
+                        <Select value={draft.residual_likelihood} onChange={v => setDraft(d => ({ ...d, residual_likelihood: v }))}
+                          options={[{ value: "", label: "— select —" }, { value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
+                      </div>
+                    </div>
+                    {draft.residual_severity && draft.residual_likelihood && (
+                      <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 12 }}>Residual risk level (auto):</span>
+                        <RiskLevelBadge level={calcRiskLevel(draft.residual_severity, draft.residual_likelihood)} />
+                      </div>
+                    )}
+                    <div style={{ marginTop: 8 }}>
+                      <Label>Notes</Label>
+                      <Textarea value={draft.review_notes} onChange={v => setDraft(d => ({ ...d, review_notes: v }))}
+                        rows={2} placeholder="Explain the residual risk and why it is / is not acceptable…" />
+                    </div>
+                  </>
+                )}
+                {showDraftResidual && (
+                  <div style={{ marginTop: 8 }}>
+                    <button onClick={() => setShowDraftResidual(false)} type="button"
+                      style={{ fontSize: 12, background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                      Done
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Test reports ── */}
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Test reports</span>
+              <button onClick={() => setShowDraftTest(s => !s)} type="button"
+                style={{ fontSize: 11, fontWeight: 600, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 10px", cursor: "pointer" }}>
+                + Add test report
+              </button>
+            </div>
+            {draftTestReports.map((tr, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12, padding: "6px 0", borderBottom: "1px solid #f4f4f5" }}>
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontWeight: 600 }}>{tr.title}</span>
+                  {tr.author && <span style={{ color: "var(--text-secondary)", fontSize: 11, marginLeft: 8 }}>{tr.author}</span>}
+                  {tr.summary && <div style={{ color: "var(--text-secondary)", marginTop: 2 }}>{tr.summary}</div>}
+                </div>
+                <button onClick={() => setDraftTestReports(prev => prev.filter((_, idx) => idx !== i))}
+                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: 14, padding: "0 2px" }}>×</button>
+              </div>
+            ))}
+            {showDraftTest && (
+              <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <Label required>Title</Label>
+                  <Input value={draftTestDraft.title ?? ""}
+                    onChange={v => setDraftTestDraft(d => ({ ...d, title: v }))}
+                    placeholder="e.g. Fairness audit — Q3 2026" />
+                </div>
+                <div>
+                  <Label>Author</Label>
+                  <Input value={draftTestDraft.author ?? ""}
+                    onChange={v => setDraftTestDraft(d => ({ ...d, author: v }))}
+                    placeholder="e.g. jane.doe@company.com" />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <Label required>Summary</Label>
+                  <Textarea value={draftTestDraft.summary ?? ""}
+                    onChange={v => setDraftTestDraft(d => ({ ...d, summary: v }))}
+                    rows={2} placeholder="Brief summary of what was tested and how…" />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <Label required>Findings</Label>
+                  <Textarea value={draftTestDraft.findings ?? ""}
+                    onChange={v => setDraftTestDraft(d => ({ ...d, findings: v }))}
+                    rows={2} placeholder="What did the test reveal? What actions follow?" />
+                </div>
+                <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
+                  <button onClick={() => {
+                    if (!draftTestDraft.title?.trim() || !draftTestDraft.summary?.trim() || !draftTestDraft.findings?.trim()) return;
+                    setDraftTestReports(prev => [...prev, { ...draftTestDraft, result: draftTestDraft.result ?? "pass" }]);
+                    setDraftTestDraft({});
+                    setShowDraftTest(false);
+                  }}
+                    disabled={!draftTestDraft.title?.trim() || !draftTestDraft.summary?.trim() || !draftTestDraft.findings?.trim()}
+                    style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                    Add test report
+                  </button>
+                  <button onClick={() => { setShowDraftTest(false); setDraftTestDraft({}); }}
+                    style={{ fontSize: 12, background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: 14 }}><ErrorMsg msg={err} /></div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button onClick={() => addRisk(false)} disabled={saving} className="btn-primary btn-sm">{saving ? "Adding…" : "+ Add risk"}</button>
             {!draft.library_risk_id && (
@@ -2555,21 +2887,38 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
       </div>
 
       <Card>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Tasks</h3>
-          {!addingTask && register && (
-            <button onClick={() => setAddingTask(true)}
-              style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontWeight: 600 }}>
-              + Add task
-            </button>
-          )}
-        </div>
+        {(() => {
+          const otherTasks = tasks.filter(t => !t.risk_id || !risks.find(r => r.id === t.risk_id));
+          const displayedTasks = showAllTasks ? tasks : otherTasks;
+          const cardTitle = showAllTasks ? "All tasks" : "Other tasks";
+          return (
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{cardTitle}</h3>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button onClick={() => setShowAllTasks(s => !s)}
+                    style={{ fontSize: 12, background: showAllTasks ? "#f4f4f5" : "#f0f4ff", color: showAllTasks ? "#374151" : "#1147E9", border: "none", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
+                    {showAllTasks ? "Show other tasks" : "Show all tasks"}
+                  </button>
+                  {!addingTask && register && (
+                    <button onClick={() => setAddingTask(true)}
+                      style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontWeight: 600 }}>
+                      + Add task
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--text-secondary)" }}>
+                {showAllTasks
+                  ? "All tasks for this risk management cycle."
+                  : "Tasks not linked to a specific risk, or linked to a risk not in this register."}
+              </p>
 
-        {tasks.length === 0 && !addingTask && (
-          <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0 }}>No tasks yet. Add tasks to track actions for this risk management cycle.</p>
-        )}
+              {displayedTasks.length === 0 && !addingTask && (
+                <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0 }}>No tasks here yet.</p>
+              )}
 
-        {tasks.map(task => {
+              {displayedTasks.map(task => {
           const sk = taskStatusKey(task);
           const sc = STATUS_COLORS[sk] ?? STATUS_COLORS.open;
           if (editingTask === task.id) {
@@ -2688,7 +3037,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
               )}
             </div>
           );
-        })}
+              })}
+            </>
+          );
+        })()}
 
         {addingTask && (
           <div style={{ marginTop: 12, padding: "12px", background: "var(--bg)", borderRadius: 8, border: "1px solid var(--border)" }}>
@@ -2854,7 +3206,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
       </div>
       <Card>
         <div style={{ marginBottom: 12 }}>
-          <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700 }}>Register-level residual risk</h3>
+          <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700 }}>Overall residual risk</h3>
           <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)" }}>
             Overall residual risk for this entire risk register, after all individual risk mitigations have been applied.
           </p>
