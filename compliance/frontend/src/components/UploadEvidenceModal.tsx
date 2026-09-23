@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
-import { EVIDENCE_TYPES, evidenceTypeLabel, expectedEvidence } from "../utils";
+import { EVIDENCE_TYPES, evidenceTypeLabel } from "../utils";
 import type { AISystem, Assessment, Requirement, Obligation } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
