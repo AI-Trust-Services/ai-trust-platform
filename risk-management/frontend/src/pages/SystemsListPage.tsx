@@ -79,6 +79,7 @@ function statusHint(sys: SystemRiskSummary): { label: string; color: string } | 
   if (sys.valid_until && new Date(sys.valid_until) < new Date()) return { label: "Overdue", color: "#dc2626" };
   if (sys.unacknowledged_triggers > 0) return { label: "Review due", color: "#dc2626" };
   if (sys.reassessment_needed) return { label: "Overdue", color: "#dc2626" };
+  if (sys.unacceptable_residual_risks > 0) return { label: "Residual risk unacceptable", color: "#dc2626" };
   if (sys.unconfirmed_risks > 0) return { label: "Risks unconfirmed", color: "#d97706" };
   return null;
 }

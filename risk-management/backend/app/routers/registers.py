@@ -92,6 +92,8 @@ def _traffic_light(
     if tier == "prohibited":
         return "red"
 
+    has_unacceptable_residual = any(r.residual_status == "unacceptable" for r in risks)
+
     if tier == "high":
         if not active_register:
             return "red"
@@ -101,7 +103,9 @@ def _traffic_light(
             return "red"
         if not risks:
             return "red"
-        all_confirmed = all(r.engineer_confirmed and r.officer_confirmed for r in risks)
+        if has_unacceptable_residual:
+            return "red"
+        all_confirmed = all(_risk_fully_confirmed(r) for r in risks)
         return "green" if all_confirmed else "orange"
 
     # non-high (limited, minimal, gpai-standard, gpai-systemic)
@@ -109,8 +113,10 @@ def _traffic_light(
         return "green"
     if active_register.status != "approved":
         return "orange"
+    if has_unacceptable_residual:
+        return "red"
     if risks:
-        all_confirmed = all(r.engineer_confirmed and r.officer_confirmed for r in risks)
+        all_confirmed = all(_risk_fully_confirmed(r) for r in risks)
         return "green" if all_confirmed else "orange"
     return "green"
 
@@ -373,6 +379,7 @@ async def list_systems(session: AsyncSession = Depends(get_session)):
             1 for r in risks
             if r.status in confirmed_statuses and not _risk_fully_confirmed(r)
         )
+        unacceptable_residual_risks = sum(1 for r in risks if r.residual_status == "unacceptable")
         total_risks = len(risks)
         open_risks = sum(1 for r in risks if r.status == "open")
 
@@ -391,6 +398,7 @@ async def list_systems(session: AsyncSession = Depends(get_session)):
             reassessment_needed=reassessment_needed,
             registry_changed=registry_changed,
             unconfirmed_risks=unconfirmed_risks,
+            unacceptable_residual_risks=unacceptable_residual_risks,
             total_risks=total_risks,
             open_risks=open_risks,
             traffic_light=tl,

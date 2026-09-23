@@ -220,6 +220,7 @@ class SystemRiskSummary(BaseModel):
     reassessment_needed: bool
     registry_changed: bool = False
     unconfirmed_risks: int = 0
+    unacceptable_residual_risks: int = 0
     total_risks: int = 0
     open_risks: int = 0
     traffic_light: str

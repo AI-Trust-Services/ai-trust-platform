@@ -2552,8 +2552,16 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
 
           {/* ── Risk management measures ── */}
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #f4f4f5" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
-              Risk management measures
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Risk management measures <span style={{ color: "#dc2626" }}>*</span>
+              </span>
+              {!showDraftMit && (
+                <button onClick={() => setShowDraftMit(true)} type="button"
+                  style={{ fontSize: 11, fontWeight: 600, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 10px", cursor: "pointer" }}>
+                  + Add measure
+                </button>
+              )}
             </div>
             {draftMitigations.map((m, i) => {
               const level = HIERARCHY_LEVELS.find(l => l.value === m.hierarchy_level);
@@ -2569,12 +2577,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                 </div>
               );
             })}
-            {!showDraftMit ? (
-              <button onClick={() => setShowDraftMit(true)} type="button"
-                style={{ fontSize: 12, fontWeight: 600, cursor: "pointer", borderRadius: 6, padding: "6px 14px", border: "none", background: draftMitigations.length ? "#f0f4ff" : "var(--brand)", color: draftMitigations.length ? "#1147E9" : "#fff" }}>
-                + Add measure
-              </button>
-            ) : (
+            {showDraftMit && (
               <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <Label required>Hierarchy level</Label>
@@ -2765,10 +2768,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
 
           <div style={{ marginTop: 14 }}><ErrorMsg msg={err} /></div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button onClick={() => addRisk(false)} disabled={saving} className="btn-primary btn-sm">{saving ? "Adding…" : "+ Add risk"}</button>
+            <button onClick={() => addRisk(false)} disabled={saving} className="btn-primary btn-sm">{saving ? "Saving…" : "Save"}</button>
             {!draft.library_risk_id && (
               <button onClick={() => addRisk(true)} disabled={saving} className="btn-secondary btn-sm" title="Save this risk and also add it to the shared Risk Library">
-                {saving ? "Adding…" : "+ Add risk & upload to library"}
+                {saving ? "Saving…" : "Save & upload to library"}
               </button>
             )}
             <button onClick={() => closeForm("risk")} className="btn-ghost btn-sm">Cancel</button>

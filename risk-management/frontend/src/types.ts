@@ -13,6 +13,7 @@ export interface SystemRiskSummary {
   reassessment_needed: boolean;
   registry_changed: boolean;
   unconfirmed_risks: number;
+  unacceptable_residual_risks: number;
   total_risks: number;
   open_risks: number;
   traffic_light: "red" | "orange" | "green";
