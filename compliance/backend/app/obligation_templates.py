@@ -26,8 +26,8 @@ from app.requirement_templates import requirements_for
 # from the "Obligation" column of the AI Act Requirements catalogue verbatim; for
 # the clusters the catalogue leaves unnamed, a concise title is derived from the
 # cluster's theme. Clusters carry no description of their own — the catalogue
-# defines descriptive text only per requirement, so that text lives on the controls
-# (see control_templates.py); the obligation is purely a titled grouping.
+# defines descriptive text only per requirement, so that text lives on the requirements
+# (see requirement_templates.py); the obligation is purely a titled grouping.
 _EU_CLUSTERS = [
     # ----- Provider -----
     {"cluster_id": "P-RM", "role": "provider", "article_ref": "Art. 9 EU AI Act",

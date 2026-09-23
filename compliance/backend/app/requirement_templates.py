@@ -10,18 +10,18 @@ Two template shapes coexist:
 
 - **EU AI Act High/Limited** (translated from the authoritative AI Act Requirements
   catalogue): one template per Requirement ID, carrying an explicit
-  `control_ref` (the Requirement ID, e.g. "P-RM-01"), a `role`
+  `requirement_ref` (the Requirement ID, e.g. "P-RM-01"), a `role`
   ("provider"/"deployer") and a `risk` token ("High"/"Limited"/"All"). Where the
   source catalogue splits one Requirement ID across several rows, the rows are
-  merged into a single control and each row's expected evidence is appended to the
+  merged into a single requirement and each row's expected evidence is appended to the
   description as an "Expected evidence:" line (there is no separate evidence schema).
 
 - **Retained sets** (NIST, ISO): carry a `slug` (AITP-* source id) from which the
-  generator derives `control_ref = f"{article_ref}:{slug}"`, plus `risk_category`
+  generator derives `requirement_ref = f"{article_ref}:{slug}"`, plus `risk_category`
   (always "All") and `category`. These sets have no `role` (they apply to any
   org_role).
 
-The generator uses `control_ref = t.get("requirement_ref") or f"{article_ref}:{slug}"`
+The generator uses `requirement_ref = t.get("requirement_ref") or f"{article_ref}:{slug}"`
 and `risk = t.get("risk") or t["risk_category"]`, so both shapes flow through the
 same filter. Hardcoded for the same reason as obligation_templates.py — the
 regulations are law, not configuration.
@@ -459,7 +459,7 @@ _REQUIREMENT_TEMPLATES: dict[str, list[dict]] = {
 
     # =====================================================================
     # Retained sets (unchanged) — keyed by cluster_id (= article_ref).
-    # These carry a `slug` (control_ref = "{article_ref}:{slug}") and
+    # These carry a `slug` (requirement_ref = "{article_ref}:{slug}") and
     # `risk_category` ("All"); they have no `role`, so they apply to any
     # org_role and any tier. NIST/ISO only — the EU AI Act contributes no
     # retained sets (its obligations/controls come solely from the AI Act

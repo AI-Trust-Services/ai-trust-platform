@@ -215,7 +215,7 @@ export default function RequirementsPage() {
               ) : paged.map((c) => (
                 <TableRow key={c.id} data-state={selected === c.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(c)}>
                   <TableCell><div className="font-medium text-foreground">{c.title}</div><div className="text-xs text-muted-foreground">{c.id}</div></TableCell>
-                  <TableCell className="text-[13px] text-muted-foreground">{c.control_ref || "—"}</TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{c.requirement_ref || "—"}</TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{c.article_ref || "—"}</TableCell>
                   <TableCell className="text-[13px]">{humanize(c.category)}</TableCell>
                   <TableCell>{c.ai_system_id ? (systemsById[c.ai_system_id]?.name ?? c.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</TableCell>
