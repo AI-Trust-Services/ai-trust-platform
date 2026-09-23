@@ -97,6 +97,6 @@ runs:
         VITE_ADMIN_API_BASE:      ${{ inputs.vite_admin_api_base }}
       run: |
         docker buildx bake \
-          --file .github/docker-bake.hcl \
+          --file docker-bake.hcl \
           --push \
           --set "*.platform=linux/amd64"
