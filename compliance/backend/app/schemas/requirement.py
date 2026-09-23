@@ -81,6 +81,7 @@ class RequirementResponse(BaseModel):
     article_ref: str | None = None
     title: str
     description: str
+    category: str
     status: str
     effectiveness: str
     owner: str
