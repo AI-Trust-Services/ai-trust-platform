@@ -51,7 +51,7 @@ group "default" {
   ]
 }
 
-# ── backends built from repo root ──
+# ── backends: context is repo root, dockerfile path is relative to root ──
 
 target "users-backend" {
   context    = "."
@@ -170,11 +170,11 @@ target "openfga-provision" {
   cache-to   = ["type=gha,mode=max,scope=openfga-provision"]
 }
 
-# ── one-shot migration images ──
+# ── own-context images: dockerfile is relative to context dir ──
 
 target "db-migrate" {
   context    = "./libs/persistence"
-  dockerfile = "./libs/persistence/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("db-migrate")]
   cache-from = ["type=gha,scope=db-migrate"]
@@ -183,18 +183,16 @@ target "db-migrate" {
 
 target "clickhouse-migrate" {
   context    = "./libs/clickhouse"
-  dockerfile = "./libs/clickhouse/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("clickhouse-migrate")]
   cache-from = ["type=gha,scope=clickhouse-migrate"]
   cache-to   = ["type=gha,mode=max,scope=clickhouse-migrate"]
 }
 
-# ── other own-context images ──
-
 target "keycloak-provision" {
   context    = "./infra/keycloak"
-  dockerfile = "./infra/keycloak/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("keycloak-provision")]
   cache-from = ["type=gha,scope=keycloak-provision"]
@@ -203,7 +201,7 @@ target "keycloak-provision" {
 
 target "shell" {
   context    = "./shell"
-  dockerfile = "./shell/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("shell")]
   cache-from = ["type=gha,scope=shell"]
@@ -212,18 +210,18 @@ target "shell" {
 
 target "otel-rmq-bridge" {
   context    = "./otel-pipeline/rmq-bridge"
-  dockerfile = "./otel-pipeline/rmq-bridge/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("otel-rmq-bridge")]
   cache-from = ["type=gha,scope=otel-rmq-bridge"]
   cache-to   = ["type=gha,mode=max,scope=otel-rmq-bridge"]
 }
 
-# ── frontends ──
+# ── frontends: dockerfile is relative to context dir ──
 
 target "ai-system-registry-frontend" {
   context    = "./ai-system-registry/frontend"
-  dockerfile = "./ai-system-registry/frontend/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("ai-system-registry-frontend")]
   args = {
@@ -236,7 +234,7 @@ target "ai-system-registry-frontend" {
 
 target "monitoring-frontend" {
   context    = "./monitoring/frontend"
-  dockerfile = "./monitoring/frontend/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("monitoring-frontend")]
   args = {
@@ -248,7 +246,7 @@ target "monitoring-frontend" {
 
 target "overview-frontend" {
   context    = "./overview/frontend"
-  dockerfile = "./overview/frontend/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("overview-frontend")]
   args = {
@@ -266,7 +264,7 @@ target "overview-frontend" {
 
 target "alerts-frontend" {
   context    = "./alerts/frontend"
-  dockerfile = "./alerts/frontend/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("alerts-frontend")]
   args = {
@@ -280,7 +278,7 @@ target "alerts-frontend" {
 
 target "compliance-frontend" {
   context    = "./compliance/frontend"
-  dockerfile = "./compliance/frontend/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("compliance-frontend")]
   args = {
@@ -294,7 +292,7 @@ target "compliance-frontend" {
 
 target "users-frontend" {
   context    = "./users/frontend"
-  dockerfile = "./users/frontend/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("users-frontend")]
   args = {
@@ -306,7 +304,7 @@ target "users-frontend" {
 
 target "decision-trace-analyzer-frontend" {
   context    = "./decision-trace-analyzer/frontend"
-  dockerfile = "./decision-trace-analyzer/frontend/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("decision-trace-analyzer-frontend")]
   args = {
@@ -318,7 +316,7 @@ target "decision-trace-analyzer-frontend" {
 
 target "audit-frontend" {
   context    = "./audit/frontend"
-  dockerfile = "./audit/frontend/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("audit-frontend")]
   args = {
@@ -331,7 +329,7 @@ target "audit-frontend" {
 
 target "admin-frontend" {
   context    = "./admin/frontend"
-  dockerfile = "./admin/frontend/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("admin-frontend")]
   args = {
