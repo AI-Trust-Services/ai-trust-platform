@@ -2,8 +2,8 @@ name: Compute Variables
 description: Compute image owner, tag, cluster, namespace, and ref for a PR deployment.
 
 inputs:
-  branch:
-    description: "Branch to build"
+  ref:
+    description: "Git ref (branch name or SHA) to build"
     required: true
   gardener_cluster:
     description: "Target Gardener cluster"
@@ -40,7 +40,7 @@ runs:
         OWNER="${GITHUB_REPOSITORY_OWNER,,}"
         echo "owner=${OWNER}" >> "$GITHUB_OUTPUT"
 
-        echo "ref=${{ inputs.branch }}" >> "$GITHUB_OUTPUT"
+        echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
         echo "cluster=${{ inputs.gardener_cluster }}" >> "$GITHUB_OUTPUT"
 
         if [[ -n "${{ inputs.namespace }}" ]]; then

@@ -62,7 +62,7 @@ jobs:
         id: vars
         uses: ./.github/actions/compute-vars
         with:
-          branch: ${{ env.PR_BRANCH }}
+          ref: ${{ env.PR_SHA }}
           gardener_cluster: ai-trust-test
           namespace: ${{ github.event.pull_request.user.login }}
 
