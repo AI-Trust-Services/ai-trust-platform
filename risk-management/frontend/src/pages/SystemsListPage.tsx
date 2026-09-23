@@ -930,11 +930,14 @@ export default function SystemsListPage({ onSelectSystem }: {
                       const voluntaryNote = isNonHigh
                         ? <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>Risk management voluntary</div>
                         : null;
-                      if (h) return <><span style={{ fontSize: 12, color: h.color, fontWeight: 600 }}>{h.label}</span>{voluntaryNote}</>;
+                      const prohibitedNote = sys.system_tier === "prohibited"
+                        ? <div style={{ fontSize: 10, color: "#dc2626", marginTop: 2 }}>Cannot be placed on the EU market</div>
+                        : null;
+                      if (h) return <><span style={{ fontSize: 12, color: h.color, fontWeight: 600 }}>{h.label}</span>{voluntaryNote}{prohibitedNote}</>;
                       if (sys.active_register_id && sys.active_register_status === "approved") {
-                        return <><span style={{ fontSize: 12, color: "#16a34a", fontWeight: 600 }}>Completed</span>{voluntaryNote}</>;
+                        return <><span style={{ fontSize: 12, color: "#16a34a", fontWeight: 600 }}>Completed</span>{voluntaryNote}{prohibitedNote}</>;
                       }
-                      return <><span style={{ fontSize: 12, color: "#6b7280" }}>Not initiated</span>{voluntaryNote}</>;
+                      return <><span style={{ fontSize: 12, color: "#6b7280" }}>Not initiated</span>{voluntaryNote}{prohibitedNote}</>;
                     })()}
                   </td>
                   {/* Action */}

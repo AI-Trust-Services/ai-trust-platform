@@ -3031,24 +3031,12 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
 
       {/* ── Approve / Review Risk Management ── */}
       {register?.status !== "approved" ? (
-        <Card>
-          <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>Approve risk register</h3>
-          <div>
-            <Label required>Expert sign-off argument</Label>
-            <Textarea value={approveArgument} onChange={setApproveArgument} rows={4}
-              placeholder="Final justification for approving this risk register — confirmation that all risks have been assessed, mitigations are in place, and residual risk is acceptable…" />
-          </div>
-          <ErrorMsg msg="" />
-          <div style={{ marginTop: 14 }}>
-            <button onClick={handleApproveSubmit} disabled={approveSaving}
-              style={{ background: approveSaving ? "#9ca3af" : "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: approveSaving ? "not-allowed" : "pointer" }}>
-              {approveSaving ? "Approving…" : "Approve register"}
-            </button>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
-              Approving creates a 6-month review trigger.
-            </div>
-          </div>
-        </Card>
+        <div style={{ marginTop: 14 }}>
+          <button onClick={handleApproveSubmit} disabled={approveSaving}
+            style={{ background: approveSaving ? "#9ca3af" : "#1147E9", color: "#fff", border: "none", borderRadius: 6, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: approveSaving ? "not-allowed" : "pointer" }}>
+            {approveSaving ? "Approving…" : "Approve"}
+          </button>
+        </div>
       ) : (
         <div style={{ marginTop: 24 }}>
           <button onClick={onReopen} disabled={reopening}
