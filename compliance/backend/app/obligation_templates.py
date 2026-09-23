@@ -6,18 +6,18 @@ are generated, the AI system's stored `tier` (and, for EU High/Limited, its
 obligation set regardless of tier/role.
 
 The EU AI Act High and Limited sets are the **obligation clusters** translated
-from the authoritative AI Act Requirements catalogue (see control_templates.py for
-the per-requirement controls). Each cluster is keyed by a stable `cluster_id`
+from the authoritative AI Act Requirements catalogue (see requirement_templates.py for
+the per-requirement requirements). Each cluster is keyed by a stable `cluster_id`
 (e.g. "P-RM", "D-LIM"). A cluster is only emitted for a given (tier, org_role)
-when at least one of its controls survives `controls_for(cluster_id, tier,
+when at least one of its requirements survives `requirements_for(cluster_id, tier,
 org_role)` — this is where the risk-tier filter, the role filter and the "Risk =
-All" rule all live (a single source of truth, in control_templates.py).
+All" rule all live (a single source of truth, in requirement_templates.py).
 
 Hardcoded because the regulations are law, not configuration.
 """
 from __future__ import annotations
 
-from app.control_templates import controls_for
+from app.requirement_templates import requirements_for
 
 # --- EU AI Act: High / Limited obligation clusters ---------------------------
 # Display metadata only. article_ref is the primary article shown for the cluster;
@@ -132,7 +132,7 @@ def obligations_for(framework_id: str, tier: str, org_role: str = "provider") ->
             for c in _EU_CLUSTERS:
                 if c["role"] != org_role:
                     continue
-                if controls_for(c["cluster_id"], tier, org_role):
+                if requirements_for(c["cluster_id"], tier, org_role):
                     result.append({
                         "cluster_id": c["cluster_id"],
                         "title": c["title"],

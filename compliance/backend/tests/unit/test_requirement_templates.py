@@ -63,11 +63,14 @@ def test_unknown_tier_allows_only_all():
 # ---------------------------------------------------------------------------
 
 def test_role_none_applies_to_any_org_role():
-    # Retained sets carry no role — they apply everywhere.
+    # Retained sets carry no role (None) — they apply everywhere.
     assert _role_allows(None, "provider")
     assert _role_allows(None, "deployer")
-    assert _role_allows("", "importer")
-    assert _role_allows("all", "distributor")
+    assert _role_allows(None, "importer")
+    # Only None is match-all; explicit roles match exactly or not at all.
+    assert not _role_allows("", "importer")
+    assert not _role_allows("all", "distributor")
+    assert not _role_allows("provider", "deployer")
 
 
 def test_role_matches_only_its_own_org_role():
@@ -178,6 +181,16 @@ def test_cluster_articles_empty_for_retained_and_wrong_role():
     assert cluster_articles("GOVERN", "high") == ""
     # No provider requirements survive for a deployer cluster.
     assert cluster_articles("P-RM", "high", "deployer") == ""
+
+
+def test_cluster_articles_no_suffix_for_non_eu_framework():
+    # If a future non-EU framework gains per-requirement articles, the suffix
+    # must not read "EU AI Act".
+    result = cluster_articles("P-RM", "high", "provider", framework="nist_ai_rmf")
+    if result:
+        assert "EU AI Act" not in result
+    # Default (no framework arg) still appends the EU AI Act suffix.
+    assert cluster_articles("P-RM", "high", "provider").endswith(" EU AI Act")
 
 
 # ---------------------------------------------------------------------------

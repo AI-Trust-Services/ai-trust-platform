@@ -569,8 +569,8 @@ def requirements_for(cluster_id: str, tier: str, org_role: str = "provider") -> 
     return out
 
 
-def cluster_articles(cluster_id: str, tier: str, org_role: str = "provider") -> str:
-    """Aggregate the distinct top-level AI Act articles of a cluster's requirements.
+def cluster_articles(cluster_id: str, tier: str, org_role: str = "provider", framework: str = "eu_ai_act") -> str:
+    """Aggregate the distinct top-level articles of a cluster's requirements.
 
     Collects the per-requirement article of every requirement that survives the
     tier/role filter, reduces each to its top-level article number (e.g.
@@ -589,5 +589,6 @@ def cluster_articles(cluster_id: str, tier: str, org_role: str = "provider") -> 
         m = re.search(r"\d+", a)
         return int(m.group(0)) if m else 0
 
-    return ", ".join(sorted(tops, key=_num)) + " EU AI Act" if tops else ""
+    suffix = " EU AI Act" if framework == "eu_ai_act" else ""
+    return ", ".join(sorted(tops, key=_num)) + suffix if tops else ""
 
