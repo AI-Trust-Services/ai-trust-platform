@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   deploy-test:
-    name: deploy-test
+    name: namespace-deployment-test
     runs-on: ubuntu-latest
     if: github.event.label.name == 'garden-deploy'
     env:
