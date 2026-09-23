@@ -101,10 +101,8 @@ make test               # all tests
 
 Frontends are built with React 19 + TypeScript 5.8. There are no unit or integration tests at the moment — this is a known gap.
 
-Five frontends have TypeScript type-checking wired up via `npm run typecheck` (`tsc --noEmit`):
-`admin`, `alerts`, `audit`, `compliance`, `users`.
-
-The remaining three (`ai-system-registry`, `decision-trace-analyzer`, `monitoring`) do not yet have a `typecheck` script.
+All 8 frontends have TypeScript type-checking wired up via `npm run typecheck` (`tsc --noEmit`):
+`admin`, `ai-system-registry`, `alerts`, `audit`, `compliance`, `decision-trace-analyzer`, `monitoring`, `users`.
 
 To run type-checking on a frontend:
 
@@ -118,7 +116,7 @@ Frontend unit tests (Vitest) and ESLint are not yet configured — contributions
 
 ### Automated PR checks
 
-Every pull request triggers two workflows:
+Every pull request triggers three workflows:
 
 **`pr-unit-tests.yml` — Pre-merge check: unit tests**
 - Matrix job, one cell per component, all 14 running in parallel
@@ -131,7 +129,11 @@ Every pull request triggers two workflows:
 - `ruff check .` — lint across the entire Python codebase
 - `ruff format --check .` — format check across the entire Python codebase
 
-E2E tests and frontend checks are not part of the PR workflow — they require infrastructure (Postgres, ClickHouse) not available in the GitHub Actions runner.
+**`pr-typecheck.yml` — Pre-merge check: typecheck**
+- Runs `npm ci && npm run typecheck` for all 8 TypeScript frontends sequentially
+- A failure in any frontend fails the whole check and lists all failures at the end
+
+E2E tests are not part of the PR workflow — they require infrastructure (Postgres, ClickHouse) not available in the GitHub Actions runner.
 
 ## Support, Feedback, Contributing
 
