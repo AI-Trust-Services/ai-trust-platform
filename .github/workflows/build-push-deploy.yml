@@ -15,8 +15,9 @@ name: Deployment Workflow
 # gardener_cluster (default: ai-trust-main) inputs. Images are tagged
 # <namespace>-<sha> where namespace is derived from the cluster and actor.
 #
-# PR deploy (workflow_call from pr-deployment-test.yml): pass namespace and
-# gardener_cluster explicitly.
+# NOTE: the workflow_call trigger below is retained for reuse, but the PR
+# deploy path (pr-deployment-test.yml) no longer calls it — that workflow
+# now builds inline via composite actions + docker-bake.hcl.
 
 on:
   push:
