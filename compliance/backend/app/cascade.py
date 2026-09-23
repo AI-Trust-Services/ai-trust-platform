@@ -24,7 +24,6 @@ from ai_trust_persistence.models import (
     Obligation,
     Requirement,
     evidence_requirements,
-    requirement_obligations,
 )
 from ai_trust_persistence.models.evidence import Evidence
 
@@ -88,8 +87,7 @@ async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
 
     requirement_statuses = (await session.execute(
         select(Requirement.status)
-        .join(requirement_obligations, requirement_obligations.c.requirement_id == Requirement.id)
-        .where(requirement_obligations.c.obligation_id == obligation_id)
+        .where(Requirement.obligation_id == obligation_id)
     )).scalars().all()
 
     if not requirement_statuses:
@@ -103,13 +101,12 @@ async def refresh_obligation(session: AsyncSession, obligation_id: str) -> None:
 
 
 async def refresh_obligations_for_requirement(session: AsyncSession, requirement_id: str) -> None:
-    """Refresh every obligation linked to a given requirement."""
-    obligation_ids = (await session.execute(
-        select(requirement_obligations.c.obligation_id)
-        .where(requirement_obligations.c.requirement_id == requirement_id)
-    )).scalars().all()
-    for oid in obligation_ids:
-        await refresh_obligation(session, oid)
+    """Refresh the obligation linked to a given requirement."""
+    requirement = (await session.execute(
+        select(Requirement).where(Requirement.id == requirement_id)
+    )).scalar_one_or_none()
+    if requirement is not None:
+        await refresh_obligation(session, requirement.obligation_id)
 
 
 async def refresh_assessment_score(session: AsyncSession, assessment_id: str) -> None:
@@ -167,4 +164,3 @@ async def _sync_system_compliance(session: AsyncSession, ai_system_id: str) -> N
     )).scalar_one_or_none()
     if system is not None:
         system.compliance = round(float(avg), 1) if avg is not None else 0.0
-

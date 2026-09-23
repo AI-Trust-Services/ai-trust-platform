@@ -3,8 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_authorization import require_permission
@@ -12,11 +11,10 @@ from ai_trust_authorization.constants import ASSESSMENTS_READ, ASSESSMENTS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import (
-    AISystem,
+    Assessment,
     Obligation,
     Requirement,
     evidence_requirements,
-    requirement_obligations,
 )
 from app.cascade import refresh_obligation, refresh_obligations_for_requirement
 from app.ids import new_id
@@ -51,30 +49,35 @@ async def list_requirements(
     async with SessionLocal() as session:
         stmt = select(Requirement).order_by(Requirement.created_at.desc())
         if ai_system_id:
-            stmt = stmt.where(or_(Requirement.ai_system_id == ai_system_id, Requirement.ai_system_id.is_(None)))
+            stmt = stmt.where(Requirement.ai_system_id == ai_system_id)
         if obligation_id:
-            stmt = stmt.join(
-                requirement_obligations, requirement_obligations.c.requirement_id == Requirement.id
-            ).where(requirement_obligations.c.obligation_id == obligation_id)
+            stmt = stmt.where(Requirement.obligation_id == obligation_id)
         if evidence_id:
             stmt = stmt.join(
                 evidence_requirements, evidence_requirements.c.requirement_id == Requirement.id
             ).where(evidence_requirements.c.evidence_id == evidence_id)
         stmt = stmt.limit(limit).offset(offset)
-        result = await session.execute(stmt)
-        return [RequirementResponse.model_validate(r) for r in result.scalars().all()]
+        rows = (await session.execute(stmt)).scalars().all()
+        results = []
+        for r in rows:
+            resp = RequirementResponse.model_validate(r)
+            results.append(resp)
+        return results
 
 
 @router.post("/requirements", response_model=RequirementResponse, status_code=201, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
 async def create_requirement(body: RequirementCreate) -> RequirementResponse:
     async with SessionLocal() as session:
-        if body.ai_system_id and not (await session.execute(
-            select(AISystem.id).where(AISystem.id == body.ai_system_id)
-        )).scalar_one_or_none():
-            raise HTTPException(404, f"AI system {body.ai_system_id} not found")
+        obligation = (await session.execute(
+            select(Obligation).where(Obligation.id == body.obligation_id)
+        )).scalar_one_or_none()
+        if not obligation:
+            raise HTTPException(404, f"Obligation {body.obligation_id} not found")
         row = Requirement(
             id=new_id("REQ"),
-            ai_system_id=body.ai_system_id,
+            obligation_id=body.obligation_id,
+            assessment_id=obligation.assessment_id,
+            ai_system_id=obligation.ai_system_id,
             title=body.title,
             description=body.description,
             category=body.category,
@@ -84,9 +87,11 @@ async def create_requirement(body: RequirementCreate) -> RequirementResponse:
             effectiveness="medium",
         )
         session.add(row)
+        await session.flush()
+        await refresh_obligation(session, body.obligation_id)
         await session.commit()
         await session.refresh(row)
-    logger.info("requirement.created", extra={"requirement_id": row.id, "ai_system_id": row.ai_system_id})
+    logger.info("requirement.created", extra={"requirement_id": row.id, "obligation_id": row.obligation_id})
     return RequirementResponse.model_validate(row)
 
 
@@ -94,16 +99,15 @@ async def create_requirement(body: RequirementCreate) -> RequirementResponse:
 async def get_requirement(requirement_id: str) -> RequirementDetailResponse:
     async with SessionLocal() as session:
         row = await _load(session, requirement_id)
-        obligation_ids = (await session.execute(
-            select(requirement_obligations.c.obligation_id)
-            .where(requirement_obligations.c.requirement_id == requirement_id)
-        )).scalars().all()
         evidence_count = (await session.execute(
             select(func.count()).select_from(evidence_requirements)
             .where(evidence_requirements.c.requirement_id == requirement_id)
         )).scalar_one()
+        ass_title = (await session.execute(
+            select(Assessment.title).where(Assessment.id == row.assessment_id)
+        )).scalar_one_or_none()
         detail = RequirementDetailResponse.model_validate(row)
-        detail.obligation_ids = list(obligation_ids)
+        detail.assessment_title = ass_title
         detail.evidence_count = evidence_count
         return detail
 
@@ -129,52 +133,10 @@ async def update_requirement(requirement_id: str, body: RequirementUpdate) -> Re
 async def delete_requirement(requirement_id: str) -> dict:
     async with SessionLocal() as session:
         row = await _load(session, requirement_id)
-        obligation_ids = (await session.execute(
-            select(requirement_obligations.c.obligation_id)
-            .where(requirement_obligations.c.requirement_id == requirement_id)
-        )).scalars().all()
+        obligation_id = row.obligation_id
         await session.delete(row)
         await session.flush()
-        for oid in obligation_ids:
-            await refresh_obligation(session, oid)
+        await refresh_obligation(session, obligation_id)
         await session.commit()
     logger.info("requirement.deleted", extra={"requirement_id": requirement_id})
     return {"status": "deleted", "id": requirement_id}
-
-
-@router.post("/requirements/{requirement_id}/link/{obligation_id}", response_model=RequirementDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def link_obligation(requirement_id: str, obligation_id: str) -> RequirementDetailResponse:
-    async with SessionLocal() as session:
-        await _load(session, requirement_id)
-        obligation = (await session.execute(
-            select(Obligation).where(Obligation.id == obligation_id)
-        )).scalar_one_or_none()
-        if not obligation:
-            raise HTTPException(404, f"Obligation {obligation_id} not found")
-
-        await session.execute(
-            pg_insert(requirement_obligations)
-            .values(requirement_id=requirement_id, obligation_id=obligation_id)
-            .on_conflict_do_nothing()
-        )
-        await session.flush()
-        await refresh_obligation(session, obligation_id)
-        await session.commit()
-    logger.info("requirement.linked", extra={"requirement_id": requirement_id, "obligation_id": obligation_id})
-    return await get_requirement(requirement_id)
-
-
-@router.delete("/requirements/{requirement_id}/link/{obligation_id}", response_model=RequirementDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def unlink_obligation(requirement_id: str, obligation_id: str) -> RequirementDetailResponse:
-    async with SessionLocal() as session:
-        await _load(session, requirement_id)
-        await session.execute(
-            requirement_obligations.delete()
-            .where(requirement_obligations.c.requirement_id == requirement_id)
-            .where(requirement_obligations.c.obligation_id == obligation_id)
-        )
-        await session.flush()
-        await refresh_obligation(session, obligation_id)
-        await session.commit()
-    logger.info("requirement.unlinked", extra={"requirement_id": requirement_id, "obligation_id": obligation_id})
-    return await get_requirement(requirement_id)

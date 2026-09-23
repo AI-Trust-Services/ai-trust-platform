@@ -11,12 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import ControlPicker from "./ControlPicker";
 
 interface Props {
   open: boolean;
@@ -28,8 +27,6 @@ interface FormState {
   title: string;
   description: string;
   evidence_type: string;
-  ai_system_id: string;
-  assessment_id: string;
   validity_from: string;
   validity_until: string;
   uploaded_by: string;
@@ -37,91 +34,27 @@ interface FormState {
 
 const EMPTY: FormState = {
   title: "", description: "", evidence_type: "document",
-  ai_system_id: "", assessment_id: "",
   validity_from: "", validity_until: "", uploaded_by: "",
 };
-// Radix Select disallows empty-string item values — use a sentinel for "none".
-const NONE = "__none__";
 
 export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [file, setFile] = useState<File | null>(null);
-  const [systems, setSystems] = useState<AISystem[]>([]);
-  const [assessments, setAssessments] = useState<Assessment[]>([]);
-  const [requirements, setRequirements] = useState<Requirement[]>([]);
-  const [obligations, setObligations] = useState<Obligation[]>([]);
-  const [selectedRequirements, setSelectedRequirements] = useState<Set<string>>(new Set());
-  const [selectedObligations, setSelectedObligations] = useState<Set<string>>(new Set());
+  const [selectedRequirements, setSelectedRequirements] = useState<string[]>([]);
   const [drag, setDrag] = useState(false);
   const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const showToast = useToast();
 
-  // Load systems on open
   useEffect(() => {
     if (!open) return;
     setForm(EMPTY);
     setFile(null);
-    setSelectedRequirements(new Set());
-    setSelectedObligations(new Set());
-    setRequirements([]);
-    setObligations([]);
-    setAssessments([]);
-    (async () => {
-      try {
-        const sys = await api.getSystems();
-        setSystems(sys.filter((s) => s.lifecycle !== "decommissioned"));
-      } catch (e) {
-        showToast(`Failed to load systems: ${(e as Error).message}`, true);
-      }
-    })();
-  }, [open, showToast]);
-
-  // When system changes: load its assessments and requirements
-  useEffect(() => {
-    setSelectedRequirements(new Set());
-    setSelectedObligations(new Set());
-    setObligations([]);
-    setAssessments([]);
-    setForm((f) => ({ ...f, assessment_id: "" }));
-    if (!form.ai_system_id) { setRequirements([]); return; }
-    (async () => {
-      try {
-        const [ctl, assess] = await Promise.all([
-          api.getRequirements({ ai_system_id: form.ai_system_id }),
-          api.getAssessments(form.ai_system_id),
-        ]);
-        setRequirements(ctl);
-        setAssessments(assess);
-      } catch (e) {
-        showToast(`Failed to load options: ${(e as Error).message}`, true);
-      }
-    })();
-  }, [form.ai_system_id, showToast]);
-
-  // When assessment changes: load its obligations
-  useEffect(() => {
-    setSelectedObligations(new Set());
-    setObligations([]);
-    if (!form.assessment_id) return;
-    (async () => {
-      try {
-        setObligations(await api.getObligations({ assessment_id: form.assessment_id }));
-      } catch (e) {
-        showToast(`Failed to load obligations: ${(e as Error).message}`, true);
-      }
-    })();
-  }, [form.assessment_id, showToast]);
+    setSelectedRequirements([]);
+  }, [open]);
 
   if (!open) return null;
 
-  function toggleRequirement(id: string) {
-    setSelectedRequirements((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  }
-
-  function toggleObligation(id: string) {
-    setSelectedObligations((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  }
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -131,9 +64,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
 
   async function handleSubmit() {
     if (!form.title.trim()) { showToast("Title is required", true); return; }
-    if (selectedRequirements.size === 0 && selectedObligations.size === 0 && !form.ai_system_id && !form.assessment_id) {
-      showToast("Link to at least one requirement, obligation, AI system, or assessment", true); return;
-    }
+    if (selectedRequirements.length === 0) { showToast("Link to at least one requirement", true); return; }
     setLoading(true);
     try {
       const fd = new FormData();
@@ -141,12 +72,9 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
       fd.append("description", form.description);
       fd.append("evidence_type", form.evidence_type);
       fd.append("uploaded_by", form.uploaded_by);
-      if (form.ai_system_id) fd.append("ai_system_id", form.ai_system_id);
-      if (form.assessment_id) fd.append("assessment_id", form.assessment_id);
       if (form.validity_from) fd.append("validity_from", form.validity_from);
       if (form.validity_until) fd.append("validity_until", form.validity_until);
       selectedRequirements.forEach((id) => fd.append("requirement_ids", id));
-      selectedObligations.forEach((id) => fd.append("obligation_ids", id));
       if (file) fd.append("file", file);
       await api.uploadEvidence(fd);
       onClose();
@@ -202,19 +130,6 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
                 </Select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>AI System</Label>
-                <Select
-                  value={form.ai_system_id || NONE}
-                  onValueChange={(v) => setForm((f) => ({ ...f, ai_system_id: v === NONE ? "" : v }))}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>— none —</SelectItem>
-                    {systems.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.id})</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="ue-desc">Description</Label>
                 <Textarea id="ue-desc" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
               </div>
@@ -234,74 +149,11 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
               </div>
             </div>
 
-            {/* Right column: linking */}
-            <div className="flex flex-col gap-4">
-              {/* Requirements checklist */}
-              <div className="flex flex-col gap-1.5">
-                <Label className="flex items-center gap-1.5">
-                  Link to Requirements
-                  {selectedRequirements.size > 0 && <Badge variant="secondary" className="rounded-full font-medium">{selectedRequirements.size} selected</Badge>}
-                </Label>
-                <div className="max-h-40 overflow-y-auto rounded-md border border-border">
-                  {!form.ai_system_id ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground">Select an AI system to see its requirements</div>
-                  ) : requirements.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground">No requirements for this system</div>
-                  ) : requirements.map((c) => {
-                    const expected = expectedEvidence(c.description);
-                    return (
-                    <label key={c.id} className="flex cursor-pointer items-start gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
-                      <Checkbox className="mt-0.5" checked={selectedRequirements.has(c.id)} onCheckedChange={() => toggleRequirement(c.id)} />
-                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="truncate text-[13px] text-foreground">{c.title}</span>
-                        {expected && (
-                          <span className="text-[11px] leading-snug text-muted-foreground">
-                            <span className="font-medium">Expected:</span> {expected}
-                          </span>
-                        )}
-                      </div>
-                      <span className="shrink-0 text-[11px] text-muted-foreground">{c.id}</span>
-                    </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Obligations: pick assessment first */}
-              <div className="flex flex-col gap-1.5">
-                <Label>Assessment</Label>
-                <Select
-                  value={form.assessment_id || NONE}
-                  onValueChange={(v) => setForm((f) => ({ ...f, assessment_id: v === NONE ? "" : v }))}
-                  disabled={!form.ai_system_id}
-                >
-                  <SelectTrigger><SelectValue placeholder="— select to filter obligations —" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>— select to filter obligations —</SelectItem>
-                    {assessments.map((a) => <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="flex items-center gap-1.5">
-                  Link to Obligations
-                  {selectedObligations.size > 0 && <Badge variant="secondary" className="rounded-full font-medium">{selectedObligations.size} selected</Badge>}
-                </Label>
-                <div className="max-h-40 overflow-y-auto rounded-md border border-border">
-                  {!form.assessment_id ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground">Select an assessment to see its obligations</div>
-                  ) : obligations.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground">No obligations for this assessment</div>
-                  ) : obligations.map((o) => (
-                    <label key={o.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 last:border-0 hover:bg-muted/50">
-                      <Checkbox checked={selectedObligations.has(o.id)} onCheckedChange={() => toggleObligation(o.id)} />
-                      <span className="flex-1 truncate text-[13px] text-foreground">{o.title}</span>
-                      <span className="shrink-0 text-[11px] text-muted-foreground">{o.article_ref || o.id}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
+            {/* Right column: requirement picker */}
+            <ControlPicker
+              value={selectedRequirements}
+              onChange={setSelectedRequirements}
+            />
           </div>
         </div>
         <DialogFooter>

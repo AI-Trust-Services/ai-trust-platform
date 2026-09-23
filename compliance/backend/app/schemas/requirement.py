@@ -17,7 +17,7 @@ VALID_EFFECTIVENESS = frozenset({"high", "medium", "low"})
 
 
 class RequirementCreate(BaseModel):
-    ai_system_id: str | None = Field(default=None, max_length=20)
+    obligation_id: str = Field(..., max_length=30)
     title: str = Field(..., min_length=1, max_length=200)
     description: str = Field(default="")
     category: str = Field(default="general")
@@ -40,6 +40,7 @@ class RequirementCreate(BaseModel):
 
 
 class RequirementUpdate(BaseModel):
+    obligation_id: str | None = Field(default=None, max_length=30)
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     category: str | None = None
@@ -72,7 +73,10 @@ class RequirementUpdate(BaseModel):
 
 class RequirementResponse(BaseModel):
     id: str
+    obligation_id: str
+    assessment_id: str
     ai_system_id: str | None
+    assessment_title: str | None = None  # not a column — set manually after model_validate
     requirement_ref: str | None
     article_ref: str | None = None
     title: str
@@ -88,7 +92,6 @@ class RequirementResponse(BaseModel):
 
 
 class RequirementDetailResponse(RequirementResponse):
-    obligation_ids: list[str] = []
     evidence_count: int = 0
 
 

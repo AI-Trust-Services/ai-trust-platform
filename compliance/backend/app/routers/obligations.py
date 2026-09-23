@@ -10,7 +10,7 @@ from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import ASSESSMENTS_READ, ASSESSMENTS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
-from ai_trust_persistence.models import Assessment, Obligation, requirement_obligations, evidence_obligations
+from ai_trust_persistence.models import Assessment, Obligation, Requirement
 from app.cascade import refresh_assessment_score
 from app.ids import new_id
 from app.schemas import (
@@ -37,7 +37,6 @@ async def list_obligations(
     ai_system_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
     requirement_id: str | None = Query(default=None),
-    evidence_id: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[ObligationResponse]:
@@ -53,12 +52,8 @@ async def list_obligations(
             stmt = stmt.where(Obligation.status == status)
         if requirement_id:
             stmt = stmt.join(
-                requirement_obligations, requirement_obligations.c.obligation_id == Obligation.id
-            ).where(requirement_obligations.c.requirement_id == requirement_id)
-        if evidence_id:
-            stmt = stmt.join(
-                evidence_obligations, evidence_obligations.c.obligation_id == Obligation.id
-            ).where(evidence_obligations.c.evidence_id == evidence_id)
+                Requirement, Requirement.obligation_id == Obligation.id
+            ).where(Requirement.id == requirement_id)
         stmt = stmt.limit(limit).offset(offset)
         result = await session.execute(stmt)
         return [ObligationResponse.model_validate(r) for r in result.scalars().all()]
@@ -105,8 +100,8 @@ async def get_obligation(obligation_id: str) -> ObligationDetailResponse:
         if not row:
             raise HTTPException(404, f"Obligation {obligation_id} not found")
         requirement_ids = (await session.execute(
-            select(requirement_obligations.c.requirement_id)
-            .where(requirement_obligations.c.obligation_id == obligation_id)
+            select(Requirement.id)
+            .where(Requirement.obligation_id == obligation_id)
         )).scalars().all()
         detail = ObligationDetailResponse.model_validate(row)
         detail.requirement_ids = list(requirement_ids)
