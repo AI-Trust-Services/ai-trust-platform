@@ -1,7 +1,7 @@
 apiVersion: delivery.ocm.software/v1alpha1
 kind: ComponentVersion
 metadata:
-  name: ai-trust-platform
+  name: ai-trust-platform-${NAMESPACE}
   namespace: ocm-system
 spec:
   component: github.com/ai-trust-services/ai-trust-platform
@@ -16,13 +16,13 @@ spec:
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Resource
 metadata:
-  name: ai-trust-platform-chart
+  name: ai-trust-platform-chart-${NAMESPACE}
   namespace: ocm-system
 spec:
   interval: 1m
   sourceRef:
     kind: ComponentVersion
-    name: ai-trust-platform
+    name: ai-trust-platform-${NAMESPACE}
     namespace: ocm-system
     resourceRef:
       name: ai-trust-platform-chart
@@ -30,48 +30,52 @@ spec:
 apiVersion: delivery.ocm.software/v1alpha1
 kind: FluxDeployer
 metadata:
-  name: ai-trust-platform
+  name: ai-trust-${NAMESPACE}
   namespace: ocm-system
 spec:
   interval: 1m
   sourceRef:
     kind: Resource
-    name: ai-trust-platform-chart
+    name: ai-trust-platform-chart-${NAMESPACE}
     namespace: ocm-system
   helmReleaseTemplate:
-    releaseName: ai-trust
-    targetNamespace: ai-trust
+    releaseName: ai-trust-${NAMESPACE}
+    targetNamespace: ${NAMESPACE}
+    install:
+      timeout: 5m0s
+    upgrade:
+      timeout: 5m0s
     valuesFrom:
-      # ai-trust-flux-values holds the 6 non-sensitive URL/hostname/tag keys needed here.
+      # ai-trust-flux-values-<namespace> holds the 6 non-sensitive URL/hostname/tag keys needed here.
       # Flux's HelmRelease valuesFrom has no cross-namespace support, so this secret
       # lives in ocm-system (same namespace as the HelmRelease) and is kept in sync
       # with ai-trust-env by bootstrap.sh from the same .env source.
       - kind: Secret
-        name: ai-trust-flux-values
+        name: ai-trust-flux-values-${NAMESPACE}
         valuesKey: APP_PUBLIC_URL
         targetPath: appPublicUrl
       - kind: Secret
-        name: ai-trust-flux-values
+        name: ai-trust-flux-values-${NAMESPACE}
         valuesKey: KEYCLOAK_PUBLIC_URL
         targetPath: keycloakPublicUrl
       - kind: Secret
-        name: ai-trust-flux-values
+        name: ai-trust-flux-values-${NAMESPACE}
         valuesKey: INGRESS_HOST
         targetPath: ingress.host
       - kind: Secret
-        name: ai-trust-flux-values
+        name: ai-trust-flux-values-${NAMESPACE}
         valuesKey: INGRESS_KEYCLOAK_HOST
         targetPath: ingress.keycloakHost
       - kind: Secret
-        name: ai-trust-flux-values
+        name: ai-trust-flux-values-${NAMESPACE}
         valuesKey: INGRESS_MINIO_HOST
         targetPath: ingress.minioHost
       - kind: Secret
-        name: ai-trust-flux-values
+        name: ai-trust-flux-values-${NAMESPACE}
         valuesKey: IMAGE_TAG
         targetPath: image.tag
       - kind: Secret
-        name: ai-trust-flux-values
+        name: ai-trust-flux-values-${NAMESPACE}
         valuesKey: OLLAMA_ENABLED
         targetPath: ollama.enabled
     values:
