@@ -26,6 +26,7 @@ interface FormState {
   obligation_id: string;
   title: string;
   description: string;
+  category: string;
   owner: string;
   due_date: string;
 }
