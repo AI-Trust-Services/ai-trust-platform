@@ -96,7 +96,7 @@ runs:
         VITE_AUDIT_API_BASE:      ${{ inputs.vite_audit_api_base }}
         VITE_ADMIN_API_BASE:      ${{ inputs.vite_admin_api_base }}
       run: |
+        # Platform is pinned per-target (platforms = ["linux/amd64"]) in docker-bake.hcl.
         docker buildx bake \
           --file docker-bake.hcl \
-          --push \
-          --set "*.platform=linux/amd64"
+          --push

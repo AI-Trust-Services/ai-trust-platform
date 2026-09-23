@@ -55,6 +55,8 @@ jobs:
             --repo "${{ github.repository }}" \
             --body "🚀 Test deployment started — deploying \`feature:${PR_SHA::12}\` to namespace \`${PR_AUTHOR_LOWER,,}\` on \`ai-trust-test\`."
 
+      # Required so the local composite actions (./.github/actions/*) resolve.
+      # build-images re-checks-out at the PR head SHA for the actual build.
       - name: Check out repository
         uses: actions/checkout@v4
 
