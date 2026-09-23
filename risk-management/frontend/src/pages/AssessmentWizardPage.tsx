@@ -3376,7 +3376,13 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack, pre
   }
 
   async function handleEnsureEditable() {
-    if (!register || register.status !== "approved") return null;
+    if (!register) {
+      const created = await api.createRegister(systemId, {});
+      setRegister(created);
+      setRisks(created.risks);
+      return { register: created, risks: created.risks };
+    }
+    if (register.status !== "approved") return null;
     const { new_register_id } = await api.cloneRegister(register.id);
     const allRegs = await api.getRegisters(systemId);
     const newActive = allRegs.find(r => r.id === new_register_id) ?? allRegs.find(r => r.status !== "archived");
