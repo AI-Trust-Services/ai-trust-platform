@@ -71,11 +71,10 @@ async def test_create_evidence_with_valid_file(client: httpx.AsyncClient):
 
 
 async def test_create_evidence_rejects_invalid_type(client: httpx.AsyncClient):
-    system = await create_system()
-    ctl = await create_control(client, system["id"])
+    req = await create_requirement(client)
     r = await client.post(
         "/v1/evidence",
-        data={"title": "X", "evidence_type": "policy_document", "control_ids": ctl["id"]},
+        data={"title": "X", "evidence_type": "policy_document", "requirement_ids": req["id"]},
     )
     assert r.status_code == 422
 
