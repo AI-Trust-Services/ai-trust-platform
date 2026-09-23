@@ -547,7 +547,7 @@ def _role_allows(role: str | None, org_role: str) -> bool:
     templates carry an explicit "provider"/"deployer" role and match only that
     org_role — there is no fallback (importer/distributor match nothing).
     """
-    return role in (None, "", "all", "any") or role == org_role
+    return role is None or role == org_role
 
 
 def requirements_for(cluster_id: str, tier: str, org_role: str = "provider") -> list[dict]:
