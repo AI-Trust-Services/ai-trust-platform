@@ -139,7 +139,7 @@ async def create_assessment(body: AssessmentCreate, request: Request) -> Assessm
                 "tier": system.tier, "org_role": system.org_role,
             })
         else:
-            await _generate_requirements_in_session(session, created, system.tier, system.org_role)
+            await _generate_requirements_in_session(session, created, system.tier, getattr(system, "org_role", "provider") or "provider")
         log_audit_event(
             session,
             actor=current_user,
@@ -541,7 +541,7 @@ async def generate_requirements(assessment_id: str) -> GenerateRequirementsRespo
         )).scalars().all())
         targets = [o for o in obligations if o.id not in linked_obl_ids]
 
-        created = await _generate_requirements_in_session(session, targets, system.tier, system.org_role)
+        created = await _generate_requirements_in_session(session, targets, system.tier, getattr(system, "org_role", "provider") or "provider")
         await session.commit()
         for r in created:
             await session.refresh(r)
