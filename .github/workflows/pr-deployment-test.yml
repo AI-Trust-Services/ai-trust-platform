@@ -9,7 +9,7 @@ name: PR Deployment Test
 # Usage: add the "garden-deploy" label to a PR.
 
 on:
-  pull_request:
+  pull_request_target:
     types: [labeled]
 
 permissions:
