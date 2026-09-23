@@ -9,14 +9,13 @@ name: PR Deployment Test
 # Usage: add the "garden-deploy" label to a PR.
 
 on:
-  pull_request_target:
+  pull_request:
     types: [labeled]
 
 permissions:
   contents: read
   issues: write
   pull-requests: write
-  statuses: write
   id-token: write
   packages: write
 
@@ -44,22 +43,11 @@ jobs:
           if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "write" || "$PERMISSION" == "maintain" ]]; then
             echo "authorized=true" >> "$GITHUB_OUTPUT"
           else
-            echo "authorized=false" >> "$GITHUB_OUTPUT"
             gh pr comment "${PR_NUMBER}" \
               --repo "${{ github.repository }}" \
               --body "❌ @${{ github.actor }} Only org members can trigger deployment."
             exit 1
           fi
-
-      - name: Set pending commit status
-        run: |
-          gh api \
-            --method POST \
-            repos/${{ github.repository }}/statuses/${PR_SHA} \
-            -f state=pending \
-            -f context=deploy-test \
-            -f description="Deploy test in progress..." \
-            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Post deployment started comment
         run: |
@@ -128,20 +116,13 @@ jobs:
           users_backend_client_secret: ${{ secrets.USERS_BACKEND_CLIENT_SECRET }}
           dev_user_password: ${{ secrets.DEV_USER_PASSWORD }}
 
-      - name: Post success comment and status
+      - name: Post success comment
         if: success()
         run: |
           APP_URL="https://${PR_AUTHOR_LOWER,,}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
             --body "✅ Test deployment successful: \`feature:${PR_SHA::12}\` deployed to namespace \`${PR_AUTHOR_LOWER,,}\` on \`ai-trust-test\`."$'\n\n'"🔗 ${APP_URL}"
-          gh api \
-            --method POST \
-            repos/${{ github.repository }}/statuses/${PR_SHA} \
-            -f state=success \
-            -f context=deploy-test \
-            -f description="Deploy test passed (feature:${PR_SHA::12})" \
-            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Post app URL to linked issues
         if: success()
@@ -164,16 +145,9 @@ jobs:
             echo "Posted to issue #${ISSUE}"
           done
 
-      - name: Post failure comment and status
+      - name: Post failure comment
         if: failure()
         run: |
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
             --body "❌ Test deployment failed: \`feature:${PR_SHA::12}\` — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-          gh api \
-            --method POST \
-            repos/${{ github.repository }}/statuses/${PR_SHA} \
-            -f state=failure \
-            -f context=deploy-test \
-            -f description="Deploy test failed (feature:${PR_SHA::12})" \
-            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
