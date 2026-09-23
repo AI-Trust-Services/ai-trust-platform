@@ -86,12 +86,13 @@ def _traffic_light(
     unacknowledged: int,
     last_completed: datetime | None,
 ) -> str:
-    is_high = tier in ("high", "prohibited")
-
     if not tier or tier == "pending":
         return "orange"
 
-    if is_high:
+    if tier == "prohibited":
+        return "red"
+
+    if tier == "high":
         if not active_register:
             return "red"
         if active_register.status != "approved":
@@ -103,7 +104,7 @@ def _traffic_light(
         all_confirmed = all(r.engineer_confirmed and r.officer_confirmed for r in risks)
         return "green" if all_confirmed else "orange"
 
-    # non-high
+    # non-high (limited, minimal, gpai-standard, gpai-systemic)
     if not active_register:
         return "green"
     if active_register.status != "approved":
@@ -324,7 +325,7 @@ async def list_systems(session: AsyncSession = Depends(get_session)):
             )
             risks = list(risks_result.scalars().all())
 
-        # Count unacknowledged triggers
+        # Count unacknowledged triggers (all types, for traffic light / reassessment_needed)
         trigger_count_result = await session.execute(
             select(func.count(ReassessmentTrigger.id))
             .where(ReassessmentTrigger.ai_system_id == sys.id)
@@ -332,6 +333,16 @@ async def list_systems(session: AsyncSession = Depends(get_session)):
             .where(ReassessmentTrigger.triggered_at <= datetime.now(timezone.utc))
         )
         unacknowledged = trigger_count_result.scalar_one() or 0
+
+        # Count only registry_changed triggers (for "Changes pending review" label)
+        registry_changed_count_result = await session.execute(
+            select(func.count(ReassessmentTrigger.id))
+            .where(ReassessmentTrigger.ai_system_id == sys.id)
+            .where(ReassessmentTrigger.trigger_type == "registry_changed")
+            .where(ReassessmentTrigger.acknowledged == False)  # noqa: E712
+            .where(ReassessmentTrigger.triggered_at <= datetime.now(timezone.utc))
+        )
+        registry_changed = (registry_changed_count_result.scalar_one() or 0) > 0
 
         last_completed = active_register.last_assessment_completed_at if active_register else None
         stale = _is_stale(last_completed)
@@ -347,6 +358,8 @@ async def list_systems(session: AsyncSession = Depends(get_session)):
             1 for r in risks
             if r.status in confirmed_statuses and not (r.engineer_confirmed and r.officer_confirmed)
         )
+        total_risks = len(risks)
+        open_risks = sum(1 for r in risks if r.status == "open")
 
         summaries.append(SystemRiskSummary(
             system_id=sys.id,
@@ -361,8 +374,10 @@ async def list_systems(session: AsyncSession = Depends(get_session)):
             valid_until=valid_until,
             unacknowledged_triggers=unacknowledged,
             reassessment_needed=reassessment_needed,
-            registry_changed=unacknowledged > 0,
+            registry_changed=registry_changed,
             unconfirmed_risks=unconfirmed_risks,
+            total_risks=total_risks,
+            open_risks=open_risks,
             traffic_light=tl,
         ))
 
@@ -661,12 +676,12 @@ async def approve_register(
         register.registry_snapshot = body.registry_snapshot
     session.add(register)
 
-    # Schedule next re-assessment in 6 months
+    # Schedule next review in 6 months
     trigger = ReassessmentTrigger(
         id=new_id("RAT"),
         ai_system_id=register.ai_system_id,
         trigger_type="scheduled_6_month",
-        trigger_reason="Automatic 6-month re-assessment cycle (Art. 9(1))",
+        trigger_reason="Automatic 6-month review cycle",
         triggered_at=datetime.now(timezone.utc) + timedelta(days=180),
     )
     session.add(trigger)

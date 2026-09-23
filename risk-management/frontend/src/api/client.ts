@@ -10,6 +10,9 @@ import type {
   RegisterDiff,
   Incident,
   RegistrySystemInfo,
+  LibraryRisk,
+  LibraryRiskStats,
+  RiskCandidate,
 } from "../types";
 
 const BASE = import.meta.env.VITE_RISK_MANAGEMENT_API_BASE ?? "/api/risk-management/v1";
@@ -110,4 +113,11 @@ export const api = {
 
   // Registry proxy
   getRegistryInfo: (systemId: string) => request<RegistrySystemInfo>(`/systems/${systemId}/registry-info`),
+
+  // Risk Library
+  getRiskLibrary: () => request<LibraryRisk[]>("/risk-library"),
+  getRiskLibraryStats: (riskId: string) => request<LibraryRiskStats>(`/risk-library/${riskId}/stats`),
+  createLibraryRisk: (body: Omit<LibraryRisk, "id" | "created_at" | "updated_at" | "incidents">) =>
+    request<LibraryRisk>("/risk-library", { method: "POST", ...json(body) }),
+  getRiskCandidates: () => request<RiskCandidate[]>("/risk-library/candidates"),
 };

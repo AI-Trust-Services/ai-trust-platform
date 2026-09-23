@@ -43,7 +43,7 @@ async def create_trigger(
     trigger_reason: str = "",
     session: AsyncSession = Depends(get_session),
 ):
-    """Manually create a re-assessment trigger (e.g. after a documentation change)."""
+    """Manually create a review trigger (e.g. after a documentation change)."""
     trigger = ReassessmentTrigger(
         id=new_id("RAT"),
         ai_system_id=system_id,

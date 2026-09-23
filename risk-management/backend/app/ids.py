@@ -6,6 +6,7 @@ def new_id(prefix: str) -> str:
     """Return an ID like RRM-3F2A1B4C.
 
     Prefixes: RRM (RiskRegister), RSK (RiskEntry), MIS (MisuseScenario),
-              MIT (MitigationMeasure), RAT (ReassessmentTrigger).
+              MIT (MitigationMeasure), RAT (ReassessmentTrigger),
+              LRK (LibraryRisk), LIN (LibraryIncident).
     """
     return f"{prefix}-{uuid.uuid4().hex[:8].upper()}"

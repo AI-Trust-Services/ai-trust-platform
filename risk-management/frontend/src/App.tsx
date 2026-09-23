@@ -3,12 +3,13 @@ import { useLuigi } from "./hooks/useLuigi";
 import { useTheme } from "./hooks/useTheme";
 import SystemsListPage from "./pages/SystemsListPage";
 import AssessmentWizardPage from "./pages/AssessmentWizardPage";
+import type { DraftRisk } from "./pages/AssessmentWizardPage";
 
 const API_BASE = import.meta.env.VITE_RISK_MANAGEMENT_API_BASE ?? "/api/risk-management/v1";
 
 type View =
   | { type: "list" }
-  | { type: "wizard"; systemId: string; systemName: string };
+  | { type: "wizard"; systemId: string; systemName: string; prefillRisk?: Partial<DraftRisk> };
 
 export default function App() {
   useLuigi();
@@ -41,7 +42,7 @@ export default function App() {
 
       {view.type === "list" && (
         <SystemsListPage
-          onSelectSystem={(id, name) => setView({ type: "wizard", systemId: id, systemName: name })}
+          onSelectSystem={(id, name, prefill) => setView({ type: "wizard", systemId: id, systemName: name, prefillRisk: prefill })}
         />
       )}
 
@@ -49,6 +50,7 @@ export default function App() {
         <AssessmentWizardPage
           systemId={view.systemId}
           systemName={view.systemName}
+          prefillRisk={view.prefillRisk}
           onBack={() => setView({ type: "list" })}
         />
       )}

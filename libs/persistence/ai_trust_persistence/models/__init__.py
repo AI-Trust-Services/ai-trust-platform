@@ -27,6 +27,7 @@ from ai_trust_persistence.models.risk_management import (
     PlanTask,
     Incident,
 )
+from ai_trust_persistence.models.risk_library import LibraryRisk, LibraryIncident
 
 __all__ = [
     "AISystem",
@@ -52,6 +53,8 @@ __all__ = [
     "PlanTask",
     "Incident",
     "QuestionAssignment",
+    "LibraryRisk",
+    "LibraryIncident",
     "control_obligations",
     "evidence_controls",
     "evidence_obligations",

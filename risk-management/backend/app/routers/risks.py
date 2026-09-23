@@ -115,7 +115,12 @@ async def create_risk(
         residual_severity=body.residual_severity,
         final_risk_level=body.final_risk_level,
         residual_status=body.residual_status,
-        date_of_assessment=body.date_of_assessment,
+        date_of_assessment=date.fromisoformat(body.date_of_assessment[:10]) if body.date_of_assessment else None,
+        responsible_role=body.responsible_role,
+        deadline=body.deadline,
+        engineer_email=body.engineer_email,
+        officer_email=body.officer_email,
+        library_risk_id=body.library_risk_id,
     )
     session.add(risk)
     await session.flush()

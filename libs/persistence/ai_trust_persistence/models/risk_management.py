@@ -127,6 +127,14 @@ class RiskEntry(Base):
     # Issue #187: dual-role confirmation (AI Engineer + Compliance Officer)
     engineer_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     officer_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    engineer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    officer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    engineer_declined: Mapped[bool] = mapped_column(Boolean, default=False)
+    officer_declined: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    library_risk_id: Mapped[str | None] = mapped_column(
+        String(30), ForeignKey("library_risks.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel
@@ -68,8 +68,11 @@ class RiskEntryIn(BaseModel):
     # Issue #187: responsible role and deadline
     responsible_role: Optional[str] = None
     deadline: Optional[datetime] = None
+    engineer_email: Optional[str] = None
+    officer_email: Optional[str] = None
     misuse_scenarios: list[MisuseScenarioIn] = []
     mitigations: list[MitigationMeasureIn] = []
+    library_risk_id: Optional[str] = None
 
 
 class RiskEntryOut(BaseModel):
@@ -103,6 +106,11 @@ class RiskEntryOut(BaseModel):
     deadline: Optional[datetime]
     engineer_confirmed: bool
     officer_confirmed: bool
+    engineer_email: Optional[str] = None
+    officer_email: Optional[str] = None
+    engineer_declined: bool = False
+    officer_declined: bool = False
+    library_risk_id: Optional[str] = None
     misuse_scenarios: list[MisuseScenarioOut] = []
     mitigations: list[MitigationMeasureOut] = []
     created_at: datetime
@@ -138,6 +146,11 @@ class RiskEntryPatch(BaseModel):
     deadline: Optional[datetime] = None
     engineer_confirmed: Optional[bool] = None
     officer_confirmed: Optional[bool] = None
+    engineer_email: Optional[str] = None
+    officer_email: Optional[str] = None
+    engineer_declined: Optional[bool] = None
+    officer_declined: Optional[bool] = None
+    library_risk_id: Optional[str] = None
 
 
 class RiskRegisterIn(BaseModel):
@@ -207,6 +220,8 @@ class SystemRiskSummary(BaseModel):
     reassessment_needed: bool
     registry_changed: bool = False
     unconfirmed_risks: int = 0
+    total_risks: int = 0
+    open_risks: int = 0
     traffic_light: str
     # "red" | "orange" | "green"
 
@@ -322,3 +337,72 @@ class IncidentPatch(BaseModel):
     reported_by: Optional[str] = None
     occurred_at: Optional[datetime] = None
     attachments: Optional[str] = None
+
+
+class LibraryIncidentOut(BaseModel):
+    id: str
+    risk_id: str
+    title: str
+    description: str = ""
+    occurred_at: Optional[date] = None
+    source_url: str = ""
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class LibraryRiskOut(BaseModel):
+    id: str
+    title: str
+    description: str = ""
+    category: str = ""
+    affects_vulnerable_groups: bool = False
+    affects_children: bool = False
+    severity: str = "medium"
+    likelihood: str = "possible"
+    suggested_mitigation: str = ""
+    source: str = ""
+    created_at: datetime
+    updated_at: datetime
+    incidents: list[LibraryIncidentOut] = []
+
+    model_config = {"from_attributes": True}
+
+
+class LibraryRiskIn(BaseModel):
+    title: str
+    description: str = ""
+    category: str = ""
+    affects_vulnerable_groups: bool = False
+    affects_children: bool = False
+    severity: str = "medium"
+    likelihood: str = "possible"
+    suggested_mitigation: str = ""
+    source: str = ""
+
+
+class RiskCandidateOut(BaseModel):
+    risk_id: str
+    title: str
+    description: str
+    category: str
+    severity: str
+    likelihood: str
+    affects_vulnerable_groups: bool
+    suggested_mitigation: str
+    system_name: str
+
+
+class LibraryRiskLinkedSystem(BaseModel):
+    system_id: str
+    system_name: str
+    risk_id: str
+    severity: str
+    likelihood: str
+    status: str
+
+
+class LibraryRiskStats(BaseModel):
+    dominant_severity: Optional[str] = None
+    dominant_likelihood: Optional[str] = None
+    linked_systems: list[LibraryRiskLinkedSystem] = []

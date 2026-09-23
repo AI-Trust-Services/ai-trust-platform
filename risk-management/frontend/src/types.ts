@@ -13,6 +13,8 @@ export interface SystemRiskSummary {
   reassessment_needed: boolean;
   registry_changed: boolean;
   unconfirmed_risks: number;
+  total_risks: number;
+  open_risks: number;
   traffic_light: "red" | "orange" | "green";
 }
 
@@ -73,6 +75,11 @@ export interface RiskEntry {
   deadline: string | null;
   engineer_confirmed: boolean;
   officer_confirmed: boolean;
+  engineer_email: string | null;
+  officer_email: string | null;
+  engineer_declined: boolean;
+  officer_declined: boolean;
+  library_risk_id: string | null;
   misuse_scenarios: MisuseScenario[];
   mitigations: MitigationMeasure[];
   created_at: string;
@@ -194,4 +201,55 @@ export interface Incident {
   updated_at: string;
 }
 
+export interface LibraryIncident {
+  id: string;
+  risk_id: string;
+  title: string;
+  description: string;
+  occurred_at: string | null;
+  source_url: string;
+  created_at: string;
+}
 
+export interface LibraryRisk {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  affects_vulnerable_groups: boolean;
+  affects_children: boolean;
+  severity: string;
+  likelihood: string;
+  suggested_mitigation: string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+  incidents: LibraryIncident[];
+}
+
+export interface LibraryRiskLinkedSystem {
+  system_id: string;
+  system_name: string;
+  risk_id: string;
+  severity: string;
+  likelihood: string;
+  status: string;
+}
+
+export interface LibraryRiskStats {
+  dominant_severity: string | null;
+  dominant_likelihood: string | null;
+  linked_systems: LibraryRiskLinkedSystem[];
+}
+
+export interface RiskCandidate {
+  risk_id: string;
+  title: string;
+  description: string;
+  category: string;
+  severity: string;
+  likelihood: string;
+  affects_vulnerable_groups: boolean;
+  suggested_mitigation: string;
+  system_name: string;
+}

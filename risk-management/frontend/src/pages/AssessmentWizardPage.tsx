@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
-import type { RiskRegister, RiskEntry, MisuseScenario, MitigationMeasure, TestReport, PlanTask } from "../types";
+import type { RiskRegister, RiskEntry, MitigationMeasure, TestReport, PlanTask, LibraryRisk } from "../types";
 
 const SEV_COLORS: Record<string, string> = {
   severe: "#8b0000", significant: "#8b3a00", moderate: "#7a5900", minor: "#1a5c35",
@@ -83,10 +83,10 @@ function Input({ value, onChange, placeholder }: { value: string; onChange: (v: 
   );
 }
 
-function Label({ children }: { children: React.ReactNode }) {
+function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
     <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", display: "block", marginBottom: 4 }}>
-      {children}
+      {children}{required && <span style={{ color: "red", marginLeft: 2 }}>*</span>}
     </label>
   );
 }
@@ -249,20 +249,20 @@ async function exportReport(systemName: string, register: RiskRegister, risks: R
 
       ${r.description ? `<div style="font-size:12px;margin-bottom:6px"><strong>Description:</strong> ${np(r.description)}</div>` : ""}
       ${r.impact ? `<div style="font-size:12px;margin-bottom:8px"><strong>Impact:</strong> ${np(r.impact)}</div>` : ""}
-      ${r.affects_vulnerable_groups ? `<div style="font-size:12px;margin-bottom:8px;color:#92400e"><strong>⚠ Affects vulnerable groups (Art. 9(9)):</strong> ${esc(vulnerableGroups) || "Specified"}</div>` : ""}
+      ${r.affects_vulnerable_groups ? `<div style="font-size:12px;margin-bottom:8px;color:#92400e"><strong>⚠ Affects vulnerable groups:</strong> ${esc(vulnerableGroups) || "Specified"}</div>` : ""}
 
       <div style="margin-top:10px">
-        <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Misuse scenarios — Art. 9(2)(a) (${(r.misuse_scenarios ?? []).length})</div>
+        <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Misuse scenarios (${(r.misuse_scenarios ?? []).length})</div>
         ${misusesHtml}
       </div>
 
       <div style="margin-top:10px">
-        <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Risk management measures — Art. 9(2)(b)+(c) (${(r.mitigations ?? []).length})</div>
+        <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Risk management measures (${(r.mitigations ?? []).length})</div>
         ${mitigationsHtml}
       </div>
 
       <div style="margin-top:10px;background:${residualBg};border-radius:6px;padding:10px 14px;font-size:12px">
-        <div style="font-size:11px;font-weight:700;color:#556b82;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px">Residual risk — Art. 9(2)(d)</div>
+        <div style="font-size:11px;font-weight:700;color:#556b82;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px">Residual risk</div>
         <div style="margin-bottom:6px">${residualStatusBadge(r.residual_status)}</div>
         ${r.residual_status && r.residual_status !== "none" ? `
         <table style="width:100%;border-collapse:collapse">
@@ -512,10 +512,10 @@ async function exportReport(systemName: string, register: RiskRegister, risks: R
       ${r.closure_justification ? ` — <span style="color:#556b82">${esc(r.closure_justification)}</span>` : ""}
     </div>`).join("")}` : ""}
 
-  <div class="section-title">Overall residual risk — Art. 9(5)</div>
+  <div class="section-title">Overall residual risk</div>
   ${regResidualHtml || `<div style="color:#9ca3af;font-size:12px;font-style:italic">Not assessed.</div>`}
 
-  <div class="section-title">Action plan — Art. 9(1)</div>
+  <div class="section-title">Action plan</div>
   ${register.next_review_date ? `<div style="font-size:12px;margin-bottom:10px"><strong>Scheduled review date:</strong> ${fmtDate(register.next_review_date)}</div>` : ""}
   ${tasksHtml}
 
@@ -577,7 +577,7 @@ const LIFECYCLE_PHASES = [
   { value: "decommissioning", label: "Decommissioning" },
 ];
 
-interface DraftRisk {
+export interface DraftRisk {
   title: string;
   description: string;
   categories: string[];
@@ -592,6 +592,9 @@ interface DraftRisk {
   impact: string;
   responsible_role: string[];
   date_of_identification: string;
+  library_risk_id?: string;
+  engineer_email: string;
+  officer_email: string;
 }
 
 const emptyDraft = (): DraftRisk => ({
@@ -600,6 +603,7 @@ const emptyDraft = (): DraftRisk => ({
   severity: "moderate", likelihood: "possible",
   risk_owner: "", due_date: "", ai_lifecycle_phase: "", impact: "",
   responsible_role: [], date_of_identification: new Date().toISOString().slice(0, 10),
+  engineer_email: "", officer_email: "",
 });
 
 interface DraftMisuseScenario {
@@ -621,27 +625,6 @@ const emptyMsDraft = (): DraftMisuseScenario => ({
   consequence: "", affects_vulnerable_groups: false, vulnerable_group: "", vulnerable_group_impact: "",
 });
 
-interface DraftMonitoringRisk {
-  title: string;
-  description: string;
-  category: string;
-  observation: string;
-  severity: string;
-  likelihood: string;
-  risk_owner: string;
-  due_date: string;
-  affects_vulnerable_groups: boolean;
-  vulnerable_groups: string;
-  vulnerable_group_impact: string;
-}
-
-const emptyMonitoringDraft = (): DraftMonitoringRisk => ({
-  title: "", description: "", category: "health", observation: "",
-  severity: "moderate", likelihood: "possible",
-  risk_owner: "", due_date: "",
-  affects_vulnerable_groups: false, vulnerable_groups: "", vulnerable_group_impact: "",
-});
-
 const HIERARCHY_LEVELS = [
   { value: "eliminate", label: "Eliminate", desc: "Remove the risk entirely (design change, feature removal)", color: "#8b0000", bg: "#ffd5d5" },
   { value: "reduce",    label: "Reduce",    desc: "Reduce severity or likelihood (technical safeguards)", color: "#8b3a00", bg: "#fde8d0" },
@@ -649,7 +632,7 @@ const HIERARCHY_LEVELS = [
   { value: "inform",    label: "Inform",    desc: "Disclosure and transparency measures to affected parties", color: "#1a5c35", bg: "#d5f5e3" },
 ];
 
-function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApprove, onReopen, reopening, onEnsureEditable, systemName, systemId }: {
+function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApprove, onReopen, reopening, onEnsureEditable, systemName, systemId, prefillRisk }: {
   register: RiskRegister | null;
   risks: RiskEntry[];
   onRisksChange: (risks: RiskEntry[]) => void;
@@ -660,11 +643,19 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   onEnsureEditable: () => Promise<{ register: RiskRegister; risks: RiskEntry[] } | null>;
   systemName: string;
   systemId: string;
+  prefillRisk?: Partial<DraftRisk>;
 }) {
   // ── Scope section state ──
   const [registryInfo, setRegistryInfo] = useState<import("../types").RegistrySystemInfo | null>(null);
   const [registryLoading, setRegistryLoading] = useState(true);
   const [registryErr, setRegistryErr] = useState("");
+  const [openTriggers, setOpenTriggers] = useState<import("../types").ReassessmentTrigger[]>([]);
+
+  useEffect(() => {
+    api.getTriggers(systemId)
+      .then(ts => setOpenTriggers(ts.filter(t => !t.acknowledged)))
+      .catch(() => {});
+  }, [systemId, register?.status]);
 
   useEffect(() => {
     api.getRegistryInfo(systemId)
@@ -673,32 +664,44 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
       .finally(() => setRegistryLoading(false));
   }, [systemId]);
   // ── Risk section state ──
-  const [activeForm, setActiveForm] = useState<"none" | "risk" | "misuse" | "monitoring">("none");
+  const [activeForm, setActiveForm] = useState<"none" | "risk" | "misuse">("none");
   const [expandedRisk, setExpandedRisk] = useState<Record<string, boolean>>({});
   const [addMit, setAddMit] = useState<Record<string, boolean>>({});
   const [mitDraft, setMitDraft] = useState<Record<string, Partial<MitigationMeasure>>>({});
   const [residualDraft, setResidualDraft] = useState<Record<string, { residual_status: string; residual_likelihood: string; residual_severity: string; date_of_assessment: string; review_notes: string }>>({});
   const [residualSaving, setResidualSaving] = useState<Record<string, boolean>>({});
   const [mitSaving, setMitSaving] = useState<Record<string, boolean>>({});
-  const [closureNote, setClosureNote] = useState<Record<string, string>>({});
   const [mitErr, setMitErr] = useState<Record<string, string>>({});
   const [testReports, setTestReports] = useState<Record<string, TestReport[]>>({});
   const [addTest, setAddTest] = useState<Record<string, boolean>>({});
   const [addResidual, setAddResidual] = useState<Record<string, boolean>>({});
   const [testDraft, setTestDraft] = useState<Record<string, { title: string; summary: string; findings: string; result: string; author: string }>>({});
   const [testSaving, setTestSaving] = useState<Record<string, boolean>>({});
-  const [draft, setDraft] = useState<DraftRisk>(emptyDraft());
+  const [draft, setDraft] = useState<DraftRisk>(() => prefillRisk ? { ...emptyDraft(), ...prefillRisk, risk_owner: "" } : emptyDraft());
   const [msDraft, setMsDraft] = useState<DraftMisuseScenario>(emptyMsDraft());
-  const [monDraft, setMonDraft] = useState<DraftMonitoringRisk>(emptyMonitoringDraft());
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [libraryRisks, setLibraryRisks] = useState<LibraryRisk[] | null>(null);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [editingRiskId, setEditingRiskId] = useState<string | null>(null);
+  const [editRiskDraft, setEditRiskDraft] = useState<DraftRisk>(emptyDraft());
+  const [editRiskSaving, setEditRiskSaving] = useState(false);
+  const [editRiskErr, setEditRiskErr] = useState("");
+
+  useEffect(() => {
+    if (prefillRisk) setActiveForm("risk");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Soft-delete state (for approved register) ──
   const [pendingDeleteRisks, setPendingDeleteRisks] = useState<Set<string>>(new Set());
-  const [pendingDeleteMits, setPendingDeleteMits] = useState<Set<string>>(new Set());
-  const [pendingDeleteMs, setPendingDeleteMs] = useState<Set<string>>(new Set());
   const [pendingDeleteTasks, setPendingDeleteTasks] = useState<Set<string>>(new Set());
   const [pendingDeleteIncidents, setPendingDeleteIncidents] = useState<Set<string>>(new Set());
+
+  // ── Delete confirmation modal ──
+  const [deleteModal, setDeleteModal] = useState<{ label: string; onConfirm: () => void } | null>(null);
+  function confirmDelete(label: string, onConfirm: () => void) {
+    setDeleteModal({ label, onConfirm });
+  }
 
   // ── Action plan section state ──
   const [tasks, setTasks] = useState<PlanTask[]>([]);
@@ -822,6 +825,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
       if (editable) { onRisksChange(editable.risks); }
       const task = await api.createPlanTask(targetRegister.id, {
         title: taskDraft.title ?? "",
+        description: taskDraft.description ?? "",
         risk_id: taskDraft.risk_id ?? null,
         mitigation_id: taskDraft.mitigation_id ?? null,
         assigned_to: taskDraft.assigned_to ?? null,
@@ -838,13 +842,17 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
 
   async function deleteTask(taskId: string) {
     if (register?.status === "approved") {
-      setPendingDeleteTasks(s => new Set(s).add(taskId));
+      const task = tasks.find(t => t.id === taskId);
+      confirmDelete(`Delete task "${task?.title ?? taskId}"?`, () => {
+        setPendingDeleteTasks(s => new Set(s).add(taskId));
+      });
       return;
     }
     const task = tasks.find(t => t.id === taskId);
-    if (!window.confirm(`Delete task "${task?.title ?? taskId}"? This cannot be undone.`)) return;
-    await api.deletePlanTask(taskId);
-    setTasks(prev => prev.filter(t => t.id !== taskId));
+    confirmDelete(`Delete task "${task?.title ?? taskId}"?`, async () => {
+      await api.deletePlanTask(taskId);
+      setTasks(prev => prev.filter(t => t.id !== taskId));
+    });
   }
 
   async function confirmDeleteTask(taskId: string) {
@@ -926,8 +934,17 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     return task.status;
   }
 
-  function openForm(form: "risk" | "misuse" | "monitoring") {
-    setActiveForm(prev => prev === form ? "none" : form);
+  function closeForm(form: "risk" | "misuse") {
+    setActiveForm("none");
+    setErr("");
+    setLibraryRisks(null);
+    if (form === "risk") setDraft(emptyDraft());
+    if (form === "misuse") setMsDraft(emptyMsDraft());
+  }
+
+  function openForm(form: "risk" | "misuse") {
+    if (activeForm === form) { closeForm(form); return; }
+    setActiveForm(form);
     setErr("");
   }
 
@@ -972,13 +989,17 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
 
   async function deleteIncident(incidentId: string) {
     if (register?.status === "approved") {
-      setPendingDeleteIncidents(s => new Set(s).add(incidentId));
+      const incident = incidents.find(i => i.id === incidentId);
+      confirmDelete(`Delete incident "${incident?.title ?? incidentId}"?`, () => {
+        setPendingDeleteIncidents(s => new Set(s).add(incidentId));
+      });
       return;
     }
     const incident = incidents.find(i => i.id === incidentId);
-    if (!window.confirm(`Delete incident "${incident?.title ?? incidentId}"? This cannot be undone.`)) return;
-    await api.deleteIncident(incidentId);
-    setIncidents(prev => prev.filter(i => i.id !== incidentId));
+    confirmDelete(`Delete incident "${incident?.title ?? incidentId}"?`, async () => {
+      await api.deleteIncident(incidentId);
+      setIncidents(prev => prev.filter(i => i.id !== incidentId));
+    });
   }
 
   async function confirmDeleteIncident(incidentId: string) {
@@ -1030,29 +1051,88 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     }
   }
 
-  async function confirmRisk(risk: RiskEntry) {
+  function roleRequired(risk: RiskEntry, role: "engineer" | "officer"): boolean {
+    const key = role === "engineer" ? "ai_engineer" : "ai_compliance_officer";
+    return (risk.responsible_role ?? "").split(",").map(s => s.trim()).filter(Boolean).includes(key);
+  }
+
+  function canFullyConfirm(risk: RiskEntry): boolean {
+    const engReq = roleRequired(risk, "engineer");
+    const offReq = roleRequired(risk, "officer");
+    if (!engReq && !offReq) return true;
+    const engOk = !engReq || risk.engineer_confirmed || risk.engineer_declined;
+    const offOk = !offReq || risk.officer_confirmed || risk.officer_declined;
+    return engOk && offOk;
+  }
+
+  async function applyRolePatch(risk: RiskEntry, rolePatch: Partial<RiskEntry>) {
     const editable = await onEnsureEditable();
     const currentRisks = editable?.risks ?? risks;
     if (editable) { onRisksChange(editable.risks); }
     const targetId = editable ? (currentRisks.find(r => r.title === risk.title)?.id ?? risk.id) : risk.id;
-    const updated = await api.patchRisk(targetId, { status: "confirmed" });
+    const merged = { ...risk, ...rolePatch };
+    const patch: Partial<RiskEntry> = { ...rolePatch };
+    if (canFullyConfirm(merged) && merged.status !== "confirmed") {
+      patch.status = "confirmed";
+      if (merged.source === "pending_library" && !merged.library_risk_id) {
+        try {
+          const libRisk = await api.createLibraryRisk({
+            title: merged.title, description: merged.description, category: merged.category,
+            severity: merged.severity, likelihood: merged.likelihood,
+            affects_vulnerable_groups: merged.affects_vulnerable_groups, affects_children: false,
+            suggested_mitigation: merged.impact, source: "manual",
+          });
+          patch.library_risk_id = libRisk.id;
+          patch.source = "manual";
+        } catch { /* non-fatal */ }
+      }
+    }
+    const updated = await api.patchRisk(targetId, patch);
     onRisksChange(currentRisks.map(r => r.id === targetId ? { ...r, ...updated, misuse_scenarios: r.misuse_scenarios, mitigations: r.mitigations } : r));
+  }
+
+  async function confirmAsRole(risk: RiskEntry, role: "engineer" | "officer") {
+    const patch: Partial<RiskEntry> = role === "engineer"
+      ? { engineer_confirmed: true, engineer_declined: false }
+      : { officer_confirmed: true, officer_declined: false };
+    await applyRolePatch(risk, patch);
+  }
+
+  async function dismissAsRole(risk: RiskEntry) {
+    await applyRolePatch(risk, { status: "dismissed" });
+  }
+
+  async function declineAsRole(risk: RiskEntry, role: "engineer" | "officer") {
+    const patch: Partial<RiskEntry> = role === "engineer"
+      ? { engineer_declined: true, engineer_confirmed: false }
+      : { officer_declined: true, officer_confirmed: false };
+    await applyRolePatch(risk, patch);
+  }
+
+  async function undoDeclineAsRole(risk: RiskEntry, role: "engineer" | "officer") {
+    const patch: Partial<RiskEntry> = role === "engineer"
+      ? { engineer_declined: false }
+      : { officer_declined: false };
+    await applyRolePatch(risk, patch);
+  }
+
+  async function confirmRisk(risk: RiskEntry) {
+    // Global override: mark engineer+officer confirmed if required, then confirm
+    const patch: Partial<RiskEntry> = { status: "confirmed" };
+    if (roleRequired(risk, "engineer")) patch.engineer_confirmed = true;
+    if (roleRequired(risk, "officer")) patch.officer_confirmed = true;
+    await applyRolePatch(risk, patch);
   }
 
   async function dismissRisk(risk: RiskEntry) {
-    const editable = await onEnsureEditable();
-    const currentRisks = editable?.risks ?? risks;
-    if (editable) { onRisksChange(editable.risks); }
-    const targetId = editable ? (currentRisks.find(r => r.title === risk.title)?.id ?? risk.id) : risk.id;
-    const updated = await api.patchRisk(targetId, { status: "dismissed" });
-    onRisksChange(currentRisks.map(r => r.id === targetId ? { ...r, ...updated, misuse_scenarios: r.misuse_scenarios, mitigations: r.mitigations } : r));
+    await applyRolePatch(risk, { status: "dismissed" });
   }
 
-  async function addRisk() {
+  async function addRisk(uploadToLibrary = false) {
     if (!draft.title.trim()) { setErr("Short description is required."); return; }
     if (draft.categories.length === 0) { setErr("Impact category is required."); return; }
     if (draft.affects_vulnerable_groups && !draft.vulnerable_groups.trim()) {
-      setErr("Vulnerable groups field is mandatory when 'affects vulnerable groups' is checked (Art. 9(9)).");
+      setErr("Vulnerable groups field is mandatory when 'affects vulnerable groups' is checked.");
       return;
     }
     setSaving(true); setErr("");
@@ -1062,6 +1142,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
       if (!targetRegister) { setErr("No register available."); return; }
       if (editable) { onRisksChange(editable.risks); }
       const { categories, ...draftRest } = draft;
+
+      let libraryRiskId = draft.library_risk_id;
+      const pendingLibraryUpload = uploadToLibrary && !libraryRiskId;
+
       const created = await api.createRisk(targetRegister.id, {
         ...draftRest,
         category: categories.join(","),
@@ -1069,10 +1153,13 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
           draft.vulnerable_groups ? draft.vulnerable_groups.split(",").map(s => s.trim()).filter(Boolean) : []
         ),
         risk_level_autocalculated: calcRiskLevel(draft.severity, draft.likelihood),
-        due_date: draft.due_date || null,
+        deadline: draft.due_date || null,
         responsible_role: draft.responsible_role.length ? draft.responsible_role.join(",") : null,
+        engineer_email: draft.engineer_email || null,
+        officer_email: draft.officer_email || null,
         date_of_assessment: draft.date_of_identification || null,
-        source: "manual",
+        source: pendingLibraryUpload ? "pending_library" : "manual",
+        library_risk_id: libraryRiskId ?? null,
       });
       const baseRisks = editable?.risks ?? risks;
       onRisksChange([...baseRisks, created]);
@@ -1080,6 +1167,64 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
       setActiveForm("none");
     } catch (e) { setErr(String(e)); }
     finally { setSaving(false); }
+  }
+
+  function startEditRisk(r: RiskEntry) {
+    const roles = (r.responsible_role ?? "").split(",").map(s => s.trim()).filter(Boolean);
+    setEditRiskDraft({
+      title: r.title,
+      description: r.description,
+      categories: r.category ? r.category.split(",").map(s => s.trim()).filter(Boolean) : [],
+      affects_vulnerable_groups: r.affects_vulnerable_groups,
+      vulnerable_groups: (() => { try { return (JSON.parse(r.vulnerable_groups) as string[]).join(", "); } catch { return r.vulnerable_groups; } })(),
+      vulnerable_group_impact: "",
+      severity: r.severity,
+      likelihood: r.likelihood,
+      risk_owner: r.risk_owner ?? "",
+      due_date: r.deadline ? (typeof r.deadline === "string" ? r.deadline.slice(0, 10) : "") : "",
+      ai_lifecycle_phase: r.ai_lifecycle_phase ?? "",
+      impact: r.impact ?? "",
+      responsible_role: roles,
+      date_of_identification: r.date_of_assessment ? (typeof r.date_of_assessment === "string" ? r.date_of_assessment.slice(0, 10) : "") : "",
+      library_risk_id: r.library_risk_id ?? undefined,
+      engineer_email: r.engineer_email ?? "",
+      officer_email: r.officer_email ?? "",
+    });
+    setEditRiskErr("");
+    setEditingRiskId(r.id);
+  }
+
+  async function saveEditRisk() {
+    if (!editRiskDraft.title.trim()) { setEditRiskErr("Short description is required."); return; }
+    if (editRiskDraft.categories.length === 0) { setEditRiskErr("Impact category is required."); return; }
+    setEditRiskSaving(true); setEditRiskErr("");
+    try {
+      const { categories, ...rest } = editRiskDraft;
+      const patch: Partial<RiskEntry> = {
+        title: rest.title,
+        description: rest.description,
+        category: categories.join(","),
+        affects_vulnerable_groups: rest.affects_vulnerable_groups,
+        vulnerable_groups: JSON.stringify(
+          rest.vulnerable_groups ? rest.vulnerable_groups.split(",").map(s => s.trim()).filter(Boolean) : []
+        ),
+        severity: rest.severity,
+        likelihood: rest.likelihood,
+        risk_level_autocalculated: calcRiskLevel(rest.severity, rest.likelihood),
+        risk_owner: rest.risk_owner || null,
+        deadline: rest.due_date || null,
+        ai_lifecycle_phase: rest.ai_lifecycle_phase || null,
+        impact: rest.impact,
+        responsible_role: rest.responsible_role.length ? rest.responsible_role.join(",") : null,
+        engineer_email: rest.engineer_email || null,
+        officer_email: rest.officer_email || null,
+        date_of_assessment: rest.date_of_identification || null,
+      };
+      const updated = await api.patchRisk(editingRiskId!, patch);
+      onRisksChange(risks.map(r => r.id === editingRiskId ? { ...r, ...updated, misuse_scenarios: r.misuse_scenarios, mitigations: r.mitigations } : r));
+      setEditingRiskId(null);
+    } catch (e) { setEditRiskErr(String(e)); }
+    finally { setEditRiskSaving(false); }
   }
 
   async function addMisuseScenario() {
@@ -1107,52 +1252,19 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     finally { setSaving(false); }
   }
 
-  async function addMonitoringRisk() {
-    const d = monDraft;
-    if (!d.title.trim()) { setErr("Risk title is required."); return; }
-    if (!d.category) { setErr("Impact category is required."); return; }
-    setSaving(true); setErr("");
-    try {
-      const editable = await onEnsureEditable();
-      const targetRegister = editable?.register ?? register;
-      if (!targetRegister) { setErr("No register available."); return; }
-      if (editable) { onRisksChange(editable.risks); }
-      const created = await api.createRisk(targetRegister.id, {
-        title: d.title,
-        description: `${d.description}${d.observation ? `\n\nObservation: ${d.observation}` : ""}`,
-        category: d.category,
-        source: "monitoring",
-        severity: d.severity,
-        likelihood: d.likelihood,
-        risk_owner: d.risk_owner,
-        due_date: d.due_date || null,
-        risk_level_autocalculated: calcRiskLevel(d.severity, d.likelihood),
-        affects_vulnerable_groups: d.affects_vulnerable_groups,
-        vulnerable_groups: JSON.stringify(
-          d.affects_vulnerable_groups && d.vulnerable_groups
-            ? d.vulnerable_groups.split(",").map(s => s.trim()).filter(Boolean)
-            : []
-        ),
-        ai_lifecycle_phase: "operation",
-        impact: d.affects_vulnerable_groups && d.vulnerable_group_impact ? d.vulnerable_group_impact : "",
-      });
-      const baseRisksM = editable?.risks ?? risks;
-      onRisksChange([...baseRisksM, created]);
-      setMonDraft(emptyMonitoringDraft());
-      setActiveForm("none");
-    } catch (e) { setErr(String(e)); }
-    finally { setSaving(false); }
-  }
-
   async function removeRisk(id: string) {
     if (register?.status === "approved") {
-      setPendingDeleteRisks(s => new Set(s).add(id));
+      const risk = risks.find(r => r.id === id);
+      confirmDelete(`Delete risk "${risk?.title ?? id}"?`, () => {
+        setPendingDeleteRisks(s => new Set(s).add(id));
+      });
       return;
     }
     const risk = risks.find(r => r.id === id);
-    if (!window.confirm(`Delete risk "${risk?.title ?? id}"? This cannot be undone.`)) return;
-    await api.deleteRisk(id);
-    onRisksChange(risks.filter(r => r.id !== id));
+    confirmDelete(`Delete risk "${risk?.title ?? id}"?`, async () => {
+      await api.deleteRisk(id);
+      onRisksChange(risks.filter(r => r.id !== id));
+    });
   }
 
   async function confirmDeleteRisk(id: string) {
@@ -1297,7 +1409,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
 
   async function handleApproveSubmit() {
     if (risks.length === 0) { setApproveErr("Cannot approve: at least one risk is required."); setApproveErrModal(true); return; }
-    if (!approveArgument.trim()) { setApproveErr("Expert sign-off argument is required (Art. 9(5))."); setApproveErrModal(true); return; }
+    if (!approveArgument.trim()) { setApproveErr("Expert sign-off argument is required."); setApproveErrModal(true); return; }
     // Gate 1: unacceptable residual → must have a plan task linked via risk_id
     const unacceptableWithoutTask = risks.filter(r => r.residual_status === "unacceptable" && !tasks.some(t => t.risk_id === r.id));
     if (unacceptableWithoutTask.length > 0) {
@@ -1327,30 +1439,71 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
 
   return (
     <div>
-      {/* ── Approved banner ── */}
-      {register?.status === "approved" && (
-        <Card style={{ background: "#d5f5e3", border: "1px solid #9cdcb8", marginBottom: 20 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#1a5c35", marginBottom: 8 }}>✓ Register approved</div>
-          <div style={{ fontSize: 13, color: "#1a5c35" }}>
-            Approved by <strong>{register.approver_username}</strong> on {register.approved_at ? new Date(register.approved_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}.
-          </div>
-          {register.residual_risk_acceptable !== null && (
-            <div style={{ marginTop: 8, fontSize: 13, color: "#1a5c35" }}>
-              Residual risk: <strong>{register.residual_risk_acceptable ? "Acceptable" : "Not acceptable"}</strong>
+      {/* ── Prohibited + Approved banner ── */}
+      {register?.status === "approved" && (() => {
+        const isProhibited = registryInfo?.tier === "prohibited";
+        const SIX_MONTHS_MS = 6 * 30 * 24 * 60 * 60 * 1000;
+        const lastCompleted = register.last_assessment_completed_at ? new Date(register.last_assessment_completed_at).getTime() : null;
+        const isStale = lastCompleted === null || (Date.now() - lastCompleted > SIX_MONTHS_MS);
+        const reasons: string[] = [
+          ...openTriggers.map(t => t.trigger_reason),
+          ...(isStale && openTriggers.length === 0 ? ["Scheduled 6-month review due."] : []),
+        ];
+        const hasIssues = isProhibited || reasons.length > 0;
+        const bg = hasIssues ? "#ffd5d5" : "#d5f5e3";
+        const border = hasIssues ? "#f5b8b8" : "#9cdcb8";
+        const textColor = hasIssues ? "#8b0000" : "#1a5c35";
+        const reasonBorder = hasIssues ? "#f5b8b8" : "#9cdcb8";
+        const reasonColor = hasIssues ? "#8b0000" : "#1a5c35";
+        return (
+          <Card style={{ background: bg, border: `1px solid ${border}`, marginBottom: 20 }}>
+            {isProhibited && (
+              <div style={{ fontSize: 16, fontWeight: 700, color: textColor, marginBottom: 8 }}>
+                PROHIBITED SYSTEM
+              </div>
+            )}
+            <div style={{ fontSize: 16, fontWeight: 700, color: textColor, marginBottom: 8 }}>
+              {hasIssues ? "⚠ Approval expired" : "✓ Risk Management approved"}
             </div>
-          )}
-          {register.residual_risk_argument && (
-            <div style={{ marginTop: 4, fontSize: 12, color: "var(--text)" }}>{register.residual_risk_argument}</div>
-          )}
+            <div style={{ fontSize: 13, color: textColor }}>
+              Approved by <strong>{register.approver_username}</strong> on {register.approved_at ? new Date(register.approved_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}.
+            </div>
+            {register.residual_risk_acceptable !== null && (
+              <div style={{ marginTop: 8, fontSize: 13, color: textColor }}>
+                Residual risk: <strong>{register.residual_risk_acceptable ? "Acceptable" : "Not acceptable"}</strong>
+              </div>
+            )}
+            {register.residual_risk_argument && (
+              <div style={{ marginTop: 4, fontSize: 12, color: "var(--text)" }}>{register.residual_risk_argument}</div>
+            )}
+            {(isProhibited || reasons.length > 0) && (
+              <div style={{ marginTop: 12, borderTop: `1px solid ${reasonBorder}`, paddingTop: 10 }}>
+                {isProhibited && (
+                  <div style={{ fontSize: 12, color: reasonColor, marginBottom: 4 }}>• This system is classified as prohibited under the EU AI Act. It must not be deployed under any circumstances.</div>
+                )}
+                {reasons.map((r, i) => (
+                  <div key={i} style={{ fontSize: 12, color: reasonColor, marginBottom: 4 }}>• {r}</div>
+                ))}
+              </div>
+            )}
+          </Card>
+        );
+      })()}
+
+      {/* ── Prohibited banner (draft/non-approved) ── */}
+      {registryInfo?.tier === "prohibited" && register?.status !== "approved" && (
+        <Card style={{ background: "#ffd5d5", border: "1px solid #f5b8b8", marginBottom: 20 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#8b0000", marginBottom: 4 }}>PROHIBITED SYSTEM</div>
+          <div style={{ fontSize: 13, color: "#8b0000" }}>• This system is classified as prohibited under the EU AI Act. It must not be deployed under any circumstances.</div>
         </Card>
       )}
 
       {/* ── Reopened banner ── */}
       {register?.status !== "approved" && register?.last_assessment_completed_at && (
         <Card style={{ background: "#fff3c4", border: "1px solid #f6c343", marginBottom: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#92400e", marginBottom: 4 }}>⚠ Register reopened</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#92400e", marginBottom: 4 }}>⚠ Risk Management draft</div>
           <div style={{ fontSize: 13, color: "#92400e" }}>
-            A change was made after the last approval. The register must be reviewed and re-approved before it is considered valid.
+            A change was made after the last approval. The register must be reviewed and approved before it is considered valid.
           </div>
         </Card>
       )}
@@ -1491,6 +1644,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                     Dismiss
                   </button>
                 )}
+                <button onClick={() => { setExpandedRisk(e => ({ ...e, [r.id]: true })); startEditRisk(r); }}
+                  style={{ fontSize: 11, padding: "4px 10px", background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}>
+                  Edit
+                </button>
                 <button onClick={() => removeRisk(r.id)}
                   style={{ background: "transparent", border: "none", cursor: "pointer", color: isPendingDelete ? "#dc2626" : "var(--text-secondary)", fontSize: 16, padding: "0 2px" }}>×</button>
               </div>
@@ -1499,6 +1656,93 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
             {/* Expandable detail + manage section */}
             {isExpanded && (
               <div style={{ padding: "0 16px 16px", borderTop: "1px solid #f4f4f5" }}>
+
+                {/* ── Inline edit form ── */}
+                {editingRiskId === r.id && (() => {
+                  const ed = editRiskDraft;
+                  const setEd = setEditRiskDraft;
+                  return (
+                    <div style={{ marginTop: 14, marginBottom: 14, padding: 14, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 12 }}>Edit risk</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <Label required>Short description</Label>
+                          <input value={ed.title} onChange={e => setEd(d => ({ ...d, title: e.target.value }))}
+                            style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "#fff", boxSizing: "border-box" }} />
+                        </div>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <Label>Description</Label>
+                          <Textarea value={ed.description} onChange={v => setEd(d => ({ ...d, description: v }))} rows={2} placeholder="" />
+                        </div>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <Label required>Impact category</Label>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                            {RISK_CATEGORIES.map(cat => {
+                              const checked = ed.categories.includes(cat.value);
+                              return (
+                                <button key={cat.value} type="button"
+                                  onClick={() => setEd(d => ({ ...d, categories: checked ? d.categories.filter(c => c !== cat.value) : [...d.categories, cat.value] }))}
+                                  style={{ padding: "4px 12px", fontSize: 12, borderRadius: 20, cursor: "pointer", border: `1px solid ${checked ? "var(--brand)" : "var(--border)"}`, background: checked ? "var(--brand)" : "#fff", color: checked ? "#fff" : "var(--text)", fontWeight: checked ? 600 : 400 }}>
+                                  {cat.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Severity</Label>
+                          <Select value={ed.severity} onChange={v => setEd(d => ({ ...d, severity: v }))}
+                            options={[{ value: "severe", label: "Severe" }, { value: "significant", label: "Significant" }, { value: "moderate", label: "Moderate" }, { value: "minor", label: "Minor" }]} />
+                        </div>
+                        <div>
+                          <Label>Likelihood</Label>
+                          <Select value={ed.likelihood} onChange={v => setEd(d => ({ ...d, likelihood: v }))}
+                            options={[{ value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
+                        </div>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <Label>Risk owner</Label>
+                          <Input value={ed.risk_owner} onChange={v => setEd(d => ({ ...d, risk_owner: v }))} placeholder="e.g. jane.doe@company.com" />
+                        </div>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <Label>Impact description</Label>
+                          <Textarea value={ed.impact} onChange={v => setEd(d => ({ ...d, impact: v }))} rows={2} placeholder="" />
+                        </div>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <Label>Risk validator</Label>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                            {[{ value: "ai_engineer", label: "AI Engineer" }, { value: "ai_compliance_officer", label: "Compliance Officer" }].map(opt => {
+                              const checked = ed.responsible_role.includes(opt.value);
+                              return (
+                                <button key={opt.value} type="button"
+                                  onClick={() => setEd(d => ({ ...d, responsible_role: checked ? d.responsible_role.filter(r2 => r2 !== opt.value) : [...d.responsible_role, opt.value] }))}
+                                  style={{ padding: "4px 12px", fontSize: 12, borderRadius: 20, cursor: "pointer", border: `1px solid ${checked ? "var(--brand)" : "var(--border)"}`, background: checked ? "var(--brand)" : "#fff", color: checked ? "#fff" : "var(--text)", fontWeight: checked ? 600 : 400 }}>
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {ed.responsible_role.includes("ai_engineer") && (
+                            <div style={{ marginTop: 8 }}>
+                              <Label>AI Engineer e-mail</Label>
+                              <Input value={ed.engineer_email} onChange={v => setEd(d => ({ ...d, engineer_email: v }))} placeholder="engineer@company.com" />
+                            </div>
+                          )}
+                          {ed.responsible_role.includes("ai_compliance_officer") && (
+                            <div style={{ marginTop: 8 }}>
+                              <Label>Compliance Officer e-mail</Label>
+                              <Input value={ed.officer_email} onChange={v => setEd(d => ({ ...d, officer_email: v }))} placeholder="officer@company.com" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {editRiskErr && <div style={{ color: "#dc2626", fontSize: 12, marginTop: 8 }}>{editRiskErr}</div>}
+                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                        <button onClick={saveEditRisk} disabled={editRiskSaving} className="btn-primary btn-sm">{editRiskSaving ? "Saving…" : "Save changes"}</button>
+                        <button onClick={() => setEditingRiskId(null)} className="btn-ghost btn-sm">Cancel</button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* ── Risk details ── */}
                 <div style={{ marginTop: 12, marginBottom: 14 }}>
@@ -1547,6 +1791,55 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                     </div>
                   )}
                 </div>
+
+                {/* ── Validation ── */}
+                {r.responsible_role && r.responsible_role.trim() && (() => {
+                  const roles: Array<{ role: "engineer" | "officer"; label: string; confirmed: boolean; declined: boolean; email: string | null }> = [];
+                  if (roleRequired(r, "engineer")) roles.push({ role: "engineer", label: "AI Engineer", confirmed: r.engineer_confirmed, declined: r.engineer_declined, email: r.engineer_email });
+                  if (roleRequired(r, "officer")) roles.push({ role: "officer", label: "Compliance Officer", confirmed: r.officer_confirmed, declined: r.officer_declined, email: r.officer_email });
+                  if (roles.length === 0) return null;
+                  return (
+                    <div style={{ marginTop: 14, marginBottom: 14 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Validation</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {roles.map(({ role, label, confirmed, declined, email }) => (
+                          <div key={role} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12, padding: "8px 12px", background: confirmed ? "#f0fdf4" : declined ? "#f9fafb" : "#f8fafc", borderRadius: 8, border: `1px solid ${confirmed ? "#bbf7d0" : declined ? "#e5e7eb" : "#e2e8f0"}` }}>
+                            <span style={{ fontWeight: 600, minWidth: 140 }}>{label}</span>
+                            {email && <span style={{ color: "var(--text-secondary)" }}>{email}</span>}
+                            {confirmed && (
+                              <span style={{ color: "#16a34a", fontWeight: 600 }}>✓ Confirmed</span>
+                            )}
+                            {declined && !confirmed && (
+                              <>
+                                <span style={{ color: "var(--text-secondary)" }}>⊘ Abstained</span>
+                                <button onClick={() => undoDeclineAsRole(r, role)}
+                                  style={{ fontSize: 11, padding: "3px 10px", background: "#fff", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", color: "var(--text)" }}>
+                                  Undo
+                                </button>
+                              </>
+                            )}
+                            {!confirmed && !declined && r.status !== "dismissed" && (
+                              <>
+                                <button onClick={() => confirmAsRole(r, role)}
+                                  style={{ fontSize: 11, padding: "3px 10px", background: "#d5f5e3", color: "#1a5c35", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}>
+                                  ✓ Confirm as {label}
+                                </button>
+                                <button onClick={() => dismissAsRole(r)}
+                                  style={{ fontSize: 11, padding: "3px 10px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 4, cursor: "pointer" }}>
+                                  Dismiss
+                                </button>
+                                <button onClick={() => declineAsRole(r, role)}
+                                  style={{ fontSize: 11, padding: "3px 10px", background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}>
+                                  Not my decision
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* ── Mitigations ── */}
                 <div style={{ marginTop: 14 }}>
@@ -1873,7 +2166,66 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
       {/* Form: Add risk */}
       {activeForm === "risk" && (
         <Card>
-          <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Add risk</h3>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Add risk</h3>
+            <button
+              onClick={() => {
+                if (libraryRisks === null && !libraryLoading) {
+                  setLibraryLoading(true);
+                  api.getRiskLibrary()
+                    .then(rs => setLibraryRisks(rs))
+                    .catch(() => setLibraryRisks([]))
+                    .finally(() => setLibraryLoading(false));
+                }
+              }}
+              style={{
+                fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 6, cursor: "pointer",
+                border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-secondary)",
+              }}
+            >
+              {libraryLoading ? "Loading…" : "Import from library"}
+            </button>
+          </div>
+
+          {/* Library import picker */}
+          {(libraryRisks !== null || libraryLoading) && (
+            <div style={{ marginBottom: 14, padding: "10px 12px", background: "#f0f4ff", border: "1px solid #c7d7f5", borderRadius: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#1147E9", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.4px" }}>
+                Import from Risk Library
+              </div>
+              {libraryLoading ? (
+                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Loading library…</div>
+              ) : libraryRisks && libraryRisks.length === 0 ? (
+                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>No risks in the library yet.</div>
+              ) : (
+                <select
+                  defaultValue=""
+                  onChange={e => {
+                    const r = libraryRisks?.find(r => r.id === e.target.value);
+                    if (!r) return;
+                    setDraft(d => ({
+                      ...d,
+                      title: r.title,
+                      description: r.description,
+                      categories: r.category ? [r.category] : d.categories,
+                      severity: r.severity,
+                      likelihood: r.likelihood,
+                      affects_vulnerable_groups: r.affects_vulnerable_groups,
+                      impact: r.suggested_mitigation,
+                      library_risk_id: r.id,
+                    }));
+                    setLibraryRisks(null);
+                  }}
+                  style={{ width: "100%", border: "1px solid #c7d7f5", borderRadius: 6, padding: "6px 10px", fontSize: 12, background: "#fff", boxSizing: "border-box" }}
+                >
+                  <option value="">— Select a library risk to pre-fill —</option>
+                  {libraryRisks?.map(r => (
+                    <option key={r.id} value={r.id}>{r.title}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div style={{ gridColumn: "1 / -1" }}>
               <Label required>Short description</Label>
@@ -1961,6 +2313,22 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                   );
                 })}
               </div>
+              {draft.responsible_role.includes("ai_engineer") && (
+                <div style={{ marginTop: 8 }}>
+                  <Label>AI Engineer e-mail</Label>
+                  <Input value={draft.engineer_email}
+                    onChange={v => setDraft(d => ({ ...d, engineer_email: v }))}
+                    placeholder="engineer@company.com" />
+                </div>
+              )}
+              {draft.responsible_role.includes("ai_compliance_officer") && (
+                <div style={{ marginTop: 8 }}>
+                  <Label>Compliance Officer e-mail</Label>
+                  <Input value={draft.officer_email}
+                    onChange={v => setDraft(d => ({ ...d, officer_email: v }))}
+                    placeholder="officer@company.com" />
+                </div>
+              )}
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
               <Label>Impact description</Label>
@@ -1994,9 +2362,14 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
             </div>
           </div>
           <ErrorMsg msg={err} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={addRisk} disabled={saving} className="btn-primary btn-sm">{saving ? "Adding…" : "+ Add risk"}</button>
-            <button onClick={() => setActiveForm("none")} className="btn-ghost btn-sm">Cancel</button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={() => addRisk(false)} disabled={saving} className="btn-primary btn-sm">{saving ? "Adding…" : "+ Add risk"}</button>
+            {!draft.library_risk_id && (
+              <button onClick={() => addRisk(true)} disabled={saving} className="btn-secondary btn-sm" title="Save this risk and also add it to the shared Risk Library">
+                {saving ? "Adding…" : "+ Add risk & upload to library"}
+              </button>
+            )}
+            <button onClick={() => closeForm("risk")} className="btn-ghost btn-sm">Cancel</button>
           </div>
         </Card>
       )}
@@ -2004,7 +2377,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
       {/* Form: Add misuse scenario */}
       {activeForm === "misuse" && (
         <Card>
-          <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Add misuse scenario <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-secondary)" }}>Art. 9(2)(b)</span></h3>
+          <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Add misuse scenario</h3>
           {risks.length === 0 ? (
             <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>Add at least one risk first before adding misuse scenarios.</div>
           ) : (
@@ -2100,7 +2473,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
           {risks.length > 0 && (
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={addMisuseScenario} disabled={saving} className="btn-primary btn-sm">{saving ? "Adding…" : "+ Add scenario"}</button>
-              <button onClick={() => setActiveForm("none")} className="btn-ghost btn-sm">Cancel</button>
+              <button onClick={() => closeForm("misuse")} className="btn-ghost btn-sm">Cancel</button>
             </div>
           )}
         </Card>
@@ -2672,7 +3045,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
               {approveSaving ? "Approving…" : "Approve register"}
             </button>
             <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
-              Approving creates a 6-month re-assessment trigger.
+              Approving creates a 6-month review trigger.
             </div>
           </div>
         </Card>
@@ -2795,10 +3168,33 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
         </div>
       )}
 
+      {/* ── Delete confirmation modal ── */}
+      {deleteModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "#fff", borderRadius: 10, padding: "28px 32px", maxWidth: 400, width: "90%", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Confirm deletion</div>
+            <div style={{ fontSize: 14, color: "#374151", marginBottom: 24 }}>{deleteModal.label}</div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setDeleteModal(null)}
+                style={{ padding: "8px 18px", borderRadius: 6, border: "1px solid var(--border)", background: "#fff", cursor: "pointer", fontSize: 13 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { deleteModal.onConfirm(); setDeleteModal(null); }}
+                style={{ padding: "8px 18px", borderRadius: 6, border: "none", background: "#dc2626", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
-
 // ── Archived register summary card ───────────────────────────────────────────
 function ArchivedRegisterCard({ reg, systemName, nextRegisterId }: { reg: RiskRegister; systemName: string; nextRegisterId: string | null }) {
   const [open, setOpen] = useState(false);
@@ -2812,7 +3208,6 @@ function ArchivedRegisterCard({ reg, systemName, nextRegisterId }: { reg: RiskRe
   }, [reg.id, nextRegisterId]);
 
   // Build sets for quick lookup
-  const addedInNext = new Set(diff?.added ?? []);
   const removedInNext = new Set(diff?.removed ?? []);
   const changedInNext = new Map((diff?.changed ?? []).map(c => [c.title, c]));
   const hasChanges = (diff?.added.length ?? 0) > 0 || (diff?.removed.length ?? 0) > 0 || (diff?.changed.length ?? 0) > 0;
@@ -2928,10 +3323,11 @@ function ArchivedRegisterCard({ reg, systemName, nextRegisterId }: { reg: RiskRe
 }
 
 // ── Main wizard ───────────────────────────────────────────────────────────────
-export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
+export default function AssessmentWizardPage({ systemId, systemName, onBack, prefillRisk }: {
   systemId: string;
   systemName: string;
   onBack: () => void;
+  prefillRisk?: Partial<DraftRisk>;
 }) {
   const [register, setRegister] = useState<RiskRegister | null>(null);
   const [archivedRegisters, setArchivedRegisters] = useState<RiskRegister[]>([]);
@@ -2957,17 +3353,6 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
       .catch(() => { /* start fresh */ })
       .finally(() => setLoading(false));
   }, [systemId]);
-
-  async function handleScopeNext(scope: string, notes: string) {
-    if (register && register.status !== "approved") {
-      const updated = await api.patchRegister(register.id, { assessment_scope: scope, notes });
-      setRegister(updated);
-    } else {
-      const created = await api.createRegister(systemId, { assessment_scope: scope, notes });
-      setRegister(created);
-      setRisks([]);
-    }
-  }
 
   async function handleApprove(acceptable: boolean | null, argument: string, registryInfo?: import("../types").RegistrySystemInfo | null) {
     if (!register) return;
@@ -3060,6 +3445,7 @@ export default function AssessmentWizardPage({ systemId, systemName, onBack }: {
         onEnsureEditable={handleEnsureEditable}
         systemName={systemName}
         systemId={systemId}
+        prefillRisk={prefillRisk}
       />
 
       {/* Previous cycles */}

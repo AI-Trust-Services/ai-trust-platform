@@ -1292,8 +1292,6 @@ def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_
             conn.close()
         except Exception as exc:
             print(f"  SQL warning: {exc}", file=sys.stderr)
-
-    # HR: v1=14mo, v2=8mo, v3=2mo, v4=1wk
     hr_regs = [r["id"] for r in sorted(_req(RISK_BASE, f"/v1/systems/{hr_id}/registers"), key=lambda r: r["created_at"])]
     for reg_id, offset in zip(hr_regs, ["14 months", "8 months", "2 months", "1 week"]):
         psql(f"UPDATE risk_registers SET created_at=NOW()-INTERVAL '{offset}', "
@@ -1313,7 +1311,7 @@ def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_
     psql(f"INSERT INTO reassessment_triggers "
          f"(id,ai_system_id,trigger_type,trigger_reason,triggered_at,acknowledged) VALUES "
          f"('TRG-DEMO-CR01','{cr_id}','scheduled_6_month',"
-         f"'Scheduled 6-month re-assessment due (Art. 9(1)).',"
+         f"'Scheduled 6-month review due.',"
          f"NOW()-INTERVAL '1 month',false);")
 
     # Customer Support: v1=12mo, v2=9mo → most recent >6mo → Overdue
@@ -1387,7 +1385,121 @@ def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_
     psql(f"UPDATE ai_systems SET org_role=NULL WHERE id='{nr_id}';")
     psql(f"UPDATE reassessment_triggers SET acknowledged=true WHERE ai_system_id='{nr_id}';")
 
+    _seed_risk_library(psql)
     print("  Dates updated.")
+
+
+def _seed_risk_library(psql):
+    """Insert example entries into library_risks and library_incidents."""
+    psql("""
+        INSERT INTO library_risks
+            (id, title, description, category, affects_vulnerable_groups, affects_children,
+             severity, likelihood, suggested_mitigation, source)
+        VALUES
+        (
+            'LRK-DEMO0001',
+            'Discriminatory outcomes due to biased training data',
+            'AI systems trained on historical data may encode and amplify existing societal biases, '
+            'leading to systematically unfair outcomes for protected groups such as women, ethnic minorities, '
+            'or older workers. Proxy variables (postcode, job title) often carry demographic signal even when '
+            'protected attributes are explicitly excluded.',
+            'fairness',
+            TRUE,
+            FALSE,
+            'high',
+            'likely',
+            'Conduct pre-training data audit for demographic imbalance. Apply fairness constraints (demographic parity '
+            'or equalised odds) during model training. Run monthly bias audits on live decisions with disparity '
+            'thresholds triggering retraining. Remove known proxy variables from feature set.',
+            'EU AI Act Art. 9(2)(a), IEEE P7003, NIST AI RMF GOVERN 6.2'
+        ),
+        (
+            'LRK-DEMO0002',
+            'Over-reliance on AI output by human operators',
+            'Human decision-makers tend to defer to AI recommendations without exercising independent judgement, '
+            'especially when AI confidence scores are high or time pressure is present. This automation bias can '
+            'cause errors in the AI output to propagate unchecked into high-stakes decisions (hiring, lending, '
+            'medical diagnosis).',
+            'safety',
+            FALSE,
+            FALSE,
+            'medium',
+            'possible',
+            'Require human reviewers to document an independent assessment before viewing AI output. '
+            'Design UI to de-emphasise AI confidence scores. Run regular "AI-off" drills where staff make '
+            'decisions without AI assistance. Audit deviation rates between AI recommendations and final decisions.',
+            'EU AI Act Art. 9(2)(e), ISO/IEC 42001 Clause 8.4'
+        ),
+        (
+            'LRK-DEMO0003',
+            'Hallucination and factual errors in generative AI outputs',
+            'Large language models may generate plausible but factually incorrect information (hallucinations), '
+            'which can mislead users, create legal liability, or cause harm when acting on wrong information. '
+            'Risk is elevated in regulated domains (medical, legal, financial) and when retrieval-augmented '
+            'generation (RAG) pipelines are absent or poorly calibrated.',
+            'reliability',
+            FALSE,
+            FALSE,
+            'medium',
+            'likely',
+            'Ground outputs via retrieval-augmented generation (RAG) against authoritative knowledge bases. '
+            'Add confidence thresholds that route low-confidence responses to human agents. '
+            'Conduct automated factual accuracy benchmarking before each deployment. '
+            'Display uncertainty indicators to end users.',
+            'EU AI Act Art. 13 (transparency), NIST AI RMF MANAGE 2.2'
+        )
+        ON CONFLICT (id) DO NOTHING;
+    """)
+    psql("""
+        INSERT INTO library_incidents
+            (id, risk_id, title, description, occurred_at, source_url)
+        VALUES
+        (
+            'LIN-DEMO0001',
+            'LRK-DEMO0001',
+            'Amazon scraps AI recruiting tool after gender bias found',
+            'Amazon''s internal ML recruiting tool, trained on a decade of CVs, learned to penalise resumes that '
+            'included the word "women''s" and downgraded graduates of all-women''s colleges. The system was '
+            'scrapped in 2018 after an internal audit revealed systematic gender bias.',
+            '2018-10-10',
+            'https://www.reuters.com/article/us-amazon-com-jobs-automation-insight-idUSKCN1MK08G'
+        ),
+        (
+            'LIN-DEMO0002',
+            'LRK-DEMO0001',
+            'UK Exam Board A-Level results downgraded by algorithmic bias',
+            'In 2020, an Ofqual algorithm used to award A-level grades during COVID-19 lockdowns '
+            'systematically downgraded results for students from state schools relative to private schools. '
+            'The algorithm weighted historical school performance, disadvantaging high-performing students '
+            'at historically lower-performing schools.',
+            '2020-08-13',
+            'https://www.theguardian.com/education/2020/aug/13/england-a-levels-results-algorithm-grade-inflation'
+        ),
+        (
+            'LIN-DEMO0003',
+            'LRK-DEMO0002',
+            'Boeing 737 MAX crashes linked to over-reliance on automated MCAS',
+            'The MCAS automated stabilisation system on Boeing 737 MAX aircraft activated based on a single '
+            'sensor reading and repeatedly pushed the nose down. Pilots over-relied on automation and did not '
+            'manually override in time. Two crashes killed 346 people. Root cause included inadequate '
+            'crew training and automation bias.',
+            '2019-03-10',
+            'https://www.boeing.com/737-max-updates'
+        ),
+        (
+            'LIN-DEMO0004',
+            'LRK-DEMO0003',
+            'Air Canada chatbot hallucinated a bereavement fare policy',
+            'Air Canada''s AI customer support chatbot told a passenger he could book a full-price ticket and '
+            'apply for a bereavement discount retroactively — a policy that did not exist. A Canadian tribunal '
+            'ruled Air Canada liable for its chatbot''s misinformation, setting a precedent for AI '
+            'output liability.',
+            '2024-02-14',
+            'https://www.theguardian.com/world/2024/feb/16/air-canada-chatbot-misinformation-bereavement-fare-lawsuit'
+        )
+        ON CONFLICT (id) DO NOTHING;
+    """)
+    print("  Risk library seeded (3 risks, 4 incidents).")
 
 
 if __name__ == "__main__":

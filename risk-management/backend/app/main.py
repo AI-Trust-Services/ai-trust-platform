@@ -12,7 +12,7 @@ from sqlalchemy import text
 
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_persistence import SessionLocal
-from app.routers import registers, risks, triggers, test_reports, plan_tasks, incidents, registry_proxy
+from app.routers import registers, risks, triggers, test_reports, plan_tasks, incidents, registry_proxy, risk_library
 
 logger = get_logger(__name__)
 
@@ -82,3 +82,4 @@ app.include_router(test_reports.router, prefix="/v1")
 app.include_router(plan_tasks.router, prefix="/v1")
 app.include_router(incidents.router, prefix="/v1")
 app.include_router(registry_proxy.router, prefix="/v1")
+app.include_router(risk_library.router, prefix="/v1")
