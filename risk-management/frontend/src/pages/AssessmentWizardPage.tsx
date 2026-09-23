@@ -653,7 +653,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
 
   useEffect(() => {
     api.getTriggers(systemId)
-      .then(ts => setOpenTriggers(ts.filter(t => !t.acknowledged)))
+      .then(ts => setOpenTriggers(ts.filter(t => !t.acknowledged && new Date(t.triggered_at) <= new Date())))
       .catch(() => {});
   }, [systemId, register?.status]);
 
@@ -670,6 +670,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   const [mitDraft, setMitDraft] = useState<Record<string, Partial<MitigationMeasure>>>({});
   const [residualDraft, setResidualDraft] = useState<Record<string, { residual_status: string; residual_likelihood: string; residual_severity: string; date_of_assessment: string; review_notes: string }>>({});
   const [residualSaving, setResidualSaving] = useState<Record<string, boolean>>({});
+  const [residualErr, setResidualErr] = useState<Record<string, string>>({});
   const [mitSaving, setMitSaving] = useState<Record<string, boolean>>({});
   const [mitErr, setMitErr] = useState<Record<string, string>>({});
   const [testReports, setTestReports] = useState<Record<string, TestReport[]>>({});
@@ -758,6 +759,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   });
   const [regResidualSaving, setRegResidualSaving] = useState(false);
   const [regResidualSaved, setRegResidualSaved] = useState(false);
+  const [regResidualErr, setRegResidualErr] = useState("");
 
   useEffect(() => {
     if (!register) return;
@@ -794,7 +796,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     setReviewDateErr("");
     setSavingDate(true);
     try {
-      const updated = await api.patchRegister(register.id, { next_review_date: value } as Partial<RiskRegister>);
+      const editable = await onEnsureEditable();
+      const targetRegister = editable?.register ?? register;
+      if (editable) { onRisksChange(editable.risks); }
+      const updated = await api.patchRegister(targetRegister.id, { next_review_date: value } as Partial<RiskRegister>);
       onRegisterUpdated(updated);
       setEditingDate(false);
     } finally {
@@ -806,7 +811,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     if (!register) return;
     setSavingReviewer(true);
     try {
-      const updated = await api.patchRegister(register.id, { reviewer_username: value } as Partial<RiskRegister>);
+      const editable = await onEnsureEditable();
+      const targetRegister = editable?.register ?? register;
+      if (editable) { onRisksChange(editable.risks); }
+      const updated = await api.patchRegister(targetRegister.id, { reviewer_username: value } as Partial<RiskRegister>);
       onRegisterUpdated(updated);
       setEditingReviewer(false);
     } finally {
@@ -1116,11 +1124,30 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     await applyRolePatch(risk, patch);
   }
 
+  async function undoConfirmAsRole(risk: RiskEntry, role: "engineer" | "officer") {
+    const patch: Partial<RiskEntry> = role === "engineer"
+      ? { engineer_confirmed: false }
+      : { officer_confirmed: false };
+    if (risk.status === "confirmed") patch.status = "open";
+    await applyRolePatch(risk, patch);
+  }
+
+  async function undoDismiss(risk: RiskEntry) {
+    await applyRolePatch(risk, { status: "open" });
+  }
+
   async function confirmRisk(risk: RiskEntry) {
     // Global override: mark engineer+officer confirmed if required, then confirm
     const patch: Partial<RiskEntry> = { status: "confirmed" };
     if (roleRequired(risk, "engineer")) patch.engineer_confirmed = true;
     if (roleRequired(risk, "officer")) patch.officer_confirmed = true;
+    await applyRolePatch(risk, patch);
+  }
+
+  async function unconfirmRisk(risk: RiskEntry) {
+    const patch: Partial<RiskEntry> = { status: "open" };
+    if (roleRequired(risk, "engineer")) patch.engineer_confirmed = false;
+    if (roleRequired(risk, "officer")) patch.officer_confirmed = false;
     await applyRolePatch(risk, patch);
   }
 
@@ -1323,6 +1350,14 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     const rs_status = d.residual_status ?? savedRisk?.residual_status ?? "none";
     const rl = rs_status !== "none" ? (d.residual_likelihood ?? savedRisk?.residual_likelihood ?? "") : "";
     const rs = rs_status !== "none" ? (d.residual_severity ?? savedRisk?.residual_severity ?? "") : "";
+    const prevStatus = savedRisk?.residual_status ?? "none";
+    const prevNotes = (savedRisk?.review_notes ?? "").trim();
+    const nextNotes = (d.review_notes ?? savedRisk?.review_notes ?? "").trim();
+    if (rs_status !== prevStatus && nextNotes === prevNotes) {
+      setResidualErr(e => ({ ...e, [riskId]: "Residual risk status changed — the notes field must be updated to explain the change." }));
+      return;
+    }
+    setResidualErr(e => ({ ...e, [riskId]: "" }));
     setResidualSaving(s => ({ ...s, [riskId]: true }));
     try {
       const editable = await onEnsureEditable();
@@ -1348,8 +1383,19 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
 
   async function saveRegResidual() {
     if (!register) return;
+    const prevAcceptable = register.residual_risk_acceptable ?? null;
+    const prevArgument = (register.residual_risk_argument ?? "").trim();
+    const nextArgument = (regResidualDraft.residual_risk_argument ?? "").trim();
+    if (regResidualDraft.residual_risk_acceptable !== prevAcceptable && nextArgument === prevArgument) {
+      setRegResidualErr("Residual risk status changed — please update the expert sign-off argument to explain the change.");
+      return;
+    }
+    setRegResidualErr("");
     setRegResidualSaving(true);
     try {
+      const editable = await onEnsureEditable();
+      const targetRegister = editable?.register ?? register;
+      if (editable) { onRisksChange(editable.risks); }
       const d = regResidualDraft;
       const patch: Partial<import("../types").RiskRegister> = {
         residual_risk_acceptable: d.residual_risk_acceptable,
@@ -1361,7 +1407,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
           : null,
         residual_date_of_identification: d.residual_date_of_identification || null,
       } as Partial<import("../types").RiskRegister>;
-      const updated = await api.patchRegister(register.id, patch);
+      const updated = await api.patchRegister(targetRegister.id, patch);
       onRegisterUpdated(updated);
       setRegResidualSaved(true);
       setTimeout(() => setRegResidualSaved(false), 2000);
@@ -1625,6 +1671,68 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                   {r.affects_vulnerable_groups && <span style={{ color: "#8b3a00" }}>⚠ vulnerable groups</span>}
                   {r.misuse_scenarios.length > 0 && <span>{r.misuse_scenarios.length} misuse scenario(s)</span>}
                 </div>
+
+                {/* ── Validation bar — visible even while the risk is collapsed ── */}
+                {r.responsible_role && r.responsible_role.trim() && (() => {
+                  const roles: Array<{ role: "engineer" | "officer"; label: string; confirmed: boolean; declined: boolean; email: string | null }> = [];
+                  if (roleRequired(r, "engineer")) roles.push({ role: "engineer", label: "AI Engineer", confirmed: r.engineer_confirmed, declined: r.engineer_declined, email: r.engineer_email });
+                  if (roleRequired(r, "officer")) roles.push({ role: "officer", label: "Compliance Officer", confirmed: r.officer_confirmed, declined: r.officer_declined, email: r.officer_email });
+                  if (roles.length === 0) return null;
+                  return (
+                    <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 8 }} onClick={e => e.stopPropagation()}>
+                      {roles.map(({ role, label, confirmed, declined, email }) => (
+                        <div key={role} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12, padding: "8px 12px", background: confirmed ? "#f0fdf4" : declined ? "#f9fafb" : "#f8fafc", borderRadius: 8, border: `1px solid ${confirmed ? "#bbf7d0" : declined ? "#e5e7eb" : "#e2e8f0"}` }}>
+                          <span style={{ fontWeight: 600, minWidth: 140 }}>{label}</span>
+                          {email && <span style={{ color: "var(--text-secondary)" }}>{email}</span>}
+                          {confirmed && (
+                            <>
+                              <span style={{ color: "#16a34a", fontWeight: 600 }}>✓ Confirmed</span>
+                              <button onClick={() => undoConfirmAsRole(r, role)}
+                                style={{ fontSize: 11, padding: "3px 10px", background: "#fff", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", color: "var(--text)" }}>
+                                Undo
+                              </button>
+                            </>
+                          )}
+                          {declined && !confirmed && (
+                            <>
+                              <span style={{ color: "var(--text-secondary)" }}>⊘ Abstained</span>
+                              <button onClick={() => undoDeclineAsRole(r, role)}
+                                style={{ fontSize: 11, padding: "3px 10px", background: "#fff", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", color: "var(--text)" }}>
+                                Undo
+                              </button>
+                            </>
+                          )}
+                          {r.status === "dismissed" && !confirmed && !declined && (
+                            <>
+                              <span style={{ color: "var(--text-secondary)" }}>⊘ Dismissed</span>
+                              <button onClick={() => undoDismiss(r)}
+                                style={{ fontSize: 11, padding: "3px 10px", background: "#fff", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", color: "var(--text)" }}>
+                                Undo
+                              </button>
+                            </>
+                          )}
+                          {!confirmed && !declined && r.status !== "dismissed" && (
+                            <>
+                              <button onClick={() => confirmAsRole(r, role)}
+                                style={{ fontSize: 11, padding: "3px 10px", background: "#d5f5e3", color: "#1a5c35", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}>
+                                ✓ Confirm as {label}
+                              </button>
+                              <button onClick={() => dismissAsRole(r)}
+                                style={{ fontSize: 11, padding: "3px 10px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 4, cursor: "pointer" }}>
+                                Dismiss
+                              </button>
+                              <button onClick={() => declineAsRole(r, role)}
+                                style={{ fontSize: 11, padding: "3px 10px", background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}>
+                                Not my decision
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
                 {summaryParts.length > 0 && (
                   <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3 }}>
                     {summaryParts.join(" · ")}
@@ -1632,13 +1740,23 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                 )}
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                {r.status !== "confirmed" && (
+                {r.status === "confirmed" ? (
+                  <button onClick={() => unconfirmRisk(r)}
+                    style={{ fontSize: 11, padding: "4px 10px", background: "#fff", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}>
+                    ↩ Undo confirm
+                  </button>
+                ) : (
                   <button onClick={() => confirmRisk(r)}
                     style={{ fontSize: 11, padding: "4px 10px", background: "#d5f5e3", color: "#1a5c35", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}>
                     ✓ Confirm
                   </button>
                 )}
-                {r.status !== "dismissed" && (
+                {r.status === "dismissed" ? (
+                  <button onClick={() => undoDismiss(r)}
+                    style={{ fontSize: 11, padding: "4px 10px", background: "#fff", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}>
+                    ↩ Undo dismiss
+                  </button>
+                ) : (
                   <button onClick={() => dismissRisk(r)}
                     style={{ fontSize: 11, padding: "4px 10px", background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}>
                     Dismiss
@@ -1791,55 +1909,6 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                     </div>
                   )}
                 </div>
-
-                {/* ── Validation ── */}
-                {r.responsible_role && r.responsible_role.trim() && (() => {
-                  const roles: Array<{ role: "engineer" | "officer"; label: string; confirmed: boolean; declined: boolean; email: string | null }> = [];
-                  if (roleRequired(r, "engineer")) roles.push({ role: "engineer", label: "AI Engineer", confirmed: r.engineer_confirmed, declined: r.engineer_declined, email: r.engineer_email });
-                  if (roleRequired(r, "officer")) roles.push({ role: "officer", label: "Compliance Officer", confirmed: r.officer_confirmed, declined: r.officer_declined, email: r.officer_email });
-                  if (roles.length === 0) return null;
-                  return (
-                    <div style={{ marginTop: 14, marginBottom: 14 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Validation</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {roles.map(({ role, label, confirmed, declined, email }) => (
-                          <div key={role} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12, padding: "8px 12px", background: confirmed ? "#f0fdf4" : declined ? "#f9fafb" : "#f8fafc", borderRadius: 8, border: `1px solid ${confirmed ? "#bbf7d0" : declined ? "#e5e7eb" : "#e2e8f0"}` }}>
-                            <span style={{ fontWeight: 600, minWidth: 140 }}>{label}</span>
-                            {email && <span style={{ color: "var(--text-secondary)" }}>{email}</span>}
-                            {confirmed && (
-                              <span style={{ color: "#16a34a", fontWeight: 600 }}>✓ Confirmed</span>
-                            )}
-                            {declined && !confirmed && (
-                              <>
-                                <span style={{ color: "var(--text-secondary)" }}>⊘ Abstained</span>
-                                <button onClick={() => undoDeclineAsRole(r, role)}
-                                  style={{ fontSize: 11, padding: "3px 10px", background: "#fff", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", color: "var(--text)" }}>
-                                  Undo
-                                </button>
-                              </>
-                            )}
-                            {!confirmed && !declined && r.status !== "dismissed" && (
-                              <>
-                                <button onClick={() => confirmAsRole(r, role)}
-                                  style={{ fontSize: 11, padding: "3px 10px", background: "#d5f5e3", color: "#1a5c35", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}>
-                                  ✓ Confirm as {label}
-                                </button>
-                                <button onClick={() => dismissAsRole(r)}
-                                  style={{ fontSize: 11, padding: "3px 10px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 4, cursor: "pointer" }}>
-                                  Dismiss
-                                </button>
-                                <button onClick={() => declineAsRole(r, role)}
-                                  style={{ fontSize: 11, padding: "3px 10px", background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}>
-                                  Not my decision
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
 
                 {/* ── Mitigations ── */}
                 <div style={{ marginTop: 14 }}>
@@ -2018,6 +2087,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                               </div>
                             </>
                           )}
+                          {residualErr[r.id] && <ErrorMsg msg={residualErr[r.id]} />}
                           <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
                             <button onClick={() => saveResidual(r.id)} disabled={residualSaving[r.id]}
                               style={{ fontSize: 12, background: "var(--brand)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer" }}>
@@ -2856,6 +2926,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
           </>
         )}
 
+        {regResidualErr && <div style={{ marginBottom: 8, fontSize: 12, color: "#dc2626" }}>{regResidualErr}</div>}
         <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={saveRegResidual} disabled={regResidualSaving}
             style={{ background: regResidualSaving ? "#9ca3af" : "var(--brand)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: regResidualSaving ? "not-allowed" : "pointer" }}>

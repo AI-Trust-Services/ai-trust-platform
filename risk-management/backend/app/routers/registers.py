@@ -115,6 +115,20 @@ def _traffic_light(
     return "green"
 
 
+def _risk_fully_confirmed(risk: RiskEntry) -> bool:
+    """Mirrors the frontend's canFullyConfirm(): only roles actually listed in
+    responsible_role must confirm (or decline) before a risk counts as resolved.
+    """
+    roles = {r.strip() for r in (risk.responsible_role or "").split(",") if r.strip()}
+    engineer_required = "ai_engineer" in roles
+    officer_required = "ai_compliance_officer" in roles
+    if not engineer_required and not officer_required:
+        return True
+    engineer_ok = not engineer_required or risk.engineer_confirmed or risk.engineer_declined
+    officer_ok = not officer_required or risk.officer_confirmed or risk.officer_declined
+    return engineer_ok and officer_ok
+
+
 async def _clone_if_approved(session: AsyncSession, register_id: str) -> str:
     """If the register is approved, archive it and clone it to a new draft register.
 
@@ -357,7 +371,7 @@ async def list_systems(session: AsyncSession = Depends(get_session)):
         confirmed_statuses = {"confirmed", "dismissed"}
         unconfirmed_risks = sum(
             1 for r in risks
-            if r.status in confirmed_statuses and not (r.engineer_confirmed and r.officer_confirmed)
+            if r.status in confirmed_statuses and not _risk_fully_confirmed(r)
         )
         total_risks = len(risks)
         open_risks = sum(1 for r in risks if r.status == "open")
@@ -677,13 +691,13 @@ async def approve_register(
         register.registry_snapshot = body.registry_snapshot
     session.add(register)
 
-    # Schedule next review in 6 months
+    # Schedule next review on the date set in the Plan step
     trigger = ReassessmentTrigger(
         id=new_id("RAT"),
         ai_system_id=register.ai_system_id,
         trigger_type="scheduled_6_month",
-        trigger_reason="Automatic 6-month review cycle",
-        triggered_at=datetime.now(timezone.utc) + timedelta(days=180),
+        trigger_reason="Scheduled review cycle",
+        triggered_at=review_date,
     )
     session.add(trigger)
     await session.commit()
