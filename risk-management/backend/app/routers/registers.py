@@ -145,6 +145,7 @@ async def _clone_if_approved(session: AsyncSession, register_id: str) -> str:
         notes=register.notes,
         created_by=register.created_by,
         registry_snapshot=register.registry_snapshot,
+        last_assessment_completed_at=register.last_assessment_completed_at,
     )
     session.add(new_reg)
     await session.flush()
