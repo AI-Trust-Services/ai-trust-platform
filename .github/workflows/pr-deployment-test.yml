@@ -25,84 +25,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  dispatch:
-    name: Parse garden-deploy
+  deploy-test:
+    name: deploy-test
     runs-on: ubuntu-latest
     if: github.event.label.name == 'garden-deploy'
-    outputs:
-      pr_number: ${{ steps.pr.outputs.pr_number }}
-      pr_sha: ${{ steps.pr.outputs.pr_sha }}
-      pr_branch: ${{ steps.pr.outputs.pr_branch }}
-      pr_author: ${{ steps.pr.outputs.pr_author }}
-      pr_author_lower: ${{ steps.pr.outputs.pr_author_lower }}
-      authorized: ${{ steps.auth.outputs.authorized }}
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+      PR_AUTHOR_LOWER: ${{ github.event.pull_request.user.login }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Check authorization (org members only)
         id: auth
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" \
             --jq '.permission' 2>/dev/null || echo "none")
           if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "write" || "$PERMISSION" == "maintain" ]]; then
             echo "authorized=true" >> "$GITHUB_OUTPUT"
-            echo "${{ github.actor }} has ${PERMISSION} permission — authorized."
           else
             echo "authorized=false" >> "$GITHUB_OUTPUT"
-            echo "${{ github.actor }} has ${PERMISSION} permission — unauthorized."
+            gh pr comment "${PR_NUMBER}" \
+              --repo "${{ github.repository }}" \
+              --body "❌ @${{ github.actor }} Only org members can trigger deployment."
+            exit 1
           fi
 
-      - name: Reject unauthorized request
-        if: steps.auth.outputs.authorized != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr comment ${{ github.event.pull_request.number }} \
-            --body "❌ @${{ github.actor }} Only org members can trigger deployment."
-          exit 1
-
-      - name: Get PR details
-        id: pr
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          PR_SHA="${{ github.event.pull_request.head.sha }}"
-          PR_BRANCH="${{ github.event.pull_request.head.ref }}"
-          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
-          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
-          echo "pr_sha=${PR_SHA}" >> "$GITHUB_OUTPUT"
-          echo "pr_branch=${PR_BRANCH}" >> "$GITHUB_OUTPUT"
-          echo "pr_author=${PR_AUTHOR}" >> "$GITHUB_OUTPUT"
-          echo "pr_author_lower=${PR_AUTHOR,,}" >> "$GITHUB_OUTPUT"
-          echo "--- PR details ---"
-          echo "pr_number:      ${PR_NUMBER}"
-          echo "pr_branch:      ${PR_BRANCH}"
-          echo "pr_author:      ${PR_AUTHOR}"
-          echo "pr_author_lower:${PR_AUTHOR,,}"
-          echo "pr_sha:         ${PR_SHA}"
-
-  post-start:
-    name: Post deployment started
-    needs: dispatch
-    if: needs.dispatch.outputs.authorized == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Post "Test deployment started" comment
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
-          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
-          PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
-        run: |
-          gh pr comment "${PR_NUMBER}" \
-            --repo "${{ github.repository }}" \
-            --body "🚀 Test deployment started — deploying \`feature:${PR_SHA::12}\` to namespace \`${PR_AUTHOR_LOWER}\` on \`ai-trust-test\`."
-
       - name: Set pending commit status
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
         run: |
           gh api \
             --method POST \
@@ -112,12 +61,12 @@ jobs:
             -f description="Deploy test in progress..." \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-  deploy:
-    name: Build and deploy PR branch
-    needs: dispatch
-    if: needs.dispatch.outputs.authorized == 'true'
-    runs-on: ubuntu-latest
-    steps:
+      - name: Post deployment started comment
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "🚀 Test deployment started — deploying \`feature:${PR_SHA::12}\` to namespace \`${PR_AUTHOR_LOWER,,}\` on \`ai-trust-test\`."
+
       - name: Check out repository
         uses: actions/checkout@v4
 
@@ -125,9 +74,9 @@ jobs:
         id: vars
         uses: ./.github/actions/compute-vars
         with:
-          branch: ${{ needs.dispatch.outputs.pr_branch }}
+          branch: ${{ env.PR_BRANCH }}
           gardener_cluster: ai-trust-test
-          namespace: ${{ needs.dispatch.outputs.pr_author_lower }}
+          namespace: ${{ github.event.pull_request.user.login }}
 
       - name: Build and push images
         uses: ./.github/actions/build-images
@@ -179,25 +128,13 @@ jobs:
           users_backend_client_secret: ${{ secrets.USERS_BACKEND_CLIENT_SECRET }}
           dev_user_password: ${{ secrets.DEV_USER_PASSWORD }}
 
-  post-result:
-    name: Post deployment result
-    needs: [dispatch, deploy]
-    if: always() && needs.dispatch.outputs.authorized == 'true'
-    runs-on: ubuntu-latest
-    steps:
       - name: Post success comment and status
-        if: needs.deploy.result == 'success'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
-          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
-          PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
+        if: success()
         run: |
-          APP_URL="https://${PR_AUTHOR_LOWER}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          APP_URL="https://${PR_AUTHOR_LOWER,,}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
-            --body "✅ Test deployment successful: \`feature:${PR_SHA::12}\` deployed to namespace \`${PR_AUTHOR_LOWER}\` on \`ai-trust-test\`."$'\n\n'"🔗 ${APP_URL}"
-
+            --body "✅ Test deployment successful: \`feature:${PR_SHA::12}\` deployed to namespace \`${PR_AUTHOR_LOWER,,}\` on \`ai-trust-test\`."$'\n\n'"🔗 ${APP_URL}"
           gh api \
             --method POST \
             repos/${{ github.repository }}/statuses/${PR_SHA} \
@@ -207,14 +144,9 @@ jobs:
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Post app URL to linked issues
-        if: needs.deploy.result == 'success'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
-          PR_AUTHOR_LOWER: ${{ needs.dispatch.outputs.pr_author_lower }}
-          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
+        if: success()
         run: |
-          APP_URL="https://${PR_AUTHOR_LOWER}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          APP_URL="https://${PR_AUTHOR_LOWER,,}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
           ISSUES=$(gh api graphql -f query='
             {
               repository(owner: "${{ github.repository_owner }}", name: "${{ github.event.repository.name }}") {
@@ -233,16 +165,11 @@ jobs:
           done
 
       - name: Post failure comment and status
-        if: needs.deploy.result != 'success'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ needs.dispatch.outputs.pr_number }}
-          PR_SHA: ${{ needs.dispatch.outputs.pr_sha }}
+        if: failure()
         run: |
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
             --body "❌ Test deployment failed: \`feature:${PR_SHA::12}\` — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-
           gh api \
             --method POST \
             repos/${{ github.repository }}/statuses/${PR_SHA} \
