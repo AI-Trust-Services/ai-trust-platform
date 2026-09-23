@@ -52,7 +52,7 @@ class EvidenceResponse(BaseModel):
     mime_type: str
     uploaded_by: str
     version_label: str
-    control_count: int = 0
+    requirement_count: int = 0
     created_at: datetime
     updated_at: datetime
 

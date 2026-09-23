@@ -91,7 +91,7 @@ export interface Evidence {
   mime_type: string;
   uploaded_by: string;
   version_label: string;
-  control_count: number;
+  requirement_count: number;
   created_at: string;
   updated_at: string;
 }
