@@ -58,10 +58,6 @@ class AISystemCreate(BaseModel):
     assignee_username: str | None = Field(default=None, max_length=200)
     compliance_officer_username: str | None = Field(default=None, max_length=200)
 
-    # Regulatory role of the organisation w.r.t. this system (provider/deployer/
-    # importer/distributor). Defaults to "provider" at intake when omitted.
-    org_role: str | None = None
-
     # Deployment context captured at registration. deployment_country is ISO
     # 3166-1 alpha-2; the two EU-presence booleans drive the framework recommendation.
     deployment_country: str | None = Field(default=None, max_length=2)
