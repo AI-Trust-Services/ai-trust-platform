@@ -11,6 +11,54 @@ inputs:
   ref:
     description: "Git ref to check out"
     required: true
+  vite_registry_api_base:
+    description: "VITE_REGISTRY_API_BASE build arg"
+    required: false
+    default: "/api/registry/v1"
+  vite_users_api_base:
+    description: "VITE_USERS_API_BASE build arg"
+    required: false
+    default: "/api/users/v1"
+  vite_monitoring_api_base:
+    description: "VITE_MONITORING_API_BASE build arg"
+    required: false
+    default: "/api/monitoring/v1"
+  vite_overview_api_base:
+    description: "VITE_OVERVIEW_API_BASE build arg"
+    required: false
+    default: "/api/overview/v1"
+  vite_alerts_api_base:
+    description: "VITE_ALERTS_API_BASE build arg"
+    required: false
+    default: "/api/alerts/v1"
+  vite_alerts_url:
+    description: "VITE_ALERTS_URL build arg"
+    required: false
+    default: "http://localhost:8080/alerts"
+  vite_registry_url:
+    description: "VITE_REGISTRY_URL build arg"
+    required: false
+    default: "http://localhost:8080/registry"
+  vite_compliance_url:
+    description: "VITE_COMPLIANCE_URL build arg"
+    required: false
+    default: "http://localhost:8080/compliance"
+  vite_compliance_api_base:
+    description: "VITE_COMPLIANCE_API_BASE build arg"
+    required: false
+    default: "/api/compliance/v1"
+  vite_dta_api_base:
+    description: "VITE_DTA_API_BASE build arg"
+    required: false
+    default: "/api/dta/v1"
+  vite_audit_api_base:
+    description: "VITE_AUDIT_API_BASE build arg"
+    required: false
+    default: "/api/audit/v1"
+  vite_admin_api_base:
+    description: "VITE_ADMIN_API_BASE build arg"
+    required: false
+    default: "/api/admin/v1"
 
 runs:
   using: composite
@@ -35,18 +83,18 @@ runs:
       env:
         OWNER: ${{ inputs.owner }}
         TAG: ${{ inputs.tag }}
-        VITE_REGISTRY_API_BASE:   ${{ vars.VITE_REGISTRY_API_BASE || '/api/registry/v1' }}
-        VITE_USERS_API_BASE:      ${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
-        VITE_MONITORING_API_BASE: ${{ vars.VITE_MONITORING_API_BASE || '/api/monitoring/v1' }}
-        VITE_OVERVIEW_API_BASE:   ${{ vars.VITE_OVERVIEW_API_BASE || '/api/overview/v1' }}
-        VITE_ALERTS_API_BASE:     ${{ vars.VITE_ALERTS_API_BASE || '/api/alerts/v1' }}
-        VITE_ALERTS_URL:          ${{ vars.VITE_ALERTS_URL || 'http://localhost:8080/alerts' }}
-        VITE_REGISTRY_URL:        ${{ vars.VITE_REGISTRY_URL || 'http://localhost:8080/registry' }}
-        VITE_COMPLIANCE_URL:      ${{ vars.VITE_COMPLIANCE_URL || 'http://localhost:8080/compliance' }}
-        VITE_COMPLIANCE_API_BASE: ${{ vars.VITE_COMPLIANCE_API_BASE || '/api/compliance/v1' }}
-        VITE_DTA_API_BASE:        ${{ vars.VITE_DTA_API_BASE || '/api/dta/v1' }}
-        VITE_AUDIT_API_BASE:      ${{ vars.VITE_AUDIT_API_BASE || '/api/audit/v1' }}
-        VITE_ADMIN_API_BASE:      ${{ vars.VITE_ADMIN_API_BASE || '/api/admin/v1' }}
+        VITE_REGISTRY_API_BASE:   ${{ inputs.vite_registry_api_base }}
+        VITE_USERS_API_BASE:      ${{ inputs.vite_users_api_base }}
+        VITE_MONITORING_API_BASE: ${{ inputs.vite_monitoring_api_base }}
+        VITE_OVERVIEW_API_BASE:   ${{ inputs.vite_overview_api_base }}
+        VITE_ALERTS_API_BASE:     ${{ inputs.vite_alerts_api_base }}
+        VITE_ALERTS_URL:          ${{ inputs.vite_alerts_url }}
+        VITE_REGISTRY_URL:        ${{ inputs.vite_registry_url }}
+        VITE_COMPLIANCE_URL:      ${{ inputs.vite_compliance_url }}
+        VITE_COMPLIANCE_API_BASE: ${{ inputs.vite_compliance_api_base }}
+        VITE_DTA_API_BASE:        ${{ inputs.vite_dta_api_base }}
+        VITE_AUDIT_API_BASE:      ${{ inputs.vite_audit_api_base }}
+        VITE_ADMIN_API_BASE:      ${{ inputs.vite_admin_api_base }}
       run: |
         docker buildx bake \
           --file .github/docker-bake.hcl \

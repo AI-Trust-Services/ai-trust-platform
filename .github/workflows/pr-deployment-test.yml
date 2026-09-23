@@ -135,6 +135,18 @@ jobs:
           owner: ${{ steps.vars.outputs.owner }}
           tag: ${{ steps.vars.outputs.tag }}
           ref: ${{ steps.vars.outputs.ref }}
+          vite_registry_api_base:   ${{ vars.VITE_REGISTRY_API_BASE || '/api/registry/v1' }}
+          vite_users_api_base:      ${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
+          vite_monitoring_api_base: ${{ vars.VITE_MONITORING_API_BASE || '/api/monitoring/v1' }}
+          vite_overview_api_base:   ${{ vars.VITE_OVERVIEW_API_BASE || '/api/overview/v1' }}
+          vite_alerts_api_base:     ${{ vars.VITE_ALERTS_API_BASE || '/api/alerts/v1' }}
+          vite_alerts_url:          ${{ vars.VITE_ALERTS_URL || 'http://localhost:8080/alerts' }}
+          vite_registry_url:        ${{ vars.VITE_REGISTRY_URL || 'http://localhost:8080/registry' }}
+          vite_compliance_url:      ${{ vars.VITE_COMPLIANCE_URL || 'http://localhost:8080/compliance' }}
+          vite_compliance_api_base: ${{ vars.VITE_COMPLIANCE_API_BASE || '/api/compliance/v1' }}
+          vite_dta_api_base:        ${{ vars.VITE_DTA_API_BASE || '/api/dta/v1' }}
+          vite_audit_api_base:      ${{ vars.VITE_AUDIT_API_BASE || '/api/audit/v1' }}
+          vite_admin_api_base:      ${{ vars.VITE_ADMIN_API_BASE || '/api/admin/v1' }}
 
       - name: Package and push Helm chart
         uses: ./.github/actions/package-chart
