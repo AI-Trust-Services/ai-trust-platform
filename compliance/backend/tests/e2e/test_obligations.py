@@ -115,7 +115,6 @@ async def test_list_obligations_filter_by_requirement(client: httpx.AsyncClient)
     assert body[0]["id"] == obs[0]["id"]
 
 
-
 async def test_list_obligations_filter_by_status(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])

@@ -3,7 +3,6 @@ import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { EVIDENCE_TYPES, humanize } from "../utils";
-import type { Requirement } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";

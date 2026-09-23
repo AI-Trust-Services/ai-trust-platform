@@ -13,18 +13,19 @@ Required env vars:
   APP_ADMIN_USERNAME          bootstrap platform admin username
   APP_ADMIN_PASSWORD          bootstrap platform admin password
 """
+
 import os
 import sys
 import httpx
 
-KEYCLOAK_URL                 = os.environ["KEYCLOAK_URL"]
-ADMIN                        = os.environ["KEYCLOAK_ADMIN"]
-ADMIN_PASSWORD               = os.environ["KEYCLOAK_ADMIN_PASSWORD"]
-APP_PUBLIC_URL               = os.environ["APP_PUBLIC_URL"]
-CLIENT_SECRET                = os.environ["KEYCLOAK_CLIENT_SECRET"]
-USERS_BACKEND_CLIENT_SECRET  = os.environ["USERS_BACKEND_CLIENT_SECRET"]
-APP_ADMIN_USERNAME           = os.environ["APP_ADMIN_USERNAME"]
-APP_ADMIN_PASSWORD           = os.environ["APP_ADMIN_PASSWORD"]
+KEYCLOAK_URL = os.environ["KEYCLOAK_URL"]
+ADMIN = os.environ["KEYCLOAK_ADMIN"]
+ADMIN_PASSWORD = os.environ["KEYCLOAK_ADMIN_PASSWORD"]
+APP_PUBLIC_URL = os.environ["APP_PUBLIC_URL"]
+CLIENT_SECRET = os.environ["KEYCLOAK_CLIENT_SECRET"]
+USERS_BACKEND_CLIENT_SECRET = os.environ["USERS_BACKEND_CLIENT_SECRET"]
+APP_ADMIN_USERNAME = os.environ["APP_ADMIN_USERNAME"]
+APP_ADMIN_PASSWORD = os.environ["APP_ADMIN_PASSWORD"]
 
 REALM = "ai-trust"
 KEYCLOAK_PUBLIC_URL = os.environ.get("KEYCLOAK_PUBLIC_URL", "")
@@ -32,9 +33,13 @@ KEYCLOAK_PUBLIC_URL = os.environ.get("KEYCLOAK_PUBLIC_URL", "")
 DEV_USER_PASSWORD = os.environ.get("DEV_USER_PASSWORD", "")
 
 DEV_USERS = [
-    {"username": "dev-owner",      "firstName": "Dev", "lastName": "Business Owner"},
-    {"username": "dev-engineer",   "firstName": "Dev", "lastName": "AI Engineer"},
-    {"username": "dev-compliance", "firstName": "Dev", "lastName": "Compliance Officer"},
+    {"username": "dev-owner", "firstName": "Dev", "lastName": "Business Owner"},
+    {"username": "dev-engineer", "firstName": "Dev", "lastName": "AI Engineer"},
+    {
+        "username": "dev-compliance",
+        "firstName": "Dev",
+        "lastName": "Compliance Officer",
+    },
 ]
 
 
@@ -69,14 +74,21 @@ def ensure_realm(client: httpx.Client) -> None:
     resp = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}")
     if resp.status_code == 200:
         print(f"Realm '{REALM}' already exists, updating...")
-        client.put(f"{KEYCLOAK_URL}/admin/realms/{REALM}", json=realm_config).raise_for_status()
+        client.put(
+            f"{KEYCLOAK_URL}/admin/realms/{REALM}", json=realm_config
+        ).raise_for_status()
     else:
         print(f"Creating realm '{REALM}'...")
-        client.post(f"{KEYCLOAK_URL}/admin/realms", json=realm_config).raise_for_status()
+        client.post(
+            f"{KEYCLOAK_URL}/admin/realms", json=realm_config
+        ).raise_for_status()
 
 
 def ensure_client(client: httpx.Client) -> None:
-    existing = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients", params={"clientId": "oauth2-proxy"}).json()
+    existing = client.get(
+        f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients",
+        params={"clientId": "oauth2-proxy"},
+    ).json()
 
     config = {
         "clientId": "oauth2-proxy",
@@ -96,10 +108,14 @@ def ensure_client(client: httpx.Client) -> None:
     if existing:
         print("Updating oauth2-proxy client...")
         client_id = existing[0]["id"]
-        client.put(f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients/{client_id}", json=config).raise_for_status()
+        client.put(
+            f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients/{client_id}", json=config
+        ).raise_for_status()
     else:
         print("Creating oauth2-proxy client...")
-        client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients", json=config).raise_for_status()
+        client.post(
+            f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients", json=config
+        ).raise_for_status()
 
 
 def ensure_users_backend_client(client: httpx.Client) -> None:
@@ -159,7 +175,11 @@ def ensure_users_backend_client(client: httpx.Client) -> None:
         f"{KEYCLOAK_URL}/admin/realms/{REALM}/clients/{rm_client_id}/roles"
     )
     rm_roles_resp.raise_for_status()
-    needed_roles = {r["name"]: r for r in rm_roles_resp.json() if r["name"] in ("manage-users", "view-realm", "manage-realm")}
+    needed_roles = {
+        r["name"]: r
+        for r in rm_roles_resp.json()
+        if r["name"] in ("manage-users", "view-realm", "manage-realm")
+    }
 
     already_assigned = client.get(
         f"{KEYCLOAK_URL}/admin/realms/{REALM}/users/{sa_user_id}/role-mappings/clients/{rm_client_id}"
@@ -168,7 +188,9 @@ def ensure_users_backend_client(client: httpx.Client) -> None:
 
     to_assign = [r for name, r in needed_roles.items() if name not in already_names]
     if to_assign:
-        print(f"Granting {[r['name'] for r in to_assign]} to users-backend service account...")
+        print(
+            f"Granting {[r['name'] for r in to_assign]} to users-backend service account..."
+        )
         client.post(
             f"{KEYCLOAK_URL}/admin/realms/{REALM}/users/{sa_user_id}/role-mappings/clients/{rm_client_id}",
             json=to_assign,
@@ -178,27 +200,37 @@ def ensure_users_backend_client(client: httpx.Client) -> None:
 
 
 def ensure_admin_user(client: httpx.Client) -> None:
-    existing = client.get(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", params={"username": APP_ADMIN_USERNAME, "exact": "true"}).json()
+    existing = client.get(
+        f"{KEYCLOAK_URL}/admin/realms/{REALM}/users",
+        params={"username": APP_ADMIN_USERNAME, "exact": "true"},
+    ).json()
     if existing:
         print(f"Admin user '{APP_ADMIN_USERNAME}' already exists, skipping.")
         return
     print(f"Creating admin user '{APP_ADMIN_USERNAME}'...")
-    client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", json={
-        "username": APP_ADMIN_USERNAME,
-        "email": f"{APP_ADMIN_USERNAME}@local.dev",  # TODO: do we want to require a real email for the admin user? If yes, we will move it to env var.
-        "emailVerified": True,
-        "firstName": "Platform",
-        "lastName": "Admin",
-        "enabled": True,
-        "credentials": [{"type": "password", "value": APP_ADMIN_PASSWORD, "temporary": False}],
-    }).raise_for_status()
+    client.post(
+        f"{KEYCLOAK_URL}/admin/realms/{REALM}/users",
+        json={
+            "username": APP_ADMIN_USERNAME,
+            "email": f"{APP_ADMIN_USERNAME}@local.dev",  # TODO: do we want to require a real email for the admin user? If yes, we will move it to env var.
+            "emailVerified": True,
+            "firstName": "Platform",
+            "lastName": "Admin",
+            "enabled": True,
+            "credentials": [
+                {"type": "password", "value": APP_ADMIN_PASSWORD, "temporary": False}
+            ],
+        },
+    ).raise_for_status()
 
 
 def ensure_dev_users(client: httpx.Client) -> None:
     if os.environ.get("SEED_DEV_USERS", "").lower() != "true":
         return
     if not DEV_USER_PASSWORD:
-        print("SEED_DEV_USERS=true but DEV_USER_PASSWORD is unset — skipping dev user creation.")
+        print(
+            "SEED_DEV_USERS=true but DEV_USER_PASSWORD is unset — skipping dev user creation."
+        )
         return
     for user in DEV_USERS:
         existing = client.get(
@@ -207,22 +239,33 @@ def ensure_dev_users(client: httpx.Client) -> None:
         ).json()
         if existing:
             user_id = existing[0]["id"]
-            print(f"Dev user '{user['username']}' already exists, resetting password...")
+            print(
+                f"Dev user '{user['username']}' already exists, resetting password..."
+            )
             client.put(
                 f"{KEYCLOAK_URL}/admin/realms/{REALM}/users/{user_id}/reset-password",
-                json={"type": "password", "value": DEV_USER_PASSWORD, "temporary": False},
+                json={
+                    "type": "password",
+                    "value": DEV_USER_PASSWORD,
+                    "temporary": False,
+                },
             ).raise_for_status()
             continue
         print(f"Creating dev user '{user['username']}'...")
-        client.post(f"{KEYCLOAK_URL}/admin/realms/{REALM}/users", json={
-            "username":      user["username"],
-            "email":         f"{user['username']}@local.dev",
-            "firstName":     user["firstName"],
-            "lastName":      user["lastName"],
-            "enabled":       True,
-            "emailVerified": True,
-            "credentials":   [{"type": "password", "value": DEV_USER_PASSWORD, "temporary": False}],
-        }).raise_for_status()
+        client.post(
+            f"{KEYCLOAK_URL}/admin/realms/{REALM}/users",
+            json={
+                "username": user["username"],
+                "email": f"{user['username']}@local.dev",
+                "firstName": user["firstName"],
+                "lastName": user["lastName"],
+                "enabled": True,
+                "emailVerified": True,
+                "credentials": [
+                    {"type": "password", "value": DEV_USER_PASSWORD, "temporary": False}
+                ],
+            },
+        ).raise_for_status()
 
 
 def main() -> None:
