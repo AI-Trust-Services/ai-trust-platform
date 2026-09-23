@@ -68,13 +68,13 @@ kubectl create secret generic ai-trust-env \
 # Flux's HelmRelease valuesFrom has no cross-namespace support — the secret must exist
 # in the same namespace as the HelmRelease (ocm-system). Only the 5 non-sensitive URL/
 # hostname values needed by the FluxDeployer are stored here; all credentials stay in
-# ai-trust-env in the ai-trust namespace.
-echo "==> secret/ai-trust-flux-values in ocm-system (Helm chart URL values for FluxDeployer)"
+# the ai-trust-env secret in the target namespace ($NAMESPACE).
+echo "==> secret/ai-trust-flux-values-${NAMESPACE} in ocm-system (Helm chart URL values for FluxDeployer)"
 kubectl create namespace ocm-system --dry-run=client -o yaml | kubectl apply -f -
 OLLAMA_ENABLED="false"
 [[ "${LLM_PROVIDER:-stub}" == "ollama" ]] && OLLAMA_ENABLED="true"
 
-kubectl create secret generic ai-trust-flux-values \
+kubectl create secret generic "ai-trust-flux-values-${NAMESPACE}" \
   --from-literal=APP_PUBLIC_URL="${APP_PUBLIC_URL:-}" \
   --from-literal=KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-}" \
   --from-literal=INGRESS_HOST="${INGRESS_HOST}" \
@@ -110,6 +110,9 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

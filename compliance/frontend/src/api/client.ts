@@ -104,7 +104,7 @@ export const api = {
   getRequirement: (id: string): Promise<RequirementDetail> =>
     request<RequirementDetail>(API_BASE, `/requirements/${id}`),
   createRequirement: (data: {
-    ai_system_id: string | null; title: string; description: string;
+    obligation_id: string; title: string; description: string;
     category: string; owner: string; due_date: string | null;
   }): Promise<Requirement> =>
     request<Requirement>(API_BASE, "/requirements", json("POST", data)),
@@ -112,10 +112,6 @@ export const api = {
     request<Requirement>(API_BASE, `/requirements/${id}`, json("PUT", data)),
   deleteRequirement: (id: string): Promise<null> =>
     request<null>(API_BASE, `/requirements/${id}`, { method: "DELETE" }),
-  linkObligation: (requirementId: string, obligationId: string): Promise<RequirementDetail> =>
-    request<RequirementDetail>(API_BASE, `/requirements/${requirementId}/link/${obligationId}`, { method: "POST" }),
-  unlinkObligation: (requirementId: string, obligationId: string): Promise<RequirementDetail> =>
-    request<RequirementDetail>(API_BASE, `/requirements/${requirementId}/link/${obligationId}`, { method: "DELETE" }),
 
   // Evidence
   getEvidence: (params: QueryParams = {}): Promise<Evidence[]> =>
@@ -138,6 +134,10 @@ export const api = {
     request<EvidenceVersion[]>(API_BASE, `/evidence/${id}/versions`),
   uploadEvidenceVersion: (id: string, formData: FormData): Promise<EvidenceDetail> =>
     request<EvidenceDetail>(API_BASE, `/evidence/${id}/upload-version`, { method: "POST", body: formData }),
+  linkRequirement: (evidenceId: string, requirementId: string): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${evidenceId}/requirements/${requirementId}`, { method: "POST" }),
+  unlinkRequirement: (evidenceId: string, requirementId: string): Promise<EvidenceDetail> =>
+    request<EvidenceDetail>(API_BASE, `/evidence/${evidenceId}/requirements/${requirementId}`, { method: "DELETE" }),
 
   // Current user's effective permissions — served by the registry backend.
   myPermissions: (): Promise<PermissionsResponse> =>

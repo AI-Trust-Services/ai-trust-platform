@@ -70,8 +70,11 @@ spec:
       {{- if $c.openfgaConfig }}
       volumes:
         - name: openfga-config
-          persistentVolumeClaim:
-            claimName: openfga-config
+          secret:
+            secretName: openfga-store-id
+            items:
+              - key: store_id
+                path: store_id
       {{- end }}
 ---
 apiVersion: v1

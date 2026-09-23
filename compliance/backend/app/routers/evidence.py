@@ -3,45 +3,24 @@ from __future__ import annotations
 import os
 from datetime import date, datetime, timezone
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Query,
-    Request,
-    UploadFile,
-)
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from sqlalchemy import exists, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_authorization import require_permission
-from ai_trust_authorization.constants import (
-    EVIDENCE_APPROVE,
-    EVIDENCE_READ,
-    EVIDENCE_WRITE,
-)
+from ai_trust_authorization.constants import EVIDENCE_APPROVE, EVIDENCE_READ, EVIDENCE_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models import (
-    AISystem,
-    Assessment,
     Requirement,
     Evidence,
     EvidenceVersion,
-    Obligation,
     evidence_requirements,
-    evidence_obligations,
 )
 from app import minio_client
-from app.cascade import (
-    refresh_requirement_effectiveness,
-    refresh_obligation,
-    refresh_obligations_for_requirement,
-)
+from app.cascade import refresh_requirement_effectiveness, refresh_obligations_for_requirement
 from app.ids import new_id
 from app.schemas import (
     DownloadUrlResponse,
@@ -55,28 +34,15 @@ from app.schemas.evidence import VALID_EVIDENCE_TYPES
 router = APIRouter(tags=["evidence"])
 logger = get_logger(__name__)
 
-MAX_FILE_BYTES = 100 * 1024 * 1024  # 100 MB, per spec EVD-FR-01
+MAX_FILE_BYTES = 100 * 1024 * 1024  # 100 MB
 
-ALLOWED_EXTENSIONS = {
-    ".pdf",
-    ".docx",
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".xlsx",
-    ".csv",
-    ".json",
-    ".zip",
-    ".txt",
-}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".png", ".jpg", ".jpeg", ".xlsx", ".csv", ".json", ".zip", ".txt"}
 ALLOWED_MIME_TYPES = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "image/png",
-    "image/jpeg",
-    "text/csv",
-    "text/plain",
+    "image/png", "image/jpeg",
+    "text/csv", "text/plain",
     "application/json",
     "application/zip",
 }
@@ -92,87 +58,72 @@ def _parse_date(value: str | None, field: str) -> date | None:
 
 
 async def _load(session: AsyncSession, evidence_id: str) -> Evidence:
-    row = (
-        await session.execute(select(Evidence).where(Evidence.id == evidence_id))
-    ).scalar_one_or_none()
+    row = (await session.execute(
+        select(Evidence).where(Evidence.id == evidence_id)
+    )).scalar_one_or_none()
     if not row:
         raise HTTPException(404, f"Evidence {evidence_id} not found")
     return row
 
 
-async def _linked_ids(
-    session: AsyncSession, evidence_id: str
-) -> tuple[list[str], list[str]]:
-    requirement_ids = (
-        (
-            await session.execute(
-                select(evidence_requirements.c.requirement_id).where(
-                    evidence_requirements.c.evidence_id == evidence_id
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    obligation_ids = (
-        (
-            await session.execute(
-                select(evidence_obligations.c.obligation_id).where(
-                    evidence_obligations.c.evidence_id == evidence_id
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return list(requirement_ids), list(obligation_ids)
+async def _linked_requirement_ids(session: AsyncSession, evidence_id: str) -> list[str]:
+    return list((await session.execute(
+        select(evidence_requirements.c.requirement_id)
+        .where(evidence_requirements.c.evidence_id == evidence_id)
+    )).scalars().all())
 
 
-@router.get(
-    "/evidence",
-    response_model=list[EvidenceResponse],
-    dependencies=[Depends(require_permission(EVIDENCE_READ))],
-)
+@router.get("/evidence", response_model=list[EvidenceResponse], dependencies=[Depends(require_permission(EVIDENCE_READ))])
 async def list_evidence(
     requirement_id: str | None = Query(default=None),
-    obligation_id: str | None = Query(default=None),
-    ai_system_id: str | None = Query(default=None),
+    system_id: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[EvidenceResponse]:
+    count_subq = (
+        select(func.count())
+        .select_from(evidence_requirements)
+        .where(evidence_requirements.c.evidence_id == Evidence.id)
+        .scalar_subquery()
+    )
     async with SessionLocal() as session:
-        stmt = select(Evidence).order_by(Evidence.created_at.desc())
+        stmt = select(Evidence, count_subq.label("control_count")).order_by(Evidence.created_at.desc())
         if requirement_id:
-            stmt = stmt.join(
-                evidence_requirements,
-                evidence_requirements.c.evidence_id == Evidence.id,
-            ).where(evidence_requirements.c.requirement_id == requirement_id)
-        if obligation_id:
-            stmt = stmt.join(
-                evidence_obligations, evidence_obligations.c.evidence_id == Evidence.id
-            ).where(evidence_obligations.c.obligation_id == obligation_id)
-        if ai_system_id:
-            stmt = stmt.where(Evidence.ai_system_id == ai_system_id)
+            stmt = stmt.where(
+                exists(
+                    select(1).select_from(evidence_requirements).where(
+                        evidence_requirements.c.evidence_id == Evidence.id,
+                        evidence_requirements.c.requirement_id == requirement_id,
+                    )
+                )
+            )
+        if system_id:
+            stmt = stmt.where(
+                exists(
+                    select(1)
+                    .select_from(evidence_requirements)
+                    .join(Requirement, Requirement.id == evidence_requirements.c.requirement_id)
+                    .where(
+                        evidence_requirements.c.evidence_id == Evidence.id,
+                        Requirement.ai_system_id == system_id,
+                    )
+                )
+            )
         stmt = stmt.limit(limit).offset(offset)
-        result = await session.execute(stmt)
-        return [EvidenceResponse.model_validate(r) for r in result.scalars().all()]
+        rows = (await session.execute(stmt)).all()
+        return [
+            EvidenceResponse.model_validate(row).model_copy(update={"control_count": count})
+            for row, count in rows
+        ]
 
 
-@router.post(
-    "/evidence",
-    response_model=EvidenceDetailResponse,
-    status_code=201,
-    dependencies=[Depends(require_permission(EVIDENCE_WRITE))],
-)
+@router.post("/evidence", response_model=EvidenceDetailResponse, status_code=201, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
 async def create_evidence(
     request: Request,
     title: str = Form(...),
     description: str = Form(default=""),
     evidence_type: str = Form(default="document"),
     requirement_ids: list[str] = Form(default=[]),
-    obligation_ids: list[str] = Form(default=[]),
-    ai_system_id: str | None = Form(default=None),
-    assessment_id: str | None = Form(default=None),
     validity_from: str | None = Form(default=None),
     validity_until: str | None = Form(default=None),
     uploaded_by: str = Form(default=""),
@@ -183,60 +134,23 @@ async def create_evidence(
         raise HTTPException(422, "title must not be blank")
     if evidence_type not in VALID_EVIDENCE_TYPES:
         raise HTTPException(422, f"invalid evidence type '{evidence_type}'")
-    # At least one link target is required (spec EVD-FR-02).
-    if not any([requirement_ids, obligation_ids, ai_system_id, assessment_id]):
-        raise HTTPException(
-            422,
-            "Evidence must link to at least one of: requirement, obligation, AI system, or assessment",
-        )
+    if not requirement_ids:
+        raise HTTPException(422, "Evidence must link to at least one requirement")
 
     v_from = _parse_date(validity_from, "validity_from")
     v_until = _parse_date(validity_until, "validity_until")
 
-    # 1) Validate every supplied link target in a short-lived session, so we
-    #    return clean 404s and never touch object storage on a bad reference.
     async with SessionLocal() as session:
         for cid in requirement_ids:
-            if not (
-                await session.execute(
-                    select(Requirement.id).where(Requirement.id == cid)
-                )
-            ).scalar_one_or_none():
+            if not (await session.execute(
+                select(Requirement.id).where(Requirement.id == cid)
+            )).scalar_one_or_none():
                 raise HTTPException(404, f"Requirement {cid} not found")
-        for oid in obligation_ids:
-            if not (
-                await session.execute(select(Obligation.id).where(Obligation.id == oid))
-            ).scalar_one_or_none():
-                raise HTTPException(404, f"Obligation {oid} not found")
-        if ai_system_id:
-            ai_system_name_row = (
-                await session.execute(
-                    select(AISystem.id, AISystem.name).where(
-                        AISystem.id == ai_system_id
-                    )
-                )
-            ).one_or_none()
-            if not ai_system_name_row:
-                raise HTTPException(404, f"AI system {ai_system_id} not found")
-            ai_system_name = ai_system_name_row[1]
-        else:
-            ai_system_name = None
-        if (
-            assessment_id
-            and not (
-                await session.execute(
-                    select(Assessment.id).where(Assessment.id == assessment_id)
-                )
-            ).scalar_one_or_none()
-        ):
-            raise HTTPException(404, f"Assessment {assessment_id} not found")
 
     evidence_id = new_id("EVD")
     file_path = file_name = mime_type = ""
     file_size = 0
 
-    # 2) Upload the file to MinIO BEFORE opening the write transaction, so no DB
-    #    connection is held across the (potentially slow, large) upload.
     if file is not None and file.filename:
         ext = os.path.splitext(file.filename)[1].lower()
         if ext not in ALLOWED_EXTENSIONS:
@@ -246,28 +160,19 @@ async def create_evidence(
             raise HTTPException(422, f"MIME type '{mime}' is not allowed")
         data = await file.read()
         if len(data) > MAX_FILE_BYTES:
-            raise HTTPException(
-                413,
-                f"File exceeds maximum size of {MAX_FILE_BYTES // (1024 * 1024)} MB",
-            )
+            raise HTTPException(413, f"File exceeds maximum size of {MAX_FILE_BYTES // (1024 * 1024)} MB")
         await minio_client.ensure_bucket()
         file_path = await minio_client.upload_file(
-            evidence_id,
-            file.filename,
-            data,
-            file.content_type or "application/octet-stream",
+            evidence_id, file.filename, data, file.content_type or "application/octet-stream"
         )
         file_name = file.filename
         file_size = len(data)
         mime_type = file.content_type or "application/octet-stream"
 
-    # 3) Persist the row + links. If anything fails, remove the orphaned object.
     try:
         async with SessionLocal() as session:
             row = Evidence(
                 id=evidence_id,
-                ai_system_id=ai_system_id,
-                assessment_id=assessment_id,
                 title=title,
                 description=description,
                 evidence_type=evidence_type,
@@ -284,17 +189,8 @@ async def create_evidence(
             await session.flush()
 
             for cid in requirement_ids:
-                await session.execute(
-                    pg_insert(evidence_requirements)
-                    .values(evidence_id=evidence_id, requirement_id=cid)
-                    .on_conflict_do_nothing()
-                )
-            for oid in obligation_ids:
-                await session.execute(
-                    pg_insert(evidence_obligations)
-                    .values(evidence_id=evidence_id, obligation_id=oid)
-                    .on_conflict_do_nothing()
-                )
+                await session.execute(pg_insert(evidence_requirements).values(
+                    evidence_id=evidence_id, requirement_id=cid).on_conflict_do_nothing())
 
             log_audit_event(
                 session,
@@ -302,53 +198,34 @@ async def create_evidence(
                 action="evidence.uploaded",
                 resource_type="evidence",
                 resource_id=evidence_id,
-                ai_system_id=ai_system_id,
-                ai_system_name=ai_system_name,
             )
             await session.commit()
             await session.refresh(row)
-            linked_requirement_ids, linked_obligation_ids = await _linked_ids(
-                session, evidence_id
-            )
+            linked_requirement_ids = await _linked_requirement_ids(session, evidence_id)
     except Exception:
         if file_path:
             await minio_client.delete_file(file_path)
         raise
 
-    logger.info(
-        "evidence.created",
-        extra={
-            "evidence_id": evidence_id,
-            "has_file": bool(file_name),
-            "size": file_size,
-        },
-    )
+    logger.info("evidence.created", extra={
+        "evidence_id": evidence_id, "has_file": bool(file_name), "size": file_size,
+    })
     detail = EvidenceDetailResponse.model_validate(row)
     detail.requirement_ids = linked_requirement_ids
-    detail.obligation_ids = linked_obligation_ids
     return detail
 
 
-@router.get(
-    "/evidence/{evidence_id}",
-    response_model=EvidenceDetailResponse,
-    dependencies=[Depends(require_permission(EVIDENCE_READ))],
-)
+@router.get("/evidence/{evidence_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_READ))])
 async def get_evidence(evidence_id: str) -> EvidenceDetailResponse:
     async with SessionLocal() as session:
         row = await _load(session, evidence_id)
-        requirement_ids, obligation_ids = await _linked_ids(session, evidence_id)
+        requirement_ids = await _linked_requirement_ids(session, evidence_id)
         detail = EvidenceDetailResponse.model_validate(row)
         detail.requirement_ids = requirement_ids
-        detail.obligation_ids = obligation_ids
         return detail
 
 
-@router.get(
-    "/evidence/{evidence_id}/download-url",
-    response_model=DownloadUrlResponse,
-    dependencies=[Depends(require_permission(EVIDENCE_READ))],
-)
+@router.get("/evidence/{evidence_id}/download-url", response_model=DownloadUrlResponse, dependencies=[Depends(require_permission(EVIDENCE_READ))])
 async def get_download_url(evidence_id: str) -> DownloadUrlResponse:
     async with SessionLocal() as session:
         row = await _load(session, evidence_id)
@@ -359,11 +236,7 @@ async def get_download_url(evidence_id: str) -> DownloadUrlResponse:
     return DownloadUrlResponse(url=url, expires_hours=1)
 
 
-@router.put(
-    "/evidence/{evidence_id}",
-    response_model=EvidenceResponse,
-    dependencies=[Depends(require_permission(EVIDENCE_WRITE))],
-)
+@router.put("/evidence/{evidence_id}", response_model=EvidenceResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
 async def update_evidence(evidence_id: str, body: EvidenceUpdate) -> EvidenceResponse:
     updates = body.model_dump(exclude_none=True)
     async with SessionLocal() as session:
@@ -377,33 +250,21 @@ async def update_evidence(evidence_id: str, body: EvidenceUpdate) -> EvidenceRes
             await _cascade_from_evidence(session, evidence_id)
         await session.commit()
         await session.refresh(row)
-    logger.info(
-        "evidence.updated",
-        extra={"evidence_id": evidence_id, "fields": sorted(updates.keys())},
-    )
+    logger.info("evidence.updated", extra={"evidence_id": evidence_id, "fields": sorted(updates.keys())})
     return EvidenceResponse.model_validate(row)
 
 
-@router.delete(
-    "/evidence/{evidence_id}",
-    dependencies=[Depends(require_permission(EVIDENCE_WRITE))],
-)
+@router.delete("/evidence/{evidence_id}", dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
 async def delete_evidence(evidence_id: str, request: Request) -> dict:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         row = await _load(session, evidence_id)
         file_path = row.file_path
-        ai_system_id = row.ai_system_id
-        ai_system_name: str | None = None
-        if ai_system_id:
-            ai_system_name = await session.scalar(
-                select(AISystem.name).where(AISystem.id == ai_system_id)
-            )
-        requirement_ids, _ = await _linked_ids(session, evidence_id)
+        req_ids = await _linked_requirement_ids(session, evidence_id)
         await session.delete(row)
         await session.flush()
-        # Removing evidence may drop a requirement below 'effective'.
-        for cid in requirement_ids:
+        # Removing evidence may drop a requirement below 'fulfilled'.
+        for cid in req_ids:
             await refresh_requirement_effectiveness(session, cid)
             await refresh_obligations_for_requirement(session, cid)
         log_audit_event(
@@ -412,8 +273,6 @@ async def delete_evidence(evidence_id: str, request: Request) -> dict:
             action="evidence.deleted",
             resource_type="evidence",
             resource_id=evidence_id,
-            ai_system_id=ai_system_id,
-            ai_system_name=ai_system_name,
         )
         await session.commit()
     if file_path:
@@ -422,21 +281,13 @@ async def delete_evidence(evidence_id: str, request: Request) -> dict:
     return {"status": "deleted", "id": evidence_id}
 
 
-@router.post(
-    "/evidence/{evidence_id}/approve",
-    response_model=EvidenceResponse,
-    dependencies=[Depends(require_permission(EVIDENCE_APPROVE))],
-)
+@router.post("/evidence/{evidence_id}/approve", response_model=EvidenceResponse, dependencies=[Depends(require_permission(EVIDENCE_APPROVE))])
 async def approve_evidence(evidence_id: str, request: Request) -> EvidenceResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     return await _set_status(evidence_id, "approved", current_user)
 
 
-@router.post(
-    "/evidence/{evidence_id}/reject",
-    response_model=EvidenceResponse,
-    dependencies=[Depends(require_permission(EVIDENCE_APPROVE))],
-)
+@router.post("/evidence/{evidence_id}/reject", response_model=EvidenceResponse, dependencies=[Depends(require_permission(EVIDENCE_APPROVE))])
 async def reject_evidence(evidence_id: str, request: Request) -> EvidenceResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     return await _set_status(evidence_id, "rejected", current_user)
@@ -448,13 +299,6 @@ async def _set_status(evidence_id: str, status: str, actor: str) -> EvidenceResp
         before_status = row.status
         row.status = status
         row.updated_at = datetime.now(timezone.utc)
-        ai_system_name = None
-        if row.ai_system_id:
-            ai_system_name = (
-                await session.execute(
-                    select(AISystem.name).where(AISystem.id == row.ai_system_id)
-                )
-            ).scalar_one_or_none()
         await session.flush()
         await _cascade_from_evidence(session, evidence_id)
         log_audit_event(
@@ -463,78 +307,38 @@ async def _set_status(evidence_id: str, status: str, actor: str) -> EvidenceResp
             action=f"evidence.{status}",
             resource_type="evidence",
             resource_id=evidence_id,
-            ai_system_id=row.ai_system_id,
-            ai_system_name=ai_system_name,
             changes={"status": {"before": before_status, "after": status}},
         )
         await session.commit()
         await session.refresh(row)
-    logger.info(
-        "evidence.status_changed", extra={"evidence_id": evidence_id, "status": status}
-    )
+    logger.info("evidence.status_changed", extra={"evidence_id": evidence_id, "status": status})
     return EvidenceResponse.model_validate(row)
 
 
 async def _cascade_from_evidence(session: AsyncSession, evidence_id: str) -> None:
-    """Re-evaluate every requirement and directly-linked obligation this evidence backs."""
-    requirement_ids = (
-        (
-            await session.execute(
-                select(evidence_requirements.c.requirement_id).where(
-                    evidence_requirements.c.evidence_id == evidence_id
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
+    """Re-evaluate every requirement this evidence backs."""
+    requirement_ids = (await session.execute(
+        select(evidence_requirements.c.requirement_id)
+        .where(evidence_requirements.c.evidence_id == evidence_id)
+    )).scalars().all()
     for cid in requirement_ids:
         await refresh_requirement_effectiveness(session, cid)
         await refresh_obligations_for_requirement(session, cid)
-    # Evidence can also be linked directly to obligations (without a requirement
-    # intermediary). Refresh those too so their status and assessment score stay in sync.
-    obligation_ids = (
-        (
-            await session.execute(
-                select(evidence_obligations.c.obligation_id).where(
-                    evidence_obligations.c.evidence_id == evidence_id
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    for oid in obligation_ids:
-        await refresh_obligation(session, oid)
 
 
-@router.get(
-    "/evidence/{evidence_id}/versions",
-    response_model=list[EvidenceVersionResponse],
-    dependencies=[Depends(require_permission(EVIDENCE_READ))],
-)
+@router.get("/evidence/{evidence_id}/versions", response_model=list[EvidenceVersionResponse], dependencies=[Depends(require_permission(EVIDENCE_READ))])
 async def get_evidence_versions(evidence_id: str) -> list[EvidenceVersionResponse]:
     async with SessionLocal() as session:
         await _load(session, evidence_id)
-        rows = (
-            (
-                await session.execute(
-                    select(EvidenceVersion)
-                    .where(EvidenceVersion.evidence_id == evidence_id)
-                    .order_by(EvidenceVersion.created_at.asc())
-                )
-            )
-            .scalars()
-            .all()
-        )
+        rows = (await session.execute(
+            select(EvidenceVersion)
+            .where(EvidenceVersion.evidence_id == evidence_id)
+            .order_by(EvidenceVersion.created_at.asc())
+        )).scalars().all()
     return [EvidenceVersionResponse.model_validate(r) for r in rows]
 
 
-@router.post(
-    "/evidence/{evidence_id}/upload-version",
-    response_model=EvidenceDetailResponse,
-    dependencies=[Depends(require_permission(EVIDENCE_WRITE))],
-)
+@router.post("/evidence/{evidence_id}/upload-version", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
 async def upload_evidence_version(
     evidence_id: str,
     version_label: str = Form(...),
@@ -542,7 +346,6 @@ async def upload_evidence_version(
     validity_until: str | None = Form(default=None),
     file: UploadFile = File(...),
 ) -> EvidenceDetailResponse:
-    # Validate evidence exists and file type/size before touching MinIO
     async with SessionLocal() as session:
         await _load(session, evidence_id)
 
@@ -556,38 +359,29 @@ async def upload_evidence_version(
         raise HTTPException(422, f"MIME type '{mime}' is not allowed")
     data = await file.read()
     if len(data) > MAX_FILE_BYTES:
-        raise HTTPException(
-            413, f"File exceeds maximum size of {MAX_FILE_BYTES // (1024 * 1024)} MB"
-        )
+        raise HTTPException(413, f"File exceeds maximum size of {MAX_FILE_BYTES // (1024 * 1024)} MB")
 
-    # Upload new file to MinIO before the write transaction
     await minio_client.ensure_bucket()
-    new_file_path = await minio_client.upload_file(
-        evidence_id, file.filename, data, mime
-    )
+    new_file_path = await minio_client.upload_file(evidence_id, file.filename, data, mime)
 
-    # Write transaction. If it fails, delete the orphaned new file.
     old_file_path = ""
     linked_requirement_ids: list[str] = []
-    linked_obligation_ids: list[str] = []
     try:
         async with SessionLocal() as session:
             row = await _load(session, evidence_id)
             old_file_path = row.file_path
 
             if row.file_path:
-                session.add(
-                    EvidenceVersion(
-                        id=new_id("EVV"),
-                        evidence_id=evidence_id,
-                        version_label=row.version_label,
-                        file_path=row.file_path,
-                        file_name=row.file_name,
-                        file_size=row.file_size,
-                        mime_type=row.mime_type,
-                        uploaded_by=row.uploaded_by,
-                    )
-                )
+                session.add(EvidenceVersion(
+                    id=new_id("EVV"),
+                    evidence_id=evidence_id,
+                    version_label=row.version_label,
+                    file_path=row.file_path,
+                    file_name=row.file_name,
+                    file_size=row.file_size,
+                    mime_type=row.mime_type,
+                    uploaded_by=row.uploaded_by,
+                ))
 
             row.file_path = new_file_path
             row.file_name = file.filename
@@ -601,25 +395,63 @@ async def upload_evidence_version(
 
             await session.commit()
             await session.refresh(row)
-            linked_requirement_ids, linked_obligation_ids = await _linked_ids(
-                session, evidence_id
-            )
+            linked_requirement_ids = await _linked_requirement_ids(session, evidence_id)
     except Exception:
         await minio_client.delete_file(new_file_path)
         raise
 
-    # Delete the replaced file from MinIO after a successful DB commit
     if old_file_path and old_file_path != new_file_path:
         await minio_client.delete_file(old_file_path)
 
-    logger.info(
-        "evidence.version_uploaded",
-        extra={
-            "evidence_id": evidence_id,
-            "version_label": version_label,
-        },
-    )
     detail = EvidenceDetailResponse.model_validate(row)
     detail.requirement_ids = linked_requirement_ids
-    detail.obligation_ids = linked_obligation_ids
+    return detail
+
+
+@router.post("/evidence/{evidence_id}/requirements/{requirement_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def link_requirement(evidence_id: str, requirement_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        await _load(session, evidence_id)
+        req = (await session.execute(select(Requirement).where(Requirement.id == requirement_id))).scalar_one_or_none()
+        if not req:
+            raise HTTPException(404, f"Requirement {requirement_id} not found")
+        await session.execute(
+            pg_insert(evidence_requirements)
+            .values(evidence_id=evidence_id, requirement_id=requirement_id)
+            .on_conflict_do_nothing()
+        )
+        await _cascade_from_evidence(session, evidence_id)
+        await session.commit()
+        req_ids = await _linked_requirement_ids(session, evidence_id)
+        row = await _load(session, evidence_id)
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.requirement_ids = req_ids
+    return detail
+
+
+@router.delete("/evidence/{evidence_id}/requirements/{requirement_id}", response_model=EvidenceDetailResponse, dependencies=[Depends(require_permission(EVIDENCE_WRITE))])
+async def unlink_requirement(evidence_id: str, requirement_id: str) -> EvidenceDetailResponse:
+    async with SessionLocal() as session:
+        await _load(session, evidence_id)
+        current = await _linked_requirement_ids(session, evidence_id)
+        if requirement_id not in current:
+            raise HTTPException(404, f"Requirement {requirement_id} is not linked to this evidence")
+        if len(current) <= 1:
+            raise HTTPException(409, "Cannot unlink the last requirement — evidence must stay linked to at least one")
+        await session.execute(
+            evidence_requirements.delete().where(
+                evidence_requirements.c.evidence_id == evidence_id,
+                evidence_requirements.c.requirement_id == requirement_id,
+            )
+        )
+        await _cascade_from_evidence(session, evidence_id)
+        # Also refresh the unlinked requirement — _cascade_from_evidence only
+        # touches requirements still linked after the delete.
+        await refresh_requirement_effectiveness(session, requirement_id)
+        await refresh_obligations_for_requirement(session, requirement_id)
+        await session.commit()
+        req_ids = await _linked_requirement_ids(session, evidence_id)
+        row = await _load(session, evidence_id)
+    detail = EvidenceDetailResponse.model_validate(row)
+    detail.requirement_ids = req_ids
     return detail

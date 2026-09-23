@@ -105,9 +105,8 @@ async def test_list_obligations_filter_by_requirement(client: httpx.AsyncClient)
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    # Link a requirement to exactly one of the assessment's obligations.
-    req = await create_requirement(client, system["id"])
-    await client.post(f"/v1/requirements/{req['id']}/link/{obs[0]['id']}")
+    # In the 1:N model, creating a requirement with obligation_id links it directly.
+    req = await create_requirement(client, obligation_id=obs[0]["id"])
 
     r = await client.get(f"/v1/obligations?requirement_id={req['id']}")
     assert r.status_code == 200
@@ -115,18 +114,6 @@ async def test_list_obligations_filter_by_requirement(client: httpx.AsyncClient)
     assert len(body) == 1
     assert body[0]["id"] == obs[0]["id"]
 
-
-async def test_list_obligations_filter_by_evidence(client: httpx.AsyncClient):
-    system = await create_system()
-    ass = await create_assessment(client, system["id"])
-    obl = await create_obligation(client, ass["id"])
-    evd = await create_evidence(client, obligation_ids=[obl["id"]])
-
-    r = await client.get(f"/v1/obligations?evidence_id={evd['id']}")
-    assert r.status_code == 200
-    body = r.json()
-    assert len(body) == 1
-    assert body[0]["id"] == obl["id"]
 
 
 async def test_list_obligations_filter_by_status(client: httpx.AsyncClient):
