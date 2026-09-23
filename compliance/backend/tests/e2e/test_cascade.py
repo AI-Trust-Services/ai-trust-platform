@@ -149,6 +149,7 @@ async def test_removing_approved_evidence_demotes_fulfilled_requirement(db_sessi
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass)
     req = await _requirement(db_session, system, obl, status="fulfilled")
+    evd = await _evidence(db_session, status="awaiting_review")
     await _link_evidence_requirement(db_session, evd.id, req.id)
 
     await refresh_requirement_effectiveness(db_session, req.id)
@@ -196,15 +197,19 @@ async def test_all_fulfilled_requirements_fulfill_obligation(db_session: AsyncSe
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass)
-    req = await _requirement(db_session, system, obl, status="fulfilled")
+    await _requirement(db_session, system, obl, status="fulfilled")
+
+    await refresh_obligation(db_session, obl.id)
+
+    assert obl.status == "fulfilled"
 
 
 async def test_mixed_requirement_statuses_set_obligation_in_progress(db_session: AsyncSession):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass)
-    req1 = await _requirement(db_session, system, obl, status="fulfilled")
-    req2 = await _requirement(db_session, system, obl, status="under_review")
+    await _requirement(db_session, system, obl, status="fulfilled")
+    await _requirement(db_session, system, obl, status="under_review")
 
     await refresh_obligation(db_session, obl.id)
 
@@ -225,14 +230,22 @@ async def test_locked_not_applicable_obligation_not_changed(db_session: AsyncSes
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass, status="not_applicable")
-    req = await _requirement(db_session, system, obl, status="fulfilled")
+    await _requirement(db_session, system, obl, status="fulfilled")
+
+    await refresh_obligation(db_session, obl.id)
+
+    assert obl.status == "not_applicable"
 
 
 async def test_locked_overdue_obligation_not_changed(db_session: AsyncSession):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass, status="overdue")
-    req = await _requirement(db_session, system, obl, status="fulfilled")
+    await _requirement(db_session, system, obl, status="fulfilled")
+
+    await refresh_obligation(db_session, obl.id)
+
+    assert obl.status == "overdue"
 
 
 # ---------------------------------------------------------------------------
