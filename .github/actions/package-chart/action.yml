@@ -1,0 +1,34 @@
+name: Package and Push Helm Chart
+description: Package the ai-trust-platform Helm chart and push it to GHCR.
+
+inputs:
+  owner:
+    description: "Lowercase GitHub repository owner"
+    required: true
+  tag:
+    description: "Chart version tag"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install Helm
+      uses: azure/setup-helm@v4
+
+    - name: Log in to GitHub Container Registry
+      shell: bash
+      run: echo "${{ github.token }}" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+    - name: Package and push chart
+      shell: bash
+      env:
+        OWNER: ${{ inputs.owner }}
+        TAG: ${{ inputs.tag }}
+      run: |
+        set -euo pipefail
+        helm dependency update k8s/helm/ai-trust-platform
+        helm package k8s/helm/ai-trust-platform \
+          --destination dist/ \
+          --version "0.0.0-${TAG}" \
+          --app-version "${TAG}"
+        helm push "dist/ai-trust-platform-0.0.0-${TAG}.tgz" "oci://ghcr.io/${OWNER}/charts"

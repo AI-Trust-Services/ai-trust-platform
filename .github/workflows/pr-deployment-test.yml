@@ -11,11 +11,6 @@ name: PR Deployment Test
 on:
   pull_request:
     types: [labeled]
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: "PR number to deploy (required for manual trigger)"
-        required: true
 
 permissions:
   contents: read
@@ -24,7 +19,6 @@ permissions:
   statuses: write
   id-token: write
   packages: write
-  actions: write
 
 concurrency:
   group: ${{ github.actor }}
@@ -32,11 +26,9 @@ concurrency:
 
 jobs:
   dispatch:
-    name: Parse /garden-deploy
+    name: Parse garden-deploy
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      github.event.label.name == 'garden-deploy'
+    if: github.event.label.name == 'garden-deploy'
     outputs:
       pr_number: ${{ steps.pr.outputs.pr_number }}
       pr_sha: ${{ steps.pr.outputs.pr_sha }}
@@ -50,10 +42,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "authorized=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" \
             --jq '.permission' 2>/dev/null || echo "none")
           if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "write" || "$PERMISSION" == "maintain" ]]; then
@@ -78,18 +66,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            PR_NUMBER="${{ inputs.pr_number }}"
-            PR_DATA=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER})
-            PR_SHA=$(echo "$PR_DATA" | jq -r '.head.sha')
-            PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
-            PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
-          else
-            PR_NUMBER="${{ github.event.pull_request.number }}"
-            PR_SHA="${{ github.event.pull_request.head.sha }}"
-            PR_BRANCH="${{ github.event.pull_request.head.ref }}"
-            PR_AUTHOR="${{ github.event.pull_request.user.login }}"
-          fi
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_SHA="${{ github.event.pull_request.head.sha }}"
+          PR_BRANCH="${{ github.event.pull_request.head.ref }}"
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
           echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
           echo "pr_sha=${PR_SHA}" >> "$GITHUB_OUTPUT"
           echo "pr_branch=${PR_BRANCH}" >> "$GITHUB_OUTPUT"
@@ -136,12 +116,56 @@ jobs:
     name: Build and deploy PR branch
     needs: dispatch
     if: needs.dispatch.outputs.authorized == 'true'
-    uses: ./.github/workflows/build-push-deploy.yml
-    with:
-      branch: ${{ needs.dispatch.outputs.pr_branch }}
-      gardener_cluster: ai-trust-test
-      namespace: ${{ needs.dispatch.outputs.pr_author_lower }}
-    secrets: inherit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Compute variables
+        id: vars
+        uses: ./.github/actions/compute-vars
+        with:
+          branch: ${{ needs.dispatch.outputs.pr_branch }}
+          gardener_cluster: ai-trust-test
+          namespace: ${{ needs.dispatch.outputs.pr_author_lower }}
+
+      - name: Build and push images
+        uses: ./.github/actions/build-images
+        with:
+          owner: ${{ steps.vars.outputs.owner }}
+          tag: ${{ steps.vars.outputs.tag }}
+          ref: ${{ steps.vars.outputs.ref }}
+
+      - name: Package and push Helm chart
+        uses: ./.github/actions/package-chart
+        with:
+          owner: ${{ steps.vars.outputs.owner }}
+          tag: ${{ steps.vars.outputs.tag }}
+
+      - name: Build and push OCM component
+        uses: ./.github/actions/publish-ocm
+        with:
+          owner: ${{ steps.vars.outputs.owner }}
+          tag: ${{ steps.vars.outputs.tag }}
+
+      - name: Deploy to cluster
+        uses: ./.github/actions/apply-to-cluster
+        with:
+          cluster: ${{ steps.vars.outputs.cluster }}
+          ocm_version: ${{ steps.vars.outputs.tag }}
+          namespace: ${{ steps.vars.outputs.namespace }}
+          github_actor: ${{ github.actor }}
+          app_admin_password: ${{ secrets.APP_ADMIN_PASSWORD }}
+          clickhouse_password: ${{ secrets.CLICKHOUSE_PASSWORD }}
+          keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+          keycloak_client_secret: ${{ secrets.KEYCLOAK_CLIENT_SECRET }}
+          minio_root_password: ${{ secrets.MINIO_ROOT_PASSWORD }}
+          oauth2_proxy_cookie_secret: ${{ secrets.OAUTH2_PROXY_COOKIE_SECRET }}
+          postgres_password: ${{ secrets.POSTGRES_PASSWORD }}
+          rabbitmq_password: ${{ secrets.RABBITMQ_PASSWORD }}
+          smtp_password: ${{ secrets.SMTP_PASSWORD }}
+          users_backend_client_secret: ${{ secrets.USERS_BACKEND_CLIENT_SECRET }}
+          dev_user_password: ${{ secrets.DEV_USER_PASSWORD }}
 
   post-result:
     name: Post deployment result

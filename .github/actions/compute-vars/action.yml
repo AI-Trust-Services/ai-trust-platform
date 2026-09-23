@@ -1,0 +1,53 @@
+name: Compute Variables
+description: Compute image owner, tag, cluster, namespace, and ref for a PR deployment.
+
+inputs:
+  branch:
+    description: "Branch to build"
+    required: true
+  gardener_cluster:
+    description: "Target Gardener cluster"
+    required: true
+  namespace:
+    description: "Namespace to deploy into (derived from actor when blank)"
+    required: false
+    default: ""
+
+outputs:
+  owner:
+    description: "Lowercase GitHub repository owner"
+    value: ${{ steps.vars.outputs.owner }}
+  tag:
+    description: "Image tag (<namespace>-<short-sha>)"
+    value: ${{ steps.vars.outputs.tag }}
+  cluster:
+    description: "Target Gardener cluster"
+    value: ${{ steps.vars.outputs.cluster }}
+  namespace:
+    description: "Target namespace"
+    value: ${{ steps.vars.outputs.namespace }}
+  ref:
+    description: "Git ref to check out"
+    value: ${{ steps.vars.outputs.ref }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute vars
+      id: vars
+      shell: bash
+      run: |
+        OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+        echo "owner=${OWNER}" >> "$GITHUB_OUTPUT"
+
+        echo "ref=${{ inputs.branch }}" >> "$GITHUB_OUTPUT"
+        echo "cluster=${{ inputs.gardener_cluster }}" >> "$GITHUB_OUTPUT"
+
+        if [[ -n "${{ inputs.namespace }}" ]]; then
+          NAMESPACE="${{ inputs.namespace }}"
+        else
+          NAMESPACE="${GITHUB_ACTOR,,}"
+        fi
+        echo "namespace=${NAMESPACE}" >> "$GITHUB_OUTPUT"
+
+        echo "tag=${NAMESPACE}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
