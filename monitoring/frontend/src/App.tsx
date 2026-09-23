@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 import { Outlet } from "react-router";
 import { Activity, Loader2 } from "lucide-react";
 import { useLuigiInit } from "./hooks/useLuigi";
-import { useTheme } from './hooks/useTheme';
-import { useBranding } from './hooks/useBranding';
+import { useTheme, useBranding } from "@ai-trust/react-hooks";
 import { HEALTH_URL } from "./api/client";
 
 type ToastFn = (msg: string, isError?: boolean) => void;

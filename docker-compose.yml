@@ -206,7 +206,8 @@ services:
 
   ai-system-registry-frontend:
     build:
-      context: ./ai-system-registry/frontend
+      context: .
+      dockerfile: ai-system-registry/frontend/Dockerfile
       args:
         VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE}
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
@@ -214,14 +215,16 @@ services:
 
   monitoring-frontend:
     build:
-      context: ./monitoring/frontend
+      context: .
+      dockerfile: monitoring/frontend/Dockerfile
       args:
         VITE_MONITORING_API_BASE: ${VITE_MONITORING_API_BASE}
     restart: on-failure
 
   overview-frontend:
     build:
-      context: ./overview/frontend
+      context: .
+      dockerfile: overview/frontend/Dockerfile
       args:
         VITE_OVERVIEW_API_BASE: ${VITE_OVERVIEW_API_BASE}
         VITE_ALERTS_API_BASE: ${VITE_ALERTS_API_BASE}
@@ -234,7 +237,8 @@ services:
 
   alerts-frontend:
     build:
-      context: ./alerts/frontend
+      context: .
+      dockerfile: alerts/frontend/Dockerfile
       args:
         VITE_ALERTS_API_BASE: ${VITE_ALERTS_API_BASE}
         VITE_ALERTS_URL: ${VITE_ALERTS_URL}
@@ -243,7 +247,8 @@ services:
 
   compliance-frontend:
     build:
-      context: ./compliance/frontend
+      context: .
+      dockerfile: compliance/frontend/Dockerfile
       args:
         VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE:-/api/compliance/v1}
         VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/v1}
@@ -252,14 +257,16 @@ services:
 
   users-frontend:
     build:
-      context: ./users/frontend
+      context: .
+      dockerfile: users/frontend/Dockerfile
       args:
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
     restart: on-failure
 
   audit-frontend:
     build:
-      context: ./audit/frontend
+      context: .
+      dockerfile: audit/frontend/Dockerfile
       args:
         VITE_AUDIT_API_BASE: ${VITE_AUDIT_API_BASE:-/api/audit/v1}
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
@@ -267,7 +274,8 @@ services:
 
   admin-frontend:
     build:
-      context: ./admin/frontend
+      context: .
+      dockerfile: admin/frontend/Dockerfile
       args:
         VITE_ADMIN_API_BASE: ${VITE_ADMIN_API_BASE:-/api/admin/v1}
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
@@ -710,7 +718,8 @@ services:
 
   decision-trace-analyzer-frontend:
     build:
-      context: ./decision-trace-analyzer/frontend
+      context: .
+      dockerfile: decision-trace-analyzer/frontend/Dockerfile
       args:
         VITE_DTA_API_BASE: ${VITE_DTA_API_BASE}
     depends_on:

@@ -2,21 +2,26 @@
 
 All endpoints require `iam:manage` permission. Tenant-aware: in jwt mode each
 tenant has isolated branding stored in their schema (Postgres) and bucket (MinIO).
+
+Branding is stored in a key-value table (`branding`) for flexibility — no migrations
+needed for new fields. Each key has a `published` value (what users see) and a
+`draft` value (for preview before publishing).
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, Response, UploadFile
-from sqlalchemy import select
-from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy import select, update, delete
 
 from ai_trust_authorization.constants import IAM_MANAGE
 from ai_trust_authorization.permissions import get_current_user, require_permission
 from ai_trust_logging import get_logger
 from ai_trust_persistence.database import SessionLocal
 from ai_trust_persistence.audit import log_audit_event
+from ai_trust_persistence.models.branding import Branding
 from ai_trust_persistence.models.platform_settings import PlatformSettings
 
 from app import branding_storage
@@ -31,8 +36,7 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/v1/branding", tags=["branding"])
 
-# Branding field names (published columns, _draft variants generated from these)
-# Note: org_name is now derived from platform_name, not a separate field
+# Branding field names (all fields that can be set/published)
 BRANDING_FIELDS = [
     "logo_horizontal_light",
     "logo_horizontal_dark",
@@ -72,14 +76,31 @@ BRANDING_FIELDS = [
     "mfe_bg_dark",
 ]
 
+# Logo fields that need MinIO copy from draft to published namespace
+LOGO_FIELDS = ["logo_horizontal_light", "logo_horizontal_dark", "logo_icon", "favicon"]
 
-async def _get_settings() -> PlatformSettings:
-    """Fetch the singleton settings row, scoped to the current tenant."""
+
+async def _get_branding_dict() -> dict[str, tuple[str | None, str | None]]:
+    """Fetch all branding entries as a dict of key -> (published, draft)."""
+    async with SessionLocal() as session:
+        result = await session.execute(select(Branding))
+        entries = result.scalars().all()
+        return {e.key: (e.published, e.draft) for e in entries}
+
+
+async def _get_platform_name() -> str:
+    """Get the platform name from platform_settings (used as org_name)."""
     async with SessionLocal() as session:
         row = await session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
-        if row is None:
-            raise HTTPException(status_code=503, detail="Platform settings not initialised")
-        return row
+        return row.platform_name if row else "AI Trust Platform"
+
+
+def _get_value(entries: dict[str, tuple[str | None, str | None]], key: str, mode: str) -> str | None:
+    """Get a branding value, falling back from draft to published in draft mode."""
+    pub, draft = entries.get(key, (None, None))
+    if mode == "draft":
+        return draft if draft is not None else pub
+    return pub
 
 
 def _merge_advanced_colors(
@@ -94,115 +115,133 @@ def _merge_advanced_colors(
     return result if result else None
 
 
-def _build_response(row: PlatformSettings, mode: Literal["published", "draft"]) -> BrandingResponse:
-    """Build BrandingResponse from either published or draft columns.
+def _build_response(
+    entries: dict[str, tuple[str | None, str | None]],
+    org_name: str,
+    mode: Literal["published", "draft"],
+) -> BrandingResponse:
+    """Build BrandingResponse from branding entries dict."""
+    # Parse advanced_colors from JSON string
+    adv_pub_str, adv_draft_str = entries.get("advanced_colors", (None, None))
+    adv_pub = json.loads(adv_pub_str) if adv_pub_str else None
+    adv_draft = json.loads(adv_draft_str) if adv_draft_str else None
 
-    Note: org_name is always derived from platform_name (configured in Settings).
-    """
-    # org_name comes from platform_name in Settings (not a separate branding field)
-    org_name = row.platform_name
+    # Get publish metadata
+    pub_at, _ = entries.get("_published_at", (None, None))
+    pub_by, _ = entries.get("_published_by", (None, None))
 
     if mode == "draft":
         return BrandingResponse(
             org_name=org_name,
-            logo_horizontal_light=row.logo_horizontal_light_draft or row.logo_horizontal_light,
-            logo_horizontal_dark=row.logo_horizontal_dark_draft or row.logo_horizontal_dark,
-            logo_icon=row.logo_icon_draft or row.logo_icon,
-            favicon=row.favicon_draft or row.favicon,
+            logo_horizontal_light=_get_value(entries, "logo_horizontal_light", mode),
+            logo_horizontal_dark=_get_value(entries, "logo_horizontal_dark", mode),
+            logo_icon=_get_value(entries, "logo_icon", mode),
+            favicon=_get_value(entries, "favicon", mode),
             # Brand colors (light)
-            primary_color=row.primary_color_draft or row.primary_color,
-            secondary_color=row.secondary_color_draft or row.secondary_color,
-            accent_color=row.accent_color_draft or row.accent_color,
-            warning_color=row.warning_color_draft or row.warning_color,
+            primary_color=_get_value(entries, "primary_color", mode),
+            secondary_color=_get_value(entries, "secondary_color", mode),
+            accent_color=_get_value(entries, "accent_color", mode),
+            warning_color=_get_value(entries, "warning_color", mode),
             # Brand colors (dark)
-            primary_color_dark=row.primary_color_dark_draft or row.primary_color_dark,
-            secondary_color_dark=row.secondary_color_dark_draft or row.secondary_color_dark,
-            accent_color_dark=row.accent_color_dark_draft or row.accent_color_dark,
-            warning_color_dark=row.warning_color_dark_draft or row.warning_color_dark,
+            primary_color_dark=_get_value(entries, "primary_color_dark", mode),
+            secondary_color_dark=_get_value(entries, "secondary_color_dark", mode),
+            accent_color_dark=_get_value(entries, "accent_color_dark", mode),
+            warning_color_dark=_get_value(entries, "warning_color_dark", mode),
             # Shell colors (light)
-            sidebar_bg=row.sidebar_bg_draft or row.sidebar_bg,
-            sidebar_text=row.sidebar_text_draft or row.sidebar_text,
-            header_bg=row.header_bg_draft or row.header_bg,
-            header_text=row.header_text_draft or row.header_text,
+            sidebar_bg=_get_value(entries, "sidebar_bg", mode),
+            sidebar_text=_get_value(entries, "sidebar_text", mode),
+            header_bg=_get_value(entries, "header_bg", mode),
+            header_text=_get_value(entries, "header_text", mode),
             # Shell colors (dark)
-            sidebar_bg_dark=row.sidebar_bg_dark_draft or row.sidebar_bg_dark,
-            sidebar_text_dark=row.sidebar_text_dark_draft or row.sidebar_text_dark,
-            header_bg_dark=row.header_bg_dark_draft or row.header_bg_dark,
-            header_text_dark=row.header_text_dark_draft or row.header_text_dark,
+            sidebar_bg_dark=_get_value(entries, "sidebar_bg_dark", mode),
+            sidebar_text_dark=_get_value(entries, "sidebar_text_dark", mode),
+            header_bg_dark=_get_value(entries, "header_bg_dark", mode),
+            header_text_dark=_get_value(entries, "header_text_dark", mode),
             # UI element colors (light)
-            button_bg=row.button_bg_draft or row.button_bg,
-            button_text=row.button_text_draft or row.button_text,
-            table_header_bg=row.table_header_bg_draft or row.table_header_bg,
-            table_border=row.table_border_draft or row.table_border,
-            mfe_bg=row.mfe_bg_draft or row.mfe_bg,
+            button_bg=_get_value(entries, "button_bg", mode),
+            button_text=_get_value(entries, "button_text", mode),
+            table_header_bg=_get_value(entries, "table_header_bg", mode),
+            table_border=_get_value(entries, "table_border", mode),
+            mfe_bg=_get_value(entries, "mfe_bg", mode),
             # UI element colors (dark)
-            button_bg_dark=row.button_bg_dark_draft or row.button_bg_dark,
-            button_text_dark=row.button_text_dark_draft or row.button_text_dark,
-            table_header_bg_dark=row.table_header_bg_dark_draft or row.table_header_bg_dark,
-            table_border_dark=row.table_border_dark_draft or row.table_border_dark,
-            mfe_bg_dark=row.mfe_bg_dark_draft or row.mfe_bg_dark,
+            button_bg_dark=_get_value(entries, "button_bg_dark", mode),
+            button_text_dark=_get_value(entries, "button_text_dark", mode),
+            table_header_bg_dark=_get_value(entries, "table_header_bg_dark", mode),
+            table_border_dark=_get_value(entries, "table_border_dark", mode),
+            mfe_bg_dark=_get_value(entries, "mfe_bg_dark", mode),
             # Advanced colors
-            advanced_colors=_merge_advanced_colors(row.advanced_colors, row.advanced_colors_draft),
-            published_at=row.branding_published_at.isoformat() if row.branding_published_at else None,
-            published_by=row.branding_published_by,
+            advanced_colors=_merge_advanced_colors(adv_pub, adv_draft),
+            published_at=pub_at,
+            published_by=pub_by,
         )
     # mode == "published"
     return BrandingResponse(
         org_name=org_name,
-        logo_horizontal_light=row.logo_horizontal_light,
-        logo_horizontal_dark=row.logo_horizontal_dark,
-        logo_icon=row.logo_icon,
-        favicon=row.favicon,
+        logo_horizontal_light=_get_value(entries, "logo_horizontal_light", mode),
+        logo_horizontal_dark=_get_value(entries, "logo_horizontal_dark", mode),
+        logo_icon=_get_value(entries, "logo_icon", mode),
+        favicon=_get_value(entries, "favicon", mode),
         # Brand colors (light)
-        primary_color=row.primary_color,
-        secondary_color=row.secondary_color,
-        accent_color=row.accent_color,
-        warning_color=row.warning_color,
+        primary_color=_get_value(entries, "primary_color", mode),
+        secondary_color=_get_value(entries, "secondary_color", mode),
+        accent_color=_get_value(entries, "accent_color", mode),
+        warning_color=_get_value(entries, "warning_color", mode),
         # Brand colors (dark)
-        primary_color_dark=row.primary_color_dark,
-        secondary_color_dark=row.secondary_color_dark,
-        accent_color_dark=row.accent_color_dark,
-        warning_color_dark=row.warning_color_dark,
+        primary_color_dark=_get_value(entries, "primary_color_dark", mode),
+        secondary_color_dark=_get_value(entries, "secondary_color_dark", mode),
+        accent_color_dark=_get_value(entries, "accent_color_dark", mode),
+        warning_color_dark=_get_value(entries, "warning_color_dark", mode),
         # Shell colors (light)
-        sidebar_bg=row.sidebar_bg,
-        sidebar_text=row.sidebar_text,
-        header_bg=row.header_bg,
-        header_text=row.header_text,
+        sidebar_bg=_get_value(entries, "sidebar_bg", mode),
+        sidebar_text=_get_value(entries, "sidebar_text", mode),
+        header_bg=_get_value(entries, "header_bg", mode),
+        header_text=_get_value(entries, "header_text", mode),
         # Shell colors (dark)
-        sidebar_bg_dark=row.sidebar_bg_dark,
-        sidebar_text_dark=row.sidebar_text_dark,
-        header_bg_dark=row.header_bg_dark,
-        header_text_dark=row.header_text_dark,
+        sidebar_bg_dark=_get_value(entries, "sidebar_bg_dark", mode),
+        sidebar_text_dark=_get_value(entries, "sidebar_text_dark", mode),
+        header_bg_dark=_get_value(entries, "header_bg_dark", mode),
+        header_text_dark=_get_value(entries, "header_text_dark", mode),
         # UI element colors (light)
-        button_bg=row.button_bg,
-        button_text=row.button_text,
-        table_header_bg=row.table_header_bg,
-        table_border=row.table_border,
-        mfe_bg=row.mfe_bg,
+        button_bg=_get_value(entries, "button_bg", mode),
+        button_text=_get_value(entries, "button_text", mode),
+        table_header_bg=_get_value(entries, "table_header_bg", mode),
+        table_border=_get_value(entries, "table_border", mode),
+        mfe_bg=_get_value(entries, "mfe_bg", mode),
         # UI element colors (dark)
-        button_bg_dark=row.button_bg_dark,
-        button_text_dark=row.button_text_dark,
-        table_header_bg_dark=row.table_header_bg_dark,
-        table_border_dark=row.table_border_dark,
-        mfe_bg_dark=row.mfe_bg_dark,
+        button_bg_dark=_get_value(entries, "button_bg_dark", mode),
+        button_text_dark=_get_value(entries, "button_text_dark", mode),
+        table_header_bg_dark=_get_value(entries, "table_header_bg_dark", mode),
+        table_border_dark=_get_value(entries, "table_border_dark", mode),
+        mfe_bg_dark=_get_value(entries, "mfe_bg_dark", mode),
         # Advanced colors
-        advanced_colors=row.advanced_colors,
-        published_at=row.branding_published_at.isoformat() if row.branding_published_at else None,
-        published_by=row.branding_published_by,
+        advanced_colors=adv_pub,
+        published_at=pub_at,
+        published_by=pub_by,
     )
 
 
-def _has_unpublished_changes(row: PlatformSettings) -> bool:
+def _has_unpublished_changes(entries: dict[str, tuple[str | None, str | None]]) -> bool:
     """Check if any draft value differs from its published counterpart."""
-    for field in BRANDING_FIELDS:
-        published = getattr(row, field)
-        draft = getattr(row, f"{field}_draft")
+    for key, (published, draft) in entries.items():
+        if key.startswith("_"):
+            continue  # Skip metadata keys
         if draft is not None and draft != published:
             return True
-    # Also check advanced_colors
-    if row.advanced_colors_draft:
-        return True
     return False
+
+
+async def _upsert_branding(key: str, published: str | None = None, draft: str | None = None, set_draft: bool = True) -> None:
+    """Insert or update a branding entry. If set_draft=True, updates draft; else updates published."""
+    async with SessionLocal() as session:
+        existing = await session.get(Branding, key)
+        if existing:
+            if set_draft:
+                existing.draft = draft
+            else:
+                existing.published = published
+        else:
+            session.add(Branding(key=key, published=published, draft=draft if set_draft else None))
+        await session.commit()
 
 
 @router.get("", response_model=BrandingResponse)
@@ -211,8 +250,9 @@ async def get_branding(
     _: str = Depends(require_permission(IAM_MANAGE)),
 ) -> BrandingResponse:
     """Get branding configuration (published or draft for preview)."""
-    row = await _get_settings()
-    return _build_response(row, mode)
+    entries = await _get_branding_dict()
+    org_name = await _get_platform_name()
+    return _build_response(entries, org_name, mode)
 
 
 @router.put("", response_model=BrandingResponse)
@@ -225,82 +265,93 @@ async def update_branding(
     Note: org_name/platform_name is configured in Settings, not here.
     """
     async with SessionLocal() as session:
-        row = await session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
-        if row is None:
-            raise HTTPException(status_code=503, detail="Platform settings not initialised")
+        # Get all fields from the body that are not None
+        updates: dict[str, str] = {}
 
         # Brand colors (light)
         if body.primary_color is not None:
-            row.primary_color_draft = body.primary_color
+            updates["primary_color"] = body.primary_color
         if body.secondary_color is not None:
-            row.secondary_color_draft = body.secondary_color
+            updates["secondary_color"] = body.secondary_color
         if body.accent_color is not None:
-            row.accent_color_draft = body.accent_color
+            updates["accent_color"] = body.accent_color
         if body.warning_color is not None:
-            row.warning_color_draft = body.warning_color
+            updates["warning_color"] = body.warning_color
         # Brand colors (dark)
         if body.primary_color_dark is not None:
-            row.primary_color_dark_draft = body.primary_color_dark
+            updates["primary_color_dark"] = body.primary_color_dark
         if body.secondary_color_dark is not None:
-            row.secondary_color_dark_draft = body.secondary_color_dark
+            updates["secondary_color_dark"] = body.secondary_color_dark
         if body.accent_color_dark is not None:
-            row.accent_color_dark_draft = body.accent_color_dark
+            updates["accent_color_dark"] = body.accent_color_dark
         if body.warning_color_dark is not None:
-            row.warning_color_dark_draft = body.warning_color_dark
+            updates["warning_color_dark"] = body.warning_color_dark
         # Shell colors (light)
         if body.sidebar_bg is not None:
-            row.sidebar_bg_draft = body.sidebar_bg
+            updates["sidebar_bg"] = body.sidebar_bg
         if body.sidebar_text is not None:
-            row.sidebar_text_draft = body.sidebar_text
+            updates["sidebar_text"] = body.sidebar_text
         if body.header_bg is not None:
-            row.header_bg_draft = body.header_bg
+            updates["header_bg"] = body.header_bg
         if body.header_text is not None:
-            row.header_text_draft = body.header_text
+            updates["header_text"] = body.header_text
         # Shell colors (dark)
         if body.sidebar_bg_dark is not None:
-            row.sidebar_bg_dark_draft = body.sidebar_bg_dark
+            updates["sidebar_bg_dark"] = body.sidebar_bg_dark
         if body.sidebar_text_dark is not None:
-            row.sidebar_text_dark_draft = body.sidebar_text_dark
+            updates["sidebar_text_dark"] = body.sidebar_text_dark
         if body.header_bg_dark is not None:
-            row.header_bg_dark_draft = body.header_bg_dark
+            updates["header_bg_dark"] = body.header_bg_dark
         if body.header_text_dark is not None:
-            row.header_text_dark_draft = body.header_text_dark
+            updates["header_text_dark"] = body.header_text_dark
         # UI element colors (light)
         if body.button_bg is not None:
-            row.button_bg_draft = body.button_bg
+            updates["button_bg"] = body.button_bg
         if body.button_text is not None:
-            row.button_text_draft = body.button_text
+            updates["button_text"] = body.button_text
         if body.table_header_bg is not None:
-            row.table_header_bg_draft = body.table_header_bg
+            updates["table_header_bg"] = body.table_header_bg
         if body.table_border is not None:
-            row.table_border_draft = body.table_border
+            updates["table_border"] = body.table_border
         if body.mfe_bg is not None:
-            row.mfe_bg_draft = body.mfe_bg
+            updates["mfe_bg"] = body.mfe_bg
         # UI element colors (dark)
         if body.button_bg_dark is not None:
-            row.button_bg_dark_draft = body.button_bg_dark
+            updates["button_bg_dark"] = body.button_bg_dark
         if body.button_text_dark is not None:
-            row.button_text_dark_draft = body.button_text_dark
+            updates["button_text_dark"] = body.button_text_dark
         if body.table_header_bg_dark is not None:
-            row.table_header_bg_dark_draft = body.table_header_bg_dark
+            updates["table_header_bg_dark"] = body.table_header_bg_dark
         if body.table_border_dark is not None:
-            row.table_border_dark_draft = body.table_border_dark
+            updates["table_border_dark"] = body.table_border_dark
         if body.mfe_bg_dark is not None:
-            row.mfe_bg_dark_draft = body.mfe_bg_dark
+            updates["mfe_bg_dark"] = body.mfe_bg_dark
+
+        # Upsert each field
+        for key, value in updates.items():
+            existing = await session.get(Branding, key)
+            if existing:
+                existing.draft = value
+            else:
+                session.add(Branding(key=key, published=None, draft=value))
+
         # Advanced colors (merge into existing draft)
         if body.advanced_colors is not None:
-            # Copy the dict to ensure SQLAlchemy detects the change
-            existing = dict(row.advanced_colors_draft or {})
-            existing.update(body.advanced_colors)
-            row.advanced_colors_draft = existing
-            # Flag as modified so SQLAlchemy flushes the change
-            flag_modified(row, "advanced_colors_draft")
+            existing_adv = await session.get(Branding, "advanced_colors")
+            if existing_adv:
+                # Parse existing draft, merge, serialize back
+                existing_dict = json.loads(existing_adv.draft) if existing_adv.draft else {}
+                existing_dict.update(body.advanced_colors)
+                existing_adv.draft = json.dumps(existing_dict)
+            else:
+                session.add(Branding(key="advanced_colors", published=None, draft=json.dumps(body.advanced_colors)))
 
         await session.commit()
-        await session.refresh(row)
         logger.info("branding.draft_updated")
 
-    return _build_response(row, "draft")
+    entries = await _get_branding_dict()
+    org_name = await _get_platform_name()
+    return _build_response(entries, org_name, "draft")
 
 
 @router.post("/upload/{asset_type}", response_model=BrandingResponse)
@@ -333,20 +384,19 @@ async def upload_logo(
         file.content_type or "application/octet-stream",
     )
 
-    # Update draft column with the storage key
+    # Update draft in branding table
     async with SessionLocal() as session:
-        row = await session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
-        if row is None:
-            raise HTTPException(status_code=503, detail="Platform settings not initialised")
-
-        draft_field = f"{asset_type}_draft"
-        setattr(row, draft_field, key)
-
+        existing = await session.get(Branding, asset_type)
+        if existing:
+            existing.draft = key
+        else:
+            session.add(Branding(key=asset_type, published=None, draft=key))
         await session.commit()
-        await session.refresh(row)
         logger.info("branding.logo_uploaded", extra={"asset_type": asset_type, "key": key})
 
-    return _build_response(row, "draft")
+    entries = await _get_branding_dict()
+    org_name = await _get_platform_name()
+    return _build_response(entries, org_name, "draft")
 
 
 @router.post("/publish", response_model=BrandingPublishResponse)
@@ -355,39 +405,38 @@ async def publish_branding(
     _: str = Depends(require_permission(IAM_MANAGE)),
 ) -> BrandingPublishResponse:
     """Publish all draft branding changes to live."""
+    now = datetime.now(timezone.utc)
+
     async with SessionLocal() as session:
-        row = await session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
-        if row is None:
-            raise HTTPException(status_code=503, detail="Platform settings not initialised")
+        # Get all branding entries with drafts
+        result = await session.execute(select(Branding).where(Branding.draft.isnot(None)))
+        entries_with_drafts = result.scalars().all()
 
-        # Logo fields that need MinIO copy from draft to published namespace
-        logo_fields = ["logo_horizontal_light", "logo_horizontal_dark", "logo_icon", "favicon"]
+        for entry in entries_with_drafts:
+            if entry.key.startswith("_"):
+                continue  # Skip metadata keys
 
-        # Copy all draft values to published (only where draft differs)
-        for field in BRANDING_FIELDS:
-            draft_value = getattr(row, f"{field}_draft")
-            if draft_value is not None:
-                # For logo fields, copy the file from draft namespace to published namespace
-                if field in logo_fields and "/draft/" in draft_value:
-                    published_key = await branding_storage.copy_draft_to_published(draft_value)
-                    setattr(row, field, published_key)
-                else:
-                    setattr(row, field, draft_value)
-                setattr(row, f"{field}_draft", None)  # Clear draft after publish
-
-        # Publish advanced colors (merge draft into published)
-        if row.advanced_colors_draft:
-            # Copy dicts to ensure SQLAlchemy detects the changes
-            existing = dict(row.advanced_colors or {})
-            existing.update(row.advanced_colors_draft)
-            row.advanced_colors = existing
-            row.advanced_colors_draft = None
-            flag_modified(row, "advanced_colors")
+            draft_value = entry.draft
+            # For logo fields, copy the file from draft namespace to published namespace
+            if entry.key in LOGO_FIELDS and draft_value and "/draft/" in draft_value:
+                published_key = await branding_storage.copy_draft_to_published(draft_value)
+                entry.published = published_key
+            else:
+                entry.published = draft_value
+            entry.draft = None  # Clear draft after publish
 
         # Update publish metadata
-        now = datetime.now(timezone.utc)
-        row.branding_published_at = now
-        row.branding_published_by = username
+        pub_at = await session.get(Branding, "_published_at")
+        if pub_at:
+            pub_at.published = now.isoformat()
+        else:
+            session.add(Branding(key="_published_at", published=now.isoformat(), draft=None))
+
+        pub_by = await session.get(Branding, "_published_by")
+        if pub_by:
+            pub_by.published = username
+        else:
+            session.add(Branding(key="_published_by", published=username, draft=None))
 
         # Audit log
         log_audit_event(
@@ -400,7 +449,6 @@ async def publish_branding(
         )
 
         await session.commit()
-        await session.refresh(row)
         logger.info("branding.published", extra={"published_by": username})
 
     return BrandingPublishResponse(
@@ -416,21 +464,14 @@ async def discard_branding(
 ) -> BrandingResponse:
     """Discard all draft changes and reset to published values."""
     async with SessionLocal() as session:
-        row = await session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
-        if row is None:
-            raise HTTPException(status_code=503, detail="Platform settings not initialised")
-
-        # Clear all draft fields
-        for field in BRANDING_FIELDS:
-            setattr(row, f"{field}_draft", None)
-        # Clear advanced colors draft
-        row.advanced_colors_draft = None
-
+        # Clear all draft fields (set to None)
+        await session.execute(update(Branding).values(draft=None))
         await session.commit()
-        await session.refresh(row)
         logger.info("branding.draft_discarded")
 
-    return _build_response(row, "published")
+    entries = await _get_branding_dict()
+    org_name = await _get_platform_name()
+    return _build_response(entries, org_name, "published")
 
 
 @router.get("/status", response_model=BrandingStatusResponse)
@@ -438,11 +479,13 @@ async def get_branding_status(
     _: str = Depends(require_permission(IAM_MANAGE)),
 ) -> BrandingStatusResponse:
     """Check if there are unpublished branding changes."""
-    row = await _get_settings()
+    entries = await _get_branding_dict()
+    pub_at, _ = entries.get("_published_at", (None, None))
+    pub_by, _ = entries.get("_published_by", (None, None))
     return BrandingStatusResponse(
-        has_unpublished_changes=_has_unpublished_changes(row),
-        published_at=row.branding_published_at.isoformat() if row.branding_published_at else None,
-        published_by=row.branding_published_by,
+        has_unpublished_changes=_has_unpublished_changes(entries),
+        published_at=pub_at,
+        published_by=pub_by,
     )
 
 
@@ -452,59 +495,24 @@ async def reset_branding(
     _: str = Depends(require_permission(IAM_MANAGE)),
 ) -> BrandingResponse:
     """Reset all branding to platform defaults. Clears all published and draft values."""
+    now = datetime.now(timezone.utc)
+
     async with SessionLocal() as session:
-        row = await session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
-        if row is None:
-            raise HTTPException(status_code=503, detail="Platform settings not initialised")
-
-        # Reset all branding fields to defaults/null
-        row.logo_horizontal_light = None
-        row.logo_horizontal_dark = None
-        row.logo_icon = None
-        row.favicon = None
-        # Brand colors (light)
-        row.primary_color = None
-        row.secondary_color = None
-        row.accent_color = None
-        row.warning_color = None
-        # Brand colors (dark)
-        row.primary_color_dark = None
-        row.secondary_color_dark = None
-        row.accent_color_dark = None
-        row.warning_color_dark = None
-        # Shell colors
-        row.sidebar_bg = None
-        row.sidebar_text = None
-        row.header_bg = None
-        row.header_text = None
-        row.sidebar_bg_dark = None
-        row.sidebar_text_dark = None
-        row.header_bg_dark = None
-        row.header_text_dark = None
-        # UI element colors
-        row.button_bg = None
-        row.button_text = None
-        row.table_header_bg = None
-        row.table_border = None
-        row.mfe_bg = None
-        row.button_bg_dark = None
-        row.button_text_dark = None
-        row.table_header_bg_dark = None
-        row.table_border_dark = None
-        row.mfe_bg_dark = None
-
-        # Clear all draft fields
-        for field in BRANDING_FIELDS:
-            setattr(row, f"{field}_draft", None)
-
-        # Clear advanced colors
-        row.advanced_colors = None
-        row.advanced_colors_draft = None
+        # Delete all branding entries except metadata (keys starting with _)
+        await session.execute(delete(Branding).where(~Branding.key.like("\\_%")))
 
         # Update publish metadata
-        now = datetime.now(timezone.utc)
-        row.branding_published_at = now
-        row.branding_published_by = username
+        pub_at = await session.get(Branding, "_published_at")
+        if pub_at:
+            pub_at.published = now.isoformat()
+        else:
+            session.add(Branding(key="_published_at", published=now.isoformat(), draft=None))
+
+        pub_by = await session.get(Branding, "_published_by")
+        if pub_by:
+            pub_by.published = username
+        else:
+            session.add(Branding(key="_published_by", published=username, draft=None))
 
         # Audit log
         log_audit_event(
@@ -517,10 +525,11 @@ async def reset_branding(
         )
 
         await session.commit()
-        await session.refresh(row)
         logger.info("branding.reset_to_defaults", extra={"reset_by": username})
 
-    return _build_response(row, "published")
+    entries = await _get_branding_dict()
+    org_name = await _get_platform_name()
+    return _build_response(entries, org_name, "published")
 
 
 @router.get("/asset/{asset_key:path}")
@@ -547,8 +556,9 @@ async def get_public_branding() -> BrandingResponse:
     Always returns published values only — draft preview is handled via the
     authenticated `/branding?mode=draft` endpoint for admin preview iframes.
     """
-    row = await _get_settings()
-    return _build_response(row, "published")
+    entries = await _get_branding_dict()
+    org_name = await _get_platform_name()
+    return _build_response(entries, org_name, "published")
 
 
 @router.get("/public/asset/{asset_key:path}")

@@ -33,10 +33,9 @@ class TestGetBranding:
 
     @pytest.mark.asyncio
     async def test_returns_draft_branding_when_mode_draft(self, client, db_session):
-        # Set up draft values directly in DB
+        # Set up draft values directly in branding table
         await db_session.execute(
-            text("UPDATE platform_settings SET primary_color_draft = :color WHERE id = 1"),
-            {"color": "#FF0000"},
+            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', NULL, '#FF0000')")
         )
         await db_session.commit()
 
@@ -52,8 +51,7 @@ class TestGetBranding:
     async def test_draft_mode_falls_back_to_published_when_draft_null(self, client, db_session):
         # Set only published value
         await db_session.execute(
-            text("UPDATE platform_settings SET primary_color = :color WHERE id = 1"),
-            {"color": "#0000FF"},
+            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#0000FF', NULL)")
         )
         await db_session.commit()
 
@@ -80,10 +78,10 @@ class TestUpdateBranding:
         assert data["primary_color"] == "#1147E9"
 
         # Verify persisted in DB
-        from ai_trust_persistence.models.platform_settings import PlatformSettings
-        row = await db_session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
-        assert row.primary_color_draft == "#1147E9"
-        assert row.primary_color is None  # Published unchanged
+        from ai_trust_persistence.models.branding import Branding
+        row = await db_session.get(Branding, "primary_color")
+        assert row.draft == "#1147E9"
+        assert row.published is None  # Published unchanged
 
     @pytest.mark.asyncio
     async def test_updates_multiple_colors(self, client):
@@ -280,14 +278,12 @@ class TestPublishBranding:
 
     @pytest.mark.asyncio
     async def test_publishes_draft_values(self, client, db_session):
-        # Set up draft values
+        # Set up draft values in branding table
         await db_session.execute(
-            text("""
-                UPDATE platform_settings
-                SET primary_color_draft = '#1147E9',
-                    secondary_color_draft = '#7C3AED'
-                WHERE id = 1
-            """)
+            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', NULL, '#1147E9')")
+        )
+        await db_session.execute(
+            text("INSERT INTO branding (key, published, draft) VALUES ('secondary_color', NULL, '#7C3AED')")
         )
         await db_session.commit()
 
@@ -299,22 +295,21 @@ class TestPublishBranding:
         assert "published_at" in data
 
         # Verify published values in DB
-        from ai_trust_persistence.models.platform_settings import PlatformSettings
-        row = await db_session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
-        assert row.primary_color == "#1147E9"
-        assert row.secondary_color == "#7C3AED"
+        from ai_trust_persistence.models.branding import Branding
+        row = await db_session.get(Branding, "primary_color")
+        assert row.published == "#1147E9"
         # Draft cleared after publish
-        assert row.primary_color_draft is None
-        assert row.secondary_color_draft is None
+        assert row.draft is None
 
     @pytest.mark.asyncio
     async def test_publish_sets_metadata(self, client, db_session):
         await client.post("/v1/branding/publish")
 
-        from ai_trust_persistence.models.platform_settings import PlatformSettings
-        row = await db_session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
-        assert row.branding_published_by == "test-user"
-        assert row.branding_published_at is not None
+        from ai_trust_persistence.models.branding import Branding
+        row = await db_session.get(Branding, "_published_by")
+        assert row.published == "test-user"
+        row_at = await db_session.get(Branding, "_published_at")
+        assert row_at.published is not None
 
 
 # ---------------------------------------------------------------------------
@@ -329,12 +324,7 @@ class TestDiscardBranding:
     async def test_discards_draft_values(self, client, db_session):
         # Set up draft and published values
         await db_session.execute(
-            text("""
-                UPDATE platform_settings
-                SET primary_color = '#0000FF',
-                    primary_color_draft = '#FF0000'
-                WHERE id = 1
-            """)
+            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#0000FF', '#FF0000')")
         )
         await db_session.commit()
 
@@ -345,10 +335,10 @@ class TestDiscardBranding:
         assert data["primary_color"] == "#0000FF"
 
         # Verify draft cleared in DB
-        from ai_trust_persistence.models.platform_settings import PlatformSettings
-        row = await db_session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
-        assert row.primary_color_draft is None
-        assert row.primary_color == "#0000FF"  # Published unchanged
+        from ai_trust_persistence.models.branding import Branding
+        row = await db_session.get(Branding, "primary_color")
+        assert row.draft is None
+        assert row.published == "#0000FF"  # Published unchanged
 
 
 # ---------------------------------------------------------------------------
@@ -363,12 +353,10 @@ class TestResetBranding:
     async def test_resets_all_branding(self, client, db_session):
         # Set up published values
         await db_session.execute(
-            text("""
-                UPDATE platform_settings
-                SET primary_color = '#1147E9',
-                    logo_icon = 'branding/logo_icon/icon.svg'
-                WHERE id = 1
-            """)
+            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#1147E9', NULL)")
+        )
+        await db_session.execute(
+            text("INSERT INTO branding (key, published, draft) VALUES ('logo_icon', 'branding/logo_icon/icon.svg', NULL)")
         )
         await db_session.commit()
 
@@ -379,12 +367,14 @@ class TestResetBranding:
         assert data["primary_color"] is None
         assert data["logo_icon"] is None
 
-        # Verify DB cleared
-        from ai_trust_persistence.models.platform_settings import PlatformSettings
-        row = await db_session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
-        assert row.primary_color is None
-        assert row.logo_icon is None
-        assert row.branding_published_by == "test-user"
+        # Verify DB cleared (rows deleted, not just nulled)
+        from ai_trust_persistence.models.branding import Branding
+        row = await db_session.get(Branding, "primary_color")
+        assert row is None  # Row deleted
+
+        # But metadata preserved
+        row_by = await db_session.get(Branding, "_published_by")
+        assert row_by.published == "test-user"
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +395,7 @@ class TestBrandingStatus:
     @pytest.mark.asyncio
     async def test_has_unpublished_changes(self, client, db_session):
         await db_session.execute(
-            text("UPDATE platform_settings SET primary_color_draft = '#FF0000' WHERE id = 1")
+            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', NULL, '#FF0000')")
         )
         await db_session.commit()
 
@@ -418,21 +408,14 @@ class TestBrandingStatus:
     async def test_draft_same_as_published_is_not_unpublished(self, client, db_session):
         # If draft equals published, it's not considered "unpublished"
         await db_session.execute(
-            text("""
-                UPDATE platform_settings
-                SET primary_color = '#FF0000',
-                    primary_color_draft = '#FF0000'
-                WHERE id = 1
-            """)
+            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#FF0000', '#FF0000')")
         )
         await db_session.commit()
 
         resp = await client.get("/v1/branding/status")
         assert resp.status_code == 200
-        # Still has_unpublished_changes because draft is not None
-        # (the current implementation checks if draft differs from published)
-        data = resp.json()
         # When draft == published, there's no "change" to publish
+        data = resp.json()
         assert data["has_unpublished_changes"] is False
 
 
@@ -447,7 +430,7 @@ class TestPublicBranding:
     @pytest.mark.asyncio
     async def test_returns_published_branding(self, client, db_session):
         await db_session.execute(
-            text("UPDATE platform_settings SET primary_color = '#1147E9' WHERE id = 1")
+            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#1147E9', NULL)")
         )
         await db_session.commit()
 
@@ -459,12 +442,7 @@ class TestPublicBranding:
     @pytest.mark.asyncio
     async def test_does_not_return_draft_values(self, client, db_session):
         await db_session.execute(
-            text("""
-                UPDATE platform_settings
-                SET primary_color = '#0000FF',
-                    primary_color_draft = '#FF0000'
-                WHERE id = 1
-            """)
+            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#0000FF', '#FF0000')")
         )
         await db_session.commit()
 

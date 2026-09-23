@@ -1,6 +1,5 @@
 import { useLuigiInit } from "./hooks/useLuigi";
-import { useTheme } from './hooks/useTheme';
-import { useBranding } from './hooks/useBranding';
+import { useTheme, useBranding } from "@ai-trust/react-hooks";
 import { TraceList } from "./pages/TraceList";
 
 export default function App() {

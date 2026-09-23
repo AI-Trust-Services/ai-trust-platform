@@ -110,7 +110,7 @@ def _run_migrations() -> None:
 
 
 def _reset_platform_settings() -> None:
-    """Reset platform_settings to a clean state for branding tests.
+    """Reset platform_settings and branding to a clean state for branding tests.
 
     Instead of TRUNCATE (which would violate the startup seed assumption),
     we DELETE then INSERT a fresh row so the seed function sees it as existing.
@@ -130,12 +130,14 @@ def _reset_platform_settings() -> None:
         "     OR (state = 'active' AND wait_event = 'ClientRead'))",
         (_TEST_DB,),
     )
-    # Delete and re-insert a clean row
+    # Delete and re-insert a clean platform_settings row
     cur.execute("DELETE FROM platform_settings")
     cur.execute("""
         INSERT INTO platform_settings (id, platform_name, support_email, smtp_ssl, smtp_starttls, org_name)
         VALUES (1, 'AI Trust Platform', NULL, false, false, 'AI Trust')
     """)
+    # Clear branding table (key-value store)
+    cur.execute("DELETE FROM branding")
     # Also truncate audit_events if it exists (for audit logging tests)
     cur.execute("""
         DO $$

@@ -2,6 +2,10 @@ import { useEffect } from 'react';
 
 const THEME_KEY = 'trust-platform-theme';
 
+/**
+ * Applies dark/light theme preference from localStorage.
+ * Listens for changes from the shell or other tabs and updates the DOM accordingly.
+ */
 export function useTheme(): void {
   useEffect(() => {
     function apply(v: string | null) {
