@@ -32,7 +32,6 @@ jobs:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_SHA: ${{ github.event.pull_request.head.sha }}
       PR_BRANCH: ${{ github.event.pull_request.head.ref }}
-      PR_AUTHOR_LOWER: ${{ github.event.pull_request.user.login }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Check authorization (org members only)
@@ -46,12 +45,6 @@ jobs:
             exit 1
           fi
 
-      - name: Post deployment started comment
-        run: |
-          gh pr comment "${PR_NUMBER}" \
-            --repo "${{ github.repository }}" \
-            --body "🚀 Test deployment started — deploying \`feature:${PR_SHA::12}\` to namespace \`${PR_AUTHOR_LOWER,,}\` on \`ai-trust-test\`."
-
       # Required so the local composite actions (./.github/actions/*) resolve.
       # build-images re-checks-out at the PR head SHA for the actual build.
       - name: Check out repository
@@ -64,6 +57,12 @@ jobs:
           ref: ${{ env.PR_SHA }}
           gardener_cluster: ai-trust-test
           namespace: ${{ github.event.pull_request.user.login }}
+
+      - name: Post deployment started comment
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "🚀 Test deployment started — deploying \`feature:${PR_SHA::12}\` to namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\`."
 
       - name: Build and push images
         uses: ./.github/actions/build-images
@@ -118,15 +117,15 @@ jobs:
       - name: Post success comment
         if: success()
         run: |
-          APP_URL="https://${PR_AUTHOR_LOWER,,}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          APP_URL="https://${{ steps.vars.outputs.namespace }}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
-            --body "✅ Test deployment successful: \`feature:${PR_SHA::12}\` deployed to namespace \`${PR_AUTHOR_LOWER,,}\` on \`ai-trust-test\`."$'\n\n'"🔗 ${APP_URL}"
+            --body "✅ Test deployment successful: \`feature:${PR_SHA::12}\` deployed to namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\`."$'\n\n'"🔗 ${APP_URL}"
 
       - name: Post app URL to linked issues
         if: success()
         run: |
-          APP_URL="https://${PR_AUTHOR_LOWER,,}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          APP_URL="https://${{ steps.vars.outputs.namespace }}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
           ISSUES=$(gh api graphql -f query='
             {
               repository(owner: "${{ github.repository_owner }}", name: "${{ github.event.repository.name }}") {
