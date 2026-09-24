@@ -59,9 +59,5 @@ runs:
         # Tag identifies the built commit. build-images checks out INPUT_REF
         # (the PR head SHA), so tag from that — not GITHUB_SHA, which is the
         # ephemeral pull_request merge commit and would mislabel the image.
-        if [[ "$INPUT_REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
-          SHORT_SHA="${INPUT_REF::12}"
-        else
-          SHORT_SHA="${GITHUB_SHA::12}"
-        fi
+        SHORT_SHA="${INPUT_REF::12}"
         echo "tag=${NAMESPACE}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
