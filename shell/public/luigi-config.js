@@ -221,7 +221,7 @@
       document.title = platformName;
       const style = document.createElement("style");
       style.textContent = `:root {
-          --luigi-nav-bg: #0f172a;
+          --luigi-nav-bg: #166534;
           --luigi-nav-width: 256px;
           --luigi__shellbar--height: 48px;
         }
@@ -313,8 +313,8 @@
         [class*="side-nav"],
         [class*="lui-nav"],
         nav.fd-navigation {
-          background: #0f172a !important;
-          background-color: #0f172a !important;
+          background: #166534 !important;
+          background-color: #166534 !important;
           border-right: none !important;
           box-shadow: none !important;
           overflow: hidden !important;
@@ -334,18 +334,18 @@
         }
         .lui-side-nav--collapsed,
         .lui-side-nav {
-          background: #0f172a !important;
-          background-color: #0f172a !important;
+          background: #166534 !important;
+          background-color: #166534 !important;
         }
         .fd-app__sidebar,
         .lui-nav-container {
-          --fdSideNavBackground: #0f172a !important;
-          --fdShellbarBackground: #0f172a !important;
-          --sapShellColor: #0f172a !important;
-          --sapBaseColor: #0f172a !important;
-          --sapBackgroundColor: #0f172a !important;
-          --sapNeutralBackground: #0f172a !important;
-          --sapContent_ForegroundBackgroundColor: #0f172a !important;
+          --fdSideNavBackground: #166534 !important;
+          --fdShellbarBackground: #166534 !important;
+          --sapShellColor: #166534 !important;
+          --sapBaseColor: #166534 !important;
+          --sapBackgroundColor: #166534 !important;
+          --sapNeutralBackground: #166534 !important;
+          --sapContent_ForegroundBackgroundColor: #166534 !important;
         }
 
         /* ── Nav items ── */
@@ -485,10 +485,10 @@
         }
         body { background: #ffffff !important; }
         .fd-app, .lui-app, #app {
-          background: linear-gradient(to right, #0f172a 256px, #ffffff 256px) !important;
+          background: linear-gradient(to right, #166534 256px, #ffffff 256px) !important;
         }
         body.semiCollapsed .fd-app, body.semiCollapsed .lui-app, body.semiCollapsed #app {
-          background: linear-gradient(to right, #0f172a 48px, #ffffff 48px) !important;
+          background: linear-gradient(to right, #166534 48px, #ffffff 48px) !important;
         }
 
         /* ── Dark mode baked into static CSS — active immediately via html.dark ── */
@@ -509,10 +509,10 @@
           background-color: #09090b !important;
         }
         html.dark .fd-app, html.dark .lui-app, html.dark #app {
-          background: linear-gradient(to right, #0f172a 256px, #09090b 256px) !important;
+          background: linear-gradient(to right, #166534 256px, #09090b 256px) !important;
         }
         html.dark body.semiCollapsed .fd-app, html.dark body.semiCollapsed .lui-app, html.dark body.semiCollapsed #app {
-          background: linear-gradient(to right, #0f172a 48px, #09090b 48px) !important;
+          background: linear-gradient(to right, #166534 48px, #09090b 48px) !important;
         }
 
         /* ── Collapsed: icons only, centered ── */
@@ -921,13 +921,13 @@
             if (dark) {
               if (!ov) { ov = document.createElement('style'); ov.id = 'luigi-dark-overrides'; document.head.appendChild(ov); }
               ov.textContent = `
-                .fd-shellbar { background: #0f172a !important; border-bottom: none !important; }
+                .fd-shellbar { background: #166534 !important; border-bottom: none !important; }
                 html, body { background: #09090b !important; }
                 .fd-app, .lui-app, #app {
-                  background: linear-gradient(to right, #0f172a 256px, #09090b 256px) !important;
+                  background: linear-gradient(to right, #166534 256px, #09090b 256px) !important;
                 }
                 body.semiCollapsed .fd-app, body.semiCollapsed .lui-app, body.semiCollapsed #app {
-                  background: linear-gradient(to right, #0f172a 48px, #09090b 48px) !important;
+                  background: linear-gradient(to right, #166534 48px, #09090b 48px) !important;
                 }
                 .fd-shell, .fd-shell__content, .fd-shell__body,
                 .fd-app__main, .fd-app__main-container,
