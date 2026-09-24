@@ -405,6 +405,7 @@ jobs:
 
       - name: Install OCM CLI
         run: |
+          # OCM CLI version — keep in sync with publish-ocm/action.yml and shoot-cluster-init.sh
           curl -sSfL \
             "https://github.com/open-component-model/ocm/releases/download/v0.50.0/ocm-0.50.0-linux-amd64.tar.gz" \
             | sudo tar -xz -C /usr/local/bin ocm
