@@ -22,7 +22,7 @@ permissions:
 
 concurrency:
   group: ${{ github.event.pull_request.user.login }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy-test:
