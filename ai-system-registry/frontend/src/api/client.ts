@@ -1,5 +1,4 @@
-import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult, QuestionAssignment } from "../types";
-import type { SectionKey } from "../config/questionnaire";
+import type { AISystem, ModelCard, ModelCardCreate, ModelCardPatch, Metric, Source, Dataset, MetricCreate, SourceCreate, DatasetCreate, DatasetPatch, ModelSystemResponse, AISystemFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult, QuestionAssignment } from "../types";import type { SectionKey } from "../config/questionnaire";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
@@ -30,10 +29,13 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     }).then((r) => r.system),
+  // ── System ↔ Model links (dead code, rework deferred) ────────────────────
+  // ponytail: these endpoints exist but no UI calls them yet; rework together
+  // with the System↔Model link UI pass.
   getSystemModels: (systemId: string) =>
-    request<SystemModelResponse[]>(`/systems/${systemId}/models`),
+    request<Array<ModelCard & { role: string | null }>>(`/systems/${systemId}/models`),
   addSystemModel: (systemId: string, modelCardId: string, role?: string) =>
-    request<SystemModelResponse>(`/systems/${systemId}/models`, {
+    request<ModelCard & { role: string | null }>(`/systems/${systemId}/models`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model_card_id: modelCardId, role }),
@@ -96,26 +98,62 @@ export const api = {
       body: JSON.stringify({ answers, section }),
     }),
 
-  linkModel: (systemId: string, modelId: string) =>
-    request<AISystem>(`/systems/${systemId}/model?model_id=${encodeURIComponent(modelId)}`, { method: "PUT" }),
-  unlinkModel: (systemId: string) =>
-    request<AISystem>(`/systems/${systemId}/model`, { method: "DELETE" }),
-
+  // ── Model Cards ────────────────────────────────────────────────────────────
   getModels: () => request<ModelCard[]>("/model-cards?limit=200"),
   getModelCard: (id: string) => request<ModelCard>(`/model-cards/${id}`),
-  createModel: (data: ModelCardFormData) =>
+  createModelCard: (data: ModelCardCreate) =>
     request<ModelCard>("/model-cards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     }),
-  updateModel: (id: string, data: Partial<ModelCardFormData>) =>
+  patchModelCard: (id: string, data: ModelCardPatch) =>
     request<ModelCard>(`/model-cards/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+  deleteModelCard: (id: string) => request<null>(`/model-cards/${id}`, { method: "DELETE" }),
+
+  addMetric: (cardId: string, data: MetricCreate) =>
+    request<Metric>(`/model-cards/${cardId}/metrics`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+  deleteMetric: (cardId: string, metricId: string) =>
+    request<null>(`/model-cards/${cardId}/metrics/${metricId}`, { method: "DELETE" }),
+
+  addSource: (cardId: string, data: SourceCreate) =>
+    request<Source>(`/model-cards/${cardId}/sources`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+  deleteSource: (cardId: string, sourceId: string) =>
+    request<null>(`/model-cards/${cardId}/sources/${sourceId}`, { method: "DELETE" }),
+
+  addDataset: (cardId: string, data: DatasetCreate) =>
+    request<Dataset>(`/model-cards/${cardId}/datasets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+  patchDataset: (cardId: string, dsId: string, data: DatasetPatch) =>
+    request<Dataset>(`/model-cards/${cardId}/datasets/${dsId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+  replaceDataset: (cardId: string, dsId: string, data: DatasetCreate) =>
+    request<ModelCard>(`/model-cards/${cardId}/datasets/${dsId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     }),
-  deleteModel: (id: string) => request<null>(`/model-cards/${id}`, { method: "DELETE" }),
+  deleteDataset: (cardId: string, dsId: string) =>
+    request<null>(`/model-cards/${cardId}/datasets/${dsId}`, { method: "DELETE" }),
+
   getModelSystems: (modelId: string) => request<ModelSystemResponse[]>(`/model-cards/${modelId}/systems`),
 
   myPermissions: () => request<PermissionsResponse>("/me/permissions", {}, USERS_API_BASE),
