@@ -63,11 +63,11 @@ def _build_dataset_response(ds, preps_by_ds, meas_by_ds, fs_by_ds) -> DatasetRes
     # preps_by_ds: dataset_id → [ModelCardDatasetPreparation], ordered
     # meas_by_ds:  dataset_id → [ModelCardDatasetMeasurement]
     # fs_by_ds:    dataset_id → [FeatureStoreResponse] (already assembled)
-    return DatasetResponse.model_validate(ds, update={
-        "preparations":   [PreparationResponse.model_validate(p) for p in preps_by_ds.get(ds.id, [])],
-        "measurements":   [MeasurementResponse.model_validate(m) for m in meas_by_ds.get(ds.id, [])],
-        "feature_stores": fs_by_ds.get(ds.id, []),
-    })
+    ds_dict = {c.key: getattr(ds, c.key) for c in ds.__table__.columns}
+    ds_dict["preparations"]   = [PreparationResponse.model_validate(p) for p in preps_by_ds.get(ds.id, [])]
+    ds_dict["measurements"]   = [MeasurementResponse.model_validate(m) for m in meas_by_ds.get(ds.id, [])]
+    ds_dict["feature_stores"] = fs_by_ds.get(ds.id, [])
+    return DatasetResponse.model_validate(ds_dict)
 
 
 async def _load_card_tree(session, card_id: str) -> ModelCardResponse | None:
@@ -137,13 +137,13 @@ async def _load_card_tree(session, card_id: str) -> ModelCardResponse | None:
             )
         )
 
-    return ModelCardResponse.model_validate(card, update={
-        "metrics":  [MetricResponse.model_validate(m) for m in metrics],
-        "sources":  [SourceResponse.model_validate(s) for s in sources],
-        "datasets": [
-            _build_dataset_response(ds, preps_by_ds, meas_by_ds, fs_by_ds) 
-            for ds in datasets],
-    })
+    card_dict = {c.key: getattr(card, c.key) for c in card.__table__.columns}
+    card_dict["metrics"]  = [MetricResponse.model_validate(m) for m in metrics]
+    card_dict["sources"]  = [SourceResponse.model_validate(s) for s in sources]
+    card_dict["datasets"] = [
+        _build_dataset_response(ds, preps_by_ds, meas_by_ds, fs_by_ds)
+        for ds in datasets]
+    return ModelCardResponse.model_validate(card_dict)
 
 
 async def _load_dataset_response(session, ds_id: str) -> DatasetResponse | None:

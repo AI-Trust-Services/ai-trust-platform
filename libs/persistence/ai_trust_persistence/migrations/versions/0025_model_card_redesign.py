@@ -39,7 +39,7 @@ def upgrade() -> None:
         sa.Column("validation_status", sa.String(100), nullable=True),
         sa.Column("task_type", sa.String(100), nullable=True),
         sa.Column("task_name", sa.String(200), nullable=True),
-        sa.Column("tags", postgresql.JSONB, nullable=False, server_default="'[]'"),
+        sa.Column("tags", postgresql.JSONB, nullable=False, server_default=sa.text("'[]'")),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
