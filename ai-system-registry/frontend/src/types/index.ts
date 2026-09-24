@@ -3,7 +3,6 @@ export type LifecycleKey = "development" | "testing" | "prod_ready" | "market" |
 export type OrgRole = "provider" | "deployer" | "both" | "importer" | "distributor" | "authorised_representative";
 export type SystemType = "application" | "model" | "component" | "service";
 export type AutonomyLevel = "decision_support" | "human_in_the_loop" | "human_on_the_loop" | "fully_automated";
-export type ModelType = "llm" | "embedding" | "multimodal" | "classifier";
 export type WorkflowStatus = "draft" | "business_pending" | "technical_pending" | "pending_review" | "info_requested" | "approved" | "rejected";
 export type RegistrationMode = "ai" | "manual_questionnaire" | "full_manual";
 
@@ -97,19 +96,167 @@ export interface UserSummary {
   lastName: string;
 }
 
+// ── Model Card (new rich schema) ─────────────────────────────────────────────
+
+export interface Metric {
+  id: string;
+  value: number;
+  name: string;
+  dataset: string | null;
+  config: string | null;
+  args: Record<string, unknown> | null;
+}
+
+export interface Source {
+  id: string;
+  url: string;
+  name: string | null;
+}
+
+export interface Preparation {
+  id: string;
+  order: number;
+  operation: string;
+  description: string | null;
+}
+
+export interface Measurement {
+  id: string;
+  measure: string;
+  value: string;
+}
+
+export interface FeatureStoreGroup {
+  id: string;
+  name: string;
+  version: string | null;
+  origin: string | null;
+}
+
+export interface FeatureStore {
+  id: string;
+  store_name: string;
+  groups: FeatureStoreGroup[];
+}
+
+export interface Dataset {
+  id: string;
+  name: string;
+  type: "train" | "val" | "test" | "train_cv";
+  revision: string | null;
+  origin: string | null;
+  is_personal_data: boolean | null;
+  assumptions: string | null;
+  assessment_availability: string | null;
+  assessment_quantity: string | null;
+  assessment_suitability: string | null;
+  potential_biases: string | null;
+  preparations: Preparation[];
+  measurements: Measurement[];
+  feature_stores: FeatureStore[];
+}
+
 export interface ModelCard {
   id: string;
   name: string;
-  provider: string;
-  version: string;
-  model_type: ModelType;
-  description: string;
-  inference_url: string;
-  open_weights: boolean;
+  version: string | null;
+  base_model: string | null;
+  library_name: string | null;
+  license: string | null;
+  license_name: string | null;
+  license_link: string | null;
+  training_commit: string | null;
+  validation_status: string | null;
+  task_type: string | null;
+  task_name: string | null;
+  tags: string[];
+  metrics: Metric[];
+  sources: Source[];
+  datasets: Dataset[];
+  created_at: string;
+  updated_at: string;
 }
 
-export interface SystemModelResponse extends ModelCard {
-  role: string | null;
+// Create / patch shapes sent to the API
+export interface ModelCardCreate {
+  name: string;
+}
+
+export interface ModelCardPatch {
+  name?: string;
+  version?: string | null;
+  base_model?: string | null;
+  library_name?: string | null;
+  license?: string | null;
+  license_name?: string | null;
+  license_link?: string | null;
+  training_commit?: string | null;
+  validation_status?: string | null;
+  task_type?: string | null;
+  task_name?: string | null;
+  tags?: string[];
+}
+
+export interface MetricCreate {
+  value: number;
+  name: string;
+  dataset?: string | null;
+  config?: string | null;
+}
+
+export interface SourceCreate {
+  url: string;
+  name?: string | null;
+}
+
+export interface PreparationCreate {
+  operation: string;
+  description?: string | null;
+}
+
+export interface MeasurementCreate {
+  measure: string;
+  value: string;
+}
+
+export interface FeatureStoreGroupCreate {
+  name: string;
+  version?: string | null;
+  origin?: string | null;
+}
+
+export interface FeatureStoreCreate {
+  store_name: string;
+  groups: FeatureStoreGroupCreate[];
+}
+
+export interface DatasetCreate {
+  name: string;
+  type: "train" | "val" | "test" | "train_cv";
+  revision?: string | null;
+  origin?: string | null;
+  is_personal_data?: boolean | null;
+  assumptions?: string | null;
+  assessment_availability?: string | null;
+  assessment_quantity?: string | null;
+  assessment_suitability?: string | null;
+  potential_biases?: string | null;
+  preparations?: PreparationCreate[];
+  measurements?: MeasurementCreate[];
+  feature_stores?: FeatureStoreCreate[];
+}
+
+export interface DatasetPatch {
+  name?: string | null;
+  type?: "train" | "val" | "test" | "train_cv" | null;
+  revision?: string | null;
+  origin?: string | null;
+  is_personal_data?: boolean | null;
+  assumptions?: string | null;
+  assessment_availability?: string | null;
+  assessment_quantity?: string | null;
+  assessment_suitability?: string | null;
+  potential_biases?: string | null;
 }
 
 export interface ModelSystemResponse {
@@ -219,16 +366,6 @@ export interface AISystemFormData {
   is_law_enforcement: boolean;
   is_migration: boolean;
   is_judicial_admin: boolean;
-}
-
-export interface ModelCardFormData {
-  name: string;
-  provider: string;
-  version: string;
-  model_type: ModelType;
-  description: string;
-  inference_url: string;
-  open_weights: boolean;
 }
 
 export interface PermissionsResponse {
