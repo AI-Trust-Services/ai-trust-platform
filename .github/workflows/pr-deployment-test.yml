@@ -1,4 +1,5 @@
 name: PR Deployment Test
+run-name: "Deploy PR #${{ github.event.pull_request.number }} (${{ github.event.pull_request.user.login }})"
 
 # Triggered by adding the "garden-deploy" label to a PR.
 # Builds the PR branch and deploys it to the PR author's namespace on ai-trust-test.
