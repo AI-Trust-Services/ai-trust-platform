@@ -90,6 +90,7 @@ class DatasetCreate(BaseModel):
     assessment_quantity: str | None = None
     assessment_suitability: str | None = None
     potential_biases: str | None = None
+    # preparation order is implicit by list order
     preparations: list[PreparationCreate] = []
     measurements: list[MeasurementCreate] = []
     feature_stores: list[FeatureStoreCreate] = []
@@ -188,8 +189,8 @@ class ModelCardResponse(_OrmResponse):
     task_type: str | None
     task_name: str | None
     tags: list[str]
-    metrics: list[MetricResponse]
-    sources: list[SourceResponse]
-    datasets: list[DatasetResponse]
+    metrics: list[MetricResponse] = []
+    sources: list[SourceResponse] = []
+    datasets: list[DatasetResponse] = []
     created_at: datetime
     updated_at: datetime
