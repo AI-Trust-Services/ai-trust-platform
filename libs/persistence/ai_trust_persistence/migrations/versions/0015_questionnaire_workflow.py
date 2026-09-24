@@ -4,6 +4,7 @@ Revision ID: 0015
 Revises: 0014
 Create Date: 2026-08-26
 """
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -15,9 +16,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("ai_systems", sa.Column("questionnaire_answers", postgresql.JSONB(), nullable=True))
-    op.add_column("ai_systems", sa.Column("business_assignee_username", sa.String(200), nullable=True))
-    op.add_column("ai_systems", sa.Column("technical_assignee_username", sa.String(200), nullable=True))
+    op.add_column(
+        "ai_systems",
+        sa.Column("questionnaire_answers", postgresql.JSONB(), nullable=True),
+    )
+    op.add_column(
+        "ai_systems",
+        sa.Column("business_assignee_username", sa.String(200), nullable=True),
+    )
+    op.add_column(
+        "ai_systems",
+        sa.Column("technical_assignee_username", sa.String(200), nullable=True),
+    )
 
 
 def downgrade() -> None:

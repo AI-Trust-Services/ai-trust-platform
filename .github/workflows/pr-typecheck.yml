@@ -1,0 +1,46 @@
+name: "Pre-merge check: typecheck"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  typecheck:
+    name: "Pre-merge check: typecheck"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Run typecheck for all frontends
+        run: |
+          COMPONENTS=(
+            admin/frontend
+            ai-system-registry/frontend
+            alerts/frontend
+            audit/frontend
+            compliance/frontend
+            decision-trace-analyzer/frontend
+            monitoring/frontend
+            users/frontend
+          )
+          FAILED=()
+          for component in "${COMPONENTS[@]}"; do
+            echo "::group::$component"
+            if (cd "$component" && npm ci && npm run typecheck); then
+              echo "✓ $component passed"
+            else
+              echo "✗ $component FAILED"
+              FAILED+=("$component")
+            fi
+            echo "::endgroup::"
+          done
+          if [ ${#FAILED[@]} -gt 0 ]; then
+            echo ""
+            echo "Failed:"
+            for f in "${FAILED[@]}"; do echo "  - $f"; done
+            exit 1
+          fi

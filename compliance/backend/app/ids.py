@@ -1,4 +1,5 @@
 """Prefixed ID generation, matching the registry's ``SYS-XXXXXXXX`` convention."""
+
 from __future__ import annotations
 
 import uuid

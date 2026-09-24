@@ -5,6 +5,7 @@ Revision ID: 0003
 Revises: 0002
 Create Date: 2026-07-16
 """
+
 from datetime import datetime, timezone
 
 import sqlalchemy as sa
@@ -58,81 +59,178 @@ def upgrade() -> None:
         sa.Column("version", sa.String(50), nullable=False, server_default=""),
         sa.Column("description", sa.Text, nullable=False, server_default=""),
         sa.Column("enabled", sa.Boolean, nullable=False, server_default="true"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
 
     op.create_table(
         "assessments",
         sa.Column("id", sa.String(30), primary_key=True),
-        sa.Column("ai_system_id", sa.String(20), sa.ForeignKey("ai_systems.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("framework_id", sa.String(30), sa.ForeignKey("frameworks.id"), nullable=False),
+        sa.Column(
+            "ai_system_id",
+            sa.String(20),
+            sa.ForeignKey("ai_systems.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "framework_id",
+            sa.String(30),
+            sa.ForeignKey("frameworks.id"),
+            nullable=False,
+        ),
         sa.Column("title", sa.String(200), nullable=False),
         sa.Column("type", sa.String(50), nullable=False, server_default="compliance"),
         sa.Column("status", sa.String(30), nullable=False, server_default="draft"),
         sa.Column("score", sa.Float, nullable=True),
         sa.Column("notes", sa.Text, nullable=False, server_default=""),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
     op.create_index("ix_assessments_ai_system_id", "assessments", ["ai_system_id"])
     op.create_index("ix_assessments_framework_id", "assessments", ["framework_id"])
     op.create_index("ix_assessments_status", "assessments", ["status"])
-    op.create_index("ix_assessments_system_status", "assessments", ["ai_system_id", "status"])
+    op.create_index(
+        "ix_assessments_system_status", "assessments", ["ai_system_id", "status"]
+    )
     op.create_index("ix_assessments_updated_at", "assessments", ["updated_at"])
 
     op.create_table(
         "obligations",
         sa.Column("id", sa.String(30), primary_key=True),
-        sa.Column("assessment_id", sa.String(30), sa.ForeignKey("assessments.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("ai_system_id", sa.String(20), sa.ForeignKey("ai_systems.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("framework_id", sa.String(30), sa.ForeignKey("frameworks.id"), nullable=False),
+        sa.Column(
+            "assessment_id",
+            sa.String(30),
+            sa.ForeignKey("assessments.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "ai_system_id",
+            sa.String(20),
+            sa.ForeignKey("ai_systems.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "framework_id",
+            sa.String(30),
+            sa.ForeignKey("frameworks.id"),
+            nullable=False,
+        ),
         sa.Column("title", sa.String(300), nullable=False),
         sa.Column("article_ref", sa.String(50), nullable=False, server_default=""),
         sa.Column("description", sa.Text, nullable=False, server_default=""),
         sa.Column("status", sa.String(30), nullable=False, server_default="applicable"),
         sa.Column("due_date", sa.Date, nullable=True),
         sa.Column("owner", sa.String(200), nullable=False, server_default=""),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
     op.create_index("ix_obligations_assessment_id", "obligations", ["assessment_id"])
     op.create_index("ix_obligations_ai_system_id", "obligations", ["ai_system_id"])
     op.create_index("ix_obligations_status", "obligations", ["status"])
-    op.create_index("ix_obligations_assessment_status", "obligations", ["assessment_id", "status"])
+    op.create_index(
+        "ix_obligations_assessment_status", "obligations", ["assessment_id", "status"]
+    )
     op.create_index("ix_obligations_article_ref", "obligations", ["article_ref"])
 
     op.create_table(
         "controls",
         sa.Column("id", sa.String(30), primary_key=True),
-        sa.Column("ai_system_id", sa.String(20), sa.ForeignKey("ai_systems.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "ai_system_id",
+            sa.String(20),
+            sa.ForeignKey("ai_systems.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("title", sa.String(200), nullable=False),
         sa.Column("description", sa.Text, nullable=False, server_default=""),
         sa.Column("category", sa.String(50), nullable=False, server_default="general"),
-        sa.Column("status", sa.String(30), nullable=False, server_default="not_started"),
-        sa.Column("effectiveness", sa.String(20), nullable=False, server_default="medium"),
+        sa.Column(
+            "status", sa.String(30), nullable=False, server_default="not_started"
+        ),
+        sa.Column(
+            "effectiveness", sa.String(20), nullable=False, server_default="medium"
+        ),
         sa.Column("owner", sa.String(200), nullable=False, server_default=""),
         sa.Column("due_date", sa.Date, nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
     op.create_index("ix_controls_ai_system_id", "controls", ["ai_system_id"])
     op.create_index("ix_controls_status", "controls", ["status"])
 
     op.create_table(
         "control_obligations",
-        sa.Column("control_id", sa.String(30), sa.ForeignKey("controls.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("obligation_id", sa.String(30), sa.ForeignKey("obligations.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "control_id",
+            sa.String(30),
+            sa.ForeignKey("controls.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "obligation_id",
+            sa.String(30),
+            sa.ForeignKey("obligations.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
     )
-    op.create_index("ix_control_obligations_obligation_id", "control_obligations", ["obligation_id"])
+    op.create_index(
+        "ix_control_obligations_obligation_id", "control_obligations", ["obligation_id"]
+    )
 
     op.create_table(
         "evidence",
         sa.Column("id", sa.String(30), primary_key=True),
-        sa.Column("ai_system_id", sa.String(20), sa.ForeignKey("ai_systems.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("assessment_id", sa.String(30), sa.ForeignKey("assessments.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "ai_system_id",
+            sa.String(20),
+            sa.ForeignKey("ai_systems.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+        sa.Column(
+            "assessment_id",
+            sa.String(30),
+            sa.ForeignKey("assessments.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("title", sa.String(200), nullable=False),
         sa.Column("description", sa.Text, nullable=False, server_default=""),
-        sa.Column("evidence_type", sa.String(50), nullable=False, server_default="document"),
+        sa.Column(
+            "evidence_type", sa.String(50), nullable=False, server_default="document"
+        ),
         sa.Column("status", sa.String(30), nullable=False, server_default="pending"),
         sa.Column("validity_from", sa.Date, nullable=True),
         sa.Column("validity_until", sa.Date, nullable=True),
@@ -141,8 +239,18 @@ def upgrade() -> None:
         sa.Column("file_size", sa.Integer, nullable=False, server_default="0"),
         sa.Column("mime_type", sa.String(100), nullable=False, server_default=""),
         sa.Column("uploaded_by", sa.String(200), nullable=False, server_default=""),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
     op.create_index("ix_evidence_ai_system_id", "evidence", ["ai_system_id"])
     op.create_index("ix_evidence_assessment_id", "evidence", ["assessment_id"])
@@ -151,24 +259,54 @@ def upgrade() -> None:
 
     op.create_table(
         "evidence_controls",
-        sa.Column("evidence_id", sa.String(30), sa.ForeignKey("evidence.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("control_id", sa.String(30), sa.ForeignKey("controls.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "evidence_id",
+            sa.String(30),
+            sa.ForeignKey("evidence.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "control_id",
+            sa.String(30),
+            sa.ForeignKey("controls.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
     )
-    op.create_index("ix_evidence_controls_control_id", "evidence_controls", ["control_id"])
+    op.create_index(
+        "ix_evidence_controls_control_id", "evidence_controls", ["control_id"]
+    )
 
     op.create_table(
         "evidence_obligations",
-        sa.Column("evidence_id", sa.String(30), sa.ForeignKey("evidence.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("obligation_id", sa.String(30), sa.ForeignKey("obligations.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "evidence_id",
+            sa.String(30),
+            sa.ForeignKey("evidence.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "obligation_id",
+            sa.String(30),
+            sa.ForeignKey("obligations.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
     )
-    op.create_index("ix_evidence_obligations_obligation_id", "evidence_obligations", ["obligation_id"])
+    op.create_index(
+        "ix_evidence_obligations_obligation_id",
+        "evidence_obligations",
+        ["obligation_id"],
+    )
 
     now = datetime.now(timezone.utc)
-    op.bulk_insert(_frameworks_table, [{**f, "created_at": now} for f in _SEED_FRAMEWORKS])
+    op.bulk_insert(
+        _frameworks_table, [{**f, "created_at": now} for f in _SEED_FRAMEWORKS]
+    )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_evidence_obligations_obligation_id", table_name="evidence_obligations")
+    op.drop_index(
+        "ix_evidence_obligations_obligation_id", table_name="evidence_obligations"
+    )
     op.drop_table("evidence_obligations")
     op.drop_index("ix_evidence_controls_control_id", table_name="evidence_controls")
     op.drop_table("evidence_controls")
@@ -177,7 +315,9 @@ def downgrade() -> None:
     op.drop_index("ix_evidence_assessment_id", table_name="evidence")
     op.drop_index("ix_evidence_ai_system_id", table_name="evidence")
     op.drop_table("evidence")
-    op.drop_index("ix_control_obligations_obligation_id", table_name="control_obligations")
+    op.drop_index(
+        "ix_control_obligations_obligation_id", table_name="control_obligations"
+    )
     op.drop_table("control_obligations")
     op.drop_index("ix_controls_status", table_name="controls")
     op.drop_index("ix_controls_ai_system_id", table_name="controls")

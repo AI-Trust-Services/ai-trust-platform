@@ -1,4 +1,5 @@
 """E2E tests for AI System Registry — in-process via ASGITransport against ai_trust_test DB."""
+
 from __future__ import annotations
 
 import httpx
@@ -21,7 +22,9 @@ def _minimal_system() -> dict:
     return {"name": "E2E Test System", "assignee_username": _ASSIGNEE}
 
 
-async def _create_system(client: httpx.AsyncClient, payload: dict | None = None) -> dict:
+async def _create_system(
+    client: httpx.AsyncClient, payload: dict | None = None
+) -> dict:
     payload = payload or _minimal_system()
     payload.setdefault("assignee_username", _ASSIGNEE)
     r = await client.post("/v1/intake", json=payload, headers=_HEADERS)
@@ -30,7 +33,9 @@ async def _create_system(client: httpx.AsyncClient, payload: dict | None = None)
 
 
 async def _create_model_card(client: httpx.AsyncClient) -> dict:
-    r = await client.post("/v1/model-cards", json={"name": "Test Model", "provider": "Test"})
+    r = await client.post(
+        "/v1/model-cards", json={"name": "Test Model", "provider": "Test"}
+    )
     assert r.status_code == 201
     return r.json()
 
@@ -38,6 +43,7 @@ async def _create_model_card(client: httpx.AsyncClient) -> dict:
 # ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
+
 
 async def test_health_returns_ok(client: httpx.AsyncClient):
     r = await client.get("/health")
@@ -49,7 +55,10 @@ async def test_health_returns_ok(client: httpx.AsyncClient):
 # POST /intake — tracer bullet
 # ---------------------------------------------------------------------------
 
-async def test_intake_registers_system_and_returns_classification(client: httpx.AsyncClient):
+
+async def test_intake_registers_system_and_returns_classification(
+    client: httpx.AsyncClient,
+):
     r = await client.post("/v1/intake", json=_minimal_system(), headers=_HEADERS)
     assert r.status_code == 201
     body = r.json()
@@ -65,7 +74,9 @@ async def test_update_flag_classifies_prohibited_system(client: httpx.AsyncClien
     # Intake no longer classifies — setting a risk flag via PUT triggers reclassification.
     system_id = (await _create_system(client))["system"]["id"]
     r = await client.put(
-        f"/v1/systems/{system_id}", json={"subliminal_manipulation": True}, headers=_HEADERS
+        f"/v1/systems/{system_id}",
+        json={"subliminal_manipulation": True},
+        headers=_HEADERS,
     )
     assert r.status_code == 200
     assert r.json()["tier"] == "prohibited"
@@ -74,14 +85,18 @@ async def test_update_flag_classifies_prohibited_system(client: httpx.AsyncClien
 async def test_update_flag_classifies_high_risk_system(client: httpx.AsyncClient):
     system_id = (await _create_system(client))["system"]["id"]
     r = await client.put(
-        f"/v1/systems/{system_id}", json={"is_biometric_identification": True}, headers=_HEADERS
+        f"/v1/systems/{system_id}",
+        json={"is_biometric_identification": True},
+        headers=_HEADERS,
     )
     assert r.status_code == 200
     assert r.json()["tier"] == "high"
 
 
 async def test_intake_rejects_missing_name(client: httpx.AsyncClient):
-    r = await client.post("/v1/intake", json={"assignee_username": _ASSIGNEE}, headers=_HEADERS)
+    r = await client.post(
+        "/v1/intake", json={"assignee_username": _ASSIGNEE}, headers=_HEADERS
+    )
     assert r.status_code == 422
 
 
@@ -98,7 +113,9 @@ async def test_intake_allows_missing_assignee(client: httpx.AsyncClient):
 async def test_update_system_lifecycle(client: httpx.AsyncClient):
     # lifecycle is not an intake field — it is set later via PUT.
     system_id = (await _create_system(client))["system"]["id"]
-    r = await client.put(f"/v1/systems/{system_id}", json={"lifecycle": "market"}, headers=_HEADERS)
+    r = await client.put(
+        f"/v1/systems/{system_id}", json={"lifecycle": "market"}, headers=_HEADERS
+    )
     assert r.status_code == 200
     assert r.json()["lifecycle"] == "market"
 
@@ -106,6 +123,7 @@ async def test_update_system_lifecycle(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # GET /systems
 # ---------------------------------------------------------------------------
+
 
 async def test_list_systems_returns_registered_system(client: httpx.AsyncClient):
     await _create_system(client)
@@ -128,6 +146,7 @@ async def test_list_systems_pagination(client: httpx.AsyncClient):
 # GET /systems/{id}
 # ---------------------------------------------------------------------------
 
+
 async def test_get_system_returns_correct_record(client: httpx.AsyncClient):
     system_id = (await _create_system(client))["system"]["id"]
     r = await client.get(f"/v1/systems/{system_id}")
@@ -135,7 +154,9 @@ async def test_get_system_returns_correct_record(client: httpx.AsyncClient):
     assert r.json()["id"] == system_id
 
 
-async def test_get_system_returns_classifier_flags_set_at_intake(client: httpx.AsyncClient):
+async def test_get_system_returns_classifier_flags_set_at_intake(
+    client: httpx.AsyncClient,
+):
     """Flags saved during AI-assisted intake are returned by GET so the engineer
     flow can pre-seed the risk checkboxes from the existing system data."""
     r = await client.post(
@@ -170,9 +191,12 @@ async def test_get_system_404_on_missing(client: httpx.AsyncClient):
 # PUT /systems/{id}
 # ---------------------------------------------------------------------------
 
+
 async def test_update_system_mutable_field(client: httpx.AsyncClient):
     system_id = (await _create_system(client))["system"]["id"]
-    r = await client.put(f"/v1/systems/{system_id}", json={"name": "Updated Name"}, headers=_HEADERS)
+    r = await client.put(
+        f"/v1/systems/{system_id}", json={"name": "Updated Name"}, headers=_HEADERS
+    )
     assert r.status_code == 200
     assert r.json()["name"] == "Updated Name"
 
@@ -192,7 +216,9 @@ async def test_update_system_rejects_immutable_basis(client: httpx.AsyncClient):
     system_id = (await _create_system(client))["system"]["id"]
     # basis is in _IMMUTABLE_FIELDS — router returns 422 if client somehow sends it
     # AISystemUpdate has no basis field so Pydantic strips it; test the lifecycle validation instead
-    r = await client.put(f"/v1/systems/{system_id}", json={"lifecycle": "invalid_lifecycle"})
+    r = await client.put(
+        f"/v1/systems/{system_id}", json={"lifecycle": "invalid_lifecycle"}
+    )
     assert r.status_code == 422
 
 
@@ -204,6 +230,7 @@ async def test_update_system_404_on_missing(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # DELETE /systems/{id}
 # ---------------------------------------------------------------------------
+
 
 async def test_delete_system_removes_record(client: httpx.AsyncClient):
     system_id = (await _create_system(client))["system"]["id"]
@@ -222,23 +249,30 @@ async def test_delete_system_404_on_missing(client: httpx.AsyncClient):
 # POST /systems/{id}/models — link model card (N:M)
 # ---------------------------------------------------------------------------
 
+
 async def test_link_model_card_to_system(client: httpx.AsyncClient):
     system_id = (await _create_system(client))["system"]["id"]
     model_id = (await _create_model_card(client))["id"]
-    r = await client.post(f"/v1/systems/{system_id}/models", json={"model_card_id": model_id})
+    r = await client.post(
+        f"/v1/systems/{system_id}/models", json={"model_card_id": model_id}
+    )
     assert r.status_code == 200
     assert r.json()["id"] == model_id
 
 
 async def test_link_model_card_404_on_missing_system(client: httpx.AsyncClient):
     model_id = (await _create_model_card(client))["id"]
-    r = await client.post("/v1/systems/SYS-NOTFOUND/models", json={"model_card_id": model_id})
+    r = await client.post(
+        "/v1/systems/SYS-NOTFOUND/models", json={"model_card_id": model_id}
+    )
     assert r.status_code == 404
 
 
 async def test_link_model_card_404_on_missing_model(client: httpx.AsyncClient):
     system_id = (await _create_system(client))["system"]["id"]
-    r = await client.post(f"/v1/systems/{system_id}/models", json={"model_card_id": "MDL-NOTFOUND"})
+    r = await client.post(
+        f"/v1/systems/{system_id}/models", json={"model_card_id": "MDL-NOTFOUND"}
+    )
     assert r.status_code == 404
 
 
@@ -246,11 +280,16 @@ async def test_link_model_card_404_on_missing_model(client: httpx.AsyncClient):
 # POST /systems/{id}/reclassify — audit event changes
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_reclassify_tier_change_logs_changes(client: httpx.AsyncClient):
     # Create a minimal system (tier=minimal), then set a high-risk flag to change tier.
     system_id = (await _create_system(client))["system"]["id"]
-    await client.put(f"/v1/systems/{system_id}", json={"is_biometric_identification": True}, headers=_HEADERS)
+    await client.put(
+        f"/v1/systems/{system_id}",
+        json={"is_biometric_identification": True},
+        headers=_HEADERS,
+    )
 
     r = await client.post(f"/v1/systems/{system_id}/reclassify", headers=_HEADERS)
     assert r.status_code == 200
@@ -258,13 +297,20 @@ async def test_reclassify_tier_change_logs_changes(client: httpx.AsyncClient):
 
     from ai_trust_persistence.database import engine
     from ai_trust_persistence.models.audit_event import AuditEvent
+
     async with AsyncSession(engine) as session:
-        row = (await session.execute(
-            select(AuditEvent)
-            .where(AuditEvent.action == "system.reclassified")
-            .where(AuditEvent.resource_id == system_id)
-            .order_by(AuditEvent.created_at.desc())
-        )).scalars().first()
+        row = (
+            (
+                await session.execute(
+                    select(AuditEvent)
+                    .where(AuditEvent.action == "system.reclassified")
+                    .where(AuditEvent.resource_id == system_id)
+                    .order_by(AuditEvent.created_at.desc())
+                )
+            )
+            .scalars()
+            .first()
+        )
 
     assert row is not None
     assert row.changes is not None
@@ -282,12 +328,19 @@ async def test_reclassify_no_tier_change_omits_changes(client: httpx.AsyncClient
 
     from ai_trust_persistence.database import engine
     from ai_trust_persistence.models.audit_event import AuditEvent
+
     async with AsyncSession(engine) as session:
-        row = (await session.execute(
-            select(AuditEvent)
-            .where(AuditEvent.action == "system.reclassified")
-            .where(AuditEvent.resource_id == system_id)
-        )).scalars().first()
+        row = (
+            (
+                await session.execute(
+                    select(AuditEvent)
+                    .where(AuditEvent.action == "system.reclassified")
+                    .where(AuditEvent.resource_id == system_id)
+                )
+            )
+            .scalars()
+            .first()
+        )
 
     assert row is not None
     assert not row.changes

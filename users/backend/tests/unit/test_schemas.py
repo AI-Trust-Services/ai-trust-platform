@@ -1,4 +1,5 @@
 """Unit tests for users backend Pydantic schemas."""
+
 from __future__ import annotations
 
 import pytest
@@ -9,10 +10,15 @@ from app.schemas import InviteUserRequest, UpdateUserRequest, UserSummary
 
 # --- InviteUserRequest ---
 
+
 def test_invite_valid_minimal():
-    r = InviteUserRequest(username="alice", email="alice@example.com",
-                          firstName="Alice", lastName="Smith",
-                          temporaryPassword="secret123")
+    r = InviteUserRequest(
+        username="alice",
+        email="alice@example.com",
+        firstName="Alice",
+        lastName="Smith",
+        temporaryPassword="secret123",
+    )
     assert r.username == "alice"
     assert r.email == "alice@example.com"
     assert r.department == ""
@@ -20,27 +26,43 @@ def test_invite_valid_minimal():
 
 def test_invite_rejects_invalid_email():
     with pytest.raises(ValidationError):
-        InviteUserRequest(username="alice", email="not-an-email",
-                          firstName="Alice", lastName="Smith",
-                          temporaryPassword="x")
+        InviteUserRequest(
+            username="alice",
+            email="not-an-email",
+            firstName="Alice",
+            lastName="Smith",
+            temporaryPassword="x",
+        )
 
 
 def test_invite_requires_username():
     with pytest.raises(ValidationError):
-        InviteUserRequest(email="alice@example.com", firstName="Alice",
-                          lastName="Smith", temporaryPassword="x")
+        InviteUserRequest(
+            email="alice@example.com",
+            firstName="Alice",
+            lastName="Smith",
+            temporaryPassword="x",
+        )
 
 
 def test_invite_requires_temporary_password():
     with pytest.raises(ValidationError):
-        InviteUserRequest(username="alice", email="alice@example.com",
-                          firstName="Alice", lastName="Smith")
+        InviteUserRequest(
+            username="alice",
+            email="alice@example.com",
+            firstName="Alice",
+            lastName="Smith",
+        )
 
 
 def test_invite_optional_fields_default_empty():
-    r = InviteUserRequest(username="bob", email="bob@example.com",
-                          firstName="Bob", lastName="Jones",
-                          temporaryPassword="pw")
+    r = InviteUserRequest(
+        username="bob",
+        email="bob@example.com",
+        firstName="Bob",
+        lastName="Jones",
+        temporaryPassword="pw",
+    )
     assert r.department == ""
     assert r.businessUnit == ""
     assert r.jobTitle == ""
@@ -49,6 +71,7 @@ def test_invite_optional_fields_default_empty():
 
 
 # --- UpdateUserRequest ---
+
 
 def test_update_all_none_is_valid():
     u = UpdateUserRequest()
@@ -75,8 +98,16 @@ def test_update_valid_email():
 
 # --- UserSummary ---
 
+
 def test_user_summary_defaults():
-    u = UserSummary(id="abc", username="u", email="u@x.com",
-                    firstName="U", lastName="U", enabled=True, emailVerified=False)
+    u = UserSummary(
+        id="abc",
+        username="u",
+        email="u@x.com",
+        firstName="U",
+        lastName="U",
+        enabled=True,
+        emailVerified=False,
+    )
     assert u.roles == []
     assert u.createdTimestamp is None

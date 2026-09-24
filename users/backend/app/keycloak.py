@@ -37,7 +37,9 @@ def _fetch_token() -> tuple[str, int]:
     single mode → the legacy users-backend service-account client_credentials grant."""
     if TENANCY_MODE == "jwt":
         if not (MESH_KC_ADMIN_USER and MESH_KC_ADMIN_PASSWORD):
-            raise HTTPException(500, "users-backend misconfigured: MESH_KC_ADMIN_USER/PASSWORD not set")
+            raise HTTPException(
+                500, "users-backend misconfigured: MESH_KC_ADMIN_USER/PASSWORD not set"
+            )
         resp = httpx.post(
             f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token",
             data={
@@ -83,7 +85,9 @@ def current_realm() -> str:
     if TENANCY_MODE == "jwt":
         realm = tenant_id_var.get()
         if not realm:
-            raise HTTPException(400, "No tenant in request context — cannot resolve Keycloak realm.")
+            raise HTTPException(
+                400, "No tenant in request context — cannot resolve Keycloak realm."
+            )
         return realm
     return LEGACY_REALM
 

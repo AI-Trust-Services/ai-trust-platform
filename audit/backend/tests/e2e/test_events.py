@@ -1,4 +1,5 @@
 """E2E tests for Audit backend — in-process via ASGITransport against a real ClickHouse."""
+
 from __future__ import annotations
 
 import time
@@ -13,6 +14,7 @@ from tests.e2e.conftest import insert_event
 # Health
 # ---------------------------------------------------------------------------
 
+
 async def test_health_ok(client: httpx.AsyncClient):
     r = await client.get("/health")
     assert r.status_code == 200
@@ -22,6 +24,7 @@ async def test_health_ok(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # GET /v1/events — empty / basic
 # ---------------------------------------------------------------------------
+
 
 async def test_list_events_empty(client: httpx.AsyncClient):
     r = await client.get("/v1/events")
@@ -57,6 +60,7 @@ async def test_list_events_returns_inserted_row(client: httpx.AsyncClient):
 # GET /v1/events — pagination
 # ---------------------------------------------------------------------------
 
+
 async def test_list_events_pagination(client: httpx.AsyncClient):
     for _ in range(5):
         insert_event()
@@ -81,6 +85,7 @@ async def test_list_events_pagination_offset(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # GET /v1/events — filters
 # ---------------------------------------------------------------------------
+
 
 async def test_list_events_filter_by_ai_system_id(client: httpx.AsyncClient):
     insert_event(ai_system_id="SYS-FILTER01", ai_system_name="System A")
@@ -126,6 +131,7 @@ async def test_list_events_filter_by_resource_type(client: httpx.AsyncClient):
 # GET /v1/events — search
 # ---------------------------------------------------------------------------
 
+
 async def test_list_events_search_by_actor(client: httpx.AsyncClient):
     insert_event(actor_username="charlie-search")
     insert_event(actor_username="dave")
@@ -158,6 +164,7 @@ async def test_list_events_search_by_ai_system_name(client: httpx.AsyncClient):
 # GET /v1/events — sort
 # ---------------------------------------------------------------------------
 
+
 async def test_list_events_sort_desc(client: httpx.AsyncClient):
     now = datetime.now(timezone.utc)
     insert_event(id="sort-old", created_at=now - timedelta(seconds=10))
@@ -186,6 +193,7 @@ async def test_list_events_sort_asc(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # GET /v1/events/{id}
 # ---------------------------------------------------------------------------
+
 
 async def test_get_event_detail(client: httpx.AsyncClient):
     event_id = insert_event(
@@ -223,6 +231,7 @@ async def test_get_event_detail_no_changes(client: httpx.AsyncClient):
 # GET /v1/systems
 # ---------------------------------------------------------------------------
 
+
 async def test_list_systems_empty(client: httpx.AsyncClient):
     r = await client.get("/v1/systems")
     assert r.status_code == 200
@@ -243,8 +252,12 @@ async def test_list_systems_returns_distinct(client: httpx.AsyncClient):
 
 
 async def test_list_systems_filtered_by_action(client: httpx.AsyncClient):
-    insert_event(ai_system_id="SYS-FA000001", ai_system_name="Alpha", action="system.registered")
-    insert_event(ai_system_id="SYS-FA000002", ai_system_name="Beta", action="system.deleted")
+    insert_event(
+        ai_system_id="SYS-FA000001", ai_system_name="Alpha", action="system.registered"
+    )
+    insert_event(
+        ai_system_id="SYS-FA000002", ai_system_name="Beta", action="system.deleted"
+    )
 
     r = await client.get("/v1/systems?action=system.registered")
     systems = r.json()
@@ -265,6 +278,7 @@ async def test_list_systems_excludes_empty_ai_system_id(client: httpx.AsyncClien
 # ---------------------------------------------------------------------------
 # GET /v1/stats
 # ---------------------------------------------------------------------------
+
 
 async def test_stats_empty(client: httpx.AsyncClient):
     r = await client.get("/v1/stats")

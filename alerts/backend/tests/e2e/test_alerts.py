@@ -1,4 +1,5 @@
 """E2E tests for Alerts backend."""
+
 from __future__ import annotations
 
 import uuid
@@ -33,6 +34,7 @@ def _rule(**kwargs) -> AlertRule:
 # Health
 # ---------------------------------------------------------------------------
 
+
 async def test_health_returns_ok(client: httpx.AsyncClient):
     r = await client.get("/health")
     assert r.status_code == 200
@@ -43,6 +45,7 @@ async def test_health_returns_ok(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # GET /alerts/active
 # ---------------------------------------------------------------------------
+
 
 async def test_active_alerts_empty(client: httpx.AsyncClient):
     r = await client.get("/v1/active")
@@ -96,11 +99,14 @@ async def test_active_alerts_sorted_by_severity(client: httpx.AsyncClient):
     assert events[1]["severity"] == "warning"
 
 
-async def test_active_alerts_sorted_by_time_within_same_severity(client: httpx.AsyncClient):
+async def test_active_alerts_sorted_by_time_within_same_severity(
+    client: httpx.AsyncClient,
+):
     # Within the same severity the secondary sort is triggered_at DESC. We
     # control insertion timing by passing explicit triggered_at values so the
     # ordering is deterministic even if both events land in the same wall-clock second.
     from datetime import timedelta
+
     older = datetime.now(timezone.utc) - timedelta(minutes=5)
     newer = datetime.now(timezone.utc)
     insert_event("rule-1", rule_name="Older", severity="error", triggered_at=older)
@@ -116,14 +122,24 @@ async def test_active_alerts_response_fields(client: httpx.AsyncClient):
     insert_event("rule-1")
     r = await client.get("/v1/active")
     event = r.json()[0]
-    for field in ["id", "rule_id", "rule_name", "category", "severity",
-                  "alert_type", "description", "value_at_trigger", "triggered_at"]:
+    for field in [
+        "id",
+        "rule_id",
+        "rule_name",
+        "category",
+        "severity",
+        "alert_type",
+        "description",
+        "value_at_trigger",
+        "triggered_at",
+    ]:
         assert field in event
 
 
 # ---------------------------------------------------------------------------
 # GET /alerts/history
 # ---------------------------------------------------------------------------
+
 
 async def test_history_empty(client: httpx.AsyncClient):
     r = await client.get("/v1/history")
@@ -157,9 +173,19 @@ async def test_history_response_fields(client: httpx.AsyncClient):
     insert_event("rule-1", resolved_at=now)
     r = await client.get("/v1/history")
     event = r.json()[0]
-    for field in ["id", "rule_id", "rule_name", "category", "severity",
-                  "alert_type", "description", "value_at_trigger",
-                  "triggered_at", "resolved_at", "handled_at"]:
+    for field in [
+        "id",
+        "rule_id",
+        "rule_name",
+        "category",
+        "severity",
+        "alert_type",
+        "description",
+        "value_at_trigger",
+        "triggered_at",
+        "resolved_at",
+        "handled_at",
+    ]:
         assert field in event
 
 
@@ -175,6 +201,7 @@ async def test_history_capped_at_100(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # GET /alerts/count
 # ---------------------------------------------------------------------------
+
 
 async def test_count_zero_when_empty(client: httpx.AsyncClient):
     r = await client.get("/v1/count")
@@ -196,6 +223,7 @@ async def test_count_returns_active_only(client: httpx.AsyncClient):
 # GET /alerts/rules
 # ---------------------------------------------------------------------------
 
+
 async def test_rules_empty(client: httpx.AsyncClient):
     r = await client.get("/v1/rules")
     assert r.status_code == 200
@@ -204,10 +232,12 @@ async def test_rules_empty(client: httpx.AsyncClient):
 
 async def test_rules_returns_seeded_rules(client: httpx.AsyncClient):
     async with SessionLocal() as session:
-        session.add_all([
-            _rule(name="Rule A", category="risk"),
-            _rule(name="Rule B", category="compliance"),
-        ])
+        session.add_all(
+            [
+                _rule(name="Rule A", category="risk"),
+                _rule(name="Rule B", category="compliance"),
+            ]
+        )
         await session.commit()
 
     r = await client.get("/v1/rules")
@@ -224,18 +254,30 @@ async def test_rules_response_fields(client: httpx.AsyncClient):
 
     r = await client.get("/v1/rules")
     rule = r.json()[0]
-    for field in ["id", "name", "category", "severity", "description",
-                  "condition_type", "threshold", "source", "alert_type", "enabled"]:
+    for field in [
+        "id",
+        "name",
+        "category",
+        "severity",
+        "description",
+        "condition_type",
+        "threshold",
+        "source",
+        "alert_type",
+        "enabled",
+    ]:
         assert field in rule
 
 
 async def test_rules_ordered_by_category_then_name(client: httpx.AsyncClient):
     async with SessionLocal() as session:
-        session.add_all([
-            _rule(name="Z Rule", category="compliance"),
-            _rule(name="A Rule", category="compliance"),
-            _rule(name="M Rule", category="risk"),
-        ])
+        session.add_all(
+            [
+                _rule(name="Z Rule", category="compliance"),
+                _rule(name="A Rule", category="compliance"),
+                _rule(name="M Rule", category="risk"),
+            ]
+        )
         await session.commit()
 
     r = await client.get("/v1/rules")
@@ -248,6 +290,7 @@ async def test_rules_ordered_by_category_then_name(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # POST /alerts/events/{id}/handle
 # ---------------------------------------------------------------------------
+
 
 async def test_handle_event_returns_handled_status(client: httpx.AsyncClient):
     event_id = insert_event("rule-1")
@@ -292,6 +335,7 @@ async def test_handle_event_is_idempotent(client: httpx.AsyncClient):
 # POST /alerts/rules/{id}/toggle
 # ---------------------------------------------------------------------------
 
+
 async def test_toggle_rule_disables_enabled_rule(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         rule = _rule(enabled=True)
@@ -325,8 +369,14 @@ async def test_toggle_rule_returns_404_for_unknown_id(client: httpx.AsyncClient)
 # Entity fields (entity_id, entity_type, entity_model)
 # ---------------------------------------------------------------------------
 
+
 async def test_active_alerts_includes_entity_fields(client: httpx.AsyncClient):
-    insert_event("rule-1", entity_id="client-safety", entity_type="service", entity_model="llama3.1")
+    insert_event(
+        "rule-1",
+        entity_id="client-safety",
+        entity_type="service",
+        entity_model="llama3.1",
+    )
 
     r = await client.get("/v1/active")
     event = r.json()[0]
@@ -337,8 +387,15 @@ async def test_active_alerts_includes_entity_fields(client: httpx.AsyncClient):
 
 async def test_history_includes_entity_fields(client: httpx.AsyncClient):
     from datetime import datetime, timezone
+
     now = datetime.now(timezone.utc)
-    insert_event("rule-1", resolved_at=now, entity_id="client-llm", entity_type="service", entity_model="gpt-4o")
+    insert_event(
+        "rule-1",
+        resolved_at=now,
+        entity_id="client-llm",
+        entity_type="service",
+        entity_model="gpt-4o",
+    )
 
     r = await client.get("/v1/history")
     event = r.json()[0]
@@ -361,26 +418,35 @@ async def test_active_alerts_entity_fields_default_to_empty(client: httpx.AsyncC
 # POST /alerts/events/{id}/approve-model
 # ---------------------------------------------------------------------------
 
+
 async def test_approve_model_returns_404_for_unknown_event(client: httpx.AsyncClient):
     r = await client.post("/v1/events/nonexistent-id/approve-model")
     assert r.status_code == 404
 
 
-async def test_approve_model_returns_422_when_entity_model_empty(client: httpx.AsyncClient):
-    event_id = insert_event("rule-1", entity_id="client-safety", entity_type="service", entity_model="")
+async def test_approve_model_returns_422_when_entity_model_empty(
+    client: httpx.AsyncClient,
+):
+    event_id = insert_event(
+        "rule-1", entity_id="client-safety", entity_type="service", entity_model=""
+    )
 
     r = await client.post(f"/v1/events/{event_id}/approve-model")
     assert r.status_code == 422
 
 
-async def test_approve_model_updates_baseline_and_handles_event(client: httpx.AsyncClient):
+async def test_approve_model_updates_baseline_and_handles_event(
+    client: httpx.AsyncClient,
+):
     from sqlalchemy import text
     from ai_trust_persistence.database import engine
 
     async with engine.begin() as conn:
         await conn.execute(
-            text("INSERT INTO service_model_baselines (service_name, model_name, last_seen_at) "
-                 "VALUES ('client-safety', 'llama3.2', now())")
+            text(
+                "INSERT INTO service_model_baselines (service_name, model_name, last_seen_at) "
+                "VALUES ('client-safety', 'llama3.2', now())"
+            )
         )
 
     event_id = insert_event(
@@ -402,7 +468,9 @@ async def test_approve_model_updates_baseline_and_handles_event(client: httpx.As
 
     async with engine.begin() as conn:
         result = await conn.execute(
-            text("SELECT model_name FROM service_model_baselines WHERE service_name = 'client-safety'")
+            text(
+                "SELECT model_name FROM service_model_baselines WHERE service_name = 'client-safety'"
+            )
         )
         model = result.scalar_one()
     assert model == "llama3.1"
@@ -424,6 +492,7 @@ async def test_approve_model_returns_404_when_no_baseline(client: httpx.AsyncCli
 # POST /alerts/events/{id}/reject-model
 # ---------------------------------------------------------------------------
 
+
 async def test_reject_model_handles_event(client: httpx.AsyncClient):
     event_id = insert_event("rule-1", alert_type="event")
 
@@ -442,8 +511,10 @@ async def test_reject_model_leaves_baseline_unchanged(client: httpx.AsyncClient)
 
     async with engine.begin() as conn:
         await conn.execute(
-            text("INSERT INTO service_model_baselines (service_name, model_name, last_seen_at) "
-                 "VALUES ('client-safety', 'llama3.2', now())")
+            text(
+                "INSERT INTO service_model_baselines (service_name, model_name, last_seen_at) "
+                "VALUES ('client-safety', 'llama3.2', now())"
+            )
         )
 
     event_id = insert_event(
@@ -457,7 +528,9 @@ async def test_reject_model_leaves_baseline_unchanged(client: httpx.AsyncClient)
 
     async with engine.begin() as conn:
         result = await conn.execute(
-            text("SELECT model_name FROM service_model_baselines WHERE service_name = 'client-safety'")
+            text(
+                "SELECT model_name FROM service_model_baselines WHERE service_name = 'client-safety'"
+            )
         )
         model = result.scalar_one()
     assert model == "llama3.2"  # unchanged
@@ -467,7 +540,10 @@ async def test_reject_model_leaves_baseline_unchanged(client: httpx.AsyncClient)
 # Alert rules — parameters and is_custom fields
 # ---------------------------------------------------------------------------
 
-async def test_rules_response_includes_parameters_and_is_custom(client: httpx.AsyncClient):
+
+async def test_rules_response_includes_parameters_and_is_custom(
+    client: httpx.AsyncClient,
+):
     async with SessionLocal() as session:
         session.add(_rule(parameters='{"service": "client-safety"}', is_custom=True))
         await session.commit()
@@ -495,10 +571,20 @@ async def test_rules_parameters_defaults_to_none(client: httpx.AsyncClient):
 # entity_display_name enrichment (PR #81)
 # ---------------------------------------------------------------------------
 
+
 async def test_active_alerts_resolves_ai_system_display_name(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         from ai_trust_persistence.models.ai_system import AISystem
-        session.add(AISystem(id="SYS-DISP0001", name="Fraud Detector", tier="minimal", lifecycle="development", compliance=0.0))
+
+        session.add(
+            AISystem(
+                id="SYS-DISP0001",
+                name="Fraud Detector",
+                tier="minimal",
+                lifecycle="development",
+                compliance=0.0,
+            )
+        )
         await session.commit()
 
     insert_event("rule-1", entity_id="SYS-DISP0001", entity_type="ai_system")
@@ -509,7 +595,9 @@ async def test_active_alerts_resolves_ai_system_display_name(client: httpx.Async
     assert r.json()[0]["entity_display_name"] == "Fraud Detector"
 
 
-async def test_active_alerts_display_name_falls_back_to_entity_id_when_unregistered(client: httpx.AsyncClient):
+async def test_active_alerts_display_name_falls_back_to_entity_id_when_unregistered(
+    client: httpx.AsyncClient,
+):
     insert_event("rule-1", entity_id="SYS-UNKNOWN99", entity_type="ai_system")
 
     r = await client.get("/v1/active")
@@ -518,7 +606,9 @@ async def test_active_alerts_display_name_falls_back_to_entity_id_when_unregiste
     assert r.json()[0]["entity_display_name"] == "SYS-UNKNOWN99"
 
 
-async def test_active_alerts_non_ai_system_entity_gets_no_enrichment(client: httpx.AsyncClient):
+async def test_active_alerts_non_ai_system_entity_gets_no_enrichment(
+    client: httpx.AsyncClient,
+):
     insert_event("rule-1", entity_id="some-service", entity_type="service")
 
     r = await client.get("/v1/active")
@@ -530,11 +620,22 @@ async def test_active_alerts_non_ai_system_entity_gets_no_enrichment(client: htt
 async def test_history_resolves_ai_system_display_name(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         from ai_trust_persistence.models.ai_system import AISystem
-        session.add(AISystem(id="SYS-DISP0002", name="Risk Scorer", tier="high", lifecycle="market", compliance=50.0))
+
+        session.add(
+            AISystem(
+                id="SYS-DISP0002",
+                name="Risk Scorer",
+                tier="high",
+                lifecycle="market",
+                compliance=50.0,
+            )
+        )
         await session.commit()
 
     now = datetime.now(timezone.utc)
-    insert_event("rule-1", entity_id="SYS-DISP0002", entity_type="ai_system", resolved_at=now)
+    insert_event(
+        "rule-1", entity_id="SYS-DISP0002", entity_type="ai_system", resolved_at=now
+    )
 
     r = await client.get("/v1/history")
     assert r.status_code == 200
@@ -542,7 +643,9 @@ async def test_history_resolves_ai_system_display_name(client: httpx.AsyncClient
     assert r.json()[0]["entity_display_name"] == "Risk Scorer"
 
 
-async def test_active_alerts_response_includes_entity_display_name_field(client: httpx.AsyncClient):
+async def test_active_alerts_response_includes_entity_display_name_field(
+    client: httpx.AsyncClient,
+):
     insert_event("rule-1")
     r = await client.get("/v1/active")
     assert r.status_code == 200
@@ -550,7 +653,9 @@ async def test_active_alerts_response_includes_entity_display_name_field(client:
     assert "entity_display_name" in r.json()[0]
 
 
-async def test_history_response_includes_entity_display_name_field(client: httpx.AsyncClient):
+async def test_history_response_includes_entity_display_name_field(
+    client: httpx.AsyncClient,
+):
     insert_event("rule-1", resolved_at=datetime.now(timezone.utc))
     r = await client.get("/v1/history")
     assert r.status_code == 200

@@ -4,6 +4,7 @@ Revision ID: 0002
 Revises: 0001
 Create Date: 2026-07-16
 """
+
 import uuid
 from datetime import datetime, timezone
 
@@ -163,7 +164,12 @@ def upgrade() -> None:
         sa.Column("enabled", sa.Boolean, nullable=False, server_default="true"),
         sa.Column("parameters", sa.Text, nullable=True),
         sa.Column("is_custom", sa.Boolean, nullable=False, server_default="false"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
     )
     op.create_index("ix_alert_rules_enabled", "alert_rules", ["enabled"])
     op.create_index("ix_alert_rules_category", "alert_rules", ["category"])

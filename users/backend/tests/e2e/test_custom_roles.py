@@ -1,4 +1,5 @@
 """E2E tests for custom role CRUD endpoints (POST/GET/PUT/DELETE /v1/iam/custom-roles)."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -50,12 +51,15 @@ def _patch_openfga_client(tuples=None):
     read_resp = MagicMock()
     read_resp.tuples = tuples
     client_mock.read = AsyncMock(return_value=read_resp)
-    return patch("app.routers.custom_roles.openfga_client.get_client", return_value=client_mock), client_mock
+    return patch(
+        "app.routers.custom_roles.openfga_client.get_client", return_value=client_mock
+    ), client_mock
 
 
 # ---------------------------------------------------------------------------
 # GET /v1/iam/custom-roles
 # ---------------------------------------------------------------------------
+
 
 async def test_list_custom_roles_empty(client: httpx.AsyncClient):
     db_patch, _ = _patch_db([])
@@ -84,6 +88,7 @@ async def test_list_custom_roles_returns_rows(client: httpx.AsyncClient):
 # POST /v1/iam/custom-roles
 # ---------------------------------------------------------------------------
 
+
 async def test_create_custom_role_success(client: httpx.AsyncClient):
     db_patch, session = _patch_db([])
 
@@ -96,12 +101,19 @@ async def test_create_custom_role_success(client: httpx.AsyncClient):
         db_patch,
         patch("app.routers.custom_roles.openfga_client.write_tuple", new=AsyncMock()),
         patch("app.routers.custom_roles.openfga_client.delete_tuple", new=AsyncMock()),
-        patch("app.routers.custom_roles._get_role_permissions", new=AsyncMock(return_value=[])),
+        patch(
+            "app.routers.custom_roles._get_role_permissions",
+            new=AsyncMock(return_value=[]),
+        ),
         patch("app.routers.custom_roles._set_role_permissions", new=AsyncMock()),
     ):
         r = await client.post(
             "/v1/iam/custom-roles",
-            json={"name": "Reviewer", "description": "Can review", "permissions": ["systems:read"]},
+            json={
+                "name": "Reviewer",
+                "description": "Can review",
+                "permissions": ["systems:read"],
+            },
         )
 
     assert r.status_code == 201
@@ -146,6 +158,7 @@ async def test_create_custom_role_conflict(client: httpx.AsyncClient):
 # PUT /v1/iam/custom-roles/{role_id}
 # ---------------------------------------------------------------------------
 
+
 async def test_update_custom_role_description(client: httpx.AsyncClient):
     row = _db_row()
     db_patch, session = _patch_db([])
@@ -156,7 +169,10 @@ async def test_update_custom_role_description(client: httpx.AsyncClient):
     with (
         db_patch,
         patch("app.routers.custom_roles._set_role_permissions", new=AsyncMock()),
-        patch("app.routers.custom_roles._get_role_permissions", new=AsyncMock(return_value=["systems:read"])),
+        patch(
+            "app.routers.custom_roles._get_role_permissions",
+            new=AsyncMock(return_value=["systems:read"]),
+        ),
     ):
         r = await client.put(
             "/v1/iam/custom-roles/ROLE-ABCD1234",
@@ -174,7 +190,9 @@ async def test_update_custom_role_not_found(client: httpx.AsyncClient):
     session.execute = AsyncMock(return_value=result_mock)
 
     with db_patch:
-        r = await client.put("/v1/iam/custom-roles/ROLE-MISSING", json={"description": "x"})
+        r = await client.put(
+            "/v1/iam/custom-roles/ROLE-MISSING", json={"description": "x"}
+        )
 
     assert r.status_code == 404
 
@@ -183,9 +201,13 @@ async def test_update_custom_role_not_found(client: httpx.AsyncClient):
 # DELETE /v1/iam/custom-roles/{role_id}
 # ---------------------------------------------------------------------------
 
-async def test_list_custom_roles_permissions_mapped_from_openfga(client: httpx.AsyncClient):
+
+async def test_list_custom_roles_permissions_mapped_from_openfga(
+    client: httpx.AsyncClient,
+):
     """Permissions from OpenFGA tuples are correctly mapped onto each role in the response."""
     from unittest.mock import MagicMock as TupleMock
+
     row = _db_row(name="Reviewer")
 
     # Build a fake tuple: role:reviewer#member has can_read_systems on platform:global
@@ -203,9 +225,12 @@ async def test_list_custom_roles_permissions_mapped_from_openfga(client: httpx.A
     assert data[0]["permissions"] == ["systems:read"]
 
 
-async def test_create_custom_role_rolls_back_postgres_on_openfga_failure(client: httpx.AsyncClient):
+async def test_create_custom_role_rolls_back_postgres_on_openfga_failure(
+    client: httpx.AsyncClient,
+):
     """If OpenFGA write fails after Postgres insert, the Postgres row is deleted."""
     import pytest
+
     db_patch, session = _patch_db([])
 
     async def _refresh(row):
@@ -221,13 +246,19 @@ async def test_create_custom_role_rolls_back_postgres_on_openfga_failure(client:
 
     with (
         db_patch,
-        patch("app.routers.custom_roles._set_role_permissions",
-              new=AsyncMock(side_effect=RuntimeError("OpenFGA down"))),
+        patch(
+            "app.routers.custom_roles._set_role_permissions",
+            new=AsyncMock(side_effect=RuntimeError("OpenFGA down")),
+        ),
         pytest.raises(Exception),
     ):
         await client.post(
             "/v1/iam/custom-roles",
-            json={"name": "Reviewer", "description": "", "permissions": ["systems:read"]},
+            json={
+                "name": "Reviewer",
+                "description": "",
+                "permissions": ["systems:read"],
+            },
         )
 
     session.delete.assert_awaited_once()
@@ -244,7 +275,9 @@ async def test_delete_custom_role_strips_all_members(client: httpx.AsyncClient):
 
     with (
         db_patch,
-        patch("app.routers.custom_roles._delete_all_member_tuples", new=AsyncMock()) as del_members,
+        patch(
+            "app.routers.custom_roles._delete_all_member_tuples", new=AsyncMock()
+        ) as del_members,
         patch("app.routers.custom_roles._set_role_permissions", new=AsyncMock()),
     ):
         r = await client.delete("/v1/iam/custom-roles/ROLE-ABCD1234")

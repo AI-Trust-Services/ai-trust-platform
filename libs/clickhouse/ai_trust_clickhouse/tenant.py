@@ -9,6 +9,7 @@ in-row tenant filter — queries run against the tenant's database directly.
 ``libs/tenancy``) so callers can pick the right per-tenant client for DB ROUTING. It is not
 a row filter.
 """
+
 from __future__ import annotations
 
 try:

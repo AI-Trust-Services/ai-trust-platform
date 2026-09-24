@@ -22,10 +22,16 @@ class Obligation(Base):
 
     id: Mapped[str] = mapped_column(String(30), primary_key=True)
     assessment_id: Mapped[str] = mapped_column(
-        String(30), ForeignKey("assessments.id", ondelete="CASCADE"), nullable=False, index=True
+        String(30),
+        ForeignKey("assessments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     ai_system_id: Mapped[str] = mapped_column(
-        String(20), ForeignKey("ai_systems.id", ondelete="CASCADE"), nullable=False, index=True
+        String(20),
+        ForeignKey("ai_systems.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     framework_id: Mapped[str] = mapped_column(
         String(30), ForeignKey("frameworks.id"), nullable=False
@@ -37,7 +43,9 @@ class Obligation(Base):
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     owner: Mapped[str] = mapped_column(String(200), default="")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

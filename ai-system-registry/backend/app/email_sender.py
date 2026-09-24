@@ -1,4 +1,5 @@
 """Fire-and-forget email notifications via SMTP."""
+
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +22,9 @@ _USERS_BACKEND_URL = os.environ.get("USERS_BACKEND_URL", "http://users-backend:8
 # Public link to the registry MFE, used in notification bodies. Derived from
 # APP_PUBLIC_URL (the platform's public base URL) so mails point at the real
 # deployment rather than a hardcoded localhost.
-REGISTRY_URL = os.environ.get("APP_PUBLIC_URL", "http://localhost:8080").rstrip("/") + "/registry/"
+REGISTRY_URL = (
+    os.environ.get("APP_PUBLIC_URL", "http://localhost:8080").rstrip("/") + "/registry/"
+)
 
 
 @dataclass
@@ -41,7 +44,9 @@ class _SmtpConfig:
 async def _get_config() -> _SmtpConfig:
     try:
         async with SessionLocal() as session:
-            row = await session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
+            row = await session.scalar(
+                select(PlatformSettings).where(PlatformSettings.id == 1)
+            )
             if row and row.smtp_host:
                 return _SmtpConfig(
                     enabled=True,
@@ -58,8 +63,15 @@ async def _get_config() -> _SmtpConfig:
     except Exception as exc:
         logger.warning("notification.config_lookup_failed", extra={"error": str(exc)})
     return _SmtpConfig(
-        enabled=False, host="", port=587, user=None, password=None,
-        from_addr="", from_name=None, ssl=False, starttls=False,
+        enabled=False,
+        host="",
+        port=587,
+        user=None,
+        password=None,
+        from_addr="",
+        from_name=None,
+        ssl=False,
+        starttls=False,
         platform_name="AI Trust Platform",
     )
 
@@ -74,7 +86,10 @@ async def _get_email(username: str) -> str | None:
             resp.raise_for_status()
             return resp.json().get("email")
     except Exception as exc:
-        logger.warning("notification.email_lookup_failed", extra={"username": username, "error": str(exc)})
+        logger.warning(
+            "notification.email_lookup_failed",
+            extra={"username": username, "error": str(exc)},
+        )
         return None
 
 
@@ -85,20 +100,34 @@ async def notify(to_username: str, subject: str, body: str) -> None:
     )
 
     if not config.enabled:
-        logger.info("notification.skipped", extra={"username": to_username, "subject": subject,
-                                                    "reason": "SMTP not configured"})
+        logger.info(
+            "notification.skipped",
+            extra={
+                "username": to_username,
+                "subject": subject,
+                "reason": "SMTP not configured",
+            },
+        )
         return
 
     if not email:
-        logger.warning("notification.no_email", extra={"username": to_username, "subject": subject})
+        logger.warning(
+            "notification.no_email", extra={"username": to_username, "subject": subject}
+        )
         return
 
     resolved_subject = subject.format(platform_name=config.platform_name)
-    resolved_body = body.format(platform_name=config.platform_name, registry_url=REGISTRY_URL)
+    resolved_body = body.format(
+        platform_name=config.platform_name, registry_url=REGISTRY_URL
+    )
 
     msg = MIMEText(resolved_body, "plain")
     msg["Subject"] = resolved_subject
-    msg["From"] = f"{config.from_name} <{config.from_addr}>" if config.from_name else config.from_addr
+    msg["From"] = (
+        f"{config.from_name} <{config.from_addr}>"
+        if config.from_name
+        else config.from_addr
+    )
     msg["To"] = email
 
     try:
@@ -111,9 +140,14 @@ async def notify(to_username: str, subject: str, body: str) -> None:
             use_tls=config.ssl,
             start_tls=config.starttls,
         )
-        logger.info("notification.sent", extra={"to": email, "subject": resolved_subject})
+        logger.info(
+            "notification.sent", extra={"to": email, "subject": resolved_subject}
+        )
     except Exception as exc:
-        logger.warning("notification.send_failed", extra={"to": email, "subject": resolved_subject, "error": str(exc)})
+        logger.warning(
+            "notification.send_failed",
+            extra={"to": email, "subject": resolved_subject, "error": str(exc)},
+        )
 
 
 async def notify_question_assigned(

@@ -1,17 +1,32 @@
 """Pydantic v2 schemas for Assessment."""
+
 from __future__ import annotations
 
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-VALID_ASSESSMENT_TYPES = frozenset({
-    "compliance", "risk", "privacy", "security", "fairness",
-    "transparency", "human_oversight", "operational_readiness", "third_party",
-})
-VALID_ASSESSMENT_STATUSES = frozenset({
-    "draft", "submitted", "under_review", "approved",
-})
+VALID_ASSESSMENT_TYPES = frozenset(
+    {
+        "compliance",
+        "risk",
+        "privacy",
+        "security",
+        "fairness",
+        "transparency",
+        "human_oversight",
+        "operational_readiness",
+        "third_party",
+    }
+)
+VALID_ASSESSMENT_STATUSES = frozenset(
+    {
+        "draft",
+        "submitted",
+        "under_review",
+        "approved",
+    }
+)
 
 
 class AssessmentCreate(BaseModel):

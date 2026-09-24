@@ -4,6 +4,7 @@ Revision ID: 0013
 Revises: 0012
 Create Date: 2026-09-03
 """
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -18,7 +19,12 @@ def upgrade() -> None:
     op.create_table(
         "audit_events",
         sa.Column("id", sa.String(20), primary_key=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.Column("actor_username", sa.String(200), nullable=False),
         sa.Column("action", sa.String(100), nullable=False),
         sa.Column("resource_type", sa.String(50), nullable=False),
@@ -29,7 +35,11 @@ def upgrade() -> None:
         sa.Column("source", sa.String(20), nullable=False, server_default="ui"),
     )
     op.create_index("ix_audit_events_created", "audit_events", ["created_at"])
-    op.create_index("ix_audit_events_ai_system_created", "audit_events", ["ai_system_id", "created_at"])
+    op.create_index(
+        "ix_audit_events_ai_system_created",
+        "audit_events",
+        ["ai_system_id", "created_at"],
+    )
 
 
 def downgrade() -> None:

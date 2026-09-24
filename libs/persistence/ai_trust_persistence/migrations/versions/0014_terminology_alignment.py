@@ -22,6 +22,7 @@ Control/Requirement statuses:
 Evidence statuses:
   pending -> awaiting_review
 """
+
 from alembic import op
 
 revision = "0014"
@@ -33,8 +34,12 @@ depends_on = None
 def upgrade() -> None:
     # --- lifecycle ---
     op.drop_constraint("ck_ai_systems_lifecycle", "ai_systems")
-    op.execute("UPDATE ai_systems SET lifecycle = 'prod_ready' WHERE lifecycle = 'conformity'")
-    op.execute("UPDATE ai_systems SET lifecycle = 'service' WHERE lifecycle = 'post-market'")
+    op.execute(
+        "UPDATE ai_systems SET lifecycle = 'prod_ready' WHERE lifecycle = 'conformity'"
+    )
+    op.execute(
+        "UPDATE ai_systems SET lifecycle = 'service' WHERE lifecycle = 'post-market'"
+    )
     op.create_check_constraint(
         "ck_ai_systems_lifecycle",
         "ai_systems",
@@ -44,8 +49,12 @@ def upgrade() -> None:
     # --- control statuses ---
     op.drop_constraint("ck_controls_status", "controls")
     op.execute("UPDATE controls SET status = 'open' WHERE status = 'not_started'")
-    op.execute("UPDATE controls SET status = 'planned' WHERE status = 'in_implementation'")
-    op.execute("UPDATE controls SET status = 'under_review' WHERE status = 'implemented'")
+    op.execute(
+        "UPDATE controls SET status = 'planned' WHERE status = 'in_implementation'"
+    )
+    op.execute(
+        "UPDATE controls SET status = 'under_review' WHERE status = 'implemented'"
+    )
     op.execute("UPDATE controls SET status = 'fulfilled' WHERE status = 'effective'")
     op.create_check_constraint(
         "ck_controls_status",
@@ -55,7 +64,9 @@ def upgrade() -> None:
 
     # --- evidence statuses ---
     op.drop_constraint("ck_evidence_status", "evidence")
-    op.execute("UPDATE evidence SET status = 'awaiting_review' WHERE status = 'pending'")
+    op.execute(
+        "UPDATE evidence SET status = 'awaiting_review' WHERE status = 'pending'"
+    )
     op.create_check_constraint(
         "ck_evidence_status",
         "evidence",
@@ -66,7 +77,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     # --- evidence statuses ---
     op.drop_constraint("ck_evidence_status", "evidence")
-    op.execute("UPDATE evidence SET status = 'pending' WHERE status = 'awaiting_review'")
+    op.execute(
+        "UPDATE evidence SET status = 'pending' WHERE status = 'awaiting_review'"
+    )
     op.create_check_constraint(
         "ck_evidence_status",
         "evidence",
@@ -76,8 +89,12 @@ def downgrade() -> None:
     # --- control statuses ---
     op.drop_constraint("ck_controls_status", "controls")
     op.execute("UPDATE controls SET status = 'not_started' WHERE status = 'open'")
-    op.execute("UPDATE controls SET status = 'in_implementation' WHERE status = 'planned'")
-    op.execute("UPDATE controls SET status = 'implemented' WHERE status = 'under_review'")
+    op.execute(
+        "UPDATE controls SET status = 'in_implementation' WHERE status = 'planned'"
+    )
+    op.execute(
+        "UPDATE controls SET status = 'implemented' WHERE status = 'under_review'"
+    )
     op.execute("UPDATE controls SET status = 'effective' WHERE status = 'fulfilled'")
     op.create_check_constraint(
         "ck_controls_status",
@@ -87,8 +104,12 @@ def downgrade() -> None:
 
     # --- lifecycle ---
     op.drop_constraint("ck_ai_systems_lifecycle", "ai_systems")
-    op.execute("UPDATE ai_systems SET lifecycle = 'conformity' WHERE lifecycle = 'prod_ready'")
-    op.execute("UPDATE ai_systems SET lifecycle = 'post-market' WHERE lifecycle = 'service'")
+    op.execute(
+        "UPDATE ai_systems SET lifecycle = 'conformity' WHERE lifecycle = 'prod_ready'"
+    )
+    op.execute(
+        "UPDATE ai_systems SET lifecycle = 'post-market' WHERE lifecycle = 'service'"
+    )
     op.create_check_constraint(
         "ck_ai_systems_lifecycle",
         "ai_systems",

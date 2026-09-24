@@ -7,6 +7,7 @@ to complete in exactly len(REQUIRED_FIELD_KEYS) user turns; infer-flags maps a
 recruiting use-case onto is_employment_related=true. The questionnaire tasks walk
 their own deterministic sequences.
 """
+
 from __future__ import annotations
 
 import json
@@ -85,7 +86,9 @@ def _turn(messages: list[dict]) -> dict:
     complete = user_turns >= len(REQUIRED_FIELD_KEYS)
     if complete:
         next_field = None
-        message = "Thanks — I have everything I need. Here is the preliminary classification."
+        message = (
+            "Thanks — I have everything I need. Here is the preliminary classification."
+        )
     else:
         next_field = REQUIRED_FIELD_KEYS[idx + 1]
         message = _PROMPTS.get(next_field, f"Please tell me about {next_field}.")
@@ -113,10 +116,25 @@ def _questionnaire_business_turn(messages: list[dict]) -> dict:
         next_field = None
         message = "Great — I have all the business context I need."
     else:
-        next_field = BUSINESS_QUESTIONNAIRE_KEYS[idx + 1] if idx + 1 < len(BUSINESS_QUESTIONNAIRE_KEYS) else None
-        message = f"Could you tell me about '{next_field}'?" if next_field else "All done."
+        next_field = (
+            BUSINESS_QUESTIONNAIRE_KEYS[idx + 1]
+            if idx + 1 < len(BUSINESS_QUESTIONNAIRE_KEYS)
+            else None
+        )
+        message = (
+            f"Could you tell me about '{next_field}'?" if next_field else "All done."
+        )
 
-    return _result(json.dumps({"message": message, "extracted_fields": extracted, "next_field": next_field, "complete": complete}))
+    return _result(
+        json.dumps(
+            {
+                "message": message,
+                "extracted_fields": extracted,
+                "next_field": next_field,
+                "complete": complete,
+            }
+        )
+    )
 
 
 def _questionnaire_technical_turn(messages: list[dict]) -> dict:
@@ -130,10 +148,21 @@ def _questionnaire_technical_turn(messages: list[dict]) -> dict:
         next_field = None
         message = "All flags have been determined. Ready to classify."
     else:
-        next_field = _TECHNICAL_FLAGS[idx + 1] if idx + 1 < len(_TECHNICAL_FLAGS) else None
+        next_field = (
+            _TECHNICAL_FLAGS[idx + 1] if idx + 1 < len(_TECHNICAL_FLAGS) else None
+        )
         message = f"Does the system have '{next_field}'?"
 
-    return _result(json.dumps({"message": message, "extracted_fields": extracted, "next_field": next_field, "complete": complete}))
+    return _result(
+        json.dumps(
+            {
+                "message": message,
+                "extracted_fields": extracted,
+                "next_field": next_field,
+                "complete": complete,
+            }
+        )
+    )
 
 
 def _doc_extract(_messages: list[dict]) -> dict:
@@ -155,25 +184,38 @@ def _doc_extract(_messages: list[dict]) -> dict:
 
 
 def _questionnaire_doc_extract(messages: list[dict]) -> dict:
-    system_text = " ".join(m.get("content", "") if isinstance(m.get("content"), str) else "" for m in messages).lower()
+    system_text = " ".join(
+        m.get("content", "") if isinstance(m.get("content"), str) else ""
+        for m in messages
+    ).lower()
     if "technical" in system_text or "flag" in system_text or "risk" in system_text:
-        return _result(json.dumps({
-            "extracted_fields": {"is_employment_related": True},
-            "notes": "Identified employment-related use case from document.",
-        }))
-    return _result(json.dumps({
-        "extracted_fields": {
-            "intended_purpose": "Screens and ranks job applicants.",
-            "department": "HR",
-            "use_case": "Automated candidate shortlisting.",
-        },
-        "notes": "Extracted business context from document.",
-    }))
+        return _result(
+            json.dumps(
+                {
+                    "extracted_fields": {"is_employment_related": True},
+                    "notes": "Identified employment-related use case from document.",
+                }
+            )
+        )
+    return _result(
+        json.dumps(
+            {
+                "extracted_fields": {
+                    "intended_purpose": "Screens and ranks job applicants.",
+                    "department": "HR",
+                    "use_case": "Automated candidate shortlisting.",
+                },
+                "notes": "Extracted business context from document.",
+            }
+        )
+    )
 
 
 def _infer_flags(messages: list[dict]) -> dict:
     blob = " ".join(
-        m["content"] for m in messages if m["role"] == "user" and isinstance(m["content"], str)
+        m["content"]
+        for m in messages
+        if m["role"] == "user" and isinstance(m["content"], str)
     ).lower()
     flags = []
     if any(kw in blob for kw in ("recruit", "employment", "applicant", "hiring")):
@@ -191,7 +233,9 @@ def _infer_flags(messages: list[dict]) -> dict:
 def _classify_questionnaire(messages: list[dict]) -> dict:
     """AI-mode authoritative classification: infer flags + reasoning + missing_info + confidence + org_role."""
     blob = " ".join(
-        m["content"] for m in messages if m["role"] == "user" and isinstance(m["content"], str)
+        m["content"]
+        for m in messages
+        if m["role"] == "user" and isinstance(m["content"], str)
     ).lower()
     flags = []
     if any(kw in blob for kw in ("recruit", "employment", "applicant", "hiring")):
@@ -208,13 +252,27 @@ def _classify_questionnaire(messages: list[dict]) -> dict:
         confidence = 0.9
     else:
         reasoning = "No Annex III, prohibited, GPAI, or transparency triggers were evident in the answers; the system appears minimal risk."
-        missing_info = ["Confirmation of the deployment context and the population affected."]
+        missing_info = [
+            "Confirmation of the deployment context and the population affected."
+        ]
         confidence = 0.6
 
-    if any(kw in blob for kw in ("built", "develop", "train", "created", "we built", "our model")):
+    if any(
+        kw in blob
+        for kw in ("built", "develop", "train", "created", "we built", "our model")
+    ):
         org_role = "provider"
         org_role_rationale = "The organisation developed or trained the AI system, placing it on the market under its own name."
-    elif any(kw in blob for kw in ("third-party", "third party", "purchased", "vendor", "use an existing")):
+    elif any(
+        kw in blob
+        for kw in (
+            "third-party",
+            "third party",
+            "purchased",
+            "vendor",
+            "use an existing",
+        )
+    ):
         org_role = "deployer"
         org_role_rationale = "The organisation deploys a third-party AI system in a professional context without being the original developer."
     else:

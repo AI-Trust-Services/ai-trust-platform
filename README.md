@@ -57,6 +57,84 @@ docker compose down --remove-orphans          # stop, keep data
 docker compose down -v --remove-orphans       # stop, wipe all data (fresh start)
 ```
 
+## Testing
+
+### Backend / Worker microservices
+
+Every backend service and worker follows a consistent two-tier test structure:
+
+| Directory | What runs | Infrastructure needed |
+|---|---|---|
+| `tests/unit/` | Pure Python — mocked I/O, no DB | None |
+| `tests/e2e/` | Full stack via ASGITransport | Postgres (and ClickHouse where applicable) |
+
+All 14 backend/worker components have unit tests:
+
+| Component | Unit test file |
+|---|---|
+| `admin/backend` | `tests/unit/` |
+| `ai-system-registry/backend` | `tests/unit/` |
+| `alerts/backend` | `tests/unit/` |
+| `audit/backend` | `tests/unit/` |
+| `audit-flush-worker` | `tests/unit/` |
+| `compliance/backend` | `tests/unit/` |
+| `consumers/clickhouse-consumer` | `tests/unit/` |
+| `decision-trace-analyzer/backend` | `tests/unit/` |
+| `libs/authorization` | `tests/unit/` |
+| `monitoring/backend` | `tests/unit/` |
+| `otel-pipeline/rmq-bridge` | `tests/unit/` |
+| `overview/backend` | `tests/unit/` |
+| `policy-checker-worker` | `tests/unit/` |
+| `users/backend` | `tests/unit/` |
+
+Run tests for any component:
+
+```bash
+cd <component>          # e.g. cd compliance/backend
+make setup              # first time only — creates .venv, installs deps
+make test-unit          # unit tests only, no Docker needed
+make test-e2e           # e2e tests, requires: docker compose up -d postgres
+make test               # all tests
+```
+
+### Frontend microservices
+
+Frontends are built with React 19 + TypeScript 5.8. There are no unit or integration tests at the moment — this is a known gap.
+
+All 8 frontends have TypeScript type-checking wired up via `npm run typecheck` (`tsc --noEmit`):
+`admin`, `ai-system-registry`, `alerts`, `audit`, `compliance`, `decision-trace-analyzer`, `monitoring`, `users`.
+
+To run type-checking on a frontend:
+
+```bash
+cd <component>/frontend   # e.g. cd compliance/frontend
+npm install
+npm run typecheck
+```
+
+Frontend unit tests (Vitest) and ESLint are not yet configured — contributions welcome.
+
+### Automated PR checks
+
+Every pull request triggers three workflows:
+
+**`pr-unit-tests.yml` — Pre-merge check: unit tests**
+- Matrix job, one cell per component, all 14 running in parallel
+- Runs `make setup && make test-unit` for each backend/worker component
+- No Docker or external services — pure Python only
+- A failure in one component does not cancel the others (`fail-fast: false`)
+- Each component appears as a separate status check on the PR
+
+**`pr-lint.yml` — Pre-merge check: lint**
+- `ruff check .` — lint across the entire Python codebase
+- `ruff format --check .` — format check across the entire Python codebase
+
+**`pr-typecheck.yml` — Pre-merge check: typecheck**
+- Runs `npm ci && npm run typecheck` for all 8 TypeScript frontends sequentially
+- A failure in any frontend fails the whole check and lists all failures at the end
+
+E2E tests are not part of the PR workflow — they require infrastructure (Postgres, ClickHouse) not available in the GitHub Actions runner.
+
 ## Support, Feedback, Contributing
 
 This project is open to feature requests/suggestions, bug reports etc. via [GitHub issues](https://github.com/AI-Trust-Services/ai-trust-platform/issues). Contribution and feedback are encouraged and always welcome. For more information about how to contribute, the project structure, as well as additional contribution information, see our [Contribution Guidelines](CONTRIBUTING.md).

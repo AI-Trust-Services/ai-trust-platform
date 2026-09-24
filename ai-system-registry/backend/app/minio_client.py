@@ -9,6 +9,7 @@ shared ``registration-docs`` bucket (not tenant-isolated) — system IDs are
 globally unique (``SYS-XXXXXXXX``), so the ``{system_id}/{filename}`` key layout
 has no cross-system collision risk.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -88,11 +89,15 @@ def _upload_sync(key: str, data: bytes, content_type: str) -> None:
     )
 
 
-async def upload_file(system_id: str, filename: str, data: bytes, content_type: str) -> str:
+async def upload_file(
+    system_id: str, filename: str, data: bytes, content_type: str
+) -> str:
     """Upload document bytes to the registration-docs bucket. Returns the stored object key."""
     key = object_key(system_id, filename)
     await asyncio.to_thread(_upload_sync, key, data, content_type)
-    logger.info("minio.file_uploaded", extra={"bucket": BUCKET, "key": key, "size": len(data)})
+    logger.info(
+        "minio.file_uploaded", extra={"bucket": BUCKET, "key": key, "size": len(data)}
+    )
     return key
 
 

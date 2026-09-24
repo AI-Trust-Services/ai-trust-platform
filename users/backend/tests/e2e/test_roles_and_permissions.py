@@ -1,4 +1,5 @@
 """E2E tests for role assignment, /v1/roles, /v1/iam/roles, and /v1/me/permissions."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -12,11 +13,14 @@ from tests.e2e.conftest import _kc_user, _make_kc_response
 # POST /v1/users/{user_id}/roles/{role_name} — assign role
 # ---------------------------------------------------------------------------
 
+
 async def test_assign_role_writes_openfga_tuple(client: httpx.AsyncClient):
     user = _kc_user("uid-1", "alice")
     with (
         patch("app.routers.users.admin_client") as mock_ctx,
-        patch("ai_trust_authorization.openfga_client.write_tuple", new=AsyncMock()) as write_tuple,
+        patch(
+            "ai_trust_authorization.openfga_client.write_tuple", new=AsyncMock()
+        ) as write_tuple,
     ):
         kc = MagicMock()
         mock_ctx.return_value.__enter__ = MagicMock(return_value=kc)
@@ -50,10 +54,16 @@ async def test_assign_role_replaces_existing_role(client: httpx.AsyncClient):
     user = _kc_user("uid-1", "alice")
     with (
         patch("app.routers.users.admin_client") as mock_ctx,
-        patch("ai_trust_authorization.openfga_client.read_user_roles",
-              new=AsyncMock(return_value=["role:auditor"])),
-        patch("ai_trust_authorization.openfga_client.delete_tuple", new=AsyncMock()) as del_tuple,
-        patch("ai_trust_authorization.openfga_client.write_tuple", new=AsyncMock()) as write_tuple,
+        patch(
+            "ai_trust_authorization.openfga_client.read_user_roles",
+            new=AsyncMock(return_value=["role:auditor"]),
+        ),
+        patch(
+            "ai_trust_authorization.openfga_client.delete_tuple", new=AsyncMock()
+        ) as del_tuple,
+        patch(
+            "ai_trust_authorization.openfga_client.write_tuple", new=AsyncMock()
+        ) as write_tuple,
     ):
         kc = MagicMock()
         mock_ctx.return_value.__enter__ = MagicMock(return_value=kc)
@@ -72,10 +82,14 @@ async def test_assign_role_blocks_demoting_last_admin(client: httpx.AsyncClient)
     user = _kc_user("uid-1", "alice")
     with (
         patch("app.routers.users.admin_client") as mock_ctx,
-        patch("ai_trust_authorization.openfga_client.read_user_roles",
-              new=AsyncMock(return_value=["role:platform_administrator"])),
-        patch("ai_trust_authorization.openfga_client.read_role_members",
-              new=AsyncMock(return_value=["user:alice"])),
+        patch(
+            "ai_trust_authorization.openfga_client.read_user_roles",
+            new=AsyncMock(return_value=["role:platform_administrator"]),
+        ),
+        patch(
+            "ai_trust_authorization.openfga_client.read_role_members",
+            new=AsyncMock(return_value=["user:alice"]),
+        ),
     ):
         kc = MagicMock()
         mock_ctx.return_value.__enter__ = MagicMock(return_value=kc)
@@ -88,15 +102,21 @@ async def test_assign_role_blocks_demoting_last_admin(client: httpx.AsyncClient)
     assert "last platform administrator" in r.json()["detail"]
 
 
-async def test_assign_role_allows_demoting_admin_when_others_exist(client: httpx.AsyncClient):
+async def test_assign_role_allows_demoting_admin_when_others_exist(
+    client: httpx.AsyncClient,
+):
     """Last-admin guard: reassigning is allowed when another admin exists."""
     user = _kc_user("uid-1", "alice")
     with (
         patch("app.routers.users.admin_client") as mock_ctx,
-        patch("ai_trust_authorization.openfga_client.read_user_roles",
-              new=AsyncMock(return_value=["role:platform_administrator"])),
-        patch("ai_trust_authorization.openfga_client.read_role_members",
-              new=AsyncMock(return_value=["user:alice", "user:bob"])),
+        patch(
+            "ai_trust_authorization.openfga_client.read_user_roles",
+            new=AsyncMock(return_value=["role:platform_administrator"]),
+        ),
+        patch(
+            "ai_trust_authorization.openfga_client.read_role_members",
+            new=AsyncMock(return_value=["user:alice", "user:bob"]),
+        ),
         patch("ai_trust_authorization.openfga_client.delete_tuple", new=AsyncMock()),
         patch("ai_trust_authorization.openfga_client.write_tuple", new=AsyncMock()),
     ):
@@ -116,7 +136,9 @@ async def test_assign_custom_role_writes_openfga_tuple(client: httpx.AsyncClient
     with (
         patch("app.routers.users.admin_client") as mock_ctx,
         patch("app.routers.users._is_valid_role", new=AsyncMock(return_value=True)),
-        patch("ai_trust_authorization.openfga_client.write_tuple", new=AsyncMock()) as write_tuple,
+        patch(
+            "ai_trust_authorization.openfga_client.write_tuple", new=AsyncMock()
+        ) as write_tuple,
     ):
         kc = MagicMock()
         mock_ctx.return_value.__enter__ = MagicMock(return_value=kc)
@@ -133,11 +155,14 @@ async def test_assign_custom_role_writes_openfga_tuple(client: httpx.AsyncClient
 # DELETE /v1/users/{user_id}/roles/{role_name} — remove role
 # ---------------------------------------------------------------------------
 
+
 async def test_remove_role_deletes_openfga_tuple(client: httpx.AsyncClient):
     user = _kc_user("uid-1", "alice")
     with (
         patch("app.routers.users.admin_client") as mock_ctx,
-        patch("ai_trust_authorization.openfga_client.delete_tuple", new=AsyncMock()) as del_tuple,
+        patch(
+            "ai_trust_authorization.openfga_client.delete_tuple", new=AsyncMock()
+        ) as del_tuple,
     ):
         kc = MagicMock()
         mock_ctx.return_value.__enter__ = MagicMock(return_value=kc)
@@ -159,6 +184,7 @@ async def test_remove_role_rejects_unknown_role(client: httpx.AsyncClient):
 # GET /v1/roles — role list from constants (no Keycloak call)
 # ---------------------------------------------------------------------------
 
+
 async def test_list_roles_returns_managed_roles(client: httpx.AsyncClient):
     r = await client.get("/v1/roles")
     assert r.status_code == 200
@@ -170,6 +196,7 @@ async def test_list_roles_returns_managed_roles(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # GET /v1/iam/roles — permission matrix (requires iam:manage, stubbed to pass)
 # ---------------------------------------------------------------------------
+
 
 async def test_iam_roles_returns_all_builtin_roles(client: httpx.AsyncClient):
     r = await client.get("/v1/iam/roles")
@@ -187,6 +214,7 @@ async def test_iam_roles_returns_all_builtin_roles(client: httpx.AsyncClient):
 # GET /v1/me/permissions — permission list for current user
 # ---------------------------------------------------------------------------
 
+
 async def test_me_permissions_returns_list(client: httpx.AsyncClient):
     r = await client.get("/v1/me/permissions")
     assert r.status_code == 200
@@ -198,6 +226,7 @@ async def test_me_permissions_returns_list(client: httpx.AsyncClient):
 async def test_me_permissions_respects_openfga_result(client: httpx.AsyncClient):
     """When OpenFGA says only systems:read is allowed, only that comes back."""
     from ai_trust_authorization.constants import RELATION_BY_PERMISSION
+
     allowed_relation = RELATION_BY_PERMISSION["systems:read"]
     with patch(
         "ai_trust_authorization.openfga_client.list_allowed_relations",

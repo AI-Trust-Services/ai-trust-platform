@@ -13,7 +13,9 @@ _SAFE_DB = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
 def get_client(database: str | None = None):
     host = os.environ["CLICKHOUSE_HOST"]
     port = int(os.environ.get("CLICKHOUSE_PORT", "8123"))
-    log.info("Connecting to ClickHouse at %s:%s (db=%s)", host, port, database or "<default>")
+    log.info(
+        "Connecting to ClickHouse at %s:%s (db=%s)", host, port, database or "<default>"
+    )
     kwargs = dict(
         host=host,
         port=port,
@@ -30,6 +32,7 @@ def _tenancy_mode() -> str:
     libs/tenancy installed (local / single-tenant), where the mode is 'single'."""
     try:
         from ai_trust_tenancy.config import MODE
+
         return MODE
     except ImportError:
         return os.environ.get("TENANCY_MODE", "single").strip().lower()
@@ -65,4 +68,3 @@ def get_client_for_tenant(tenant: str | None):
     missing tenant is fail-closed (db_for_tenant raises). Callers on the read path pass
     current_tenant(); the consumer passes each span's tenant on the write path."""
     return get_client(database=db_for_tenant(tenant))
-

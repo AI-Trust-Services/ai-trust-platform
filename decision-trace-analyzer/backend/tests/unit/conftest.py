@@ -4,6 +4,7 @@ The Span shape mirrors the dicts returned by `routers/traces._load_spans()`,
 which in turn mirror columns in `otel.gen_ai_spans` plus the `attributes` Map.
 Tests construct spans via small builders rather than pasting 20-field dicts.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -86,6 +87,7 @@ def make_llm_span(
 ) -> dict[str, Any]:
     """LLM span with OTel GenAI `gen_ai.input.messages` / `gen_ai.output.messages`."""
     import json
+
     input_msgs = ""
     output_msgs = ""
     if user_prompt is not None:
@@ -126,7 +128,9 @@ def make_tool_span(
     attrs: dict[str, Any] = {}
     if tool_name is not None:
         attrs["gen_ai.tool.name"] = tool_name
-    span_name = fallback_span_name or (f"execute_tool {tool_name}" if tool_name else "execute_tool")
+    span_name = fallback_span_name or (
+        f"execute_tool {tool_name}" if tool_name else "execute_tool"
+    )
     return make_span(
         span_id=span_id,
         parent_span_id=parent_span_id,

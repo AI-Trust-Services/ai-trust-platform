@@ -1,4 +1,5 @@
 """Pydantic v2 schemas for the AI-assisted registration flow (stateless)."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -15,6 +16,7 @@ class ChatMessage(BaseModel):
 
 class AssistTurnRequest(BaseModel):
     """The frontend resends the full transcript + field state each turn."""
+
     transcript: list[ChatMessage] = []
     fields: dict[str, Any] = {}
 

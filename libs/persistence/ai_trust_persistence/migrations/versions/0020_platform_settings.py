@@ -4,6 +4,7 @@ Revision ID: 0020
 Revises: 0019
 Create Date: 2026-09-09
 """
+
 import sqlalchemy as sa
 from alembic import op
 
@@ -17,7 +18,12 @@ def upgrade() -> None:
     op.create_table(
         "platform_settings",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("platform_name", sa.String(200), nullable=False, server_default="AI Trust Platform"),
+        sa.Column(
+            "platform_name",
+            sa.String(200),
+            nullable=False,
+            server_default="AI Trust Platform",
+        ),
         sa.Column("support_email", sa.String(200), nullable=True),
         sa.Column("smtp_host", sa.String(200), nullable=True),
         sa.Column("smtp_port", sa.Integer, nullable=True),

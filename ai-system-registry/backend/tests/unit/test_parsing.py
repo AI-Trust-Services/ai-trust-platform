@@ -1,4 +1,5 @@
 """Unit tests for JSON repair path in parsing.py and document truncation in documents.py."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
@@ -13,6 +14,7 @@ from app.llm.parsing import LLMParseError, parse_json_response
 # JSON repair path — parse_json_response
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_repair_succeeds_when_first_parse_fails():
     """Malformed text triggers the repair call; stub returns '{}' which parses cleanly."""
@@ -26,7 +28,13 @@ async def test_repair_raises_llm_parse_error_when_repair_also_malformed():
     """If the repair call itself returns garbage, LLMParseError is raised."""
     with patch(
         "app.llm.parsing.chat",
-        new=AsyncMock(return_value={"text": "still not json !!!", "input_tokens": 0, "output_tokens": 0}),
+        new=AsyncMock(
+            return_value={
+                "text": "still not json !!!",
+                "input_tokens": 0,
+                "output_tokens": 0,
+            }
+        ),
     ):
         with pytest.raises(LLMParseError):
             await parse_json_response("also not json", task="test")
@@ -53,6 +61,7 @@ async def test_repair_succeeds_on_fenced_json():
 # ---------------------------------------------------------------------------
 # Document truncation — parse_document
 # ---------------------------------------------------------------------------
+
 
 def test_text_document_truncated_at_max_length():
     """A text file exceeding MAX_TEXT_LENGTH is truncated with a marker appended."""

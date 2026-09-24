@@ -4,6 +4,7 @@ Revision ID: 0009
 Revises: 0008
 Create Date: 2026-08-12
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -14,9 +15,19 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("ai_systems", sa.Column("workflow_status", sa.String(30), nullable=False, server_default="draft"))
-    op.add_column("ai_systems", sa.Column("assignee_username", sa.String(200), nullable=True))
-    op.add_column("ai_systems", sa.Column("compliance_officer_username", sa.String(200), nullable=True))
+    op.add_column(
+        "ai_systems",
+        sa.Column(
+            "workflow_status", sa.String(30), nullable=False, server_default="draft"
+        ),
+    )
+    op.add_column(
+        "ai_systems", sa.Column("assignee_username", sa.String(200), nullable=True)
+    )
+    op.add_column(
+        "ai_systems",
+        sa.Column("compliance_officer_username", sa.String(200), nullable=True),
+    )
 
     op.create_table(
         "system_workflow_steps",
@@ -32,7 +43,12 @@ def upgrade() -> None:
         sa.Column("actor_username", sa.String(200), nullable=False),
         sa.Column("assignee_username", sa.String(200), nullable=True),
         sa.Column("note", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
 
 

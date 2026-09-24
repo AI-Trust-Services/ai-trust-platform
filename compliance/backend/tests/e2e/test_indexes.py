@@ -3,6 +3,7 @@
 M2M reverse indexes are defined in 0003_compliance.py alongside their tables.
 Composite and single-column hot-path indexes are defined in 0007_indexes.py.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -18,17 +19,17 @@ from tests.e2e.conftest import _test_engine
 
 EXPECTED = [
     # M2M reverse indexes
-    ("evidence_requirements",   "ix_evidence_requirements_requirement_id"),
+    ("evidence_requirements", "ix_evidence_requirements_requirement_id"),
     # Requirements 1:N FK indexes (from 0024)
-    ("requirements",            "ix_requirements_obligation_id"),
-    ("requirements",            "ix_requirements_assessment_id"),
+    ("requirements", "ix_requirements_obligation_id"),
+    ("requirements", "ix_requirements_assessment_id"),
     # Composite hot-path indexes
-    ("assessments",         "ix_assessments_system_status"),
-    ("obligations",         "ix_obligations_assessment_status"),
+    ("assessments", "ix_assessments_system_status"),
+    ("obligations", "ix_obligations_assessment_status"),
     # Single-column misses
-    ("evidence",            "ix_evidence_validity_until"),
-    ("assessments",         "ix_assessments_updated_at"),
-    ("obligations",         "ix_obligations_article_ref"),
+    ("evidence", "ix_evidence_validity_until"),
+    ("assessments", "ix_assessments_updated_at"),
+    ("obligations", "ix_obligations_article_ref"),
 ]
 
 
@@ -57,8 +58,8 @@ async def test_m2m_reverse_index_columns():
     """Each reverse index must cover the correct column."""
     expected_columns = {
         "ix_evidence_requirements_requirement_id": "requirement_id",
-        "ix_requirements_obligation_id":            "obligation_id",
-        "ix_requirements_assessment_id":            "assessment_id",
+        "ix_requirements_obligation_id": "obligation_id",
+        "ix_requirements_assessment_id": "assessment_id",
     }
 
     async with AsyncSession(_test_engine) as session:
@@ -89,7 +90,7 @@ async def test_composite_index_column_order():
     # pg_index.indkey is an int2vector of attribute numbers in key order.
     # We check that the first column in each composite index is correct.
     expected_leading = {
-        "ix_assessments_system_status":     "ai_system_id",
+        "ix_assessments_system_status": "ai_system_id",
         "ix_obligations_assessment_status": "assessment_id",
     }
 
