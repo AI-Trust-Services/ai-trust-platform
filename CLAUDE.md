@@ -41,7 +41,7 @@ kubectl get pods -n <namespace>
 - OCM CRs (ComponentVersion, Resource, FluxDeployer), all named per `${NAMESPACE}`: `k8s/ocm/manifests.yaml`
 - Per-cluster env: `k8s/env/<cluster>/.env` (`K8S_NAMESPACE` sets that cluster's default namespace)
 - One-time cluster/namespace setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster> [--namespace=<namespace>]` (installs OCM controller, Flux, Traefik, per-namespace DNS + TLS cert, RBAC — default namespace `ai-trust`; pass `--namespace=<name>` to additionally provision a developer/PR namespace on a shared cluster)
-- **PR deployment test** — commenting `/garden-deploy` on a PR (`.github/workflows/pr-deployment-test.yml`) deploys latest `main`, then the PR branch, to a namespace derived from the PR author on `ai-trust-test`. That namespace must be initialized once via `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`.
+- **PR deployment test** — adding the `garden-deploy` label to a PR (`.github/workflows/pr-deployment-test.yml`) deploys the PR branch to a namespace derived from the PR author on `ai-trust-test`. It runs the whole build→package→publish→deploy pipeline as one job (`namespace-deployment-test`) via composite actions + `docker-bake.hcl` (not a `workflow_call` to `build-push-deploy.yml`); the job's pass/fail is the PR check. That namespace must be initialized once via `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`.
 
 ### Run tests (any backend)
 ```bash
@@ -205,6 +205,7 @@ Each component has `frontend/` (nginx, internal) and `backend/` (FastAPI, intern
 ### Dual deployment paths (docker-compose, k8s kind, and Gardener/OCM) — keep in sync
 Three paths are fully supported; **develop and change them together**. When you touch how a service runs:
 - New service in `docker-compose.yml` → add matching Deployment+Service (or Job) to the Helm chart + its image to `k8s/scripts/build-and-load-images.sh` + add it as a resource in `.ocm/component-constructor.yaml`.
+- **New image built in CI** → add it in **all three** CI build definitions or the Gardener deploy will be missing it: the **Deployment Workflow** `build-push` matrix (`.github/workflows/build-push-deploy.yml`, used by push-to-main and `workflow_dispatch`), a matching `target` + the `group "default"` list in `docker-bake.hcl` (used by the **PR Deployment Test** `/garden-deploy` path via `.github/actions/build-images`), and as an `ociImage` resource in `.ocm/component-constructor.yaml`. Nothing enforces parity — an image added to only one silently ships broken on the other trigger. Frontends must also carry their `VITE_*` build args in both the matrix `build_args` and the bake `target`'s `args`.
 - New/changed env var or secret → add to `.env.example`; it flows to k8s via `k8s/scripts/bootstrap.sh`'s Secret (sourced from the same `.env`, no separate k8s env file).
 - New `depends_on: condition:` → add the matching `waitForTcp`/`waitForHttp`/`waitForJob` initContainer (helpers in `_helpers.tpl`).
 - New one-shot Job → use the `ai-trust.jobName` helper for `metadata.name` (appends `-r<.Release.Revision>`) so each `helm upgrade` creates a new Job name instead of patching an immutable one. Do **not** add `helm.sh/hook` annotations — plain resources with per-revision names are the established pattern here (see `jobs.yaml`).
@@ -221,7 +222,7 @@ Three paths are fully supported; **develop and change them together**. When you 
 8. Add proxy routes to `shell/nginx.conf` (`/new-component/`, `/api/new-component/`).
 9. Add `base: "/new-component/"` to the frontend `vite.config.ts`.
 10. Add a nav node to `shell/luigi-config.js`.
-11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh` **and** as `ociImage` resources in `.ocm/component-constructor.yaml`.
+11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh` (kind), the `build-push` matrix in `.github/workflows/build-push-deploy.yml` **and** a `target` + `group "default"` entry in `docker-bake.hcl` (both CI build paths — see "keep in sync" above), **and** as `ociImage` resources in `.ocm/component-constructor.yaml`.
 
 ### ai-system-registry/ (port 8001, `/api/registry/`)
 AI system registration and EU AI Act classification.

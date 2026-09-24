@@ -180,7 +180,7 @@ jobs:
     if: needs.dispatch.outputs.authorized == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Load Gardener connection vars
         run: |
@@ -189,7 +189,7 @@ jobs:
           echo "GARDENER_CA_DISCOVERY_URL=${GARDENER_CA_DISCOVERY_URL}" >> "$GITHUB_ENV"
           echo "GARDENER_OIDC_AUDIENCE=${GARDENER_OIDC_AUDIENCE}" >> "$GITHUB_ENV"
 
-      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-kubectl@v5
 
       - name: Authenticate to Gardener cluster
         uses: gardener/cc-utils/.github/actions/kubernetes-auth@1e70b044f4d3305267a559e7ae74b4de57e1fdee

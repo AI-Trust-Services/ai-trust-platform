@@ -87,12 +87,13 @@ with `targetNamespace: NS`), and Helm runs `helm upgrade --install ai-trust-NS -
 pods. The deploy step then force-reconciles a `Stalled` HelmRelease and polls it every 60 s for up to
 15 min, failing fast on `InstallFailed`/`UpgradeFailed`.
 
-**How `NS` is resolved** (`prepare` job in `build-push-deploy.yml`, then `apply-to-cluster`):
+**How `NS` is resolved** (`prepare` job in `build-push-deploy.yml`, or `compute-vars` for the
+`garden-deploy` label path, then `apply-to-cluster`):
 
 | Target | Namespace |
 |---|---|
 | `ai-trust-main` | always `ai-trust` — the platform's long-running namespace, never derived |
-| `/garden-deploy` on a PR | the PR author's GitHub username, lowercased |
+| `garden-deploy` label on a PR | the PR author's GitHub username, lowercased |
 | any other cluster | the `namespace` workflow input, else `github.actor` lowercased |
 | fallback in `apply-to-cluster` | `K8S_NAMESPACE` from `k8s/env/<cluster>/.env`, else `ai-trust` |
 
@@ -136,16 +137,16 @@ flowchart TB
 ```
 
 **`ai-trust-test` — development.** One namespace per developer, named after the lowercased GitHub
-actor (or the explicit `namespace` workflow input). Deploys are on demand: commenting
-`/garden-deploy` on a PR builds that PR's branch and rolls it into the author's own namespace
+actor (or the explicit `namespace` workflow input). Deploys are on demand: adding the `garden-deploy`
+label to a PR builds that PR's branch and rolls it into the author's own namespace
 (`.github/workflows/pr-deployment-test.yml` pins `gardener_cluster: ai-trust-test`). Several
 developers therefore hold independent full-stack environments on the same shoot at the same time.
 
 ```mermaid
 flowchart TB
     subgraph gha["⚙️ GitHub Actions — one run per developer"]
-        t_alice["/garden-deploy on PR 101<br/>namespace: alice"]
-        t_bob["/garden-deploy on PR 102<br/>namespace: bob"]
+        t_alice["garden-deploy label on PR 101<br/>namespace: alice"]
+        t_bob["garden-deploy label on PR 102<br/>namespace: bob"]
     end
 
     subgraph cluster["🟪 Gardener shoot: ai-trust-test — development"]
@@ -154,9 +155,12 @@ flowchart TB
             crs_bob["ComponentVersion ai-trust-platform-bob<br/>Resource ai-trust-platform-chart-bob<br/>FluxDeployer + HelmRelease ai-trust-bob<br/>Secret ai-trust-flux-values-bob"]
         end
 
-        subgraph nss["Workload namespaces — one per developer, own pods, DB, storage, URL"]
-            ns_alice["namespace: alice<br/>release ai-trust-alice<br/>pods · PVCs · secret ai-trust-env<br/>host: alice.shoot-domain"]
-            ns_bob["namespace: bob<br/>release ai-trust-bob<br/>pods · PVCs · secret ai-trust-env<br/>host: bob.shoot-domain"]
+        subgraph nsAlice["namespace: alice — own pods, DB, storage, URL"]
+            ns_alice["release ai-trust-alice<br/>pods · PVCs · secret ai-trust-env<br/>host: alice.shoot-domain"]
+        end
+
+        subgraph nsBob["namespace: bob — own pods, DB, storage, URL"]
+            ns_bob["release ai-trust-bob<br/>pods · PVCs · secret ai-trust-env<br/>host: bob.shoot-domain"]
         end
 
         crs_alice -->|helm-controller| ns_alice
@@ -173,7 +177,8 @@ flowchart TB
     style gha fill:#fffde7,stroke:#c9c5ae,stroke-width:1px,color:#202124
     style cluster fill:#fffde7,stroke:#c9c5ae,stroke-width:2px,color:#202124
     style ocmsys fill:#fffef2,stroke:#d8d3b8,stroke-width:1px,color:#202124
-    style nss fill:#fffef2,stroke:#d8d3b8,stroke-width:1px,color:#202124
+    style nsAlice fill:#f2fbf5,stroke:#bfe3c9,stroke-width:1px,color:#202124
+    style nsBob fill:#fdf3ef,stroke:#eecdbf,stroke-width:1px,color:#202124
     linkStyle default stroke:#777982,stroke-width:1px
 ```
 
@@ -204,7 +209,7 @@ Without it the deploy fails — the CI identity holds no rights in an unprovisio
 | Event | Namespace | Images built | OCM published | Deploys to |
 |---|---|---|---|---|
 | Push to `main` | `ai-trust` | ✓ `ai-trust-main-<sha>` + `latest` | ✓ `0.0.0-ai-trust-main-<sha>` + `0.0.0-latest` | `ai-trust-main` / `ai-trust` (automatic) |
-| `/garden-deploy` on a PR | `<pr-author>` | ✓ `<pr-author>-<sha>` | ✓ `0.0.0-<pr-author>-<sha>` | `ai-trust-test` / `<pr-author>` |
+| `garden-deploy` label on a PR | `<pr-author>` | ✓ `<pr-author>-<sha>` | ✓ `0.0.0-<pr-author>-<sha>` | `ai-trust-test` / `<pr-author>` |
 | `workflow_dispatch` → `ai-trust-test` | input, else `github.actor` | ✓ `<ns>-<sha>` | ✓ `0.0.0-<ns>-<sha>` | `ai-trust-test` / `<ns>` |
 | `workflow_dispatch` → `sr-test` | input, else `github.actor` | ✓ `<ns>-<sha>` | ✓ `0.0.0-<ns>-<sha>` | `sr-test` / `<ns>` |
 | `workflow_dispatch` → `ai-trust-main` | `ai-trust` (forced) | ✓ `ai-trust-main-<sha>` + `latest` | ✓ `0.0.0-ai-trust-main-<sha>` + `0.0.0-latest` | `ai-trust-main` / `ai-trust` |
@@ -217,18 +222,26 @@ not `ai-trust-<sha>`) — otherwise it would collide with an `ai-trust` namespac
 
 ---
 
-## PR deployment test — `/garden-deploy`
+## PR deployment test — `garden-deploy` label
 
 `.github/workflows/pr-deployment-test.yml` builds a PR branch and deploys it to the PR author's
-namespace on `ai-trust-test`, so several PRs can be validated on the cluster concurrently.
+namespace on `ai-trust-test`, so several PRs can be validated on the cluster concurrently. Adding the
+`garden-deploy` label triggers it (`on: pull_request [labeled]`).
 
-1. **dispatch** — reads PR head SHA/branch/author, then authorizes: only the PR author or an org
-   member may trigger it; anyone else gets a rejection comment and the run fails.
-2. **post-start** — posts a "🚀 Test deployment started" PR comment and a `pending` `deploy-test`
-   commit status.
-3. **deploy** — `workflow_call` into `build-push-deploy.yml` with `gardener_cluster: ai-trust-test`
-   and `namespace: <pr-author lowercased>` — a full build + OCM publish + namespaced deploy.
-4. **post-result** — success/failure PR comment plus the final `deploy-test` commit status.
+The entire pipeline runs as **one job** (`namespace-deployment-test`) whose steps chain the composite
+actions `compute-vars` → `build-images` → `package-chart` → `publish-ocm` → `apply-to-cluster`. That
+single job's success/failure **is** the PR check — there is no separate `deploy-test` commit status.
+
+1. **authorize** — only an org member (repo `admin`/`write`/`maintain`) may trigger it; anyone else
+   gets a rejection comment and the step exits non-zero (failing the job/check).
+2. **build** — `compute-vars` resolves the namespace (PR author, lowercased) and the `<ns>-<sha>`
+   tag; `build-images` checks out the PR head SHA and builds every image in parallel with
+   `docker buildx bake` (`docker-bake.hcl`).
+3. **publish + deploy** — `package-chart` and `publish-ocm` push the chart and OCM component, then
+   `apply-to-cluster` deploys into the author's namespace — a full build + OCM publish + namespaced
+   deploy, all inline (no `workflow_call` into `build-push-deploy.yml`).
+4. **report** — success/failure PR comments (and app-URL comments on linked issues) via `if: success()`
+   / `if: failure()` steps that never mask the job's own conclusion.
 
 ---
 

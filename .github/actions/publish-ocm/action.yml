@@ -1,0 +1,43 @@
+name: Build and Push OCM Component
+description: Build and push the OCM component version to GHCR.
+
+inputs:
+  owner:
+    description: "Lowercase GitHub repository owner"
+    required: true
+  tag:
+    description: "Component version tag"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+
+    - name: Install OCM CLI
+      shell: bash
+      run: |
+        # OCM CLI version — keep in sync with build-push-deploy.yml and shoot-cluster-init.sh
+        curl -sSfL \
+          "https://github.com/open-component-model/ocm/releases/download/v0.50.0/ocm-0.50.0-linux-amd64.tar.gz" \
+          | sudo tar -xz -C /usr/local/bin ocm
+
+    - name: Build and push OCM component
+      shell: bash
+      env:
+        OWNER: ${{ inputs.owner }}
+        TAG: ${{ inputs.tag }}
+      run: |
+        set -euo pipefail
+        mkdir -p dist/ctf
+        ocm add componentversions --create --file dist/ctf .ocm/component-constructor.yaml \
+          VERSION="0.0.0-${TAG}" \
+          GITHUB_REPOSITORY_OWNER="${OWNER}" \
+          IMAGE_TAG="${TAG}" \
+          CHART_TAG="0.0.0-${TAG}"
+        ocm transfer commontransportarchive dist/ctf "oci://ghcr.io/${OWNER}/ocm" --overwrite
