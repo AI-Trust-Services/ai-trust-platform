@@ -13,92 +13,15 @@ concurrency:
 
 jobs:
   check-title:
+    name: Validate · PR Title
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
-      - name: Validate PR title
+      - name: Validate Conventional Commit title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          set -euo pipefail
-
-          TYPES='feat|fix|refactor|docs|test|chore|build|ci|perf|style|revert'
-          MAX_LEN=92
-
-          usage() {
-            echo ""
-            echo "Expected format: <type>[(<scope>)][!]: <short description>"
-            echo ""
-            echo "  type        required - one of: feat, fix, refactor, docs, test,"
-            echo "                         chore, build, ci, perf, style, revert"
-            echo "  (scope)     OPTIONAL  - lowercase component name, e.g. (compliance),"
-            echo "                         (registry), (helm), (ocm), (k8s)"
-            echo "  !           optional  - marks a breaking change"
-            echo "  description required  - lowercase, no trailing period"
-            echo ""
-            echo "Examples:"
-            echo "  feat(compliance): add article reference to requirement tables"
-            echo "  fix: treat empty smtp_password as absent"
-            echo "  feat(api)!: drop v1 evidence endpoint"
-            echo "  docs: clarify gardener bootstrap order"
-            echo ""
-            echo "Reference the issue in the PR description, not the title:"
-            echo "  Fixes #87"
-            echo ""
-            echo "Got: \"$PR_TITLE\""
-          }
-
-          fail() {
-            echo "::error::$1"
-            usage
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)[:space:]]+\))?!?: [^[:space:]].*$'
+          if [[ ! "$PR_TITLE" =~ $pattern ]]; then
+            echo "::error::PR title must follow Conventional Commits: <type>[(<scope>)][!]: <description>. Allowed types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test. Example: 'feat(compliance): add article reference to requirement tables'."
             exit 1
-          }
-
-          # GitHub's "Revert" button auto-generates: Revert "<original title>"
-          if [[ "$PR_TITLE" == Revert\ \"* ]]; then
-            echo "Accepted auto-generated revert title: $PR_TITLE"
-            exit 0
           fi
-
-          LOOSE="^($TYPES)(\(([^)]*)\))?(!)?: (.*)$"
-          if [[ ! "$PR_TITLE" =~ $LOOSE ]]; then
-            fail "PR title does not follow the Conventional Commits format."
-          fi
-
-          HAS_PARENS="${BASH_REMATCH[2]}"
-          SCOPE="${BASH_REMATCH[3]}"
-          SUBJECT="${BASH_REMATCH[5]}"
-
-          if [[ -n "$HAS_PARENS" && -z "$SCOPE" ]]; then
-            fail "Empty scope '()'. Provide a component name or omit the parentheses entirely."
-          fi
-
-          if [[ "$SCOPE" =~ ^#?[0-9]+$ ]]; then
-            fail "Scope '($SCOPE)' looks like an issue number. The scope must name a component, e.g. 'compliance'. GitHub appends the pull request number on squash merge, so an issue number here produces a confusing subject such as 'fix(#87): ... (#130)'. Link the issue in the PR description with 'Fixes #<issue>' instead."
-          fi
-
-          if [[ -n "$SCOPE" && ! "$SCOPE" =~ ^[a-z0-9][a-z0-9._/-]*$ ]]; then
-            fail "Scope '($SCOPE)' is invalid. Use a lowercase component name (letters, digits, '.', '_', '-', '/')."
-          fi
-
-          if [[ -z "$SUBJECT" ]]; then
-            fail "The description is empty."
-          fi
-
-          if [[ "$SUBJECT" =~ ^[A-Z] ]]; then
-            fail "The description must start with a lowercase character."
-          fi
-
-          if [[ "$SUBJECT" == *. ]]; then
-            fail "The description must not end with a period."
-          fi
-
-          if [[ "$SUBJECT" =~ \ \(#[0-9]+\)$ ]]; then
-            fail "Do not append '(#123)' to the title - GitHub adds the pull request number automatically on squash merge."
-          fi
-
-          if (( ${#PR_TITLE} > MAX_LEN )); then
-            fail "PR title is ${#PR_TITLE} characters; the limit is $MAX_LEN. GitHub appends ' (#123)' on squash merge, so the final commit subject must stay under 100 characters."
-          fi
-
-          echo "PR title is valid: $PR_TITLE"

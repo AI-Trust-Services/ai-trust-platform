@@ -33,10 +33,10 @@ The `PR Title Check` workflow validates this automatically on every push — a w
 
 ### Rules
 
-- `type` is required
-- `(scope)` is optional — lowercase component name (`compliance`, `registry`, `helm`, `ocm`, `k8s`, `audit`, `monitoring`, `alerts`, `dta`, `admin`, `users`, `iam`). Omit for repo-wide changes.
+- `type` is required — must be one of the types in the table above
+- `(scope)` is optional — lowercase component name, no spaces. Omit for repo-wide changes
 - `!` is optional — marks a breaking change
-- `description` must be lowercase, imperative mood, no trailing period, ≤ 92 characters total title length
+- `description` is required — non-empty, no leading whitespace
 - Do **not** put issue numbers in the title — put them in the PR body: `Fixes #<number>`
 
 ### Examples

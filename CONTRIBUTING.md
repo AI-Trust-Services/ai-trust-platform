@@ -45,7 +45,7 @@ We squash-merge pull requests, so **the pull request title becomes the commit me
 | `type` | yes | See table below |
 | `(scope)` | **optional** | Lowercase component name, for example `compliance`, `registry`, `helm`, `ocm`, `k8s`. Omit it when the change is repository-wide |
 | `!` | optional | Marks a breaking change |
-| `description` | yes | Lowercase, imperative mood, no trailing period |
+| `description` | yes | Non-empty, no leading whitespace |
 
 #### Commit types
 
@@ -61,7 +61,7 @@ We squash-merge pull requests, so **the pull request title becomes the commit me
 | `ci` | Changes to CI/CD configuration (GitHub Actions workflows, scripts in `.github/`) |
 | `perf` | A code change that improves performance |
 | `style` | Formatting, whitespace, or punctuation — no logic change |
-| `revert` | Reverts a previous commit (GitHub auto-generates the title; accepted as-is) |
+| `revert` | Reverts a previous commit |
 
 Examples:
 
@@ -82,10 +82,6 @@ Fixes #87
 ```
 
 Closing keywords (`Fixes`, `Closes`, `Resolves`) create a real link between the pull request and the issue, and close the issue automatically when the pull request is merged. An issue number in the title does not. Because GitHub appends the pull request number on squash merge, an issue number in the title also produces a confusing subject such as `fix(#87): correct validation (#130)`, where the two numbers refer to different things.
-
-### Title length
-
-Keep the title at 92 characters or fewer. GitHub appends ` (#123)` when squash merging, which keeps the final commit subject under the conventional 100-character limit.
 
 ## Issues and Planning
 
