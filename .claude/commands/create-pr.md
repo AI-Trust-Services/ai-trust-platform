@@ -1,80 +1,54 @@
 ---
 name: create-pr
-description: Create a pull request with a conventional-commit title. Derives the title from staged changes, prompts for scope and description, then opens the PR.
+description: Create a pull request with a conventional-commit title. Derives the title from the branch's changes, then commits, pushes, and opens the PR.
 ---
 
-You are helping create a pull request for the ai-trust-platform repository.
+Create a pull request for the ai-trust-platform repository. The `PR Title Check` workflow validates the title on every push, so a malformed title blocks the PR.
 
-## PR title format
-
-The title **must** follow Conventional Commits:
+## Title format
 
 ```
-<type>[(<scope>)][!]: <short description>
+<type>[(<scope>)][!]: <description>
 ```
 
-The `PR Title Check` workflow validates this automatically on every push — a wrong title blocks the PR.
-
-### Type reference
+- **type** — required, one of the types below.
+- **(scope)** — optional lowercase component name, no spaces (`compliance`, `registry`, `helm`, `k8s`, …). Omit for repo-wide changes.
+- **!** — optional, marks a breaking change.
+- **description** — required, non-empty, no leading whitespace.
+- Never put an issue number in the title (`fix(#87): …`). Link it in the PR body with `Fixes #<n>` — GitHub appends the PR number on squash-merge anyway.
 
 | Type | When to use |
 |---|---|
-| `feat` | New feature visible to users or consumers of the API |
+| `feat` | New user- or API-visible feature |
 | `fix` | Bug fix |
 | `refactor` | Code restructuring — no feature, no bug fix |
-| `docs` | Documentation only (README, CONTRIBUTING, comments) |
-| `test` | Adding or updating tests without touching production code |
-| `chore` | Routine maintenance: dependency bumps, file renames, tooling config |
-| `build` | Build system or external dependency changes (Dockerfile, requirements.txt, package.json) |
-| `ci` | CI/CD configuration changes (GitHub Actions, `.github/` scripts) |
+| `docs` | Documentation only |
+| `test` | Adding/updating tests, no production change |
+| `chore` | Maintenance: dep bumps, renames, tooling |
+| `build` | Build system / dependency changes (Dockerfile, requirements.txt, package.json) |
+| `ci` | CI/CD config (GitHub Actions, `.github/`) |
 | `perf` | Performance improvement |
-| `style` | Formatting/whitespace — no logic change |
+| `style` | Formatting/whitespace, no logic change |
 | `revert` | Reverts a previous commit |
 
-### Rules
-
-- `type` is required — must be one of the types in the table above
-- `(scope)` is optional — lowercase component name, no spaces. Omit for repo-wide changes
-- `!` is optional — marks a breaking change
-- `description` is required — non-empty, no leading whitespace
-- Do **not** put issue numbers in the title — put them in the PR body: `Fixes #<number>`
-
-### Examples
-
-```
-feat(compliance): add article reference to requirement tables
-fix: treat empty smtp_password as absent
-feat(api)!: drop v1 evidence endpoint
-docs: clarify gardener bootstrap order
-chore(deps): bump helm chart to 0.4.0
-ci: add pr-title-check workflow
-refactor(registry): extract classifier into separate module
-test(audit): add e2e coverage for flush worker
-```
+Example: `feat(compliance): add article reference to requirement tables`
 
 ## Steps
 
-0. Confirm you are on the right branch before proceeding:
-   ```
-   git branch --show-current
-   gh pr list --head $(git branch --show-current) --state all
-   ```
-   - If the branch is `main` or `master`, stop and ask the user which feature branch to use.
-   - If a PR already exists for this branch (open or merged), show it to the user and ask whether to continue or abort.
-   - If the branch name matches the current work (e.g. references an issue number or feature name), confirm with the user: "You are on branch `<name>` — is this the branch you want to open a PR for?"
+1. **Confirm the branch.** Run `git branch --show-current`.
+   - If it is `main`/`master`, stop and ask which feature branch to use.
+   - Run `gh pr list --head <branch> --state all`. If a PR already exists, show it and ask whether to add to it or abort.
 
-1. Understand what changed — prefer session context over git commands:
-   - If this session already contains the implemented changes (files edited, features discussed), use that context directly — skip the git commands below.
-   - Otherwise, discover the changes from git:
-     ```
-     BASE=$(git merge-base HEAD $(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo main))
-     git diff $BASE --stat
-     git log $BASE..HEAD --oneline
-     ```
-2. Determine the correct `type` from the table above.
-3. Determine `scope` if the changes are isolated to one component; omit if cross-cutting.
-4. Draft a short imperative description (lowercase, no trailing period).
-5. Compose the title: `<type>[(<scope>)][!]: <description>`
-6. Confirm the title is ≤ 92 characters.
-7. Push the branch if not already pushed: `git push -u origin HEAD`
-8. Create the PR with `gh pr create`, putting any issue references in the body.
+2. **Determine what changed.** If this session already implemented the changes, use that context. Otherwise:
+   ```
+   BASE=$(git merge-base HEAD "$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo main)")
+   git diff "$BASE" --stat && git log "$BASE"..HEAD --oneline
+   ```
+
+3. **Compose the title** — pick `type` from the table, add `scope` only if the change is isolated to one component, write a short description.
+
+4. **Commit any uncommitted work.** Run `git status`; if there are staged or unstaged changes, `git add` the intended files and `git commit`. Skip if the tree is clean and the commits are already made.
+
+5. **Push:** `git push -u origin HEAD`.
+
+6. **Open the PR:** `gh pr create --base main --title "<title>" --body "<summary>\n\nFixes #<n>"`. Put the issue link (if any) in the body, not the title.
