@@ -209,7 +209,7 @@ async def _generate_obligations_in_session(
         # Prefer the aggregate of the cluster's requirement articles (all articles
         # the obligation touches); fall back to the cluster's own display article
         # for retained sets (which carry no per-requirement articles).
-        article_ref = cluster_articles(t["cluster_id"], system.tier, org_role) or t["article_ref"]
+        article_ref = cluster_articles(t["cluster_id"], system.tier, org_role, assessment.framework_id) or t["article_ref"]
         obl = Obligation(
             id=new_id("OBL"),
             assessment_id=assessment.id,
