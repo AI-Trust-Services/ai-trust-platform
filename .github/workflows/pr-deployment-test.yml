@@ -45,10 +45,12 @@ jobs:
             exit 1
           fi
 
-      # Required so the local composite actions (./.github/actions/*) resolve.
-      # build-images re-checks-out at the PR head SHA for the actual build.
+      # Checks out the PR head SHA so composite actions (./.github/actions/*)
+      # resolve correctly. build-images reuses this checkout — no second clone.
       - name: Check out repository
         uses: actions/checkout@v5
+        with:
+          ref: ${{ env.PR_SHA }}
 
       - name: Compute variables
         id: vars
@@ -69,7 +71,6 @@ jobs:
         with:
           owner: ${{ steps.vars.outputs.owner }}
           tag: ${{ steps.vars.outputs.tag }}
-          ref: ${{ steps.vars.outputs.ref }}
           vite_registry_api_base:   ${{ vars.VITE_REGISTRY_API_BASE || '/api/registry/v1' }}
           vite_users_api_base:      ${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
           vite_monitoring_api_base: ${{ vars.VITE_MONITORING_API_BASE || '/api/monitoring/v1' }}

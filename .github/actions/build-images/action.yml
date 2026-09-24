@@ -8,9 +8,6 @@ inputs:
   tag:
     description: "Image tag to apply"
     required: true
-  ref:
-    description: "Git ref to check out"
-    required: true
   vite_registry_api_base:
     description: "VITE_REGISTRY_API_BASE build arg"
     required: false
@@ -63,11 +60,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Check out repository
-      uses: actions/checkout@v5
-      with:
-        ref: ${{ inputs.ref }}
-
     - name: Log in to GitHub Container Registry
       uses: docker/login-action@v4
       with:
