@@ -8,7 +8,7 @@ import DetailPanel, { DetailField, DetailSection } from "../components/DetailPan
 import UploadEvidenceModal from "../components/UploadEvidenceModal";
 import UploadVersionModal from "../components/UploadVersionModal";
 import ControlPicker from "../components/ControlPicker";
-import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, fmtDate, humanize } from "../utils";
+import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, fmtDate, humanize, evidenceTypeLabel } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import type { Requirement, Evidence, EvidenceDetail, EvidenceVersion } from "../types";
 import { Button } from "@/components/ui/button";
