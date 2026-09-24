@@ -42,10 +42,26 @@ We squash-merge pull requests, so **the pull request title becomes the commit me
 
 | Part | Required | Notes |
 |---|---|---|
-| `type` | yes | One of `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `build`, `ci`, `perf`, `style`, `revert` |
+| `type` | yes | See table below |
 | `(scope)` | **optional** | Lowercase component name, for example `compliance`, `registry`, `helm`, `ocm`, `k8s`. Omit it when the change is repository-wide |
 | `!` | optional | Marks a breaking change |
 | `description` | yes | Lowercase, imperative mood, no trailing period |
+
+#### Commit types
+
+| Type | When to use |
+|---|---|
+| `feat` | A new feature visible to users or consumers of the API |
+| `fix` | A bug fix |
+| `refactor` | Code restructuring that neither adds a feature nor fixes a bug |
+| `docs` | Documentation-only changes (README, CONTRIBUTING, code comments) |
+| `test` | Adding or updating tests without touching production code |
+| `chore` | Routine maintenance that does not affect the application (dependency bumps, file renames, tooling config) |
+| `build` | Changes to the build system or external dependencies (Dockerfile, `requirements.txt`, `package.json`) |
+| `ci` | Changes to CI/CD configuration (GitHub Actions workflows, scripts in `.github/`) |
+| `perf` | A code change that improves performance |
+| `style` | Formatting, whitespace, or punctuation — no logic change |
+| `revert` | Reverts a previous commit (GitHub auto-generates the title; accepted as-is) |
 
 Examples:
 
