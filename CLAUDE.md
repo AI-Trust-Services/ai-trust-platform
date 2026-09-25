@@ -183,6 +183,7 @@ All backends are **FastAPI 0.115 + Python 3.12** on port 8001+:
 - **`libs/persistence`** — async SQLAlchemy engine (`database.py`, reads `DATABASE_URL`; pool 5/+10, `pool_pre_ping`), ORM `models/` (one file per entity), Alembic `migrations/versions/` (all tables, all components).
 - **`libs/clickhouse`** — connection factory (`database.py`, reads `CLICKHOUSE_*`, fail-fast), `tables.py` (single source for table/column names), versioned SQL `migrations/` (applied in filename order, tracked in `otel.schema_migrations`).
 - **`libs/logging`** — `logger.py` JSON formatter (UTC timestamp, level, logger, correlation ID, `extra={}` fields). `correlation_id_var` is a `contextvars.ContextVar` set once per request in `logging_middleware`; it propagates through all `await`s automatically. Middleware logs INFO for 2xx, WARNING for 4xx, ERROR for 5xx. Usage: `from ai_trust_logging import get_logger, correlation_id_var`.
+- **`libs/react-hooks`** — shared React hooks for all MFEs. Provides `useBranding()` (applies branding colors from localStorage) and `useTheme()` (applies dark/light mode). All MFE frontends import via `@ai-trust/react-hooks` path alias (configured in each MFE's `tsconfig.json` + `vite.config.ts`). Frontend Dockerfiles use repo-root context (`context: .`) to access the shared lib.
 
 ### ClickHouse cold storage (tiered MergeTree → MinIO)
 `gen_ai_spans` and `alert_events` use two tiers: **hot** (local `clickhouse_data` disk, default) and **cold** (MinIO S3, triggered by age > 7 days or hot disk > 90% full).
@@ -334,15 +335,31 @@ Immutable audit trail — records who did what and when across all platform acti
 **audit-flush-worker/** — standalone asyncio worker (no HTTP port). `AUDIT_FLUSH_INTERVAL` (default 5s), `AUDIT_FLUSH_BATCH_SIZE` (default 500). On ClickHouse failure the exception is caught in the main loop, logged, and retried next cycle — rows stay in Postgres safely.
 
 ### admin/ (port 8010, `/api/admin/`)
-Platform administration — SMTP mail service configuration, general platform settings, and a summary dashboard. Access restricted to `platform_administrator` role via `iam:manage` permission.
+Platform administration — SMTP mail service configuration, general platform settings, branding/white-labeling, and a summary dashboard. Access restricted to `platform_administrator` role via `iam:manage` permission.
 
 **Screens** — all gated on `iam:manage`:
 - `/admin-home` — Platform Administration dashboard: KPI tiles (user/role counts, mail status) + cards linking to each section.
 - `/mail-service` — SMTP configuration.
 - `/admin-settings` — General platform settings.
+- `/branding` — White-labeling: logos (light/dark mode), colors (primary, secondary, accent, warning), org name, favicon. Draft/publish workflow with live preview.
 - Users & Roles — served by the separate IAM MFE (`/users/`).
 
-**Data model** — single-row `platform_settings` table (migration `0020`, always `id=1`). Seeded from env vars on first startup; once a row exists the DB is the source of truth and env vars are ignored. Password is stored in the row but **never returned** by GET endpoints — only `has_password: bool` is exposed.
+**Data model** — single-row `platform_settings` table (migration `0020`, always `id=1`) for SMTP and general settings. Branding is stored separately in the `branding` key-value table (migration `0031`) — each row has a `key` (e.g. `primary_color`), `published` value (live), and `draft` value (preview). This design means no migrations are needed for new branding fields — just INSERT a row. Metadata keys `_published_at` and `_published_by` track publish history.
+
+**Branding system** — white-labeling for multi-tenant or custom single-tenant deployments. Each branding field has a published and draft variant; changes save to draft, preview shows draft via `?preview=true` URL param, publish copies draft → published.
+- **Logo storage** — MinIO bucket `branding-assets` (single mode) or `tenant-<org>` (jwt mode). Keys: `branding/{asset_type}/{filename}`. Served via `/v1/branding/public/asset/{key}`.
+- **Shell sync** — shell fetches `/v1/branding/public` at init, stores in `localStorage('trust-platform-branding')`, applies logos/colors/favicon. MFEs listen via `useBranding()` hook from `libs/react-hooks/` (StorageEvent on the key).
+- **Preview** — BrandingPage embeds an iframe with `?preview=true`; shell loads draft branding in that context.
+
+**Branding API** (`admin/backend/app/routers/branding.py`):
+- `GET /v1/branding?mode=published|draft` — get branding (requires `iam:manage`)
+- `PUT /v1/branding` — update draft values (colors, org_name)
+- `POST /v1/branding/upload/{asset_type}` — upload logo/favicon (multipart)
+- `POST /v1/branding/publish` — copy all drafts to published
+- `POST /v1/branding/discard` — reset drafts to published
+- `GET /v1/branding/status` — check for unpublished changes
+- `GET /v1/branding/public` — published branding (no auth, for shell/MFEs)
+- `GET /v1/branding/public/asset/{key}` — serve logo binary (no auth)
 
 **Backend** (`admin/backend/app/`):
 - `GET/PUT /v1/smtp` — SMTP configuration (host, port, user, password, from, from_name, ssl, starttls). PUT preserves the existing password when `smtp_password` is absent from the body.

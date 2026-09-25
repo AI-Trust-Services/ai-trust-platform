@@ -5,6 +5,7 @@ import App from "./App";
 import MailServicePage from "./pages/MailServicePage";
 import SettingsPage from "./pages/SettingsPage";
 import AdminHomePage from "./pages/AdminHomePage";
+import BrandingPage from "./pages/BrandingPage";
 import { RequirePermission } from "./components/RequirePermission";
 
 const router = createHashRouter([
@@ -33,6 +34,14 @@ const router = createHashRouter([
         element: (
           <RequirePermission anyOf={["iam:manage"]}>
             <AdminHomePage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "branding",
+        element: (
+          <RequirePermission anyOf={["iam:manage"]}>
+            <BrandingPage />
           </RequirePermission>
         ),
       },

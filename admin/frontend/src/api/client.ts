@@ -6,6 +6,10 @@ import type {
   GeneralSettings,
   GeneralSettingsUpdate,
   AdminStats,
+  Branding,
+  BrandingUpdate,
+  BrandingStatus,
+  BrandingPublishResponse,
 } from "../types";
 
 const API_BASE = import.meta.env.VITE_ADMIN_API_BASE as string;
@@ -68,4 +72,44 @@ export const api = {
 
   getStats: (): Promise<AdminStats> =>
     request<AdminStats>("/stats"),
+
+  // ── Branding ─────────────────────────────────────────────────────────────
+
+  getBranding: (mode: "published" | "draft" = "published"): Promise<Branding> =>
+    request<Branding>(`/branding?mode=${mode}`),
+
+  updateBranding: (data: BrandingUpdate): Promise<Branding> =>
+    request<Branding>("/branding", json("PUT", data)),
+
+  uploadBrandingAsset: async (
+    assetType: string,
+    file: File,
+  ): Promise<Branding> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${API_BASE}/branding/upload/${assetType}`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { detail?: unknown };
+      throw new Error(formatDetail(err.detail) || `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<Branding>;
+  },
+
+  publishBranding: (): Promise<BrandingPublishResponse> =>
+    request<BrandingPublishResponse>("/branding/publish", { method: "POST" }),
+
+  discardBranding: (): Promise<Branding> =>
+    request<Branding>("/branding/discard", { method: "POST" }),
+
+  getBrandingStatus: (): Promise<BrandingStatus> =>
+    request<BrandingStatus>("/branding/status"),
+
+  resetBranding: (): Promise<Branding> =>
+    request<Branding>("/branding/reset", { method: "POST" }),
+
+  getBrandingAssetUrl: (assetKey: string): string =>
+    `${API_BASE}/branding/asset/${assetKey}`,
 };

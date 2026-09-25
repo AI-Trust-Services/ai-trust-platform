@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { Outlet } from "react-router";
 import { useLuigiInit } from "./hooks/useLuigi";
-import { useTheme } from "./hooks/useTheme";
+import { useTheme, useBranding } from "@ai-trust/react-hooks";
 import { HEALTH_URL } from "./api/client";
 
 type ShowToast = (msg: string, isError?: boolean) => void;
@@ -20,6 +20,7 @@ export default function App() {
 
   useLuigiInit(() => {});
   useTheme();
+  useBranding();
 
   const checkHealth = useCallback(async () => {
     if (healthTimer.current) clearTimeout(healthTimer.current);

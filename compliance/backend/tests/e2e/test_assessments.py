@@ -280,8 +280,6 @@ async def test_delete_assessment_keeps_manual_requirements(client: httpx.AsyncCl
 
 
 
-
-
 # ---------------------------------------------------------------------------
 # POST /assessments/{id}/generate-obligations
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 import { Outlet } from "react-router";
 import { Loader2, Plus, LayoutDashboard } from "lucide-react";
 import { useLuigiInit, navigateTo } from "./hooks/useLuigi";
-import { useTheme } from './hooks/useTheme';
+import { useTheme, useBranding } from "@ai-trust/react-hooks";
 import { usePermissions } from "./hooks/usePermissions";
 import { api, HEALTH_URL, REGISTRY_URL } from "./api/client";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ export default function App() {
 
   useLuigiInit(() => {});
   useTheme();
+  useBranding();
 
   const checkHealth = useCallback(async () => {
     if (healthTimer.current) clearTimeout(healthTimer.current);

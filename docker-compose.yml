@@ -154,6 +154,9 @@ services:
       - --pass-authorization-header=true
       - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout?id_token_hint={id_token}
       - --upstream-timeout=300s
+      # Public branding endpoints — no auth required for shell to fetch branding at startup
+      # Anchored regex: ^...(/|$) matches /public and /public/asset/... but not /public-secret
+      - --skip-auth-route=^/api/admin/v1/branding/public(/|$)
     depends_on:
       keycloak-provision:
         condition: service_completed_successfully
@@ -204,7 +207,8 @@ services:
 
   ai-system-registry-frontend:
     build:
-      context: ./ai-system-registry/frontend
+      context: .
+      dockerfile: ai-system-registry/frontend/Dockerfile
       args:
         VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE}
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
@@ -212,14 +216,16 @@ services:
 
   monitoring-frontend:
     build:
-      context: ./monitoring/frontend
+      context: .
+      dockerfile: monitoring/frontend/Dockerfile
       args:
         VITE_MONITORING_API_BASE: ${VITE_MONITORING_API_BASE}
     restart: on-failure
 
   overview-frontend:
     build:
-      context: ./overview/frontend
+      context: .
+      dockerfile: overview/frontend/Dockerfile
       args:
         VITE_OVERVIEW_API_BASE: ${VITE_OVERVIEW_API_BASE}
         VITE_ALERTS_API_BASE: ${VITE_ALERTS_API_BASE}
@@ -232,7 +238,8 @@ services:
 
   alerts-frontend:
     build:
-      context: ./alerts/frontend
+      context: .
+      dockerfile: alerts/frontend/Dockerfile
       args:
         VITE_ALERTS_API_BASE: ${VITE_ALERTS_API_BASE}
         VITE_ALERTS_URL: ${VITE_ALERTS_URL}
@@ -241,7 +248,8 @@ services:
 
   compliance-frontend:
     build:
-      context: ./compliance/frontend
+      context: .
+      dockerfile: compliance/frontend/Dockerfile
       args:
         VITE_COMPLIANCE_API_BASE: ${VITE_COMPLIANCE_API_BASE:-/api/compliance/v1}
         VITE_REGISTRY_API_BASE: ${VITE_REGISTRY_API_BASE:-/api/registry/v1}
@@ -250,14 +258,16 @@ services:
 
   users-frontend:
     build:
-      context: ./users/frontend
+      context: .
+      dockerfile: users/frontend/Dockerfile
       args:
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
     restart: on-failure
 
   audit-frontend:
     build:
-      context: ./audit/frontend
+      context: .
+      dockerfile: audit/frontend/Dockerfile
       args:
         VITE_AUDIT_API_BASE: ${VITE_AUDIT_API_BASE:-/api/audit/v1}
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
@@ -265,7 +275,8 @@ services:
 
   admin-frontend:
     build:
-      context: ./admin/frontend
+      context: .
+      dockerfile: admin/frontend/Dockerfile
       args:
         VITE_ADMIN_API_BASE: ${VITE_ADMIN_API_BASE:-/api/admin/v1}
         VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
@@ -347,6 +358,13 @@ services:
       ROOT_PATH: "/api/admin"
       OPENFGA_URL: http://openfga:8080
       USERS_BACKEND_URL: http://users-backend:8008
+      # MinIO for branding assets
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_SECURE: ${MINIO_SECURE}
+      MINIO_REGION: ${MINIO_REGION}
       # Seeds the platform_settings row on first startup only; DB is source of truth after that.
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
@@ -361,6 +379,8 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
+      minio:
+        condition: service_healthy
       openfga-provision:
         condition: service_completed_successfully
     healthcheck:
@@ -636,7 +656,8 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
       mc mb --ignore-existing local/clickhouse &&
-      mc mb --ignore-existing local/evidence-files
+      mc mb --ignore-existing local/evidence-files &&
+      mc mb --ignore-existing local/branding-assets
       "
     restart: on-failure
 
@@ -698,7 +719,8 @@ services:
 
   decision-trace-analyzer-frontend:
     build:
-      context: ./decision-trace-analyzer/frontend
+      context: .
+      dockerfile: decision-trace-analyzer/frontend/Dockerfile
       args:
         VITE_DTA_API_BASE: ${VITE_DTA_API_BASE}
     depends_on:

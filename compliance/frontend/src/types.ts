@@ -70,6 +70,14 @@ export interface RequirementDetail extends Requirement {
   evidence_count: number;
 }
 
+export interface ControlRef {
+  id: string;
+  ai_system_id: string | null;
+  control_ref: string | null;
+  title: string;
+  status: string;
+}
+
 export interface Evidence {
   id: string;
   title: string;
