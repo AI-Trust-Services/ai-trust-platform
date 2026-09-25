@@ -24,7 +24,7 @@ from ai_trust_persistence.models import (
     Requirement,
 )
 from app.cascade import refresh_assessment_score, refresh_obligation, sync_system_compliance
-from app.requirement_templates import requirements_for
+from app.requirement_templates import cluster_articles, requirements_for
 from app.ids import new_id
 from app.obligation_templates import obligations_for
 from app.schemas import (
@@ -135,10 +135,11 @@ async def create_assessment(body: AssessmentCreate, request: Request) -> Assessm
         created, _ = await _generate_obligations_in_session(session, row, system)
         if not created:
             logger.warning("assessment.no_obligations", extra={
-                "assessment_id": row.id, "framework": body.framework_id, "tier": system.tier,
+                "assessment_id": row.id, "framework": body.framework_id,
+                "tier": system.tier, "org_role": system.org_role,
             })
         else:
-            await _generate_requirements_in_session(session, created, system.tier)
+            await _generate_requirements_in_session(session, created, system.tier, getattr(system, "org_role", "provider") or "provider")
         log_audit_event(
             session,
             actor=current_user,
@@ -168,7 +169,20 @@ async def _generate_obligations_in_session(
     Returns (created_obligations, prior_prefilled) where prior_prefilled is True
     if any owner/not_applicable values were carried forward from a prior assessment.
     """
-    templates = obligations_for(assessment.framework_id, system.tier, getattr(system, "org_role", "provider") or "provider")
+    org_role = getattr(system, "org_role", "provider") or "provider"
+    templates = obligations_for(assessment.framework_id, system.tier, org_role)
+
+    if (
+        assessment.framework_id == "FRM-EU-AI-ACT"
+        and system.tier in ("high", "limited")
+        and org_role not in ("provider", "deployer")
+    ):
+        # Only provider/deployer obligation sets are defined for EU high/limited;
+        # importer/distributor yield no obligations (templates is already []).
+        logger.warning("assessment.unsupported_org_role", extra={
+            "assessment_id": assessment.id, "framework": assessment.framework_id,
+            "tier": system.tier, "org_role": org_role,
+        })
 
     prior = (await session.execute(
         select(Assessment)
@@ -185,22 +199,29 @@ async def _generate_obligations_in_session(
             select(Obligation).where(Obligation.assessment_id == prior.id)
         )).scalars().all()
         for po in prior_obs:
-            if po.article_ref:
-                prior_by_ref[po.article_ref] = po
+            key = po.cluster_id or po.article_ref
+            if key:
+                prior_by_ref[key] = po
 
     created: list[Obligation] = []
-    for t in templates:
-        carried = prior_by_ref.get(t["article_ref"])
+    for idx, t in enumerate(templates):
+        carried = prior_by_ref.get(t["cluster_id"])
+        # Prefer the aggregate of the cluster's requirement articles (all articles
+        # the obligation touches); fall back to the cluster's own display article
+        # for retained sets (which carry no per-requirement articles).
+        article_ref = cluster_articles(t["cluster_id"], system.tier, org_role, assessment.framework_id) or t["article_ref"]
         obl = Obligation(
             id=new_id("OBL"),
             assessment_id=assessment.id,
             ai_system_id=assessment.ai_system_id,
             framework_id=assessment.framework_id,
             title=t["title"],
-            article_ref=t["article_ref"],
-            description=t["description"],
+            article_ref=article_ref,
+            cluster_id=t["cluster_id"],
+            description=t.get("description", ""),
             status=("not_applicable" if carried and carried.status == "not_applicable" else "applicable"),
             owner=carried.owner if carried else "",
+            sort_order=idx,
         )
         session.add(obl)
         created.append(obl)
@@ -213,14 +234,16 @@ async def _generate_obligations_in_session(
 
 
 async def _generate_requirements_in_session(
-    session: AsyncSession, obligations: list[Obligation], tier: str
+    session: AsyncSession, obligations: list[Obligation], tier: str, org_role: str = "provider"
 ) -> list[Requirement]:
     """Generate + link requirements for the given obligations within the caller's txn.
 
-    For each obligation, `requirements_for(article_ref, tier)` yields the tier-scoped
-    requirement templates; each becomes a Requirement row (requirement_ref = "{article_ref}:{slug}")
-    linked to the obligation via obligation_id FK (1:N). Owner is carried forward from
-    the most recent prior requirement with the same requirement_ref (see _prior_owners_by_ref).
+    For each obligation, `requirements_for(cluster_id, tier, org_role)` yields the
+    tier- and role-scoped requirement templates; each becomes a Requirement row linked to
+    the obligation via requirement_obligations. The requirement_ref is the template's
+    explicit Requirement ID (EU CSV sets) or, for retained sets, the derived
+    "{article_ref}:{slug}". Owner is carried forward from the most recent prior
+    requirement with the same requirement_ref (see _prior_owners_by_ref).
 
     After linking, each touched obligation is refreshed so its status reflects the
     new requirements (applicable -> in_progress). If this raises, the whole transaction
@@ -234,26 +257,31 @@ async def _generate_requirements_in_session(
 
     created: list[Requirement] = []
     for obl in obligations:
-        templates = requirements_for(obl.article_ref, tier)
+        templates = requirements_for(obl.cluster_id or obl.article_ref, tier, org_role)
         if not templates:
             logger.warning("assessment.requirement_template_missing", extra={
-                "assessment_id": obl.assessment_id, "article_ref": obl.article_ref, "tier": tier,
+                "assessment_id": obl.assessment_id, "cluster_id": obl.cluster_id,
+                "article_ref": obl.article_ref, "tier": tier, "org_role": org_role,
             })
             continue
-        for t in templates:
-            requirement_ref = f"{obl.article_ref}:{t['slug']}"
+        for j, t in enumerate(templates):
+            requirement_ref = t.get("requirement_ref") or f"{obl.article_ref}:{t['slug']}"
             requirement = Requirement(
                 id=new_id("REQ"),
                 obligation_id=obl.id,
                 assessment_id=obl.assessment_id,
                 ai_system_id=ai_system_id,
                 requirement_ref=requirement_ref,
+                article_ref=t.get("article"),
                 title=t["title"],
                 description=t["description"],
-                category=t["category"],
+                category=t.get("category", "general"),
                 status="open",
                 effectiveness="medium",
                 owner=prior_owner_by_ref.get(requirement_ref, ""),
+                # Order requirements after their obligation's position, then by template
+                # order within the cluster (headroom of 100 requirements per cluster).
+                sort_order=obl.sort_order * 100 + j,
             )
             session.add(requirement)
             created.append(requirement)
@@ -308,7 +336,9 @@ async def advance_from_classification(assessment_id: str) -> AssessmentResponse:
         if existing == 0:
             created, _ = await _generate_obligations_in_session(session, row, system)
             if created:
-                await _generate_requirements_in_session(session, created, system.tier)
+                await _generate_requirements_in_session(
+                    session, created, system.tier, getattr(system, "org_role", "provider") or "provider"
+                )
 
         row.status = "pending_review"
         row.updated_at = datetime.now(timezone.utc)
@@ -511,7 +541,7 @@ async def generate_requirements(assessment_id: str) -> GenerateRequirementsRespo
         )).scalars().all())
         targets = [o for o in obligations if o.id not in linked_obl_ids]
 
-        created = await _generate_requirements_in_session(session, targets, system.tier)
+        created = await _generate_requirements_in_session(session, targets, system.tier, getattr(system, "org_role", "provider") or "provider")
         await session.commit()
         for r in created:
             await session.refresh(r)

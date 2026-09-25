@@ -104,6 +104,7 @@ jobs:
           ocm_version: ${{ steps.vars.outputs.tag }}
           namespace: ${{ steps.vars.outputs.namespace }}
           github_actor: ${{ github.actor }}
+          ghcr_pull_token: ${{ secrets.GHCR_PULL_TOKEN }}
           app_admin_password: ${{ secrets.APP_ADMIN_PASSWORD }}
           clickhouse_password: ${{ secrets.CLICKHOUSE_PASSWORD }}
           keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
