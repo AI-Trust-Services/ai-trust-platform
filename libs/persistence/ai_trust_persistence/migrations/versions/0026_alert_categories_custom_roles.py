@@ -1,7 +1,7 @@
 """Add alert_categories to custom_roles
 
-Revision ID: 0025
-Revises: 0024
+Revision ID: 0026
+Revises: 0025
 Create Date: 2026-09-15
 """
 import sqlalchemy as sa
