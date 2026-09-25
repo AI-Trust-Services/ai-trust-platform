@@ -95,6 +95,26 @@ async def test_intake_allows_missing_assignee(client: httpx.AsyncClient):
     assert body["system"]["assignee_username"] is None
 
 
+async def test_intake_persists_org_role(client: httpx.AsyncClient):
+    body = await _create_system(client, {"name": "Deployer System", "org_role": "deployer"})
+    assert body["system"]["org_role"] == "deployer"
+
+
+async def test_intake_defaults_org_role_to_provider(client: httpx.AsyncClient):
+    # org_role omitted -> defaults to provider.
+    body = await _create_system(client, _minimal_system())
+    assert body["system"]["org_role"] == "provider"
+
+
+async def test_intake_rejects_invalid_org_role(client: httpx.AsyncClient):
+    r = await client.post(
+        "/v1/intake",
+        json={"name": "Bad Role", "assignee_username": _ASSIGNEE, "org_role": "reseller"},
+        headers=_HEADERS,
+    )
+    assert r.status_code == 422
+
+
 async def test_update_system_lifecycle(client: httpx.AsyncClient):
     # lifecycle is not an intake field — it is set later via PUT.
     system_id = (await _create_system(client))["system"]["id"]

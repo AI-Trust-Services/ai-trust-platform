@@ -73,6 +73,7 @@ services:
       APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD}
       SEED_DEV_USERS: ${SEED_DEV_USERS:-false}
+      DEV_USER_PASSWORD: ${DEV_USER_PASSWORD:-}
     depends_on:
       keycloak:
         condition: service_healthy
@@ -345,6 +346,7 @@ services:
       ALLOWED_ORIGINS: "http://localhost:8080"
       ROOT_PATH: "/api/admin"
       OPENFGA_URL: http://openfga:8080
+      USERS_BACKEND_URL: http://users-backend:8008
       # Seeds the platform_settings row on first startup only; DB is source of truth after that.
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}

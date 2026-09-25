@@ -34,6 +34,7 @@ export interface Obligation {
   framework_id: string;
   title: string;
   article_ref: string;
+  cluster_id: string | null;
   description: string;
   status: string;
   due_date: string | null;
@@ -52,6 +53,7 @@ export interface Requirement {
   assessment_id: string;
   ai_system_id: string | null;
   requirement_ref: string | null;
+  article_ref: string | null;
   title: string;
   description: string;
   category: string;
@@ -68,14 +70,6 @@ export interface RequirementDetail extends Requirement {
   evidence_count: number;
 }
 
-export interface ControlRef {
-  id: string;
-  ai_system_id: string | null;
-  control_ref: string | null;
-  title: string;
-  status: string;
-}
-
 export interface Evidence {
   id: string;
   title: string;
@@ -89,7 +83,7 @@ export interface Evidence {
   mime_type: string;
   uploaded_by: string;
   version_label: string;
-  control_count: number;
+  requirement_count: number;
   created_at: string;
   updated_at: string;
 }

@@ -41,7 +41,9 @@ async def list_obligations(
     offset: int = Query(default=0, ge=0),
 ) -> list[ObligationResponse]:
     async with SessionLocal() as session:
-        stmt = select(Obligation).order_by(Obligation.created_at.desc())
+        # Newest generation first; catalogue order (sort_order) within a generation,
+        # since all rows of one generation share the same transaction timestamp.
+        stmt = select(Obligation).order_by(Obligation.created_at.desc(), Obligation.sort_order.asc())
         if assessment_id:
             stmt = stmt.where(Obligation.assessment_id == assessment_id)
         if ai_system_id:
