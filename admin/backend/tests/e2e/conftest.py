@@ -133,8 +133,8 @@ def _reset_platform_settings() -> None:
     # Delete and re-insert a clean platform_settings row
     cur.execute("DELETE FROM platform_settings")
     cur.execute("""
-        INSERT INTO platform_settings (id, platform_name, support_email, smtp_ssl, smtp_starttls, org_name)
-        VALUES (1, 'AI Trust Platform', NULL, false, false, 'AI Trust')
+        INSERT INTO platform_settings (id, platform_name, support_email, smtp_ssl, smtp_starttls)
+        VALUES (1, 'AI Trust Platform', NULL, false, false)
     """)
     # Clear branding table (key-value store)
     cur.execute("DELETE FROM branding")
@@ -253,29 +253,6 @@ def _default_settings():
     row.smtp_from_name = "AI Trust Platform"
     row.smtp_ssl = False
     row.smtp_starttls = False
-    # Branding - published values
-    row.org_name = "AI Trust"
-    row.logo_horizontal_light = None
-    row.logo_horizontal_dark = None
-    row.logo_icon = None
-    row.favicon = None
-    row.primary_color = None
-    row.secondary_color = None
-    row.accent_color = None
-    row.warning_color = None
-    # Branding - draft values
-    row.org_name_draft = None
-    row.logo_horizontal_light_draft = None
-    row.logo_horizontal_dark_draft = None
-    row.logo_icon_draft = None
-    row.favicon_draft = None
-    row.primary_color_draft = None
-    row.secondary_color_draft = None
-    row.accent_color_draft = None
-    row.warning_color_draft = None
-    # Branding publish metadata
-    row.branding_published_at = None
-    row.branding_published_by = None
     return row
 
 
