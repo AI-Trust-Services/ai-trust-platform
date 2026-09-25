@@ -3,16 +3,16 @@
 Drops old model_cards (name/provider/model_type/open_weights/inference_url)
 and recreates with rich fields plus 7 child tables.
 
-Revision ID: 0025
-Revises: 0024
+Revision ID: 0026
+Revises: 0025
 Create Date: 2026-09-23
 """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0025"
-down_revision = "0024"
+revision = "0026"
+down_revision = "0025"
 branch_labels = None
 depends_on = None
 
