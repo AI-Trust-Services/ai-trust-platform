@@ -114,6 +114,7 @@ ROLE_PERMISSIONS = {
     "executive": [
         SYSTEMS_READ,
         ASSESSMENTS_READ,
+        ALERTS_READ,
         MONITORING_READ,
     ],
 }
