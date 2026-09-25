@@ -197,17 +197,17 @@ async def get_monitoring_stats(lifecycle: str = Query(default="")) -> dict:
         )).scalar_one()
 
         model_type_rows = (await session.execute(
-            select(ModelCard.model_type, func.count().label("n")).group_by(ModelCard.model_type)
+            select(ModelCard.task_type, func.count().label("n")).group_by(ModelCard.task_type)
         )).all()
-        by_model_type = {r.model_type: r.n for r in model_type_rows}
+        by_model_type = {r.task_type: r.n for r in model_type_rows}
 
-        model_provider_rows = (await session.execute(
-            select(ModelCard.provider, func.count().label("n")).group_by(ModelCard.provider)
+        model_validation_rows = (await session.execute(
+            select(ModelCard.validation_status, func.count().label("n")).group_by(ModelCard.validation_status)
         )).all()
-        by_model_provider = {r.provider: r.n for r in model_provider_rows}
+        by_model_validation_status = {(r.validation_status or "unknown"): r.n for r in model_validation_rows}
 
-        open_weights_count = (await session.execute(
-            select(func.count()).select_from(ModelCard).where(ModelCard.open_weights.is_(True))
+        validated_count = (await session.execute(
+            select(func.count()).select_from(ModelCard).where(ModelCard.validation_status == "validated")
         )).scalar_one()
 
         buckets = {"0–20": 0, "20–40": 0, "40–60": 0, "60–80": 0, "80–100": 0}
@@ -245,14 +245,14 @@ async def get_monitoring_stats(lifecycle: str = Query(default="")) -> dict:
         "high_count": by_tier.get("high", 0),
         "below_50_compliance": below_50,
         "total_models": total_models,
-        "open_weights_count": open_weights_count,
+        "validated_count": validated_count,
         "by_tier": by_tier,
         "by_lifecycle": by_lifecycle,
         "by_type": by_type,
         "by_autonomy": by_autonomy,
         "compliance_by_tier": compliance_by_tier,
         "by_model_type": by_model_type,
-        "by_model_provider": by_model_provider,
+        "by_model_validation_status": by_model_validation_status,
         "compliance_histogram": buckets,
         "recent": recent,
     }

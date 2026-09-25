@@ -31,7 +31,6 @@ def _model(**kwargs) -> ModelCard:
     defaults = dict(
         id=f"MDL-{uuid.uuid4().hex[:8].upper()}",
         name="Test Model",
-        provider="Test Provider",
     )
     return ModelCard(**{**defaults, **kwargs})
 
@@ -314,9 +313,9 @@ async def test_stats_compliance_by_tier(client: httpx.AsyncClient):
 async def test_stats_model_card_distributions(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         session.add_all([
-            _model(model_type="llm", provider="OpenAI", open_weights=False),
-            _model(model_type="llm", provider="Anthropic", open_weights=True),
-            _model(model_type="vision", provider="OpenAI", open_weights=True),
+            _model(task_type="llm", validation_status="validated"),
+            _model(task_type="llm", validation_status="pending"),
+            _model(task_type="vision", validation_status="validated"),
         ])
         await session.commit()
 
@@ -324,8 +323,8 @@ async def test_stats_model_card_distributions(client: httpx.AsyncClient):
     body = r.json()
     assert body["total_models"] == 3
     assert body["by_model_type"] == {"llm": 2, "vision": 1}
-    assert body["by_model_provider"] == {"OpenAI": 2, "Anthropic": 1}
-    assert body["open_weights_count"] == 2
+    assert body["by_model_validation_status"] == {"validated": 2, "pending": 1}
+    assert body["validated_count"] == 2
 
 
 # ---------------------------------------------------------------------------

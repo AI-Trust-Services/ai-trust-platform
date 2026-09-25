@@ -33,7 +33,7 @@ def _model(**kwargs) -> ModelCard:
     defaults = dict(
         id=f"MDL-{uuid.uuid4().hex[:8].upper()}",
         name="Test Model",
-        provider="Test Provider",
+        library_name="Test Provider",
     )
     return ModelCard(**{**defaults, **kwargs})
 
@@ -72,7 +72,7 @@ async def test_stats_empty_db(client: httpx.AsyncClient):
     assert body["compliance_by_tier"] == {}
     assert body["compliance_histogram"] == {"0–20": 0, "20–40": 0, "40–60": 0, "60–80": 0, "80–100": 0}
     assert body["by_model_type"] == {}
-    assert body["by_model_provider"] == {}
+    assert body["by_model_validation_status"] == {}
     assert body["recent"] == []
     assert body["attention"] == []
 
@@ -227,9 +227,9 @@ async def test_compliance_by_tier(client: httpx.AsyncClient):
 async def test_total_models_and_distributions(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         session.add_all([
-            _model(model_type="llm", provider="OpenAI", open_weights=False),
-            _model(model_type="llm", provider="Anthropic", open_weights=True),
-            _model(model_type="vision", provider="OpenAI", open_weights=False),
+            _model(task_type="llm", validation_status="validated"),
+            _model(task_type="llm", validation_status="pending"),
+            _model(task_type="vision", validation_status="validated"),
         ])
         await session.commit()
 
@@ -237,7 +237,7 @@ async def test_total_models_and_distributions(client: httpx.AsyncClient):
     body = r.json()
     assert body["total_models"] == 3
     assert body["by_model_type"] == {"llm": 2, "vision": 1}
-    assert body["by_model_provider"] == {"OpenAI": 2, "Anthropic": 1}
+    assert body["by_model_validation_status"] == {"validated": 2, "pending": 1}
 
 
 # ---------------------------------------------------------------------------

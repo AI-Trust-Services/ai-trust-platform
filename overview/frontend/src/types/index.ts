@@ -15,7 +15,7 @@ export interface OverviewStats {
   compliance_by_tier: Record<string, number>;
   compliance_histogram: Record<string, number>;
   by_model_type: Record<string, number>;
-  by_model_provider: Record<string, number>;
+  by_model_validation_status: Record<string, number>;
   recent: RecentSystem[];
   attention: AttentionSystem[];
 }
@@ -42,7 +42,7 @@ export type ChartType = "bar" | "doughnut" | "line" | "pie";
 export type DataKey =
   | "by_tier" | "by_lifecycle" | "by_type"
   | "compliance_by_tier" | "compliance_histogram"
-  | "by_model_type" | "by_model_provider"
+  | "by_model_type" | "by_model_validation_status"
   | "obligation_status" | "evidence_gap" | "framework_compliance"
   | "upcoming_deadlines" | "active_alerts";
 
