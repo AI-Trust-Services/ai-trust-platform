@@ -53,13 +53,13 @@ async def _allowed_categories(username: str) -> list[str] | None:
         }
         for slug in custom_slugs:
             if slug not in slug_to_cats:
-                return None
+                continue
             role_cats = slug_to_cats[slug]
             if role_cats is None:
                 return None
             cats.update(role_cats)
 
-    return list(cats)
+    return None if not cats else list(cats)
 
 
 async def _resolve_display_names(entity_ids: list[str]) -> dict[str, str]:
