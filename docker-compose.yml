@@ -73,6 +73,7 @@ services:
       APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD}
       SEED_DEV_USERS: ${SEED_DEV_USERS:-false}
+      DEV_USER_PASSWORD: ${DEV_USER_PASSWORD:-}
     depends_on:
       keycloak:
         condition: service_healthy

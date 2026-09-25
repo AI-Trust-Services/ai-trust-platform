@@ -1,0 +1,63 @@
+name: Compute Variables
+description: Compute image owner, tag, cluster, namespace, and ref for a PR deployment.
+
+inputs:
+  ref:
+    description: "Git ref (branch name or SHA) to build"
+    required: true
+  gardener_cluster:
+    description: "Target Gardener cluster"
+    required: true
+  namespace:
+    description: "Namespace to deploy into (derived from actor when blank)"
+    required: false
+    default: ""
+
+outputs:
+  owner:
+    description: "Lowercase GitHub repository owner"
+    value: ${{ steps.vars.outputs.owner }}
+  tag:
+    description: "Image tag (<namespace>-<short-sha>)"
+    value: ${{ steps.vars.outputs.tag }}
+  cluster:
+    description: "Target Gardener cluster"
+    value: ${{ steps.vars.outputs.cluster }}
+  namespace:
+    description: "Target namespace"
+    value: ${{ steps.vars.outputs.namespace }}
+  ref:
+    description: "Git ref to check out"
+    value: ${{ steps.vars.outputs.ref }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute vars
+      id: vars
+      shell: bash
+      env:
+        INPUT_REF: ${{ inputs.ref }}
+        INPUT_CLUSTER: ${{ inputs.gardener_cluster }}
+        INPUT_NAMESPACE: ${{ inputs.namespace }}
+      run: |
+        OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+        echo "owner=${OWNER}" >> "$GITHUB_OUTPUT"
+
+        echo "ref=${INPUT_REF}" >> "$GITHUB_OUTPUT"
+        echo "cluster=${INPUT_CLUSTER}" >> "$GITHUB_OUTPUT"
+
+        # Namespace must be RFC-1123 lowercase (K8s namespace + DNS subdomain),
+        # so lowercase whether it comes from the explicit input or the actor.
+        if [[ -n "$INPUT_NAMESPACE" ]]; then
+          NAMESPACE="${INPUT_NAMESPACE,,}"
+        else
+          NAMESPACE="${GITHUB_ACTOR,,}"
+        fi
+        echo "namespace=${NAMESPACE}" >> "$GITHUB_OUTPUT"
+
+        # Tag identifies the built commit. build-images checks out INPUT_REF
+        # (the PR head SHA), so tag from that — not GITHUB_SHA, which is the
+        # ephemeral pull_request merge commit and would mislabel the image.
+        SHORT_SHA="${INPUT_REF::12}"
+        echo "tag=${NAMESPACE}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"

@@ -10,11 +10,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-VALID_EVIDENCE_TYPES = frozenset({
-    "document", "policy_document", "technical_doc", "test_report",
-    "monitoring_data", "approval_record", "audit_log", "training_record",
-    "certificate", "screenshot", "api_log",
-})
+VALID_EVIDENCE_TYPES = frozenset({"document", "code", "function_is_used"})
 VALID_EVIDENCE_STATUSES = frozenset({
     "awaiting_review", "approved", "rejected", "expired",
 })
@@ -56,7 +52,7 @@ class EvidenceResponse(BaseModel):
     mime_type: str
     uploaded_by: str
     version_label: str
-    control_count: int = 0
+    requirement_count: int = 0
     created_at: datetime
     updated_at: datetime
 

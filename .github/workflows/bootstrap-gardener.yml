@@ -74,7 +74,7 @@ jobs:
     environment: main
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Apply to cluster
         uses: ./.github/actions/apply-to-cluster
@@ -103,7 +103,7 @@ jobs:
     if: inputs.cluster != 'ai-trust-main' || (inputs.ref != 'refs/heads/main' && inputs.ref != 'main')
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Apply to cluster
         uses: ./.github/actions/apply-to-cluster
