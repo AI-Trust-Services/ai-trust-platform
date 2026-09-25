@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
-import { EVIDENCE_TYPES, humanize } from "../utils";
-import type { AISystem, Assessment, Requirement } from "../types";
+import { EVIDENCE_TYPES, evidenceTypeLabel } from "../utils";
+import type { AISystem, Assessment, Requirement, Obligation } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -125,7 +125,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
                 <Select value={form.evidence_type} onValueChange={(v) => setForm((f) => ({ ...f, evidence_type: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {EVIDENCE_TYPES.map((t) => <SelectItem key={t} value={t}>{humanize(t)}</SelectItem>)}
+                    {EVIDENCE_TYPES.map((t) => <SelectItem key={t} value={t}>{evidenceTypeLabel(t)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

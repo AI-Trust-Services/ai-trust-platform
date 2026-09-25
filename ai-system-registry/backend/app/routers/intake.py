@@ -22,7 +22,6 @@ logger = get_logger(__name__)
 @router.post("/intake", response_model=IntakeResponse, status_code=201, dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
 async def intake_system(body: AISystemCreate, request: Request, background_tasks: BackgroundTasks) -> IntakeResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
-
     system_id = new_id("SYS")
     step_id = new_id("SWS")
 
@@ -38,6 +37,7 @@ async def intake_system(body: AISystemCreate, request: Request, background_tasks
         annex_iii_area=None,
         compliance=0.0,
         workflow_status="draft",
+        org_role=body.org_role or "provider",
         registration_mode="ai",
     )
 

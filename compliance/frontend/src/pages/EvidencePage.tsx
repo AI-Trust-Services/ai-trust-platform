@@ -8,7 +8,7 @@ import DetailPanel, { DetailField, DetailSection } from "../components/DetailPan
 import UploadEvidenceModal from "../components/UploadEvidenceModal";
 import UploadVersionModal from "../components/UploadVersionModal";
 import ControlPicker from "../components/ControlPicker";
-import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, fmtDate, humanize } from "../utils";
+import { EVIDENCE_STATUS_META, EVIDENCE_TYPES, CONTROL_STATUS_META, fmtDate, humanize, evidenceTypeLabel } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import type { Requirement, Evidence, EvidenceDetail, EvidenceVersion } from "../types";
 import { Button } from "@/components/ui/button";
@@ -168,7 +168,7 @@ export default function EvidencePage() {
           <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All Types</SelectItem>
-            {EVIDENCE_TYPES.map((t) => <SelectItem key={t} value={t}>{humanize(t)}</SelectItem>)}
+            {EVIDENCE_TYPES.map((t) => <SelectItem key={t} value={t}>{evidenceTypeLabel(t)}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={uploaderFilter || ALL} onValueChange={(v) => setUploaderFilter(v === ALL ? "" : v)}>
@@ -211,7 +211,7 @@ export default function EvidencePage() {
                 <TableRow key={e.id} data-state={selected === e.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(e)}>
                   <TableCell><div className="font-medium text-foreground">{e.title}</div><div className="text-xs text-muted-foreground">{e.id}</div></TableCell>
                   <TableCell className="text-[13px]">{humanize(e.evidence_type)}</TableCell>
-                  <TableCell className="text-[13px] text-muted-foreground">{e.control_count}</TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{e.requirement_count}</TableCell>
                   <TableCell><Badge variant="secondary" className="rounded-full font-medium">v{e.version_label}</Badge></TableCell>
                   <TableCell><StatusBadge meta={EVIDENCE_STATUS_META} value={e.status} /></TableCell>
                   <TableCell>{e.file_name ? <Badge variant="secondary" className="max-w-[160px] truncate rounded-full font-medium">{e.file_name}</Badge> : "—"}</TableCell>
@@ -262,7 +262,7 @@ export default function EvidencePage() {
       <DetailPanel
         open={!!detail}
         title={detail?.title ?? ""}
-        subtitle={detail ? humanize(detail.evidence_type) : undefined}
+        subtitle={detail ? evidenceTypeLabel(detail.evidence_type) : undefined}
         badge={detail ? EVIDENCE_STATUS_META[detail.status]?.label : undefined}
         onClose={closePanel}
       >

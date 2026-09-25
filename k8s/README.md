@@ -141,10 +141,10 @@ deployments side by side. Two namespace conventions are in use today:
 
 ### Workflows
 
-- **`build-push-deploy.yml`** — runs on every push to `main`, on version tags (`v*.*.*`), manually via
-  `workflow_dispatch` (inputs: `branch`, `gardener_cluster`, `namespace`), or via `workflow_call` from
-  `pr-deployment-test.yml` (adds `skip_build_new_version` to redeploy already-published images without
-  rebuilding). Namespace is resolved first — `ai-trust-main` always resolves to `ai-trust`; any other
+- **`build-push-deploy.yml`** — runs on every push to `main`, on version tags (`v*.*.*`), or manually via
+  `workflow_dispatch` (inputs: `branch`, `gardener_cluster`, `namespace`). (The PR deploy path no longer
+  calls this workflow — it builds inline via composite actions + `docker-bake.hcl`; see "PR deployment
+  test" below.) Namespace is resolved first — `ai-trust-main` always resolves to `ai-trust`; any other
   cluster uses the explicit `namespace` input, falling back to `github.actor` (lowercase). Tags images
   `<namespace>-<short-sha>` (isolated per namespace, so concurrent namespaces on one cluster never
   collide); only `ai-trust-main` builds additionally tag `latest`. OCM component version:
@@ -183,14 +183,19 @@ deployments side by side. Two namespace conventions are in use today:
 
 ### PR deployment test
 
-Commenting `/garden-deploy` on a PR (`.github/workflows/pr-deployment-test.yml`) deploys latest `main`
-and then the PR branch to a namespace derived from the PR author, on `ai-trust-test` — so several PRs
-or developers can test concurrently without colliding. The namespace must be initialized once before
-first use:
+Adding the **`garden-deploy` label** to a PR (`.github/workflows/pr-deployment-test.yml`) deploys the
+PR branch to a namespace derived from the PR author, on `ai-trust-test` — so several PRs or developers
+can test concurrently without colliding. The namespace must be initialized once before first use:
 ```bash
 bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-username>
 ```
-The workflow reports progress via PR comments and a `deploy-test` commit status check.
+The workflow runs the whole build→package→publish→deploy pipeline as steps in a **single job**
+(`namespace-deployment-test`) using composite actions (`compute-vars`, `build-images`, `package-chart`,
+`publish-ocm`, `apply-to-cluster`) rather than calling `build-push-deploy.yml`. Images are built in
+parallel via `docker buildx bake` (`docker-bake.hcl`) — a **separate build definition** from
+`build-push-deploy.yml`'s matrix, so any new image must be added to **both** (see [CLAUDE.md](../CLAUDE.md)
+"keep in sync"). It reports progress via PR comments; the single job's pass/fail **is** the PR check
+(`namespace-deployment-test`) — there is no separate `deploy-test` commit status.
 
 ### OCM component structure
 
@@ -243,7 +248,7 @@ known display bug in ocm-controller v0.33. The correct value is in `.status.reco
 | Scenario | OCM version published | Deploys to |
 |---|---|---|
 | Push to `main` | `0.0.0-ai-trust-<sha>` + `0.0.0-latest` | `ai-trust-main`, namespace `ai-trust` |
-| `/garden-deploy` on a PR | `0.0.0-<pr-author>-<sha>` | `ai-trust-test`, namespace `<pr-author>` |
+| `garden-deploy` label on a PR | `0.0.0-<pr-author>-<sha>` | `ai-trust-test`, namespace `<pr-author>` |
 | `workflow_dispatch` → sr-test | `0.0.0-<namespace>-<sha>` | `sr-test`, namespace `github.actor` (or explicit `namespace` input) |
 | Feature branch push (no cluster) | *(not published)* | nowhere |
 | `workflow_dispatch` gardener_cluster=none | *(not published)* | nowhere |
