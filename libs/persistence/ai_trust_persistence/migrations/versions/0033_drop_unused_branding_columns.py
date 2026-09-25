@@ -1,10 +1,10 @@
 """drop unused branding columns from platform_settings
 
 Now that branding data lives in the key-value `branding` table, these 75+ columns
-on platform_settings are obsolete. Data was migrated in 0031.
+on platform_settings are obsolete. Data was migrated in 0032.
 
-Revision ID: 6282ecfeacfe
-Revises: 0031
+Revision ID: 0033
+Revises: 0032
 Create Date: 2026-09-25 15:05:07.222992
 """
 from alembic import op
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 
-revision = '0032'
-down_revision = '0031'
+revision = "0033"
+down_revision = "0032"
 branch_labels = None
 depends_on = None
 
