@@ -17,6 +17,7 @@ spec:
       labels:
         {{- include "ai-trust.labels" (dict "name" "minio") | nindent 8 }}
     spec:
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: minio
           image: {{ .Values.minio.image }}

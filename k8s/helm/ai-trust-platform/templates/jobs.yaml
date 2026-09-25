@@ -71,6 +71,7 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
       initContainers:
         {{- include "ai-trust.waitForHttp" (dict "name" "minio" "port" 9000 "path" "/minio/health/live" "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:

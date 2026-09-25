@@ -246,7 +246,15 @@ runs:
           kubectl annotate helmrelease "ai-trust-${NAMESPACE}" -n ocm-system \
             reconcile.fluxcd.io/requestedAt="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --overwrite
-          echo "Annotation applied — Flux will retry the upgrade."
+          echo "Annotation applied — waiting for Flux to clear the Stalled condition..."
+          for i in $(seq 1 12); do
+            sleep 10
+            STALLED_NOW=$(kubectl get helmrelease "ai-trust-${NAMESPACE}" -n ocm-system \
+              -o jsonpath='{.status.conditions[?(@.type=="Stalled")].status}' 2>/dev/null || echo "")
+            echo "  [${i}0s] Stalled=${STALLED_NOW:-unknown}"
+            [[ "$STALLED_NOW" != "True" ]] && break
+          done
+          echo "Stalled condition cleared — proceeding to upgrade wait."
         else
           echo "HelmRelease is not Stalled (status: ${STALLED:-unknown}) — no remediation needed."
         fi
@@ -279,13 +287,17 @@ runs:
             fi
             echo "[${ELAPSED}s] Ready=${READY_STATUS} reason=${READY_REASON} lastAppliedRevision=${LAST_APPLIED}"
             [[ -n "$READY_MSG" ]] && echo "         message: ${READY_MSG}"
-            # Fail fast on terminal error states
+            # Fail fast on terminal error states — only if the failure is for the current version
             case "$READY_REASON" in
               InstallFailed|UpgradeFailed|RollbackFailed|UninstallFailed|TestFailed)
-                echo "error: HelmRelease failed with reason=${READY_REASON}" >&2
-                echo "Full status conditions:" >&2
-                echo "$HR" | jq '.status.conditions' >&2
-                exit 1
+                if echo "$LAST_APPLIED" | grep -qF "${EXPECTED_VERSION}"; then
+                  echo "error: HelmRelease failed with reason=${READY_REASON}" >&2
+                  echo "Full status conditions:" >&2
+                  echo "$HR" | jq '.status.conditions' >&2
+                  exit 1
+                else
+                  echo "[${ELAPSED}s] Stale ${READY_REASON} for previous version (${LAST_APPLIED}) — waiting for current version ${EXPECTED_VERSION}..."
+                fi
                 ;;
             esac
             # Succeed when Ready=True and the applied revision contains the expected version

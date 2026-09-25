@@ -82,6 +82,11 @@ spec:
       image:
         repository: ghcr.io/ai-trust-services/ai-trust-platform
         pullPolicy: IfNotPresent
+      # quay.io/minio requires authentication on Gardener k8s nodes (policy change 2025).
+      # Mirrored to ghcr.io by the CI build step; pulled using the same ghcr-pull-secret.
+      minio:
+        image: ghcr.io/ai-trust-services/ai-trust-platform/minio:RELEASE.2025-09-07T16-13-09Z
+        mcImage: ghcr.io/ai-trust-services/ai-trust-platform/mc:RELEASE.2025-08-13T08-35-41Z
       imagePullSecrets:
         - name: ghcr-pull-secret
       oauthProxy:

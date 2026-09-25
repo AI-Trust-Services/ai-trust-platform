@@ -92,3 +92,25 @@ runs:
         docker buildx bake \
           --file docker-bake.hcl \
           --push
+
+    - name: Mirror third-party images to ghcr.io
+      shell: bash
+      env:
+        OWNER: ${{ inputs.owner }}
+      run: |
+        # quay.io/minio requires authentication to pull on k8s nodes (policy change 2025).
+        # Mirror the pinned releases to ghcr.io so the cluster can pull them using the
+        # same ghcr-pull-secret that covers all other platform images.
+        # GitHub Actions runners can still pull from quay.io anonymously; this step
+        # re-tags and pushes to ghcr.io/$OWNER/ai-trust-platform/<image>:<tag>.
+        MINIO_TAG="RELEASE.2025-09-07T16-13-09Z"
+        MC_TAG="RELEASE.2025-08-13T08-35-41Z"
+        DEST="ghcr.io/${OWNER}/ai-trust-platform"
+
+        docker pull "quay.io/minio/minio:${MINIO_TAG}"
+        docker tag  "quay.io/minio/minio:${MINIO_TAG}" "${DEST}/minio:${MINIO_TAG}"
+        docker push "${DEST}/minio:${MINIO_TAG}"
+
+        docker pull "quay.io/minio/mc:${MC_TAG}"
+        docker tag  "quay.io/minio/mc:${MC_TAG}" "${DEST}/mc:${MC_TAG}"
+        docker push "${DEST}/mc:${MC_TAG}"
