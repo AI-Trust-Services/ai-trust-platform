@@ -239,6 +239,12 @@ jobs:
           - name: keycloak-provision
             context: ./infra/keycloak
             dockerfile: ./infra/keycloak/Dockerfile
+          - name: minio
+            context: ./infra/minio
+            dockerfile: ./infra/minio/Dockerfile
+          - name: mc
+            context: ./infra/mc
+            dockerfile: ./infra/mc/Dockerfile
           - name: shell
             context: ./shell
             dockerfile: ./shell/Dockerfile

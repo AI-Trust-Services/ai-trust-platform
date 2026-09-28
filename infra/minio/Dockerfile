@@ -1,0 +1,24 @@
+FROM debian:12-slim
+
+ARG MINIO_RELEASE=RELEASE.2025-09-07T16-13-09Z
+ARG TARGETARCH=amd64
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && curl -fsSL \
+       "https://github.com/minio/minio/releases/download/${MINIO_RELEASE}/minio.linux-${TARGETARCH}.${MINIO_RELEASE}" \
+       -o /usr/local/bin/minio \
+    && EXPECTED=$(curl -fsSL \
+       "https://github.com/minio/minio/releases/download/${MINIO_RELEASE}/minio.linux-${TARGETARCH}.${MINIO_RELEASE}.shasum" \
+       | awk '{print $1}') \
+    && printf '%s  /usr/local/bin/minio\n' "$EXPECTED" | sha1sum -c - \
+    && chmod +x /usr/local/bin/minio \
+    && apt-get purge -y --auto-remove curl \
+    && rm -rf /var/lib/apt/lists/*
+
+VOLUME ["/data"]
+
+EXPOSE 9000 9001
+
+ENTRYPOINT ["/usr/local/bin/minio"]
+CMD ["server", "/data"]

@@ -78,6 +78,14 @@ spec:
         name: ai-trust-flux-values-${NAMESPACE}
         valuesKey: OLLAMA_ENABLED
         targetPath: ollama.enabled
+      - kind: Secret
+        name: ai-trust-flux-values-${NAMESPACE}
+        valuesKey: MINIO_IMAGE
+        targetPath: minio.image
+      - kind: Secret
+        name: ai-trust-flux-values-${NAMESPACE}
+        valuesKey: MC_IMAGE
+        targetPath: minio.mcImage
     values:
       image:
         repository: ghcr.io/ai-trust-services/ai-trust-platform
