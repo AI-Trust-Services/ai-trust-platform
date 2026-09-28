@@ -354,6 +354,8 @@ async def copy_draft_to_published(draft_key: str) -> str:
     try:
         await asyncio.to_thread(_copy_sync, bucket, draft_key, published_key)
         logger.info("branding.draft_promoted", extra={"draft_key": draft_key, "published_key": published_key})
+        # Clean up the draft file to prevent orphaned objects accumulating
+        await delete_file(draft_key)  # best-effort, already logs on failure without raising
         return published_key
     except Exception as e:
         logger.error("branding.draft_promote_failed", extra={"draft_key": draft_key, "error": str(e)})
