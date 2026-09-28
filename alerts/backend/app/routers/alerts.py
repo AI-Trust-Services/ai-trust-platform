@@ -159,9 +159,10 @@ async def get_alert_rules(username: str = Depends(require_permission(ALERTS_READ
     if cats is not None and len(cats) == 0:
         return []
     async with SessionLocal() as session:
-        stmt = select(AlertRule).order_by(AlertRule.category, AlertRule.name)
+        stmt = select(AlertRule)
         if cats is not None:
-            stmt = select(AlertRule).where(AlertRule.category.in_(cats)).order_by(AlertRule.category, AlertRule.name)
+            stmt = stmt.where(AlertRule.category.in_(cats))
+        stmt = stmt.order_by(AlertRule.category, AlertRule.name)
         rules = (await session.execute(stmt)).scalars().all()
     return [
         {
