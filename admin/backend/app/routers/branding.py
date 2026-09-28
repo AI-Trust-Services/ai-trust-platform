@@ -327,7 +327,14 @@ async def discard_branding(
 ) -> BrandingResponse:
     """Discard all draft changes and reset to published values."""
     async with SessionLocal() as session:
-        # Clear all draft fields (set to None)
+        # Delete orphaned draft logo files from MinIO before clearing the DB column
+        result = await session.execute(
+            select(Branding).where(Branding.key.in_(LOGO_FIELDS), Branding.draft.isnot(None))
+        )
+        for entry in result.scalars().all():
+            if entry.draft and "/draft/" in entry.draft:
+                await branding_storage.delete_file(entry.draft)
+
         await session.execute(update(Branding).values(draft=None))
         await session.commit()
         logger.info("branding.draft_discarded")
