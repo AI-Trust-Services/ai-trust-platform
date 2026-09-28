@@ -76,6 +76,7 @@ function ScalarField({ label, value, onBlur, type = "text", placeholder }: {
 // inline edit when a PATCH /metrics/:id endpoint is added.
 
 function MetricsSection({ cardId, metrics, onReload }: { cardId: string; metrics: ModelCard["metrics"]; onReload: () => void }) {
+  const [open, setOpen] = useState(false);
   const [showAddRow, setShowAddRow] = useState(false);
   const [newName, setNewName] = useState("");
   const [newValue, setNewValue] = useState("");
@@ -105,14 +106,19 @@ function MetricsSection({ cardId, metrics, onReload }: { cardId: string; metrics
 
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Metrics</h3>
-        <Button variant="ghost" size="sm" className="h-6 text-xs gap-1"
-          onClick={() => { setShowAddRow(true); setNewName(""); setNewValue(""); setNewDataset(""); }}>
-          <Plus className="size-3" />Add
-        </Button>
+      <div className="flex items-center justify-between cursor-pointer select-none mb-3" onClick={() => setOpen((o) => !o)}>
+        <div className="flex items-center gap-2">
+          {open ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
+          <h3 className="text-sm font-semibold">Metrics</h3>
+        </div>
+        {open && (
+          <Button variant="ghost" size="sm" className="h-6 text-xs gap-1"
+            onClick={(e) => { e.stopPropagation(); setShowAddRow(true); setNewName(""); setNewValue(""); setNewDataset(""); }}>
+            <Plus className="size-3" />Add
+          </Button>
+        )}
       </div>
-      <Card className="overflow-hidden p-0">
+      {open && <Card className="overflow-hidden p-0">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-xs text-muted-foreground">
@@ -149,7 +155,7 @@ function MetricsSection({ cardId, metrics, onReload }: { cardId: string; metrics
             )}
           </tbody>
         </table>
-      </Card>
+      </Card>}
     </section>
   );
 }
@@ -157,6 +163,7 @@ function MetricsSection({ cardId, metrics, onReload }: { cardId: string; metrics
 // ── Sources section ───────────────────────────────────────────────────────────
 
 function SourcesSection({ cardId, sources, onReload }: { cardId: string; sources: ModelCard["sources"]; onReload: () => void }) {
+  const [open, setOpen] = useState(false);
   const [showAddRow, setShowAddRow] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [newName, setNewName] = useState("");
@@ -184,14 +191,19 @@ function SourcesSection({ cardId, sources, onReload }: { cardId: string; sources
 
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Sources</h3>
-        <Button variant="ghost" size="sm" className="h-6 text-xs gap-1"
-          onClick={() => { setShowAddRow(true); setNewUrl(""); setNewName(""); }}>
-          <Plus className="size-3" />Add
-        </Button>
+      <div className="flex items-center justify-between cursor-pointer select-none mb-3" onClick={() => setOpen((o) => !o)}>
+        <div className="flex items-center gap-2">
+          {open ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
+          <h3 className="text-sm font-semibold">Sources</h3>
+        </div>
+        {open && (
+          <Button variant="ghost" size="sm" className="h-6 text-xs gap-1"
+            onClick={(e) => { e.stopPropagation(); setShowAddRow(true); setNewUrl(""); setNewName(""); }}>
+            <Plus className="size-3" />Add
+          </Button>
+        )}
       </div>
-      <Card className="overflow-hidden p-0">
+      {open && <Card className="overflow-hidden p-0">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-xs text-muted-foreground">
@@ -225,7 +237,7 @@ function SourcesSection({ cardId, sources, onReload }: { cardId: string; sources
             )}
           </tbody>
         </table>
-      </Card>
+      </Card>}
     </section>
   );
 }
@@ -526,6 +538,7 @@ function TextareaBlur({ value, onBlur, placeholder }: { value: string; onBlur: (
 // ── Datasets section ──────────────────────────────────────────────────────────
 
 function DatasetsSection({ cardId, datasets, onReload }: { cardId: string; datasets: Dataset[]; onReload: () => void }) {
+  const [open, setOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<DatasetCreate["type"]>("train");
@@ -551,44 +564,56 @@ function DatasetsSection({ cardId, datasets, onReload }: { cardId: string; datas
 
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Datasets</h3>
-        <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => setDialogOpen(true)}><Plus className="size-3.5" />Add dataset</Button>
-      </div>
-      <div className="flex flex-col gap-3">
-        {datasets.length === 0 && <p className="text-sm text-muted-foreground">No datasets yet.</p>}
-        {datasets.map((ds) => (
-          <DatasetCard key={ds.id} cardId={cardId} dataset={ds} onReload={onReload}
-            onDelete={() => handleDelete(ds.id, ds.name)} />
-        ))}
-      </div>
-
-      {/* Create dialog */}
-      <dialog open={dialogOpen} className="fixed inset-0 z-50 bg-transparent p-0" onClick={() => setDialogOpen(false)}>
-        <div className="fixed left-1/2 top-1/2 w-80 -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-card p-6 shadow-lg flex flex-col gap-4"
-          onClick={(e) => e.stopPropagation()}>
-          <h3 className="font-semibold">New Dataset</h3>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ds_name">Name <span className="text-[var(--danger-fg)]">*</span></Label>
-            <Input id="ds_name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. MMLU" autoFocus />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ds_type">Type</Label>
-            <select id="ds_type" className={SELECT_CLASS} value={newType} onChange={(e) => setNewType(e.target.value as DatasetCreate["type"])}>
-              <option value="train">train</option>
-              <option value="val">val</option>
-              <option value="test">test</option>
-              <option value="train_cv">train_cv</option>
-            </select>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={saving}>
-              {saving && <Loader2 className="animate-spin" />} Create
-            </Button>
-          </div>
+      <div className="flex items-center justify-between cursor-pointer select-none mb-3" onClick={() => setOpen((o) => !o)}>
+        <div className="flex items-center gap-2">
+          {open ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
+          <h3 className="text-sm font-semibold">Datasets</h3>
         </div>
-      </dialog>
+        {open && (
+          <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs"
+            onClick={(e) => { e.stopPropagation(); setDialogOpen(true); }}>
+            <Plus className="size-3.5" />Add dataset
+          </Button>
+        )}
+      </div>
+      {open && (
+        <>
+          <div className="flex flex-col gap-3">
+            {datasets.length === 0 && <p className="text-sm text-muted-foreground">No datasets yet.</p>}
+            {datasets.map((ds) => (
+              <DatasetCard key={ds.id} cardId={cardId} dataset={ds} onReload={onReload}
+                onDelete={() => handleDelete(ds.id, ds.name)} />
+            ))}
+          </div>
+
+          {/* Create dialog */}
+          <dialog open={dialogOpen} className="fixed inset-0 z-50 bg-transparent p-0" onClick={() => setDialogOpen(false)}>
+            <div className="fixed left-1/2 top-1/2 w-80 -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-card p-6 shadow-lg flex flex-col gap-4"
+              onClick={(e) => e.stopPropagation()}>
+              <h3 className="font-semibold">New Dataset</h3>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ds_name">Name <span className="text-[var(--danger-fg)]">*</span></Label>
+                <Input id="ds_name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. MMLU" autoFocus />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ds_type">Type</Label>
+                <select id="ds_type" className={SELECT_CLASS} value={newType} onChange={(e) => setNewType(e.target.value as DatasetCreate["type"])}>
+                  <option value="train">train</option>
+                  <option value="val">val</option>
+                  <option value="test">test</option>
+                  <option value="train_cv">train_cv</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleCreate} disabled={saving}>
+                  {saving && <Loader2 className="animate-spin" />} Create
+                </Button>
+              </div>
+            </div>
+          </dialog>
+        </>
+      )}
     </section>
   );
 }
