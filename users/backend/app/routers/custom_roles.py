@@ -15,6 +15,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import select
+from typing import Literal
 
 from ai_trust_authorization import openfga_client, require_permission
 from ai_trust_authorization.constants import (
@@ -30,17 +31,20 @@ router = APIRouter(prefix="/iam", tags=["custom-roles"])
 logger = get_logger(__name__)
 
 
+AlertCategory = Literal["risk", "compliance", "observability"]
+
+
 class CustomRoleCreate(BaseModel):
     name: str
     description: str = ""
     permissions: list[str]
-    alert_categories: list[str] | None = None
+    alert_categories: list[AlertCategory] | None = None
 
 
 class CustomRoleUpdate(BaseModel):
     description: str | None = None
     permissions: list[str] | None = None
-    alert_categories: list[str] | None = None
+    alert_categories: list[AlertCategory] | None = None
 
 
 class CustomRoleResponse(BaseModel):
@@ -48,7 +52,7 @@ class CustomRoleResponse(BaseModel):
     name: str
     description: str
     permissions: list[str] = []
-    alert_categories: list[str] | None = None
+    alert_categories: list[AlertCategory] | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
