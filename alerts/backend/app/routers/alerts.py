@@ -83,6 +83,7 @@ async def _compute_allowed_categories(username: str) -> list[str] | None:
 
 
 async def _resolve_display_names(entity_ids: list[str]) -> dict[str, str]:
+    """Map system IDs to display names via Postgres. Falls back to the ID itself."""
     if not entity_ids:
         return {}
     unique_ids = list({e for e in entity_ids if e})
@@ -183,6 +184,7 @@ async def get_alert_rules(username: str = Depends(require_permission(ALERTS_READ
 
 @router.get("/count")
 async def get_alert_count(username: str = Depends(require_permission(ALERTS_READ))) -> dict:
+    """Fast endpoint for bell badge — returns count of active unhandled alerts."""
     cats = await _allowed_categories(username)
     if cats is not None and len(cats) == 0:
         return {"count": 0}
@@ -206,6 +208,7 @@ async def get_alert_count(username: str = Depends(require_permission(ALERTS_READ
     dependencies=[Depends(require_permission(ALERTS_HANDLE))],
 )
 async def handle_alert_event(event_id: str) -> dict:
+    """Mark an event-based alert as handled — moves to history permanently."""
     now = datetime.now(timezone.utc)
     await ch_command(
         "ALTER TABLE alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
@@ -222,6 +225,7 @@ async def handle_alert_event(event_id: str) -> dict:
     dependencies=[Depends(require_permission(ALERTS_MANAGE_RULES))],
 )
 async def toggle_alert_rule(rule_id: str) -> dict:
+    """Enable or disable an alert rule."""
     async with SessionLocal() as session:
         result = await session.execute(select(AlertRule).where(AlertRule.id == rule_id))
         rule = result.scalar_one_or_none()
@@ -241,6 +245,7 @@ async def toggle_alert_rule(rule_id: str) -> dict:
     dependencies=[Depends(require_permission(ALERTS_HANDLE))],
 )
 async def approve_model_change(event_id: str) -> dict:
+    """Approve a model change — marks event as handled and updates the service baseline."""
     rows = await ch_query(
         "SELECT entity_id, entity_model FROM alert_events WHERE id = {id:String}",
         {"id": event_id},
@@ -285,6 +290,7 @@ async def approve_model_change(event_id: str) -> dict:
     dependencies=[Depends(require_permission(ALERTS_HANDLE))],
 )
 async def reject_model_change(event_id: str) -> dict:
+    """Reject a model change — marks event as handled, baseline unchanged."""
     now = datetime.now(timezone.utc)
     await ch_command(
         "ALTER TABLE alert_events UPDATE handled_at = {ts:DateTime}, resolved_at = {ts:DateTime} "
