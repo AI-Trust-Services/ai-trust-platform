@@ -72,8 +72,8 @@ clickhouse:
   serviceType: ClusterIP
 
 minio:
-  image: "" # set via values-gardener.yaml / values-kind.yaml from IMAGE_TAG; built by infra/minio/Dockerfile
-  mcImage: "" # set via values-gardener.yaml / values-kind.yaml from IMAGE_TAG; built by infra/mc/Dockerfile
+  image: ghcr.io/ai-trust-services/ai-trust-platform/minio:latest
+  mcImage: ghcr.io/ai-trust-services/ai-trust-platform/mc:latest
   storageSize: 5Gi
   serviceType: ClusterIP
 
