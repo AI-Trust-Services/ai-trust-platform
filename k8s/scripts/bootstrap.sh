@@ -74,7 +74,7 @@ kubectl create namespace ocm-system --dry-run=client -o yaml | kubectl apply -f 
 OLLAMA_ENABLED="false"
 [[ "${LLM_PROVIDER:-stub}" == "ollama" ]] && OLLAMA_ENABLED="true"
 GHCR_OWNER="${GITHUB_REPOSITORY_OWNER:-ai-trust-services}"
-GHCR_OWNER="${GHCR_OWNER,,}"
+GHCR_OWNER="$(echo "$GHCR_OWNER" | tr '[:upper:]' '[:lower:]')"
 
 kubectl create secret generic "ai-trust-flux-values-${NAMESPACE}" \
   --from-literal=APP_PUBLIC_URL="${APP_PUBLIC_URL:-}" \
