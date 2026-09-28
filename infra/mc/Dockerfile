@@ -8,6 +8,10 @@ RUN apt-get update \
     && curl -fsSL \
        "https://github.com/minio/mc/releases/download/${MC_RELEASE}/mc.linux-${TARGETARCH}.${MC_RELEASE}" \
        -o /usr/local/bin/mc \
+    && EXPECTED=$(curl -fsSL \
+       "https://github.com/minio/mc/releases/download/${MC_RELEASE}/mc.linux-${TARGETARCH}.${MC_RELEASE}.shasum" \
+       | awk '{print $1}') \
+    && printf '%s  /usr/local/bin/mc\n' "$EXPECTED" | sha1sum -c - \
     && chmod +x /usr/local/bin/mc \
     && apt-get purge -y --auto-remove curl \
     && rm -rf /var/lib/apt/lists/*

@@ -8,6 +8,10 @@ RUN apt-get update \
     && curl -fsSL \
        "https://github.com/minio/minio/releases/download/${MINIO_RELEASE}/minio.linux-${TARGETARCH}.${MINIO_RELEASE}" \
        -o /usr/local/bin/minio \
+    && EXPECTED=$(curl -fsSL \
+       "https://github.com/minio/minio/releases/download/${MINIO_RELEASE}/minio.linux-${TARGETARCH}.${MINIO_RELEASE}.shasum" \
+       | awk '{print $1}') \
+    && printf '%s  /usr/local/bin/minio\n' "$EXPECTED" | sha1sum -c - \
     && chmod +x /usr/local/bin/minio \
     && apt-get purge -y --auto-remove curl \
     && rm -rf /var/lib/apt/lists/*
