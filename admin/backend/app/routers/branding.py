@@ -401,6 +401,8 @@ async def get_asset(
     _: str = Depends(require_permission(IAM_MANAGE)),
 ) -> Response:
     """Serve a branding asset from storage. Used for preview and by the shell."""
+    if not asset_key.startswith("branding/"):
+        raise HTTPException(status_code=400, detail="Invalid asset key")
     data, content_type = await branding_storage.get_file(asset_key)
     return Response(
         content=data,
@@ -432,6 +434,8 @@ async def get_public_asset(
 
     Note: In production, you may want to serve these through a CDN or nginx directly.
     """
+    if not asset_key.startswith("branding/"):
+        raise HTTPException(status_code=400, detail="Invalid asset key")
     data, content_type = await branding_storage.get_file(asset_key)
     return Response(
         content=data,
