@@ -81,21 +81,14 @@ export const api = {
   updateBranding: (data: BrandingUpdate): Promise<Branding> =>
     request<Branding>("/branding", json("PUT", data)),
 
-  uploadBrandingAsset: async (
-    assetType: string,
-    file: File,
-  ): Promise<Branding> => {
+  uploadBrandingAsset: (assetType: string, file: File): Promise<Branding> => {
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch(`${API_BASE}/branding/upload/${assetType}`, {
+    // Use request<T>() with FormData - browser auto-sets Content-Type with boundary
+    return request<Branding>(`/branding/upload/${assetType}`, {
       method: "POST",
       body: formData,
     });
-    if (!res.ok) {
-      const err = (await res.json().catch(() => ({}))) as { detail?: unknown };
-      throw new Error(formatDetail(err.detail) || `HTTP ${res.status}`);
-    }
-    return res.json() as Promise<Branding>;
   },
 
   publishBranding: (): Promise<BrandingPublishResponse> =>

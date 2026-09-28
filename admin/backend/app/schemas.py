@@ -78,24 +78,6 @@ class AdminStatsResponse(BaseModel):
 # ── Branding schemas ──────────────────────────────────────────────────────────
 
 
-class BrandingColors(BaseModel):
-    """Color palette for branding."""
-
-    primary_color: str | None = None
-    secondary_color: str | None = None
-    accent_color: str | None = None
-    warning_color: str | None = None
-
-
-class BrandingLogos(BaseModel):
-    """Logo paths/URLs for branding."""
-
-    logo_horizontal_light: str | None = None
-    logo_horizontal_dark: str | None = None
-    logo_icon: str | None = None
-    favicon: str | None = None
-
-
 class BrandingResponse(BaseModel):
     """Full branding configuration (published or draft)."""
 

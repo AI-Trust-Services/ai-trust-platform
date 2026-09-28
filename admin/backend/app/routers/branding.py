@@ -125,96 +125,16 @@ def _build_response(
     adv_pub_str, adv_draft_str = entries.get("advanced_colors", (None, None))
     adv_pub = json.loads(adv_pub_str) if adv_pub_str else None
     adv_draft = json.loads(adv_draft_str) if adv_draft_str else None
+    adv = _merge_advanced_colors(adv_pub, adv_draft) if mode == "draft" else adv_pub
 
     # Get publish metadata
     pub_at, _ = entries.get("_published_at", (None, None))
     pub_by, _ = entries.get("_published_by", (None, None))
 
-    if mode == "draft":
-        return BrandingResponse(
-            org_name=org_name,
-            logo_horizontal_light=_get_value(entries, "logo_horizontal_light", mode),
-            logo_horizontal_dark=_get_value(entries, "logo_horizontal_dark", mode),
-            logo_icon=_get_value(entries, "logo_icon", mode),
-            favicon=_get_value(entries, "favicon", mode),
-            # Brand colors (light)
-            primary_color=_get_value(entries, "primary_color", mode),
-            secondary_color=_get_value(entries, "secondary_color", mode),
-            accent_color=_get_value(entries, "accent_color", mode),
-            warning_color=_get_value(entries, "warning_color", mode),
-            # Brand colors (dark)
-            primary_color_dark=_get_value(entries, "primary_color_dark", mode),
-            secondary_color_dark=_get_value(entries, "secondary_color_dark", mode),
-            accent_color_dark=_get_value(entries, "accent_color_dark", mode),
-            warning_color_dark=_get_value(entries, "warning_color_dark", mode),
-            # Shell colors (light)
-            sidebar_bg=_get_value(entries, "sidebar_bg", mode),
-            sidebar_text=_get_value(entries, "sidebar_text", mode),
-            header_bg=_get_value(entries, "header_bg", mode),
-            header_text=_get_value(entries, "header_text", mode),
-            # Shell colors (dark)
-            sidebar_bg_dark=_get_value(entries, "sidebar_bg_dark", mode),
-            sidebar_text_dark=_get_value(entries, "sidebar_text_dark", mode),
-            header_bg_dark=_get_value(entries, "header_bg_dark", mode),
-            header_text_dark=_get_value(entries, "header_text_dark", mode),
-            # UI element colors (light)
-            button_bg=_get_value(entries, "button_bg", mode),
-            button_text=_get_value(entries, "button_text", mode),
-            table_header_bg=_get_value(entries, "table_header_bg", mode),
-            table_border=_get_value(entries, "table_border", mode),
-            mfe_bg=_get_value(entries, "mfe_bg", mode),
-            # UI element colors (dark)
-            button_bg_dark=_get_value(entries, "button_bg_dark", mode),
-            button_text_dark=_get_value(entries, "button_text_dark", mode),
-            table_header_bg_dark=_get_value(entries, "table_header_bg_dark", mode),
-            table_border_dark=_get_value(entries, "table_border_dark", mode),
-            mfe_bg_dark=_get_value(entries, "mfe_bg_dark", mode),
-            # Advanced colors
-            advanced_colors=_merge_advanced_colors(adv_pub, adv_draft),
-            published_at=pub_at,
-            published_by=pub_by,
-        )
-    # mode == "published"
     return BrandingResponse(
         org_name=org_name,
-        logo_horizontal_light=_get_value(entries, "logo_horizontal_light", mode),
-        logo_horizontal_dark=_get_value(entries, "logo_horizontal_dark", mode),
-        logo_icon=_get_value(entries, "logo_icon", mode),
-        favicon=_get_value(entries, "favicon", mode),
-        # Brand colors (light)
-        primary_color=_get_value(entries, "primary_color", mode),
-        secondary_color=_get_value(entries, "secondary_color", mode),
-        accent_color=_get_value(entries, "accent_color", mode),
-        warning_color=_get_value(entries, "warning_color", mode),
-        # Brand colors (dark)
-        primary_color_dark=_get_value(entries, "primary_color_dark", mode),
-        secondary_color_dark=_get_value(entries, "secondary_color_dark", mode),
-        accent_color_dark=_get_value(entries, "accent_color_dark", mode),
-        warning_color_dark=_get_value(entries, "warning_color_dark", mode),
-        # Shell colors (light)
-        sidebar_bg=_get_value(entries, "sidebar_bg", mode),
-        sidebar_text=_get_value(entries, "sidebar_text", mode),
-        header_bg=_get_value(entries, "header_bg", mode),
-        header_text=_get_value(entries, "header_text", mode),
-        # Shell colors (dark)
-        sidebar_bg_dark=_get_value(entries, "sidebar_bg_dark", mode),
-        sidebar_text_dark=_get_value(entries, "sidebar_text_dark", mode),
-        header_bg_dark=_get_value(entries, "header_bg_dark", mode),
-        header_text_dark=_get_value(entries, "header_text_dark", mode),
-        # UI element colors (light)
-        button_bg=_get_value(entries, "button_bg", mode),
-        button_text=_get_value(entries, "button_text", mode),
-        table_header_bg=_get_value(entries, "table_header_bg", mode),
-        table_border=_get_value(entries, "table_border", mode),
-        mfe_bg=_get_value(entries, "mfe_bg", mode),
-        # UI element colors (dark)
-        button_bg_dark=_get_value(entries, "button_bg_dark", mode),
-        button_text_dark=_get_value(entries, "button_text_dark", mode),
-        table_header_bg_dark=_get_value(entries, "table_header_bg_dark", mode),
-        table_border_dark=_get_value(entries, "table_border_dark", mode),
-        mfe_bg_dark=_get_value(entries, "mfe_bg_dark", mode),
-        # Advanced colors
-        advanced_colors=adv_pub,
+        **{f: _get_value(entries, f, mode) for f in BRANDING_FIELDS},
+        advanced_colors=adv,
         published_at=pub_at,
         published_by=pub_by,
     )
@@ -265,67 +185,10 @@ async def update_branding(
     Note: org_name/platform_name is configured in Settings, not here.
     """
     async with SessionLocal() as session:
-        # Get all fields from the body that are not None
-        updates: dict[str, str] = {}
-
-        # Brand colors (light)
-        if body.primary_color is not None:
-            updates["primary_color"] = body.primary_color
-        if body.secondary_color is not None:
-            updates["secondary_color"] = body.secondary_color
-        if body.accent_color is not None:
-            updates["accent_color"] = body.accent_color
-        if body.warning_color is not None:
-            updates["warning_color"] = body.warning_color
-        # Brand colors (dark)
-        if body.primary_color_dark is not None:
-            updates["primary_color_dark"] = body.primary_color_dark
-        if body.secondary_color_dark is not None:
-            updates["secondary_color_dark"] = body.secondary_color_dark
-        if body.accent_color_dark is not None:
-            updates["accent_color_dark"] = body.accent_color_dark
-        if body.warning_color_dark is not None:
-            updates["warning_color_dark"] = body.warning_color_dark
-        # Shell colors (light)
-        if body.sidebar_bg is not None:
-            updates["sidebar_bg"] = body.sidebar_bg
-        if body.sidebar_text is not None:
-            updates["sidebar_text"] = body.sidebar_text
-        if body.header_bg is not None:
-            updates["header_bg"] = body.header_bg
-        if body.header_text is not None:
-            updates["header_text"] = body.header_text
-        # Shell colors (dark)
-        if body.sidebar_bg_dark is not None:
-            updates["sidebar_bg_dark"] = body.sidebar_bg_dark
-        if body.sidebar_text_dark is not None:
-            updates["sidebar_text_dark"] = body.sidebar_text_dark
-        if body.header_bg_dark is not None:
-            updates["header_bg_dark"] = body.header_bg_dark
-        if body.header_text_dark is not None:
-            updates["header_text_dark"] = body.header_text_dark
-        # UI element colors (light)
-        if body.button_bg is not None:
-            updates["button_bg"] = body.button_bg
-        if body.button_text is not None:
-            updates["button_text"] = body.button_text
-        if body.table_header_bg is not None:
-            updates["table_header_bg"] = body.table_header_bg
-        if body.table_border is not None:
-            updates["table_border"] = body.table_border
-        if body.mfe_bg is not None:
-            updates["mfe_bg"] = body.mfe_bg
-        # UI element colors (dark)
-        if body.button_bg_dark is not None:
-            updates["button_bg_dark"] = body.button_bg_dark
-        if body.button_text_dark is not None:
-            updates["button_text_dark"] = body.button_text_dark
-        if body.table_header_bg_dark is not None:
-            updates["table_header_bg_dark"] = body.table_header_bg_dark
-        if body.table_border_dark is not None:
-            updates["table_border_dark"] = body.table_border_dark
-        if body.mfe_bg_dark is not None:
-            updates["mfe_bg_dark"] = body.mfe_bg_dark
+        # Get all non-None fields from the body (except advanced_colors, handled separately)
+        updates = body.model_dump(exclude_none=True)
+        updates.pop("advanced_colors", None)
+        updates.pop("org_name", None)  # org_name is managed via Settings
 
         # Upsert each field
         for key, value in updates.items():

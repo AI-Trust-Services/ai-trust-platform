@@ -1,44 +1,9 @@
 import { useEffect } from 'react';
+import type { Branding } from './types';
 
 const BRANDING_KEY = 'trust-platform-branding';
 const BRANDING_STYLE_ID = 'branding-overrides';
 const THEME_KEY = 'trust-platform-theme';
-
-interface Branding {
-  org_name: string;
-  // Brand colors (light mode)
-  primary_color: string | null;
-  secondary_color: string | null;
-  accent_color: string | null;
-  warning_color: string | null;
-  // Brand colors (dark mode)
-  primary_color_dark: string | null;
-  secondary_color_dark: string | null;
-  accent_color_dark: string | null;
-  warning_color_dark: string | null;
-  // Shell colors (light mode)
-  sidebar_bg: string | null;
-  sidebar_text: string | null;
-  header_bg: string | null;
-  header_text: string | null;
-  // Shell colors (dark mode)
-  sidebar_bg_dark: string | null;
-  sidebar_text_dark: string | null;
-  header_bg_dark: string | null;
-  header_text_dark: string | null;
-  // UI element colors (light mode)
-  button_bg: string | null;
-  button_text: string | null;
-  table_header_bg: string | null;
-  table_border: string | null;
-  mfe_bg: string | null;
-  // UI element colors (dark mode)
-  button_bg_dark: string | null;
-  button_text_dark: string | null;
-  table_header_bg_dark: string | null;
-  table_border_dark: string | null;
-  mfe_bg_dark: string | null;
-}
 
 /**
  * Applies custom branding colors from localStorage to CSS variables and rules.
