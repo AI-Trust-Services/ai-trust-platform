@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 
 const PERMISSION_GROUPS: { label: string; permissions: string[] }[] = [
   { label: "AI Systems", permissions: ["systems:read", "systems:write"] },
@@ -37,6 +38,7 @@ export function CustomRoleModal({ role, onClose, onSaved }: Props) {
   const [alertCategories, setAlertCategories] = useState<Set<string>>(
     new Set(role?.alert_categories ?? [])
   );
+  const [restrictAlerts, setRestrictAlerts] = useState(role?.alert_categories !== null && role?.alert_categories !== undefined);
 
   function toggleAlertCategory(cat: string) {
     setAlertCategories(prev => {
@@ -74,14 +76,14 @@ export function CustomRoleModal({ role, onClose, onSaved }: Props) {
         saved = await api.updateCustomRole(role.id, {
           description,
           permissions: Array.from(permissions),
-          alert_categories: alertCategories.size > 0 ? Array.from(alertCategories) : null,
+          alert_categories: restrictAlerts ? Array.from(alertCategories) : null,
         });
       } else {
         const body: CustomRoleCreate = {
           name: name.trim(),
           description,
           permissions: Array.from(permissions),
-          alert_categories: alertCategories.size > 0 ? Array.from(alertCategories) : null,
+          alert_categories: restrictAlerts ? Array.from(alertCategories) : null,
         };
         saved = await api.createCustomRole(body);
       }
@@ -123,20 +125,30 @@ export function CustomRoleModal({ role, onClose, onSaved }: Props) {
                 placeholder="What is this role for?"
               />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Alert categories</Label>
-              <p className="text-xs text-muted-foreground">Leave all unchecked to show all alert categories.</p>
-              <div className="flex flex-col gap-2">
-                {(["risk", "compliance", "observability"] as const).map(cat => (
-                  <label key={cat} className="flex cursor-pointer items-center gap-2 text-sm text-foreground capitalize">
-                    <Checkbox
-                      checked={alertCategories.has(cat)}
-                      onCheckedChange={() => toggleAlertCategory(cat)}
-                    />
-                    <span>{cat}</span>
-                  </label>
-                ))}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Alert categories</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Restrict access</span>
+                  <Switch checked={restrictAlerts} onCheckedChange={setRestrictAlerts} />
+                </div>
               </div>
+              {restrictAlerts ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-muted-foreground">Only the selected categories will be visible. Leave all unchecked to show no alerts.</p>
+                  {(["risk", "compliance", "observability"] as const).map(cat => (
+                    <label key={cat} className="flex cursor-pointer items-center gap-2 text-sm text-foreground capitalize">
+                      <Checkbox
+                        checked={alertCategories.has(cat)}
+                        onCheckedChange={() => toggleAlertCategory(cat)}
+                      />
+                      <span>{cat}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">All alert categories are visible.</p>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Permissions *</Label>
