@@ -45,8 +45,11 @@ async def _allowed_categories(username: str) -> list[str] | None:
             custom_slugs.append(slug)
 
     if custom_slugs:
+        names = [s.replace("_", " ").title() for s in custom_slugs]
         async with SessionLocal() as session:
-            rows = (await session.execute(select(CustomRole))).scalars().all()
+            rows = (
+                await session.execute(select(CustomRole).where(CustomRole.name.in_(names)))
+            ).scalars().all()
         slug_to_cats = {
             row.name.lower().replace(" ", "_"): row.alert_categories
             for row in rows
