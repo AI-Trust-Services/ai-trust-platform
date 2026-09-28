@@ -608,7 +608,9 @@ services:
     restart: on-failure
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    build:
+      context: ./infra/minio
+      dockerfile: Dockerfile
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -626,7 +628,9 @@ services:
     restart: on-failure
 
   minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    build:
+      context: ./infra/mc
+      dockerfile: Dockerfile
     environment:
       <<: *minio-env
     depends_on:

@@ -72,8 +72,8 @@ clickhouse:
   serviceType: ClusterIP
 
 minio:
-  image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-  mcImage: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+  image: "" # set via values-gardener.yaml / values-kind.yaml from IMAGE_TAG; built by infra/minio/Dockerfile
+  mcImage: "" # set via values-gardener.yaml / values-kind.yaml from IMAGE_TAG; built by infra/mc/Dockerfile
   storageSize: 5Gi
   serviceType: ClusterIP
 

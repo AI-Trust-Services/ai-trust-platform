@@ -82,6 +82,8 @@ kubectl create secret generic "ai-trust-flux-values-${NAMESPACE}" \
   --from-literal=INGRESS_MINIO_HOST="${INGRESS_MINIO_HOST}" \
   --from-literal=IMAGE_TAG="${IMAGE_TAG:-latest}" \
   --from-literal=OLLAMA_ENABLED="${OLLAMA_ENABLED}" \
+  --from-literal=MINIO_IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER:-ai-trust-services}/ai-trust-platform/minio:${IMAGE_TAG:-latest}" \
+  --from-literal=MC_IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER:-ai-trust-services}/ai-trust-platform/mc:${IMAGE_TAG:-latest}" \
   -n ocm-system --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> configmap/postgres-init (from infra/postgres/init.sh)"
