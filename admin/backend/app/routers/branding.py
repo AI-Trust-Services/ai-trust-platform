@@ -258,8 +258,9 @@ async def publish_branding(
     now = datetime.now(timezone.utc)
 
     async with SessionLocal() as session:
-        # Get all branding entries with drafts
-        result = await session.execute(select(Branding).where(Branding.draft.isnot(None)))
+        # Get all branding entries with drafts — FOR UPDATE locks rows so concurrent
+        # publishes queue rather than racing on the MinIO copy/delete sequence.
+        result = await session.execute(select(Branding).where(Branding.draft.isnot(None)).with_for_update())
         entries_with_drafts = result.scalars().all()
 
         for entry in entries_with_drafts:
