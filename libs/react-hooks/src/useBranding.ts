@@ -5,6 +5,17 @@ const BRANDING_KEY = 'trust-platform-branding';
 const BRANDING_STYLE_ID = 'branding-overrides';
 const THEME_KEY = 'trust-platform-theme';
 
+const BRANDING_CSS_VARS = [
+  '--primary', '--brand', '--secondary', '--accent', '--warning', '--destructive', '--background'
+];
+
+// Validates that a value is a CSS hex color before it can be interpolated into a <style> tag.
+// Accepts #RGB, #RRGGBB, #RRGGBBAA only — rejects anything else (including CSS injection attempts).
+const HEX_COLOR = /^#[0-9a-fA-F]{3}$|^#[0-9a-fA-F]{6}$|^#[0-9a-fA-F]{8}$/;
+function safeColor(v: string | null | undefined): string | null {
+  return v && HEX_COLOR.test(v) ? v : null;
+}
+
 /**
  * Applies custom branding colors from localStorage to CSS variables and rules.
  * The shell fetches branding from the backend and stores it in localStorage;
@@ -12,10 +23,6 @@ const THEME_KEY = 'trust-platform-theme';
  */
 export function useBranding(): void {
   useEffect(() => {
-    // CSS variables that may have been set on :root by branding
-    const BRANDING_CSS_VARS = [
-      '--primary', '--brand', '--secondary', '--accent', '--warning', '--destructive', '--background'
-    ];
 
     function clearBranding() {
       // Remove the style element
@@ -42,11 +49,11 @@ export function useBranding(): void {
         const root = document.documentElement;
         const isDark = localStorage.getItem(THEME_KEY) === 'dark' || root.classList.contains('dark');
 
-        // Set CSS variables for brand colors (theme-aware)
-        const primaryColor = isDark ? (b.primary_color_dark || b.primary_color) : b.primary_color;
-        const secondaryColor = isDark ? (b.secondary_color_dark || b.secondary_color) : b.secondary_color;
-        const accentColor = isDark ? (b.accent_color_dark || b.accent_color) : b.accent_color;
-        const warningColor = isDark ? (b.warning_color_dark || b.warning_color) : b.warning_color;
+        // Set CSS variables for brand colors (theme-aware, validated)
+        const primaryColor = safeColor(isDark ? (b.primary_color_dark || b.primary_color) : b.primary_color);
+        const secondaryColor = safeColor(isDark ? (b.secondary_color_dark || b.secondary_color) : b.secondary_color);
+        const accentColor = safeColor(isDark ? (b.accent_color_dark || b.accent_color) : b.accent_color);
+        const warningColor = safeColor(isDark ? (b.warning_color_dark || b.warning_color) : b.warning_color);
 
         if (primaryColor) {
           root.style.setProperty('--primary', primaryColor);
@@ -64,19 +71,18 @@ export function useBranding(): void {
         }
 
         // Apply MFE background color (this is the content area background)
-        const mfeBg = isDark ? (b.mfe_bg_dark || b.mfe_bg) : b.mfe_bg;
+        const mfeBg = safeColor(isDark ? (b.mfe_bg_dark || b.mfe_bg) : b.mfe_bg);
         if (mfeBg) {
           root.style.setProperty('--background', mfeBg);
           root.style.backgroundColor = mfeBg;
           document.body.style.backgroundColor = mfeBg;
         }
 
-        // Build CSS rules for buttons and tables
-        // Use theme-appropriate colors
-        const btnBg = isDark ? (b.button_bg_dark || b.button_bg) : b.button_bg;
-        const btnText = isDark ? (b.button_text_dark || b.button_text) : b.button_text;
-        const tableHeaderBg = isDark ? (b.table_header_bg_dark || b.table_header_bg) : b.table_header_bg;
-        const tableBorder = isDark ? (b.table_border_dark || b.table_border) : b.table_border;
+        // Build CSS rules for buttons and tables (values validated above via safeColor)
+        const btnBg = safeColor(isDark ? (b.button_bg_dark || b.button_bg) : b.button_bg);
+        const btnText = safeColor(isDark ? (b.button_text_dark || b.button_text) : b.button_text);
+        const tableHeaderBg = safeColor(isDark ? (b.table_header_bg_dark || b.table_header_bg) : b.table_header_bg);
+        const tableBorder = safeColor(isDark ? (b.table_border_dark || b.table_border) : b.table_border);
 
         let css = '';
 
@@ -91,8 +97,8 @@ export function useBranding(): void {
 
         // Button styling - target shadcn button variants
         if (btnBg || btnText) {
-          const bg = btnBg || 'var(--primary)';
-          const text = btnText || '#ffffff';
+          const bg = btnBg ?? 'var(--primary)';
+          const text = btnText ?? '#ffffff';
           css += `
             /* Primary buttons */
             .bg-primary,
