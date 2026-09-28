@@ -244,11 +244,6 @@ function SourcesSection({ cardId, sources, onReload }: { cardId: string; sources
 
 // ── Dataset card ──────────────────────────────────────────────────────────────
 
-type EditableDataset = Omit<Dataset, "preparations" | "measurements" | "feature_stores"> & {
-  preparations: (Omit<Preparation, "id" | "order"> & { id: string })[];
-  measurements: (Omit<Measurement, "id"> & { id: string })[];
-  feature_stores: (Omit<FeatureStore, "groups"> & { groups: (Omit<FeatureStoreGroup, "id"> & { id: string })[] })[];
-};
 
 function toDatasetCreate(ds: Dataset): DatasetCreate {
   return {
