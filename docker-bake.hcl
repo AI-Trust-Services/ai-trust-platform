@@ -37,6 +37,8 @@ group "default" {
     "db-migrate",
     "clickhouse-migrate",
     "keycloak-provision",
+    "minio",
+    "mc",
     "shell",
     "otel-rmq-bridge",
     "ai-system-registry-frontend",
@@ -197,6 +199,24 @@ target "keycloak-provision" {
   tags       = [tag("keycloak-provision")]
   cache-from = ["type=gha,scope=keycloak-provision"]
   cache-to   = ["type=gha,mode=max,scope=keycloak-provision"]
+}
+
+target "minio" {
+  context    = "./infra/minio"
+  dockerfile = "Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("minio")]
+  cache-from = ["type=gha,scope=minio"]
+  cache-to   = ["type=gha,mode=max,scope=minio"]
+}
+
+target "mc" {
+  context    = "./infra/mc"
+  dockerfile = "Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("mc")]
+  cache-from = ["type=gha,scope=mc"]
+  cache-to   = ["type=gha,mode=max,scope=mc"]
 }
 
 target "shell" {

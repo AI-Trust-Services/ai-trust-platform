@@ -19,6 +19,8 @@ clickhouse:
   nodePort: 30123
 
 minio:
+  image: ai-trust/minio:local
+  mcImage: ai-trust/mc:local
   serviceType: NodePort
   apiNodePort: 30900
   consoleNodePort: 30901
