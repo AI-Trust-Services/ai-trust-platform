@@ -357,6 +357,7 @@ Platform administration — SMTP mail service configuration, general platform se
 - `POST /v1/branding/upload/{asset_type}` — upload logo/favicon (multipart)
 - `POST /v1/branding/publish` — copy all drafts to published
 - `POST /v1/branding/discard` — reset drafts to published
+- `POST /v1/branding/reset` — delete all branding rows, revert to platform defaults
 - `GET /v1/branding/status` — check for unpublished changes
 - `GET /v1/branding/public` — published branding (no auth, for shell/MFEs)
 - `GET /v1/branding/public/asset/{key}` — serve logo binary (no auth)
