@@ -16,7 +16,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
 
 // ── Chip input for tags ───────────────────────────────────────────────────────
 
@@ -77,6 +76,7 @@ function ScalarField({ label, value, onBlur, type = "text", placeholder }: {
 // inline edit when a PATCH /metrics/:id endpoint is added.
 
 function MetricsSection({ cardId, metrics, onReload }: { cardId: string; metrics: ModelCard["metrics"]; onReload: () => void }) {
+  const [showAddRow, setShowAddRow] = useState(false);
   const [newName, setNewName] = useState("");
   const [newValue, setNewValue] = useState("");
   const [newDataset, setNewDataset] = useState("");
@@ -92,6 +92,7 @@ function MetricsSection({ cardId, metrics, onReload }: { cardId: string; metrics
       if (newDataset.trim()) body.dataset = newDataset.trim();
       await api.addMetric(cardId, body);
       setNewName(""); setNewValue(""); setNewDataset("");
+      setShowAddRow(false);
       onReload();
     } catch (e) { showToast(`Add failed: ${(e as Error).message}`, true); }
     finally { setSaving(false); }
@@ -104,7 +105,13 @@ function MetricsSection({ cardId, metrics, onReload }: { cardId: string; metrics
 
   return (
     <section>
-      <h3 className="mb-3 text-sm font-semibold">Metrics</h3>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Metrics</h3>
+        <Button variant="ghost" size="sm" className="h-6 text-xs gap-1"
+          onClick={() => { setShowAddRow(true); setNewName(""); setNewValue(""); setNewDataset(""); }}>
+          <Plus className="size-3" />Add
+        </Button>
+      </div>
       <Card className="overflow-hidden p-0">
         <table className="w-full text-sm">
           <thead>
@@ -127,17 +134,19 @@ function MetricsSection({ cardId, metrics, onReload }: { cardId: string; metrics
                 </td>
               </tr>
             ))}
-            {/* Add row */}
-            <tr className="bg-muted/30">
-              <td className="px-4 py-2"><Input className="h-7 text-xs" placeholder="name" value={newName} onChange={(e) => setNewName(e.target.value)} /></td>
-              <td className="px-4 py-2"><Input className="h-7 w-24 text-xs" placeholder="0.0" value={newValue} onChange={(e) => setNewValue(e.target.value)} /></td>
-              <td className="px-4 py-2"><Input className="h-7 text-xs" placeholder="dataset (opt)" value={newDataset} onChange={(e) => setNewDataset(e.target.value)} /></td>
-              <td className="px-4 py-2 text-right">
-                <Button size="icon" variant="ghost" className="size-7" disabled={saving} onClick={handleAdd}>
-                  {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
-                </Button>
-              </td>
-            </tr>
+            {showAddRow && (
+              <tr className="bg-muted/30">
+                <td className="px-4 py-2"><Input className="h-7 text-xs" placeholder="name" autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} /></td>
+                <td className="px-4 py-2"><Input className="h-7 w-24 text-xs" placeholder="0.0" value={newValue} onChange={(e) => setNewValue(e.target.value)} /></td>
+                <td className="px-4 py-2"><Input className="h-7 text-xs" placeholder="dataset (opt)" value={newDataset} onChange={(e) => setNewDataset(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }} /></td>
+                <td className="px-4 py-2 text-right">
+                  <Button size="icon" variant="ghost" className="size-7" disabled={saving} onClick={handleAdd}>
+                    {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                  </Button>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </Card>
@@ -146,9 +155,9 @@ function MetricsSection({ cardId, metrics, onReload }: { cardId: string; metrics
 }
 
 // ── Sources section ───────────────────────────────────────────────────────────
-// ponytail: same add-only pattern as metrics.
 
 function SourcesSection({ cardId, sources, onReload }: { cardId: string; sources: ModelCard["sources"]; onReload: () => void }) {
+  const [showAddRow, setShowAddRow] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -161,7 +170,9 @@ function SourcesSection({ cardId, sources, onReload }: { cardId: string; sources
       const body: SourceCreate = { url: newUrl.trim() };
       if (newName.trim()) body.name = newName.trim();
       await api.addSource(cardId, body);
-      setNewUrl(""); setNewName(""); onReload();
+      setNewUrl(""); setNewName("");
+      setShowAddRow(false);
+      onReload();
     } catch (e) { showToast(`Add failed: ${(e as Error).message}`, true); }
     finally { setSaving(false); }
   }
@@ -173,7 +184,13 @@ function SourcesSection({ cardId, sources, onReload }: { cardId: string; sources
 
   return (
     <section>
-      <h3 className="mb-3 text-sm font-semibold">Sources</h3>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Sources</h3>
+        <Button variant="ghost" size="sm" className="h-6 text-xs gap-1"
+          onClick={() => { setShowAddRow(true); setNewUrl(""); setNewName(""); }}>
+          <Plus className="size-3" />Add
+        </Button>
+      </div>
       <Card className="overflow-hidden p-0">
         <table className="w-full text-sm">
           <thead>
@@ -194,8 +211,10 @@ function SourcesSection({ cardId, sources, onReload }: { cardId: string; sources
                 </td>
               </tr>
             ))}
+            {showAddRow && (
             <tr className="bg-muted/30">
-              <td className="px-4 py-2"><Input className="h-7 text-xs" placeholder="https://…" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} /></td>
+              <td className="px-4 py-2"><Input className="h-7 text-xs" placeholder="https://…" autoFocus value={newUrl} onChange={(e) => setNewUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }} /></td>
               <td className="px-4 py-2"><Input className="h-7 text-xs" placeholder="name (opt)" value={newName} onChange={(e) => setNewName(e.target.value)} /></td>
               <td className="px-4 py-2 text-right">
                 <Button size="icon" variant="ghost" className="size-7" disabled={saving} onClick={handleAdd}>
@@ -203,6 +222,7 @@ function SourcesSection({ cardId, sources, onReload }: { cardId: string; sources
                 </Button>
               </td>
             </tr>
+            )}
           </tbody>
         </table>
       </Card>
