@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -27,8 +28,21 @@ ROLE_ALERT_CATEGORIES: dict[str, list[str] | None] = {
 }
 _BUILT_IN_ROLES = frozenset(ROLE_ALERT_CATEGORIES.keys())
 
+_category_cache: dict[str, tuple[list[str] | None, float]] = {}
+_CACHE_TTL = 60
+
 
 async def _allowed_categories(username: str) -> list[str] | None:
+    cached = _category_cache.get(username)
+    if cached is not None and time.monotonic() < cached[1]:
+        return cached[0]
+
+    result = await _compute_allowed_categories(username)
+    _category_cache[username] = (result, time.monotonic() + _CACHE_TTL)
+    return result
+
+
+async def _compute_allowed_categories(username: str) -> list[str] | None:
     role_objects = await fga.read_user_roles(f"user:{username}")
 
     cats: set[str] = set()
