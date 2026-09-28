@@ -46,6 +46,7 @@ async def _compute_allowed_categories(username: str) -> list[str] | None:
     role_objects = await fga.read_user_roles(f"user:{username}")
 
     cats: set[str] = set()
+    restricted = False
     custom_slugs: list[str] = []
 
     for obj in role_objects:
@@ -54,6 +55,7 @@ async def _compute_allowed_categories(username: str) -> list[str] | None:
             builtin_cats = ROLE_ALERT_CATEGORIES[slug]
             if builtin_cats is None:
                 return None
+            restricted = True
             cats.update(builtin_cats)
         else:
             custom_slugs.append(slug)
@@ -74,9 +76,10 @@ async def _compute_allowed_categories(username: str) -> list[str] | None:
             role_cats = slug_to_cats[slug]
             if role_cats is None:
                 return None
+            restricted = True
             cats.update(role_cats)
 
-    return None if not cats else list(cats)
+    return list(cats) if restricted else None
 
 
 async def _resolve_display_names(entity_ids: list[str]) -> dict[str, str]:
