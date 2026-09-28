@@ -150,19 +150,6 @@ def _has_unpublished_changes(entries: dict[str, tuple[str | None, str | None]]) 
     return False
 
 
-async def _upsert_branding(key: str, published: str | None = None, draft: str | None = None, set_draft: bool = True) -> None:
-    """Insert or update a branding entry. If set_draft=True, updates draft; else updates published."""
-    async with SessionLocal() as session:
-        existing = await session.get(Branding, key)
-        if existing:
-            if set_draft:
-                existing.draft = draft
-            else:
-                existing.published = published
-        else:
-            session.add(Branding(key=key, published=published, draft=draft if set_draft else None))
-        await session.commit()
-
 
 @router.get("", response_model=BrandingResponse)
 async def get_branding(
