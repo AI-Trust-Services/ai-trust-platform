@@ -45,6 +45,7 @@ export function useBranding(): void {
       }
 
       try {
+        clearBranding();  // wipe previous inline styles before reapplying
         const b: Branding = JSON.parse(raw);
         const root = document.documentElement;
         const isDark = localStorage.getItem(THEME_KEY) === 'dark' || root.classList.contains('dark');
