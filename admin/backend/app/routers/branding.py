@@ -1,12 +1,4 @@
-"""Branding settings API — upload logos, set colors, preview and publish.
-
-All endpoints require `iam:manage` permission. Tenant-aware: in jwt mode each
-tenant has isolated branding stored in their schema (Postgres) and bucket (MinIO).
-
-Branding is stored in a key-value table (`branding`) for flexibility — no migrations
-needed for new fields. Each key has a `published` value (what users see) and a
-`draft` value (for preview before publishing).
-"""
+"""Branding API — logos, colors, org name; draft/publish workflow."""
 from __future__ import annotations
 
 import json
