@@ -12,9 +12,14 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field, field_validator
 
 VALID_EVIDENCE_TYPES = frozenset({"document", "code", "function_is_used"})
-VALID_EVIDENCE_STATUSES = frozenset({
-    "awaiting_review", "approved", "rejected", "expired",
-})
+VALID_EVIDENCE_STATUSES = frozenset(
+    {
+        "awaiting_review",
+        "approved",
+        "rejected",
+        "expired",
+    }
+)
 
 
 class EvidenceUpdate(BaseModel):

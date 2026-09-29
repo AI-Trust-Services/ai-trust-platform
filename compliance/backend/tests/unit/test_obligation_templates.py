@@ -45,6 +45,7 @@ def test_new_id_different_prefixes():
 # obligations_for — EU AI Act High / Limited (CSV catalogue, role-aware)
 # ---------------------------------------------------------------------------
 
+
 def test_eu_high_risk_provider_count():
     # Provider is the default org_role.
     obs = obligations_for("FRM-EU-AI-ACT", "high")
@@ -74,7 +75,9 @@ def test_eu_high_risk_provider_article_refs():
 
 
 def test_eu_high_risk_deployer_article_refs():
-    refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "high", "deployer")}
+    refs = {
+        ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "high", "deployer")
+    }
     assert "Art. 26 EU AI Act" in refs
     assert "Art. 27 EU AI Act" in refs
     # Provider-only clusters must not leak into the deployer set.

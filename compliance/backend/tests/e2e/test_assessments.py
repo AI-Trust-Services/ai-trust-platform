@@ -107,22 +107,29 @@ async def test_create_assessment_rejects_decommissioned_system(
     assert r.status_code == 422
 
 
-async def test_create_assessment_allowed_for_unapproved_system(client: httpx.AsyncClient):
+async def test_create_assessment_allowed_for_unapproved_system(
+    client: httpx.AsyncClient,
+):
     # Creating an assessment is part of the registration/approval workflow itself, so
     # a system need not already be approved — draft/pending_review/rejected systems are
     # all assessable. (Approval is driven forward by the assessment lifecycle.)
     for status in ("draft", "pending_review", "rejected"):
         system = await create_system(tier="high", workflow_status=status)
-        r = await client.post("/v1/assessments", json={
-            "ai_system_id": system["id"],
-            "framework_id": "FRM-EU-AI-ACT",
-            "title": "X",
-            "type": "compliance",
-        })
+        r = await client.post(
+            "/v1/assessments",
+            json={
+                "ai_system_id": system["id"],
+                "framework_id": "FRM-EU-AI-ACT",
+                "title": "X",
+                "type": "compliance",
+            },
+        )
         assert r.status_code == 201, f"status={status} should be assessable"
 
 
-async def test_create_assessment_tier_without_obligations_yields_none(client: httpx.AsyncClient):
+async def test_create_assessment_tier_without_obligations_yields_none(
+    client: httpx.AsyncClient,
+):
     # The cluster catalogue only defines obligations for EU high/limited tiers.
     # A minimal-tier system yields zero obligations — a valid state (logged as a warning).
     system = await create_system(tier="minimal")
@@ -326,7 +333,6 @@ async def test_delete_assessment_keeps_manual_requirements(client: httpx.AsyncCl
     assert ids == [manual["id"]]
 
 
-
 # ---------------------------------------------------------------------------
 # POST /assessments/{id}/generate-obligations
 # ---------------------------------------------------------------------------
@@ -356,7 +362,9 @@ async def test_generate_obligations_importer_yields_none(client: httpx.AsyncClie
     assert len(obs) == 0
 
 
-async def test_generated_obligations_carry_cluster_id(client: httpx.AsyncClient, db_session):
+async def test_generated_obligations_carry_cluster_id(
+    client: httpx.AsyncClient, db_session
+):
     # cluster_id is internal (not exposed in the API) but must be persisted so
     # carry-forward and control generation key off it.
     from sqlalchemy import select
@@ -364,9 +372,15 @@ async def test_generated_obligations_carry_cluster_id(client: httpx.AsyncClient,
 
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
-    rows = (await db_session.execute(
-        select(Obligation).where(Obligation.assessment_id == ass["id"])
-    )).scalars().all()
+    rows = (
+        (
+            await db_session.execute(
+                select(Obligation).where(Obligation.assessment_id == ass["id"])
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert rows
     assert all(o.cluster_id for o in rows)
     assert "P-RM" in {o.cluster_id for o in rows}
@@ -403,7 +417,9 @@ async def test_generate_obligations_approved_assessment_returns_409(
     assert r.status_code == 409
 
 
-async def test_generate_obligations_prefills_from_prior_approved(client: httpx.AsyncClient):
+async def test_generate_obligations_prefills_from_prior_approved(
+    client: httpx.AsyncClient,
+):
     system = await create_system(tier="high")
 
     # First assessment — auto-generated on create. Mark one obligation not_applicable and approve.
@@ -524,14 +540,18 @@ async def test_create_assessment_auto_generates_requirements(client: httpx.Async
     # High-risk EU provider obligations (15 clusters) map to 60 Requirement templates.
     system = await create_system(tier="high")
     await create_assessment(client, system["id"])
-    requirements = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
+    requirements = (
+        await client.get(f"/v1/requirements?ai_system_id={system['id']}")
+    ).json()
     assert len(requirements) == 60
 
 
 async def test_generated_requirements_have_requirement_ref(client: httpx.AsyncClient):
     system = await create_system(tier="high")
     await create_assessment(client, system["id"])
-    requirements = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
+    requirements = (
+        await client.get(f"/v1/requirements?ai_system_id={system['id']}")
+    ).json()
     assert len(requirements) == 60
     for c in requirements:
         # Every generated requirement carries a stable requirement_ref.
@@ -584,7 +604,9 @@ async def test_prohibited_tier_generates_no_requirements(client: httpx.AsyncClie
     # banned outright, not remediated via requirements) — so no obligations and no requirements.
     system = await create_system(tier="prohibited")
     await create_assessment(client, system["id"])
-    requirements = (await client.get(f"/v1/requirements?ai_system_id={system['id']}")).json()
+    requirements = (
+        await client.get(f"/v1/requirements?ai_system_id={system['id']}")
+    ).json()
     assert len(requirements) == 0
 
 
@@ -643,7 +665,9 @@ async def test_generate_requirements_approved_assessment_returns_409(
     assert r.status_code == 409
 
 
-async def test_generate_requirements_no_obligations_returns_422(client: httpx.AsyncClient):
+async def test_generate_requirements_no_obligations_returns_422(
+    client: httpx.AsyncClient,
+):
     system = await create_system(tier="minimal")  # yields zero obligations
     ass = await create_assessment(client, system["id"])
     r = await client.post(f"/v1/assessments/{ass['id']}/generate-requirements")

@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Table, Text, func
+from sqlalchemy import (
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
@@ -41,7 +51,9 @@ class Requirement(Base):
     # carry-forward key across assessment cycles. NULL for manually-created requirements.
     # Deliberately non-unique: the same slug recurs each cycle and org-wide requirements
     # span multiple assessments.
-    requirement_ref: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    requirement_ref: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, index=True
+    )
     # Per-requirement AI Act article reference (e.g. "Art. 9 (1)(2)"), copied from the
     # source catalogue at generation. NULL for retained sets and manual requirements.
     article_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)

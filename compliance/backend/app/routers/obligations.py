@@ -49,7 +49,9 @@ async def list_obligations(
     async with SessionLocal() as session:
         # Newest generation first; catalogue order (sort_order) within a generation,
         # since all rows of one generation share the same transaction timestamp.
-        stmt = select(Obligation).order_by(Obligation.created_at.desc(), Obligation.sort_order.asc())
+        stmt = select(Obligation).order_by(
+            Obligation.created_at.desc(), Obligation.sort_order.asc()
+        )
         if assessment_id:
             stmt = stmt.where(Obligation.assessment_id == assessment_id)
         if ai_system_id:

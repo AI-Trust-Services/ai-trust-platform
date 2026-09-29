@@ -127,7 +127,9 @@ async def list_evidence(
         .scalar_subquery()
     )
     async with SessionLocal() as session:
-        stmt = select(Evidence, count_subq.label("requirement_count")).order_by(Evidence.created_at.desc())
+        stmt = select(Evidence, count_subq.label("requirement_count")).order_by(
+            Evidence.created_at.desc()
+        )
         if requirement_id:
             stmt = stmt.where(
                 exists(
@@ -157,7 +159,9 @@ async def list_evidence(
         stmt = stmt.limit(limit).offset(offset)
         rows = (await session.execute(stmt)).all()
         return [
-            EvidenceResponse.model_validate(row).model_copy(update={"requirement_count": count})
+            EvidenceResponse.model_validate(row).model_copy(
+                update={"requirement_count": count}
+            )
             for row, count in rows
         ]
 

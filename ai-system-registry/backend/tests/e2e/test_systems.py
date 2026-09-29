@@ -111,7 +111,9 @@ async def test_intake_allows_missing_assignee(client: httpx.AsyncClient):
 
 
 async def test_intake_persists_org_role(client: httpx.AsyncClient):
-    body = await _create_system(client, {"name": "Deployer System", "org_role": "deployer"})
+    body = await _create_system(
+        client, {"name": "Deployer System", "org_role": "deployer"}
+    )
     assert body["system"]["org_role"] == "deployer"
 
 
@@ -124,7 +126,11 @@ async def test_intake_defaults_org_role_to_provider(client: httpx.AsyncClient):
 async def test_intake_rejects_invalid_org_role(client: httpx.AsyncClient):
     r = await client.post(
         "/v1/intake",
-        json={"name": "Bad Role", "assignee_username": _ASSIGNEE, "org_role": "reseller"},
+        json={
+            "name": "Bad Role",
+            "assignee_username": _ASSIGNEE,
+            "org_role": "reseller",
+        },
         headers=_HEADERS,
     )
     assert r.status_code == 422

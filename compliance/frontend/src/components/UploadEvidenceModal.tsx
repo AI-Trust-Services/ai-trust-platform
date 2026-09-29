@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
 import { EVIDENCE_TYPES, evidenceTypeLabel } from "../utils";
-import type { AISystem, Assessment, Requirement, Obligation } from "../types";
+import type { AISystem, Assessment, Requirement } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
