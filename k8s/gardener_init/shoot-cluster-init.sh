@@ -190,6 +190,7 @@ echo "==> [4/5] Installing OCM controller and Flux"
 # OCM controller (github.com/open-component-model/ocm-controller) and
 # OCM CLI (github.com/open-component-model/ocm) are versioned independently.
 OCM_CONTROLLER_VERSION="v0.33.0"
+# OCM CLI version — keep in sync with publish-ocm/action.yml and build-push-deploy.yml
 OCM_CLI_VERSION="v0.50.0"
 FLUX_VERSION="v2.9.5"
 

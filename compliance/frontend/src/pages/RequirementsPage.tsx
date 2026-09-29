@@ -33,8 +33,8 @@ export default function RequirementsPage() {
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [systemsById, setSystemsById] = useState<Record<string, AISystem>>({});
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [systemFilter, setSystemFilter] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -94,8 +94,8 @@ export default function RequirementsPage() {
     const s = search.toLowerCase();
     return requirements.filter((c) =>
       (!s || c.title.toLowerCase().includes(s) || c.id.toLowerCase().includes(s)) &&
-      (!categoryFilter || c.category === categoryFilter) &&
       (!statusFilter || c.status === statusFilter) &&
+      (!categoryFilter || c.category === categoryFilter) &&
       (!systemFilter || (systemFilter === "__org__" ? !c.ai_system_id : c.ai_system_id === systemFilter))
     );
   }, [requirements, search, categoryFilter, statusFilter, systemFilter]);
@@ -199,6 +199,8 @@ export default function RequirementsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Requirement</TableHead>
+                <TableHead>Requirement ID</TableHead>
+                <TableHead>Article</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>AI System</TableHead>
                 <TableHead>Owner</TableHead>
@@ -209,10 +211,12 @@ export default function RequirementsPage() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No requirements yet.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="py-8 text-center text-muted-foreground">No requirements yet.</TableCell></TableRow>
               ) : paged.map((c) => (
                 <TableRow key={c.id} data-state={selected === c.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(c)}>
                   <TableCell><div className="font-medium text-foreground">{c.title}</div><div className="text-xs text-muted-foreground">{c.id}</div></TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{c.requirement_ref || "—"}</TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">{c.article_ref || "—"}</TableCell>
                   <TableCell className="text-[13px]">{humanize(c.category)}</TableCell>
                   <TableCell>{c.ai_system_id ? (systemsById[c.ai_system_id]?.name ?? c.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{c.owner || "—"}</TableCell>
@@ -252,7 +256,6 @@ export default function RequirementsPage() {
       <DetailPanel
         open={!!detail}
         title={detail?.title ?? ""}
-        subtitle={detail ? humanize(detail.category) : undefined}
         badge={detail ? CONTROL_STATUS_META[detail.status]?.label : undefined}
         onClose={closePanel}
       >
@@ -260,7 +263,6 @@ export default function RequirementsPage() {
           <>
             <DetailSection title="General Information">
               <DetailField label="ID">{detail.id}</DetailField>
-              <DetailField label="Category">{humanize(detail.category)}</DetailField>
               <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</DetailField>
               <DetailField label="Owner">{detail.owner || "—"}</DetailField>
               <DetailField label="Status"><StatusBadge meta={CONTROL_STATUS_META} value={detail.status} /></DetailField>

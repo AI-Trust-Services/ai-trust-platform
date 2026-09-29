@@ -52,13 +52,31 @@ export const CONTROL_CATEGORIES: string[] = [
   "incident_response", "general",
 ];
 
-export const EVIDENCE_TYPES: string[] = [
-  "document", "policy_document", "technical_doc", "test_report",
-  "monitoring_data", "approval_record", "audit_log", "training_record",
-  "certificate", "screenshot", "api_log",
-];
+export const EVIDENCE_TYPES: string[] = ["document", "code", "function_is_used"];
+
+// Display labels for evidence types (humanize would render "Function Is Used").
+export const EVIDENCE_TYPE_LABELS: Record<string, string> = {
+  document: "Document",
+  code: "Code",
+  function_is_used: "Function is used",
+};
+
+export function evidenceTypeLabel(t: string | null | undefined): string {
+  if (!t) return "—";
+  return EVIDENCE_TYPE_LABELS[t] ?? humanize(t);
+}
 
 export function humanize(s: string | null | undefined): string {
   if (!s) return "—";
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Auto-generated requirement descriptions carry an "Expected evidence: <type> —
+// <what to upload>" line from the AI Act Requirements catalogue. Extract it so the
+// upload flow can show what a requirement expects. Returns null when absent
+// (manual requirements, retained-set controls).
+export function expectedEvidence(description: string | null | undefined): string | null {
+  if (!description) return null;
+  const m = description.match(/Expected evidence:\s*([\s\S]+)$/i);
+  return m ? m[1].trim() : null;
 }

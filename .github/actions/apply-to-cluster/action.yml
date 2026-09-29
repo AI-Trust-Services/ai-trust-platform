@@ -120,7 +120,7 @@ runs:
         echo "Loaded env from $ENV_FILE (namespace=${NAMESPACE})"
 
     - name: Set up kubectl
-      uses: azure/setup-kubectl@v4
+      uses: azure/setup-kubectl@v5
 
     - name: Print Gardener OIDC vars
       shell: bash

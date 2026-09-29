@@ -98,6 +98,7 @@ class RequirementResponse(BaseModel):
         None  # not a column — set manually after model_validate
     )
     requirement_ref: str | None
+    article_ref: str | None = None
     title: str
     description: str
     category: str
