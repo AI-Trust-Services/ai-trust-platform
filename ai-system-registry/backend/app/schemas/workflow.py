@@ -1,4 +1,5 @@
 """Pydantic schemas for workflow endpoints."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -70,6 +71,7 @@ class WorkflowSubmitSectionRequest(BaseModel):
 
 class WorkflowSubAssignRequest(BaseModel):
     """Section owner hands a section to a contributor (task handoff, Model B1)."""
+
     section: Literal["business", "technical"]
     sub_assignee_username: str
     note: str | None = None
@@ -77,6 +79,7 @@ class WorkflowSubAssignRequest(BaseModel):
 
 class WorkflowSubReclaimRequest(BaseModel):
     """Section owner cancels an active sub-assignment and reclaims editing."""
+
     section: Literal["business", "technical"]
     note: str | None = None
 
@@ -84,12 +87,14 @@ class WorkflowSubReclaimRequest(BaseModel):
 class WorkflowRequestInfoRequest(BaseModel):
     """CO sends a system back for revision of one section. The recipient is derived
     from that section's owner (business_assignee / technical_assignee)."""
+
     section: Literal["business", "technical"]
     note: str
 
 
 class QuestionAssignRequest(BaseModel):
     """Section owner assigns a single questionnaire question to another user."""
+
     section: Literal["business", "technical"]
     question_key: str
     assignee_username: str
@@ -105,6 +110,7 @@ class QuestionAssignRequest(BaseModel):
 
 class QuestionUnassignRequest(BaseModel):
     """Section owner removes a per-question assignment."""
+
     section: Literal["business", "technical"]
     question_key: str
 
@@ -118,6 +124,7 @@ class QuestionUnassignRequest(BaseModel):
 
 class QuestionAnswerRequest(BaseModel):
     """Assignee marks their assigned question as answered."""
+
     section: Literal["business", "technical"]
     question_key: str
 

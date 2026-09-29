@@ -15,6 +15,7 @@ Engineer flow:
 Full round-trip:
   owner turn loop → complete → POST /v1/intake with inferred flags → tier=high
 """
+
 from __future__ import annotations
 
 import io
@@ -42,7 +43,10 @@ async def _create_system(client: httpx.AsyncClient, **extra) -> str:
 # Owner turn — POST /intake/assist/turn
 # ---------------------------------------------------------------------------
 
-async def test_owner_turn_returns_message_and_extracted_fields(client: httpx.AsyncClient):
+
+async def test_owner_turn_returns_message_and_extracted_fields(
+    client: httpx.AsyncClient,
+):
     transcript = [{"role": "assistant", "content": "Hi! Tell me about your system."}]
     fields: dict = {}
     r = await client.post(
@@ -58,14 +62,18 @@ async def test_owner_turn_returns_message_and_extracted_fields(client: httpx.Asy
     assert body["degraded"] is False
 
 
-async def test_owner_turn_reaches_complete_after_full_sequence(client: httpx.AsyncClient, monkeypatch):
+async def test_owner_turn_reaches_complete_after_full_sequence(
+    client: httpx.AsyncClient, monkeypatch
+):
     """Drive REQUIRED_FIELD_KEYS turns; stub marks complete on the last one.
 
     The default TURN_CAP (12) is below REQUIRED_FIELD_KEYS (14), so the one-shot
     chat would degrade before the stub converges. Raise the cap here so the full
     scripted sequence completes and flag inference runs.
     """
-    monkeypatch.setattr("app.routers.intake_assist.TURN_CAP", len(REQUIRED_FIELD_KEYS) + 5)
+    monkeypatch.setattr(
+        "app.routers.intake_assist.TURN_CAP", len(REQUIRED_FIELD_KEYS) + 5
+    )
     transcript = [{"role": "assistant", "content": "Hi! Describe your system."}]
     fields: dict = {}
 
@@ -108,6 +116,7 @@ async def test_owner_turn_empty_transcript_still_responds(client: httpx.AsyncCli
 async def test_owner_turn_degraded_after_turn_cap(client: httpx.AsyncClient):
     """Exceeding TURN_CAP without reaching complete triggers degraded=True."""
     from app.routers.intake_assist import TURN_CAP
+
     transcript: list[dict] = [{"role": "assistant", "content": "Go!"}]
     fields: dict = {}
 
@@ -132,6 +141,7 @@ async def test_owner_turn_degraded_after_turn_cap(client: httpx.AsyncClient):
 # Owner extract — POST /intake/assist/extract
 # ---------------------------------------------------------------------------
 
+
 async def test_owner_extract_from_text_file(client: httpx.AsyncClient):
     content = b"System: TalentMatch\nPurpose: Screens job applicants\nDepartment: HR"
     r = await client.post(
@@ -146,7 +156,9 @@ async def test_owner_extract_from_text_file(client: httpx.AsyncClient):
     assert "department" in body["extracted_fields"]
 
 
-async def test_owner_extract_unsupported_file_type_returns_400(client: httpx.AsyncClient):
+async def test_owner_extract_unsupported_file_type_returns_400(
+    client: httpx.AsyncClient,
+):
     r = await client.post(
         "/v1/intake/assist/extract",
         files={"file": ("data.csv", io.BytesIO(b"a,b,c"), "text/csv")},
@@ -186,7 +198,10 @@ async def test_owner_extract_oversized_file_returns_400(client: httpx.AsyncClien
 # Engineer turn — POST /intake/assist/engineer/{system_id}/turn
 # ---------------------------------------------------------------------------
 
-async def test_engineer_turn_returns_response_for_valid_system(client: httpx.AsyncClient):
+
+async def test_engineer_turn_returns_response_for_valid_system(
+    client: httpx.AsyncClient,
+):
     system_id = await _create_system(client)
     transcript = [{"role": "assistant", "content": "Tell me the version and provider."}]
     r = await client.post(
@@ -234,9 +249,13 @@ async def test_engineer_turn_404_on_missing_system(client: httpx.AsyncClient):
     assert r.status_code == 404
 
 
-async def test_engineer_turn_reaches_complete_and_infers_flags(client: httpx.AsyncClient, monkeypatch):
+async def test_engineer_turn_reaches_complete_and_infers_flags(
+    client: httpx.AsyncClient, monkeypatch
+):
     """Full sequence for the engineer flow — should complete and infer flags."""
-    monkeypatch.setattr("app.routers.intake_assist.TURN_CAP", len(REQUIRED_FIELD_KEYS) + 5)
+    monkeypatch.setattr(
+        "app.routers.intake_assist.TURN_CAP", len(REQUIRED_FIELD_KEYS) + 5
+    )
     system_id = await _create_system(
         client,
         intended_purpose="Screens and ranks job applicants to support recruiters.",
@@ -269,6 +288,7 @@ async def test_engineer_turn_reaches_complete_and_infers_flags(client: httpx.Asy
 # Engineer extract — POST /intake/assist/engineer/{system_id}/extract
 # ---------------------------------------------------------------------------
 
+
 async def test_engineer_extract_from_text_file(client: httpx.AsyncClient):
     system_id = await _create_system(client)
     content = b"Model: GPT-4o\nProvider: OpenAI\nVersion: 2024-11"
@@ -291,7 +311,9 @@ async def test_engineer_extract_404_on_missing_system(client: httpx.AsyncClient)
     assert r.status_code == 404
 
 
-async def test_engineer_extract_unsupported_file_type_returns_400(client: httpx.AsyncClient):
+async def test_engineer_extract_unsupported_file_type_returns_400(
+    client: httpx.AsyncClient,
+):
     system_id = await _create_system(client)
     r = await client.post(
         f"/v1/intake/assist/engineer/{system_id}/extract",
@@ -319,12 +341,17 @@ async def test_engineer_extract_oversized_file_returns_400(client: httpx.AsyncCl
 # Full round-trip: owner AI flow → POST /intake with inferred flags
 # ---------------------------------------------------------------------------
 
-async def test_full_owner_flow_registers_high_risk_system(client: httpx.AsyncClient, monkeypatch):
+
+async def test_full_owner_flow_registers_high_risk_system(
+    client: httpx.AsyncClient, monkeypatch
+):
     """Drive the owner turn loop to completion, then register with inferred flags.
 
     The stub infers is_employment_related=True, so the final tier must be 'high'.
     """
-    monkeypatch.setattr("app.routers.intake_assist.TURN_CAP", len(REQUIRED_FIELD_KEYS) + 5)
+    monkeypatch.setattr(
+        "app.routers.intake_assist.TURN_CAP", len(REQUIRED_FIELD_KEYS) + 5
+    )
     transcript = [{"role": "assistant", "content": "Tell me about your system."}]
     fields: dict = {}
     inferred_flags = None

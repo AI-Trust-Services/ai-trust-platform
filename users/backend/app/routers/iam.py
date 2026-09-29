@@ -1,4 +1,5 @@
 """GET /iam/roles — built-in roles and the permissions each grants (requires iam:manage)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends

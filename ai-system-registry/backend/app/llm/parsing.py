@@ -5,6 +5,7 @@ they wrap output in code fences, add prose, or emit trailing text. We strip the
 obvious cases; if that fails, we make ONE repair call asking the model to return
 only valid JSON, then give up with a typed LLMParseError.
 """
+
 from __future__ import annotations
 
 import json
@@ -64,12 +65,19 @@ async def parse_json_response(text: str, *, task: str = "parse") -> dict[str, An
     ]
     repaired: dict | None = None
     try:
-        repaired = await chat(repair_messages, json_mode=True, task=f"{task}_repair", max_tokens=1024)
+        repaired = await chat(
+            repair_messages, json_mode=True, task=f"{task}_repair", max_tokens=1024
+        )
         return _extract_json(repaired["text"])
     except Exception as exc:
-        logger.error("llm.parse_failed", extra={
-            "task": task,
-            "error": str(exc),
-            "repaired_snippet": repaired["text"][:200] if repaired else "(no response)",
-        })
+        logger.error(
+            "llm.parse_failed",
+            extra={
+                "task": task,
+                "error": str(exc),
+                "repaired_snippet": repaired["text"][:200]
+                if repaired
+                else "(no response)",
+            },
+        )
         raise LLMParseError(f"Could not parse LLM response for task '{task}'") from exc

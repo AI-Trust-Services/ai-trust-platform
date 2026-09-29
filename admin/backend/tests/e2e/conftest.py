@@ -20,6 +20,7 @@ What is tested:
   - Color validation (hex pattern enforcement)
   - SVG sanitization
 """
+
 from __future__ import annotations
 
 import os
@@ -236,9 +237,6 @@ async def db_session():
 # (smtp, settings, stats tests). These can be migrated to real Postgres later.
 # ---------------------------------------------------------------------------
 
-from unittest.mock import AsyncMock, MagicMock
-
-
 def _default_settings():
     """Return a MagicMock with default platform settings values."""
     row = MagicMock()
@@ -261,8 +259,46 @@ def _make_session(row=None):
     session = AsyncMock()
     session.__aenter__ = AsyncMock(return_value=session)
     session.__aexit__ = AsyncMock(return_value=False)
-    session.scalar = AsyncMock(return_value=row if row is not None else _default_settings())
+    session.scalar = AsyncMock(
+        return_value=row if row is not None else _default_settings()
+    )
     session.add = MagicMock()
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
     return session
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session", autouse=True)
+def patch_openfga_and_startup():
+    """Stub OpenFGA + startup seed for all tests."""
+    with (
+        patch(
+            "ai_trust_authorization.openfga_client.check",
+            new=AsyncMock(return_value=True),
+        ),
+        # Prevent lifespan seed from hitting the real DB
+        patch("app.startup.seed_settings_from_env", new=AsyncMock()),
+    ):
+        from app.main import app
+        from ai_trust_authorization.permissions import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: "test-user"
+        yield
+        app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def client():
+    from app.main import app
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+        timeout=10,
+    ) as ac:
+        yield ac

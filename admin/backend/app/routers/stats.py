@@ -28,14 +28,18 @@ async def _get_user_and_role_counts() -> tuple[int, int]:
         if resp.status_code == 200:
             data = resp.json()
             return data.get("user_count", 0), data.get("role_count", 0)
-        logger.warning("admin.stats.users_backend_error", extra={"status_code": resp.status_code})
+        logger.warning(
+            "admin.stats.users_backend_error", extra={"status_code": resp.status_code}
+        )
     except Exception as exc:
         logger.warning("admin.stats.fetch_failed", extra={"error": str(exc)})
     return 0, 0
 
 
 @router.get("", response_model=AdminStatsResponse)
-async def get_stats(_: str = Depends(require_permission(IAM_MANAGE))) -> AdminStatsResponse:
+async def get_stats(
+    _: str = Depends(require_permission(IAM_MANAGE)),
+) -> AdminStatsResponse:
     async with SessionLocal() as session:
         settings_row = await session.scalar(
             select(PlatformSettings).where(PlatformSettings.id == 1)
@@ -49,4 +53,3 @@ async def get_stats(_: str = Depends(require_permission(IAM_MANAGE))) -> AdminSt
         role_count=role_count,
         mail_configured=mail_configured,
     )
-

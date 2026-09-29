@@ -4,6 +4,7 @@ These exercise the pure gap-computation branches that the e2e workflow tests don
 all reach: the full_manual and manual-questionnaire skips, and the dual-storage rule
 (a business key counts as answered if EITHER its column OR its answers entry is set).
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -50,13 +51,21 @@ def _complete_ai_row():
 
 # ── business gaps ──────────────────────────────────────────────────────────────
 
+
 def test_missing_business_all_when_blank():
     missing = missing_business_keys(_row("ai", answers=None))
     # Every required business key is reported, including the two column-backed ones.
     assert set(missing) == {
-        "submission_type", "use_case_owner", "use_case_type", "department",
-        "technologies", "use_case_status", "use_case", "planned_modifications",
-        "exception_category", "sector_legislation",
+        "submission_type",
+        "use_case_owner",
+        "use_case_type",
+        "department",
+        "technologies",
+        "use_case_status",
+        "use_case",
+        "planned_modifications",
+        "exception_category",
+        "sector_legislation",
     }
 
 
@@ -74,8 +83,12 @@ def test_column_backed_key_satisfied_by_column():
 
 def test_column_backed_key_satisfied_by_answers_fallback():
     # Dual-storage: if the column is blank but the answers entry is set, it still counts.
-    row = _row("ai", department=None, use_case=None,
-               answers={**_BUSINESS_ANSWERS, "department": "Eng", "use_case": "desc"})
+    row = _row(
+        "ai",
+        department=None,
+        use_case=None,
+        answers={**_BUSINESS_ANSWERS, "department": "Eng", "use_case": "desc"},
+    )
     assert "department" not in missing_business_keys(row)
     assert "use_case" not in missing_business_keys(row)
 
@@ -88,6 +101,7 @@ def test_whitespace_only_answer_is_a_gap():
 
 # ── technical gaps ───────────────────────────────────────────────────────────────
 
+
 def test_technical_gaps_only_in_ai_mode():
     # Manual-questionnaire technical is boolean/number flags → never a gap.
     assert missing_technical_keys(_row("manual_questionnaire", answers=None)) == []
@@ -95,7 +109,9 @@ def test_technical_gaps_only_in_ai_mode():
 
 
 def test_technical_all_missing_in_ai_mode_when_blank():
-    assert set(missing_technical_keys(_row("ai", answers=None))) == set(REQUIRED_AI_TECHNICAL)
+    assert set(missing_technical_keys(_row("ai", answers=None))) == set(
+        REQUIRED_AI_TECHNICAL
+    )
 
 
 def test_technical_none_missing_when_complete():
@@ -104,6 +120,7 @@ def test_technical_none_missing_when_complete():
 
 
 # ── approval aggregate ───────────────────────────────────────────────────────────
+
 
 def test_full_manual_skips_the_gate_entirely():
     # full_manual has no questionnaire sections even with blank answers.
@@ -122,5 +139,5 @@ def test_complete_ai_system_has_no_gaps():
 
 def test_incomplete_ai_system_reports_business_and_technical():
     missing = missing_for_approval(_row("ai", answers=None))
-    assert "use_case" in missing            # business column key
-    assert "data_and_inputs" in missing     # technical key
+    assert "use_case" in missing  # business column key
+    assert "data_and_inputs" in missing  # technical key

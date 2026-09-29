@@ -1,4 +1,5 @@
 """Unit tests for admin backend Pydantic schemas."""
+
 from __future__ import annotations
 
 import pytest
@@ -12,6 +13,7 @@ from app.schemas import (
 
 
 # --- SmtpSettingsUpdate ---
+
 
 def test_smtp_update_all_defaults():
     s = SmtpSettingsUpdate()
@@ -49,6 +51,7 @@ def test_smtp_update_ssl_and_starttls_are_bool():
 
 # --- SmtpTestRequest ---
 
+
 def test_smtp_test_valid_email():
     r = SmtpTestRequest(to="admin@local.dev")
     assert str(r.to) == "admin@local.dev"
@@ -66,6 +69,7 @@ def test_smtp_test_requires_to():
 
 # --- GeneralSettingsUpdate ---
 
+
 def test_general_settings_all_optional():
     g = GeneralSettingsUpdate()
     assert g.platform_name is None
@@ -73,7 +77,9 @@ def test_general_settings_all_optional():
 
 
 def test_general_settings_with_values():
-    g = GeneralSettingsUpdate(platform_name="My Platform", support_email="support@example.com")
+    g = GeneralSettingsUpdate(
+        platform_name="My Platform", support_email="support@example.com"
+    )
     assert g.platform_name == "My Platform"
     assert g.support_email == "support@example.com"
 

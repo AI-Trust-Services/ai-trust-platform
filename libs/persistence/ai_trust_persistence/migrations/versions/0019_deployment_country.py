@@ -9,6 +9,7 @@ alpha-2) plus two universal EU-presence questions — whether the output is used
 in the EU and whether the system is placed on the EU market. All three are
 nullable so existing rows (registered before this field existed) stay valid.
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -19,9 +20,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("ai_systems", sa.Column("deployment_country", sa.String(2), nullable=True))
-    op.add_column("ai_systems", sa.Column("eu_output_usage", sa.Boolean(), nullable=True))
-    op.add_column("ai_systems", sa.Column("eu_market_placement", sa.Boolean(), nullable=True))
+    op.add_column(
+        "ai_systems", sa.Column("deployment_country", sa.String(2), nullable=True)
+    )
+    op.add_column(
+        "ai_systems", sa.Column("eu_output_usage", sa.Boolean(), nullable=True)
+    )
+    op.add_column(
+        "ai_systems", sa.Column("eu_market_placement", sa.Boolean(), nullable=True)
+    )
 
 
 def downgrade() -> None:

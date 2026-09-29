@@ -31,9 +31,11 @@ async def _is_valid_role(role_name: str) -> bool:
     if role_name in MANAGED_ROLES:
         return True
     async with SessionLocal() as session:
-        custom = (await session.execute(
-            select(CustomRole).where(CustomRole.name == role_name)
-        )).scalar_one_or_none()
+        custom = (
+            await session.execute(
+                select(CustomRole).where(CustomRole.name == role_name)
+            )
+        ).scalar_one_or_none()
     return custom is not None
 
 
@@ -43,7 +45,9 @@ async def _build_slug_map() -> dict[str, str]:
     return {row.name.lower().replace(" ", "_"): row.name for row in rows}
 
 
-async def _user_roles(username: str, slug_map: dict[str, str] | None = None) -> list[str]:
+async def _user_roles(
+    username: str, slug_map: dict[str, str] | None = None
+) -> list[str]:
     role_objects = await openfga_client.read_user_roles(f"user:{username}")
     slugs = [r.removeprefix("role:") for r in role_objects]
     custom_slugs = [s for s in slugs if s not in MANAGED_ROLES]
@@ -96,7 +100,11 @@ async def list_users(
     with admin_client(current_realm()) as kc:
         resp = kc.get("/users", params=params)
         resp.raise_for_status()
-        users = [u for u in resp.json() if not u.get("username", "").startswith("service-account-")]
+        users = [
+            u
+            for u in resp.json()
+            if not u.get("username", "").startswith("service-account-")
+        ]
 
         count_params = {"search": search} if search else {}
         count_resp = kc.get("/users/count", params=count_params)
@@ -119,7 +127,9 @@ async def list_users(
 
 
 @router.post("", response_model=UserDetail, status_code=201)
-async def invite_user(body: InviteUserRequest, _: str = Depends(require_permission("iam:manage"))):
+async def invite_user(
+    body: InviteUserRequest, _: str = Depends(require_permission("iam:manage"))
+):
     payload = {
         "username": body.username,
         "email": body.email,
@@ -127,7 +137,9 @@ async def invite_user(body: InviteUserRequest, _: str = Depends(require_permissi
         "lastName": body.lastName,
         "enabled": True,
         "emailVerified": True,
-        "credentials": [{"type": "password", "value": body.temporaryPassword, "temporary": True}],
+        "credentials": [
+            {"type": "password", "value": body.temporaryPassword, "temporary": True}
+        ],
         "attributes": {
             "department": [body.department],
             "businessUnit": [body.businessUnit],
@@ -139,7 +151,9 @@ async def invite_user(body: InviteUserRequest, _: str = Depends(require_permissi
     with admin_client(current_realm()) as kc:
         resp = kc.post("/users", json=payload)
         if resp.status_code == 409:
-            raise HTTPException(409, "A user with that username or email already exists.")
+            raise HTTPException(
+                409, "A user with that username or email already exists."
+            )
         if resp.status_code == 400:
             kc_error = resp.json()
             msg = kc_error.get("errorMessage", "Invalid user data.")
@@ -171,7 +185,9 @@ async def users_by_role(
         async with sem:
             try:
                 with admin_client(current_realm()) as kc:
-                    resp = kc.get("/users", params={"username": username, "exact": "true"})
+                    resp = kc.get(
+                        "/users", params={"username": username, "exact": "true"}
+                    )
                     resp.raise_for_status()
                     users = resp.json()
                 if not users:
@@ -183,7 +199,9 @@ async def users_by_role(
                     "lastName": u.get("lastName", ""),
                 }
             except Exception:
-                logger.warning("user.by_role_fetch_failed", extra={"username": username})
+                logger.warning(
+                    "user.by_role_fetch_failed", extra={"username": username}
+                )
                 return None
 
     fetched = await asyncio.gather(*[_fetch(u) for u in usernames])
@@ -202,7 +220,11 @@ async def get_user(user_id: str, _: str = Depends(require_permission("iam:manage
 
 
 @router.put("/{user_id}", response_model=UserDetail)
-async def update_user(user_id: str, body: UpdateUserRequest, _: str = Depends(require_permission("iam:manage"))):
+async def update_user(
+    user_id: str,
+    body: UpdateUserRequest,
+    _: str = Depends(require_permission("iam:manage")),
+):
     with admin_client(current_realm()) as kc:
         existing_resp = kc.get(f"/users/{user_id}")
         if existing_resp.status_code == 404:
@@ -211,7 +233,13 @@ async def update_user(user_id: str, body: UpdateUserRequest, _: str = Depends(re
         existing = existing_resp.json()
 
         attrs = existing.get("attributes", {})
-        for field in ("department", "businessUnit", "jobTitle", "phone", "preferredLanguage"):
+        for field in (
+            "department",
+            "businessUnit",
+            "jobTitle",
+            "phone",
+            "preferredLanguage",
+        ):
             val = getattr(body, field, None)
             if val is not None:
                 attrs[field] = [val]
@@ -232,28 +260,36 @@ async def update_user(user_id: str, body: UpdateUserRequest, _: str = Depends(re
 
 
 @router.post("/{user_id}/deactivate", response_model=UserDetail)
-async def deactivate_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
+async def deactivate_user(
+    user_id: str, _: str = Depends(require_permission("iam:manage"))
+):
     with admin_client(current_realm()) as kc:
         existing_resp = kc.get(f"/users/{user_id}")
         if existing_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
         existing_resp.raise_for_status()
         existing = existing_resp.json()
-        kc.put(f"/users/{user_id}", json={**existing, "enabled": False}).raise_for_status()
+        kc.put(
+            f"/users/{user_id}", json={**existing, "enabled": False}
+        ).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()
         return await _to_detail(updated.json())
 
 
 @router.post("/{user_id}/activate", response_model=UserDetail)
-async def activate_user(user_id: str, _: str = Depends(require_permission("iam:manage"))):
+async def activate_user(
+    user_id: str, _: str = Depends(require_permission("iam:manage"))
+):
     with admin_client(current_realm()) as kc:
         existing_resp = kc.get(f"/users/{user_id}")
         if existing_resp.status_code == 404:
             raise HTTPException(404, "User not found.")
         existing_resp.raise_for_status()
         existing = existing_resp.json()
-        kc.put(f"/users/{user_id}", json={**existing, "enabled": True}).raise_for_status()
+        kc.put(
+            f"/users/{user_id}", json={**existing, "enabled": True}
+        ).raise_for_status()
         updated = kc.get(f"/users/{user_id}")
         updated.raise_for_status()
         return await _to_detail(updated.json())
@@ -269,7 +305,9 @@ def delete_user(user_id: str, _: str = Depends(require_permission("iam:manage"))
 
 
 @router.post("/{user_id}/roles/{role_name}", response_model=UserDetail)
-async def assign_role(user_id: str, role_name: str, _: str = Depends(require_permission("iam:manage"))):
+async def assign_role(
+    user_id: str, role_name: str, _: str = Depends(require_permission("iam:manage"))
+):
     if not await _is_valid_role(role_name):
         raise HTTPException(400, f"Unknown role '{role_name}'.")
 
@@ -286,21 +324,30 @@ async def assign_role(user_id: str, role_name: str, _: str = Depends(require_per
 
     existing_fga_roles = await openfga_client.read_user_roles(f"user:{username}")
 
-    if "role:platform_administrator" in existing_fga_roles and role_name != "platform_administrator":
-        pa_members = await openfga_client.read_role_members("role:platform_administrator")
+    if (
+        "role:platform_administrator" in existing_fga_roles
+        and role_name != "platform_administrator"
+    ):
+        pa_members = await openfga_client.read_role_members(
+            "role:platform_administrator"
+        )
         if len(pa_members) <= 1:
             raise HTTPException(409, "Cannot reassign the last platform administrator.")
 
     for role_obj in existing_fga_roles:
         await openfga_client.delete_tuple(f"user:{username}", "member", role_obj)
-    await openfga_client.write_tuple(f"user:{username}", "member", _role_object(role_name))
+    await openfga_client.write_tuple(
+        f"user:{username}", "member", _role_object(role_name)
+    )
 
     logger.info("user.role_assigned", extra={"username": username, "role": role_name})
     return await _to_detail(user)
 
 
 @router.delete("/{user_id}/roles/{role_name}", response_model=UserDetail)
-async def remove_role(user_id: str, role_name: str, _: str = Depends(require_permission("iam:manage"))):
+async def remove_role(
+    user_id: str, role_name: str, _: str = Depends(require_permission("iam:manage"))
+):
     if not await _is_valid_role(role_name):
         raise HTTPException(400, f"Unknown role '{role_name}'.")
 
@@ -315,7 +362,9 @@ async def remove_role(user_id: str, role_name: str, _: str = Depends(require_per
     if not username:
         raise HTTPException(500, "Keycloak returned a user without a username.")
 
-    await openfga_client.delete_tuple(f"user:{username}", "member", _role_object(role_name))
+    await openfga_client.delete_tuple(
+        f"user:{username}", "member", _role_object(role_name)
+    )
 
     logger.info("user.role_removed", extra={"username": username, "role": role_name})
     return await _to_detail(user)

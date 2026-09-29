@@ -1,4 +1,5 @@
 """Tests for Pydantic schema validation."""
+
 from __future__ import annotations
 
 import pytest
@@ -7,6 +8,7 @@ from app.schemas import AISystemCreate, AISystemUpdate
 
 
 # --- AISystemCreate ---
+
 
 def test_create_valid_minimal():
     s = AISystemCreate(name="My System", assignee_username="eng1")
@@ -50,6 +52,7 @@ def test_create_assignee_empty_string_is_stored_as_none():
 
 
 # --- AISystemUpdate ---
+
 
 def test_update_all_none_is_valid():
     u = AISystemUpdate()

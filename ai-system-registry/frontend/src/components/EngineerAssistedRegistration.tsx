@@ -134,7 +134,6 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
   const [fields, setFields] = useState<Record<string, unknown>>({});
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [complete, setComplete] = useState(false);
   const [degraded, setDegraded] = useState(false);
 
   const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
@@ -161,19 +160,16 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
     const savedFields: Record<string, unknown> = {};
     for (const k of ALL_FIELD_KEYS) {
       if (prevConfirmed[k] === true) {
-        const v = (system as Record<string, unknown>)[k];
+        const v = (system as unknown as Record<string, unknown>)[k];
         if (v !== undefined && v !== null && v !== "") savedFields[k] = v;
       }
     }
-    const hasSavedFields = Object.keys(savedFields).length > 0;
-
     setFields(savedFields);
     setConfirmed(system.field_confirmations ?? {});
     setStep(0);
     setTranscript([{ role: "assistant", content: GREETING }]);
     setInput("");
     setBusy(false);
-    setComplete(hasSavedFields);
     setDegraded(false);
     setFlags({});
     setInferredFlags([]);
@@ -212,7 +208,6 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
       if (res.message) setTranscript([...nextTranscript, { role: "assistant", content: res.message }]);
       else setTranscript(nextTranscript);
       if (res.complete) {
-        setComplete(true);
         setDegraded(res.degraded);
         setInferredFlags(res.inferred_flags || []);
         setClassification(res.classification);
@@ -259,7 +254,6 @@ export default function EngineerAssistedRegistration({ open, system, onClose, on
       const assistMsg: ChatMessage = { role: "assistant", content: summary };
       const nextTranscript = [...currentTranscript, assistMsg];
       setTranscript(nextTranscript);
-      if (Object.keys(FIELD_LABELS).every(k => { const v = merged[k]; return v !== undefined && v !== null && v !== ""; })) setComplete(true);
       setBusy(false);
       if (Object.keys(extracted).length) await runTurn(nextTranscript, merged);
     } catch (err) {

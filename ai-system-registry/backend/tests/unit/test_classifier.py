@@ -1,4 +1,5 @@
 """Tests for the EU AI Act waterfall classifier."""
+
 from __future__ import annotations
 
 import types
@@ -45,16 +46,20 @@ def test_minimal_risk():
 
 # --- Art. 5 prohibited ---
 
-@pytest.mark.parametrize("flag", [
-    "subliminal_manipulation",
-    "exploits_vulnerability",
-    "social_scoring_public",
-    "real_time_biometric_public",
-    "emotion_recognition_workplace",
-    "untargeted_facial_scraping",
-    "predictive_policing",
-    "biometric_categorisation_sensitive",
-])
+
+@pytest.mark.parametrize(
+    "flag",
+    [
+        "subliminal_manipulation",
+        "exploits_vulnerability",
+        "social_scoring_public",
+        "real_time_biometric_public",
+        "emotion_recognition_workplace",
+        "untargeted_facial_scraping",
+        "predictive_policing",
+        "biometric_categorisation_sensitive",
+    ],
+)
 def test_prohibited_any_art5_flag(flag):
     result = classify(_base(**{flag: True}))
     assert result.tier == "prohibited"
@@ -62,34 +67,45 @@ def test_prohibited_any_art5_flag(flag):
 
 
 def test_prohibited_takes_priority_over_gpai():
-    result = classify(_base(
-        subliminal_manipulation=True,
-        is_gpai=True,
-        training_compute_flops=_GPAI_SYSTEMIC_FLOPS_THRESHOLD,
-    ))
+    result = classify(
+        _base(
+            subliminal_manipulation=True,
+            is_gpai=True,
+            training_compute_flops=_GPAI_SYSTEMIC_FLOPS_THRESHOLD,
+        )
+    )
     assert result.tier == "prohibited"
 
 
 def test_prohibited_takes_priority_over_high_risk():
-    result = classify(_base(subliminal_manipulation=True, is_biometric_identification=True))
+    result = classify(
+        _base(subliminal_manipulation=True, is_biometric_identification=True)
+    )
     assert result.tier == "prohibited"
 
 
 # --- GPAI ---
 
+
 def test_gpai_systemic_at_threshold():
-    result = classify(_base(is_gpai=True, training_compute_flops=_GPAI_SYSTEMIC_FLOPS_THRESHOLD))
+    result = classify(
+        _base(is_gpai=True, training_compute_flops=_GPAI_SYSTEMIC_FLOPS_THRESHOLD)
+    )
     assert result.tier == "gpai-systemic"
     assert "systemic" in result.basis
 
 
 def test_gpai_systemic_above_threshold():
-    result = classify(_base(is_gpai=True, training_compute_flops=_GPAI_SYSTEMIC_FLOPS_THRESHOLD * 2))
+    result = classify(
+        _base(is_gpai=True, training_compute_flops=_GPAI_SYSTEMIC_FLOPS_THRESHOLD * 2)
+    )
     assert result.tier == "gpai-systemic"
 
 
 def test_gpai_standard_below_threshold():
-    result = classify(_base(is_gpai=True, training_compute_flops=_GPAI_SYSTEMIC_FLOPS_THRESHOLD / 10))
+    result = classify(
+        _base(is_gpai=True, training_compute_flops=_GPAI_SYSTEMIC_FLOPS_THRESHOLD / 10)
+    )
     assert result.tier == "gpai-standard"
 
 
@@ -105,17 +121,21 @@ def test_gpai_takes_priority_over_high_risk():
 
 # --- Annex III high-risk ---
 
-@pytest.mark.parametrize("flag,expected_area", [
-    ("is_biometric_identification", 1),
-    ("is_critical_infrastructure", 2),
-    ("is_education_related", 3),
-    ("is_employment_related", 4),
-    ("is_credit_scoring", 5),
-    ("is_public_service", 5),
-    ("is_law_enforcement", 6),
-    ("is_migration", 7),
-    ("is_judicial_admin", 8),
-])
+
+@pytest.mark.parametrize(
+    "flag,expected_area",
+    [
+        ("is_biometric_identification", 1),
+        ("is_critical_infrastructure", 2),
+        ("is_education_related", 3),
+        ("is_employment_related", 4),
+        ("is_credit_scoring", 5),
+        ("is_public_service", 5),
+        ("is_law_enforcement", 6),
+        ("is_migration", 7),
+        ("is_judicial_admin", 8),
+    ],
+)
 def test_high_risk_annex_iii_flags(flag, expected_area):
     result = classify(_base(**{flag: True}))
     assert result.tier == "high"
@@ -129,6 +149,7 @@ def test_high_risk_takes_priority_over_limited():
 
 
 # --- Art. 50 limited ---
+
 
 def test_limited_chatbot():
     result = classify(_base(is_chatbot=True))

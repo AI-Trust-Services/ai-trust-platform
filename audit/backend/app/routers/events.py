@@ -8,7 +8,12 @@ from pydantic import BaseModel
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import AUDIT_READ
-from ai_trust_clickhouse import AUDIT_EVENTS, AUDIT_EVENTS_COLUMNS, current_tenant, get_client_for_tenant
+from ai_trust_clickhouse import (
+    AUDIT_EVENTS,
+    AUDIT_EVENTS_COLUMNS,
+    current_tenant,
+    get_client_for_tenant,
+)
 from ai_trust_logging import get_logger
 
 router = APIRouter(tags=["audit"])
@@ -16,12 +21,13 @@ logger = get_logger(__name__)
 
 # Category → resource_type mapping for KPI stats
 _CATEGORIES: dict[str, list[str]] = {
-    "system_events":         ["ai_system"],
-    "risk_and_compliance":   ["assessment", "evidence", "control", "obligation"],
+    "system_events": ["ai_system"],
+    "risk_and_compliance": ["assessment", "evidence", "control", "obligation"],
 }
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
+
 
 class AuditSystem(BaseModel):
     id: str
@@ -63,6 +69,7 @@ class AuditStatsResponse(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _row_to_summary(row) -> AuditEventSummary:
     r = dict(zip(AUDIT_EVENTS_COLUMNS, row))
     return AuditEventSummary(**{k: r[k] for k in AuditEventSummary.model_fields})
@@ -85,7 +92,12 @@ def _trend(current: int, previous: int) -> float | None:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.get("/events", response_model=AuditEventListResponse, dependencies=[Depends(require_permission(AUDIT_READ))])
+
+@router.get(
+    "/events",
+    response_model=AuditEventListResponse,
+    dependencies=[Depends(require_permission(AUDIT_READ))],
+)
 def list_events(
     ai_system_id: str | None = Query(default=None),
     action: str | None = Query(default=None),
@@ -150,7 +162,11 @@ def list_events(
     return AuditEventListResponse(total=total, items=items)
 
 
-@router.get("/events/{event_id}", response_model=AuditEventDetail, dependencies=[Depends(require_permission(AUDIT_READ))])
+@router.get(
+    "/events/{event_id}",
+    response_model=AuditEventDetail,
+    dependencies=[Depends(require_permission(AUDIT_READ))],
+)
 def get_event(event_id: str) -> AuditEventDetail:
     ch = get_client_for_tenant(current_tenant())
     _cols = ", ".join(AUDIT_EVENTS_COLUMNS)
@@ -163,7 +179,11 @@ def get_event(event_id: str) -> AuditEventDetail:
     return _row_to_detail(result.result_rows[0])
 
 
-@router.get("/systems", response_model=list[AuditSystem], dependencies=[Depends(require_permission(AUDIT_READ))])
+@router.get(
+    "/systems",
+    response_model=list[AuditSystem],
+    dependencies=[Depends(require_permission(AUDIT_READ))],
+)
 def list_systems(
     action: str | None = Query(default=None),
     resource_type: str | None = Query(default=None),
@@ -206,7 +226,11 @@ def list_systems(
     return [AuditSystem(id=r[0], name=r[1]) for r in result.result_rows]
 
 
-@router.get("/stats", response_model=AuditStatsResponse, dependencies=[Depends(require_permission(AUDIT_READ))])
+@router.get(
+    "/stats",
+    response_model=AuditStatsResponse,
+    dependencies=[Depends(require_permission(AUDIT_READ))],
+)
 def get_stats(
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
@@ -232,8 +256,10 @@ def get_stats(
     rac_ph = ", ".join(f"{{rac{i}:String}}" for i in range(len(rac_types)))
 
     params: dict = {
-        "cf": from_ts, "ct": to_ts,
-        "pf": prev_from, "pt": prev_to,
+        "cf": from_ts,
+        "ct": to_ts,
+        "pf": prev_from,
+        "pt": prev_to,
     }
     for i, v in enumerate(sys_types):
         params[f"sys{i}"] = v
@@ -257,5 +283,7 @@ def get_stats(
     return AuditStatsResponse(
         total=CategoryStat(count=cur_total, trend_pct=_trend(cur_total, prev_total)),
         system_events=CategoryStat(count=cur_sys, trend_pct=_trend(cur_sys, prev_sys)),
-        risk_and_compliance=CategoryStat(count=cur_rac, trend_pct=_trend(cur_rac, prev_rac)),
+        risk_and_compliance=CategoryStat(
+            count=cur_rac, trend_pct=_trend(cur_rac, prev_rac)
+        ),
     )
