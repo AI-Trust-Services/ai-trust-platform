@@ -1,11 +1,4 @@
-"""MinIO client for branding asset storage.
-
-Tenant-aware bucket routing: single mode uses a shared `branding-assets` bucket,
-jwt mode uses the tenant's bucket (`tenant-<org>`) with a `branding/` key prefix.
-
-The `minio` SDK is synchronous; all blocking calls are wrapped in
-``asyncio.to_thread`` so they can be awaited from async request handlers.
-"""
+"""MinIO client for branding asset storage (tenant-aware, async-wrapped)."""
 from __future__ import annotations
 
 import asyncio

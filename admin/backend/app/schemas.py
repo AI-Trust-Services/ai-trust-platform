@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr, field_validator, BeforeValidator
 
 # ── Color validation ─────────────────────────────────────────────────────────
 # Hex color pattern: #RGB, #RRGGBB, or #RRGGBBAA (3, 6, or 8 hex digits)
-_HEX_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?([0-9a-fA-F]{2})?$")
+_HEX_COLOR_PATTERN = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 
 
 def _validate_hex_color(v: str | None) -> str | None:

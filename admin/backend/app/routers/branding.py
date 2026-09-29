@@ -1,12 +1,4 @@
-"""Branding settings API — upload logos, set colors, preview and publish.
-
-All endpoints require `iam:manage` permission. Tenant-aware: in jwt mode each
-tenant has isolated branding stored in their schema (Postgres) and bucket (MinIO).
-
-Branding is stored in a key-value table (`branding`) for flexibility — no migrations
-needed for new fields. Each key has a `published` value (what users see) and a
-`draft` value (for preview before publishing).
-"""
+"""Branding API — logos, colors, org name; draft/publish workflow."""
 from __future__ import annotations
 
 import json
@@ -150,19 +142,6 @@ def _has_unpublished_changes(entries: dict[str, tuple[str | None, str | None]]) 
     return False
 
 
-async def _upsert_branding(key: str, published: str | None = None, draft: str | None = None, set_draft: bool = True) -> None:
-    """Insert or update a branding entry. If set_draft=True, updates draft; else updates published."""
-    async with SessionLocal() as session:
-        existing = await session.get(Branding, key)
-        if existing:
-            if set_draft:
-                existing.draft = draft
-            else:
-                existing.published = published
-        else:
-            session.add(Branding(key=key, published=published, draft=draft if set_draft else None))
-        await session.commit()
-
 
 @router.get("", response_model=BrandingResponse)
 async def get_branding(
@@ -271,8 +250,9 @@ async def publish_branding(
     now = datetime.now(timezone.utc)
 
     async with SessionLocal() as session:
-        # Get all branding entries with drafts
-        result = await session.execute(select(Branding).where(Branding.draft.isnot(None)))
+        # Get all branding entries with drafts — FOR UPDATE locks rows so concurrent
+        # publishes queue rather than racing on the MinIO copy/delete sequence.
+        result = await session.execute(select(Branding).where(Branding.draft.isnot(None)).with_for_update())
         entries_with_drafts = result.scalars().all()
 
         for entry in entries_with_drafts:
@@ -327,7 +307,14 @@ async def discard_branding(
 ) -> BrandingResponse:
     """Discard all draft changes and reset to published values."""
     async with SessionLocal() as session:
-        # Clear all draft fields (set to None)
+        # Delete orphaned draft logo files from MinIO before clearing the DB column
+        result = await session.execute(
+            select(Branding).where(Branding.key.in_(LOGO_FIELDS), Branding.draft.isnot(None))
+        )
+        for entry in result.scalars().all():
+            if entry.draft and "/draft/" in entry.draft:
+                await branding_storage.delete_file(entry.draft)
+
         await session.execute(update(Branding).values(draft=None))
         await session.commit()
         logger.info("branding.draft_discarded")
@@ -401,6 +388,8 @@ async def get_asset(
     _: str = Depends(require_permission(IAM_MANAGE)),
 ) -> Response:
     """Serve a branding asset from storage. Used for preview and by the shell."""
+    if not asset_key.startswith("branding/"):
+        raise HTTPException(status_code=400, detail="Invalid asset key")
     data, content_type = await branding_storage.get_file(asset_key)
     return Response(
         content=data,
@@ -432,6 +421,8 @@ async def get_public_asset(
 
     Note: In production, you may want to serve these through a CDN or nginx directly.
     """
+    if not asset_key.startswith("branding/"):
+        raise HTTPException(status_code=400, detail="Invalid asset key")
     data, content_type = await branding_storage.get_file(asset_key)
     return Response(
         content=data,

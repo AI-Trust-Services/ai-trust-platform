@@ -1122,10 +1122,10 @@
               ? (branding?.sidebar_bg_dark || branding?.sidebar_bg || '#0f172a')
               : (branding?.sidebar_bg || '#0f172a');
             const headerBgColor = dark
-              ? (branding?.header_bg_dark || '#09090b')
+              ? (branding?.header_bg_dark || branding?.header_bg || '#09090b')
               : (branding?.header_bg || '#ffffff');
             const mfeBgColor = dark
-              ? (branding?.mfe_bg_dark || '#09090b')
+              ? (branding?.mfe_bg_dark || branding?.mfe_bg || '#09090b')
               : (branding?.mfe_bg || '#ffffff');
             if (dark) {
               if (!ov) { ov = document.createElement('style'); ov.id = 'luigi-dark-overrides'; document.head.appendChild(ov); }
