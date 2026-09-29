@@ -348,6 +348,15 @@ async def reset_branding(
     now = datetime.now(timezone.utc)
 
     async with SessionLocal() as session:
+        # Delete orphaned logo files from MinIO before removing the DB rows
+        result = await session.execute(
+            select(Branding).where(Branding.key.in_(LOGO_FIELDS))
+        )
+        for entry in result.scalars().all():
+            for key_value in (entry.published, entry.draft):
+                if key_value:
+                    await branding_storage.delete_file(key_value)
+
         # Delete all branding entries except metadata (keys starting with _)
         await session.execute(delete(Branding).where(~Branding.key.like("\\_%")))
 
