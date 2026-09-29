@@ -1,4 +1,11 @@
-import type { AISystem, ModelCard, ModelCardCreate, ModelCardPatch, Metric, Source, Dataset, MetricCreate, SourceCreate, DatasetCreate, DatasetPatch, ModelSystemResponse, AISystemFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult, QuestionAssignment } from "../types";import type { SectionKey } from "../config/questionnaire";
+import type {
+  AISystem, ModelCard, ModelCardCreate, ModelCardPatch, Metric,
+  Source, Dataset, MetricCreate, SourceCreate, DatasetCreate,
+  DatasetPatch, ModelSystemResponse, AISystemFormData, PermissionsResponse, WorkflowStep,
+  UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult,
+  QuestionAssignment,
+} from "../types"
+import type { SectionKey } from "../config/questionnaire";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
@@ -146,7 +153,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
   replaceDataset: (cardId: string, dsId: string, data: DatasetCreate) =>
-    request<ModelCard>(`/model-cards/${cardId}/datasets/${dsId}`, {
+    request<null>(`/model-cards/${cardId}/datasets/${dsId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),

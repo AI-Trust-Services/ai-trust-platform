@@ -1,7 +1,7 @@
 """Seed 12 known model cards for the redesigned model_cards schema.
 
-Revision ID: 0026
-Revises: 0025
+Revision ID: 0027
+Revises: 0026
 Create Date: 2026-09-25
 """
 import sqlalchemy as sa
@@ -55,6 +55,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute(
-        "DELETE FROM model_cards WHERE id IN (%s)"
-        % ", ".join(f"'{id_}'" for id_, *_ in _SEEDS)
+        _model_cards.delete().where(
+            _model_cards.c.id.in_([id_ for id_, *_ in _SEEDS])
+        )
     )

@@ -1,7 +1,7 @@
 """Seed NVIDIA Nemotron-3-Ultra-550B model card with full dataset and benchmark data.
 
-Revision ID: 0027
-Revises: 0026
+Revision ID: 0028
+Revises: 0027
 Create Date: 2026-09-25
 """
 import sqlalchemy as sa
@@ -286,4 +286,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # CASCADE on all child FKs — deleting the card removes everything
-    op.execute(f"DELETE FROM model_cards WHERE id = '{_CARD_ID}'")
+    op.execute(_t_cards.delete().where(_t_cards.c.id == _CARD_ID))

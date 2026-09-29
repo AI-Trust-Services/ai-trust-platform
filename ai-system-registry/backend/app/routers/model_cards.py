@@ -456,24 +456,25 @@ async def patch_dataset(card_id: str, ds_id: str, body: DatasetPatch) -> Dataset
 
 
 @router.put(
-        "/model-cards/{card_id}/datasets/{ds_id}", 
-        response_model=ModelCardResponse, 
+        "/model-cards/{card_id}/datasets/{ds_id}",
+        status_code=204,
+        response_model=None,
+        responses={404: {"description": "Dataset not found"}},
         dependencies=[Depends(require_permission(SYSTEMS_WRITE))])
-async def replace_dataset(card_id: str, ds_id: str, body: DatasetCreate) -> ModelCardResponse:
+async def replace_dataset(card_id: str, ds_id: str, body: DatasetCreate) -> None:
     async with SessionLocal() as session:
         result = await session.execute(
             select(ModelCardDataset).where(
-                ModelCardDataset.id == ds_id, 
+                ModelCardDataset.id == ds_id,
                 ModelCardDataset.model_card_id == card_id)
         )
         row = result.scalar_one_or_none()
         if row is None:
             raise HTTPException(404, f"Dataset {ds_id} not found")
 
-        # Replace scalars
         for field in (
             "name", "type", "revision", "origin", "is_personal_data", "assumptions",
-            "assessment_availability", "assessment_quantity", "assessment_suitability", 
+            "assessment_availability", "assessment_quantity", "assessment_suitability",
             "potential_biases"
             ):
             setattr(row, field, getattr(body, field))
@@ -484,8 +485,7 @@ async def replace_dataset(card_id: str, ds_id: str, body: DatasetCreate) -> Mode
         await session.execute(delete(ModelCardFeatureStore).where(ModelCardFeatureStore.dataset_id == ds_id))
         await _insert_dataset_children(session, ds_id, body)
         await session.commit()
-        tree = await _load_card_tree(session, card_id)
-    return tree  # type: ignore[return-value]
+        return None
 
 
 @router.delete(
