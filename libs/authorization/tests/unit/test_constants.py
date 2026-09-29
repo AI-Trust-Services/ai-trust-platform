@@ -44,8 +44,8 @@ def test_no_duplicate_permissions_within_role():
         assert len(perms) == len(set(perms)), f"Role '{role}' has duplicate permissions"
 
 
-def test_platform_administrator_has_all_permissions():
-    assert set(ROLE_PERMISSIONS["platform_administrator"]) == set(ALL_PERMISSIONS)
+def test_platform_administrator_has_iam_manage_only():
+    assert ROLE_PERMISSIONS["platform_administrator"] == [IAM_MANAGE]
 
 
 def test_ai_engineer_permissions():
@@ -112,12 +112,11 @@ def test_executive_permissions():
     }
 
 
-def test_only_admin_can_manage_rules():
+def test_no_role_can_manage_rules():
     for role, perms in ROLE_PERMISSIONS.items():
-        if role != "platform_administrator":
-            assert ALERTS_MANAGE_RULES not in perms, (
-                f"Role '{role}' should not have {ALERTS_MANAGE_RULES}"
-            )
+        assert ALERTS_MANAGE_RULES not in perms, (
+            f"Role '{role}' should not have {ALERTS_MANAGE_RULES}"
+        )
 
 
 def test_only_admin_can_manage_iam():
