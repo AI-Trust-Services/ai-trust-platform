@@ -5,7 +5,7 @@ Platform administration — SMTP mail service configuration, general platform se
 - `/admin-home` — Platform Administration dashboard: KPI tiles (user/role counts, mail status) + cards linking to each section.
 - `/mail-service` — SMTP configuration.
 - `/admin-settings` — General platform settings.
-- Users & Roles — served by the separate IAM MFE (`/users/`).
+- Users & Roles — served by the separate IAM MFE (`/iam/`).
 
 **Data model** — single-row `platform_settings` table (migration `0020`, always `id=1`). Seeded from env vars on first startup; once a row exists the DB is the source of truth and env vars are ignored. Password is stored in the row but **never returned** by GET endpoints — only `has_password: bool` is exposed.
 
