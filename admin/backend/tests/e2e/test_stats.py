@@ -1,4 +1,5 @@
 """E2E tests for GET /v1/stats (admin dashboard KPIs)."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -12,7 +13,9 @@ from tests.e2e.conftest import _default_settings, _make_session
 def _internal_stats_resp(user_count: int, role_count: int):
     r = MagicMock()
     r.status_code = 200
-    r.json = MagicMock(return_value={"user_count": user_count, "role_count": role_count})
+    r.json = MagicMock(
+        return_value={"user_count": user_count, "role_count": role_count}
+    )
     return r
 
 
@@ -27,6 +30,7 @@ def _mock_http_client(resp):
 # ---------------------------------------------------------------------------
 # GET /v1/stats
 # ---------------------------------------------------------------------------
+
 
 async def test_get_stats_returns_counts(client: httpx.AsyncClient):
     session = _make_session()
@@ -45,7 +49,9 @@ async def test_get_stats_returns_counts(client: httpx.AsyncClient):
     assert body["mail_configured"] is True
 
 
-async def test_get_stats_mail_not_configured_when_no_smtp_host(client: httpx.AsyncClient):
+async def test_get_stats_mail_not_configured_when_no_smtp_host(
+    client: httpx.AsyncClient,
+):
     row = _default_settings()
     row.smtp_host = None
     session = _make_session(row)
@@ -61,7 +67,9 @@ async def test_get_stats_mail_not_configured_when_no_smtp_host(client: httpx.Asy
     assert r.json()["mail_configured"] is False
 
 
-async def test_get_stats_mail_not_configured_when_no_settings_row(client: httpx.AsyncClient):
+async def test_get_stats_mail_not_configured_when_no_settings_row(
+    client: httpx.AsyncClient,
+):
     session = _make_session(row=None)
     session.scalar = AsyncMock(return_value=None)
     mock_client = _mock_http_client(_internal_stats_resp(0, 0))
@@ -96,7 +104,9 @@ async def test_get_stats_users_backend_failure_returns_zeros(client: httpx.Async
     assert body["role_count"] == 0
 
 
-async def test_get_stats_calls_internal_endpoint_not_authed_routes(client: httpx.AsyncClient):
+async def test_get_stats_calls_internal_endpoint_not_authed_routes(
+    client: httpx.AsyncClient,
+):
     """Verify the internal /stats endpoint is used, not the permission-gated user/roles routes."""
     session = _make_session()
     mock_client = _mock_http_client(_internal_stats_resp(2, 7))
@@ -117,13 +127,17 @@ async def test_get_stats_calls_internal_endpoint_not_authed_routes(client: httpx
 # Authorization
 # ---------------------------------------------------------------------------
 
+
 async def test_get_stats_requires_iam_manage(client: httpx.AsyncClient):
     from app.main import app
     from ai_trust_authorization.permissions import get_current_user
 
     app.dependency_overrides[get_current_user] = lambda: "unprivileged-user"
     try:
-        with patch("ai_trust_authorization.openfga_client.check", new=AsyncMock(return_value=False)):
+        with patch(
+            "ai_trust_authorization.openfga_client.check",
+            new=AsyncMock(return_value=False),
+        ):
             r = await client.get("/v1/stats")
     finally:
         app.dependency_overrides[get_current_user] = lambda: "test-user"

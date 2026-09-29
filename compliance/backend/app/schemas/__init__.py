@@ -1,4 +1,5 @@
 """Public API for app.schemas — import from here, not from submodules."""
+
 from app.schemas.assessment import (
     AssessmentCreate,
     AssessmentDetailResponse,

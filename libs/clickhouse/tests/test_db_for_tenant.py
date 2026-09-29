@@ -5,6 +5,7 @@ shared database in a multi-tenant mode. The mode is read via _tenancy_mode(), wh
 TENANCY_MODE env var when libs/tenancy is not importable — which is exactly the case here, so
 these tests drive the fallback path deterministically.
 """
+
 import importlib
 
 import pytest

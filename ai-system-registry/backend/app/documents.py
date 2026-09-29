@@ -6,6 +6,7 @@ Text is truncated to ~15 000 chars. Returns a ParsedDoc carrying either extracte
 text or a base64 image payload, plus an ``is_image`` flag so the router picks
 LLM_MODEL vs LLM_VISION_MODEL.
 """
+
 from __future__ import annotations
 
 import base64
@@ -21,10 +22,18 @@ logger = get_logger(__name__)
 
 TEXT_EXTENSIONS = {".txt", ".md", ".markdown"}
 PDF_EXTENSIONS = {".pdf"}
-WORD_EXTENSIONS = {".docx"}  # python-docx only supports OOXML (.docx); legacy .doc is not supported
+WORD_EXTENSIONS = {
+    ".docx"
+}  # python-docx only supports OOXML (.docx); legacy .doc is not supported
 PPTX_EXTENSIONS = {".ppt", ".pptx"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-ALL_SUPPORTED = TEXT_EXTENSIONS | PDF_EXTENSIONS | WORD_EXTENSIONS | PPTX_EXTENSIONS | IMAGE_EXTENSIONS
+ALL_SUPPORTED = (
+    TEXT_EXTENSIONS
+    | PDF_EXTENSIONS
+    | WORD_EXTENSIONS
+    | PPTX_EXTENSIONS
+    | IMAGE_EXTENSIONS
+)
 
 MAX_TEXT_LENGTH = int(os.environ.get("ASSIST_MAX_TEXT_LENGTH", "15000"))
 MAX_IMAGE_SIDE = 1568  # vision-model recommended long side
@@ -106,12 +115,18 @@ def _parse_image(content: bytes, ext: str) -> tuple[str, str]:
         img = Image.open(io.BytesIO(content))
         if max(img.size) > MAX_IMAGE_SIDE:
             ratio = MAX_IMAGE_SIDE / max(img.size)
-            img = img.resize((int(img.size[0] * ratio), int(img.size[1] * ratio)), Image.Resampling.LANCZOS)
+            img = img.resize(
+                (int(img.size[0] * ratio), int(img.size[1] * ratio)),
+                Image.Resampling.LANCZOS,
+            )
             buffer = io.BytesIO()
             img.save(buffer, format="PNG" if ext == ".png" else "JPEG")
             content = buffer.getvalue()
             logger.info("document.image_resized", extra={"new_size": img.size})
-    except (OSError, _PILUnidentifiedImageError) as exc:  # resize is best-effort; fall back to original bytes
+    except (
+        OSError,
+        _PILUnidentifiedImageError,
+    ) as exc:  # resize is best-effort; fall back to original bytes
         logger.warning("document.image_resize_failed", extra={"error": str(exc)})
     return base64.standard_b64encode(content).decode("utf-8"), media_type
 
@@ -145,7 +160,9 @@ def parse_document(filename: str, content: bytes) -> ParsedDoc:
     except DocumentParseError:
         raise
     except Exception as exc:
-        logger.warning("document.parse_failed", extra={"file_name": filename, "error": str(exc)})
+        logger.warning(
+            "document.parse_failed", extra={"file_name": filename, "error": str(exc)}
+        )
         raise DocumentParseError(f"Failed to parse {ext} document: {exc}") from exc
 
     if len(text) > MAX_TEXT_LENGTH:

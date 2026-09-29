@@ -4,6 +4,7 @@ These tests bypass the Pydantic API layer and write directly to the DB via
 SQLAlchemy, confirming the constraints fire at the storage layer regardless
 of what the application does.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -30,6 +31,7 @@ async def _insert_raw(table: str, **values) -> None:
 # assessments.status
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_invalid_assessment_status_rejected():
     system = await create_system()
@@ -41,7 +43,7 @@ async def test_invalid_assessment_status_rejected():
             framework_id="FRM-EU-AI-ACT",
             title="Bad Status",
             type="compliance",
-            status="pending",   # not in the allowed set
+            status="pending",  # not in the allowed set
             notes="",
         )
 
@@ -66,6 +68,7 @@ async def test_valid_assessment_statuses_accepted():
 # obligations.status
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_invalid_obligation_status_rejected():
     system = await create_system()
@@ -89,7 +92,7 @@ async def test_invalid_obligation_status_rejected():
             title="Bad Obligation",
             article_ref="",
             description="",
-            status="open",   # not in the allowed set
+            status="open",  # not in the allowed set
             owner="",
         )
 
@@ -97,6 +100,7 @@ async def test_invalid_obligation_status_rejected():
 # ---------------------------------------------------------------------------
 # requirements.status
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_invalid_requirement_status_rejected():
@@ -109,7 +113,7 @@ async def test_invalid_requirement_status_rejected():
             title="Bad Requirement",
             description="",
             category="general",
-            status="broken",   # not in the allowed set
+            status="broken",  # not in the allowed set
             effectiveness="",
             owner="",
         )
@@ -118,6 +122,7 @@ async def test_invalid_requirement_status_rejected():
 # ---------------------------------------------------------------------------
 # evidence.status
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_invalid_evidence_status_rejected():
@@ -129,7 +134,7 @@ async def test_invalid_evidence_status_rejected():
             ai_system_id=system["id"],
             title="Bad Evidence",
             evidence_type="document",
-            status="in_review",   # not in the allowed set
+            status="in_review",  # not in the allowed set
             uploaded_by="",
             file_name="",
             file_path="",
@@ -142,6 +147,7 @@ async def test_invalid_evidence_status_rejected():
 # ai_systems.tier
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_invalid_tier_rejected():
     with pytest.raises(IntegrityError, match="ck_ai_systems_tier"):
@@ -150,13 +156,21 @@ async def test_invalid_tier_rejected():
 
 @pytest.mark.asyncio
 async def test_valid_tiers_accepted():
-    for tier in ("prohibited", "gpai-systemic", "gpai-standard", "high", "limited", "minimal"):
+    for tier in (
+        "prohibited",
+        "gpai-systemic",
+        "gpai-standard",
+        "high",
+        "limited",
+        "minimal",
+    ):
         await create_system(tier=tier)
 
 
 # ---------------------------------------------------------------------------
 # ai_systems.lifecycle
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_invalid_lifecycle_rejected():
@@ -166,5 +180,13 @@ async def test_invalid_lifecycle_rejected():
 
 @pytest.mark.asyncio
 async def test_valid_lifecycles_accepted():
-    for lifecycle in ("development", "testing", "prod_ready", "market", "service", "updated", "decommissioned"):
+    for lifecycle in (
+        "development",
+        "testing",
+        "prod_ready",
+        "market",
+        "service",
+        "updated",
+        "decommissioned",
+    ):
         await create_system(lifecycle=lifecycle)

@@ -29,8 +29,14 @@ JWT_AUDIENCE = os.environ.get("TENANCY_JWT_AUDIENCE", "").strip()
 # Verify the signature (default true). Set false ONLY in a controlled test/dev where the
 # token is unsigned — the allowlisted-issuer prefix is still enforced. Turning it off in a real
 # deployment is refused by validate() unless TENANCY_ALLOW_INSECURE_JWT=true is ALSO set (SEC-L1).
-JWT_VERIFY = os.environ.get("TENANCY_JWT_VERIFY", "true").strip().lower() not in ("0", "false", "no")
-ALLOW_INSECURE_JWT = os.environ.get("TENANCY_ALLOW_INSECURE_JWT", "").strip().lower() in ("1", "true", "yes")
+JWT_VERIFY = os.environ.get("TENANCY_JWT_VERIFY", "true").strip().lower() not in (
+    "0",
+    "false",
+    "no",
+)
+ALLOW_INSECURE_JWT = os.environ.get(
+    "TENANCY_ALLOW_INSECURE_JWT", ""
+).strip().lower() in ("1", "true", "yes")
 
 
 def validate() -> None:

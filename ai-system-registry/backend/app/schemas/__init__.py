@@ -1,4 +1,5 @@
 """Public API for app.schemas — import from here, not from submodules."""
+
 from app.schemas.ai_system import (
     AISystemCreate,
     AISystemUpdate,
@@ -43,7 +44,11 @@ from app.schemas.workflow import (
     QuestionAnswerRequest,
     QuestionAssignmentResponse,
 )
-from app.schemas.system_model import SystemModelLinkBody, SystemModelResponse, ModelSystemResponse
+from app.schemas.system_model import (
+    SystemModelLinkBody,
+    SystemModelResponse,
+    ModelSystemResponse,
+)
 
 __all__ = [
     "AISystemCreate",

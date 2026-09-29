@@ -21,6 +21,7 @@ Note: a "approved evidence must have validity_until" constraint was considered
 but not added — some evidence types (policies, architecture decisions) are
 legitimately evergreen. That is an application-layer concern, not a DB invariant.
 """
+
 from alembic import op
 
 revision = "0007"

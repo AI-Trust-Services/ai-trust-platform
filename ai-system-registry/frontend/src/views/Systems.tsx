@@ -203,7 +203,6 @@ export default function Systems() {
                     <div className="font-medium">{s.name}</div>
                     <div className="text-xs text-muted-foreground">
                       {s.id} · v{s.version || "1.0.0"}
-                      {s.model_id && <> · <span className="text-[var(--brand)]">{modelName(s.model_id)}</span></>}
                     </div>
                   </TableCell>
                   <TableCell>{workflowStatusBadge(s.workflow_status)}</TableCell>

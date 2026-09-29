@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="-")
 
 _RESERVED = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()) | {
-    "message", "asctime",
+    "message",
+    "asctime",
 }
 
 

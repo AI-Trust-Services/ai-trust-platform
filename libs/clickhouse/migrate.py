@@ -74,7 +74,9 @@ def run() -> None:
         for statement in _statements(_retarget(path.read_text())):
             client.command(statement)
 
-        client.insert(f"{_TARGET_DB}.schema_migrations", [[version]], column_names=["version"])
+        client.insert(
+            f"{_TARGET_DB}.schema_migrations", [[version]], column_names=["version"]
+        )
         log.info("[%s] Applied %s", _TARGET_DB, version)
 
     log.info("Migrations complete for '%s'", _TARGET_DB)

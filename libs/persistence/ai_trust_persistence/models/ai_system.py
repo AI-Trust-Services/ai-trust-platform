@@ -52,8 +52,12 @@ class AISystem(Base):
     # {"version": true, "provider": false, ...} — merged via PATCH, never replaced wholesale.
     field_confirmations: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
 
-    lifecycle: Mapped[str] = mapped_column(String(30), default="development", index=True)
-    compliance: Mapped[float] = mapped_column(Float, default=0.0)  # 0.0–100.0 percentage
+    lifecycle: Mapped[str] = mapped_column(
+        String(30), default="development", index=True
+    )
+    compliance: Mapped[float] = mapped_column(
+        Float, default=0.0
+    )  # 0.0–100.0 percentage
 
     subliminal_manipulation: Mapped[bool] = mapped_column(Boolean, default=False)
     exploits_vulnerability: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -62,7 +66,9 @@ class AISystem(Base):
     emotion_recognition_workplace: Mapped[bool] = mapped_column(Boolean, default=False)
     untargeted_facial_scraping: Mapped[bool] = mapped_column(Boolean, default=False)
     predictive_policing: Mapped[bool] = mapped_column(Boolean, default=False)
-    biometric_categorisation_sensitive: Mapped[bool] = mapped_column(Boolean, default=False)
+    biometric_categorisation_sensitive: Mapped[bool] = mapped_column(
+        Boolean, default=False
+    )
 
     is_biometric_identification: Mapped[bool] = mapped_column(Boolean, default=False)
     is_critical_infrastructure: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -80,22 +86,36 @@ class AISystem(Base):
     is_chatbot: Mapped[bool] = mapped_column(Boolean, default=False)
     generates_synthetic_content: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    workflow_status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+    workflow_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="draft"
+    )
     # Top-level registration mode: "ai" | "manual_questionnaire" | "full_manual".
-    registration_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="ai")
+    registration_mode: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="ai"
+    )
     assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    compliance_officer_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    business_assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    technical_assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    compliance_officer_username: Mapped[str | None] = mapped_column(
+        String(200), nullable=True
+    )
+    business_assignee_username: Mapped[str | None] = mapped_column(
+        String(200), nullable=True
+    )
+    technical_assignee_username: Mapped[str | None] = mapped_column(
+        String(200), nullable=True
+    )
     # While workflow_status == "info_requested", which section the compliance officer
     # asked to be revised ("business" | "technical"). Null otherwise. Governs which
     # section the contributor may edit and which questions they see on bounce-back.
-    info_requested_section: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    info_requested_section: Mapped[str | None] = mapped_column(
+        String(30), nullable=True
+    )
     questionnaire_answers: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
     # Full-manual supporting docs: a JSON array of {filename, minio_key, uploaded_at}.
     registration_documents: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

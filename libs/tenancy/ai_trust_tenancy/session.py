@@ -44,7 +44,9 @@ def install_tenant_scoping(engine) -> None:
     sync_engine = getattr(engine, "sync_engine", engine)
 
     @event.listens_for(sync_engine, "begin")
-    def _set_tenant_on_begin(conn):  # conn: a raw DBAPI-level connection wrapper (asyncpg)
+    def _set_tenant_on_begin(
+        conn,
+    ):  # conn: a raw DBAPI-level connection wrapper (asyncpg)
         tenant = tenant_id_var.get()
         if tenant and _SAFE_TENANT.match(tenant):
             # Schema-per-tenant with a HARD, DB-enforced wall:
@@ -79,5 +81,7 @@ def install_tenant_scoping(engine) -> None:
             conn.exec_driver_sql("RESET ROLE")
             conn.exec_driver_sql("SET search_path = public")
         except Exception:
-            log.warning("tenant.reset_failed — invalidating pool connection to prevent role leak")
+            log.warning(
+                "tenant.reset_failed — invalidating pool connection to prevent role leak"
+            )
             raise  # re-raise so SQLAlchemy invalidates and discards this connection
