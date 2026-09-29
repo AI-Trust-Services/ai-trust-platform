@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Table, Text, func
+from sqlalchemy import (
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
@@ -19,20 +29,31 @@ class Requirement(Base):
 
     id: Mapped[str] = mapped_column(String(30), primary_key=True)
     obligation_id: Mapped[str] = mapped_column(
-        String(30), ForeignKey("obligations.id", ondelete="CASCADE"), nullable=False, index=True
+        String(30),
+        ForeignKey("obligations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     assessment_id: Mapped[str] = mapped_column(
-        String(30), ForeignKey("assessments.id", ondelete="CASCADE"), nullable=False, index=True
+        String(30),
+        ForeignKey("assessments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     # Denormalized from obligation for efficient evidence filtering.
     ai_system_id: Mapped[str | None] = mapped_column(
-        String(20), ForeignKey("ai_systems.id", ondelete="SET NULL"), nullable=True, index=True
+        String(20),
+        ForeignKey("ai_systems.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     # Stable slug ("{article_ref}:{slug}") for auto-generated requirements; used as the
     # carry-forward key across assessment cycles. NULL for manually-created requirements.
     # Deliberately non-unique: the same slug recurs each cycle and org-wide requirements
     # span multiple assessments.
-    requirement_ref: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    requirement_ref: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, index=True
+    )
     # Per-requirement AI Act article reference (e.g. "Art. 9 (1)(2)"), copied from the
     # source catalogue at generation. NULL for retained sets and manual requirements.
     article_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -47,7 +68,9 @@ class Requirement(Base):
     # be shown in catalogue order (created_at ties within one generation txn).
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

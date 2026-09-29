@@ -11,6 +11,7 @@ Requires:
 
 The suite auto-skips if Postgres is not reachable.
 """
+
 from __future__ import annotations
 
 import os
@@ -44,9 +45,12 @@ _ALEMBIC_BIN = Path(__file__).parents[2] / ".venv" / "bin" / "alembic"
 def _pg_reachable() -> bool:
     try:
         conn = psycopg2.connect(
-            host=_PG_HOST, port=_PG_PORT,
-            user=_PG_USER, password=_PG_PASSWORD,
-            dbname="postgres", connect_timeout=3,
+            host=_PG_HOST,
+            port=_PG_PORT,
+            user=_PG_USER,
+            password=_PG_PASSWORD,
+            dbname="postgres",
+            connect_timeout=3,
         )
         conn.close()
         return True
@@ -56,8 +60,10 @@ def _pg_reachable() -> bool:
 
 def _ensure_test_db() -> None:
     conn = psycopg2.connect(
-        host=_PG_HOST, port=_PG_PORT,
-        user=_PG_USER, password=_PG_PASSWORD,
+        host=_PG_HOST,
+        port=_PG_PORT,
+        user=_PG_USER,
+        password=_PG_PASSWORD,
         dbname="postgres",
     )
     conn.autocommit = True
@@ -79,8 +85,10 @@ def _run_migrations() -> None:
 
 def _truncate() -> None:
     conn = psycopg2.connect(
-        host=_PG_HOST, port=_PG_PORT,
-        user=_PG_USER, password=_PG_PASSWORD,
+        host=_PG_HOST,
+        port=_PG_PORT,
+        user=_PG_USER,
+        password=_PG_PASSWORD,
         dbname=_TEST_DB,
     )
     conn.autocommit = True
@@ -94,7 +102,9 @@ def _truncate() -> None:
 def e2e_setup():
     """Auto-skip if Postgres unreachable; otherwise create DB and run migrations."""
     if not _pg_reachable():
-        pytest.skip("Postgres not reachable at localhost:5432 — start Docker Compose first")
+        pytest.skip(
+            "Postgres not reachable at localhost:5432 — start Docker Compose first"
+        )
     _ensure_test_db()
     _run_migrations()
     os.environ["DATABASE_URL"] = _TEST_DATABASE_URL
@@ -128,12 +138,14 @@ def truncate_tables():
     # without stale identity-map cache from the previous test
     from ai_trust_persistence.database import engine
     import asyncio
+
     asyncio.get_event_loop().run_until_complete(engine.dispose())
 
 
 @pytest_asyncio.fixture
 async def client():
     from app.main import app
+
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",

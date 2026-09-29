@@ -156,12 +156,14 @@ def _verify_and_decode(token: str) -> dict | None:
         # Escape hatch (test/dev only): trust the allowlisted-issuer token without sig check.
         try:
             import jwt
+
             return jwt.decode(token, options={"verify_signature": False})
         except Exception:
             return None
 
     try:
         import jwt
+
         signing_key = _jwks_client_for(issuer).get_signing_key_from_jwt(token)
         options = {"verify_aud": bool(JWT_AUDIENCE)}
         return jwt.decode(
@@ -173,7 +175,10 @@ def _verify_and_decode(token: str) -> dict | None:
             options=options,
         )
     except Exception as e:
-        log.warning("tenant.jwt_verify_failed", extra={"error": type(e).__name__, "detail": str(e)})
+        log.warning(
+            "tenant.jwt_verify_failed",
+            extra={"error": type(e).__name__, "detail": str(e)},
+        )
         return None  # signature/expiry/issuer/JWKS failure → fail-closed
 
 

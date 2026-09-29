@@ -1,24 +1,35 @@
 """E2E tests for /v1/requirements."""
+
 from __future__ import annotations
 
 import httpx
 
-from tests.e2e.conftest import create_assessment, create_requirement, create_evidence, create_obligation, create_system
+from tests.e2e.conftest import (
+    create_assessment,
+    create_requirement,
+    create_evidence,
+    create_obligation,
+    create_system,
+)
 
 
 # ---------------------------------------------------------------------------
 # POST /requirements
 # ---------------------------------------------------------------------------
 
+
 async def test_create_requirement_returns_201(client: httpx.AsyncClient):
     system = await create_system()
     ass = await create_assessment(client, system["id"])
     obl = await create_obligation(client, ass["id"])
-    r = await client.post("/v1/requirements", json={
-        "obligation_id": obl["id"],
-        "title": "My Requirement",
-        "category": "documentation",
-    })
+    r = await client.post(
+        "/v1/requirements",
+        json={
+            "obligation_id": obl["id"],
+            "title": "My Requirement",
+            "category": "documentation",
+        },
+    )
     assert r.status_code == 201
     body = r.json()
     assert body["id"].startswith("REQ-")
@@ -29,17 +40,21 @@ async def test_create_requirement_returns_201(client: httpx.AsyncClient):
 
 
 async def test_create_requirement_404_on_missing_obligation(client: httpx.AsyncClient):
-    r = await client.post("/v1/requirements", json={
-        "obligation_id": "OBL-NOTFOUND",
-        "title": "X",
-        "category": "general",
-    })
+    r = await client.post(
+        "/v1/requirements",
+        json={
+            "obligation_id": "OBL-NOTFOUND",
+            "title": "X",
+            "category": "general",
+        },
+    )
     assert r.status_code == 404
 
 
 # ---------------------------------------------------------------------------
 # GET /requirements
 # ---------------------------------------------------------------------------
+
 
 async def test_list_requirements_for_obligation(client: httpx.AsyncClient):
     system = await create_system()
@@ -69,6 +84,7 @@ async def test_list_requirements_filter_by_evidence(client: httpx.AsyncClient):
 # GET /requirements/{id}
 # ---------------------------------------------------------------------------
 
+
 async def test_get_requirement_returns_detail(client: httpx.AsyncClient):
     req = await create_requirement(client)
     r = await client.get(f"/v1/requirements/{req['id']}")
@@ -88,6 +104,7 @@ async def test_get_requirement_404_on_missing(client: httpx.AsyncClient):
 # PUT /requirements/{id}
 # ---------------------------------------------------------------------------
 
+
 async def test_update_requirement_title(client: httpx.AsyncClient):
     req = await create_requirement(client)
     r = await client.put(f"/v1/requirements/{req['id']}", json={"title": "Updated"})
@@ -97,7 +114,9 @@ async def test_update_requirement_title(client: httpx.AsyncClient):
 
 async def test_update_requirement_status(client: httpx.AsyncClient):
     req = await create_requirement(client)
-    r = await client.put(f"/v1/requirements/{req['id']}", json={"status": "under_review"})
+    r = await client.put(
+        f"/v1/requirements/{req['id']}", json={"status": "under_review"}
+    )
     assert r.status_code == 200
     assert r.json()["status"] == "under_review"
 
@@ -110,6 +129,7 @@ async def test_update_requirement_404_on_missing(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # DELETE /requirements/{id}
 # ---------------------------------------------------------------------------
+
 
 async def test_delete_requirement(client: httpx.AsyncClient):
     req = await create_requirement(client)
@@ -126,6 +146,7 @@ async def test_delete_requirement_404_on_missing(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # Cascade: deleting a requirement refreshes the obligation
 # ---------------------------------------------------------------------------
+
 
 async def test_delete_requirement_cascades_obligation_status(client: httpx.AsyncClient):
     """Deleting the only requirement on an obligation reverts it to 'applicable'."""

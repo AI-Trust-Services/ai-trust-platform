@@ -3,6 +3,7 @@
 Postgres holds the registry (ai_systems, model_cards); ClickHouse holds span
 telemetry (otel.gen_ai_spans). The three endpoints join across both stores.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -40,6 +41,7 @@ def _model(**kwargs) -> ModelCard:
 # Health
 # ---------------------------------------------------------------------------
 
+
 async def test_health_returns_ok(client: httpx.AsyncClient):
     r = await client.get("/health")
     assert r.status_code == 200
@@ -51,6 +53,7 @@ async def test_health_returns_ok(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # GET /monitoring/services
 # ---------------------------------------------------------------------------
+
 
 async def test_services_empty_when_no_spans(client: httpx.AsyncClient):
     r = await client.get("/v1/services")
@@ -91,10 +94,12 @@ async def test_services_returns_only_registered_and_orders_by_span_count(
     client: httpx.AsyncClient,
 ):
     async with SessionLocal() as session:
-        session.add_all([
-            _sys(id="SYS-REG10001", name="Busy System"),
-            _sys(id="SYS-REG20002", name="Quiet System"),
-        ])
+        session.add_all(
+            [
+                _sys(id="SYS-REG10001", name="Busy System"),
+                _sys(id="SYS-REG20002", name="Quiet System"),
+            ]
+        )
         await session.commit()
 
     # Busy has more spans than Quiet; an orphan should never appear.
@@ -113,6 +118,7 @@ async def test_services_returns_only_registered_and_orders_by_span_count(
 # ---------------------------------------------------------------------------
 # GET /monitoring/signals
 # ---------------------------------------------------------------------------
+
 
 async def test_signals_empty_registry_returns_zeroed_shape(client: httpx.AsyncClient):
     # No registered systems at all → early return with zeroed KPIs.
@@ -188,9 +194,7 @@ async def test_signals_valid_windows_accepted(client: httpx.AsyncClient):
     insert_span("SYS-SIG40004")
 
     for window in ("15m", "1h", "6h", "24h"):
-        r = await client.get(
-            f"/v1/signals?service=SYS-SIG40004&window={window}"
-        )
+        r = await client.get(f"/v1/signals?service=SYS-SIG40004&window={window}")
         assert r.status_code == 200, window
         assert r.json()["kpis"]["total_inferences"] == 1, window
 
@@ -198,6 +202,7 @@ async def test_signals_valid_windows_accepted(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # GET /monitoring/stats — empty
 # ---------------------------------------------------------------------------
+
 
 async def test_stats_empty_db(client: httpx.AsyncClient):
     r = await client.get("/v1/stats")
@@ -218,7 +223,11 @@ async def test_stats_empty_db(client: httpx.AsyncClient):
     assert body["by_model_type"] == {}
     assert body["by_model_provider"] == {}
     assert body["compliance_histogram"] == {
-        "0–20": 0, "20–40": 0, "40–60": 0, "60–80": 0, "80–100": 0
+        "0–20": 0,
+        "20–40": 0,
+        "40–60": 0,
+        "60–80": 0,
+        "80–100": 0,
     }
     assert body["recent"] == []
 
@@ -227,14 +236,17 @@ async def test_stats_empty_db(client: httpx.AsyncClient):
 # GET /monitoring/stats — KPI counts
 # ---------------------------------------------------------------------------
 
+
 async def test_stats_kpi_counts(client: httpx.AsyncClient):
     async with SessionLocal() as session:
-        session.add_all([
-            _sys(tier="prohibited", compliance=10.0),
-            _sys(tier="prohibited", compliance=90.0),
-            _sys(tier="high", compliance=40.0),
-            _sys(tier="minimal", compliance=80.0),
-        ])
+        session.add_all(
+            [
+                _sys(tier="prohibited", compliance=10.0),
+                _sys(tier="prohibited", compliance=90.0),
+                _sys(tier="high", compliance=40.0),
+                _sys(tier="minimal", compliance=80.0),
+            ]
+        )
         await session.commit()
 
     r = await client.get("/v1/stats")
@@ -250,6 +262,7 @@ async def test_stats_kpi_counts(client: httpx.AsyncClient):
 # GET /monitoring/stats — distributions
 # ---------------------------------------------------------------------------
 
+
 async def test_stats_by_tier(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         session.add_all([_sys(tier="minimal"), _sys(tier="minimal"), _sys(tier="high")])
@@ -261,11 +274,13 @@ async def test_stats_by_tier(client: httpx.AsyncClient):
 
 async def test_stats_by_type_and_autonomy(client: httpx.AsyncClient):
     async with SessionLocal() as session:
-        session.add_all([
-            _sys(system_type="application", autonomy_level="decision_support"),
-            _sys(system_type="application", autonomy_level="autonomous"),
-            _sys(system_type="model", autonomy_level="autonomous"),
-        ])
+        session.add_all(
+            [
+                _sys(system_type="application", autonomy_level="decision_support"),
+                _sys(system_type="application", autonomy_level="autonomous"),
+                _sys(system_type="model", autonomy_level="autonomous"),
+            ]
+        )
         await session.commit()
 
     r = await client.get("/v1/stats")
@@ -276,29 +291,37 @@ async def test_stats_by_type_and_autonomy(client: httpx.AsyncClient):
 
 async def test_stats_compliance_histogram(client: httpx.AsyncClient):
     async with SessionLocal() as session:
-        session.add_all([
-            _sys(compliance=10.0),   # 0–20
-            _sys(compliance=25.0),   # 20–40
-            _sys(compliance=50.0),   # 40–60
-            _sys(compliance=70.0),   # 60–80
-            _sys(compliance=90.0),   # 80–100
-            _sys(compliance=100.0),  # 80–100
-        ])
+        session.add_all(
+            [
+                _sys(compliance=10.0),  # 0–20
+                _sys(compliance=25.0),  # 20–40
+                _sys(compliance=50.0),  # 40–60
+                _sys(compliance=70.0),  # 60–80
+                _sys(compliance=90.0),  # 80–100
+                _sys(compliance=100.0),  # 80–100
+            ]
+        )
         await session.commit()
 
     r = await client.get("/v1/stats")
     assert r.json()["compliance_histogram"] == {
-        "0–20": 1, "20–40": 1, "40–60": 1, "60–80": 1, "80–100": 2
+        "0–20": 1,
+        "20–40": 1,
+        "40–60": 1,
+        "60–80": 1,
+        "80–100": 2,
     }
 
 
 async def test_stats_compliance_by_tier(client: httpx.AsyncClient):
     async with SessionLocal() as session:
-        session.add_all([
-            _sys(tier="high", compliance=40.0),
-            _sys(tier="high", compliance=60.0),
-            _sys(tier="minimal", compliance=80.0),
-        ])
+        session.add_all(
+            [
+                _sys(tier="high", compliance=40.0),
+                _sys(tier="high", compliance=60.0),
+                _sys(tier="minimal", compliance=80.0),
+            ]
+        )
         await session.commit()
 
     r = await client.get("/v1/stats")
@@ -311,13 +334,16 @@ async def test_stats_compliance_by_tier(client: httpx.AsyncClient):
 # GET /monitoring/stats — model card stats
 # ---------------------------------------------------------------------------
 
+
 async def test_stats_model_card_distributions(client: httpx.AsyncClient):
     async with SessionLocal() as session:
-        session.add_all([
-            _model(model_type="llm", provider="OpenAI", open_weights=False),
-            _model(model_type="llm", provider="Anthropic", open_weights=True),
-            _model(model_type="vision", provider="OpenAI", open_weights=True),
-        ])
+        session.add_all(
+            [
+                _model(model_type="llm", provider="OpenAI", open_weights=False),
+                _model(model_type="llm", provider="Anthropic", open_weights=True),
+                _model(model_type="vision", provider="OpenAI", open_weights=True),
+            ]
+        )
         await session.commit()
 
     r = await client.get("/v1/stats")
@@ -331,6 +357,7 @@ async def test_stats_model_card_distributions(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # GET /monitoring/stats — recent
 # ---------------------------------------------------------------------------
+
 
 async def test_stats_recent_returns_latest_10_ordered(client: httpx.AsyncClient):
     # Commit each row in its own transaction so server_default=now() yields
@@ -346,20 +373,30 @@ async def test_stats_recent_returns_latest_10_ordered(client: httpx.AsyncClient)
     assert recent[0]["name"] == "System 11"
     assert recent[-1]["name"] == "System 02"
     for entry in recent:
-        assert {"id", "name", "tier", "lifecycle", "compliance", "created_at"} <= entry.keys()
+        assert {
+            "id",
+            "name",
+            "tier",
+            "lifecycle",
+            "compliance",
+            "created_at",
+        } <= entry.keys()
 
 
 # ---------------------------------------------------------------------------
 # GET /monitoring/stats — lifecycle filter
 # ---------------------------------------------------------------------------
 
+
 async def test_stats_lifecycle_filter_narrows_counts(client: httpx.AsyncClient):
     async with SessionLocal() as session:
-        session.add_all([
-            _sys(lifecycle="market", tier="high"),
-            _sys(lifecycle="market", tier="minimal"),
-            _sys(lifecycle="development", tier="high"),
-        ])
+        session.add_all(
+            [
+                _sys(lifecycle="market", tier="high"),
+                _sys(lifecycle="market", tier="minimal"),
+                _sys(lifecycle="development", tier="high"),
+            ]
+        )
         await session.commit()
 
     r = await client.get("/v1/stats?lifecycle=market")

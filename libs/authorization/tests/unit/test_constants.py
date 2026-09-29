@@ -2,13 +2,21 @@ from ai_trust_authorization.constants import (
     ALL_PERMISSIONS,
     RELATION_BY_PERMISSION,
     ROLE_PERMISSIONS,
-    ALERTS_READ, ALERTS_HANDLE, ALERTS_MANAGE_RULES,
-    ASSESSMENTS_READ, ASSESSMENTS_WRITE, ASSESSMENTS_APPROVE,
+    ALERTS_READ,
+    ALERTS_HANDLE,
+    ALERTS_MANAGE_RULES,
+    ASSESSMENTS_READ,
+    ASSESSMENTS_WRITE,
+    ASSESSMENTS_APPROVE,
     AUDIT_READ,
-    EVIDENCE_READ, EVIDENCE_WRITE, EVIDENCE_APPROVE,
+    EVIDENCE_READ,
+    EVIDENCE_WRITE,
+    EVIDENCE_APPROVE,
     IAM_MANAGE,
     MONITORING_READ,
-    SYSTEMS_READ, SYSTEMS_WRITE, SYSTEMS_APPROVE,
+    SYSTEMS_READ,
+    SYSTEMS_WRITE,
+    SYSTEMS_APPROVE,
 )
 
 
@@ -36,16 +44,20 @@ def test_no_duplicate_permissions_within_role():
         assert len(perms) == len(set(perms)), f"Role '{role}' has duplicate permissions"
 
 
-def test_platform_administrator_has_all_permissions():
-    assert set(ROLE_PERMISSIONS["platform_administrator"]) == set(ALL_PERMISSIONS)
+def test_platform_administrator_has_iam_manage_only():
+    assert ROLE_PERMISSIONS["platform_administrator"] == [IAM_MANAGE]
 
 
 def test_ai_engineer_permissions():
     assert set(ROLE_PERMISSIONS["ai_engineer"]) == {
-        SYSTEMS_READ, SYSTEMS_WRITE,
-        ASSESSMENTS_READ, ASSESSMENTS_WRITE,
-        EVIDENCE_READ, EVIDENCE_WRITE,
-        ALERTS_READ, ALERTS_HANDLE,
+        SYSTEMS_READ,
+        SYSTEMS_WRITE,
+        ASSESSMENTS_READ,
+        ASSESSMENTS_WRITE,
+        EVIDENCE_READ,
+        EVIDENCE_WRITE,
+        ALERTS_READ,
+        ALERTS_HANDLE,
         MONITORING_READ,
         AUDIT_READ,
     }
@@ -53,19 +65,30 @@ def test_ai_engineer_permissions():
 
 def test_ai_compliance_officer_permissions():
     assert set(ROLE_PERMISSIONS["ai_compliance_officer"]) == {
-        SYSTEMS_READ, SYSTEMS_APPROVE,
-        ASSESSMENTS_READ, ASSESSMENTS_WRITE, ASSESSMENTS_APPROVE,
-        EVIDENCE_READ, EVIDENCE_WRITE, EVIDENCE_APPROVE,
-        ALERTS_READ, ALERTS_HANDLE,
+        SYSTEMS_READ,
+        SYSTEMS_APPROVE,
+        ASSESSMENTS_READ,
+        ASSESSMENTS_WRITE,
+        ASSESSMENTS_APPROVE,
+        EVIDENCE_READ,
+        EVIDENCE_WRITE,
+        EVIDENCE_APPROVE,
+        ALERTS_READ,
+        ALERTS_HANDLE,
         AUDIT_READ,
     }
 
 
 def test_business_owner_permissions():
     assert set(ROLE_PERMISSIONS["business_owner"]) == {
-        SYSTEMS_READ, SYSTEMS_WRITE, SYSTEMS_APPROVE,
-        ASSESSMENTS_READ, ASSESSMENTS_WRITE,
-        EVIDENCE_READ, EVIDENCE_WRITE, EVIDENCE_APPROVE,
+        SYSTEMS_READ,
+        SYSTEMS_WRITE,
+        SYSTEMS_APPROVE,
+        ASSESSMENTS_READ,
+        ASSESSMENTS_WRITE,
+        EVIDENCE_READ,
+        EVIDENCE_WRITE,
+        EVIDENCE_APPROVE,
         ALERTS_READ,
     }
 
@@ -89,12 +112,11 @@ def test_executive_permissions():
     }
 
 
-def test_only_admin_can_manage_rules():
+def test_no_role_can_manage_rules():
     for role, perms in ROLE_PERMISSIONS.items():
-        if role != "platform_administrator":
-            assert ALERTS_MANAGE_RULES not in perms, (
-                f"Role '{role}' should not have {ALERTS_MANAGE_RULES}"
-            )
+        assert ALERTS_MANAGE_RULES not in perms, (
+            f"Role '{role}' should not have {ALERTS_MANAGE_RULES}"
+        )
 
 
 def test_only_admin_can_manage_iam():

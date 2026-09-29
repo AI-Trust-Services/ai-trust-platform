@@ -1,4 +1,4 @@
-import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult, QuestionAssignment } from "../types";
+import type { AISystem, ModelCard, AISystemFormData, ModelCardFormData, PermissionsResponse, WorkflowStep, UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult, QuestionAssignment, SystemModelResponse, ModelSystemResponse } from "../types";
 import type { SectionKey } from "../config/questionnaire";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;

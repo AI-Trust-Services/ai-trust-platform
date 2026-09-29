@@ -1,0 +1,54 @@
+name: "Pre-merge check: unit tests"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  unit-tests:
+    name: "Pre-merge check: unit tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run unit tests for all components
+        env:
+          DATABASE_URL: "postgresql+asyncpg://ci:ci@localhost/ci"
+        run: |
+          COMPONENTS=(
+            admin/backend
+            ai-system-registry/backend
+            alerts/backend
+            audit/backend
+            audit-flush-worker
+            compliance/backend
+            consumers/clickhouse-consumer
+            decision-trace-analyzer/backend
+            libs/authorization
+            monitoring/backend
+            otel-pipeline/rmq-bridge
+            overview/backend
+            policy-checker-worker
+            users/backend
+          )
+          FAILED=()
+          for component in "${COMPONENTS[@]}"; do
+            echo "::group::$component"
+            if (cd "$component" && make setup && make test-unit); then
+              echo "✓ $component passed"
+            else
+              echo "✗ $component FAILED"
+              FAILED+=("$component")
+            fi
+            echo "::endgroup::"
+          done
+          if [ ${#FAILED[@]} -gt 0 ]; then
+            echo ""
+            echo "Failed:"
+            for f in "${FAILED[@]}"; do echo "  - $f"; done
+            exit 1
+          fi

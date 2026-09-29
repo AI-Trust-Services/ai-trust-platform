@@ -6,7 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text, select
 
 from ai_trust_authorization import require_permission
-from ai_trust_authorization.constants import ALERTS_READ, ALERTS_HANDLE, ALERTS_MANAGE_RULES
+from ai_trust_authorization.constants import (
+    ALERTS_READ,
+    ALERTS_HANDLE,
+    ALERTS_MANAGE_RULES,
+)
 from ai_trust_clickhouse import ch_command, ch_query
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
@@ -31,7 +35,9 @@ async def _resolve_display_names(entity_ids: list[str]) -> dict[str, str]:
 
 def _enrich(rows: list[dict], name_map: dict[str, str]) -> list[dict]:
     for row in rows:
-        row["entity_display_name"] = name_map.get(row.get("entity_id", ""), row.get("entity_id", ""))
+        row["entity_display_name"] = name_map.get(
+            row.get("entity_id", ""), row.get("entity_id", "")
+        )
     return rows
 
 
@@ -50,7 +56,9 @@ async def get_active_alerts() -> list[dict]:
             multiIf(severity='error', 0, severity='warning', 1, 2) ASC,
             triggered_at DESC
     """)
-    entity_ids = [r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"]
+    entity_ids = [
+        r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"
+    ]
     name_map = await _resolve_display_names(entity_ids)
     logger.info("alerts.active_fetched", extra={"count": len(rows)})
     return _enrich(rows, name_map)
@@ -71,7 +79,9 @@ async def get_alert_history() -> list[dict]:
         ORDER BY triggered_at DESC
         LIMIT 100
     """)
-    entity_ids = [r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"]
+    entity_ids = [
+        r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"
+    ]
     name_map = await _resolve_display_names(entity_ids)
     logger.info("alerts.history_fetched", extra={"count": len(rows)})
     return _enrich(rows, name_map)
@@ -80,9 +90,15 @@ async def get_alert_history() -> list[dict]:
 @router.get("/rules", dependencies=[Depends(require_permission(ALERTS_READ))])
 async def get_alert_rules() -> list[dict]:
     async with SessionLocal() as session:
-        rules = (await session.execute(
-            select(AlertRule).order_by(AlertRule.category, AlertRule.name)
-        )).scalars().all()
+        rules = (
+            (
+                await session.execute(
+                    select(AlertRule).order_by(AlertRule.category, AlertRule.name)
+                )
+            )
+            .scalars()
+            .all()
+        )
     return [
         {
             "id": r.id,
@@ -115,7 +131,10 @@ async def get_alert_count() -> dict:
     return {"count": count}
 
 
-@router.post("/events/{event_id}/handle", dependencies=[Depends(require_permission(ALERTS_HANDLE))])
+@router.post(
+    "/events/{event_id}/handle",
+    dependencies=[Depends(require_permission(ALERTS_HANDLE))],
+)
 async def handle_alert_event(event_id: str) -> dict:
     """Mark an event-based alert as handled — moves to history permanently."""
     now = datetime.now(timezone.utc)
@@ -129,7 +148,10 @@ async def handle_alert_event(event_id: str) -> dict:
     return {"status": "handled", "event_id": event_id}
 
 
-@router.post("/rules/{rule_id}/toggle", dependencies=[Depends(require_permission(ALERTS_MANAGE_RULES))])
+@router.post(
+    "/rules/{rule_id}/toggle",
+    dependencies=[Depends(require_permission(ALERTS_MANAGE_RULES))],
+)
 async def toggle_alert_rule(rule_id: str) -> dict:
     """Enable or disable an alert rule."""
     async with SessionLocal() as session:
@@ -140,11 +162,16 @@ async def toggle_alert_rule(rule_id: str) -> dict:
         rule.enabled = not rule.enabled
         await session.commit()
         await session.refresh(rule)
-    logger.info("alerts.rule_toggled", extra={"rule_id": rule_id, "enabled": rule.enabled})
+    logger.info(
+        "alerts.rule_toggled", extra={"rule_id": rule_id, "enabled": rule.enabled}
+    )
     return {"rule_id": rule_id, "enabled": rule.enabled}
 
 
-@router.post("/events/{event_id}/approve-model", dependencies=[Depends(require_permission(ALERTS_HANDLE))])
+@router.post(
+    "/events/{event_id}/approve-model",
+    dependencies=[Depends(require_permission(ALERTS_HANDLE))],
+)
 async def approve_model_change(event_id: str) -> dict:
     """Approve a model change — marks event as handled and updates the service baseline."""
     rows = await ch_query(
@@ -179,11 +206,17 @@ async def approve_model_change(event_id: str) -> dict:
         if result.rowcount == 0:
             raise HTTPException(404, f"No baseline found for service '{service_name}'")
         await session.commit()
-    logger.info("alerts.model_approved", extra={"event_id": event_id, "service": service_name, "new_model": new_model})
+    logger.info(
+        "alerts.model_approved",
+        extra={"event_id": event_id, "service": service_name, "new_model": new_model},
+    )
     return {"status": "approved", "event_id": event_id, "new_model": new_model}
 
 
-@router.post("/events/{event_id}/reject-model", dependencies=[Depends(require_permission(ALERTS_HANDLE))])
+@router.post(
+    "/events/{event_id}/reject-model",
+    dependencies=[Depends(require_permission(ALERTS_HANDLE))],
+)
 async def reject_model_change(event_id: str) -> dict:
     """Reject a model change — marks event as handled, baseline unchanged."""
     now = datetime.now(timezone.utc)

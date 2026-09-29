@@ -1,4 +1,5 @@
 """Pydantic v2 schemas for AI System ↔ Model Card links."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field

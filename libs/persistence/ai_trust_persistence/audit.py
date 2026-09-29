@@ -22,14 +22,16 @@ def log_audit_event(
     changes: dict | None = None,
     source: str = "ui",
 ) -> None:
-    session.add(AuditEvent(
-        id=_new_audit_id(),
-        actor_username=actor,
-        action=action,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        ai_system_id=ai_system_id,
-        ai_system_name=ai_system_name,
-        changes=changes or {},
-        source=source,
-    ))
+    session.add(
+        AuditEvent(
+            id=_new_audit_id(),
+            actor_username=actor,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            ai_system_id=ai_system_id,
+            ai_system_name=ai_system_name,
+            changes=changes or {},
+            source=source,
+        )
+    )
