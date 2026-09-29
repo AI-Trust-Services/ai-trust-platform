@@ -15,10 +15,12 @@ MinIO env vars are set at module level (before any import) so minio_client.py
 module-level code does not crash. MinIO functions are patched to no-ops in
 e2e_setup so no real MinIO instance is needed.
 """
+
 from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -35,8 +37,8 @@ os.environ.setdefault("MINIO_REGION", "us-east-1")
 # before any test runs (and before SessionLocal is first used).
 _PG_USER = os.environ.get("POSTGRES_USER", "postgres")
 _PG_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "postgres")
-_PG_HOST = "localhost"
-_PG_PORT = 5432
+_PG_HOST = os.environ.get("POSTGRES_HOST", "localhost")
+_PG_PORT = int(os.environ.get("POSTGRES_PORT", "5432"))
 _TEST_DB = "ai_trust_test"
 _TEST_DATABASE_URL = (
     f"postgresql+asyncpg://{_PG_USER}:{_PG_PASSWORD}@{_PG_HOST}:{_PG_PORT}/{_TEST_DB}"
@@ -70,15 +72,17 @@ import pytest_asyncio
 import httpx
 
 _ALEMBIC_INI = Path(__file__).parents[4] / "libs" / "persistence" / "alembic.ini"
-_ALEMBIC_BIN = Path(__file__).parents[2] / ".venv" / "bin" / "alembic"
 
 
 def _pg_reachable() -> bool:
     try:
         conn = psycopg2.connect(
-            host=_PG_HOST, port=_PG_PORT,
-            user=_PG_USER, password=_PG_PASSWORD,
-            dbname="postgres", connect_timeout=3,
+            host=_PG_HOST,
+            port=_PG_PORT,
+            user=_PG_USER,
+            password=_PG_PASSWORD,
+            dbname="postgres",
+            connect_timeout=3,
         )
         conn.close()
         return True
@@ -88,8 +92,10 @@ def _pg_reachable() -> bool:
 
 def _ensure_test_db() -> None:
     conn = psycopg2.connect(
-        host=_PG_HOST, port=_PG_PORT,
-        user=_PG_USER, password=_PG_PASSWORD,
+        host=_PG_HOST,
+        port=_PG_PORT,
+        user=_PG_USER,
+        password=_PG_PASSWORD,
         dbname="postgres",
     )
     conn.autocommit = True
@@ -103,7 +109,7 @@ def _ensure_test_db() -> None:
 
 def _run_migrations() -> None:
     subprocess.run(
-        [str(_ALEMBIC_BIN), "-c", str(_ALEMBIC_INI), "upgrade", "head"],
+        [sys.executable, "-m", "alembic", "-c", str(_ALEMBIC_INI), "upgrade", "head"],
         env={**os.environ, "DATABASE_URL": _TEST_DATABASE_URL},
         check=True,
     )
@@ -111,8 +117,10 @@ def _run_migrations() -> None:
 
 def _truncate() -> None:
     conn = psycopg2.connect(
-        host=_PG_HOST, port=_PG_PORT,
-        user=_PG_USER, password=_PG_PASSWORD,
+        host=_PG_HOST,
+        port=_PG_PORT,
+        user=_PG_USER,
+        password=_PG_PASSWORD,
         dbname=_TEST_DB,
     )
     conn.autocommit = True
@@ -129,8 +137,8 @@ def _truncate() -> None:
     )
     # frameworks is excluded — seeded by migration, never modified by tests.
     cur.execute(
-        "TRUNCATE ai_systems, assessments, obligations, controls, evidence, "
-        "control_obligations, evidence_controls, evidence_obligations, "
+        "TRUNCATE ai_systems, assessments, obligations, requirements, evidence, "
+        "evidence_requirements, "
         "service_model_baselines RESTART IDENTITY CASCADE"
     )
     cur.close()
@@ -141,7 +149,9 @@ def _truncate() -> None:
 def e2e_setup():
     """Auto-skip if Postgres unreachable; patch MinIO to no-ops for all tests."""
     if not _pg_reachable():
-        pytest.skip("Postgres not reachable at localhost:5432 — start Docker Compose first")
+        pytest.skip(
+            f"Postgres not reachable at {_PG_HOST}:{_PG_PORT} — start Docker Compose first"
+        )
     _ensure_test_db()
     _run_migrations()
     os.environ["DATABASE_URL"] = _TEST_DATABASE_URL
@@ -151,8 +161,16 @@ def e2e_setup():
 
     with (
         patch("app.minio_client.ensure_bucket", new_callable=AsyncMock),
-        patch("app.minio_client.upload_file", new=AsyncMock(return_value="evidence/EVD-TEST/file.pdf")),
-        patch("app.minio_client.get_presigned_url", new=AsyncMock(return_value="http://localhost:9000/evidence-files/evidence/EVD-TEST/file.pdf")),
+        patch(
+            "app.minio_client.upload_file",
+            new=AsyncMock(return_value="evidence/EVD-TEST/file.pdf"),
+        ),
+        patch(
+            "app.minio_client.get_presigned_url",
+            new=AsyncMock(
+                return_value="http://localhost:9000/evidence-files/evidence/EVD-TEST/file.pdf"
+            ),
+        ),
         patch("app.minio_client.delete_file", new_callable=AsyncMock),
     ):
         # Bypass OpenFGA for e2e tests — no OpenFGA instance is available.
@@ -178,6 +196,7 @@ async def truncate_tables():
 @pytest_asyncio.fixture
 async def client():
     from app.main import app
+
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",
@@ -190,6 +209,7 @@ async def client():
 async def db_session():
     """Bare AsyncSession for cascade tests. truncate_tables handles cleanup."""
     from sqlalchemy.ext.asyncio import AsyncSession
+
     session = AsyncSession(_test_engine)
     try:
         yield session
@@ -211,7 +231,10 @@ async def db_session():
 # Shared helper functions
 # ---------------------------------------------------------------------------
 
-async def create_system(name: str = "Test System", tier: str = "minimal", **kwargs) -> dict:
+
+async def create_system(
+    name: str = "Test System", tier: str = "minimal", **kwargs
+) -> dict:
     """Insert an AI system directly into the DB (compliance app has no intake endpoint).
 
     Defaults ``workflow_status`` to ``approved`` because assessments can only be created
@@ -227,10 +250,17 @@ async def create_system(name: str = "Test System", tier: str = "minimal", **kwar
         session.add(row)
         await session.commit()
         await session.refresh(row)
-        return {"id": row.id, "name": row.name, "tier": row.tier, "lifecycle": row.lifecycle}
+        return {
+            "id": row.id,
+            "name": row.name,
+            "tier": row.tier,
+            "lifecycle": row.lifecycle,
+        }
 
 
-async def create_assessment(client: httpx.AsyncClient, system_id: str, **kwargs) -> dict:
+async def create_assessment(
+    client: httpx.AsyncClient, system_id: str, **kwargs
+) -> dict:
     payload = {
         "ai_system_id": system_id,
         "framework_id": "FRM-EU-AI-ACT",
@@ -243,7 +273,9 @@ async def create_assessment(client: httpx.AsyncClient, system_id: str, **kwargs)
     return r.json()
 
 
-async def create_obligation(client: httpx.AsyncClient, assessment_id: str, **kwargs) -> dict:
+async def create_obligation(
+    client: httpx.AsyncClient, assessment_id: str, **kwargs
+) -> dict:
     payload = {
         "assessment_id": assessment_id,
         "title": "Test Obligation",
@@ -254,22 +286,48 @@ async def create_obligation(client: httpx.AsyncClient, assessment_id: str, **kwa
     return r.json()
 
 
-async def create_control(client: httpx.AsyncClient, system_id: str | None = None, **kwargs) -> dict:
+async def create_requirement(
+    client: httpx.AsyncClient,
+    obligation_id: str | None = None,
+    **kwargs,
+) -> dict:
+    """Create a requirement. obligation_id is required by the backend.
+
+    When obligation_id is omitted the helper auto-creates a system, an assessment,
+    and an obligation so callers that only care about having *a* requirement don't
+    need to do the setup themselves.
+    """
+    if obligation_id is None:
+        sys = await create_system()
+        ass = await create_assessment(client, sys["id"])
+        obl = await create_obligation(client, ass["id"])
+        obligation_id = obl["id"]
     payload = {
-        "title": "Test Control",
+        "obligation_id": obligation_id,
+        "title": "Test Requirement",
         "category": "general",
         **kwargs,
     }
-    if system_id:
-        payload["ai_system_id"] = system_id
-    r = await client.post("/v1/controls", json=payload)
+    r = await client.post("/v1/requirements", json=payload)
     assert r.status_code == 201, r.text
     return r.json()
 
 
-async def create_evidence(client: httpx.AsyncClient, **kwargs) -> dict:
-    """Creates evidence without a file. At least one link target required."""
-    data = {"title": "Test Evidence", "evidence_type": "document", **kwargs}
+async def create_evidence(
+    client: httpx.AsyncClient,
+    requirement_ids: list[str] | None = None,
+    **kwargs,
+) -> dict:
+    """Creates evidence without a file. Auto-creates a requirement when none given."""
+    if requirement_ids is None:
+        req = await create_requirement(client)
+        requirement_ids = [req["id"]]
+    data: dict = {
+        "title": kwargs.pop("title", "Test Evidence"),
+        "evidence_type": kwargs.pop("evidence_type", "document"),
+        **{k: str(v) for k, v in kwargs.items() if v is not None},
+        "requirement_ids": requirement_ids,
+    }
     r = await client.post("/v1/evidence", data=data)
     assert r.status_code == 201, r.text
     return r.json()

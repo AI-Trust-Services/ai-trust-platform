@@ -6,6 +6,7 @@ are not_applicable, etc.
 
 Each test uses the db_session fixture (rollback after test — no truncate needed).
 """
+
 from __future__ import annotations
 
 from sqlalchemy import insert
@@ -14,17 +15,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai_trust_persistence.models import (
     AISystem,
     Assessment,
-    Control,
     Obligation,
-    control_obligations,
-    evidence_controls,
+    Requirement,
+    evidence_requirements,
 )
 from ai_trust_persistence.models.evidence import Evidence
 from app.cascade import (
     refresh_assessment_score,
-    refresh_control_effectiveness,
+    refresh_requirement_effectiveness,
     refresh_obligation,
-    refresh_obligations_for_control,
+    refresh_obligations_for_requirement,
     sync_system_compliance,
 )
 from app.ids import new_id
@@ -33,6 +33,7 @@ from app.ids import new_id
 # ---------------------------------------------------------------------------
 # Helpers — insert rows directly without HTTP
 # ---------------------------------------------------------------------------
+
 
 async def _system(session: AsyncSession, tier: str = "minimal") -> AISystem:
     row = AISystem(id=new_id("SYS"), name="Cascade Test System", tier=tier)
@@ -55,7 +56,9 @@ async def _assessment(session: AsyncSession, system: AISystem) -> Assessment:
     return row
 
 
-async def _obligation(session: AsyncSession, assessment: Assessment, status: str = "applicable") -> Obligation:
+async def _obligation(
+    session: AsyncSession, assessment: Assessment, status: str = "applicable"
+) -> Obligation:
     row = Obligation(
         id=new_id("OBL"),
         assessment_id=assessment.id,
@@ -69,11 +72,18 @@ async def _obligation(session: AsyncSession, assessment: Assessment, status: str
     return row
 
 
-async def _control(session: AsyncSession, system: AISystem, status: str = "under_review") -> Control:
-    row = Control(
-        id=new_id("CTL"),
+async def _requirement(
+    session: AsyncSession,
+    system: AISystem,
+    obligation: Obligation,
+    status: str = "under_review",
+) -> Requirement:
+    row = Requirement(
+        id=new_id("REQ"),
+        obligation_id=obligation.id,
+        assessment_id=obligation.assessment_id,
         ai_system_id=system.id,
-        title="Test Control",
+        title="Test Requirement",
         category="general",
         status=status,
         effectiveness="medium",
@@ -100,117 +110,133 @@ async def _evidence(session: AsyncSession, status: str = "awaiting_review") -> E
     return row
 
 
-async def _link_evidence_control(session: AsyncSession, evidence_id: str, control_id: str) -> None:
+async def _link_evidence_requirement(
+    session: AsyncSession, evidence_id: str, requirement_id: str
+) -> None:
     await session.execute(
-        insert(evidence_controls).values(evidence_id=evidence_id, control_id=control_id)
-    )
-    await session.flush()
-
-
-async def _link_control_obligation(session: AsyncSession, control_id: str, obligation_id: str) -> None:
-    await session.execute(
-        insert(control_obligations).values(control_id=control_id, obligation_id=obligation_id)
+        insert(evidence_requirements).values(
+            evidence_id=evidence_id, requirement_id=requirement_id
+        )
     )
     await session.flush()
 
 
 # ---------------------------------------------------------------------------
-# refresh_control_effectiveness
+# refresh_requirement_effectiveness
 # ---------------------------------------------------------------------------
 
-async def test_approved_evidence_promotes_control_to_fulfilled(db_session: AsyncSession):
+
+async def test_approved_evidence_promotes_requirement_to_fulfilled(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
-    ctl = await _control(db_session, system, status="under_review")
+    ass = await _assessment(db_session, system)
+    obl = await _obligation(db_session, ass)
+    req = await _requirement(db_session, system, obl, status="under_review")
     evd = await _evidence(db_session, status="approved")
-    await _link_evidence_control(db_session, evd.id, ctl.id)
+    await _link_evidence_requirement(db_session, evd.id, req.id)
 
-    await refresh_control_effectiveness(db_session, ctl.id)
+    await refresh_requirement_effectiveness(db_session, req.id)
 
-    assert ctl.status == "fulfilled"
+    assert req.status == "fulfilled"
 
 
-async def test_no_approved_evidence_leaves_non_fulfilled_control_unchanged(db_session: AsyncSession):
+async def test_no_approved_evidence_leaves_non_fulfilled_requirement_unchanged(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
-    ctl = await _control(db_session, system, status="under_review")
+    ass = await _assessment(db_session, system)
+    obl = await _obligation(db_session, ass)
+    req = await _requirement(db_session, system, obl, status="under_review")
     evd = await _evidence(db_session, status="awaiting_review")
-    await _link_evidence_control(db_session, evd.id, ctl.id)
+    await _link_evidence_requirement(db_session, evd.id, req.id)
 
-    await refresh_control_effectiveness(db_session, ctl.id)
+    await refresh_requirement_effectiveness(db_session, req.id)
 
-    assert ctl.status == "under_review"
+    assert req.status == "under_review"
 
 
-async def test_removing_approved_evidence_demotes_fulfilled_control(db_session: AsyncSession):
-    """Control promoted to fulfilled, then its evidence is rejected → should demote."""
+async def test_removing_approved_evidence_demotes_fulfilled_requirement(
+    db_session: AsyncSession,
+):
+    """Requirement promoted to fulfilled, then its evidence is rejected → should demote."""
     system = await _system(db_session)
-    ctl = await _control(db_session, system, status="fulfilled")
-    evd = await _evidence(db_session, status="rejected")
-    await _link_evidence_control(db_session, evd.id, ctl.id)
+    ass = await _assessment(db_session, system)
+    obl = await _obligation(db_session, ass)
+    req = await _requirement(db_session, system, obl, status="fulfilled")
+    evd = await _evidence(db_session, status="awaiting_review")
+    await _link_evidence_requirement(db_session, evd.id, req.id)
 
-    await refresh_control_effectiveness(db_session, ctl.id)
+    await refresh_requirement_effectiveness(db_session, req.id)
 
-    assert ctl.status == "planned"
+    assert req.status == "planned"
 
 
-async def test_locked_control_deactivated_is_not_changed(db_session: AsyncSession):
-    """Deactivated control must never be auto-promoted, even with approved evidence."""
+async def test_locked_requirement_deactivated_is_not_changed(db_session: AsyncSession):
+    """Deactivated requirement must never be auto-promoted, even with approved evidence."""
     system = await _system(db_session)
-    ctl = await _control(db_session, system, status="deactivated")
+    ass = await _assessment(db_session, system)
+    obl = await _obligation(db_session, ass)
+    req = await _requirement(db_session, system, obl, status="deactivated")
     evd = await _evidence(db_session, status="approved")
-    await _link_evidence_control(db_session, evd.id, ctl.id)
+    await _link_evidence_requirement(db_session, evd.id, req.id)
 
-    await refresh_control_effectiveness(db_session, ctl.id)
+    await refresh_requirement_effectiveness(db_session, req.id)
 
-    assert ctl.status == "deactivated"
+    assert req.status == "deactivated"
 
 
-async def test_locked_control_ineffective_is_not_changed(db_session: AsyncSession):
+async def test_locked_requirement_ineffective_is_not_changed(db_session: AsyncSession):
     system = await _system(db_session)
-    ctl = await _control(db_session, system, status="ineffective")
+    ass = await _assessment(db_session, system)
+    obl = await _obligation(db_session, ass)
+    req = await _requirement(db_session, system, obl, status="ineffective")
     evd = await _evidence(db_session, status="approved")
-    await _link_evidence_control(db_session, evd.id, ctl.id)
+    await _link_evidence_requirement(db_session, evd.id, req.id)
 
-    await refresh_control_effectiveness(db_session, ctl.id)
+    await refresh_requirement_effectiveness(db_session, req.id)
 
-    assert ctl.status == "ineffective"
+    assert req.status == "ineffective"
 
 
-async def test_missing_control_is_silently_ignored(db_session: AsyncSession):
+async def test_missing_requirement_is_silently_ignored(db_session: AsyncSession):
     # Should not raise
-    await refresh_control_effectiveness(db_session, "CTL-DOES-NOT-EXIST")
+    await refresh_requirement_effectiveness(db_session, "REQ-DOES-NOT-EXIST")
 
 
 # ---------------------------------------------------------------------------
 # refresh_obligation
 # ---------------------------------------------------------------------------
 
-async def test_all_fulfilled_controls_fulfill_obligation(db_session: AsyncSession):
+
+async def test_all_fulfilled_requirements_fulfill_obligation(db_session: AsyncSession):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass)
-    ctl = await _control(db_session, system, status="fulfilled")
-    await _link_control_obligation(db_session, ctl.id, obl.id)
+    await _requirement(db_session, system, obl, status="fulfilled")
 
     await refresh_obligation(db_session, obl.id)
 
     assert obl.status == "fulfilled"
 
 
-async def test_mixed_control_statuses_set_obligation_in_progress(db_session: AsyncSession):
+async def test_mixed_requirement_statuses_set_obligation_in_progress(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass)
-    ctl1 = await _control(db_session, system, status="fulfilled")
-    ctl2 = await _control(db_session, system, status="under_review")
-    await _link_control_obligation(db_session, ctl1.id, obl.id)
-    await _link_control_obligation(db_session, ctl2.id, obl.id)
+    await _requirement(db_session, system, obl, status="fulfilled")
+    await _requirement(db_session, system, obl, status="under_review")
 
     await refresh_obligation(db_session, obl.id)
 
     assert obl.status == "in_progress"
 
 
-async def test_no_controls_reverts_obligation_to_applicable(db_session: AsyncSession):
+async def test_no_requirements_reverts_obligation_to_applicable(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass, status="in_progress")
@@ -224,8 +250,7 @@ async def test_locked_not_applicable_obligation_not_changed(db_session: AsyncSes
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass, status="not_applicable")
-    ctl = await _control(db_session, system, status="fulfilled")
-    await _link_control_obligation(db_session, ctl.id, obl.id)
+    await _requirement(db_session, system, obl, status="fulfilled")
 
     await refresh_obligation(db_session, obl.id)
 
@@ -236,8 +261,7 @@ async def test_locked_overdue_obligation_not_changed(db_session: AsyncSession):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     obl = await _obligation(db_session, ass, status="overdue")
-    ctl = await _control(db_session, system, status="fulfilled")
-    await _link_control_obligation(db_session, ctl.id, obl.id)
+    await _requirement(db_session, system, obl, status="fulfilled")
 
     await refresh_obligation(db_session, obl.id)
 
@@ -248,7 +272,10 @@ async def test_locked_overdue_obligation_not_changed(db_session: AsyncSession):
 # refresh_assessment_score
 # ---------------------------------------------------------------------------
 
-async def test_score_is_none_when_all_obligations_not_applicable(db_session: AsyncSession):
+
+async def test_score_is_none_when_all_obligations_not_applicable(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
     await _obligation(db_session, ass, status="not_applicable")
@@ -312,6 +339,7 @@ async def test_missing_assessment_is_silently_ignored(db_session: AsyncSession):
 # sync_system_compliance
 # ---------------------------------------------------------------------------
 
+
 async def test_sync_compliance_averages_approved_assessments(db_session: AsyncSession):
     system = await _system(db_session)
 
@@ -329,7 +357,9 @@ async def test_sync_compliance_averages_approved_assessments(db_session: AsyncSe
     assert system.compliance == 70.0
 
 
-async def test_sync_compliance_ignores_non_approved_assessments(db_session: AsyncSession):
+async def test_sync_compliance_ignores_non_approved_assessments(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
 
     ass1 = await _assessment(db_session, system)
@@ -346,7 +376,9 @@ async def test_sync_compliance_ignores_non_approved_assessments(db_session: Asyn
     assert system.compliance == 80.0
 
 
-async def test_sync_compliance_is_zero_with_no_approved_assessments(db_session: AsyncSession):
+async def test_sync_compliance_is_zero_with_no_approved_assessments(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
     system.compliance = 99.0  # stale value
     await db_session.flush()
@@ -374,19 +406,18 @@ async def test_sync_compliance_ignores_null_scores(db_session: AsyncSession):
 
 
 # ---------------------------------------------------------------------------
-# refresh_obligations_for_control
+# refresh_obligations_for_requirement
 # ---------------------------------------------------------------------------
 
-async def test_refresh_obligations_for_control_updates_all_linked(db_session: AsyncSession):
+
+async def test_refresh_obligations_for_requirement_updates_linked_obligation(
+    db_session: AsyncSession,
+):
     system = await _system(db_session)
     ass = await _assessment(db_session, system)
-    obl1 = await _obligation(db_session, ass)
-    obl2 = await _obligation(db_session, ass)
-    ctl = await _control(db_session, system, status="fulfilled")
-    await _link_control_obligation(db_session, ctl.id, obl1.id)
-    await _link_control_obligation(db_session, ctl.id, obl2.id)
+    obl = await _obligation(db_session, ass)
+    req = await _requirement(db_session, system, obl, status="fulfilled")
 
-    await refresh_obligations_for_control(db_session, ctl.id)
+    await refresh_obligations_for_requirement(db_session, req.id)
 
-    assert obl1.status == "fulfilled"
-    assert obl2.status == "fulfilled"
+    assert obl.status == "fulfilled"

@@ -1,0 +1,154 @@
+name: PR Deployment Test
+run-name: "Deploy PR #${{ github.event.pull_request.number }} (${{ github.event.pull_request.user.login }})"
+
+# Triggered by adding the "garden-deploy" label to a PR.
+# Builds the PR branch and deploys it to the PR author's namespace on ai-trust-test.
+#
+# Prerequisites (one-time per developer namespace):
+#   bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-username>
+#
+# Usage: add the "garden-deploy" label to a PR.
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  id-token: write
+  packages: write
+
+concurrency:
+  group: ${{ github.event.pull_request.user.login }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-test:
+    name: namespace-deployment-test
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'garden-deploy'
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check authorization (org members only)
+        id: auth
+        run: |
+          PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" \
+            --jq '.permission' 2>/dev/null || echo "none")
+          if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "write" || "$PERMISSION" == "maintain" ]]; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+          else
+            exit 1
+          fi
+
+      # Checks out the PR head SHA so composite actions (./.github/actions/*)
+      # resolve correctly. build-images reuses this checkout — no second clone.
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.PR_SHA }}
+
+      - name: Compute variables
+        id: vars
+        uses: ./.github/actions/compute-vars
+        with:
+          ref: ${{ env.PR_SHA }}
+          gardener_cluster: ai-trust-test
+          namespace: ${{ github.event.pull_request.user.login }}
+
+      - name: Post deployment started comment
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "🚀 Test deployment started — deploying \`feature:${PR_SHA::12}\` to namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\`."
+
+      - name: Build and push images
+        uses: ./.github/actions/build-images
+        with:
+          owner: ${{ steps.vars.outputs.owner }}
+          tag: ${{ steps.vars.outputs.tag }}
+          vite_registry_api_base:   ${{ vars.VITE_REGISTRY_API_BASE || '/api/registry/v1' }}
+          vite_users_api_base:      ${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
+          vite_monitoring_api_base: ${{ vars.VITE_MONITORING_API_BASE || '/api/monitoring/v1' }}
+          vite_overview_api_base:   ${{ vars.VITE_OVERVIEW_API_BASE || '/api/overview/v1' }}
+          vite_alerts_api_base:     ${{ vars.VITE_ALERTS_API_BASE || '/api/alerts/v1' }}
+          vite_alerts_url:          ${{ vars.VITE_ALERTS_URL || 'http://localhost:8080/alerts' }}
+          vite_registry_url:        ${{ vars.VITE_REGISTRY_URL || 'http://localhost:8080/registry' }}
+          vite_compliance_url:      ${{ vars.VITE_COMPLIANCE_URL || 'http://localhost:8080/compliance' }}
+          vite_compliance_api_base: ${{ vars.VITE_COMPLIANCE_API_BASE || '/api/compliance/v1' }}
+          vite_dta_api_base:        ${{ vars.VITE_DTA_API_BASE || '/api/dta/v1' }}
+          vite_audit_api_base:      ${{ vars.VITE_AUDIT_API_BASE || '/api/audit/v1' }}
+          vite_admin_api_base:      ${{ vars.VITE_ADMIN_API_BASE || '/api/admin/v1' }}
+
+      - name: Package and push Helm chart
+        uses: ./.github/actions/package-chart
+        with:
+          owner: ${{ steps.vars.outputs.owner }}
+          tag: ${{ steps.vars.outputs.tag }}
+
+      - name: Build and push OCM component
+        uses: ./.github/actions/publish-ocm
+        with:
+          owner: ${{ steps.vars.outputs.owner }}
+          tag: ${{ steps.vars.outputs.tag }}
+
+      - name: Deploy to cluster
+        uses: ./.github/actions/apply-to-cluster
+        with:
+          cluster: ${{ steps.vars.outputs.cluster }}
+          ocm_version: ${{ steps.vars.outputs.tag }}
+          namespace: ${{ steps.vars.outputs.namespace }}
+          github_actor: ${{ github.actor }}
+          ghcr_pull_token: ${{ secrets.GHCR_PULL_TOKEN }}
+          app_admin_password: ${{ secrets.APP_ADMIN_PASSWORD }}
+          clickhouse_password: ${{ secrets.CLICKHOUSE_PASSWORD }}
+          keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+          keycloak_client_secret: ${{ secrets.KEYCLOAK_CLIENT_SECRET }}
+          minio_root_password: ${{ secrets.MINIO_ROOT_PASSWORD }}
+          oauth2_proxy_cookie_secret: ${{ secrets.OAUTH2_PROXY_COOKIE_SECRET }}
+          postgres_password: ${{ secrets.POSTGRES_PASSWORD }}
+          rabbitmq_password: ${{ secrets.RABBITMQ_PASSWORD }}
+          smtp_password: ${{ secrets.SMTP_PASSWORD }}
+          users_backend_client_secret: ${{ secrets.USERS_BACKEND_CLIENT_SECRET }}
+          dev_user_password: ${{ secrets.DEV_USER_PASSWORD }}
+
+      - name: Post success comment
+        if: success()
+        run: |
+          APP_URL="https://${{ steps.vars.outputs.namespace }}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "✅ Test deployment successful: \`feature:${PR_SHA::12}\` deployed to namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\`."$'\n\n'"🔗 ${APP_URL}"
+
+      - name: Post app URL to linked issues
+        if: success()
+        run: |
+          APP_URL="https://${{ steps.vars.outputs.namespace }}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          ISSUES=$(gh api graphql -f query='
+            {
+              repository(owner: "${{ github.repository_owner }}", name: "${{ github.event.repository.name }}") {
+                pullRequest(number: '"${PR_NUMBER}"') {
+                  closingIssuesReferences(first: 10) {
+                    nodes { number }
+                  }
+                }
+              }
+            }' --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[].number')
+          for ISSUE in $ISSUES; do
+            gh issue comment "${ISSUE}" \
+              --repo "${{ github.repository }}" \
+              --body "🚀 Test deployment for PR #${PR_NUMBER} (\`feature:${PR_SHA::12}\`) is live:"$'\n\n'"🔗 ${APP_URL}"
+            echo "Posted to issue #${ISSUE}"
+          done
+
+      - name: Post failure comment
+        if: failure()
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "❌ Test deployment failed: \`feature:${PR_SHA::12}\` — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"

@@ -38,3 +38,9 @@ export interface GeneralSettingsUpdate {
   platform_name?: string | null;
   support_email?: string | null;
 }
+
+export interface AdminStats {
+  user_count: number;
+  role_count: number;
+  mail_configured: boolean;
+}

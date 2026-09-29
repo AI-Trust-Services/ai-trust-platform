@@ -34,6 +34,7 @@ export interface Obligation {
   framework_id: string;
   title: string;
   article_ref: string;
+  cluster_id: string | null;
   description: string;
   status: string;
   due_date: string | null;
@@ -43,13 +44,16 @@ export interface Obligation {
 }
 
 export interface ObligationDetail extends Obligation {
-  control_ids: string[];
+  requirement_ids: string[];
 }
 
-export interface Control {
+export interface Requirement {
   id: string;
+  obligation_id: string;
+  assessment_id: string;
   ai_system_id: string | null;
-  control_ref: string | null;
+  requirement_ref: string | null;
+  article_ref: string | null;
   title: string;
   description: string;
   category: string;
@@ -57,19 +61,17 @@ export interface Control {
   effectiveness: string;
   owner: string;
   due_date: string | null;
+  assessment_title: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface ControlDetail extends Control {
-  obligation_ids: string[];
+export interface RequirementDetail extends Requirement {
   evidence_count: number;
 }
 
 export interface Evidence {
   id: string;
-  ai_system_id: string | null;
-  assessment_id: string | null;
   title: string;
   description: string;
   evidence_type: string;
@@ -81,13 +83,13 @@ export interface Evidence {
   mime_type: string;
   uploaded_by: string;
   version_label: string;
+  requirement_count: number;
   created_at: string;
   updated_at: string;
 }
 
 export interface EvidenceDetail extends Evidence {
-  control_ids: string[];
-  obligation_ids: string[];
+  requirement_ids: string[];
 }
 
 export interface EvidenceVersion {

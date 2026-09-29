@@ -10,7 +10,7 @@ from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import ASSESSMENTS_READ, ASSESSMENTS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
-from ai_trust_persistence.models import Assessment, Obligation, control_obligations, evidence_obligations
+from ai_trust_persistence.models import Assessment, Obligation, Requirement
 from app.cascade import refresh_assessment_score
 from app.ids import new_id
 from app.schemas import (
@@ -25,49 +25,61 @@ logger = get_logger(__name__)
 
 
 async def _assessment_approved(session: AsyncSession, assessment_id: str) -> bool:
-    status = (await session.execute(
-        select(Assessment.status).where(Assessment.id == assessment_id)
-    )).scalar_one_or_none()
+    status = (
+        await session.execute(
+            select(Assessment.status).where(Assessment.id == assessment_id)
+        )
+    ).scalar_one_or_none()
     return status == "approved"
 
 
-@router.get("/obligations", response_model=list[ObligationResponse], dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
+@router.get(
+    "/obligations",
+    response_model=list[ObligationResponse],
+    dependencies=[Depends(require_permission(ASSESSMENTS_READ))],
+)
 async def list_obligations(
     assessment_id: str | None = Query(default=None),
     ai_system_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
-    control_id: str | None = Query(default=None),
-    evidence_id: str | None = Query(default=None),
+    requirement_id: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[ObligationResponse]:
     async with SessionLocal() as session:
-        stmt = select(Obligation).order_by(Obligation.created_at.desc())
+        # Newest generation first; catalogue order (sort_order) within a generation,
+        # since all rows of one generation share the same transaction timestamp.
+        stmt = select(Obligation).order_by(
+            Obligation.created_at.desc(), Obligation.sort_order.asc()
+        )
         if assessment_id:
             stmt = stmt.where(Obligation.assessment_id == assessment_id)
         if ai_system_id:
             stmt = stmt.where(Obligation.ai_system_id == ai_system_id)
         if status:
             stmt = stmt.where(Obligation.status == status)
-        if control_id:
+        if requirement_id:
             stmt = stmt.join(
-                control_obligations, control_obligations.c.obligation_id == Obligation.id
-            ).where(control_obligations.c.control_id == control_id)
-        if evidence_id:
-            stmt = stmt.join(
-                evidence_obligations, evidence_obligations.c.obligation_id == Obligation.id
-            ).where(evidence_obligations.c.evidence_id == evidence_id)
+                Requirement, Requirement.obligation_id == Obligation.id
+            ).where(Requirement.id == requirement_id)
         stmt = stmt.limit(limit).offset(offset)
         result = await session.execute(stmt)
         return [ObligationResponse.model_validate(r) for r in result.scalars().all()]
 
 
-@router.post("/obligations", response_model=ObligationResponse, status_code=201, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
+@router.post(
+    "/obligations",
+    response_model=ObligationResponse,
+    status_code=201,
+    dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))],
+)
 async def create_obligation(body: ObligationCreate) -> ObligationResponse:
     async with SessionLocal() as session:
-        assessment = (await session.execute(
-            select(Assessment).where(Assessment.id == body.assessment_id)
-        )).scalar_one_or_none()
+        assessment = (
+            await session.execute(
+                select(Assessment).where(Assessment.id == body.assessment_id)
+            )
+        ).scalar_one_or_none()
         if not assessment:
             raise HTTPException(404, f"Assessment {body.assessment_id} not found")
         if assessment.status == "approved":
@@ -90,34 +102,58 @@ async def create_obligation(body: ObligationCreate) -> ObligationResponse:
         await refresh_assessment_score(session, assessment.id)
         await session.commit()
         await session.refresh(row)
-    logger.info("obligation.created", extra={"obligation_id": row.id, "assessment_id": row.assessment_id})
+    logger.info(
+        "obligation.created",
+        extra={"obligation_id": row.id, "assessment_id": row.assessment_id},
+    )
     return ObligationResponse.model_validate(row)
 
 
-@router.get("/obligations/{obligation_id}", response_model=ObligationDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
+@router.get(
+    "/obligations/{obligation_id}",
+    response_model=ObligationDetailResponse,
+    dependencies=[Depends(require_permission(ASSESSMENTS_READ))],
+)
 async def get_obligation(obligation_id: str) -> ObligationDetailResponse:
     async with SessionLocal() as session:
-        row = (await session.execute(
-            select(Obligation).where(Obligation.id == obligation_id)
-        )).scalar_one_or_none()
+        row = (
+            await session.execute(
+                select(Obligation).where(Obligation.id == obligation_id)
+            )
+        ).scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"Obligation {obligation_id} not found")
-        control_ids = (await session.execute(
-            select(control_obligations.c.control_id)
-            .where(control_obligations.c.obligation_id == obligation_id)
-        )).scalars().all()
+        requirement_ids = (
+            (
+                await session.execute(
+                    select(Requirement.id).where(
+                        Requirement.obligation_id == obligation_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
         detail = ObligationDetailResponse.model_validate(row)
-        detail.control_ids = list(control_ids)
+        detail.requirement_ids = list(requirement_ids)
         return detail
 
 
-@router.put("/obligations/{obligation_id}", response_model=ObligationResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def update_obligation(obligation_id: str, body: ObligationUpdate) -> ObligationResponse:
+@router.put(
+    "/obligations/{obligation_id}",
+    response_model=ObligationResponse,
+    dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))],
+)
+async def update_obligation(
+    obligation_id: str, body: ObligationUpdate
+) -> ObligationResponse:
     updates = body.model_dump(exclude_none=True)
     async with SessionLocal() as session:
-        row = (await session.execute(
-            select(Obligation).where(Obligation.id == obligation_id)
-        )).scalar_one_or_none()
+        row = (
+            await session.execute(
+                select(Obligation).where(Obligation.id == obligation_id)
+            )
+        ).scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"Obligation {obligation_id} not found")
         if await _assessment_approved(session, row.assessment_id):
@@ -132,16 +168,24 @@ async def update_obligation(obligation_id: str, body: ObligationUpdate) -> Oblig
             await refresh_assessment_score(session, row.assessment_id)
         await session.commit()
         await session.refresh(row)
-    logger.info("obligation.updated", extra={"obligation_id": obligation_id, "fields": sorted(updates.keys())})
+    logger.info(
+        "obligation.updated",
+        extra={"obligation_id": obligation_id, "fields": sorted(updates.keys())},
+    )
     return ObligationResponse.model_validate(row)
 
 
-@router.delete("/obligations/{obligation_id}", dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
+@router.delete(
+    "/obligations/{obligation_id}",
+    dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))],
+)
 async def delete_obligation(obligation_id: str) -> dict:
     async with SessionLocal() as session:
-        row = (await session.execute(
-            select(Obligation).where(Obligation.id == obligation_id)
-        )).scalar_one_or_none()
+        row = (
+            await session.execute(
+                select(Obligation).where(Obligation.id == obligation_id)
+            )
+        ).scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"Obligation {obligation_id} not found")
         if await _assessment_approved(session, row.assessment_id):

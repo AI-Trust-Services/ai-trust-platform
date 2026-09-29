@@ -5,6 +5,7 @@ shared `openfga-config` Docker volume (written by openfga-provision). Both are
 resolved lazily on first use so that importing this module never fails at
 import time — a backend that never calls a permission check still starts.
 """
+
 import logging
 import os
 
@@ -74,7 +75,9 @@ async def check(user: str, relation: str, obj: str) -> bool:
         return bool(response.allowed)
 
 
-async def list_allowed_relations(user: str, relations: list[str], obj: str) -> list[str]:
+async def list_allowed_relations(
+    user: str, relations: list[str], obj: str
+) -> list[str]:
     """Return the subset of `relations` the user has on `obj` (batch check)."""
     from openfga_sdk.client.models import ClientListRelationsRequest
 
@@ -91,7 +94,9 @@ async def write_tuple(user: str, relation: str, obj: str) -> None:
     async with get_client() as client:
         try:
             await client.write(
-                ClientWriteRequest(writes=[ClientTuple(user=user, relation=relation, object=obj)])
+                ClientWriteRequest(
+                    writes=[ClientTuple(user=user, relation=relation, object=obj)]
+                )
             )
         except Exception as e:
             if "already exists" in str(e) or "write_failed" in str(e):
@@ -104,7 +109,9 @@ async def delete_tuple(user: str, relation: str, obj: str) -> None:
     async with get_client() as client:
         try:
             await client.write(
-                ClientWriteRequest(deletes=[ClientTuple(user=user, relation=relation, object=obj)])
+                ClientWriteRequest(
+                    deletes=[ClientTuple(user=user, relation=relation, object=obj)]
+                )
             )
         except Exception as e:
             if "not found" in str(e) or "cannot delete" in str(e):

@@ -5,6 +5,7 @@ import type {
   SmtpTestResponse,
   GeneralSettings,
   GeneralSettingsUpdate,
+  AdminStats,
 } from "../types";
 
 const API_BASE = import.meta.env.VITE_ADMIN_API_BASE as string;
@@ -64,4 +65,7 @@ export const api = {
     fetch(`${USERS_API}/me/permissions`, { cache: "no-store" })
       .then((r) => r.json() as Promise<{ permissions: string[] }>)
       .catch(() => ({ permissions: [] })),
+
+  getStats: (): Promise<AdminStats> =>
+    request<AdminStats>("/stats"),
 };

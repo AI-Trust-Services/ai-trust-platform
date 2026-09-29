@@ -1,13 +1,20 @@
 """Pydantic v2 schemas for Obligation."""
+
 from __future__ import annotations
 
 from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-VALID_OBLIGATION_STATUSES = frozenset({
-    "applicable", "in_progress", "fulfilled", "not_applicable", "overdue",
-})
+VALID_OBLIGATION_STATUSES = frozenset(
+    {
+        "applicable",
+        "in_progress",
+        "fulfilled",
+        "not_applicable",
+        "overdue",
+    }
+)
 
 
 class ObligationCreate(BaseModel):
@@ -49,6 +56,7 @@ class ObligationResponse(BaseModel):
     framework_id: str
     title: str
     article_ref: str
+    cluster_id: str | None = None
     description: str
     status: str
     due_date: date | None
@@ -60,7 +68,7 @@ class ObligationResponse(BaseModel):
 
 
 class ObligationDetailResponse(ObligationResponse):
-    control_ids: list[str] = []
+    requirement_ids: list[str] = []
 
 
 class GenerateObligationsResponse(BaseModel):

@@ -73,6 +73,7 @@ services:
       APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD}
       SEED_DEV_USERS: ${SEED_DEV_USERS:-false}
+      DEV_USER_PASSWORD: ${DEV_USER_PASSWORD:-}
     depends_on:
       keycloak:
         condition: service_healthy
@@ -349,6 +350,7 @@ services:
       ALLOWED_ORIGINS: "http://localhost:8080"
       ROOT_PATH: "/api/admin"
       OPENFGA_URL: http://openfga:8080
+      USERS_BACKEND_URL: http://users-backend:8008
       # Seeds the platform_settings row on first startup only; DB is source of truth after that.
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
@@ -610,7 +612,9 @@ services:
     restart: on-failure
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    build:
+      context: ./infra/minio
+      dockerfile: Dockerfile
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -620,7 +624,7 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/9000' 2>/dev/null && exit 0 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -628,7 +632,9 @@ services:
     restart: on-failure
 
   minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    build:
+      context: ./infra/mc
+      dockerfile: Dockerfile
     environment:
       <<: *minio-env
     depends_on:

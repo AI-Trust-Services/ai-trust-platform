@@ -8,7 +8,7 @@ import DetailPanel, { DetailField, DetailSection } from "../components/DetailPan
 import CreateObligationModal from "../components/CreateObligationModal";
 import { OBLIGATION_STATUS_META, CONTROL_STATUS_META, EVIDENCE_STATUS_META, fmtDate } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
-import type { AISystem, Assessment, Control, Evidence, Obligation, ObligationDetail } from "../types";
+import type { AISystem, Assessment, Requirement, Evidence, Obligation, ObligationDetail } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -34,7 +34,7 @@ export default function ObligationsPage() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<ObligationDetail | null>(null);
-  const [detailControls, setDetailControls] = useState<Control[]>([]);
+  const [detailRequirements, setDetailRequirements] = useState<Requirement[]>([]);
   const [detailEvidence, setDetailEvidence] = useState<Evidence[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const showToast = useToast();
@@ -65,20 +65,20 @@ export default function ObligationsPage() {
   async function openDetail(o: Obligation) {
     setSelected(o.id);
     try {
-      const [det, controls, evidence] = await Promise.all([
+      const [det, requirements, evidence] = await Promise.all([
         api.getObligation(o.id),
-        api.getControls({ obligation_id: o.id }),
+        api.getRequirements({ obligation_id: o.id }),
         api.getEvidence({ obligation_id: o.id }),
       ]);
       setDetail(det);
-      setDetailControls(controls);
+      setDetailRequirements(requirements);
       setDetailEvidence(evidence);
     } catch (e) {
       showToast(`Failed to load detail: ${(e as Error).message}`, true);
     }
   }
 
-  function closePanel() { setSelected(null); setDetail(null); setDetailControls([]); setDetailEvidence([]); }
+  function closePanel() { setSelected(null); setDetail(null); setDetailRequirements([]); setDetailEvidence([]); }
 
   async function changeStatus(id: string, status: string) {
     try {
@@ -178,7 +178,7 @@ export default function ObligationsPage() {
                 <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No obligations found.</TableCell></TableRow>
               ) : filtered.map((o) => (
                 <TableRow key={o.id} data-state={selected === o.id ? "selected" : undefined} className="cursor-pointer" onClick={() => openDetail(o)}>
-                  <TableCell><div className="font-medium text-foreground">{o.title}</div><div className="text-xs text-muted-foreground">{o.id}</div></TableCell>
+                  <TableCell><div className="font-medium text-foreground">{o.title}</div><div className="text-xs text-muted-foreground">{o.cluster_id ? `${o.cluster_id} · ${o.id}` : o.id}</div></TableCell>
                   <TableCell className="text-xs">{o.article_ref || "—"}</TableCell>
                   <TableCell>{systemsById[o.ai_system_id]?.name ?? o.ai_system_id}</TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{o.owner || "—"}</TableCell>
@@ -230,11 +230,17 @@ export default function ObligationsPage() {
                 <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{detail.description}</p>
               </DetailSection>
             )}
-            <DetailSection title={`Related Requirements (${detailControls.length})`}>
-              {detailControls.length === 0
+            <DetailSection title={`Related Requirements (${detailRequirements.length})`}>
+              {detailRequirements.length === 0
                 ? <p className="text-[13px] text-muted-foreground">No requirements linked.</p>
-                : <ul className="flex flex-col gap-1.5">{detailControls.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between gap-2"><span className="truncate text-[13px] text-foreground">{c.title}</span><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></li>
+                : <ul className="flex flex-col gap-1.5">{detailRequirements.map((c) => (
+                    <li key={c.id} className="flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        {c.requirement_ref && <span className="shrink-0 text-xs font-medium text-muted-foreground">{c.requirement_ref}</span>}
+                        <span className="truncate text-[13px] text-foreground">{c.title}</span>
+                      </span>
+                      <StatusBadge meta={CONTROL_STATUS_META} value={c.status} />
+                    </li>
                   ))}</ul>
               }
             </DetailSection>

@@ -6,6 +6,7 @@ Endpoints (all require iam:manage):
   PUT    /iam/custom-roles/{role_id}    — update description and/or permissions
   DELETE /iam/custom-roles/{role_id}    — delete role + strip from all users
 """
+
 from __future__ import annotations
 
 import uuid
@@ -16,7 +17,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from ai_trust_authorization import openfga_client, require_permission
-from ai_trust_authorization.constants import ALL_PERMISSIONS, PLATFORM_OBJECT, RELATION_BY_PERMISSION
+from ai_trust_authorization.constants import (
+    ALL_PERMISSIONS,
+    PLATFORM_OBJECT,
+    RELATION_BY_PERMISSION,
+)
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.custom_role import CustomRole
@@ -59,6 +64,7 @@ def _validate_permissions(permissions: list[str]) -> None:
 async def _get_role_permissions(role_name: str) -> list[str]:
     """Read current permission tuples for a role from OpenFGA."""
     from openfga_sdk.models.read_request_tuple_key import ReadRequestTupleKey
+
     target_user = f"{_role_object(role_name)}#member"
     async with openfga_client.get_client() as client:
         body = ReadRequestTupleKey(object=PLATFORM_OBJECT)
@@ -100,12 +106,15 @@ async def list_custom_roles(
     _: str = Depends(require_permission("iam:manage")),
 ) -> list[CustomRoleResponse]:
     async with SessionLocal() as session:
-        rows = (await session.execute(
-            select(CustomRole).order_by(CustomRole.created_at)
-        )).scalars().all()
+        rows = (
+            (await session.execute(select(CustomRole).order_by(CustomRole.created_at)))
+            .scalars()
+            .all()
+        )
 
     # Fetch all platform:global tuples once and group by user to avoid N sequential reads.
     from openfga_sdk.models.read_request_tuple_key import ReadRequestTupleKey
+
     async with openfga_client.get_client() as client:
         response = await client.read(ReadRequestTupleKey(object=PLATFORM_OBJECT))
         all_tuples = response.tuples or []
@@ -114,7 +123,9 @@ async def list_custom_roles(
     perms_by_user: dict[str, list[str]] = {}
     for t in all_tuples:
         if t.key.relation in relation_to_perm:
-            perms_by_user.setdefault(t.key.user, []).append(relation_to_perm[t.key.relation])
+            perms_by_user.setdefault(t.key.user, []).append(
+                relation_to_perm[t.key.relation]
+            )
 
     result = []
     for row in rows:
@@ -136,9 +147,11 @@ async def create_custom_role(
 
     # 1. Postgres
     async with SessionLocal() as session:
-        existing = (await session.execute(
-            select(CustomRole).where(CustomRole.name == body.name)
-        )).scalar_one_or_none()
+        existing = (
+            await session.execute(
+                select(CustomRole).where(CustomRole.name == body.name)
+            )
+        ).scalar_one_or_none()
         if existing:
             raise HTTPException(409, f"Role '{body.name}' already exists")
         # new_id() lives in compliance/backend — not a shared lib, so uuid4 here is intentional
@@ -156,13 +169,17 @@ async def create_custom_role(
         await _set_role_permissions(body.name, body.permissions)
     except Exception:
         async with SessionLocal() as session:
-            r = (await session.execute(select(CustomRole).where(CustomRole.id == row.id))).scalar_one_or_none()
+            r = (
+                await session.execute(select(CustomRole).where(CustomRole.id == row.id))
+            ).scalar_one_or_none()
             if r:
                 await session.delete(r)
                 await session.commit()
         raise
 
-    logger.info("custom_role.created", extra={"role_id": row.id, "role_name": body.name})
+    logger.info(
+        "custom_role.created", extra={"role_id": row.id, "role_name": body.name}
+    )
     result = CustomRoleResponse.model_validate(row)
     result.permissions = body.permissions
     return result
@@ -175,9 +192,9 @@ async def update_custom_role(
     _: str = Depends(require_permission("iam:manage")),
 ) -> CustomRoleResponse:
     async with SessionLocal() as session:
-        row = (await session.execute(
-            select(CustomRole).where(CustomRole.id == role_id)
-        )).scalar_one_or_none()
+        row = (
+            await session.execute(select(CustomRole).where(CustomRole.id == role_id))
+        ).scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"Custom role {role_id} not found")
 
@@ -191,7 +208,9 @@ async def update_custom_role(
         await _set_role_permissions(row.name, body.permissions)
 
     permissions = await _get_role_permissions(row.name)
-    logger.info("custom_role.updated", extra={"role_id": role_id, "role_name": row.name})
+    logger.info(
+        "custom_role.updated", extra={"role_id": role_id, "role_name": row.name}
+    )
     result = CustomRoleResponse.model_validate(row)
     result.permissions = permissions
     return result
@@ -203,9 +222,9 @@ async def delete_custom_role(
     _: str = Depends(require_permission("iam:manage")),
 ) -> Response:
     async with SessionLocal() as session:
-        row = (await session.execute(
-            select(CustomRole).where(CustomRole.id == role_id)
-        )).scalar_one_or_none()
+        row = (
+            await session.execute(select(CustomRole).where(CustomRole.id == role_id))
+        ).scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"Custom role {role_id} not found")
         name = row.name
@@ -215,9 +234,9 @@ async def delete_custom_role(
     await _set_role_permissions(name, [])
 
     async with SessionLocal() as session:
-        row = (await session.execute(
-            select(CustomRole).where(CustomRole.id == role_id)
-        )).scalar_one_or_none()
+        row = (
+            await session.execute(select(CustomRole).where(CustomRole.id == role_id))
+        ).scalar_one_or_none()
         if row:
             await session.delete(row)
             await session.commit()

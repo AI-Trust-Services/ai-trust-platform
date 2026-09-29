@@ -3,6 +3,7 @@
 Pure tier → obligation-set logic with org_role filtering, mirroring the
 classifier tests: public interface only, no I/O, no mocks.
 """
+
 from __future__ import annotations
 
 from app.obligation_lookup import obligations_for_tier
@@ -33,16 +34,20 @@ def test_both_role_returns_every_obligation_for_the_tier():
     everything = obligations_for_tier("high", org_role="both")
     provider = obligations_for_tier("high", org_role="provider")
     deployer = obligations_for_tier("high", org_role="deployer")
-    assert len(everything) == len({o["article_ref"] for o in everything})  # no accidental dupes
-    assert len(everything) == len(provider) + len([o for o in deployer if o["roles"] == "deployer"])
+    assert len(everything) == len(
+        {o["article_ref"] for o in everything}
+    )  # no accidental dupes
+    assert len(everything) == len(provider) + len(
+        [o for o in deployer if o["roles"] == "deployer"]
+    )
 
 
 def test_unknown_tier_returns_empty_list():
     assert obligations_for_tier("no-such-tier") == []
 
 
-def test_gpai_systemic_is_a_superset_of_gpai_standard():
-    """Systemic GPAI carries every standard-GPAI duty plus the additional systemic-risk ones."""
-    standard = {o["article_ref"] for o in obligations_for_tier("gpai-standard", org_role="both")}
-    systemic = {o["article_ref"] for o in obligations_for_tier("gpai-systemic", org_role="both")}
-    assert standard < systemic
+def test_non_catalogue_tiers_return_empty_list():
+    """The AI Act Requirements catalogue covers only High/Limited risk, so the
+    RCE panel shows no obligations for prohibited/GPAI/minimal tiers."""
+    for tier in ("prohibited", "gpai-standard", "gpai-systemic", "minimal"):
+        assert obligations_for_tier(tier, org_role="both") == []

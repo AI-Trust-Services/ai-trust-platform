@@ -102,6 +102,20 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/keycloak-provision:${IMAGE_TAG}
 
+  - name: minio
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/minio:${IMAGE_TAG}
+
+  - name: mc
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/mc:${IMAGE_TAG}
+
   - name: shell
     type: ociImage
     version: "${VERSION}"

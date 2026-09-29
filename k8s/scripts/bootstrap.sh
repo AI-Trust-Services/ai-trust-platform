@@ -68,16 +68,24 @@ kubectl create secret generic ai-trust-env \
 # Flux's HelmRelease valuesFrom has no cross-namespace support — the secret must exist
 # in the same namespace as the HelmRelease (ocm-system). Only the 5 non-sensitive URL/
 # hostname values needed by the FluxDeployer are stored here; all credentials stay in
-# ai-trust-env in the ai-trust namespace.
-echo "==> secret/ai-trust-flux-values in ocm-system (Helm chart URL values for FluxDeployer)"
+# the ai-trust-env secret in the target namespace ($NAMESPACE).
+echo "==> secret/ai-trust-flux-values-${NAMESPACE} in ocm-system (Helm chart URL values for FluxDeployer)"
 kubectl create namespace ocm-system --dry-run=client -o yaml | kubectl apply -f -
-kubectl create secret generic ai-trust-flux-values \
+OLLAMA_ENABLED="false"
+[[ "${LLM_PROVIDER:-stub}" == "ollama" ]] && OLLAMA_ENABLED="true"
+GHCR_OWNER="${GITHUB_REPOSITORY_OWNER:-ai-trust-services}"
+GHCR_OWNER="$(echo "$GHCR_OWNER" | tr '[:upper:]' '[:lower:]')"
+
+kubectl create secret generic "ai-trust-flux-values-${NAMESPACE}" \
   --from-literal=APP_PUBLIC_URL="${APP_PUBLIC_URL:-}" \
   --from-literal=KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-}" \
   --from-literal=INGRESS_HOST="${INGRESS_HOST}" \
   --from-literal=INGRESS_KEYCLOAK_HOST="${INGRESS_KEYCLOAK_HOST}" \
   --from-literal=INGRESS_MINIO_HOST="${INGRESS_MINIO_HOST}" \
   --from-literal=IMAGE_TAG="${IMAGE_TAG:-latest}" \
+  --from-literal=OLLAMA_ENABLED="${OLLAMA_ENABLED}" \
+  --from-literal=MINIO_IMAGE="ghcr.io/${GHCR_OWNER}/ai-trust-platform/minio:${IMAGE_TAG:-latest}" \
+  --from-literal=MC_IMAGE="ghcr.io/${GHCR_OWNER}/ai-trust-platform/mc:${IMAGE_TAG:-latest}" \
   -n ocm-system --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> configmap/postgres-init (from infra/postgres/init.sh)"
@@ -106,6 +114,9 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

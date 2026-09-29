@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
-import { useNavigate, useLocation, Outlet } from "react-router";
+import { useLocation, Outlet } from "react-router";
 import { Loader2, Database } from "lucide-react";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { useTheme } from './hooks/useTheme';
@@ -35,7 +35,7 @@ export default function App() {
   const location = useLocation();
   const { can, username } = usePermissions();
   const mayWrite = can("systems:write");
-  const mayRegister = can("systems:approve");
+  const mayRegister = can("systems:write");
   const noWriteTitle = "Requires permission: systems:write";
 
   useLuigiInit(() => {});
@@ -79,7 +79,7 @@ export default function App() {
           <div>
             {activeView === "systems" ? (
               <Button disabled={!mayRegister}
-                title={mayRegister ? undefined : "Requires role: business owner or administrator"}
+                title={mayRegister ? undefined : "Requires permission: systems:write"}
                 onClick={() => setWizardOpen(true)}>
                 + Register System
               </Button>
@@ -90,23 +90,6 @@ export default function App() {
               </Button>
             )}
           </div>
-        </div>
-
-        <div className="flex border-b border-border bg-card px-6">
-          {([["systems", "AI Systems"], ["models", "Model Catalog"]] as const).map(([key, label]) => (
-            <div
-              key={key}
-              className={cn(
-                "-mb-px cursor-pointer border-b-[3px] border-transparent px-5 py-3.5 text-sm font-medium",
-                activeView === key
-                  ? "border-primary text-primary"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => navigate(`/${key}`)}
-            >
-              {label}
-            </div>
-          ))}
         </div>
 
         {backendOk === false && (

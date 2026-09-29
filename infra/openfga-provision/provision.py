@@ -19,6 +19,7 @@ Optional env vars:
   OPENFGA_STORE_ID_FILE  path to write store ID (default /config/store_id)
   INITIAL_ADMIN_USER     username to seed as platform_administrator
 """
+
 import asyncio
 import json
 import os
@@ -43,8 +44,8 @@ STORE_ID_FILE = os.environ.get("OPENFGA_STORE_ID_FILE", "/config/store_id")
 INITIAL_ADMIN_USER = os.environ.get("INITIAL_ADMIN_USER", "").strip()
 
 DEV_USER_ROLES = [
-    ("dev-owner",      "business_owner"),
-    ("dev-engineer",   "ai_engineer"),
+    ("dev-owner", "business_owner"),
+    ("dev-engineer", "ai_engineer"),
     ("dev-compliance", "ai_compliance_officer"),
 ]
 
@@ -111,6 +112,7 @@ def _canonical_model(model: dict) -> str:
     hides differences that are equally absent on both — a real change (e.g. a
     new relation for a new permission) always survives normalization.
     """
+
     def strip(value):
         if isinstance(value, dict):
             return {
@@ -183,7 +185,11 @@ async def seed_admin_users(client: OpenFgaClient) -> None:
         return
 
     tuples = [
-        ClientTuple(user=f"user:{INITIAL_ADMIN_USER}", relation="member", object="role:platform_administrator")
+        ClientTuple(
+            user=f"user:{INITIAL_ADMIN_USER}",
+            relation="member",
+            object="role:platform_administrator",
+        )
     ]
     await _write_tuples_idempotent(client, tuples, label="admin assignment")
     print(f"Seeded platform_administrator for: {INITIAL_ADMIN_USER}")

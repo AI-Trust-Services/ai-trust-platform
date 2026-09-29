@@ -5,7 +5,7 @@ import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS, TIER_META } from "../utils";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary, QuestionAssignment } from "../types";
+import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary } from "../types";
 import {
   BUSINESS_QUESTIONS,
   AI_TECHNICAL_QUESTIONS,
@@ -152,7 +152,6 @@ function WorkflowProgress({
   const [resubmitNote, setResubmitNote] = useState("");
   const [acting, setActing] = useState(false);
   const [steps, setSteps] = useState<WorkflowStep[]>([]);
-  const [questionAssignments, setQuestionAssignments] = useState<QuestionAssignment[]>([]);
   const [delegateUser, setDelegateUser] = useState("");
   const [delegatePool, setDelegatePool] = useState<UserSummary[]>([]);
   const { username, mayWrite } = useModalControls();
@@ -173,16 +172,7 @@ function WorkflowProgress({
     : null;
   const activeSub = pendingSection ? activeSubAssignee(steps, pendingSection) : null;
   const isSectionOwner = !!sectionOwner && username === sectionOwner;
-  const isDelegate = !!activeSub && username === activeSub;
-  const iAmQuestionAssignee = !!pendingSection && questionAssignments.some(
-    (a) => a.section === pendingSection && a.assignee_username === username,
-  );
   // The owner may fill only while holding the token (no active delegate); the delegate
-  // may fill while it holds the token. Question assignees may always open their section.
-  // This mirrors the backend section edit-lock.
-  const canFillSection = !!pendingSection && ((isSectionOwner && !activeSub) || isDelegate || iAmQuestionAssignee);
-
-  // The CO cannot approve until every required question is answered (backend enforces a
   // 422 as the safety net). Booleans/numbers and full_manual systems never contribute gaps.
   const bizMissing = missingRequired(BUSINESS_QUESTIONS, getBusinessFieldValues(system));
   const techMissing = system.registration_mode === "ai"
@@ -194,10 +184,8 @@ function WorkflowProgress({
   useEffect(() => {
     if (system.workflow_status === "business_pending" || system.workflow_status === "technical_pending") {
       api.getWorkflow(system.id).then(setSteps).catch(() => setSteps([]));
-      api.getQuestionAssignments(system.id).then(setQuestionAssignments).catch(() => setQuestionAssignments([]));
     } else {
       setSteps([]);
-      setQuestionAssignments([]);
     }
   }, [system.id, system.workflow_status]);
 
@@ -666,9 +654,6 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
           <select className={SELECT_CLASS} id="edit_org_role" value={form.org_role} onChange={set("org_role")}>
             <option value="provider">Provider</option>
             <option value="deployer">Deployer</option>
-            <option value="importer">Importer</option>
-            <option value="distributor">Distributor</option>
-            <option value="authorised_representative">Authorised Representative</option>
           </select>
         </div>
         <div className="flex flex-col gap-1.5"><Label htmlFor="edit_country">Country</Label><Input type="text" id="edit_country" value={form.provider_country} onChange={set("provider_country")} maxLength={2} /></div>
@@ -706,92 +691,6 @@ function EditForm({ system, models: _models, onSave, onClose }: { system: AISyst
           {saving && <Loader2 className="animate-spin" />} Save Changes
         </Button>
       </div>
-    </div>
-  );
-}
-
-function ModelTab({ system, models }: { system: AISystem; models: ModelCard[] }) {
-  const [linkedModels, setLinkedModels] = useState<SystemModelResponse[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedModelId, setSelectedModelId] = useState("");
-  const [role, setRole] = useState("");
-  const [linking, setLinking] = useState(false);
-  const [detailModelId, setDetailModelId] = useState<string | null>(null);
-  const showToast = useToast();
-  const { mayWrite } = useModalControls();
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    api.getSystemModels(system.id)
-      .then((data) => { if (!cancelled) setLinkedModels(data); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [system.id]);
-
-  const linkedIds = new Set(linkedModels.map((m) => m.id));
-  const availableModels = models.filter((m) => !linkedIds.has(m.id));
-
-  async function handleAddModel() {
-    if (!selectedModelId) { showToast("Please select a model first", true); return; }
-    setLinking(true);
-    try {
-      const added = await api.addSystemModel(system.id, selectedModelId, role || undefined);
-      setLinkedModels((prev) => [...prev, added]);
-      setSelectedModelId("");
-      setRole("");
-      showToast("Model linked");
-    } catch (e) {
-      showToast(`Link failed: ${(e as Error).message}`, true);
-    } finally { setLinking(false); }
-  }
-
-  async function handleRemoveModel(modelCardId: string) {
-    try {
-      await api.removeSystemModel(system.id, modelCardId);
-      setLinkedModels((prev) => prev.filter((m) => m.id !== modelCardId));
-      showToast("Model unlinked");
-    } catch (e) {
-      showToast(`Unlink failed: ${(e as Error).message}`, true);
-    }
-  }
-
-  return (
-    <div>
-      {system.model_id ? (
-        <Section title="Currently Linked Model">
-          <div className="rounded-md border border-border bg-muted/30 p-4">
-            <div className="font-medium">{linkedModel ? linkedModel.name : system.model_id}</div>
-            <div className="mt-0.5 text-[13px] text-muted-foreground">
-              {linkedModel ? `${linkedModel.provider} · ${linkedModel.model_type} · v${linkedModel.version}` : system.model_id}
-              {linkedModel?.inference_url && (
-                <> · <a href={linkedModel.inference_url} target="_blank" rel="noreferrer" className="text-[var(--brand)]">{linkedModel.inference_url}</a></>
-              )}
-            </div>
-            {linkedModel?.description && <div className="mt-1.5 text-[13px] text-muted-foreground">{linkedModel.description}</div>}
-          </div>
-          <Button variant="ghost" className="mt-2" disabled={!mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE} onClick={handleUnlink}>Unlink Model</Button>
-        </Section>
-      ) : (
-        <Alert variant="info" className="mb-4">No model card is linked to this system yet.</Alert>
-      )}
-      <Section title="Link a Model Card">
-        <div className="mb-3 flex items-end gap-2">
-          <div className="flex flex-1 flex-col gap-1.5">
-            <Label htmlFor="modelLinkSelect">Select model from catalog</Label>
-            <select className={SELECT_CLASS} id="modelLinkSelect" value={selectedModelId} onChange={(e) => setSelectedModelId(e.target.value)}>
-              <option value="">— choose a model —</option>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>{m.name} ({m.provider} · {m.model_type})</option>
-              ))}
-            </select>
-          </div>
-          <Button onClick={handleLink} disabled={linking || !mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE}>Link</Button>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Linking a model records which LLM or AI model powers this system. One system can have at most one linked model.
-        </div>
-      </Section>
     </div>
   );
 }
@@ -962,7 +861,7 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
             <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
               <div className="border-b border-border px-6 py-2.5">
                 <TabsList>
-                  {["overview", "workflow", "model", "edit"].map((t) => (
+                  {["overview", "workflow", "edit"].map((t) => (
                     <TabsTrigger key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</TabsTrigger>
                   ))}
                 </TabsList>
@@ -1119,10 +1018,6 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
 
                 <TabsContent value="workflow">
                   <WorkflowTab system={system} userMap={userMap} />
-                </TabsContent>
-
-                <TabsContent value="model">
-                  <ModelTab system={system} models={models} onSystemUpdate={handleSystemUpdate} />
                 </TabsContent>
 
                 <TabsContent value="edit">

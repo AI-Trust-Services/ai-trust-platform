@@ -63,15 +63,23 @@ async def logging_middleware(request: Request, call_next) -> Response:
     try:
         response = await call_next(request)
     except Exception as exc:
-        logger.exception("request.failed", extra={
-            "method": request.method,
-            "path": request.url.path,
-        })
+        logger.exception(
+            "request.failed",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+            },
+        )
         raise exc
 
     duration_ms = round((time.perf_counter() - start) * 1000, 2)
     status = response.status_code
-    log_extra = {"method": request.method, "path": request.url.path, "status": status, "duration_ms": duration_ms}
+    log_extra = {
+        "method": request.method,
+        "path": request.url.path,
+        "status": status,
+        "duration_ms": duration_ms,
+    }
     if status >= 500:
         logger.error("request.error", extra=log_extra)
     elif status >= 400:
@@ -98,4 +106,6 @@ async def health() -> Response:
         return JSONResponse({"status": "ok", "db": "ok"})
     except Exception as e:
         logger.error("health.db_unavailable", extra={"error": str(e)})
-        return JSONResponse({"status": "degraded", "db": "unavailable"}, status_code=503)
+        return JSONResponse(
+            {"status": "degraded", "db": "unavailable"}, status_code=503
+        )

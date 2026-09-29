@@ -2,7 +2,7 @@
 # Builds every locally-built image (same context/Dockerfile/build-args as the
 # matching docker-compose service) and loads them into the kind cluster - no
 # registry involved. Third-party images (postgres, keycloak, openfga,
-# oauth2-proxy, rabbitmq, clickhouse-server, minio, otel-collector-contrib)
+# oauth2-proxy, rabbitmq, clickhouse-server, otel-collector-contrib)
 # are pulled normally by kubelet and are not built here.
 set -euo pipefail
 
@@ -55,6 +55,8 @@ build clickhouse-migrate ./libs/clickhouse ./libs/clickhouse/Dockerfile
 
 # ── other own-context images ──
 build keycloak-provision ./infra/keycloak ./infra/keycloak/Dockerfile
+build minio ./infra/minio ./infra/minio/Dockerfile
+build mc ./infra/mc ./infra/mc/Dockerfile
 build shell ./shell ./shell/Dockerfile
 build otel-rmq-bridge ./otel-pipeline/rmq-bridge ./otel-pipeline/rmq-bridge/Dockerfile
 

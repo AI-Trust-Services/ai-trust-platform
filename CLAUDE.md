@@ -19,41 +19,54 @@ make down    # helm uninstall + kind delete cluster
 ```
 Manifests live in `k8s/helm/ai-trust-platform/`. Every k8s Service name matches the docker-compose service name (`postgres`, `ai-system-registry-backend`, etc.) so `shell/nginx.conf` and backend env vars work unmodified.
 
+**Stateful workloads** (`postgres`, `clickhouse`, `minio`, `ollama`) are `kind: StatefulSet` with `volumeClaimTemplates` (not standalone PVCs). This gives each pod a stable PVC identity (`data-postgres-0` etc.) and lets the CSI driver safely detach/reattach the volume when a pod reschedules to a different node — preventing the RWO deadlock that occurs with plain Deployments on multi-node clusters. `updateStrategy: RollingUpdate` with `maxUnavailable: 1` ensures the old pod fully terminates (releasing the volume) before the new pod starts.
+
+**OpenFGA store ID** is distributed as a Kubernetes `Secret` (`openfga-store-id`) rather than a PVC. The `openfga-provision` Job writes the store ID to the Secret; all backends mount it read-only at `/config/store_id` via a `secret` volume. This avoids the RWO multi-node attach conflict that a shared PVC would cause when backends land on different nodes.
+
 ### Deploy to Gardener (OCM + Flux + GitHub Actions)
-The platform is packaged as an OCM component and deployed to Gardener shoot clusters via Flux HelmRelease. See [k8s/README.md](k8s/README.md) for the full guide.
+The platform is packaged as an OCM component and deployed to Gardener shoot clusters via Flux HelmRelease. Deployments are **namespace-scoped** — a cluster can host several concurrent namespaces: `ai-trust` (the platform's existing, long-running namespace, default on `ai-trust-main`) plus per-developer/PR namespaces derived from the GitHub username (used on `ai-trust-test`). See [k8s/README.md](k8s/README.md) for the full guide.
 ```bash
-# Trigger a build + deploy to a specific cluster from any branch:
+# Trigger a build + deploy to a specific cluster/namespace from any branch:
 gh workflow run build-push-deploy.yml \
   --ref <branch> \
-  --field gardener_cluster=sr-test
+  --field gardener_cluster=ai-trust-test \
+  --field namespace=<namespace>
 
-# Check deploy status on the cluster:
+# Check deploy status on the cluster (namespace defaults to "ai-trust" on ai-trust-main):
 kubectl get componentversion,resource,fluxdeployer -n ocm-system
-kubectl get helmrelease ai-trust -n ocm-system -o wide
-kubectl get pods -n ai-trust
+kubectl get helmrelease ai-trust-<namespace> -n ocm-system -o wide
+kubectl get pods -n <namespace>
 ```
 - OCM component descriptor: `.ocm/component-constructor.yaml`
-- OCM CRs (ComponentVersion, Resource, FluxDeployer): `k8s/ocm/manifests.yaml`
-- Per-cluster env: `k8s/env/<cluster>/.env`
-- One-time cluster setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster>` (installs OCM controller, Flux, Traefik, DNS, TLS cert)
+- OCM CRs (ComponentVersion, Resource, FluxDeployer), all named per `${NAMESPACE}`: `k8s/ocm/manifests.yaml`
+- Per-cluster env: `k8s/env/<cluster>/.env` (`K8S_NAMESPACE` sets that cluster's default namespace)
+- One-time cluster/namespace setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster> [--namespace=<namespace>]` (installs OCM controller, Flux, Traefik, per-namespace DNS + TLS cert, RBAC — default namespace `ai-trust`; pass `--namespace=<name>` to additionally provision a developer/PR namespace on a shared cluster)
+- **PR deployment test** — adding the `garden-deploy` label to a PR (`.github/workflows/pr-deployment-test.yml`) deploys the PR branch to a namespace derived from the PR author on `ai-trust-test`. It runs the whole build→package→publish→deploy pipeline as one job (`namespace-deployment-test`) via composite actions + `docker-bake.hcl` (not a `workflow_call` to `build-push-deploy.yml`); the job's pass/fail is the PR check. That namespace must be initialized once via `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`.
 
 ### Run tests (any backend)
 ```bash
 cd <component>/backend   # e.g. cd compliance/backend
 make setup               # first time only — creates .venv, installs deps
-make test-unit           # no Docker needed (where available)
+make test-unit           # no Docker needed
 make test-e2e            # requires Postgres: docker compose up -d postgres
 make test                # all tests
 ```
 - `tests/unit/` — pure unit tests, no DB
 - `tests/e2e/` — full stack via ASGITransport, requires Postgres only (no running server); auto-creates `ai_trust_test` DB and runs migrations on first run
 
-### Consumer tests
+Workers (`audit-flush-worker`, `policy-checker-worker`, `consumers/clickhouse-consumer`) follow the same pattern but live without a `backend/` subdirectory — `cd <worker-dir>` instead of `cd <component>/backend`.
+
+### Pre-push checks
+Run these from the repo root before pushing to avoid CI failures:
 ```bash
-cd consumers/clickhouse-consumer
-make setup
-make test-unit
+# Python lint + format (ruff is not on PATH — invoke via python3 -m)
+python3 -m ruff check .
+python3 -m ruff format --check .
+
+# TypeScript typecheck (run for each frontend you touched)
+cd <component>/frontend && npm ci && npm run typecheck
 ```
+All three checks run as PR gates (`.github/workflows/pr-lint.yml`, `pr-typecheck.yml`, `pr-unit-tests.yml`). A clean local run guarantees no surprises in CI.
 
 ### Migrations
 ```bash
@@ -62,6 +75,8 @@ alembic upgrade head
 alembic revision --autogenerate -m "description"
 alembic downgrade -1
 ```
+
+**After merging main into a feature branch:** if revision IDs collide, renumber all feature migrations to follow the new main head (rename file + update `revision`/`down_revision`). Then check whether any feature migration touches the same table/column as the new main migrations — warn if so, don't auto-fix.
 
 ### VS Code debugging (any backend)
 Stop the Docker backend (`docker compose stop <service>`), `cd <component>/backend`, `make setup`, then press F5 — `launch.json` is pre-configured in each backend.
@@ -74,11 +89,14 @@ Codebase-specific decisions. Follow them even where an external pattern is more 
 
 - **DB sessions** — use `async with SessionLocal() as session` directly in each router (not `Depends()`). Helper functions (e.g. `cascade.py`) never `commit()` — only `flush()` if they need a row ID. The router owns the transaction and is always the one to `commit()`, keeping each request atomic.
 - **Logging** — event names follow `resource.action` (e.g. `assessment.created`, `evidence.status_changed`). Contextual fields go in `extra={}`, never interpolated into the message: `logger.info("assessment.created", extra={"assessment_id": row.id})`.
-- **ID generation** — all domain IDs use `new_id("PREFIX")` from `compliance/backend/app/ids.py` (e.g. `new_id("ASS")` → `ASS-XXXXXXXX`). Never `uuid4()` directly. Prefixes: `ASS`, `OBL`, `CTL`, `EVD`. Add new prefixes to `ids.py`.
+- **ID generation** — all domain IDs use `new_id("PREFIX")` from `compliance/backend/app/ids.py` (e.g. `new_id("ASS")` → `ASS-XXXXXXXX`). Never `uuid4()` directly. Prefixes: `ASS`, `OBL`, `REQ`, `EVD`. Add new prefixes to `ids.py`.
 - **E2E helpers** — `conftest.py` exposes module-level async functions (`create_system`, `create_assessment`, etc.). Import and call them directly; don't inline HTTP calls or wrap them in fixtures. `create_system()` in compliance tests writes directly to the DB (no HTTP intake endpoint in compliance).
-- **M2M linking** — many-to-many joins (`control_obligations`, `evidence_controls`, `evidence_obligations`) use raw `pg_insert(...).on_conflict_do_nothing()`, not ORM `relationship(secondary=)`. Don't add ORM relationships to M2M tables.
+- **M2M linking** — `evidence_requirements` is the only M2M join table; it uses raw `pg_insert(...).on_conflict_do_nothing()`, not ORM `relationship(secondary=)`. Don't add ORM relationships to M2M tables. Requirements link to obligations via a direct `obligation_id` FK (1:N), not a join table.
 - **Frontend API client** — every React frontend has `src/api/client.ts` with a typed `request<T>()` wrapper, `json()`/`qs()` helpers, and an `api` object with one method per endpoint. All calls go through `request<T>()` — never raw `fetch()` in components. `formatDetail` normalises FastAPI validation errors. Reference: `compliance/frontend/src/api/client.ts`.
 - **Pydantic schemas** — response schemas set `model_config = {"from_attributes": True}`. Convert rows with `Schema.model_validate(row)` — never `.from_orm()` (Pydantic v1, removed in v2).
+- **Test deps** — `requirements-test.txt` lists PyPI deps only; never `-r requirements.txt`. Editable libs (`-e ../libs/…`) are installed by `make setup`, not from this file. The service `requirements.txt` uses Docker-path `-e /app/libs/…` which is invalid outside containers and would break CI.
+- **Lint** — `pyproject.toml` at repo root configures ruff. `ruff` is not on PATH — invoke as `python3 -m ruff check .` and `python3 -m ruff format --check .`; both run as PR gates. Rules F401/F811/E402/E701/E712 are suppressed for pre-existing violations — don't add new suppressions for new code.
+- **TypeScript typecheck** — all 8 frontends run `npm run typecheck` (`tsc --noEmit`) as a PR gate (`.github/workflows/pr-typecheck.yml`). Run `cd <component>/frontend && npm ci && npm run typecheck` locally before pushing frontend changes. Do not leave unused imports or type errors — the check fails the PR.
 - **CLAUDE.md** — update it as part of any PR that adds or changes a feature, service, endpoint, env var, migration, or architectural pattern. It is the primary reference for AI assistants working in this repo — stale docs cause wrong suggestions and wasted effort.
 
 ---
@@ -197,9 +215,10 @@ Each component has `frontend/` (nginx, internal) and `backend/` (FastAPI, intern
 ### Dual deployment paths (docker-compose, k8s kind, and Gardener/OCM) — keep in sync
 Three paths are fully supported; **develop and change them together**. When you touch how a service runs:
 - New service in `docker-compose.yml` → add matching Deployment+Service (or Job) to the Helm chart + its image to `k8s/scripts/build-and-load-images.sh` + add it as a resource in `.ocm/component-constructor.yaml`.
+- **New image built in CI** → add it in **all three** CI build definitions or the Gardener deploy will be missing it: the **Deployment Workflow** `build-push` matrix (`.github/workflows/build-push-deploy.yml`, used by push-to-main and `workflow_dispatch`), a matching `target` + the `group "default"` list in `docker-bake.hcl` (used by the **PR Deployment Test** `/garden-deploy` path via `.github/actions/build-images`), and as an `ociImage` resource in `.ocm/component-constructor.yaml`. Nothing enforces parity — an image added to only one silently ships broken on the other trigger. Frontends must also carry their `VITE_*` build args in both the matrix `build_args` and the bake `target`'s `args`.
 - New/changed env var or secret → add to `.env.example`; it flows to k8s via `k8s/scripts/bootstrap.sh`'s Secret (sourced from the same `.env`, no separate k8s env file).
 - New `depends_on: condition:` → add the matching `waitForTcp`/`waitForHttp`/`waitForJob` initContainer (helpers in `_helpers.tpl`).
-- New one-shot Job → add `helm.sh/hook: pre-install,pre-upgrade` and `helm.sh/hook-delete-policy: before-hook-creation` annotations (see `jobs.yaml`). Without hooks, `helm upgrade` will fail with a Job immutability error on the second deploy.
+- New one-shot Job → use the `ai-trust.jobName` helper for `metadata.name` (appends `-r<.Release.Revision>`) so each `helm upgrade` creates a new Job name instead of patching an immutable one. Do **not** add `helm.sh/hook` annotations — plain resources with per-revision names are the established pattern here (see `jobs.yaml`).
 - Renamed/moved a mounted file (e.g. `infra/*/init.sh`, `otel-pipeline/**/config`) → update both `docker-compose.yml` `volumes:` **and** `bootstrap.sh` `--from-file`. Nothing enforces this in CI — a rename on one side silently breaks the other.
 
 ### Adding a new component
@@ -213,7 +232,7 @@ Three paths are fully supported; **develop and change them together**. When you 
 8. Add proxy routes to `shell/nginx.conf` (`/new-component/`, `/api/new-component/`).
 9. Add `base: "/new-component/"` to the frontend `vite.config.ts`.
 10. Add a nav node to `shell/luigi-config.js`.
-11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh` **and** as `ociImage` resources in `.ocm/component-constructor.yaml`.
+11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh` (kind), the `build-push` matrix in `.github/workflows/build-push-deploy.yml` **and** a `target` + `group "default"` entry in `docker-bake.hcl` (both CI build paths — see "keep in sync" above), **and** as `ociImage` resources in `.ocm/component-constructor.yaml`.
 
 ### ai-system-registry/ (port 8001, `/api/registry/`)
 AI system registration and EU AI Act classification.
@@ -286,24 +305,24 @@ Trace viewer for GenAI spans, reads ClickHouse only.
 - `GET /api/v1/traces` — groups spans by `trace_id`, paginated. Dev: `vite.config.ts` proxies `/api/*` → `http://localhost:8006`. Prod: nginx proxies `/api/` → `decision-trace-analyzer-backend:8006`.
 
 ### compliance/ (port 8007, `/api/compliance/`)
-Governance chain — assessments, obligations, controls, evidence for EU AI Act / NIST / ISO. Reads/writes Postgres; evidence files in MinIO.
+Governance chain — assessments, obligations, requirements, evidence for EU AI Act / NIST / ISO. Reads/writes Postgres; evidence files in MinIO.
 
 Backend (`compliance/backend/app/`):
-- `cascade.py` — status cascade + score recalc: approved evidence → effective control → fulfilled obligation → assessment score → `ai_systems.compliance`. Caller owns the transaction; cascade never commits.
-- `obligation_templates.py` — hardcoded obligation sets per (framework, tier): EU AI Act + NIST AI RMF + ISO/IEC 42001.
-- `control_templates.py` — hardcoded control templates per obligation `article_ref` (AISEC-* set), tier-filtered via `controls_for(article_ref, tier)`.
+- `cascade.py` — status cascade + score recalc: approved evidence → fulfilled requirement → fulfilled obligation → assessment score → `ai_systems.compliance`. Caller owns the transaction; cascade never commits.
+- `obligation_templates.py` — hardcoded obligation sets per (framework, tier, org_role). EU AI Act High/Limited are **obligation clusters** (keyed by a stable `cluster_id` like `P-RM`, `D-LIM`) translated from the AI Act Requirements catalogue; a cluster is emitted for a (tier, org_role) only when ≥1 of its requirements survives `requirements_for(...)`. NIST AI RMF + ISO/IEC 42001 apply their full set regardless of tier/role. `obligations_for(framework, tier, org_role="provider")`; minimal/prohibited/GPAI/unknown tiers yield no EU obligations.
+- `requirement_templates.py` — hardcoded per-requirement templates keyed by obligation `cluster_id`, filtered by risk tier **and** org_role via `requirements_for(cluster_id, tier, org_role)`. `requirement_ref` is the Requirement ID (e.g. `P-RM-01`); retained NIST/ISO sets carry no `role` and match any org_role. `cluster_articles(...)` aggregates a cluster's distinct top-level AI Act articles for display.
 - `minio_client.py` — async wrapper over the sync `minio` SDK (blocking calls in `asyncio.to_thread`). Two clients: `_client` (in-cluster, uploads) and `_presign_client` (public, presigned download URLs).
-- Routers: `frameworks.py`, `assessments.py` (CRUD + `/generate-obligations`, `/generate-controls`, `/submit`, `/approve`), `obligations.py`, `controls.py` (CRUD + `/link/{obligation_id}` POST/DELETE), `evidence.py` (multipart + CRUD + `/approve`, `/reject`, `/download-url`, `/versions`, `/upload-version`).
+- Routers: `frameworks.py`, `assessments.py` (CRUD + `/generate-obligations`, `/generate-requirements`, `/submit`, `/approve`), `obligations.py`, `requirements.py` (CRUD + `/link/{obligation_id}` POST/DELETE), `evidence.py` (multipart + CRUD + `/approve`, `/reject`, `/download-url`, `/versions`, `/upload-version`).
 
-**Governance chain** — `POST /api/v1/assessments` is the entry point: it auto-generates obligations **and** controls in one transaction. Obligations come from `obligation_templates.py` by tier, with owner/not-applicable pre-filled from the most recent approved prior assessment for the same (system, framework). For each obligation, `controls_for(article_ref, tier)` yields controls (stable `control_ref = "{article_ref}:{slug}"`) linked via `control_obligations`; a fresh control is `not_started`, so the cascade immediately moves each obligation `applicable → in_progress`. Owner (only) is carried forward from the most recent prior control with the same `control_ref` for that system. `POST /assessments/{id}/generate-controls` re-runs for API consumers and is idempotent (skips obligations that already have a control). Controls can also be linked manually via `POST /controls/{id}/link/{obligation_id}`. Approving evidence cascades automatically.
+**Governance chain** — `POST /api/v1/assessments` is the entry point: it auto-generates obligations **and** requirements in one transaction. Obligations come from `obligation_templates.py` by (tier, org_role), with owner/not-applicable pre-filled from the most recent approved prior assessment for the same (system, framework). For each obligation, `requirements_for(cluster_id, tier, org_role)` yields requirements (stable `requirement_ref` = the Requirement ID, e.g. `P-RM-01`) stored with a direct `obligation_id` FK (1:N); a fresh requirement is `open`, so the cascade immediately moves each obligation `applicable → in_progress`. Owner (only) is carried forward from the most recent prior requirement with the same `requirement_ref` for that system. `POST /assessments/{id}/generate-requirements` re-runs for API consumers and is idempotent (skips obligations that already have a requirement). Requirements can also be linked manually via `POST /requirements/{id}/link/{obligation_id}`. Approving evidence cascades automatically.
 
-**Delete** — `DELETE /api/v1/assessments/{id}` cascades obligations (FK `ondelete=CASCADE`) and removes auto-generated controls (`control_ref` not null) linked **only** to that assessment's obligations. Manual controls (`control_ref` null) and shared controls are kept. Response includes `controls_deleted`.
+**Delete** — `DELETE /api/v1/assessments/{id}` cascades obligations (FK `ondelete=CASCADE`) and removes auto-generated requirements (`requirement_ref` not null) linked **only** to that assessment's obligations. Manual requirements (`requirement_ref` null) and shared requirements are kept. Response includes `requirements_deleted`.
 
-**Evidence** — `POST /api/v1/evidence` accepts `control_ids` and `obligation_ids` as repeated form fields (multi-value, one M2M row each); at least one of `control_ids`/`obligation_ids`/`ai_system_id`/`assessment_id` required. Versioned: `/upload-version` snapshots current file metadata to `evidence_versions` before replacing (old MinIO file deleted, snapshot retained); `/versions` returns history oldest-first; `version_label` tracks the current label. Stored in MinIO bucket `evidence-files`, key `evidence/{evidence_id}/{filename}`.
+**Evidence** — `POST /api/v1/evidence` accepts `requirement_ids` as repeated form fields (multi-value, one M2M row each); at least one `requirement_id` required. Versioned: `/upload-version` snapshots current file metadata to `evidence_versions` before replacing (old MinIO file deleted, snapshot retained); `/versions` returns history oldest-first; `version_label` tracks the current label. Stored in MinIO bucket `evidence-files`, key `evidence/{evidence_id}/{filename}`.
 
 #### Evidence expiry (policy-checker-worker)
 Three alert rules seeded in migration `0004` drive evidence expiry:
-- `evidence_expired` — marks approved evidence past `validity_until` as `expired`, cascades control effectiveness + obligation status, fires alert
+- `evidence_expired` — marks approved evidence past `validity_until` as `expired`, cascades requirement effectiveness + obligation status, fires alert
 - `evidence_expiring_30d` — fires warning for approved evidence expiring in 8–30 days
 - `evidence_expiring_7d` — fires warning for approved evidence expiring in 1–7 days; replaces the 30-day alert when evidence enters the 7-day window (auto-resolves the 30-day alert)
 
@@ -318,14 +337,20 @@ Immutable audit trail — records who did what and when across all platform acti
 - `GET /v1/events` — paginated list with filters: `ai_system_id`, `action`, `actor`, `resource_type`, `from`, `to`, `search` (case-insensitive across action/actor/system name), `limit`/`offset`/`sort`
 - `GET /v1/events/{id}` — full detail including `changes` dict
 - `GET /v1/systems` — distinct AI systems present in audit log, filtered by same params as list (used to populate the UI dropdown)
-- `GET /v1/stats` — KPI counts with trend vs. previous equal-length window: `total`, `system_events` (resource_type=ai_system), `risk_and_compliance` (assessment/evidence/control/obligation)
+- `GET /v1/stats` — KPI counts with trend vs. previous equal-length window: `total`, `system_events` (resource_type=ai_system), `risk_and_compliance` (assessment/evidence/requirement/obligation)
 
 **Authorization** — all endpoints require `audit:read` (OpenFGA). Assigned to `platform_administrator`, `ai_compliance_officer`, `auditor`, `ai_engineer`.
 
 **audit-flush-worker/** — standalone asyncio worker (no HTTP port). `AUDIT_FLUSH_INTERVAL` (default 5s), `AUDIT_FLUSH_BATCH_SIZE` (default 500). On ClickHouse failure the exception is caught in the main loop, logged, and retried next cycle — rows stay in Postgres safely.
 
 ### admin/ (port 8010, `/api/admin/`)
-Platform administration — SMTP mail service configuration and general platform settings. Access restricted to `platform_administrator` role via `iam:manage` permission.
+Platform administration — SMTP mail service configuration, general platform settings, and a summary dashboard. Access restricted to `platform_administrator` role via `iam:manage` permission.
+
+**Screens** — all gated on `iam:manage`:
+- `/admin-home` — Platform Administration dashboard: KPI tiles (user/role counts, mail status) + cards linking to each section.
+- `/mail-service` — SMTP configuration.
+- `/admin-settings` — General platform settings.
+- Users & Roles — served by the separate IAM MFE (`/users/`).
 
 **Data model** — single-row `platform_settings` table (migration `0020`, always `id=1`). Seeded from env vars on first startup; once a row exists the DB is the source of truth and env vars are ignored. Password is stored in the row but **never returned** by GET endpoints — only `has_password: bool` is exposed.
 
@@ -333,6 +358,7 @@ Platform administration — SMTP mail service configuration and general platform
 - `GET/PUT /v1/smtp` — SMTP configuration (host, port, user, password, from, from_name, ssl, starttls). PUT preserves the existing password when `smtp_password` is absent from the body.
 - `POST /v1/smtp/test` — sends a real test email using the **saved** settings (save first, then test). Returns `{success, message}` with a descriptive error for each failure type (auth, connection refused, recipient rejected, timeout).
 - `GET/PUT /v1/settings` — general platform settings (platform_name, support_email).
+- `GET /v1/stats` — dashboard KPIs: user/role counts (via internal call to users backend), mail configured flag.
 - `startup.py` — `seed_settings_from_env()` called via FastAPI lifespan; reads `SMTP_*`, `PLATFORM_NAME`, `SUPPORT_EMAIL` env vars and inserts the row only if none exists.
 
 ## Environment variables

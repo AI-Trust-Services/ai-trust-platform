@@ -1,4 +1,5 @@
 """Public API for app.schemas — import from here, not from submodules."""
+
 from app.schemas.assessment import (
     AssessmentCreate,
     AssessmentDetailResponse,
@@ -7,14 +8,14 @@ from app.schemas.assessment import (
     VALID_ASSESSMENT_STATUSES,
     VALID_ASSESSMENT_TYPES,
 )
-from app.schemas.control import (
-    ControlCreate,
-    ControlDetailResponse,
-    ControlResponse,
-    ControlUpdate,
-    GenerateControlsResponse,
-    VALID_CONTROL_CATEGORIES,
-    VALID_CONTROL_STATUSES,
+from app.schemas.requirement import (
+    RequirementCreate,
+    RequirementDetailResponse,
+    RequirementResponse,
+    RequirementUpdate,
+    GenerateRequirementsResponse,
+    VALID_REQUIREMENT_CATEGORIES,
+    VALID_REQUIREMENT_STATUSES,
     VALID_EFFECTIVENESS,
 )
 from app.schemas.evidence import (
@@ -49,13 +50,13 @@ __all__ = [
     "ObligationDetailResponse",
     "GenerateObligationsResponse",
     "VALID_OBLIGATION_STATUSES",
-    "ControlCreate",
-    "ControlUpdate",
-    "ControlResponse",
-    "ControlDetailResponse",
-    "GenerateControlsResponse",
-    "VALID_CONTROL_CATEGORIES",
-    "VALID_CONTROL_STATUSES",
+    "RequirementCreate",
+    "RequirementUpdate",
+    "RequirementResponse",
+    "RequirementDetailResponse",
+    "GenerateRequirementsResponse",
+    "VALID_REQUIREMENT_CATEGORIES",
+    "VALID_REQUIREMENT_STATUSES",
     "VALID_EFFECTIVENESS",
     "EvidenceUpdate",
     "EvidenceResponse",
