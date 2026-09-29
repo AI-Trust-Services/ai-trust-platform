@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 // ── Chip input for tags ───────────────────────────────────────────────────────
 
@@ -581,32 +582,32 @@ function DatasetsSection({ cardId, datasets, onReload }: { cardId: string; datas
             ))}
           </div>
 
-          {/* Create dialog */}
-          <dialog open={dialogOpen} className="fixed inset-0 z-50 bg-transparent p-0" onClick={() => setDialogOpen(false)}>
-            <div className="fixed left-1/2 top-1/2 w-80 -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-card p-6 shadow-lg flex flex-col gap-4"
-              onClick={(e) => e.stopPropagation()}>
-              <h3 className="font-semibold">New Dataset</h3>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="ds_name">Name <span className="text-[var(--danger-fg)]">*</span></Label>
-                <Input id="ds_name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. MMLU" autoFocus />
+          <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setDialogOpen(false); setNewName(""); setNewType("train"); } }}>
+            <DialogContent className="max-w-[400px] gap-0 p-0">
+              <DialogHeader><DialogTitle>New Dataset</DialogTitle></DialogHeader>
+              <div className="flex flex-col gap-4 p-6 pt-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="ds_name">Name <span className="text-[var(--danger-fg)]">*</span></Label>
+                  <Input id="ds_name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. MMLU" autoFocus />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="ds_type">Type</Label>
+                  <select id="ds_type" className={SELECT_CLASS} value={newType} onChange={(e) => setNewType(e.target.value as DatasetCreate["type"])}>
+                    <option value="train">train</option>
+                    <option value="val">val</option>
+                    <option value="test">test</option>
+                    <option value="train_cv">train_cv</option>
+                  </select>
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="ds_type">Type</Label>
-                <select id="ds_type" className={SELECT_CLASS} value={newType} onChange={(e) => setNewType(e.target.value as DatasetCreate["type"])}>
-                  <option value="train">train</option>
-                  <option value="val">val</option>
-                  <option value="test">test</option>
-                  <option value="train_cv">train_cv</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <DialogFooter className="px-6 pb-6">
+                <Button variant="ghost" onClick={() => { setDialogOpen(false); setNewName(""); setNewType("train"); }}>Cancel</Button>
                 <Button onClick={handleCreate} disabled={saving}>
                   {saving && <Loader2 className="animate-spin" />} Create
                 </Button>
-              </div>
-            </div>
-          </dialog>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </section>
