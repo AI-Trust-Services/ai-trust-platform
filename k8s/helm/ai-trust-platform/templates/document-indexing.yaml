@@ -1,0 +1,188 @@
+{{/* Document indexing feature: a shared BGE-M3 embedding server, the indexing API
+     backend, and the async indexing worker. Deployed on k8s/kind only (this feature
+     has no docker-compose entry). The worker's queue is the DB (document_versions.status),
+     so no broker is involved. */}}
+
+{{/* ── embedding-service: loads BAAI/bge-m3 once, shared by backend (query) + worker (index) ── */}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: embedding-service
+spec:
+  serviceName: embedding-service
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "embedding-service") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "embedding-service") | nindent 8 }}
+    spec:
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: embedding-service
+          image: {{ .Values.image.repository }}/embedding-service:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: EMBED_MODEL
+              value: {{ .Values.indexing.embedModel | quote }}
+          ports:
+            - containerPort: {{ .Values.indexing.embedding.port }}
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+          # Model load is slow (first start also downloads ~2 GB) — /health returns
+          # 503 until it is in memory, so give readiness a long grace window.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.indexing.embedding.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 40
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.indexing.embedding.port }}
+            initialDelaySeconds: 300
+            periodSeconds: 30
+  volumeClaimTemplates:
+    - metadata:
+        name: hf-cache
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.indexing.embedding.storageSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedding-service
+spec:
+  type: {{ .Values.indexing.embedding.serviceType | default "ClusterIP" }}
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "embedding-service") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.indexing.embedding.port }}
+      targetPort: {{ .Values.indexing.embedding.port }}
+---
+{{/* ── document-indexing-backend: upload, status, retrieval API ── */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: document-indexing-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "document-indexing-backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "document-indexing-backend") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        {{- include "ai-trust.waitForJob" (dict "job" "db-migrate" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForJob" (dict "job" "openfga-provision" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForHttp" (dict "name" "minio" "port" 9000 "path" "/minio/health/live" "image" .Values.waitImages.busybox) | nindent 8 }}
+        {{- include "ai-trust.waitForHttp" (dict "name" "embedding-service" "port" .Values.indexing.embedding.port "path" "/health" "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: document-indexing-backend
+          image: {{ .Values.image.repository }}/document-indexing-backend:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # DATABASE_URL, MINIO_*
+          env:
+            - name: ALLOWED_ORIGINS
+              value: {{ .Values.appPublicUrl | quote }}
+            - name: ROOT_PATH
+              value: {{ .Values.indexing.rootPath | quote }}
+            - name: INDEXING_BUCKET
+              value: {{ .Values.indexing.bucket | quote }}
+            - name: EMBEDDING_SERVICE_URL
+              value: http://embedding-service:{{ .Values.indexing.embedding.port }}
+            - name: OPENFGA_URL
+              value: http://openfga:8080
+          ports:
+            - containerPort: {{ .Values.indexing.backendPort }}
+          volumeMounts:
+            - name: openfga-config
+              mountPath: /config
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.indexing.backendPort }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.indexing.backendPort }}
+            initialDelaySeconds: 20
+            periodSeconds: 15
+      volumes:
+        - name: openfga-config
+          secret:
+            secretName: openfga-store-id
+            items:
+              - key: store_id
+                path: store_id
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: document-indexing-backend
+spec:
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "document-indexing-backend") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.indexing.backendPort }}
+      targetPort: {{ .Values.indexing.backendPort }}
+---
+{{/* ── document-indexing-worker: DB-polling indexer (no HTTP port) ── */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: document-indexing-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "document-indexing-worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "document-indexing-worker") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        {{- include "ai-trust.waitForJob" (dict "job" "db-migrate" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForHttp" (dict "name" "minio" "port" 9000 "path" "/minio/health/live" "image" .Values.waitImages.busybox) | nindent 8 }}
+        {{- include "ai-trust.waitForHttp" (dict "name" "embedding-service" "port" .Values.indexing.embedding.port "path" "/health" "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: document-indexing-worker
+          image: {{ .Values.image.repository }}/document-indexing-worker:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # DATABASE_URL, MINIO_*
+          env:
+            - name: INDEXING_BUCKET
+              value: {{ .Values.indexing.bucket | quote }}
+            - name: INDEXING_POLL_INTERVAL
+              value: {{ .Values.indexing.pollInterval | quote }}
+            - name: EMBED_MODEL
+              value: {{ .Values.indexing.embedModel | quote }}
+            - name: EMBEDDING_SERVICE_URL
+              value: http://embedding-service:{{ .Values.indexing.embedding.port }}

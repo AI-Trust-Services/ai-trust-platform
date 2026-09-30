@@ -58,7 +58,10 @@ secretName: ai-trust-env # created by k8s/scripts/bootstrap.sh (from .env)
 # on node IPs). On kind, values-kind.yaml overrides these to NodePort so
 # kind-config.yaml extraPortMappings can bind them to localhost.
 postgres:
-  image: postgres:16-alpine
+  # pgvector-enabled Postgres 16 (drop-in for postgres:16-alpine — same PG16 data
+  # dir). Provides the `vector` extension enabled by migration 0026 for document
+  # embeddings. The waitImages.postgres client above stays alpine (psql only).
+  image: pgvector/pgvector:pg16
   storageSize: 2Gi
   serviceType: ClusterIP
 
@@ -99,6 +102,20 @@ policyChecker:
 auditFlush:
   interval: "5"
   batchSize: "500"
+
+# ── Document indexing (document-indexing-backend/-worker + embedding-service) ──
+# backend + worker use image.repository/<name>:image.tag like every other built
+# image; embedding-service loads BGE-M3 once and is shared by both.
+indexing:
+  backendPort: 8011
+  rootPath: /api/indexing
+  pollInterval: "10"
+  bucket: indexing-docs
+  embedModel: BAAI/bge-m3
+  embedding:
+    port: 8012
+    storageSize: 10Gi # BGE-M3 (~2 GB) + Docling models cached on the HF-cache PVC
+    serviceType: ClusterIP
 
 # ── Ollama (optional local LLM for AI-assisted registration) ──
 # Disabled by default: the registry backend defaults to the offline `stub`

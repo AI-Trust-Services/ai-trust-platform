@@ -29,6 +29,9 @@ group "default" {
     "compliance-backend",
     "decision-trace-analyzer-backend",
     "policy-checker-worker",
+    "embedding-service",
+    "document-indexing-backend",
+    "document-indexing-worker",
     "audit-backend",
     "audit-flush-worker",
     "admin-backend",
@@ -127,6 +130,33 @@ target "policy-checker-worker" {
   tags       = [tag("policy-checker-worker")]
   cache-from = ["type=gha,scope=policy-checker-worker"]
   cache-to   = ["type=gha,mode=max,scope=policy-checker-worker"]
+}
+
+target "embedding-service" {
+  context    = "."
+  dockerfile = "embedding-service/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("embedding-service")]
+  cache-from = ["type=gha,scope=embedding-service"]
+  cache-to   = ["type=gha,mode=max,scope=embedding-service"]
+}
+
+target "document-indexing-backend" {
+  context    = "."
+  dockerfile = "document-indexing/backend/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("document-indexing-backend")]
+  cache-from = ["type=gha,scope=document-indexing-backend"]
+  cache-to   = ["type=gha,mode=max,scope=document-indexing-backend"]
+}
+
+target "document-indexing-worker" {
+  context    = "."
+  dockerfile = "document-indexing-worker/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("document-indexing-worker")]
+  cache-from = ["type=gha,scope=document-indexing-worker"]
+  cache-to   = ["type=gha,mode=max,scope=document-indexing-worker"]
 }
 
 target "audit-backend" {

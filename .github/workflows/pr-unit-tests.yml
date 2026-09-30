@@ -28,6 +28,9 @@ jobs:
             compliance/backend
             consumers/clickhouse-consumer
             decision-trace-analyzer/backend
+            document-indexing/backend
+            document-indexing-worker
+            embedding-service
             libs/authorization
             monitoring/backend
             otel-pipeline/rmq-bridge
