@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
+      "@ai-trust/react-hooks": path.resolve(__dirname, "../../libs/react-hooks/src"),
     },
   },
   server: {

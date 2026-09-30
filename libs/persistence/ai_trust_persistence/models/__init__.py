@@ -1,4 +1,5 @@
 from ai_trust_persistence.models.ai_system import AISystem
+from ai_trust_persistence.models.branding import Branding
 from ai_trust_persistence.models.platform_settings import PlatformSettings
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.alert_rule import AlertRule
@@ -22,6 +23,7 @@ __all__ = [
     "AISystemModelCard",
     "AlertRule",
     "AuditEvent",
+    "Branding",
     "CustomRole",
     "ModelCard",
     "Framework",
