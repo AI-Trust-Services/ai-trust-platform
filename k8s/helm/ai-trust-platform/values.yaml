@@ -17,6 +17,9 @@ image:
   tag: local
   pullPolicy: IfNotPresent # required for images loaded via `kind load docker-image` (not in any registry)
 
+demoSeed:
+  enabled: false
+
 # Only needed against a real registry (e.g. ghcr.io on Gardener) when the
 # repository's packages are private. Empty for kind - see values-gardener.yaml
 # and .github/workflows/deploy-gardener.yml.

@@ -28,6 +28,7 @@ group "default" {
     "alerts-backend",
     "compliance-backend",
     "decision-trace-analyzer-backend",
+    "risk-management-demo-seed",
     "policy-checker-worker",
     "audit-backend",
     "audit-flush-worker",
@@ -116,6 +117,15 @@ target "decision-trace-analyzer-backend" {
   tags       = [tag("decision-trace-analyzer-backend")]
   cache-from = ["type=gha,scope=decision-trace-analyzer-backend"]
   cache-to   = ["type=gha,mode=max,scope=decision-trace-analyzer-backend"]
+}
+
+target "risk-management-demo-seed" {
+  context    = "risk-management/demo-seed"
+  dockerfile = "Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("risk-management-demo-seed")]
+  cache-from = ["type=gha,scope=risk-management-demo-seed"]
+  cache-to   = ["type=gha,mode=max,scope=risk-management-demo-seed"]
 }
 
 target "policy-checker-worker" {

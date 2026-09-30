@@ -16,6 +16,7 @@ Alternative to docker-compose — both are supported, share the same `.env`, and
 cd k8s
 make up      # kind create cluster + bootstrap + build&load images + helm install
 make down    # helm uninstall + kind delete cluster
+make demo-seed # opt-in Risk Management demo data Job
 ```
 Manifests live in `k8s/helm/ai-trust-platform/`. Every k8s Service name matches the docker-compose service name (`postgres`, `ai-system-registry-backend`, etc.) so `shell/nginx.conf` and backend env vars work unmodified.
 

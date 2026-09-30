@@ -45,6 +45,7 @@ build alerts-backend . alerts/backend/Dockerfile
 build compliance-backend . compliance/backend/Dockerfile
 build decision-trace-analyzer-backend . decision-trace-analyzer/backend/Dockerfile
 build risk-management-backend . risk-management/backend/Dockerfile
+build risk-management-demo-seed ./risk-management/demo-seed ./risk-management/demo-seed/Dockerfile
 build policy-checker-worker . policy-checker-worker/Dockerfile
 build otel-clickhouse-consumer . consumers/clickhouse-consumer/Dockerfile
 build openfga-provision . infra/openfga-provision/Dockerfile

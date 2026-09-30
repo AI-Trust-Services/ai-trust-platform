@@ -6,7 +6,7 @@ CHART := helm/ai-trust-platform
 # Auto-enable Ollama in Helm when LLM_PROVIDER=ollama is set in ../.env
 OLLAMA_SET := $(shell grep -s '^LLM_PROVIDER=ollama' ../.env > /dev/null 2>&1 && echo '--set ollama.enabled=true' || echo '')
 
-.PHONY: up down cluster delete-cluster configure bootstrap build install upgrade uninstall reset-jobs status
+.PHONY: up down cluster delete-cluster configure bootstrap build install upgrade demo-seed uninstall reset-jobs status
 
 # Full stack, from nothing - the kind/Helm equivalent of `docker compose up --build -d`.
 # `configure` runs first: it PROMPTS for the tenancy mode (single vs multi-tenant) and
@@ -50,6 +50,9 @@ install:
 
 upgrade:
 	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
+
+demo-seed:
+	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml --set demoSeed.enabled=true $(OLLAMA_SET)
 
 uninstall:
 	-helm uninstall $(RELEASE) -n $(NAMESPACE)

@@ -80,6 +80,26 @@ Watch it come up with `make status` or `kubectl get pods -n ai-trust -w`. One-sh
 (`db-migrate`, `clickhouse-migrate`, `minio-init`, `keycloak-provision`, `openfga-migrate`,
 `openfga-provision`) should reach `Completed`; everything else should reach `Running`.
 
+### Seed the Risk Management demo data
+
+The demo seed is opt-in, matching the Docker Compose `demo` profile. The image is built and
+loaded by `make build`, but the Job is not created during a normal install. To run it:
+
+```bash
+make demo-seed
+kubectl get jobs -n ai-trust
+kubectl logs -n ai-trust job/risk-management-demo-seed-r<N>
+```
+
+Replace `<N>` with the current Helm release revision shown by
+`helm history ai-trust -n ai-trust`. The seed is idempotent and can be run again with
+`make demo-seed`; each Helm revision creates a fresh Job. To remove the opt-in Job from
+subsequent upgrades, run:
+
+```bash
+make upgrade
+```
+
 ## Day-to-day
 
 - Rebuilt an image after a code change? `make build` again, then

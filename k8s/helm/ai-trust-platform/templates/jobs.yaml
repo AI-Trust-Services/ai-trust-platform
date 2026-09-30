@@ -235,6 +235,39 @@ spec:
           emptyDir: {}
         - name: secret-yaml
           emptyDir: {}
+{{- if .Values.demoSeed.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ai-trust.jobName" (dict "base" "risk-management-demo-seed" "rev" .Release.Revision) }}
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: OnFailure
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        {{- include "ai-trust.waitForHttp" (dict "name" "ai-system-registry-backend" "port" 8001 "path" "/health" "image" .Values.waitImages.busybox) | nindent 8 }}
+        {{- include "ai-trust.waitForHttp" (dict "name" "risk-management-backend" "port" 8009 "path" "/health" "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: risk-management-demo-seed
+          image: {{ .Values.image.repository }}/risk-management-demo-seed:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secretName }}
+          env:
+            - name: REGISTRY_API_BASE
+              value: http://ai-system-registry-backend:8001
+            - name: RISK_API_BASE
+              value: http://risk-management-backend:8009
+            - name: SEED_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: APP_ADMIN_USERNAME
+{{- end }}
 {{- if .Values.ollama.enabled }}
 ---
 apiVersion: batch/v1
