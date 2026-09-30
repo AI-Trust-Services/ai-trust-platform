@@ -114,6 +114,37 @@ npm run typecheck
 
 Frontend unit tests (Vitest) and ESLint are not yet configured — contributions welcome.
 
+### Integration tests
+
+`tests/integration/` is a global cross-service suite that verifies microservice contracts against a **live platform** (kind locally, or a Gardener cluster). It requires all services running — not a substitute for unit or e2e tests.
+
+| Test file | Tests covered |
+|---|---|
+| `test_01_health.py` | All 7 backends `/health` → 200 |
+| `test_02_registry_compliance.py` | Registry↔compliance shared model, assessment generation, evidence cascade to `ai_systems.compliance`, rejection revert |
+| `test_03_rbac.py` | RBAC 403s across services, admin→users internal HTTP call |
+
+**Run locally** (after `cd k8s && make up`):
+
+```bash
+cd k8s
+make test-int                    # namespace=ai-trust (kind default)
+NAMESPACE=sebastian make test-int  # against a remote namespace
+```
+
+`make test-int` starts port-forwards for all 7 backends, runs pytest, then kills the forwards — even on failure.
+
+**Manual iteration** (debug a single test):
+
+```bash
+cd k8s
+make forward-ports               # start forwards, returns prompt
+pytest ../tests/integration/test_03_rbac.py -v
+make stop-forwards
+```
+
+**CI**: the `Integration Tests` workflow triggers automatically after a successful `PR Deployment Test` (PR with `garden-deploy` label) or `Deployment Workflow` (merge to main). It runs as a separate workflow — deployment status is unaffected by integration test results.
+
 ### Automated PR checks
 
 Every pull request triggers three workflows:
