@@ -60,14 +60,14 @@ build shell ./shell ./shell/Dockerfile
 build otel-rmq-bridge ./otel-pipeline/rmq-bridge ./otel-pipeline/rmq-bridge/Dockerfile
 
 # ── frontends (Vite build args baked in, same as docker-compose args:) ──
-build ai-system-registry-frontend ./ai-system-registry/frontend ./ai-system-registry/frontend/Dockerfile \
+build ai-system-registry-frontend . ai-system-registry/frontend/Dockerfile \
   --build-arg "VITE_REGISTRY_API_BASE=${VITE_REGISTRY_API_BASE}" \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
 
-build monitoring-frontend ./monitoring/frontend ./monitoring/frontend/Dockerfile \
+build monitoring-frontend . monitoring/frontend/Dockerfile \
   --build-arg "VITE_MONITORING_API_BASE=${VITE_MONITORING_API_BASE}"
 
-build overview-frontend ./overview/frontend ./overview/frontend/Dockerfile \
+build overview-frontend . overview/frontend/Dockerfile \
   --build-arg "VITE_OVERVIEW_API_BASE=${VITE_OVERVIEW_API_BASE}" \
   --build-arg "VITE_ALERTS_API_BASE=${VITE_ALERTS_API_BASE}" \
   --build-arg "VITE_ALERTS_URL=${VITE_ALERTS_URL}" \
@@ -76,22 +76,22 @@ build overview-frontend ./overview/frontend ./overview/frontend/Dockerfile \
   --build-arg "VITE_COMPLIANCE_API_BASE=${VITE_COMPLIANCE_API_BASE}" \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
 
-build alerts-frontend ./alerts/frontend ./alerts/frontend/Dockerfile \
+build alerts-frontend . alerts/frontend/Dockerfile \
   --build-arg "VITE_ALERTS_API_BASE=${VITE_ALERTS_API_BASE}" \
   --build-arg "VITE_ALERTS_URL=${VITE_ALERTS_URL}" \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
 
-build compliance-frontend ./compliance/frontend ./compliance/frontend/Dockerfile \
+build compliance-frontend . compliance/frontend/Dockerfile \
   --build-arg "VITE_COMPLIANCE_API_BASE=${VITE_COMPLIANCE_API_BASE:-/api/compliance/v1}" \
   --build-arg "VITE_REGISTRY_API_BASE=${VITE_REGISTRY_API_BASE:-/api/registry/v1}" \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
 
-build users-frontend ./users/frontend ./users/frontend/Dockerfile \
+build users-frontend . users/frontend/Dockerfile \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
 
 build audit-backend . audit/backend/Dockerfile
 
-build audit-frontend ./audit/frontend ./audit/frontend/Dockerfile \
+build audit-frontend . audit/frontend/Dockerfile \
   --build-arg "VITE_AUDIT_API_BASE=${VITE_AUDIT_API_BASE:-/api/audit/v1}" \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
 
@@ -99,11 +99,11 @@ build audit-flush-worker . audit-flush-worker/Dockerfile
 
 build admin-backend . admin/backend/Dockerfile
 
-build admin-frontend ./admin/frontend ./admin/frontend/Dockerfile \
+build admin-frontend . admin/frontend/Dockerfile \
   --build-arg "VITE_ADMIN_API_BASE=${VITE_ADMIN_API_BASE:-/api/admin/v1}" \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
 
-build decision-trace-analyzer-frontend ./decision-trace-analyzer/frontend ./decision-trace-analyzer/frontend/Dockerfile \
+build decision-trace-analyzer-frontend . decision-trace-analyzer/frontend/Dockerfile \
   --build-arg "VITE_DTA_API_BASE=${VITE_DTA_API_BASE}"
 
 echo "==> loading ${#images[@]} images into kind cluster '${CLUSTER_NAME}'"
