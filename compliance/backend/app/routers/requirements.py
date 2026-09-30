@@ -30,15 +30,21 @@ logger = get_logger(__name__)
 
 
 async def _load(session: AsyncSession, requirement_id: str) -> Requirement:
-    row = (await session.execute(
-        select(Requirement).where(Requirement.id == requirement_id)
-    )).scalar_one_or_none()
+    row = (
+        await session.execute(
+            select(Requirement).where(Requirement.id == requirement_id)
+        )
+    ).scalar_one_or_none()
     if not row:
         raise HTTPException(404, f"Requirement {requirement_id} not found")
     return row
 
 
-@router.get("/requirements", response_model=list[RequirementResponse], dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
+@router.get(
+    "/requirements",
+    response_model=list[RequirementResponse],
+    dependencies=[Depends(require_permission(ASSESSMENTS_READ))],
+)
 async def list_requirements(
     ai_system_id: str | None = Query(default=None),
     obligation_id: str | None = Query(default=None),
@@ -54,7 +60,8 @@ async def list_requirements(
             stmt = stmt.where(Requirement.obligation_id == obligation_id)
         if evidence_id:
             stmt = stmt.join(
-                evidence_requirements, evidence_requirements.c.requirement_id == Requirement.id
+                evidence_requirements,
+                evidence_requirements.c.requirement_id == Requirement.id,
             ).where(evidence_requirements.c.evidence_id == evidence_id)
         stmt = stmt.limit(limit).offset(offset)
         rows = (await session.execute(stmt)).scalars().all()
@@ -65,12 +72,19 @@ async def list_requirements(
         return results
 
 
-@router.post("/requirements", response_model=RequirementResponse, status_code=201, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
+@router.post(
+    "/requirements",
+    response_model=RequirementResponse,
+    status_code=201,
+    dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))],
+)
 async def create_requirement(body: RequirementCreate) -> RequirementResponse:
     async with SessionLocal() as session:
-        obligation = (await session.execute(
-            select(Obligation).where(Obligation.id == body.obligation_id)
-        )).scalar_one_or_none()
+        obligation = (
+            await session.execute(
+                select(Obligation).where(Obligation.id == body.obligation_id)
+            )
+        ).scalar_one_or_none()
         if not obligation:
             raise HTTPException(404, f"Obligation {body.obligation_id} not found")
         row = Requirement(
@@ -91,29 +105,47 @@ async def create_requirement(body: RequirementCreate) -> RequirementResponse:
         await refresh_obligation(session, body.obligation_id)
         await session.commit()
         await session.refresh(row)
-    logger.info("requirement.created", extra={"requirement_id": row.id, "obligation_id": row.obligation_id})
+    logger.info(
+        "requirement.created",
+        extra={"requirement_id": row.id, "obligation_id": row.obligation_id},
+    )
     return RequirementResponse.model_validate(row)
 
 
-@router.get("/requirements/{requirement_id}", response_model=RequirementDetailResponse, dependencies=[Depends(require_permission(ASSESSMENTS_READ))])
+@router.get(
+    "/requirements/{requirement_id}",
+    response_model=RequirementDetailResponse,
+    dependencies=[Depends(require_permission(ASSESSMENTS_READ))],
+)
 async def get_requirement(requirement_id: str) -> RequirementDetailResponse:
     async with SessionLocal() as session:
         row = await _load(session, requirement_id)
-        evidence_count = (await session.execute(
-            select(func.count()).select_from(evidence_requirements)
-            .where(evidence_requirements.c.requirement_id == requirement_id)
-        )).scalar_one()
-        ass_title = (await session.execute(
-            select(Assessment.title).where(Assessment.id == row.assessment_id)
-        )).scalar_one_or_none()
+        evidence_count = (
+            await session.execute(
+                select(func.count())
+                .select_from(evidence_requirements)
+                .where(evidence_requirements.c.requirement_id == requirement_id)
+            )
+        ).scalar_one()
+        ass_title = (
+            await session.execute(
+                select(Assessment.title).where(Assessment.id == row.assessment_id)
+            )
+        ).scalar_one_or_none()
         detail = RequirementDetailResponse.model_validate(row)
         detail.assessment_title = ass_title
         detail.evidence_count = evidence_count
         return detail
 
 
-@router.put("/requirements/{requirement_id}", response_model=RequirementResponse, dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
-async def update_requirement(requirement_id: str, body: RequirementUpdate) -> RequirementResponse:
+@router.put(
+    "/requirements/{requirement_id}",
+    response_model=RequirementResponse,
+    dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))],
+)
+async def update_requirement(
+    requirement_id: str, body: RequirementUpdate
+) -> RequirementResponse:
     updates = body.model_dump(exclude_none=True)
     async with SessionLocal() as session:
         row = await _load(session, requirement_id)
@@ -125,11 +157,17 @@ async def update_requirement(requirement_id: str, body: RequirementUpdate) -> Re
             await refresh_obligations_for_requirement(session, requirement_id)
         await session.commit()
         await session.refresh(row)
-    logger.info("requirement.updated", extra={"requirement_id": requirement_id, "fields": sorted(updates.keys())})
+    logger.info(
+        "requirement.updated",
+        extra={"requirement_id": requirement_id, "fields": sorted(updates.keys())},
+    )
     return RequirementResponse.model_validate(row)
 
 
-@router.delete("/requirements/{requirement_id}", dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))])
+@router.delete(
+    "/requirements/{requirement_id}",
+    dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))],
+)
 async def delete_requirement(requirement_id: str) -> dict:
     async with SessionLocal() as session:
         row = await _load(session, requirement_id)

@@ -16,6 +16,7 @@ def _tenancy_mode() -> str:
     """Active tenancy mode (guarded — libs/tenancy may be absent in single/local)."""
     try:
         from ai_trust_tenancy.config import MODE
+
         return MODE
     except ImportError:
         return os.environ.get("TENANCY_MODE", "single").strip().lower()
@@ -56,6 +57,7 @@ class Batcher:
         messages = [msg for _, msg in snapshot]
         await self._flush_fn(all_rows, messages)
         self._buffer = []
+
 
 EXCHANGE_NAME = "otel.traces"
 QUEUE_NAME = "clickhouse-consumer"
@@ -145,7 +147,9 @@ def _process_payload(body: bytes) -> list[dict]:
     received_at = datetime.now(timezone.utc)
     rows = []
     for resource_span in payload.get("resourceSpans", []):
-        resource_attrs = _attrs_dict(resource_span.get("resource", {}).get("attributes", []))
+        resource_attrs = _attrs_dict(
+            resource_span.get("resource", {}).get("attributes", [])
+        )
         service_name = _extract_attr(resource_attrs, "service.name") or ""
         # Database-per-tenant routing: the instrumented app emits its tenant as an OTLP resource
         # attribute `ai_trust.tenant_id`. This selects which tenant database the span is written
@@ -172,7 +176,9 @@ def _process_payload(body: bytes) -> list[dict]:
                     # the trace and hides the instrumentation gap.
                     log.warning(
                         "Dropping span %s/%s: missing or invalid startTimeUnixNano=%r",
-                        span.get("traceId"), span.get("spanId"), start_nano,
+                        span.get("traceId"),
+                        span.get("spanId"),
+                        start_nano,
                     )
                     continue
                 duration_ms = 0.0
@@ -182,35 +188,53 @@ def _process_payload(body: bytes) -> list[dict]:
                     except (TypeError, ValueError):
                         duration_ms = 0.0
                 status = span.get("status") or {}
-                rows.append({
-                    "received_at": received_at,
-                    "started_at": started_at,
-                    "trace_id": span.get("traceId", ""),
-                    "span_id": span.get("spanId", ""),
-                    "service_name": service_name,
-                    "gen_ai_system": _extract_attr(attrs, "gen_ai.system") or "",
-                    "operation_name": operation_name or "",
-                    "request_model": _extract_attr(attrs, "gen_ai.request.model") or "",
-                    "response_model": _extract_attr(attrs, "gen_ai.response.model") or "",
-                    "finish_reasons": _extract_attr(attrs, "gen_ai.response.finish_reasons") or "",
-                    "input_tokens": int(_extract_attr(attrs, "gen_ai.usage.input_tokens") or 0),
-                    "output_tokens": int(_extract_attr(attrs, "gen_ai.usage.output_tokens") or 0),
-                    "max_tokens": int(_extract_attr(attrs, "gen_ai.request.max_tokens") or 0),
-                    "duration_ms": duration_ms,
-                    "input_messages": _extract_attr(attrs, "gen_ai.input.messages") or "",
-                    "output_messages": _extract_attr(attrs, "gen_ai.output.messages") or "",
-                    # added in 0002 — order must match COLUMNS in tables.py
-                    "parent_span_id": span.get("parentSpanId", ""),
-                    "span_name": span.get("name", ""),
-                    "span_kind": int(span.get("kind", 0)),
-                    "status_code": int(status.get("code", 0)),
-                    "status_message": status.get("message", "") or "",
-                    "attributes": _attrs_as_map(attrs),
-                    # Routing key only — NOT a table column. Resolves the tenant whose ClickHouse
-                    # database this span is written to (span attr overrides resource attr). Popped
-                    # out in insert_routed before the row is turned into column values.
-                    "_route_tenant": _extract_attr(attrs, "ai_trust.tenant_id") or resource_tenant,
-                })
+                rows.append(
+                    {
+                        "received_at": received_at,
+                        "started_at": started_at,
+                        "trace_id": span.get("traceId", ""),
+                        "span_id": span.get("spanId", ""),
+                        "service_name": service_name,
+                        "gen_ai_system": _extract_attr(attrs, "gen_ai.system") or "",
+                        "operation_name": operation_name or "",
+                        "request_model": _extract_attr(attrs, "gen_ai.request.model")
+                        or "",
+                        "response_model": _extract_attr(attrs, "gen_ai.response.model")
+                        or "",
+                        "finish_reasons": _extract_attr(
+                            attrs, "gen_ai.response.finish_reasons"
+                        )
+                        or "",
+                        "input_tokens": int(
+                            _extract_attr(attrs, "gen_ai.usage.input_tokens") or 0
+                        ),
+                        "output_tokens": int(
+                            _extract_attr(attrs, "gen_ai.usage.output_tokens") or 0
+                        ),
+                        "max_tokens": int(
+                            _extract_attr(attrs, "gen_ai.request.max_tokens") or 0
+                        ),
+                        "duration_ms": duration_ms,
+                        "input_messages": _extract_attr(attrs, "gen_ai.input.messages")
+                        or "",
+                        "output_messages": _extract_attr(
+                            attrs, "gen_ai.output.messages"
+                        )
+                        or "",
+                        # added in 0002 — order must match COLUMNS in tables.py
+                        "parent_span_id": span.get("parentSpanId", ""),
+                        "span_name": span.get("name", ""),
+                        "span_kind": int(span.get("kind", 0)),
+                        "status_code": int(status.get("code", 0)),
+                        "status_message": status.get("message", "") or "",
+                        "attributes": _attrs_as_map(attrs),
+                        # Routing key only — NOT a table column. Resolves the tenant whose ClickHouse
+                        # database this span is written to (span attr overrides resource attr). Popped
+                        # out in insert_routed before the row is turned into column values.
+                        "_route_tenant": _extract_attr(attrs, "ai_trust.tenant_id")
+                        or resource_tenant,
+                    }
+                )
     return rows
 
 
@@ -223,13 +247,26 @@ def make_flush_fn(insert_fn: Callable, retry_delays: list[int] | None = None):
                 await asyncio.sleep(delay)
             try:
                 insert_fn(rows)
-                log.info("Inserted %d GenAI span(s) in batch of %d messages", len(rows), len(messages))
+                log.info(
+                    "Inserted %d GenAI span(s) in batch of %d messages",
+                    len(rows),
+                    len(messages),
+                )
                 for m in messages:
                     await m.ack()
                 return
             except Exception:
-                log.warning("ClickHouse insert attempt %d/%d failed", attempt, len(delays) + 1, exc_info=True)
-        log.error("Dropping batch of %d rows after %d failed attempts", len(rows), len(delays) + 1)
+                log.warning(
+                    "ClickHouse insert attempt %d/%d failed",
+                    attempt,
+                    len(delays) + 1,
+                    exc_info=True,
+                )
+        log.error(
+            "Dropping batch of %d rows after %d failed attempts",
+            len(rows),
+            len(delays) + 1,
+        )
         for m in messages:
             await m.ack()
 
@@ -254,7 +291,9 @@ async def main() -> None:
         key = tenant or ""
         c = _clients.get(key)
         if c is None:
-            c = get_client_for_tenant(tenant or None)  # single mode: None → shared 'otel' db
+            c = get_client_for_tenant(
+                tenant or None
+            )  # single mode: None → shared 'otel' db
             _clients[key] = c
         return c
 
@@ -268,8 +307,11 @@ async def main() -> None:
             if not tenant and _TENANCY_MODE != "single":
                 # Fail-closed: an untenanted span in a multi-tenant deploy has no database to
                 # belong to — drop it (loudly) rather than leak it into a shared 'otel' db.
-                log.warning("Dropping %d untenanted span(s) in TENANCY_MODE=%s (no tenant DB)",
-                            len(trows), _TENANCY_MODE)
+                log.warning(
+                    "Dropping %d untenanted span(s) in TENANCY_MODE=%s (no tenant DB)",
+                    len(trows),
+                    _TENANCY_MODE,
+                )
                 continue
             _client_for(tenant).insert(
                 GEN_AI_SPANS, [list(r.values()) for r in trows], column_names=COLUMNS
@@ -284,11 +326,17 @@ async def main() -> None:
     connection = await aio_pika.connect_robust(rabbitmq_url)
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=batch_size)
-    exchange = await channel.declare_exchange(EXCHANGE_NAME, aio_pika.ExchangeType.FANOUT, durable=True)
+    exchange = await channel.declare_exchange(
+        EXCHANGE_NAME, aio_pika.ExchangeType.FANOUT, durable=True
+    )
     queue = await channel.declare_queue(QUEUE_NAME, durable=True)
     await queue.bind(exchange)
 
-    log.info("Waiting for messages (batch_size=%d, batch_timeout=%ss)", batch_size, batch_timeout)
+    log.info(
+        "Waiting for messages (batch_size=%d, batch_timeout=%ss)",
+        batch_size,
+        batch_timeout,
+    )
 
     timer_task = asyncio.create_task(batcher.start_timer(batch_timeout))
     try:

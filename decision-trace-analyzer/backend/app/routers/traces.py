@@ -129,7 +129,9 @@ def list_traces(
         }
         for r in rows.result_rows
     ]
-    return JSONResponse({"items": items, "total": total, "limit": limit, "offset": offset})
+    return JSONResponse(
+        {"items": items, "total": total, "limit": limit, "offset": offset}
+    )
 
 
 @router.get("/traces/{trace_id}")

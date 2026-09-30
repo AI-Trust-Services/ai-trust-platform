@@ -5,6 +5,7 @@ Required because tests/e2e/test_overview.py imports models from
 ai_trust_persistence at module level, which reads DATABASE_URL at import time.
 The session-scoped e2e_setup fixture in tests/e2e/conftest.py runs too late.
 """
+
 import os
 
 _PG_USER = os.environ.get("POSTGRES_USER", "postgres")

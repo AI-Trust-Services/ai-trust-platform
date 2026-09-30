@@ -1,4 +1,5 @@
 """Prefixed ID generation for the AI System Registry."""
+
 from __future__ import annotations
 
 import uuid

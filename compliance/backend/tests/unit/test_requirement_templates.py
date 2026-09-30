@@ -1,4 +1,5 @@
 """Unit tests for requirement_templates.requirements_for() and the tier/role filters."""
+
 from __future__ import annotations
 
 from app.requirement_templates import (
@@ -17,8 +18,16 @@ from app.schemas.requirement import VALID_REQUIREMENT_CATEGORIES
 # _tier_allows
 # ---------------------------------------------------------------------------
 
+
 def test_all_applies_to_every_tier():
-    for tier in ("high", "limited", "minimal", "prohibited", "gpai-standard", "gpai-systemic"):
+    for tier in (
+        "high",
+        "limited",
+        "minimal",
+        "prohibited",
+        "gpai-standard",
+        "gpai-systemic",
+    ):
         assert _tier_allows("All", tier)
 
 
@@ -62,6 +71,7 @@ def test_unknown_tier_allows_only_all():
 # _role_allows
 # ---------------------------------------------------------------------------
 
+
 def test_role_none_applies_to_any_org_role():
     # Retained sets carry no role (None) — they apply everywhere.
     assert _role_allows(None, "provider")
@@ -87,11 +97,18 @@ def test_role_matches_only_its_own_org_role():
 # requirements_for — EU High-Risk clusters (counts from the CSV catalogue)
 # ---------------------------------------------------------------------------
 
+
 def test_provider_high_risk_management_requirements():
     reqs = requirements_for("P-RM", "high", "provider")
     assert len(reqs) == 7
     assert {c["requirement_ref"] for c in reqs} == {
-        "P-RM-01", "P-RM-02", "P-RM-03", "P-RM-04", "P-RM-05", "P-RM-06", "P-RM-07",
+        "P-RM-01",
+        "P-RM-02",
+        "P-RM-03",
+        "P-RM-04",
+        "P-RM-05",
+        "P-RM-06",
+        "P-RM-07",
     }
 
 
@@ -152,6 +169,7 @@ def test_requirements_have_required_fields():
 # Per-requirement articles + cluster aggregation
 # ---------------------------------------------------------------------------
 
+
 def test_every_eu_requirement_ref_has_an_article():
     # Every explicit Requirement ID (EU CSV set) is mapped; retained sets (slug-based)
     # carry no requirement_ref and are intentionally absent.
@@ -172,7 +190,10 @@ def test_requirements_for_attaches_article():
 
 def test_cluster_articles_aggregates_distinct_top_level():
     # P-RM requirements reference Art. 9, Art. 11 and Art. 72 -> distinct, num-sorted.
-    assert cluster_articles("P-RM", "high", "provider") == "Art. 9, Art. 11, Art. 72 EU AI Act"
+    assert (
+        cluster_articles("P-RM", "high", "provider")
+        == "Art. 9, Art. 11, Art. 72 EU AI Act"
+    )
     assert cluster_articles("P-DG", "high", "provider") == "Art. 10 EU AI Act"
 
 
@@ -197,6 +218,7 @@ def test_cluster_articles_no_suffix_for_non_eu_framework():
 # requirements_for — retained sets (tier-independent NIST/ISO)
 # ---------------------------------------------------------------------------
 
+
 def test_nist_controls_tier_independent():
     for tier in ("high", "minimal", "prohibited"):
         assert len(requirements_for("GOVERN", tier)) == 1
@@ -210,6 +232,7 @@ def test_iso_controls_tier_independent():
 # ---------------------------------------------------------------------------
 # requirements_for — unknown refs / independence
 # ---------------------------------------------------------------------------
+
 
 def test_unknown_cluster_returns_empty():
     assert requirements_for("P-DOES-NOT-EXIST", "high", "provider") == []
@@ -227,9 +250,17 @@ def test_returns_independent_lists():
 # (tier, role) — the "100% coverage" goal.
 # ---------------------------------------------------------------------------
 
+
 def test_every_eu_obligation_has_requirements_at_its_tier_and_role():
     gaps = []
-    for tier in ("prohibited", "gpai-systemic", "gpai-standard", "high", "limited", "minimal"):
+    for tier in (
+        "prohibited",
+        "gpai-systemic",
+        "gpai-standard",
+        "high",
+        "limited",
+        "minimal",
+    ):
         for role in ("provider", "deployer"):
             for ob in obligations_for("FRM-EU-AI-ACT", tier, role):
                 if not requirements_for(ob["cluster_id"], tier, role):
@@ -258,4 +289,6 @@ def test_all_categories_are_valid():
     # RequirementUpdate validation error (schemas.requirement.VALID_REQUIREMENT_CATEGORIES).
     for cid, templates in _REQUIREMENT_TEMPLATES.items():
         for t in templates:
-            assert t["category"] in VALID_REQUIREMENT_CATEGORIES, f"{cid}: {t['category']}"
+            assert t["category"] in VALID_REQUIREMENT_CATEGORIES, (
+                f"{cid}: {t['category']}"
+            )

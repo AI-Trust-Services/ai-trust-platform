@@ -8,6 +8,7 @@ Requires:
 
 Auto-skips if either is not reachable.
 """
+
 from __future__ import annotations
 
 import os
@@ -42,9 +43,12 @@ _CH_PASSWORD = os.environ.get("CLICKHOUSE_PASSWORD", "")
 def _pg_reachable() -> bool:
     try:
         conn = psycopg2.connect(
-            host=_PG_HOST, port=_PG_PORT,
-            user=_PG_USER, password=_PG_PASSWORD,
-            dbname="postgres", connect_timeout=3,
+            host=_PG_HOST,
+            port=_PG_PORT,
+            user=_PG_USER,
+            password=_PG_PASSWORD,
+            dbname="postgres",
+            connect_timeout=3,
         )
         conn.close()
         return True
@@ -55,8 +59,10 @@ def _pg_reachable() -> bool:
 def _ch_reachable() -> bool:
     try:
         client = clickhouse_connect.get_client(
-            host=_CH_HOST, port=_CH_PORT,
-            username=_CH_USER, password=_CH_PASSWORD,
+            host=_CH_HOST,
+            port=_CH_PORT,
+            username=_CH_USER,
+            password=_CH_PASSWORD,
         )
         client.command("SELECT 1")
         return True
@@ -66,8 +72,10 @@ def _ch_reachable() -> bool:
 
 def _ensure_test_db() -> None:
     conn = psycopg2.connect(
-        host=_PG_HOST, port=_PG_PORT,
-        user=_PG_USER, password=_PG_PASSWORD,
+        host=_PG_HOST,
+        port=_PG_PORT,
+        user=_PG_USER,
+        password=_PG_PASSWORD,
         dbname="postgres",
     )
     conn.autocommit = True
@@ -89,8 +97,10 @@ def _run_migrations() -> None:
 
 def _truncate_pg() -> None:
     conn = psycopg2.connect(
-        host=_PG_HOST, port=_PG_PORT,
-        user=_PG_USER, password=_PG_PASSWORD,
+        host=_PG_HOST,
+        port=_PG_PORT,
+        user=_PG_USER,
+        password=_PG_PASSWORD,
         dbname=_TEST_DB,
     )
     conn.autocommit = True
@@ -104,16 +114,20 @@ def _truncate_pg() -> None:
 
 def _truncate_ch() -> None:
     client = clickhouse_connect.get_client(
-        host=_CH_HOST, port=_CH_PORT,
-        username=_CH_USER, password=_CH_PASSWORD,
+        host=_CH_HOST,
+        port=_CH_PORT,
+        username=_CH_USER,
+        password=_CH_PASSWORD,
     )
     client.command("TRUNCATE TABLE IF EXISTS otel.alert_events")
 
 
 def _ch_client():
     return clickhouse_connect.get_client(
-        host=_CH_HOST, port=_CH_PORT,
-        username=_CH_USER, password=_CH_PASSWORD,
+        host=_CH_HOST,
+        port=_CH_PORT,
+        username=_CH_USER,
+        password=_CH_PASSWORD,
     )
 
 
@@ -137,12 +151,40 @@ def insert_event(
     client = _ch_client()
     client.insert(
         "otel.alert_events",
-        [[event_id, rule_id, rule_name, category, severity, alert_type,
-          description, value, triggered, resolved_at, handled_at, entity_id, entity_type, entity_model]],
-        column_names=["id", "rule_id", "rule_name", "category", "severity",
-                      "alert_type", "description", "value_at_trigger",
-                      "triggered_at", "resolved_at", "handled_at",
-                      "entity_id", "entity_type", "entity_model"],
+        [
+            [
+                event_id,
+                rule_id,
+                rule_name,
+                category,
+                severity,
+                alert_type,
+                description,
+                value,
+                triggered,
+                resolved_at,
+                handled_at,
+                entity_id,
+                entity_type,
+                entity_model,
+            ]
+        ],
+        column_names=[
+            "id",
+            "rule_id",
+            "rule_name",
+            "category",
+            "severity",
+            "alert_type",
+            "description",
+            "value_at_trigger",
+            "triggered_at",
+            "resolved_at",
+            "handled_at",
+            "entity_id",
+            "entity_type",
+            "entity_model",
+        ],
     )
     return event_id
 
@@ -150,9 +192,13 @@ def insert_event(
 @pytest.fixture(scope="session", autouse=True)
 def e2e_setup():
     if not _pg_reachable():
-        pytest.skip("Postgres not reachable at localhost:5432 — start Docker Compose first")
+        pytest.skip(
+            "Postgres not reachable at localhost:5432 — start Docker Compose first"
+        )
     if not _ch_reachable():
-        pytest.skip("ClickHouse not reachable at localhost:8123 — start Docker Compose first")
+        pytest.skip(
+            "ClickHouse not reachable at localhost:8123 — start Docker Compose first"
+        )
     _ensure_test_db()
     _run_migrations()
     os.environ["DATABASE_URL"] = _TEST_DATABASE_URL
@@ -180,12 +226,14 @@ def truncate_tables(e2e_setup):
     _truncate_ch()
     from ai_trust_persistence.database import engine
     import asyncio
+
     asyncio.run(engine.dispose())
 
 
 @pytest_asyncio.fixture
 async def client():
     from app.main import app
+
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",

@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import LuigiClient from "@luigi-project/client";
-import { Check, Loader2, X, ChevronDown, ChevronRight, Copy, ClipboardList } from "lucide-react";
+import { Loader2, X, ChevronDown, ChevronRight, Copy, ClipboardList } from "lucide-react";
 import { TierBadge } from "./Badges";
 import { previewClassify, copyToClipboard, SELECT_CLASS } from "../utils";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import type { AISystem, AISystemFormData } from "../types";
-import { TECHNICAL_QUESTIONS } from "../config/questionnaire";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

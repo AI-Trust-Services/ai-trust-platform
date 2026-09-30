@@ -3,6 +3,7 @@ Sets ALLOWED_ORIGINS and ClickHouse env vars before pytest collection.
 
 Required because the app reads these at import time.
 """
+
 import os
 
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:3000")

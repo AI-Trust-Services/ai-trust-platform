@@ -13,6 +13,7 @@ What is tested:
   - SMTP test endpoint returns descriptive errors
   - Startup seed inserts a row only when none exists
 """
+
 from __future__ import annotations
 
 import os
@@ -41,6 +42,7 @@ os.environ.setdefault("USERS_BACKEND_URL", "http://users-backend:8008")
 # Default platform settings row returned by the DB mock
 # ---------------------------------------------------------------------------
 
+
 def _default_settings():
     row = MagicMock()
     row.id = 1
@@ -62,7 +64,9 @@ def _make_session(row=None):
     session = AsyncMock()
     session.__aenter__ = AsyncMock(return_value=session)
     session.__aexit__ = AsyncMock(return_value=False)
-    session.scalar = AsyncMock(return_value=row if row is not None else _default_settings())
+    session.scalar = AsyncMock(
+        return_value=row if row is not None else _default_settings()
+    )
     session.add = MagicMock()
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
@@ -73,16 +77,21 @@ def _make_session(row=None):
 # Session-scoped fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="session", autouse=True)
 def patch_openfga_and_startup():
     """Stub OpenFGA + startup seed for all tests."""
     with (
-        patch("ai_trust_authorization.openfga_client.check", new=AsyncMock(return_value=True)),
+        patch(
+            "ai_trust_authorization.openfga_client.check",
+            new=AsyncMock(return_value=True),
+        ),
         # Prevent lifespan seed from hitting the real DB
         patch("app.startup.seed_settings_from_env", new=AsyncMock()),
     ):
         from app.main import app
         from ai_trust_authorization.permissions import get_current_user
+
         app.dependency_overrides[get_current_user] = lambda: "test-user"
         yield
         app.dependency_overrides.clear()
@@ -91,6 +100,7 @@ def patch_openfga_and_startup():
 @pytest_asyncio.fixture
 async def client():
     from app.main import app
+
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",

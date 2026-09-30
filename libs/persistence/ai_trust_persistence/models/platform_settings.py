@@ -8,7 +8,9 @@ class PlatformSettings(Base):
     __tablename__ = "platform_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
-    platform_name: Mapped[str] = mapped_column(String(200), nullable=False, default="AI Trust Platform")
+    platform_name: Mapped[str] = mapped_column(
+        String(200), nullable=False, default="AI Trust Platform"
+    )
     support_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     smtp_host: Mapped[str | None] = mapped_column(String(200), nullable=True)
     smtp_port: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -4,6 +4,7 @@ Revision ID: 0025
 Revises: 0024
 Create Date: 2026-09-07
 """
+
 import sqlalchemy as sa
 from alembic import op
 
@@ -24,26 +25,40 @@ def upgrade() -> None:
     # Position within the source catalogue for stable ordering (all rows of one
     # generation share the same transaction timestamp, so created_at alone gives
     # no stable order). Defaults to 0 for pre-existing and manually-created rows.
-    op.add_column("obligations", sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"))
-    op.add_column("requirements", sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"))
+    op.add_column(
+        "obligations",
+        sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"),
+    )
+    op.add_column(
+        "requirements",
+        sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"),
+    )
 
     # Per-requirement AI Act article reference (e.g. "Art. 9 (1)(2)"), derived from
     # the AI Act Requirements catalogue. Nullable — retained sets and manually-created
     # requirements leave it blank.
-    op.add_column("requirements", sa.Column("article_ref", sa.String(100), nullable=True))
+    op.add_column(
+        "requirements", sa.Column("article_ref", sa.String(100), nullable=True)
+    )
 
     # Obligation article_ref now holds the aggregate of a cluster's distinct top-level
     # articles (e.g. "Art. 9, Art. 11, Art. 72"), which can exceed 50 chars.
     op.alter_column(
-        "obligations", "article_ref",
-        existing_type=sa.String(50), type_=sa.String(100), existing_nullable=False,
+        "obligations",
+        "article_ref",
+        existing_type=sa.String(50),
+        type_=sa.String(100),
+        existing_nullable=False,
     )
 
 
 def downgrade() -> None:
     op.alter_column(
-        "obligations", "article_ref",
-        existing_type=sa.String(100), type_=sa.String(50), existing_nullable=False,
+        "obligations",
+        "article_ref",
+        existing_type=sa.String(100),
+        type_=sa.String(50),
+        existing_nullable=False,
     )
     op.drop_column("requirements", "article_ref")
     op.drop_column("requirements", "sort_order")

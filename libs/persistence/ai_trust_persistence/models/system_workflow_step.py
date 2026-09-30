@@ -13,10 +13,15 @@ class SystemWorkflowStep(Base):
 
     id: Mapped[str] = mapped_column(String(20), primary_key=True)
     system_id: Mapped[str] = mapped_column(
-        String(20), ForeignKey("ai_systems.id", ondelete="CASCADE"), nullable=False, index=True
+        String(20),
+        ForeignKey("ai_systems.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     step: Mapped[str] = mapped_column(String(30), nullable=False)
     actor_username: Mapped[str] = mapped_column(String(200), nullable=False)
     assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
