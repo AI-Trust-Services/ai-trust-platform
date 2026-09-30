@@ -119,6 +119,8 @@ spec:
     metadata:
       labels:
         {{- include "ai-trust.labels" (dict "name" "otel-clickhouse-consumer") | nindent 8 }}
+      annotations:
+        ai-trust/release-revision: {{ .Release.Revision | quote }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
       {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}

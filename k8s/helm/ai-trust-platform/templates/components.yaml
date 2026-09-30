@@ -18,6 +18,8 @@ spec:
     metadata:
       labels:
         {{- include "ai-trust.labels" (dict "name" $backend) | nindent 8 }}
+      annotations:
+        ai-trust/release-revision: {{ $.Release.Revision | quote }}
     spec:
       {{- include "ai-trust.imagePullSecrets" $ | nindent 6 }}
       {{- if gt (len $c.dependsOnJobs) 0 }}

@@ -11,6 +11,8 @@ spec:
     metadata:
       labels:
         {{- include "ai-trust.labels" (dict "name" "openfga") | nindent 8 }}
+      annotations:
+        ai-trust/release-revision: {{ .Release.Revision | quote }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
       initContainers:
