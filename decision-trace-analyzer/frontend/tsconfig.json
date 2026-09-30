@@ -16,7 +16,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@ai-trust/react-hooks": ["../../libs/react-hooks/src/index.ts"],
-      "react": ["./node_modules/react"]
+      "react": ["./node_modules/@types/react"]
     }
   },
   "include": ["src"]
