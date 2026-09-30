@@ -1,0 +1,93 @@
+name: Integration Tests
+
+# Triggered after a successful deployment — either from a PR (garden-deploy label)
+# or after a merge to main. Deployment workflow status is unaffected by this workflow.
+on:
+  workflow_run:
+    workflows:
+      - "PR Deployment Test"
+      - "Deployment Workflow"
+    types:
+      - completed
+
+jobs:
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Derive cluster and namespace
+        id: vars
+        shell: bash
+        run: |
+          WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          ACTOR="${{ github.event.workflow_run.actor.login }}"
+
+          if [[ "${WORKFLOW_NAME}" == "Deployment Workflow" ]]; then
+            cluster="ai-trust-main"
+            namespace="ai-trust"
+          else
+            # PR Deployment Test — namespace is the PR author's GitHub username (lowercase)
+            cluster="ai-trust-test"
+            namespace="${ACTOR,,}"
+          fi
+
+          echo "cluster=${cluster}" >> "$GITHUB_OUTPUT"
+          echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
+          echo "==> cluster=${cluster}, namespace=${namespace}"
+
+      - name: Load cluster env (API server, OIDC audience)
+        shell: bash
+        run: |
+          ENV_FILE="k8s/env/${{ steps.vars.outputs.cluster }}/.env"
+          if [[ ! -f "$ENV_FILE" ]]; then
+            echo "error: $ENV_FILE not found" >&2
+            exit 1
+          fi
+          set -a
+          # shellcheck disable=SC1090
+          source <(grep -E '^(GARDENER_SHOOT_API_SERVER|GARDENER_CA_DISCOVERY_URL|GARDENER_OIDC_AUDIENCE)=' "$ENV_FILE")
+          set +a
+          echo "GARDENER_SHOOT_API_SERVER=${GARDENER_SHOOT_API_SERVER}" >> "$GITHUB_ENV"
+          echo "GARDENER_CA_DISCOVERY_URL=${GARDENER_CA_DISCOVERY_URL}" >> "$GITHUB_ENV"
+          echo "GARDENER_OIDC_AUDIENCE=${GARDENER_OIDC_AUDIENCE}" >> "$GITHUB_ENV"
+
+      - name: Authenticate to Gardener cluster
+        uses: gardener/cc-utils/.github/actions/kubernetes-auth@1e70b044f4d3305267a559e7ae74b4de57e1fdee
+        with:
+          server: ${{ env.GARDENER_SHOOT_API_SERVER }}
+          server-ca-discovery-url: ${{ env.GARDENER_CA_DISCOVERY_URL }}
+          audience: ${{ env.GARDENER_OIDC_AUDIENCE }}
+          service-account-name: github-actions
+          service-account-namespace: ocm-system
+          service-account-token-expiration: 3600
+
+      - name: Point KUBECONFIG at authenticated kubeconfig
+        shell: bash
+        run: echo "KUBECONFIG=$GITHUB_WORKSPACE/kubeconfig.yaml" >> "$GITHUB_ENV"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install -r tests/integration/requirements.txt
+
+      - name: Forward ports
+        run: bash k8s/scripts/forward-ports.sh ${{ steps.vars.outputs.namespace }}
+
+      - name: Run integration tests
+        env:
+          APP_ADMIN_USERNAME: ${{ secrets.APP_ADMIN_USERNAME }}
+        run: pytest tests/integration/ -v
+
+      - name: Stop port forwards
+        if: always()
+        run: bash k8s/scripts/kill-port-forwards.sh
