@@ -1,4 +1,5 @@
 """MinIO client for branding asset storage (tenant-aware, async-wrapped)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -43,15 +44,40 @@ ALLOWED_CONTENT_TYPES = {
 MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB
 
 # SVG elements and attributes that can execute scripts (XSS vectors)
-_SVG_DANGEROUS_TAGS = frozenset([
-    "script", "handler", "listener",
-])
-_SVG_DANGEROUS_ATTRS = frozenset([
-    "onload", "onerror", "onclick", "onmouseover", "onmouseout", "onmousedown",
-    "onmouseup", "onmousemove", "onfocus", "onblur", "onchange", "onsubmit",
-    "onreset", "onselect", "onkeydown", "onkeypress", "onkeyup", "onabort",
-    "ondblclick", "onresize", "onscroll", "onunload", "onbeforeunload",
-])
+_SVG_DANGEROUS_TAGS = frozenset(
+    [
+        "script",
+        "handler",
+        "listener",
+    ]
+)
+_SVG_DANGEROUS_ATTRS = frozenset(
+    [
+        "onload",
+        "onerror",
+        "onclick",
+        "onmouseover",
+        "onmouseout",
+        "onmousedown",
+        "onmouseup",
+        "onmousemove",
+        "onfocus",
+        "onblur",
+        "onchange",
+        "onsubmit",
+        "onreset",
+        "onselect",
+        "onkeydown",
+        "onkeypress",
+        "onkeyup",
+        "onabort",
+        "ondblclick",
+        "onresize",
+        "onscroll",
+        "onunload",
+        "onbeforeunload",
+    ]
+)
 _SVG_DANGEROUS_ATTR_VALUES = re.compile(r"javascript:", re.IGNORECASE)
 
 _client: Minio | None = None
@@ -72,10 +98,15 @@ def bucket_name() -> str:
         return SINGLE_TENANT_BUCKET
     tenant = _current_tenant()
     if not tenant:
-        raise HTTPException(status_code=400, detail="No tenant in request context — cannot resolve branding bucket.")
+        raise HTTPException(
+            status_code=400,
+            detail="No tenant in request context — cannot resolve branding bucket.",
+        )
     name = "tenant-" + tenant.lower().replace("_", "-")
     if not _SAFE_BUCKET.match(name):
-        raise HTTPException(status_code=400, detail="Tenant does not map to a valid bucket name.")
+        raise HTTPException(
+            status_code=400, detail="Tenant does not map to a valid bucket name."
+        )
     return name
 
 
@@ -252,7 +283,14 @@ def _upload_sync(bucket: str, key: str, data: bytes, content_type: str) -> None:
     )
 
 
-async def upload_file(asset_type: str, filename: str, data: bytes, content_type: str, *, draft: bool = True) -> str:
+async def upload_file(
+    asset_type: str,
+    filename: str,
+    data: bytes,
+    content_type: str,
+    *,
+    draft: bool = True,
+) -> str:
     """Upload branding asset to the tenant's bucket. Returns the stored object key.
 
     By default uploads to the draft namespace (draft=True) so live assets are not overwritten.
@@ -268,7 +306,10 @@ async def upload_file(asset_type: str, filename: str, data: bytes, content_type:
     await ensure_bucket()
     key = object_key(asset_type, filename, draft=draft)
     await asyncio.to_thread(_upload_sync, bucket, key, data, content_type)
-    logger.info("branding.file_uploaded", extra={"bucket": bucket, "key": key, "size": len(data), "draft": draft})
+    logger.info(
+        "branding.file_uploaded",
+        extra={"bucket": bucket, "key": key, "size": len(data), "draft": draft},
+    )
     return key
 
 
@@ -301,7 +342,9 @@ def _presigned_sync(bucket: str, key: str, expires: timedelta) -> str:
 
 async def get_presigned_url(key: str, expires_hours: int = 24) -> str:
     """Return a presigned GET URL for a branding asset in the tenant's bucket."""
-    return await asyncio.to_thread(_presigned_sync, bucket_name(), key, timedelta(hours=expires_hours))
+    return await asyncio.to_thread(
+        _presigned_sync, bucket_name(), key, timedelta(hours=expires_hours)
+    )
 
 
 def _delete_sync(bucket: str, key: str) -> None:
@@ -314,7 +357,9 @@ async def delete_file(key: str) -> None:
         await asyncio.to_thread(_delete_sync, bucket_name(), key)
         logger.info("branding.file_deleted", extra={"key": key})
     except Exception as e:  # noqa: BLE001 — deletion is best-effort
-        logger.warning("branding.file_delete_failed", extra={"key": key, "error": str(e)})
+        logger.warning(
+            "branding.file_delete_failed", extra={"key": key, "error": str(e)}
+        )
 
 
 def _copy_sync(bucket: str, src_key: str, dst_key: str) -> None:
@@ -346,10 +391,20 @@ async def copy_draft_to_published(draft_key: str) -> str:
     bucket = bucket_name()
     try:
         await asyncio.to_thread(_copy_sync, bucket, draft_key, published_key)
-        logger.info("branding.draft_promoted", extra={"draft_key": draft_key, "published_key": published_key})
+        logger.info(
+            "branding.draft_promoted",
+            extra={"draft_key": draft_key, "published_key": published_key},
+        )
         # Clean up the draft file to prevent orphaned objects accumulating
-        await delete_file(draft_key)  # best-effort, already logs on failure without raising
+        await delete_file(
+            draft_key
+        )  # best-effort, already logs on failure without raising
         return published_key
     except Exception as e:
-        logger.error("branding.draft_promote_failed", extra={"draft_key": draft_key, "error": str(e)})
-        raise HTTPException(status_code=500, detail=f"Failed to publish asset: {e}") from e
+        logger.error(
+            "branding.draft_promote_failed",
+            extra={"draft_key": draft_key, "error": str(e)},
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Failed to publish asset: {e}"
+        ) from e

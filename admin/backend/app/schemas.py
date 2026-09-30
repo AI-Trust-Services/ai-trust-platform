@@ -16,7 +16,9 @@ def _validate_hex_color(v: str | None) -> str | None:
     if v is None or v == "":
         return None
     if not _HEX_COLOR_PATTERN.match(v):
-        raise ValueError(f"Invalid hex color: {v!r}. Must be #RGB, #RRGGBB, or #RRGGBBAA")
+        raise ValueError(
+            f"Invalid hex color: {v!r}. Must be #RGB, #RRGGBB, or #RRGGBBAA"
+        )
     return v
 
 
@@ -168,7 +170,9 @@ class BrandingUpdate(BaseModel):
 
     @field_validator("advanced_colors", mode="before")
     @classmethod
-    def validate_advanced_colors(cls, v: dict[str, str] | None) -> dict[str, str] | None:
+    def validate_advanced_colors(
+        cls, v: dict[str, str] | None
+    ) -> dict[str, str] | None:
         """Validate all values in advanced_colors dict are valid hex colors."""
         if v is None:
             return None

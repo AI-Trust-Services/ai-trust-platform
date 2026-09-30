@@ -1,11 +1,21 @@
 """Branding API — logos, colors, org name; draft/publish workflow."""
+
 from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Path,
+    Query,
+    Response,
+    UploadFile,
+)
 from sqlalchemy import select, update, delete
 
 from ai_trust_authorization.constants import IAM_MANAGE
@@ -83,11 +93,15 @@ async def _get_branding_dict() -> dict[str, tuple[str | None, str | None]]:
 async def _get_platform_name() -> str:
     """Get the platform name from platform_settings (used as org_name)."""
     async with SessionLocal() as session:
-        row = await session.scalar(select(PlatformSettings).where(PlatformSettings.id == 1))
+        row = await session.scalar(
+            select(PlatformSettings).where(PlatformSettings.id == 1)
+        )
         return row.platform_name if row else "AI Trust Platform"
 
 
-def _get_value(entries: dict[str, tuple[str | None, str | None]], key: str, mode: str) -> str | None:
+def _get_value(
+    entries: dict[str, tuple[str | None, str | None]], key: str, mode: str
+) -> str | None:
     """Get a branding value, falling back from draft to published in draft mode."""
     pub, draft = entries.get(key, (None, None))
     if mode == "draft":
@@ -142,10 +156,11 @@ def _has_unpublished_changes(entries: dict[str, tuple[str | None, str | None]]) 
     return False
 
 
-
 @router.get("", response_model=BrandingResponse)
 async def get_branding(
-    mode: Literal["published", "draft"] = Query("published", description="Which branding set to return"),
+    mode: Literal["published", "draft"] = Query(
+        "published", description="Which branding set to return"
+    ),
     _: str = Depends(require_permission(IAM_MANAGE)),
 ) -> BrandingResponse:
     """Get branding configuration (published or draft for preview)."""
@@ -182,11 +197,19 @@ async def update_branding(
             existing_adv = await session.get(Branding, "advanced_colors")
             if existing_adv:
                 # Parse existing draft, merge, serialize back
-                existing_dict = json.loads(existing_adv.draft) if existing_adv.draft else {}
+                existing_dict = (
+                    json.loads(existing_adv.draft) if existing_adv.draft else {}
+                )
                 existing_dict.update(body.advanced_colors)
                 existing_adv.draft = json.dumps(existing_dict)
             else:
-                session.add(Branding(key="advanced_colors", published=None, draft=json.dumps(body.advanced_colors)))
+                session.add(
+                    Branding(
+                        key="advanced_colors",
+                        published=None,
+                        draft=json.dumps(body.advanced_colors),
+                    )
+                )
 
         await session.commit()
         logger.info("branding.draft_updated")
@@ -234,7 +257,9 @@ async def upload_logo(
         else:
             session.add(Branding(key=asset_type, published=None, draft=key))
         await session.commit()
-        logger.info("branding.logo_uploaded", extra={"asset_type": asset_type, "key": key})
+        logger.info(
+            "branding.logo_uploaded", extra={"asset_type": asset_type, "key": key}
+        )
 
     entries = await _get_branding_dict()
     org_name = await _get_platform_name()
@@ -252,7 +277,9 @@ async def publish_branding(
     async with SessionLocal() as session:
         # Get all branding entries with drafts — FOR UPDATE locks rows so concurrent
         # publishes queue rather than racing on the MinIO copy/delete sequence.
-        result = await session.execute(select(Branding).where(Branding.draft.isnot(None)).with_for_update())
+        result = await session.execute(
+            select(Branding).where(Branding.draft.isnot(None)).with_for_update()
+        )
         entries_with_drafts = result.scalars().all()
 
         for entry in entries_with_drafts:
@@ -262,7 +289,9 @@ async def publish_branding(
             draft_value = entry.draft
             # For logo fields, copy the file from draft namespace to published namespace
             if entry.key in LOGO_FIELDS and draft_value and "/draft/" in draft_value:
-                published_key = await branding_storage.copy_draft_to_published(draft_value)
+                published_key = await branding_storage.copy_draft_to_published(
+                    draft_value
+                )
                 entry.published = published_key
             else:
                 entry.published = draft_value
@@ -273,7 +302,9 @@ async def publish_branding(
         if pub_at:
             pub_at.published = now.isoformat()
         else:
-            session.add(Branding(key="_published_at", published=now.isoformat(), draft=None))
+            session.add(
+                Branding(key="_published_at", published=now.isoformat(), draft=None)
+            )
 
         pub_by = await session.get(Branding, "_published_by")
         if pub_by:
@@ -309,7 +340,9 @@ async def discard_branding(
     async with SessionLocal() as session:
         # Delete orphaned draft logo files from MinIO before clearing the DB column
         result = await session.execute(
-            select(Branding).where(Branding.key.in_(LOGO_FIELDS), Branding.draft.isnot(None))
+            select(Branding).where(
+                Branding.key.in_(LOGO_FIELDS), Branding.draft.isnot(None)
+            )
         )
         for entry in result.scalars().all():
             if entry.draft and "/draft/" in entry.draft:
@@ -365,7 +398,9 @@ async def reset_branding(
         if pub_at:
             pub_at.published = now.isoformat()
         else:
-            session.add(Branding(key="_published_at", published=now.isoformat(), draft=None))
+            session.add(
+                Branding(key="_published_at", published=now.isoformat(), draft=None)
+            )
 
         pub_by = await session.get(Branding, "_published_by")
         if pub_by:
@@ -393,7 +428,9 @@ async def reset_branding(
 
 @router.get("/asset/{asset_key:path}")
 async def get_asset(
-    asset_key: str = Path(..., description="Full asset key (e.g., branding/logo_icon/icon.svg)"),
+    asset_key: str = Path(
+        ..., description="Full asset key (e.g., branding/logo_icon/icon.svg)"
+    ),
     _: str = Depends(require_permission(IAM_MANAGE)),
 ) -> Response:
     """Serve a branding asset from storage. Used for preview and by the shell."""
@@ -424,7 +461,9 @@ async def get_public_branding() -> BrandingResponse:
 
 @router.get("/public/asset/{asset_key:path}")
 async def get_public_asset(
-    asset_key: str = Path(..., description="Full asset key (e.g., branding/logo_icon/icon.svg)"),
+    asset_key: str = Path(
+        ..., description="Full asset key (e.g., branding/logo_icon/icon.svg)"
+    ),
 ) -> Response:
     """Serve a branding asset publicly. Used by shell to render logos.
 

@@ -27,7 +27,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Must be set before app.main is imported — branding_storage reads these at import time.
 os.environ.setdefault("MINIO_ENDPOINT", "localhost:9000")
@@ -77,9 +77,12 @@ _ALEMBIC_INI = Path(__file__).parents[4] / "libs" / "persistence" / "alembic.ini
 def _pg_reachable() -> bool:
     try:
         conn = psycopg2.connect(
-            host=_PG_HOST, port=_PG_PORT,
-            user=_PG_USER, password=_PG_PASSWORD,
-            dbname="postgres", connect_timeout=3,
+            host=_PG_HOST,
+            port=_PG_PORT,
+            user=_PG_USER,
+            password=_PG_PASSWORD,
+            dbname="postgres",
+            connect_timeout=3,
         )
         conn.close()
         return True
@@ -89,8 +92,10 @@ def _pg_reachable() -> bool:
 
 def _ensure_test_db() -> None:
     conn = psycopg2.connect(
-        host=_PG_HOST, port=_PG_PORT,
-        user=_PG_USER, password=_PG_PASSWORD,
+        host=_PG_HOST,
+        port=_PG_PORT,
+        user=_PG_USER,
+        password=_PG_PASSWORD,
         dbname="postgres",
     )
     conn.autocommit = True
@@ -117,8 +122,10 @@ def _reset_platform_settings() -> None:
     we DELETE then INSERT a fresh row so the seed function sees it as existing.
     """
     conn = psycopg2.connect(
-        host=_PG_HOST, port=_PG_PORT,
-        user=_PG_USER, password=_PG_PASSWORD,
+        host=_PG_HOST,
+        port=_PG_PORT,
+        user=_PG_USER,
+        password=_PG_PASSWORD,
         dbname=_TEST_DB,
     )
     conn.autocommit = True
@@ -156,7 +163,9 @@ def _reset_platform_settings() -> None:
 def e2e_setup():
     """Auto-skip if Postgres unreachable; patch MinIO and OpenFGA for all tests."""
     if not _pg_reachable():
-        pytest.skip(f"Postgres not reachable at {_PG_HOST}:{_PG_PORT} — start Docker Compose first")
+        pytest.skip(
+            f"Postgres not reachable at {_PG_HOST}:{_PG_PORT} — start Docker Compose first"
+        )
     _ensure_test_db()
     _run_migrations()
     os.environ["DATABASE_URL"] = _TEST_DATABASE_URL
@@ -174,9 +183,18 @@ def e2e_setup():
 
     with (
         patch("app.branding_storage.ensure_bucket", new_callable=AsyncMock),
-        patch("app.branding_storage.upload_file", new=AsyncMock(return_value="branding/logo_icon/draft/icon.svg")),
-        patch("app.branding_storage.get_file", new=AsyncMock(return_value=(b"<svg></svg>", "image/svg+xml"))),
-        patch("app.branding_storage.copy_draft_to_published", new=AsyncMock(return_value="branding/logo_icon/icon.svg")),
+        patch(
+            "app.branding_storage.upload_file",
+            new=AsyncMock(return_value="branding/logo_icon/draft/icon.svg"),
+        ),
+        patch(
+            "app.branding_storage.get_file",
+            new=AsyncMock(return_value=(b"<svg></svg>", "image/svg+xml")),
+        ),
+        patch(
+            "app.branding_storage.copy_draft_to_published",
+            new=AsyncMock(return_value="branding/logo_icon/icon.svg"),
+        ),
         patch("app.branding_storage.delete_file", new_callable=AsyncMock),
         # Prevent lifespan seed from running (we control platform_settings via _reset_platform_settings)
         patch("app.startup.seed_settings_from_env", new=AsyncMock()),
@@ -205,6 +223,7 @@ async def reset_settings():
 @pytest_asyncio.fixture
 async def client():
     from app.main import app
+
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",
@@ -217,6 +236,7 @@ async def client():
 async def db_session():
     """Bare AsyncSession for direct DB manipulation in tests."""
     from sqlalchemy.ext.asyncio import AsyncSession
+
     session = AsyncSession(_test_engine)
     try:
         yield session
@@ -236,6 +256,7 @@ async def db_session():
 # Backward-compatible helpers for tests that still use mocked sessions
 # (smtp, settings, stats tests). These can be migrated to real Postgres later.
 # ---------------------------------------------------------------------------
+
 
 def _default_settings():
     """Return a MagicMock with default platform settings values."""
