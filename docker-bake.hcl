@@ -240,8 +240,8 @@ target "otel-rmq-bridge" {
 # ── frontends: dockerfile is relative to context dir ──
 
 target "ai-system-registry-frontend" {
-  context    = "./ai-system-registry/frontend"
-  dockerfile = "Dockerfile"
+  context    = "."
+  dockerfile = "ai-system-registry/frontend/Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("ai-system-registry-frontend")]
   args = {
@@ -253,8 +253,8 @@ target "ai-system-registry-frontend" {
 }
 
 target "monitoring-frontend" {
-  context    = "./monitoring/frontend"
-  dockerfile = "Dockerfile"
+  context    = "."
+  dockerfile = "monitoring/frontend/Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("monitoring-frontend")]
   args = {
@@ -265,8 +265,8 @@ target "monitoring-frontend" {
 }
 
 target "overview-frontend" {
-  context    = "./overview/frontend"
-  dockerfile = "Dockerfile"
+  context    = "."
+  dockerfile = "overview/frontend/Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("overview-frontend")]
   args = {
@@ -283,8 +283,8 @@ target "overview-frontend" {
 }
 
 target "alerts-frontend" {
-  context    = "./alerts/frontend"
-  dockerfile = "Dockerfile"
+  context    = "."
+  dockerfile = "alerts/frontend/Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("alerts-frontend")]
   args = {
@@ -297,8 +297,8 @@ target "alerts-frontend" {
 }
 
 target "compliance-frontend" {
-  context    = "./compliance/frontend"
-  dockerfile = "Dockerfile"
+  context    = "."
+  dockerfile = "compliance/frontend/Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("compliance-frontend")]
   args = {
@@ -311,8 +311,8 @@ target "compliance-frontend" {
 }
 
 target "users-frontend" {
-  context    = "./users/frontend"
-  dockerfile = "Dockerfile"
+  context    = "."
+  dockerfile = "users/frontend/Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("users-frontend")]
   args = {
@@ -323,8 +323,8 @@ target "users-frontend" {
 }
 
 target "decision-trace-analyzer-frontend" {
-  context    = "./decision-trace-analyzer/frontend"
-  dockerfile = "Dockerfile"
+  context    = "."
+  dockerfile = "decision-trace-analyzer/frontend/Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("decision-trace-analyzer-frontend")]
   args = {
@@ -335,8 +335,8 @@ target "decision-trace-analyzer-frontend" {
 }
 
 target "audit-frontend" {
-  context    = "./audit/frontend"
-  dockerfile = "Dockerfile"
+  context    = "."
+  dockerfile = "audit/frontend/Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("audit-frontend")]
   args = {
@@ -348,8 +348,8 @@ target "audit-frontend" {
 }
 
 target "admin-frontend" {
-  context    = "./admin/frontend"
-  dockerfile = "Dockerfile"
+  context    = "."
+  dockerfile = "admin/frontend/Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("admin-frontend")]
   args = {
