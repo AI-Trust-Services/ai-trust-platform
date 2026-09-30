@@ -1,4 +1,5 @@
 from sqlalchemy import Column, DateTime, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from ai_trust_persistence.database import Base
 
 
@@ -11,3 +12,4 @@ class CustomRole(Base):
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    alert_categories = Column(JSONB, nullable=True)

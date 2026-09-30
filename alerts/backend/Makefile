@@ -3,7 +3,7 @@
 setup:
 	python3.12 -m venv .venv
 	.venv/bin/pip install -r requirements-test.txt
-	.venv/bin/pip install -e ../../libs/persistence -e ../../libs/logging -e ../../libs/clickhouse
+	.venv/bin/pip install -e ../../libs/persistence -e ../../libs/logging -e ../../libs/clickhouse -e ../../libs/authorization
 
 test:
 	.venv/bin/pytest tests/ -v

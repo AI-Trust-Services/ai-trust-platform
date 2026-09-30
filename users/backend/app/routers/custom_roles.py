@@ -15,6 +15,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import select
+from typing import Literal
 
 from ai_trust_authorization import openfga_client, require_permission
 from ai_trust_authorization.constants import (
@@ -30,15 +31,20 @@ router = APIRouter(prefix="/iam", tags=["custom-roles"])
 logger = get_logger(__name__)
 
 
+AlertCategory = Literal["risk", "compliance", "observability"]
+
+
 class CustomRoleCreate(BaseModel):
     name: str
     description: str = ""
     permissions: list[str]
+    alert_categories: list[AlertCategory] | None = None
 
 
 class CustomRoleUpdate(BaseModel):
     description: str | None = None
     permissions: list[str] | None = None
+    alert_categories: list[AlertCategory] | None = None
 
 
 class CustomRoleResponse(BaseModel):
@@ -46,6 +52,7 @@ class CustomRoleResponse(BaseModel):
     name: str
     description: str
     permissions: list[str] = []
+    alert_categories: list[AlertCategory] | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -159,6 +166,7 @@ async def create_custom_role(
             id=f"ROLE-{uuid.uuid4().hex[:8].upper()}",
             name=body.name,
             description=body.description,
+            alert_categories=body.alert_categories,
         )
         session.add(row)
         await session.commit()
@@ -200,6 +208,8 @@ async def update_custom_role(
 
         if body.description is not None:
             row.description = body.description
+        if "alert_categories" in body.model_fields_set:
+            row.alert_categories = body.alert_categories
         await session.commit()
         await session.refresh(row)
 

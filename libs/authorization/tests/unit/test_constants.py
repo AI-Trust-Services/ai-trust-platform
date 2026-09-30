@@ -109,6 +109,7 @@ def test_executive_permissions():
         SYSTEMS_READ,
         ASSESSMENTS_READ,
         MONITORING_READ,
+        ALERTS_READ,
     }
 
 
