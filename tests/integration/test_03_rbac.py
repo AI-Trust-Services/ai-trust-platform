@@ -12,7 +12,7 @@ import pytest
 
 from conftest import (
     ADMIN_HEADERS,
-    ADMIN_USER,
+    TEST_USER_HEADERS,
     register_system,
     create_assessment,
     assign_role,
@@ -64,7 +64,7 @@ async def test_ai_engineer_cannot_approve_evidence(
     reqs = await compliance.get(
         "/v1/requirements",
         params={"ai_system_id": system["id"]},
-        headers=ADMIN_HEADERS,
+        headers=TEST_USER_HEADERS,
     )
     req_list = reqs.json()
     if not req_list:
@@ -78,7 +78,7 @@ async def test_ai_engineer_cannot_approve_evidence(
             "evidence_type": "document",
             "requirement_ids": req_id,
         },
-        headers=ADMIN_HEADERS,
+        headers=TEST_USER_HEADERS,
     )
     ev_id = ev_r.json()["id"]
 

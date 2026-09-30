@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from conftest import (
-    ADMIN_HEADERS,
+    TEST_USER_HEADERS,
     register_system,
     create_assessment,
 )
@@ -34,7 +34,7 @@ async def test_system_visible_in_compliance_after_registration(
     r = await compliance.get(
         "/v1/assessments",
         params={"ai_system_id": system_id},
-        headers=ADMIN_HEADERS,
+        headers=TEST_USER_HEADERS,
     )
     assert r.status_code == 200, r.text
     # No assessments yet — but the query must succeed (FK resolvable).
@@ -60,7 +60,7 @@ async def test_assessment_creation_generates_obligations_and_requirements(
     obligations = await compliance.get(
         "/v1/obligations",
         params={"assessment_id": assessment_id},
-        headers=ADMIN_HEADERS,
+        headers=TEST_USER_HEADERS,
     )
     assert obligations.status_code == 200, obligations.text
     obl_list = obligations.json()
@@ -69,7 +69,7 @@ async def test_assessment_creation_generates_obligations_and_requirements(
     requirements = await compliance.get(
         "/v1/requirements",
         params={"ai_system_id": system["id"]},
-        headers=ADMIN_HEADERS,
+        headers=TEST_USER_HEADERS,
     )
     assert requirements.status_code == 200, requirements.text
     req_list = requirements.json()
@@ -94,7 +94,7 @@ async def test_evidence_approval_cascades_compliance_score_to_registry(
     reqs = await compliance.get(
         "/v1/requirements",
         params={"ai_system_id": system_id},
-        headers=ADMIN_HEADERS,
+        headers=TEST_USER_HEADERS,
     )
     assert reqs.status_code == 200, reqs.text
     req_list = reqs.json()
@@ -109,7 +109,7 @@ async def test_evidence_approval_cascades_compliance_score_to_registry(
             "evidence_type": "document",
             "requirement_ids": req_id,
         },
-        headers=ADMIN_HEADERS,
+        headers=TEST_USER_HEADERS,
     )
     assert ev_r.status_code == 201, ev_r.text
     ev_id = ev_r.json()["id"]
@@ -117,24 +117,24 @@ async def test_evidence_approval_cascades_compliance_score_to_registry(
     # Approve
     approve_r = await compliance.post(
         f"/v1/evidence/{ev_id}/approve",
-        headers=ADMIN_HEADERS,
+        headers=TEST_USER_HEADERS,
     )
     assert approve_r.status_code == 200, approve_r.text
 
     # Requirement should be fulfilled
-    req_r = await compliance.get(f"/v1/requirements/{req_id}", headers=ADMIN_HEADERS)
+    req_r = await compliance.get(f"/v1/requirements/{req_id}", headers=TEST_USER_HEADERS)
     assert req_r.status_code == 200, req_r.text
     assert req_r.json()["status"] == "fulfilled", f"Requirement status: {req_r.json()['status']}"
 
     # Assessment score should be > 0
     ass_r = await compliance.get(
-        f"/v1/assessments/{assessment['id']}", headers=ADMIN_HEADERS
+        f"/v1/assessments/{assessment['id']}", headers=TEST_USER_HEADERS
     )
     assert ass_r.status_code == 200, ass_r.text
     assert ass_r.json()["score"] > 0, "Assessment score did not update after evidence approval"
 
     # Cross-service write: compliance must have updated ai_systems.compliance in registry
-    sys_r = await registry.get(f"/v1/systems/{system_id}", headers=ADMIN_HEADERS)
+    sys_r = await registry.get(f"/v1/systems/{system_id}", headers=TEST_USER_HEADERS)
     assert sys_r.status_code == 200, sys_r.text
     assert sys_r.json()["compliance"] > 0.0, (
         "registry ai_systems.compliance was not updated after evidence approval — "
@@ -159,7 +159,7 @@ async def test_evidence_rejection_reverts_compliance_score(
     reqs = await compliance.get(
         "/v1/requirements",
         params={"ai_system_id": system_id},
-        headers=ADMIN_HEADERS,
+        headers=TEST_USER_HEADERS,
     )
     req_id = reqs.json()[0]["id"]
 
@@ -170,25 +170,25 @@ async def test_evidence_rejection_reverts_compliance_score(
             "evidence_type": "document",
             "requirement_ids": req_id,
         },
-        headers=ADMIN_HEADERS,
+        headers=TEST_USER_HEADERS,
     )
     ev_id = ev_r.json()["id"]
 
     # Approve then reject
-    await compliance.post(f"/v1/evidence/{ev_id}/approve", headers=ADMIN_HEADERS)
+    await compliance.post(f"/v1/evidence/{ev_id}/approve", headers=TEST_USER_HEADERS)
     reject_r = await compliance.post(
-        f"/v1/evidence/{ev_id}/reject", headers=ADMIN_HEADERS
+        f"/v1/evidence/{ev_id}/reject", headers=TEST_USER_HEADERS
     )
     assert reject_r.status_code == 200, reject_r.text
 
     # Requirement should revert
-    req_r = await compliance.get(f"/v1/requirements/{req_id}", headers=ADMIN_HEADERS)
+    req_r = await compliance.get(f"/v1/requirements/{req_id}", headers=TEST_USER_HEADERS)
     assert req_r.json()["status"] != "fulfilled", (
         "Requirement remained fulfilled after evidence rejection"
     )
 
     # Registry compliance score should drop back to 0
-    sys_r = await registry.get(f"/v1/systems/{system_id}", headers=ADMIN_HEADERS)
+    sys_r = await registry.get(f"/v1/systems/{system_id}", headers=TEST_USER_HEADERS)
     assert sys_r.json()["compliance"] == 0.0, (
         "registry ai_systems.compliance was not reverted after evidence rejection"
     )
