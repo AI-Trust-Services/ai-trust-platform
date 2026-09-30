@@ -4,6 +4,7 @@ Revision ID: 0026
 Revises: 0025
 Create Date: 2026-09-15
 """
+
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 from alembic import op

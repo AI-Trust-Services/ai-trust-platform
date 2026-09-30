@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, text
 
 from ai_trust_authorization import openfga_client as fga, require_permission
-from ai_trust_authorization.constants import ALERTS_READ, ALERTS_HANDLE, ALERTS_MANAGE_RULES
+from ai_trust_authorization.constants import (
+    ALERTS_READ,
+    ALERTS_HANDLE,
+    ALERTS_MANAGE_RULES,
+)
 from ai_trust_clickhouse import ch_command, ch_query
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
@@ -64,11 +68,16 @@ async def _compute_allowed_categories(username: str) -> list[str] | None:
         names = [s.replace("_", " ").title() for s in custom_slugs]
         async with SessionLocal() as session:
             rows = (
-                await session.execute(select(CustomRole).where(CustomRole.name.in_(names)))
-            ).scalars().all()
+                (
+                    await session.execute(
+                        select(CustomRole).where(CustomRole.name.in_(names))
+                    )
+                )
+                .scalars()
+                .all()
+            )
         slug_to_cats = {
-            row.name.lower().replace(" ", "_"): row.alert_categories
-            for row in rows
+            row.name.lower().replace(" ", "_"): row.alert_categories for row in rows
         }
         for slug in custom_slugs:
             if slug not in slug_to_cats:
@@ -103,7 +112,9 @@ def _enrich(rows: list[dict], name_map: dict[str, str]) -> list[dict]:
 
 
 @router.get("/active")
-async def get_active_alerts(username: str = Depends(require_permission(ALERTS_READ))) -> list[dict]:
+async def get_active_alerts(
+    username: str = Depends(require_permission(ALERTS_READ)),
+) -> list[dict]:
     cats = await _allowed_categories(username)
     if cats is not None and len(cats) == 0:
         return []
@@ -120,14 +131,18 @@ async def get_active_alerts(username: str = Depends(require_permission(ALERTS_RE
         params = {"cats": cats}
     sql += " ORDER BY multiIf(severity='error', 0, severity='warning', 1, 2) ASC, triggered_at DESC"
     rows = await ch_query(sql, params)
-    entity_ids = [r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"]
+    entity_ids = [
+        r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"
+    ]
     name_map = await _resolve_display_names(entity_ids)
     logger.info("alerts.active_fetched", extra={"count": len(rows)})
     return _enrich(rows, name_map)
 
 
 @router.get("/history")
-async def get_alert_history(username: str = Depends(require_permission(ALERTS_READ))) -> list[dict]:
+async def get_alert_history(
+    username: str = Depends(require_permission(ALERTS_READ)),
+) -> list[dict]:
     cats = await _allowed_categories(username)
     if cats is not None and len(cats) == 0:
         return []
@@ -147,14 +162,18 @@ async def get_alert_history(username: str = Depends(require_permission(ALERTS_RE
         params = {"cats": cats}
     sql += " ORDER BY triggered_at DESC LIMIT 100"
     rows = await ch_query(sql, params)
-    entity_ids = [r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"]
+    entity_ids = [
+        r.get("entity_id", "") for r in rows if r.get("entity_type") == "ai_system"
+    ]
     name_map = await _resolve_display_names(entity_ids)
     logger.info("alerts.history_fetched", extra={"count": len(rows)})
     return _enrich(rows, name_map)
 
 
 @router.get("/rules")
-async def get_alert_rules(username: str = Depends(require_permission(ALERTS_READ))) -> list[dict]:
+async def get_alert_rules(
+    username: str = Depends(require_permission(ALERTS_READ)),
+) -> list[dict]:
     cats = await _allowed_categories(username)
     if cats is not None and len(cats) == 0:
         return []
@@ -184,7 +203,9 @@ async def get_alert_rules(username: str = Depends(require_permission(ALERTS_READ
 
 
 @router.get("/count")
-async def get_alert_count(username: str = Depends(require_permission(ALERTS_READ))) -> dict:
+async def get_alert_count(
+    username: str = Depends(require_permission(ALERTS_READ)),
+) -> dict:
     """Fast endpoint for bell badge — returns count of active unhandled alerts."""
     cats = await _allowed_categories(username)
     if cats is not None and len(cats) == 0:
