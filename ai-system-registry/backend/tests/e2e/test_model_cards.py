@@ -89,6 +89,20 @@ async def test_list_model_cards_empty(client: httpx.AsyncClient):
     assert r.json() == []
 
 
+async def test_list_model_cards_omits_children(client: httpx.AsyncClient):
+    # list endpoint is intentionally flat — children are loaded only by GET /{id}
+    card = await _create_card(client)
+    await client.post(f"/v1/model-cards/{card['id']}/metrics", json={"value": 0.9, "name": "Accuracy"})
+    await client.post(f"/v1/model-cards/{card['id']}/sources", json={"url": "https://example.com"})
+    await _create_dataset(client, card["id"])
+    r = await client.get("/v1/model-cards")
+    assert r.status_code == 200
+    card_in_list = next(c for c in r.json() if c["id"] == card["id"])
+    assert card_in_list["metrics"] == []
+    assert card_in_list["sources"] == []
+    assert card_in_list["datasets"] == []
+
+
 # ---------------------------------------------------------------------------
 # GET /model-cards/{id}
 # ---------------------------------------------------------------------------
@@ -129,6 +143,15 @@ async def test_patch_model_card_partial(client: httpx.AsyncClient):
     body = r.json()
     assert body["name"] == "My Model"    # unchanged
     assert body["version"] == "2.0"      # updated
+
+
+async def test_patch_model_card_empty_body_is_noop(client: httpx.AsyncClient):
+    card = await _create_card(client, {"name": "Stable Model", "version": "1.0"})
+    r = await client.patch(f"/v1/model-cards/{card['id']}", json={})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "Stable Model"
+    assert body["version"] == "1.0"
 
 
 async def test_patch_model_card_not_found(client: httpx.AsyncClient):
@@ -196,6 +219,11 @@ async def test_add_metric_requires_name_and_value(client: httpx.AsyncClient):
     assert r2.status_code == 422
 
 
+async def test_add_metric_card_not_found(client: httpx.AsyncClient):
+    r = await client.post("/v1/model-cards/MDL-NOTFOUND/metrics", json={"value": 0.9, "name": "Accuracy"})
+    assert r.status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # POST /model-cards/{id}/sources  +  DELETE /model-cards/{id}/sources/{sid}
 # ---------------------------------------------------------------------------
@@ -236,6 +264,11 @@ async def test_add_source_requires_url(client: httpx.AsyncClient):
     card = await _create_card(client)
     r = await client.post(f"/v1/model-cards/{card['id']}/sources", json={"name": "Paper"})
     assert r.status_code == 422
+
+
+async def test_add_source_card_not_found(client: httpx.AsyncClient):
+    r = await client.post("/v1/model-cards/MDL-NOTFOUND/sources", json={"url": "https://example.com"})
+    assert r.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +363,11 @@ async def test_add_dataset_invalid_type(client: httpx.AsyncClient):
     assert r.status_code == 422
 
 
+async def test_add_dataset_card_not_found(client: httpx.AsyncClient):
+    r = await client.post("/v1/model-cards/MDL-NOTFOUND/datasets", json={"name": "X", "type": "train"})
+    assert r.status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # PATCH /model-cards/{id}/datasets/{did}
 # ---------------------------------------------------------------------------
@@ -394,9 +432,10 @@ async def test_put_dataset_replaces_children(client: httpx.AsyncClient):
             "preparations": [{"operation": "augmentation"}],
         },
     )
-    assert r.status_code == 200
-    # old two preparations replaced by one
-    ds = next(d for d in r.json()["datasets"] if d["id"] == did)
+    assert r.status_code == 204
+    # verify via GET — old two preparations replaced by one
+    tree = (await client.get(f"/v1/model-cards/{card['id']}")).json()
+    ds = next(d for d in tree["datasets"] if d["id"] == did)
     assert len(ds["preparations"]) == 1
     assert ds["preparations"][0]["operation"] == "augmentation"
 
@@ -409,8 +448,9 @@ async def test_put_dataset_preserves_dataset_id(client: httpx.AsyncClient):
         f"/v1/model-cards/{card['id']}/datasets/{did}",
         json={"name": "Updated Name", "type": "test"},
     )
-    assert r.status_code == 200
-    ds = next(d for d in r.json()["datasets"] if d["id"] == did)
+    assert r.status_code == 204
+    tree = (await client.get(f"/v1/model-cards/{card['id']}")).json()
+    ds = next(d for d in tree["datasets"] if d["id"] == did)
     assert ds["name"] == "Updated Name"
     assert ds["type"] == "test"
 
@@ -452,3 +492,52 @@ async def test_get_model_card_systems_empty(client: httpx.AsyncClient):
     r = await client.get(f"/v1/model-cards/{card['id']}/systems")
     assert r.status_code == 200
     assert r.json() == []
+
+
+async def test_get_model_card_systems_with_link(client: httpx.AsyncClient):
+    card = await _create_card(client)
+    r_sys = await client.post(
+        "/v1/intake",
+        json={"name": "Linked System", "assignee_username": "user1"},
+        headers={"x-forwarded-preferred-username": "user1"},
+    )
+    assert r_sys.status_code == 201
+    system_id = r_sys.json()["system"]["id"]
+    await client.post(f"/v1/systems/{system_id}/models", json={"model_card_id": card["id"]})
+    r = await client.get(f"/v1/model-cards/{card['id']}/systems")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["id"] == system_id
+
+
+# ---------------------------------------------------------------------------
+# Cross-ownership: sub-resource DELETE on wrong card → 404
+# ---------------------------------------------------------------------------
+
+async def test_delete_metric_wrong_card(client: httpx.AsyncClient):
+    card_a = await _create_card(client)
+    card_b = await _create_card(client)
+    metric = (await client.post(
+        f"/v1/model-cards/{card_b['id']}/metrics", json={"value": 0.9, "name": "Accuracy"}
+    )).json()
+    r = await client.delete(f"/v1/model-cards/{card_a['id']}/metrics/{metric['id']}")
+    assert r.status_code == 404
+
+
+async def test_delete_source_wrong_card(client: httpx.AsyncClient):
+    card_a = await _create_card(client)
+    card_b = await _create_card(client)
+    source = (await client.post(
+        f"/v1/model-cards/{card_b['id']}/sources", json={"url": "https://example.com"}
+    )).json()
+    r = await client.delete(f"/v1/model-cards/{card_a['id']}/sources/{source['id']}")
+    assert r.status_code == 404
+
+
+async def test_delete_dataset_wrong_card(client: httpx.AsyncClient):
+    card_a = await _create_card(client)
+    card_b = await _create_card(client)
+    dataset = await _create_dataset(client, card_b["id"])
+    r = await client.delete(f"/v1/model-cards/{card_a['id']}/datasets/{dataset['id']}")
+    assert r.status_code == 404

@@ -303,7 +303,53 @@ async def test_link_model_card_404_on_missing_model(client: httpx.AsyncClient):
 
 
 # ---------------------------------------------------------------------------
-# POST /systems/{id}/reclassify — audit event changes
+# GET /systems/{id}/models — list linked model cards
+# ---------------------------------------------------------------------------
+
+
+async def test_list_system_models(client: httpx.AsyncClient):
+    system_id = (await _create_system(client))["system"]["id"]
+    model_id = (await _create_model_card(client))["id"]
+    await client.post(f"/v1/systems/{system_id}/models", json={"model_card_id": model_id})
+    r = await client.get(f"/v1/systems/{system_id}/models")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["id"] == model_id
+
+
+async def test_list_system_models_empty(client: httpx.AsyncClient):
+    system_id = (await _create_system(client))["system"]["id"]
+    r = await client.get(f"/v1/systems/{system_id}/models")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+async def test_list_system_models_404_on_missing_system(client: httpx.AsyncClient):
+    r = await client.get("/v1/systems/SYS-NOTFOUND/models")
+    assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /systems/{id}/models/{card_id} — unlink model card
+# ---------------------------------------------------------------------------
+
+
+async def test_remove_system_model(client: httpx.AsyncClient):
+    system_id = (await _create_system(client))["system"]["id"]
+    model_id = (await _create_model_card(client))["id"]
+    await client.post(f"/v1/systems/{system_id}/models", json={"model_card_id": model_id})
+    r = await client.delete(f"/v1/systems/{system_id}/models/{model_id}")
+    assert r.status_code == 200
+    assert r.json()["model_card_id"] == model_id
+    # gone from list
+    assert (await client.get(f"/v1/systems/{system_id}/models")).json() == []
+
+
+async def test_remove_system_model_404(client: httpx.AsyncClient):
+    system_id = (await _create_system(client))["system"]["id"]
+    r = await client.delete(f"/v1/systems/{system_id}/models/MDL-NOTFOUND")
+    assert r.status_code == 404
 # ---------------------------------------------------------------------------
 
 
