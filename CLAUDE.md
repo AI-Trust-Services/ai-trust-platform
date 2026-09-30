@@ -195,6 +195,7 @@ All backends are **FastAPI 0.115 + Python 3.12** on port 8001+:
 - **`libs/persistence`** — async SQLAlchemy engine (`database.py`, reads `DATABASE_URL`; pool 5/+10, `pool_pre_ping`), ORM `models/` (one file per entity), Alembic `migrations/versions/` (all tables, all components).
 - **`libs/clickhouse`** — connection factory (`database.py`, reads `CLICKHOUSE_*`, fail-fast), `tables.py` (single source for table/column names), versioned SQL `migrations/` (applied in filename order, tracked in `otel.schema_migrations`).
 - **`libs/logging`** — `logger.py` JSON formatter (UTC timestamp, level, logger, correlation ID, `extra={}` fields). `correlation_id_var` is a `contextvars.ContextVar` set once per request in `logging_middleware`; it propagates through all `await`s automatically. Middleware logs INFO for 2xx, WARNING for 4xx, ERROR for 5xx. Usage: `from ai_trust_logging import get_logger, correlation_id_var`.
+- **`libs/react-hooks`** — shared React hooks for all MFEs. Provides `useBranding()` (applies branding colors from localStorage) and `useTheme()` (applies dark/light mode). All MFE frontends import via `@ai-trust/react-hooks` path alias (configured in each MFE's `tsconfig.json` + `vite.config.ts`). Frontend Dockerfiles use repo-root context (`context: .`) to access the shared lib.
 
 ### ClickHouse cold storage (tiered MergeTree → MinIO)
 `gen_ai_spans` and `alert_events` use two tiers: **hot** (local `clickhouse_data` disk, default) and **cold** (MinIO S3, triggered by age > 7 days or hot disk > 90% full).
@@ -259,7 +260,7 @@ Governance chain — assessments, obligations, requirements, evidence for EU AI 
 Immutable audit trail across all platform actions (Postgres buffer → ClickHouse archive). Includes the `audit-flush-worker`. Details → [audit/CLAUDE.md](audit/CLAUDE.md).
 
 ### admin/ (port 8010, `/api/admin/`)
-Platform administration — SMTP mail config, general platform settings, summary dashboard. Details → [admin/CLAUDE.md](admin/CLAUDE.md).
+Platform administration — SMTP mail config, general platform settings, branding/white-labeling, summary dashboard. Details → [admin/CLAUDE.md](admin/CLAUDE.md).
 
 ## Environment variables
 

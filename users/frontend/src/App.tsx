@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 import { Outlet, NavLink } from "react-router";
 import { Users } from "lucide-react";
 import { useLuigiInit } from "./hooks/useLuigi";
-import { useTheme } from './hooks/useTheme';
+import { useTheme, useBranding } from "@ai-trust/react-hooks";
 import { HEALTH_URL } from "./api/client";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,7 @@ export default function App() {
 
   useLuigiInit(() => {});
   useTheme();
+  useBranding();
 
   const checkHealth = useCallback(async () => {
     if (healthTimer.current) clearTimeout(healthTimer.current);

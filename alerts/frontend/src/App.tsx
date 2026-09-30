@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { BellRing, Loader2, RefreshCw } from "lucide-react";
 import { api, HEALTH_URL, ALERTS_URL } from "./api/client";
 import { useLuigiInit, navigateTo } from "./hooks/useLuigi";
-import { useTheme } from './hooks/useTheme';
+import { useTheme, useBranding } from "@ai-trust/react-hooks";
 import { usePermissions } from "./hooks/usePermissions";
 import { ToastProvider } from "./components/Toast";
 import { NoAccess } from "./components/NoAccess";
@@ -19,6 +19,7 @@ type Tab = "active" | "history" | "rules";
 export default function App() {
   useLuigiInit(() => {});
   useTheme();
+  useBranding();
 
   const { can, loading: permsLoading } = usePermissions();
   const mayViewAlerts =

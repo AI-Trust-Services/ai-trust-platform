@@ -1,4 +1,8 @@
-from sqlalchemy import Boolean, Integer, String, Text
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
