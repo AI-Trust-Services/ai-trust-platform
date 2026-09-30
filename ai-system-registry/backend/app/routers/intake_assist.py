@@ -28,7 +28,7 @@ from ai_trust_persistence.models.ai_system import AISystem
 from app.classifier import CLASSIFIER_INPUTS, classify_from_flags
 from app.documents import DocumentParseError, is_supported, parse_document
 from app.llm import (
-    LLM_VISION_MODEL,
+    THALAMUS_VISION_MODEL,
     LLMParseError,
     build_doc_extract_messages,
     build_engineer_doc_extract_messages,
@@ -144,7 +144,7 @@ async def _run_assist_extract(
 
     if doc.is_image:
         messages = build_messages_fn(image_b64=doc.image_b64, media_type=doc.media_type)
-        model = LLM_VISION_MODEL
+        model = THALAMUS_VISION_MODEL
     else:
         messages = build_messages_fn(parsed_text=doc.text)
         model = None

@@ -1,4 +1,4 @@
-"""Deterministic stub LLM provider (LLM_PROVIDER=stub, the default everywhere).
+"""Deterministic stub — used when THALAMUS_BASE_URL is unset or "stub" (the default everywhere).
 
 Canned responses keyed by task, with light keyword matching on the conversation,
 so tests / local dev can drive the full agentic loop with no network. The turn

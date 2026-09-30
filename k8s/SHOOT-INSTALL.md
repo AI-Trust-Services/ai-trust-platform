@@ -72,7 +72,7 @@ POSTGRES_PASSWORD=<strong>
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=<strong>
 SMTP_HOST=                                     # blank → email disabled (optional; no crash)
-LLM_PROVIDER=stub
+THALAMUS_BASE_URL=stub
 SMTP_FROM_NAME="AI Trust Platform"             # MUST be quoted — bootstrap.sh sources .env
 ```
 > **Quote any value containing spaces.** `bootstrap.sh` does `source <(.env)`; an unquoted
@@ -94,8 +94,6 @@ image:
   repository: <registry>       # placeholder; the transform builds the hyphenated names
   tag: <tag>
   pullPolicy: Always
-ollama:
-  enabled: false
 ```
 
 ### 4. Render → transform → apply

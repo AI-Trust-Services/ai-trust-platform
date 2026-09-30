@@ -38,7 +38,3 @@ otel:
   collectorGrpcNodePort: 30317
   collectorHttpNodePort: 30318
   rmqBridgeNodePort: 30802
-
-ollama:
-  serviceType: NodePort
-  nodePort: 30434

@@ -253,7 +253,7 @@ has no cross-namespace `valuesFrom` support, so two secrets are maintained **per
 | Secret | Namespace | Contents | Used by |
 |---|---|---|---|
 | `ai-trust-env` | `<ns>` | Full credential set from `.env` + computed URLs | Helm chart pods via `envFrom` |
-| `ai-trust-flux-values-<ns>` | `ocm-system` | `APP_PUBLIC_URL`, `KEYCLOAK_PUBLIC_URL`, `INGRESS_*`, `IMAGE_TAG`, `OLLAMA_ENABLED` | FluxDeployer `valuesFrom` → HelmRelease |
+| `ai-trust-flux-values-<ns>` | `ocm-system` | `APP_PUBLIC_URL`, `KEYCLOAK_PUBLIC_URL`, `INGRESS_*`, `IMAGE_TAG` | FluxDeployer `valuesFrom` → HelmRelease |
 
 Only the `ocm-system` copy carries the `-<ns>` suffix: all HelmReleases share that one namespace,
 while each `ai-trust-env` is already isolated by its own namespace. Both are (re)created by
