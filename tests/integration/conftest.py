@@ -71,7 +71,7 @@ async def register_system(
     tier: str = "minimal",
 ) -> dict:
     r = await registry_client.post(
-        "/api/v1/intake",
+        "/v1/intake",
         json={"name": name, "tier": tier, "assignee_username": ADMIN_USER},
         headers=ADMIN_HEADERS,
     )
@@ -102,8 +102,8 @@ async def assign_role(
     username: str,
     role: str,
 ) -> None:
-    r = await users_client.put(
+    r = await users_client.post(
         f"/v1/users/{username}/roles/{role}",
         headers=ADMIN_HEADERS,
     )
-    assert r.status_code in (200, 204), r.text
+    assert r.status_code in (200, 201, 204), r.text
