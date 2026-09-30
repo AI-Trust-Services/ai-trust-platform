@@ -244,19 +244,33 @@ async def get_monitoring_stats(lifecycle: str = Query(default="")) -> dict:
             await session.execute(select(func.count()).select_from(ModelCard))
         ).scalar_one()
 
-        model_type_rows = (await session.execute(
-            select(ModelCard.task_type, func.count().label("n")).group_by(ModelCard.task_type)
-        )).all()
+        model_type_rows = (
+            await session.execute(
+                select(ModelCard.task_type, func.count().label("n")).group_by(
+                    ModelCard.task_type
+                )
+            )
+        ).all()
         by_model_type = {r.task_type: r.n for r in model_type_rows}
 
-        model_validation_rows = (await session.execute(
-            select(ModelCard.validation_status, func.count().label("n")).group_by(ModelCard.validation_status)
-        )).all()
-        by_model_validation_status = {(r.validation_status or "unknown"): r.n for r in model_validation_rows}
+        model_validation_rows = (
+            await session.execute(
+                select(ModelCard.validation_status, func.count().label("n")).group_by(
+                    ModelCard.validation_status
+                )
+            )
+        ).all()
+        by_model_validation_status = {
+            (r.validation_status or "unknown"): r.n for r in model_validation_rows
+        }
 
-        validated_count = (await session.execute(
-            select(func.count()).select_from(ModelCard).where(ModelCard.validation_status == "validated")
-        )).scalar_one()
+        validated_count = (
+            await session.execute(
+                select(func.count())
+                .select_from(ModelCard)
+                .where(ModelCard.validation_status == "validated")
+            )
+        ).scalar_one()
 
         buckets = {"0–20": 0, "20–40": 0, "40–60": 0, "60–80": 0, "80–100": 0}
         compliance_rows = (

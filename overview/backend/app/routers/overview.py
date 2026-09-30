@@ -91,15 +91,25 @@ async def get_overview_stats() -> dict:
             await session.execute(select(func.count()).select_from(ModelCard))
         ).scalar_one()
 
-        model_type_rows = (await session.execute(
-            select(ModelCard.task_type, func.count().label("n")).group_by(ModelCard.task_type)
-        )).all()
+        model_type_rows = (
+            await session.execute(
+                select(ModelCard.task_type, func.count().label("n")).group_by(
+                    ModelCard.task_type
+                )
+            )
+        ).all()
         by_model_type = {r.task_type: r.n for r in model_type_rows}
 
-        model_validation_rows = (await session.execute(
-            select(ModelCard.validation_status, func.count().label("n")).group_by(ModelCard.validation_status)
-        )).all()
-        by_model_validation_status = {(r.validation_status or "unknown"): r.n for r in model_validation_rows}
+        model_validation_rows = (
+            await session.execute(
+                select(ModelCard.validation_status, func.count().label("n")).group_by(
+                    ModelCard.validation_status
+                )
+            )
+        ).all()
+        by_model_validation_status = {
+            (r.validation_status or "unknown"): r.n for r in model_validation_rows
+        }
 
         # Compliance histogram — single aggregate query instead of loading all rows.
         hist_row = (
@@ -237,10 +247,10 @@ async def get_overview_stats() -> dict:
         "by_type": by_type,
         "compliance_by_tier": compliance_by_tier,
         "compliance_histogram": buckets,
-        "by_model_type":        by_model_type,
+        "by_model_type": by_model_type,
         "by_model_validation_status": by_model_validation_status,
-        "recent":               recent,
-        "attention":            attention,
+        "recent": recent,
+        "attention": attention,
     }
 
 

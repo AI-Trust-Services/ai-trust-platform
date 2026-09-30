@@ -1,4 +1,5 @@
 """E2E tests for Model Card API — in-process via ASGITransport against ai_trust_test DB."""
+
 from __future__ import annotations
 
 import httpx
@@ -9,6 +10,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 async def _create_card(client: httpx.AsyncClient, payload: dict | None = None) -> dict:
     payload = payload or {"name": "Test Model"}
     r = await client.post("/v1/model-cards", json=payload)
@@ -16,7 +18,9 @@ async def _create_card(client: httpx.AsyncClient, payload: dict | None = None) -
     return r.json()
 
 
-async def _create_dataset(client: httpx.AsyncClient, card_id: str, payload: dict | None = None) -> dict:
+async def _create_dataset(
+    client: httpx.AsyncClient, card_id: str, payload: dict | None = None
+) -> dict:
     payload = payload or {"name": "Test Dataset", "type": "train"}
     r = await client.post(f"/v1/model-cards/{card_id}/datasets", json=payload)
     assert r.status_code == 201, r.text
@@ -26,6 +30,7 @@ async def _create_dataset(client: httpx.AsyncClient, card_id: str, payload: dict
 # ---------------------------------------------------------------------------
 # POST /model-cards
 # ---------------------------------------------------------------------------
+
 
 async def test_create_model_card_minimal(client: httpx.AsyncClient):
     r = await client.post("/v1/model-cards", json={"name": "Cancer Classifier"})
@@ -73,6 +78,7 @@ async def test_create_model_card_requires_name(client: httpx.AsyncClient):
 # GET /model-cards
 # ---------------------------------------------------------------------------
 
+
 async def test_list_model_cards(client: httpx.AsyncClient):
     await _create_card(client, {"name": "Model A"})
     await _create_card(client, {"name": "Model B"})
@@ -92,8 +98,12 @@ async def test_list_model_cards_empty(client: httpx.AsyncClient):
 async def test_list_model_cards_omits_children(client: httpx.AsyncClient):
     # list endpoint is intentionally flat — children are loaded only by GET /{id}
     card = await _create_card(client)
-    await client.post(f"/v1/model-cards/{card['id']}/metrics", json={"value": 0.9, "name": "Accuracy"})
-    await client.post(f"/v1/model-cards/{card['id']}/sources", json={"url": "https://example.com"})
+    await client.post(
+        f"/v1/model-cards/{card['id']}/metrics", json={"value": 0.9, "name": "Accuracy"}
+    )
+    await client.post(
+        f"/v1/model-cards/{card['id']}/sources", json={"url": "https://example.com"}
+    )
     await _create_dataset(client, card["id"])
     r = await client.get("/v1/model-cards")
     assert r.status_code == 200
@@ -106,6 +116,7 @@ async def test_list_model_cards_omits_children(client: httpx.AsyncClient):
 # ---------------------------------------------------------------------------
 # GET /model-cards/{id}
 # ---------------------------------------------------------------------------
+
 
 async def test_get_model_card_returns_full_tree(client: httpx.AsyncClient):
     card = await _create_card(client)
@@ -127,9 +138,12 @@ async def test_get_model_card_not_found(client: httpx.AsyncClient):
 # PATCH /model-cards/{id}
 # ---------------------------------------------------------------------------
 
+
 async def test_patch_model_card_scalars(client: httpx.AsyncClient):
     card = await _create_card(client, {"name": "Old Name"})
-    r = await client.patch(f"/v1/model-cards/{card['id']}", json={"name": "New Name", "version": "3.0"})
+    r = await client.patch(
+        f"/v1/model-cards/{card['id']}", json={"name": "New Name", "version": "3.0"}
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["name"] == "New Name"
@@ -141,8 +155,8 @@ async def test_patch_model_card_partial(client: httpx.AsyncClient):
     r = await client.patch(f"/v1/model-cards/{card['id']}", json={"version": "2.0"})
     assert r.status_code == 200
     body = r.json()
-    assert body["name"] == "My Model"    # unchanged
-    assert body["version"] == "2.0"      # updated
+    assert body["name"] == "My Model"  # unchanged
+    assert body["version"] == "2.0"  # updated
 
 
 async def test_patch_model_card_empty_body_is_noop(client: httpx.AsyncClient):
@@ -163,6 +177,7 @@ async def test_patch_model_card_not_found(client: httpx.AsyncClient):
 # DELETE /model-cards/{id}
 # ---------------------------------------------------------------------------
 
+
 async def test_delete_model_card(client: httpx.AsyncClient):
     card = await _create_card(client)
     r = await client.delete(f"/v1/model-cards/{card['id']}")
@@ -182,9 +197,13 @@ async def test_delete_model_card_not_found(client: httpx.AsyncClient):
 # POST /model-cards/{id}/metrics  +  DELETE /model-cards/{id}/metrics/{mid}
 # ---------------------------------------------------------------------------
 
+
 async def test_add_metric(client: httpx.AsyncClient):
     card = await _create_card(client)
-    r = await client.post(f"/v1/model-cards/{card['id']}/metrics", json={"value": 0.94, "name": "Accuracy"})
+    r = await client.post(
+        f"/v1/model-cards/{card['id']}/metrics",
+        json={"value": 0.94, "name": "Accuracy"},
+    )
     assert r.status_code == 201
     body = r.json()
     assert body["id"].startswith("MCM-")
@@ -194,7 +213,9 @@ async def test_add_metric(client: httpx.AsyncClient):
 
 async def test_metric_appears_in_tree(client: httpx.AsyncClient):
     card = await _create_card(client)
-    await client.post(f"/v1/model-cards/{card['id']}/metrics", json={"value": 0.91, "name": "F1"})
+    await client.post(
+        f"/v1/model-cards/{card['id']}/metrics", json={"value": 0.91, "name": "F1"}
+    )
     tree = (await client.get(f"/v1/model-cards/{card['id']}")).json()
     assert len(tree["metrics"]) == 1
     assert tree["metrics"][0]["name"] == "F1"
@@ -202,9 +223,12 @@ async def test_metric_appears_in_tree(client: httpx.AsyncClient):
 
 async def test_delete_metric(client: httpx.AsyncClient):
     card = await _create_card(client)
-    metric = (await client.post(
-        f"/v1/model-cards/{card['id']}/metrics", json={"value": 0.9, "name": "Accuracy"}
-    )).json()
+    metric = (
+        await client.post(
+            f"/v1/model-cards/{card['id']}/metrics",
+            json={"value": 0.9, "name": "Accuracy"},
+        )
+    ).json()
     r = await client.delete(f"/v1/model-cards/{card['id']}/metrics/{metric['id']}")
     assert r.status_code == 200
     tree = (await client.get(f"/v1/model-cards/{card['id']}")).json()
@@ -215,18 +239,23 @@ async def test_add_metric_requires_name_and_value(client: httpx.AsyncClient):
     card = await _create_card(client)
     r = await client.post(f"/v1/model-cards/{card['id']}/metrics", json={"value": 0.9})
     assert r.status_code == 422
-    r2 = await client.post(f"/v1/model-cards/{card['id']}/metrics", json={"name": "Accuracy"})
+    r2 = await client.post(
+        f"/v1/model-cards/{card['id']}/metrics", json={"name": "Accuracy"}
+    )
     assert r2.status_code == 422
 
 
 async def test_add_metric_card_not_found(client: httpx.AsyncClient):
-    r = await client.post("/v1/model-cards/MDL-NOTFOUND/metrics", json={"value": 0.9, "name": "Accuracy"})
+    r = await client.post(
+        "/v1/model-cards/MDL-NOTFOUND/metrics", json={"value": 0.9, "name": "Accuracy"}
+    )
     assert r.status_code == 404
 
 
 # ---------------------------------------------------------------------------
 # POST /model-cards/{id}/sources  +  DELETE /model-cards/{id}/sources/{sid}
 # ---------------------------------------------------------------------------
+
 
 async def test_add_source(client: httpx.AsyncClient):
     card = await _create_card(client)
@@ -243,7 +272,9 @@ async def test_add_source(client: httpx.AsyncClient):
 
 async def test_source_appears_in_tree(client: httpx.AsyncClient):
     card = await _create_card(client)
-    await client.post(f"/v1/model-cards/{card['id']}/sources", json={"url": "https://example.com"})
+    await client.post(
+        f"/v1/model-cards/{card['id']}/sources", json={"url": "https://example.com"}
+    )
     tree = (await client.get(f"/v1/model-cards/{card['id']}")).json()
     assert len(tree["sources"]) == 1
     assert tree["sources"][0]["url"] == "https://example.com"
@@ -251,9 +282,11 @@ async def test_source_appears_in_tree(client: httpx.AsyncClient):
 
 async def test_delete_source(client: httpx.AsyncClient):
     card = await _create_card(client)
-    source = (await client.post(
-        f"/v1/model-cards/{card['id']}/sources", json={"url": "https://example.com"}
-    )).json()
+    source = (
+        await client.post(
+            f"/v1/model-cards/{card['id']}/sources", json={"url": "https://example.com"}
+        )
+    ).json()
     r = await client.delete(f"/v1/model-cards/{card['id']}/sources/{source['id']}")
     assert r.status_code == 200
     tree = (await client.get(f"/v1/model-cards/{card['id']}")).json()
@@ -262,18 +295,23 @@ async def test_delete_source(client: httpx.AsyncClient):
 
 async def test_add_source_requires_url(client: httpx.AsyncClient):
     card = await _create_card(client)
-    r = await client.post(f"/v1/model-cards/{card['id']}/sources", json={"name": "Paper"})
+    r = await client.post(
+        f"/v1/model-cards/{card['id']}/sources", json={"name": "Paper"}
+    )
     assert r.status_code == 422
 
 
 async def test_add_source_card_not_found(client: httpx.AsyncClient):
-    r = await client.post("/v1/model-cards/MDL-NOTFOUND/sources", json={"url": "https://example.com"})
+    r = await client.post(
+        "/v1/model-cards/MDL-NOTFOUND/sources", json={"url": "https://example.com"}
+    )
     assert r.status_code == 404
 
 
 # ---------------------------------------------------------------------------
 # POST /model-cards/{id}/datasets
 # ---------------------------------------------------------------------------
+
 
 async def test_add_dataset_minimal(client: httpx.AsyncClient):
     card = await _create_card(client)
@@ -310,9 +348,7 @@ async def test_add_dataset_with_all_children(client: httpx.AsyncClient):
         "feature_stores": [
             {
                 "store_name": "customer-fs",
-                "groups": [
-                    {"name": "demographics", "version": "v2", "origin": "CRM"}
-                ],
+                "groups": [{"name": "demographics", "version": "v2", "origin": "CRM"}],
             }
         ],
     }
@@ -350,7 +386,9 @@ async def test_add_dataset_requires_name_and_type(client: httpx.AsyncClient):
     card = await _create_card(client)
     r = await client.post(f"/v1/model-cards/{card['id']}/datasets", json={"name": "X"})
     assert r.status_code == 422
-    r2 = await client.post(f"/v1/model-cards/{card['id']}/datasets", json={"type": "train"})
+    r2 = await client.post(
+        f"/v1/model-cards/{card['id']}/datasets", json={"type": "train"}
+    )
     assert r2.status_code == 422
 
 
@@ -364,7 +402,9 @@ async def test_add_dataset_invalid_type(client: httpx.AsyncClient):
 
 
 async def test_add_dataset_card_not_found(client: httpx.AsyncClient):
-    r = await client.post("/v1/model-cards/MDL-NOTFOUND/datasets", json={"name": "X", "type": "train"})
+    r = await client.post(
+        "/v1/model-cards/MDL-NOTFOUND/datasets", json={"name": "X", "type": "train"}
+    )
     assert r.status_code == 404
 
 
@@ -372,10 +412,12 @@ async def test_add_dataset_card_not_found(client: httpx.AsyncClient):
 # PATCH /model-cards/{id}/datasets/{did}
 # ---------------------------------------------------------------------------
 
+
 async def test_patch_dataset_scalars(client: httpx.AsyncClient):
     card = await _create_card(client)
     dataset = await _create_dataset(
-        client, card["id"],
+        client,
+        card["id"],
         {
             "name": "My Dataset",
             "type": "train",
@@ -409,10 +451,12 @@ async def test_patch_dataset_not_found(client: httpx.AsyncClient):
 # PUT /model-cards/{id}/datasets/{did}  — full replace
 # ---------------------------------------------------------------------------
 
+
 async def test_put_dataset_replaces_children(client: httpx.AsyncClient):
     card = await _create_card(client)
     dataset = await _create_dataset(
-        client, card["id"],
+        client,
+        card["id"],
         {
             "name": "Dataset",
             "type": "train",
@@ -468,6 +512,7 @@ async def test_put_dataset_not_found(client: httpx.AsyncClient):
 # DELETE /model-cards/{id}/datasets/{did}
 # ---------------------------------------------------------------------------
 
+
 async def test_delete_dataset(client: httpx.AsyncClient):
     card = await _create_card(client)
     dataset = await _create_dataset(client, card["id"])
@@ -487,6 +532,7 @@ async def test_delete_dataset_not_found(client: httpx.AsyncClient):
 # GET /model-cards/{id}/systems  — existing join-table read
 # ---------------------------------------------------------------------------
 
+
 async def test_get_model_card_systems_empty(client: httpx.AsyncClient):
     card = await _create_card(client)
     r = await client.get(f"/v1/model-cards/{card['id']}/systems")
@@ -503,7 +549,9 @@ async def test_get_model_card_systems_with_link(client: httpx.AsyncClient):
     )
     assert r_sys.status_code == 201
     system_id = r_sys.json()["system"]["id"]
-    await client.post(f"/v1/systems/{system_id}/models", json={"model_card_id": card["id"]})
+    await client.post(
+        f"/v1/systems/{system_id}/models", json={"model_card_id": card["id"]}
+    )
     r = await client.get(f"/v1/model-cards/{card['id']}/systems")
     assert r.status_code == 200
     body = r.json()
@@ -515,12 +563,16 @@ async def test_get_model_card_systems_with_link(client: httpx.AsyncClient):
 # Cross-ownership: sub-resource DELETE on wrong card → 404
 # ---------------------------------------------------------------------------
 
+
 async def test_delete_metric_wrong_card(client: httpx.AsyncClient):
     card_a = await _create_card(client)
     card_b = await _create_card(client)
-    metric = (await client.post(
-        f"/v1/model-cards/{card_b['id']}/metrics", json={"value": 0.9, "name": "Accuracy"}
-    )).json()
+    metric = (
+        await client.post(
+            f"/v1/model-cards/{card_b['id']}/metrics",
+            json={"value": 0.9, "name": "Accuracy"},
+        )
+    ).json()
     r = await client.delete(f"/v1/model-cards/{card_a['id']}/metrics/{metric['id']}")
     assert r.status_code == 404
 
@@ -528,9 +580,12 @@ async def test_delete_metric_wrong_card(client: httpx.AsyncClient):
 async def test_delete_source_wrong_card(client: httpx.AsyncClient):
     card_a = await _create_card(client)
     card_b = await _create_card(client)
-    source = (await client.post(
-        f"/v1/model-cards/{card_b['id']}/sources", json={"url": "https://example.com"}
-    )).json()
+    source = (
+        await client.post(
+            f"/v1/model-cards/{card_b['id']}/sources",
+            json={"url": "https://example.com"},
+        )
+    ).json()
     r = await client.delete(f"/v1/model-cards/{card_a['id']}/sources/{source['id']}")
     assert r.status_code == 404
 

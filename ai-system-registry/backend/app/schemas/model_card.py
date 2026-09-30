@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 # Nested input types (used inside DatasetCreate / PUT body)
 # ---------------------------------------------------------------------------
 
+
 class PreparationCreate(BaseModel):
     operation: str = Field(..., max_length=200)
     description: str | None = None
@@ -36,6 +37,7 @@ class FeatureStoreCreate(BaseModel):
 # ---------------------------------------------------------------------------
 # Request schemas
 # ---------------------------------------------------------------------------
+
 
 class ModelCardCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
@@ -113,6 +115,7 @@ class DatasetPatch(BaseModel):
 # ---------------------------------------------------------------------------
 # Response schemas
 # ---------------------------------------------------------------------------
+
 
 class _OrmResponse(BaseModel):
     model_config = {"from_attributes": True}

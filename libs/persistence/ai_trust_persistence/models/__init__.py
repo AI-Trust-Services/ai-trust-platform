@@ -17,10 +17,16 @@ from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.model_card_metric import ModelCardMetric
 from ai_trust_persistence.models.model_card_source import ModelCardSource
 from ai_trust_persistence.models.model_card_dataset import ModelCardDataset
-from ai_trust_persistence.models.model_card_dataset_preparation import ModelCardDatasetPreparation
-from ai_trust_persistence.models.model_card_dataset_measurement import ModelCardDatasetMeasurement
+from ai_trust_persistence.models.model_card_dataset_preparation import (
+    ModelCardDatasetPreparation,
+)
+from ai_trust_persistence.models.model_card_dataset_measurement import (
+    ModelCardDatasetMeasurement,
+)
 from ai_trust_persistence.models.model_card_feature_store import ModelCardFeatureStore
-from ai_trust_persistence.models.model_card_feature_store_group import ModelCardFeatureStoreGroup
+from ai_trust_persistence.models.model_card_feature_store_group import (
+    ModelCardFeatureStoreGroup,
+)
 from ai_trust_persistence.models.obligation import Obligation
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 

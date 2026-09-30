@@ -12,7 +12,10 @@ class ModelCardMetric(Base):
 
     id: Mapped[str] = mapped_column(String(20), primary_key=True)
     model_card_id: Mapped[str] = mapped_column(
-        String(20), ForeignKey("model_cards.id", ondelete="CASCADE"), nullable=False, index=True
+        String(20),
+        ForeignKey("model_cards.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     # assumption: value is a float. It might change in the future.
     value: Mapped[float] = mapped_column(Float, nullable=False)

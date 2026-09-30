@@ -6,8 +6,7 @@ import { useToast, useModalControls } from "../App";
 import { SELECT_CLASS } from "../utils";
 import type {
   ModelCard, ModelCardPatch, MetricCreate, SourceCreate,
-  DatasetCreate, DatasetPatch, Dataset, Preparation, Measurement,
-  FeatureStore, FeatureStoreGroup,
+  DatasetCreate, DatasetPatch, Dataset, FeatureStoreGroup,
 } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

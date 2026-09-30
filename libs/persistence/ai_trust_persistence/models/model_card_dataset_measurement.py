@@ -11,7 +11,10 @@ class ModelCardDatasetMeasurement(Base):
 
     id: Mapped[str] = mapped_column(String(20), primary_key=True)
     dataset_id: Mapped[str] = mapped_column(
-        String(20), ForeignKey("model_card_datasets.id", ondelete="CASCADE"), nullable=False, index=True
+        String(20),
+        ForeignKey("model_card_datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     measure: Mapped[str] = mapped_column(String(200), nullable=False)
     # Assumption: only float

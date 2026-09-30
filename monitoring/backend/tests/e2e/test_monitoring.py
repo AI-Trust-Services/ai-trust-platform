@@ -336,11 +336,13 @@ async def test_stats_compliance_by_tier(client: httpx.AsyncClient):
 
 async def test_stats_model_card_distributions(client: httpx.AsyncClient):
     async with SessionLocal() as session:
-        session.add_all([
-            _model(task_type="llm", validation_status="validated"),
-            _model(task_type="llm", validation_status="pending"),
-            _model(task_type="vision", validation_status="validated"),
-        ])
+        session.add_all(
+            [
+                _model(task_type="llm", validation_status="validated"),
+                _model(task_type="llm", validation_status="pending"),
+                _model(task_type="vision", validation_status="validated"),
+            ]
+        )
         await session.commit()
 
     r = await client.get("/v1/stats")

@@ -26,7 +26,9 @@ class ModelCard(Base):
     task_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     tags: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="'[]'")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

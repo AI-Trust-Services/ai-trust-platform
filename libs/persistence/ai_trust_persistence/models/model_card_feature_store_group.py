@@ -11,7 +11,10 @@ class ModelCardFeatureStoreGroup(Base):
 
     id: Mapped[str] = mapped_column(String(20), primary_key=True)
     feature_store_id: Mapped[str] = mapped_column(
-        String(20), ForeignKey("model_card_feature_stores.id", ondelete="CASCADE"), nullable=False, index=True
+        String(20),
+        ForeignKey("model_card_feature_stores.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     version: Mapped[str | None] = mapped_column(String(100), nullable=True)
