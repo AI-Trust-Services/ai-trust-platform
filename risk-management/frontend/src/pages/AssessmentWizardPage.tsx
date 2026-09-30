@@ -1530,7 +1530,9 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     const prevAcceptable = register.residual_risk_acceptable ?? null;
     const prevArgument = (register.residual_risk_argument ?? "").trim();
     const nextArgument = (regResidualDraft.residual_risk_argument ?? "").trim();
-    if (regResidualDraft.residual_risk_acceptable !== prevAcceptable && nextArgument === prevArgument) {
+    if (regResidualDraft.residual_risk_acceptable !== null
+      && regResidualDraft.residual_risk_acceptable !== prevAcceptable
+      && nextArgument === prevArgument) {
       setRegResidualErr("Residual risk status changed — please update the expert sign-off argument to explain the change.");
       return;
     }
