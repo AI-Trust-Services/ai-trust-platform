@@ -20,13 +20,13 @@ from conftest import (
 )
 
 _SERVICES = [
-    ("registry",    REGISTRY_URL),
-    ("compliance",  COMPLIANCE_URL),
-    ("alerts",      ALERTS_URL),
-    ("users",       USERS_URL),
-    ("audit",       AUDIT_URL),
-    ("admin",       ADMIN_URL),
-    ("monitoring",  MONITORING_URL),
+    ("registry", REGISTRY_URL),
+    ("compliance", COMPLIANCE_URL),
+    ("alerts", ALERTS_URL),
+    ("users", USERS_URL),
+    ("audit", AUDIT_URL),
+    ("admin", ADMIN_URL),
+    ("monitoring", MONITORING_URL),
 ]
 
 

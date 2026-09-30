@@ -68,7 +68,9 @@ async def test_ai_engineer_cannot_approve_evidence(
     )
     req_list = reqs.json()
     if not req_list:
-        pytest.skip("No requirements generated for minimal tier — cannot test evidence approval")
+        pytest.skip(
+            "No requirements generated for minimal tier — cannot test evidence approval"
+        )
     req_id = req_list[0]["id"]
 
     ev_r = await compliance.post(

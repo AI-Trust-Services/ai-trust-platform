@@ -25,13 +25,13 @@ import httpx
 import pytest
 import pytest_asyncio
 
-REGISTRY_URL   = os.getenv("REGISTRY_URL",   "http://localhost:8001")
-COMPLIANCE_URL = os.getenv("COMPLIANCE_URL",  "http://localhost:8007")
-ALERTS_URL     = os.getenv("ALERTS_URL",      "http://localhost:8005")
-USERS_URL      = os.getenv("USERS_URL",       "http://localhost:8008")
-AUDIT_URL      = os.getenv("AUDIT_URL",       "http://localhost:8009")
-ADMIN_URL      = os.getenv("ADMIN_URL",       "http://localhost:8010")
-MONITORING_URL = os.getenv("MONITORING_URL",  "http://localhost:8003")
+REGISTRY_URL = os.getenv("REGISTRY_URL", "http://localhost:8001")
+COMPLIANCE_URL = os.getenv("COMPLIANCE_URL", "http://localhost:8007")
+ALERTS_URL = os.getenv("ALERTS_URL", "http://localhost:8005")
+USERS_URL = os.getenv("USERS_URL", "http://localhost:8008")
+AUDIT_URL = os.getenv("AUDIT_URL", "http://localhost:8009")
+ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:8010")
+MONITORING_URL = os.getenv("MONITORING_URL", "http://localhost:8003")
 
 ADMIN_USER = os.getenv("APP_ADMIN_USERNAME", "admin")
 
@@ -44,7 +44,7 @@ TEST_USER = "it-business-owner"
 TEST_USER_PASSWORD = "IntegrationTest1!"
 TEST_USER_EMAIL = "it-business-owner@integration-tests.example.com"
 
-ADMIN_HEADERS     = {"x-forwarded-preferred-username": ADMIN_USER}
+ADMIN_HEADERS = {"x-forwarded-preferred-username": ADMIN_USER}
 TEST_USER_HEADERS = {"x-forwarded-preferred-username": TEST_USER}
 
 # Track systems created during the session for cleanup.
@@ -123,7 +123,9 @@ async def _setup_test_user() -> None:
         assert search_r.status_code == 200, search_r.text
         users_list = search_r.json().get("users", search_r.json())
         user = next((u for u in users_list if u.get("username") == TEST_USER), None)
-        assert user is not None, f"Could not find test user '{TEST_USER}' after creation"
+        assert user is not None, (
+            f"Could not find test user '{TEST_USER}' after creation"
+        )
         user_id = user["id"]
 
         # Assign business_owner role
@@ -131,7 +133,9 @@ async def _setup_test_user() -> None:
             f"/v1/users/{user_id}/roles/business_owner",
             headers=ADMIN_HEADERS,
         )
-        assert role_r.status_code in (200, 201, 204), f"Failed to assign role: {role_r.text}"
+        assert role_r.status_code in (200, 201, 204), (
+            f"Failed to assign role: {role_r.text}"
+        )
 
 
 async def _cleanup_test_data() -> None:
@@ -145,10 +149,14 @@ async def _cleanup_test_data() -> None:
         return
     async with httpx.AsyncClient(base_url=REGISTRY_URL, timeout=15) as client:
         for system_id in _created_system_ids:
-            r = await client.delete(f"/v1/systems/{system_id}", headers=TEST_USER_HEADERS)
+            r = await client.delete(
+                f"/v1/systems/{system_id}", headers=TEST_USER_HEADERS
+            )
             # 404 means already deleted — still counts as clean
             if r.status_code not in (200, 204, 404):
-                print(f"Warning: cleanup of {system_id} returned {r.status_code}: {r.text}")
+                print(
+                    f"Warning: cleanup of {system_id} returned {r.status_code}: {r.text}"
+                )
     _created_system_ids.clear()
 
 
@@ -231,7 +239,9 @@ async def _get_user_id(users_client: httpx.AsyncClient, username: str) -> str:
         },
         headers=ADMIN_HEADERS,
     )
-    assert create_r.status_code in (201, 409), f"Failed to create user {username}: {create_r.text}"
+    assert create_r.status_code in (201, 409), (
+        f"Failed to create user {username}: {create_r.text}"
+    )
     return create_r.json()["id"]
 
 
