@@ -27,7 +27,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Must be set before app.main is imported — branding_storage reads these at import time.
 os.environ.setdefault("MINIO_ENDPOINT", "localhost:9000")

@@ -116,7 +116,7 @@ export default function BrandingPage() {
       // Initialize form with all color fields
       const formData: BrandingUpdate = {};
       for (const key of ALL_COLOR_KEYS) {
-        formData[key as keyof BrandingUpdate] = draftData[key as keyof Branding] as string ?? "";
+        (formData as Record<string, string | null>)[key] = draftData[key as keyof Branding] as string ?? "";
       }
       setForm(formData);
       // Initialize advanced colors
