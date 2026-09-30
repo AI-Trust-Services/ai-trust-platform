@@ -10,6 +10,7 @@ Covers:
   - Public endpoints (no auth)
   - Error paths (400/422)
 """
+
 from __future__ import annotations
 
 import pytest
@@ -35,7 +36,9 @@ class TestGetBranding:
     async def test_returns_draft_branding_when_mode_draft(self, client, db_session):
         # Set up draft values directly in branding table
         await db_session.execute(
-            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', NULL, '#FF0000')")
+            text(
+                "INSERT INTO branding (key, published, draft) VALUES ('primary_color', NULL, '#FF0000')"
+            )
         )
         await db_session.commit()
 
@@ -48,10 +51,14 @@ class TestGetBranding:
         assert data["primary_color"] == "#FF0000"
 
     @pytest.mark.asyncio
-    async def test_draft_mode_falls_back_to_published_when_draft_null(self, client, db_session):
+    async def test_draft_mode_falls_back_to_published_when_draft_null(
+        self, client, db_session
+    ):
         # Set only published value
         await db_session.execute(
-            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#0000FF', NULL)")
+            text(
+                "INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#0000FF', NULL)"
+            )
         )
         await db_session.commit()
 
@@ -79,18 +86,22 @@ class TestUpdateBranding:
 
         # Verify persisted in DB
         from ai_trust_persistence.models.branding import Branding
+
         row = await db_session.get(Branding, "primary_color")
         assert row.draft == "#1147E9"
         assert row.published is None  # Published unchanged
 
     @pytest.mark.asyncio
     async def test_updates_multiple_colors(self, client):
-        resp = await client.put("/v1/branding", json={
-            "primary_color": "#1147E9",
-            "secondary_color": "#7C3AED",
-            "accent_color": "#10B981",
-            "warning_color": "#F59E0B",
-        })
+        resp = await client.put(
+            "/v1/branding",
+            json={
+                "primary_color": "#1147E9",
+                "secondary_color": "#7C3AED",
+                "accent_color": "#10B981",
+                "warning_color": "#F59E0B",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["primary_color"] == "#1147E9"
@@ -100,12 +111,15 @@ class TestUpdateBranding:
 
     @pytest.mark.asyncio
     async def test_updates_advanced_colors(self, client, db_session):
-        resp = await client.put("/v1/branding", json={
-            "advanced_colors": {
-                "tier_prohibited": "#DC2626",
-                "tier_high": "#F59E0B",
-            }
-        })
+        resp = await client.put(
+            "/v1/branding",
+            json={
+                "advanced_colors": {
+                    "tier_prohibited": "#DC2626",
+                    "tier_high": "#F59E0B",
+                }
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["advanced_colors"]["tier_prohibited"] == "#DC2626"
@@ -121,16 +135,16 @@ class TestUpdateBranding:
     @pytest.mark.asyncio
     async def test_rejects_css_injection_attempt(self, client):
         # Attempt to inject CSS via color value
-        resp = await client.put("/v1/branding", json={
-            "primary_color": "#000;background:url(evil.com)"
-        })
+        resp = await client.put(
+            "/v1/branding", json={"primary_color": "#000;background:url(evil.com)"}
+        )
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
     async def test_rejects_invalid_advanced_color(self, client):
-        resp = await client.put("/v1/branding", json={
-            "advanced_colors": {"tier_prohibited": "not-a-color"}
-        })
+        resp = await client.put(
+            "/v1/branding", json={"advanced_colors": {"tier_prohibited": "not-a-color"}}
+        )
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
@@ -198,7 +212,12 @@ class TestUploadLogo:
     @pytest.mark.asyncio
     async def test_allowed_asset_types(self, client):
         # Test all valid asset types
-        for asset_type in ["logo_horizontal_light", "logo_horizontal_dark", "logo_icon", "favicon"]:
+        for asset_type in [
+            "logo_horizontal_light",
+            "logo_horizontal_dark",
+            "logo_icon",
+            "favicon",
+        ]:
             resp = await client.post(
                 f"/v1/branding/upload/{asset_type}",
                 files={"file": ("test.png", b"PNG", "image/png")},
@@ -233,6 +252,7 @@ class TestSvgSanitization:
 
     def test_removes_script_tags(self):
         from app.branding_storage import sanitize_svg
+
         svg = b'<svg><script>alert("xss")</script><rect/></svg>'
         result = sanitize_svg(svg)
         assert b"script" not in result.lower()
@@ -240,6 +260,7 @@ class TestSvgSanitization:
 
     def test_removes_event_handlers(self):
         from app.branding_storage import sanitize_svg
+
         svg = b'<svg><rect onclick="alert(1)" onload="evil()"/></svg>'
         result = sanitize_svg(svg)
         assert b"onclick" not in result
@@ -247,12 +268,14 @@ class TestSvgSanitization:
 
     def test_removes_javascript_uris(self):
         from app.branding_storage import sanitize_svg
+
         svg = b'<svg><a href="javascript:alert(1)"><rect/></a></svg>'
         result = sanitize_svg(svg)
         assert b"javascript:" not in result.lower()
 
     def test_preserves_safe_svg(self):
         from app.branding_storage import sanitize_svg
+
         svg = b'<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#F00"/></svg>'
         result = sanitize_svg(svg)
         assert b"rect" in result
@@ -262,6 +285,7 @@ class TestSvgSanitization:
     def test_rejects_invalid_svg(self):
         from app.branding_storage import sanitize_svg
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             sanitize_svg(b"not valid xml <><>")
         assert exc_info.value.status_code == 400
@@ -280,10 +304,14 @@ class TestPublishBranding:
     async def test_publishes_draft_values(self, client, db_session):
         # Set up draft values in branding table
         await db_session.execute(
-            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', NULL, '#1147E9')")
+            text(
+                "INSERT INTO branding (key, published, draft) VALUES ('primary_color', NULL, '#1147E9')"
+            )
         )
         await db_session.execute(
-            text("INSERT INTO branding (key, published, draft) VALUES ('secondary_color', NULL, '#7C3AED')")
+            text(
+                "INSERT INTO branding (key, published, draft) VALUES ('secondary_color', NULL, '#7C3AED')"
+            )
         )
         await db_session.commit()
 
@@ -296,6 +324,7 @@ class TestPublishBranding:
 
         # Verify published values in DB
         from ai_trust_persistence.models.branding import Branding
+
         row = await db_session.get(Branding, "primary_color")
         assert row.published == "#1147E9"
         # Draft cleared after publish
@@ -306,6 +335,7 @@ class TestPublishBranding:
         await client.post("/v1/branding/publish")
 
         from ai_trust_persistence.models.branding import Branding
+
         row = await db_session.get(Branding, "_published_by")
         assert row.published == "test-user"
         row_at = await db_session.get(Branding, "_published_at")
@@ -324,7 +354,9 @@ class TestDiscardBranding:
     async def test_discards_draft_values(self, client, db_session):
         # Set up draft and published values
         await db_session.execute(
-            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#0000FF', '#FF0000')")
+            text(
+                "INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#0000FF', '#FF0000')"
+            )
         )
         await db_session.commit()
 
@@ -336,6 +368,7 @@ class TestDiscardBranding:
 
         # Verify draft cleared in DB
         from ai_trust_persistence.models.branding import Branding
+
         row = await db_session.get(Branding, "primary_color")
         assert row.draft is None
         assert row.published == "#0000FF"  # Published unchanged
@@ -353,10 +386,14 @@ class TestResetBranding:
     async def test_resets_all_branding(self, client, db_session):
         # Set up published values
         await db_session.execute(
-            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#1147E9', NULL)")
+            text(
+                "INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#1147E9', NULL)"
+            )
         )
         await db_session.execute(
-            text("INSERT INTO branding (key, published, draft) VALUES ('logo_icon', 'branding/logo_icon/icon.svg', NULL)")
+            text(
+                "INSERT INTO branding (key, published, draft) VALUES ('logo_icon', 'branding/logo_icon/icon.svg', NULL)"
+            )
         )
         await db_session.commit()
 
@@ -369,6 +406,7 @@ class TestResetBranding:
 
         # Verify DB cleared (rows deleted, not just nulled)
         from ai_trust_persistence.models.branding import Branding
+
         row = await db_session.get(Branding, "primary_color")
         assert row is None  # Row deleted
 
@@ -395,7 +433,9 @@ class TestBrandingStatus:
     @pytest.mark.asyncio
     async def test_has_unpublished_changes(self, client, db_session):
         await db_session.execute(
-            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', NULL, '#FF0000')")
+            text(
+                "INSERT INTO branding (key, published, draft) VALUES ('primary_color', NULL, '#FF0000')"
+            )
         )
         await db_session.commit()
 
@@ -408,7 +448,9 @@ class TestBrandingStatus:
     async def test_draft_same_as_published_is_not_unpublished(self, client, db_session):
         # If draft equals published, it's not considered "unpublished"
         await db_session.execute(
-            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#FF0000', '#FF0000')")
+            text(
+                "INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#FF0000', '#FF0000')"
+            )
         )
         await db_session.commit()
 
@@ -430,7 +472,9 @@ class TestPublicBranding:
     @pytest.mark.asyncio
     async def test_returns_published_branding(self, client, db_session):
         await db_session.execute(
-            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#1147E9', NULL)")
+            text(
+                "INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#1147E9', NULL)"
+            )
         )
         await db_session.commit()
 
@@ -442,7 +486,9 @@ class TestPublicBranding:
     @pytest.mark.asyncio
     async def test_does_not_return_draft_values(self, client, db_session):
         await db_session.execute(
-            text("INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#0000FF', '#FF0000')")
+            text(
+                "INSERT INTO branding (key, published, draft) VALUES ('primary_color', '#0000FF', '#FF0000')"
+            )
         )
         await db_session.commit()
 

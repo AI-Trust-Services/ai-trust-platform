@@ -7,6 +7,7 @@ Revision ID: 0026
 Revises: 0025
 Create Date: 2026-09-23
 """
+
 from alembic import op
 import sqlalchemy as sa
 
