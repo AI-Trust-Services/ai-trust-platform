@@ -162,6 +162,16 @@ function MetricsSection({ cardId, metrics, onReload }: { cardId: string; metrics
 
 // ── Sources section ───────────────────────────────────────────────────────────
 
+// Guard href against javascript:/data: XSS — only http(s) links become anchors.
+function safeHttpUrl(url: string): string | null {
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 function SourcesSection({ cardId, sources, onReload }: { cardId: string; sources: ModelCard["sources"]; onReload: () => void }) {
   const [open, setOpen] = useState(false);
   const [showAddRow, setShowAddRow] = useState(false);
@@ -215,7 +225,9 @@ function SourcesSection({ cardId, sources, onReload }: { cardId: string; sources
           <tbody>
             {sources.map((s) => (
               <tr key={s.id} className="border-b border-border last:border-0">
-                <td className="px-4 py-2 max-w-xs truncate"><a href={s.url} target="_blank" rel="noreferrer" className="text-[var(--brand)] underline">{s.url}</a></td>
+                <td className="px-4 py-2 max-w-xs truncate">{safeHttpUrl(s.url)
+                  ? <a href={s.url} target="_blank" rel="noreferrer" className="text-[var(--brand)] underline">{s.url}</a>
+                  : <span>{s.url}</span>}</td>
                 <td className="px-4 py-2 text-muted-foreground">{s.name || "—"}</td>
                 <td className="px-4 py-2 text-right">
                   <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-destructive"
