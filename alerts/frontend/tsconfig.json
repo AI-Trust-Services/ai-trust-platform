@@ -16,7 +16,8 @@
     "noUnusedParameters": false,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@ai-trust/react-hooks": ["../../libs/react-hooks/src/index.ts"]
     }
   },
   "include": ["src"]

@@ -53,6 +53,8 @@ spec:
             {{- end }}
             - --email-domain=*
             - --pass-authorization-header=true
+            # Allow unauthenticated access to public branding endpoint (shell needs it before login)
+            - --skip-auth-route=^/api/admin/v1/branding/public(/|$)
             - --backend-logout-url=http://keycloak:8080/realms/ai-trust/protocol/openid-connect/logout?id_token_hint={id_token}
           ports:
             - containerPort: 4180
