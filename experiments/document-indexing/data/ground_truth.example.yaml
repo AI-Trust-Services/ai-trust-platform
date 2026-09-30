@@ -1,0 +1,25 @@
+# Ground-Truth-Set für das Phase-1-Eval  ->  nach `ground_truth.yaml` kopieren.
+#
+# Ein Treffer zählt, wenn ein zurückgegebener Chunk aus `document` stammt UND
+# (eine Seite in `pages` trifft ODER `answer_substring` im Chunk-Text vorkommt).
+# Mindestens eines von `pages` / `answer_substring` muss gesetzt sein.
+#
+# Fragen bewusst MISCHEN:
+#   - umformulierte Fragen (Wortlaut != Dokument)  -> testet Semantik   (AK 3)
+#   - Fragen mit exaktem Term / ID / Normnummer     -> testet Wortsuche  (AK 4)
+
+questions:
+  # Semantisch (Frage anders formuliert als das Dokument):
+  - query: "Wer trägt die Verantwortung für die Risikobewertung des Systems?"
+    document: example-system-doc.pdf
+    pages: [4]
+
+  # Exakter Term / Normnummer (testet den lexikalischen Kanal):
+  - query: "Annex III high-risk classification"
+    document: example-system-doc.pdf
+    pages: [12, 13]
+
+  # Substring-Match statt Seite:
+  - query: "Welches Modell wird für die Inferenz verwendet?"
+    document: example-system-doc.pdf
+    answer_substring: "inference model"
