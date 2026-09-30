@@ -86,7 +86,7 @@ jobs:
       - name: Run integration tests
         env:
           APP_ADMIN_USERNAME: ${{ secrets.APP_ADMIN_USERNAME }}
-        run: pytest tests/integration/ -v
+        run: python3 -m pytest tests/integration/ -v
 
       - name: Stop port forwards
         if: always()
