@@ -71,7 +71,7 @@ stop-forwards:
 # Run integration tests against the live cluster.
 # Installs test deps, starts port-forwards, runs pytest, stops forwards (even on failure).
 test-int:
-	pip install -q -r ../tests/integration/requirements.txt; \
+	python3 -m pip install -q -r ../tests/integration/requirements.txt; \
 	bash scripts/forward-ports.sh $(NAMESPACE); \
 	python3 -m pytest ../tests/integration/ -v; EXIT=$$?; \
 	bash scripts/kill-port-forwards.sh; \
