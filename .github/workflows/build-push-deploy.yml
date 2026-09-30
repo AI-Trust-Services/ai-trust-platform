@@ -254,18 +254,18 @@ jobs:
 
           # ── frontends (Vite build args baked in, same as docker-compose args:) ──
           - name: ai-system-registry-frontend
-            context: ./ai-system-registry/frontend
+            context: .
             dockerfile: ./ai-system-registry/frontend/Dockerfile
             build_args: |
               VITE_REGISTRY_API_BASE=${{ vars.VITE_REGISTRY_API_BASE || '/api/registry/v1' }}
               VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
           - name: monitoring-frontend
-            context: ./monitoring/frontend
+            context: .
             dockerfile: ./monitoring/frontend/Dockerfile
             build_args: |
               VITE_MONITORING_API_BASE=${{ vars.VITE_MONITORING_API_BASE || '/api/monitoring/v1' }}
           - name: overview-frontend
-            context: ./overview/frontend
+            context: .
             dockerfile: ./overview/frontend/Dockerfile
             build_args: |
               VITE_OVERVIEW_API_BASE=${{ vars.VITE_OVERVIEW_API_BASE || '/api/overview/v1' }}
@@ -276,37 +276,37 @@ jobs:
               VITE_COMPLIANCE_API_BASE=${{ vars.VITE_COMPLIANCE_API_BASE || '/api/compliance/v1' }}
               VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
           - name: alerts-frontend
-            context: ./alerts/frontend
+            context: .
             dockerfile: ./alerts/frontend/Dockerfile
             build_args: |
               VITE_ALERTS_API_BASE=${{ vars.VITE_ALERTS_API_BASE || '/api/alerts/v1' }}
               VITE_ALERTS_URL=${{ vars.VITE_ALERTS_URL || 'http://localhost:8080/alerts' }}
               VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
           - name: compliance-frontend
-            context: ./compliance/frontend
+            context: .
             dockerfile: ./compliance/frontend/Dockerfile
             build_args: |
               VITE_COMPLIANCE_API_BASE=${{ vars.VITE_COMPLIANCE_API_BASE || '/api/compliance/v1' }}
               VITE_REGISTRY_API_BASE=${{ vars.VITE_REGISTRY_API_BASE || '/api/registry/v1' }}
               VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
           - name: users-frontend
-            context: ./users/frontend
+            context: .
             dockerfile: ./users/frontend/Dockerfile
             build_args: |
               VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
           - name: decision-trace-analyzer-frontend
-            context: ./decision-trace-analyzer/frontend
+            context: .
             dockerfile: ./decision-trace-analyzer/frontend/Dockerfile
             build_args: |
               VITE_DTA_API_BASE=${{ vars.VITE_DTA_API_BASE || '/api/dta/v1' }}
           - name: audit-frontend
-            context: ./audit/frontend
+            context: .
             dockerfile: ./audit/frontend/Dockerfile
             build_args: |
               VITE_AUDIT_API_BASE=${{ vars.VITE_AUDIT_API_BASE || '/api/audit/v1' }}
               VITE_USERS_API_BASE=${{ vars.VITE_USERS_API_BASE || '/api/users/v1' }}
           - name: admin-frontend
-            context: ./admin/frontend
+            context: .
             dockerfile: ./admin/frontend/Dockerfile
             build_args: |
               VITE_ADMIN_API_BASE=${{ vars.VITE_ADMIN_API_BASE || '/api/admin/v1' }}
