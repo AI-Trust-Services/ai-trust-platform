@@ -8,6 +8,11 @@ from ai_trust_persistence.models.assessment import Assessment
 from ai_trust_persistence.models.audit_event import AuditEvent
 from ai_trust_persistence.models.requirement import Requirement
 from ai_trust_persistence.models.custom_role import CustomRole
+from ai_trust_persistence.models.document import (
+    Document,
+    DocumentChunk,
+    DocumentVersion,
+)
 from ai_trust_persistence.models.evidence import (
     Evidence,
     EvidenceVersion,
@@ -38,6 +43,9 @@ __all__ = [
     "AuditEvent",
     "Branding",
     "CustomRole",
+    "Document",
+    "DocumentVersion",
+    "DocumentChunk",
     "ModelCard",
     "ModelCardMetric",
     "ModelCardSource",
