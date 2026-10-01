@@ -5,8 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, AnyHttpUrl, field_validator
-
+from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
 
 # ---------------------------------------------------------------------------
 # Nested input types (used inside DatasetCreate / PUT body)
@@ -53,6 +52,13 @@ class ModelCardCreate(BaseModel):
     task_name: str | None = Field(default=None, max_length=200)
     tags: list[str] = []
 
+    @field_validator("license_link")
+    @classmethod
+    def _license_link_must_be_http(cls, v: str | None) -> str | None:
+        if v is not None and not v.lower().startswith(("http://", "https://")):
+            raise ValueError("URL must use http or https scheme")
+        return v
+
 
 class ModelCardPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
@@ -67,6 +73,13 @@ class ModelCardPatch(BaseModel):
     task_type: str | None = Field(default=None, max_length=100)
     task_name: str | None = Field(default=None, max_length=200)
     tags: list[str] | None = None
+
+    @field_validator("license_link")
+    @classmethod
+    def _license_link_must_be_http(cls, v: str | None) -> str | None:
+        if v is not None and not v.lower().startswith(("http://", "https://")):
+            raise ValueError("URL must use http or https scheme")
+        return v
 
 
 class MetricCreate(BaseModel):
