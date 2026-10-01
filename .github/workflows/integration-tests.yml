@@ -2,7 +2,11 @@ name: Integration Tests
 
 # Triggered after a successful deployment — either from a PR (garden-deploy label)
 # or after a merge to main. Deployment workflow status is unaffected by this workflow.
+# Also triggered directly on a PR by adding the "garden-test" label (skips deploy,
+# runs tests against the already-deployed namespace on ai-trust-test).
 on:
+  pull_request:
+    types: [labeled]
   workflow_run:
     workflows:
       - "PR Deployment Test"
@@ -14,28 +18,34 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
+    if: |
+      (github.event_name == 'pull_request' && github.event.label.name == 'garden-test') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
 
       - name: Derive cluster and namespace
         id: vars
         shell: bash
         run: |
-          WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
-          ACTOR="${{ github.event.workflow_run.actor.login }}"
-
-          if [[ "${WORKFLOW_NAME}" == "Deployment Workflow" ]]; then
-            cluster="ai-trust-main"
-            namespace="ai-trust"
-          else
-            # PR Deployment Test — namespace is the PR author's GitHub username (lowercase)
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             cluster="ai-trust-test"
-            namespace="${ACTOR,,}"
+            namespace="${{ github.event.pull_request.user.login }}"
+          else
+            WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+            ACTOR="${{ github.event.workflow_run.actor.login }}"
+            if [[ "${WORKFLOW_NAME}" == "Deployment Workflow" ]]; then
+              cluster="ai-trust-main"
+              namespace="ai-trust"
+            else
+              # PR Deployment Test — namespace is the PR author's GitHub username (lowercase)
+              cluster="ai-trust-test"
+              namespace="${ACTOR,,}"
+            fi
           fi
 
           echo "cluster=${cluster}" >> "$GITHUB_OUTPUT"
