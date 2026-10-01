@@ -203,8 +203,12 @@ async def test_delete_model_card_cascades_all_children(client: httpx.AsyncClient
     card = await _create_card(client, {"name": "Cascade Card"})
     cid = card["id"]
 
-    await client.post(f"/v1/model-cards/{cid}/metrics", json={"value": 0.9, "name": "Accuracy"})
-    await client.post(f"/v1/model-cards/{cid}/sources", json={"url": "https://example.com"})
+    await client.post(
+        f"/v1/model-cards/{cid}/metrics", json={"value": 0.9, "name": "Accuracy"}
+    )
+    await client.post(
+        f"/v1/model-cards/{cid}/sources", json={"url": "https://example.com"}
+    )
     await client.post(
         f"/v1/model-cards/{cid}/datasets",
         json={
