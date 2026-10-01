@@ -49,6 +49,8 @@ TEST_USER_HEADERS = {"x-forwarded-preferred-username": TEST_USER}
 
 # Track systems created during the session for cleanup.
 _created_system_ids: list[str] = []
+# Track Keycloak user IDs created during the session for cleanup.
+_created_user_ids: list[str] = []
 
 
 def _headers(username: str) -> dict[str, str]:
@@ -127,6 +129,7 @@ async def _setup_test_user() -> None:
             f"Could not find test user '{TEST_USER}' after creation"
         )
         user_id = user["id"]
+        _created_user_ids.append(user_id)
 
         # Assign business_owner role
         role_r = await client.post(
@@ -139,25 +142,30 @@ async def _setup_test_user() -> None:
 
 
 async def _cleanup_test_data() -> None:
-    """Delete all AI systems created during the test session.
-
-    Deleting a system cascades to its assessments, obligations, requirements,
-    and evidence (via FK ON DELETE CASCADE). This keeps the cluster clean
-    between test runs.
-    """
-    if not _created_system_ids:
-        return
-    async with httpx.AsyncClient(base_url=REGISTRY_URL, timeout=15) as client:
-        for system_id in _created_system_ids:
-            r = await client.delete(
-                f"/v1/systems/{system_id}", headers=TEST_USER_HEADERS
-            )
-            # 404 means already deleted — still counts as clean
-            if r.status_code not in (200, 204, 404):
-                print(
-                    f"Warning: cleanup of {system_id} returned {r.status_code}: {r.text}"
+    """Delete all AI systems and Keycloak users created during the test session."""
+    if _created_system_ids:
+        async with httpx.AsyncClient(base_url=REGISTRY_URL, timeout=15) as client:
+            for system_id in _created_system_ids:
+                r = await client.delete(
+                    f"/v1/systems/{system_id}", headers=TEST_USER_HEADERS
                 )
-    _created_system_ids.clear()
+                if r.status_code not in (200, 204, 404):
+                    print(
+                        f"Warning: cleanup of system {system_id} returned {r.status_code}: {r.text}"
+                    )
+        _created_system_ids.clear()
+
+    if _created_user_ids:
+        async with httpx.AsyncClient(base_url=USERS_URL, timeout=15) as client:
+            for user_id in _created_user_ids:
+                r = await client.delete(
+                    f"/v1/users/{user_id}", headers=ADMIN_HEADERS
+                )
+                if r.status_code not in (200, 204, 404):
+                    print(
+                        f"Warning: cleanup of user {user_id} returned {r.status_code}: {r.text}"
+                    )
+        _created_user_ids.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +254,9 @@ async def _get_user_id(users_client: httpx.AsyncClient, username: str) -> str:
     assert create_r.status_code in (201, 409), (
         f"Failed to create user {username}: {create_r.text}"
     )
-    return create_r.json()["id"]
+    created_id = create_r.json()["id"]
+    _created_user_ids.append(created_id)
+    return created_id
 
 
 async def assign_role(
