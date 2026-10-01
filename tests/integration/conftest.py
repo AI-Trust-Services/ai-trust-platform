@@ -33,7 +33,7 @@ AUDIT_URL = os.getenv("AUDIT_URL", "http://localhost:8009")
 ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:8010")
 MONITORING_URL = os.getenv("MONITORING_URL", "http://localhost:8003")
 
-ADMIN_USER = os.getenv("APP_ADMIN_USERNAME", "admin")
+ADMIN_USER = os.getenv("APP_ADMIN_USERNAME") or "admin"
 
 # Test user with business_owner role — created once per session.
 # business_owner has: systems:read/write/approve, assessments:read/write,
