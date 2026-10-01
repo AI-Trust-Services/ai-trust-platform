@@ -68,7 +68,9 @@ async def test_ai_engineer_cannot_approve_evidence(
         headers=TEST_USER_HEADERS,
     )
     req_list = reqs.json()
-    assert req_list, "No requirements generated for high tier — check obligation templates"
+    assert req_list, (
+        "No requirements generated for high tier — check obligation templates"
+    )
     req_id = req_list[0]["id"]
 
     ev_r = await compliance.post(

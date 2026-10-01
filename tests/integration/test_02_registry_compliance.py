@@ -107,7 +107,9 @@ async def test_evidence_approval_cascades_compliance_score_to_registry(
     assert len(req_list) > 0, "No requirements to attach evidence to"
 
     first_obligation_id = req_list[0]["obligation_id"]
-    obligation_req_ids = [r["id"] for r in req_list if r["obligation_id"] == first_obligation_id]
+    obligation_req_ids = [
+        r["id"] for r in req_list if r["obligation_id"] == first_obligation_id
+    ]
     req_id = obligation_req_ids[0]
 
     # Approve evidence for every requirement in that obligation so the obligation
