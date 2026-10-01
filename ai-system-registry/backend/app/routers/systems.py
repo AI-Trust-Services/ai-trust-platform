@@ -451,7 +451,7 @@ async def upload_registration_document(
     request: Request,
     file: UploadFile = File(...),
 ) -> AISystemResponse:
-    """Attach a supporting document to a full-manual registration.
+    """Attach a supporting document to a registered AI system.
 
     Stored in the ``registration-docs`` MinIO bucket; a metadata entry is appended to
     the system's ``registration_documents`` JSONB array."""
@@ -481,8 +481,6 @@ async def upload_registration_document(
     if not data:
         raise HTTPException(422, "The uploaded file is empty")
 
-    # Single session, row locked for update: validate → upload → write is atomic, so the
-    # system can't be deleted or switched away from full_manual between check and write.
     async with SessionLocal() as session:
         result = await session.execute(
             select(AISystem).where(AISystem.id == system_id).with_for_update()
@@ -490,11 +488,6 @@ async def upload_registration_document(
         row = result.scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
-        if row.registration_mode != "full_manual":
-            raise HTTPException(
-                422,
-                "Supporting documents may only be uploaded for full-manual registrations",
-            )
 
         key = await minio_client.upload_file(
             system_id, filename, data, file.content_type or "application/octet-stream"

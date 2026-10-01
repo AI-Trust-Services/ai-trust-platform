@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from "react";
 import LuigiClient from "@luigi-project/client";
-import { Loader2, ChevronDown, ChevronRight, Copy, FileText, Download, Sparkles, ClipboardList } from "lucide-react";
+import { Loader2, ChevronDown, ChevronRight, Copy, FileText, Download, Sparkles, ClipboardList, ExternalLink } from "lucide-react";
 import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS, TIER_META } from "../utils";
 import { api } from "../api/client";
@@ -609,92 +609,6 @@ function WorkflowTab({ system, userMap }: { system: AISystem; userMap?: UserMap 
   );
 }
 
-function EditForm({ system, models: _models, onSave, onClose }: { system: AISystem; models: ModelCard[]; onSave: (updated: AISystem) => void; onClose: () => void }) {
-  const [form, setForm] = useState<Record<string, string>>({
-    name: system.name || "",
-    version: system.version || "",
-    provider: system.provider || "",
-    org_name: system.org_name || "",
-    org_role: system.org_role || "provider",
-    provider_country: system.provider_country || "",
-    system_type: system.system_type || "application",
-    autonomy_level: system.autonomy_level || "decision_support",
-    lifecycle: system.lifecycle || "development",
-    application_url: system.application_url || "",
-    description: system.description || "",
-    intended_purpose: system.intended_purpose || "",
-  });
-  const [saving, setSaving] = useState(false);
-  const showToast = useToast();
-  const { mayWrite } = useModalControls();
-  const NO_WRITE_TITLE = "Requires permission: systems:write";
-  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      const updated = await api.updateSystem(system.id, form);
-      showToast("System updated successfully");
-      onSave(updated);
-    } catch (e) {
-      showToast(`Update failed: ${(e as Error).message}`, true);
-    } finally { setSaving(false); }
-  }
-
-  return (
-    <div>
-      <Alert variant="info" className="mb-4">Changes to identity and purpose fields only. Classification flags are immutable after registration.</Alert>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex flex-col gap-1.5"><Label htmlFor="edit_name">System Name <span className="text-[var(--danger-fg)]">*</span></Label><Input type="text" id="edit_name" value={form.name} onChange={set("name")} /></div>
-        <div className="flex flex-col gap-1.5"><Label htmlFor="edit_version">Version</Label><Input type="text" id="edit_version" value={form.version} onChange={set("version")} /></div>
-        <div className="flex flex-col gap-1.5"><Label htmlFor="edit_provider">Provider</Label><Input type="text" id="edit_provider" value={form.provider} onChange={set("provider")} /></div>
-        <div className="flex flex-col gap-1.5"><Label htmlFor="edit_org_name">Organisation</Label><Input type="text" id="edit_org_name" value={form.org_name} onChange={set("org_name")} /></div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="edit_org_role">Role</Label>
-          <select className={SELECT_CLASS} id="edit_org_role" value={form.org_role} onChange={set("org_role")}>
-            <option value="provider">Provider</option>
-            <option value="deployer">Deployer</option>
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5"><Label htmlFor="edit_country">Country</Label><Input type="text" id="edit_country" value={form.provider_country} onChange={set("provider_country")} maxLength={2} /></div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="edit_system_type">System Type</Label>
-          <select className={SELECT_CLASS} id="edit_system_type" value={form.system_type} onChange={set("system_type")}>
-            <option value="application">Application</option>
-            <option value="model">Model</option>
-            <option value="component">Component</option>
-            <option value="service">Service</option>
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="edit_autonomy">Autonomy Level</Label>
-          <select className={SELECT_CLASS} id="edit_autonomy" value={form.autonomy_level} onChange={set("autonomy_level")}>
-            <option value="decision_support">Decision support</option>
-            <option value="human_in_the_loop">Human in the loop</option>
-            <option value="human_on_the_loop">Human on the loop</option>
-            <option value="fully_automated">Fully automated</option>
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="edit_lifecycle">Lifecycle State</Label>
-          <select className={SELECT_CLASS} id="edit_lifecycle" value={form.lifecycle} onChange={set("lifecycle")}>
-            {Object.entries(LIFECYCLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5"><Label htmlFor="edit_app_url">Application URL</Label><Input type="url" id="edit_app_url" value={form.application_url} onChange={set("application_url")} /></div>
-        <div className="col-span-2 flex flex-col gap-1.5"><Label htmlFor="edit_description">Description</Label><Textarea id="edit_description" rows={3} value={form.description} onChange={set("description")} /></div>
-        <div className="col-span-2 flex flex-col gap-1.5 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3"><Label htmlFor="edit_purpose" className="flex flex-wrap items-center gap-2 text-[var(--brand)]">Intended Purpose <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk classification category</span></Label><Textarea id="edit_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} className="border-[var(--brand)]/40 focus-visible:ring-[var(--brand)]" /><p className="text-xs text-muted-foreground">The intended purpose determines how your AI system is classified under the EU AI Act. You can edit this during the risk classification process.</p></div>
-      </div>
-      <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSave} disabled={saving || !mayWrite} title={mayWrite ? undefined : NO_WRITE_TITLE}>
-          {saving && <Loader2 className="animate-spin" />} Save Changes
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 // CO-only view of the AI-inferred classification: reasoning, confidence, gaps, and per-flag detail.
 function ClassificationRationalePanel({ rationale }: { rationale: ClassificationRationale }) {
   const pct = (c: number | null) => (c == null ? "—" : `${Math.round(c * 100)}%`);
@@ -787,7 +701,30 @@ function RegistrationDocuments({ system }: { system: AISystem }) {
   );
 }
 
-export default function SystemDetail({ system: initialSystem, models, open, onClose, onDelete, onUpdate, userMap }: {
+// Editable fields that appear immediately when the sheet opens — no "edit" tab needed.
+type EditableFields = {
+  name: string;
+  description: string;
+  intended_purpose: string;
+  business_owners: string;
+  technical_owners: string;
+  git_repo_url: string;
+  lifecycle: string;
+};
+
+function extractEditableFields(sys: AISystem | null): EditableFields {
+  return {
+    name: sys?.name ?? "",
+    description: sys?.description ?? "",
+    intended_purpose: sys?.intended_purpose ?? "",
+    business_owners: sys?.business_owners ?? "",
+    technical_owners: sys?.technical_owners ?? "",
+    git_repo_url: sys?.git_repo_url ?? "",
+    lifecycle: sys?.lifecycle ?? "development",
+  };
+}
+
+export default function SystemDetail({ system: initialSystem, models: _models, open, onClose, onDelete, onUpdate, userMap }: {
   system: AISystem | null;
   models: ModelCard[];
   open: boolean;
@@ -796,16 +733,39 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
   onUpdate: (updated: AISystem) => void;
   userMap?: UserMap;
 }) {
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("details");
   const [system, setSystem] = useState<AISystem | null>(initialSystem);
   const [rceSummary, setRceSummary] = useState<{
     tier: string | null; org_role: string | null; registration_mode: string | null;
     obligations: Array<{ title: string; article_ref: string; description: string }>;
   } | null>(null);
+  const [form, setForm] = useState<EditableFields>(() => extractEditableFields(initialSystem));
+  const [formBase, setFormBase] = useState<EditableFields>(() => extractEditableFields(initialSystem));
+  const [saving, setSaving] = useState(false);
+  const [allUsers, setAllUsers] = useState<Array<{ username: string; firstName: string; lastName: string }>>([]);
   const showToast = useToast();
-  const { mayRegister, username } = useModalControls();
+  const { mayRegister, mayWrite, username } = useModalControls();
 
-  useEffect(() => { setSystem(initialSystem); setTab("overview"); setRceSummary(null); }, [initialSystem]);
+  const isDirty = (Object.keys(form) as (keyof EditableFields)[]).some(
+    (k) => form[k] !== formBase[k],
+  );
+
+  // Reset form and local system when the sheet opens a different system.
+  useEffect(() => {
+    setSystem(initialSystem);
+    setTab("details");
+    setRceSummary(null);
+    const fields = extractEditableFields(initialSystem);
+    setForm(fields);
+    setFormBase(fields);
+  }, [initialSystem]);
+
+  // Load all users once for the owner dropdowns.
+  useEffect(() => {
+    api.getAllUsers()
+      .then((users) => setAllUsers(users))
+      .catch(() => setAllUsers([]));
+  }, []);
 
   // Load the RCE summary when the CO is viewing a pending_review system.
   useEffect(() => {
@@ -821,6 +781,31 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
     onUpdate(updated);
   }
 
+  async function handleSave() {
+    if (!system) return;
+    setSaving(true);
+    try {
+      const payload = {
+        name: form.name,
+        description: form.description,
+        intended_purpose: form.intended_purpose,
+        business_owners: form.business_owners || null,
+        technical_owners: form.technical_owners || null,
+        git_repo_url: form.git_repo_url || null,
+        lifecycle: form.lifecycle,
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const updated = await api.updateSystem(system.id, payload as any);
+      handleSystemUpdate(updated);
+      setFormBase({ ...form });
+      showToast("System updated successfully");
+    } catch (e) {
+      showToast(`Update failed: ${(e as Error).message}`, true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleDelete() {
     if (!system) return;
     if (!confirm(`Delete "${system.name}"?\n\nThis action cannot be undone.`)) return;
@@ -833,6 +818,10 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
       showToast(`Delete failed: ${(e as Error).message}`, true);
     }
   }
+
+  const setField = (k: keyof EditableFields) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+      setForm((f) => ({ ...f, [k]: e.target.value }));
 
   return (
     <>
@@ -861,14 +850,86 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
             <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
               <div className="border-b border-border px-6 py-2.5">
                 <TabsList>
-                  {["overview", "workflow", "edit"].map((t) => (
+                  {["details", "workflow"].map((t) => (
                     <TabsTrigger key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</TabsTrigger>
                   ))}
                 </TabsList>
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-                <TabsContent value="overview">
+                <TabsContent value="details">
+                  {/* Editable fields */}
+                  <Section title="System Details">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="field_name">System Name <span className="text-[var(--danger-fg)]">*</span></Label>
+                        <Input id="field_name" value={form.name} onChange={setField("name")} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="field_description">Description</Label>
+                        <Textarea id="field_description" rows={2} value={form.description} onChange={setField("description")} />
+                      </div>
+                      <div className="flex flex-col gap-1.5 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3">
+                        <Label htmlFor="field_purpose" className="flex flex-wrap items-center gap-2 text-[var(--brand)]">
+                          Intended Purpose
+                          <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk classification category</span>
+                        </Label>
+                        <Textarea
+                          id="field_purpose"
+                          rows={3}
+                          value={form.intended_purpose}
+                          onChange={setField("intended_purpose")}
+                          className="border-[var(--brand)]/40 focus-visible:ring-[var(--brand)]"
+                        />
+                        <p className="text-xs text-muted-foreground">The intended purpose determines how your AI system is classified under the EU AI Act.</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="field_biz_owner">Business Owner</Label>
+                          <select className={SELECT_CLASS} id="field_biz_owner" value={form.business_owners} onChange={setField("business_owners")}>
+                            <option value="">— none —</option>
+                            {allUsers.map((u) => (
+                              <option key={u.username} value={u.username}>
+                                {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="field_tech_owner">Technical Owner</Label>
+                          <select className={SELECT_CLASS} id="field_tech_owner" value={form.technical_owners} onChange={setField("technical_owners")}>
+                            <option value="">— none —</option>
+                            {allUsers.map((u) => (
+                              <option key={u.username} value={u.username}>
+                                {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="field_git_repo" className="flex items-center gap-1.5">
+                          <ExternalLink className="size-3.5" /> Source Repository
+                        </Label>
+                        <Input
+                          id="field_git_repo"
+                          type="url"
+                          placeholder="https://github.com/org/repo"
+                          value={form.git_repo_url}
+                          onChange={setField("git_repo_url")}
+                        />
+                        <p className="text-xs text-muted-foreground">Link to the source repository or application</p>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="field_lifecycle">Lifecycle State</Label>
+                        <select className={SELECT_CLASS} id="field_lifecycle" value={form.lifecycle} onChange={setField("lifecycle")}>
+                          {Object.entries(LIFECYCLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </Section>
+
+                  {/* Workflow progress */}
                   <Section>
                     <WorkflowProgress
                       system={system}
@@ -877,6 +938,8 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                       userMap={userMap}
                     />
                   </Section>
+
+                  {/* CO-only: classification rationale */}
                   {system.classification_rationale != null
                     && system.compliance_officer_username === username && (
                     <Section>
@@ -904,6 +967,8 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                       )}
                     </Section>
                   )}
+
+                  {/* CO-only: RCE summary */}
                   {rceSummary && system.compliance_officer_username === username && (
                     <Section title="RCE Summary — Applicable Obligations">
                       <div className="mb-2 flex flex-wrap items-center gap-2 text-[13px]">
@@ -929,48 +994,8 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                       )}
                     </Section>
                   )}
-                  {system.registration_mode === "full_manual" && (system.registration_documents?.length ?? 0) > 0 && (
-                    <Section title="Supporting Documents">
-                      <RegistrationDocuments system={system} />
-                    </Section>
-                  )}
-                  <Section title="Identity">
-                    <DetailGrid rows={[
-                      ["Name", system.name],
-                      ["Version", system.version],
-                      ["Provider", system.provider || "—"],
-                      ["Organisation", system.org_name || "—"],
-                      ["Role", system.org_role],
-                      ["Country", system.provider_country],
-                      ["System Type", system.system_type],
-                      ["Autonomy Level", (system.autonomy_level || "").replace(/_/g, " ")],
-                      !!system.application_url && ["Application URL", <a key="url" href={system.application_url} target="_blank" rel="noreferrer" className="text-[var(--brand)]">{system.application_url}</a>],
-                    ]} />
-                    <div className="mt-4 rounded-md border border-border bg-background p-3">
-                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Telemetry Configuration</div>
-                      <div className="mb-2 text-xs text-muted-foreground">Use this system ID as the telemetry service name (e.g. <code className="font-mono">OTEL_SERVICE_NAME</code>) to link telemetry to this system:</div>
-                      <div className="flex items-center gap-2">
-                        <code className="flex-1 font-mono text-xs">{system.id}</code>
-                        <Button variant="ghost" size="sm" onClick={() => {
-                          copyToClipboard(system.id)
-                            .then(() => showToast("System ID copied"))
-                            .catch(() => showToast("Copy failed", true));
-                        }}><Copy /> Copy ID</Button>
-                      </div>
-                    </div>
-                  </Section>
-                  <Section title="Purpose">
-                    <DetailGrid rows={[
-                      ["Description", system.description || "—"],
-                    ]} />
-                    <div className="mt-3 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[13px] font-semibold text-[var(--brand)]">Intended Purpose</span>
-                        <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--brand)]">Drives risk classification category</span>
-                      </div>
-                      <p className="mt-1 text-[13px] text-foreground">{system.intended_purpose || "—"}</p>
-                    </div>
-                  </Section>
+
+                  {/* Classification — read-only */}
                   <Section title="Classification">
                     <DetailGrid rows={[
                       ["Risk Classification", <TierBadge key="tier" tier={system.tier} workflowStatus={system.workflow_status} />],
@@ -979,6 +1004,8 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                       ["GPAI", system.is_gpai ? <span key="gpai" className="text-[var(--brand)]">Yes</span> : "No"],
                     ]} />
                   </Section>
+
+                  {/* Risk Flags — read-only, collapsible */}
                   <Section title="Risk Flags">
                     <FlagPanel title="Art. 5 — Prohibited Practice Flags" flags={[
                       [system.subliminal_manipulation, "Subliminal manipulation"],
@@ -1006,6 +1033,8 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                       [system.generates_synthetic_content, "Generates synthetic content"],
                     ]} />
                   </Section>
+
+                  {/* Lifecycle — read-only */}
                   <Section title="Lifecycle">
                     <DetailGrid rows={[
                       ["State", <LifecycleBadge key="lc" lc={system.lifecycle} />],
@@ -1014,14 +1043,33 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                       ["Last Updated", fmtDateTime(system.updated_at)],
                     ]} />
                   </Section>
+
+                  {/* Supporting documents — show for any system that has them */}
+                  {(system.registration_documents?.length ?? 0) > 0 && (
+                    <Section title="Supporting Documents">
+                      <RegistrationDocuments system={system} />
+                    </Section>
+                  )}
+
+                  {/* Telemetry ID */}
+                  <Section>
+                    <div className="rounded-md border border-border bg-background p-3">
+                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Telemetry Configuration</div>
+                      <div className="mb-2 text-xs text-muted-foreground">Use this system ID as the telemetry service name (e.g. <code className="font-mono">OTEL_SERVICE_NAME</code>) to link telemetry to this system:</div>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 font-mono text-xs">{system.id}</code>
+                        <Button variant="ghost" size="sm" onClick={() => {
+                          copyToClipboard(system.id)
+                            .then(() => showToast("System ID copied"))
+                            .catch(() => showToast("Copy failed", true));
+                        }}><Copy /> Copy ID</Button>
+                      </div>
+                    </div>
+                  </Section>
                 </TabsContent>
 
                 <TabsContent value="workflow">
                   <WorkflowTab system={system} userMap={userMap} />
-                </TabsContent>
-
-                <TabsContent value="edit">
-                  <EditForm system={system} models={models} onSave={handleSystemUpdate} onClose={onClose} />
                 </TabsContent>
               </div>
             </Tabs>
@@ -1030,6 +1078,11 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
               <Button variant="destructive" onClick={handleDelete} disabled={!mayRegister}
                 title={mayRegister ? undefined : "Requires role: business owner or administrator"}>Delete System</Button>
               <div className="flex-1" />
+              {isDirty && (
+                <Button onClick={handleSave} disabled={saving || !mayWrite} title={mayWrite ? undefined : "Requires permission: systems:write"}>
+                  {saving && <Loader2 className="animate-spin" />} Save Changes
+                </Button>
+              )}
               <Button variant="ghost" onClick={onClose}>Close</Button>
             </SheetFooter>
           </>

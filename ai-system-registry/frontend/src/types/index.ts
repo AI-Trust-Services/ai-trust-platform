@@ -44,6 +44,9 @@ export interface AISystem {
   // are nested under the "technical" key. Values are strings except that nesting.
   questionnaire_answers: Record<string, unknown> | null;
   registration_documents: RegistrationDocument[] | null;
+  business_owners: string | null;
+  technical_owners: string | null;
+  git_repo_url: string | null;
   // Two shapes: legacy bare RationaleItem[] (AI-assisted intake) or the extended
   // ClassificationRationale object (questionnaire workflow, CO-only). Discriminate
   // with Array.isArray().
