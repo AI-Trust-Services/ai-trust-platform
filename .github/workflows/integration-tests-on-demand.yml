@@ -1,14 +1,12 @@
-name: Integration Tests
+name: Integration Tests (on-demand)
 
-# Triggered after a successful deployment — either from a PR (garden-deploy label)
-# or after a merge to main. Deployment workflow status is unaffected by this workflow.
+# Triggered manually by adding the "garden-test" label to a PR.
+# Runs tests against the already-deployed namespace on ai-trust-test — no redeploy.
+# This is separate from integration-tests.yml so the garden-deploy label does not
+# produce a spurious skipped check from the pull_request: labeled trigger.
 on:
-  workflow_run:
-    workflows:
-      - "PR Deployment Test"
-      - "Deployment Workflow"
-    types:
-      - completed
+  pull_request:
+    types: [labeled]
 
 permissions:
   contents: read
@@ -16,36 +14,22 @@ permissions:
 
 jobs:
   integration-tests:
-    name: Integration Tests
+    name: Integration Tests (on-demand)
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
+    if: github.event.label.name == 'garden-test'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Derive cluster and namespace
         id: vars
         shell: bash
         run: |
-          WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
-          if [[ "${WORKFLOW_NAME}" == "Deployment Workflow" ]]; then
-            cluster="ai-trust-main"
-            namespace="ai-trust"
-          else
-            # PR Deployment Test — namespace is the PR author's login.
-            # workflow_run.pull_requests[0].user.login is the PR author (set when the
-            # triggering workflow was itself triggered by a pull_request event).
-            # Fall back to actor.login only if pull_requests is empty (e.g. fork PRs).
-            PR_AUTHOR="${{ github.event.workflow_run.pull_requests[0].user.login }}"
-            ACTOR="${{ github.event.workflow_run.actor.login }}"
-            namespace="${PR_AUTHOR:-${ACTOR}}"
-            namespace="${namespace,,}"
-            cluster="ai-trust-test"
-          fi
-
+          cluster="ai-trust-test"
+          namespace="${{ github.event.pull_request.user.login }}"
           echo "cluster=${cluster}" >> "$GITHUB_OUTPUT"
           echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
           echo "==> cluster=${cluster}, namespace=${namespace}"
