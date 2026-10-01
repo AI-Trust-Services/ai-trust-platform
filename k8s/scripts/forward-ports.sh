@@ -8,6 +8,9 @@ NAMESPACE="${1:-ai-trust}"
 PID_FILE="/tmp/ai-trust-port-forwards.pid"
 LOG_DIR="/tmp/ai-trust-port-forward-logs"
 mkdir -p "${LOG_DIR}"
+# Truncate before recording this run's PIDs — stale entries from a previous
+# run could kill unrelated processes if the OS reused those PIDs.
+> "${PID_FILE}"
 
 echo "==> Forwarding ports for namespace: ${NAMESPACE}"
 
