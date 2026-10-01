@@ -158,9 +158,7 @@ async def _cleanup_test_data() -> None:
     if _created_user_ids:
         async with httpx.AsyncClient(base_url=USERS_URL, timeout=15) as client:
             for user_id in _created_user_ids:
-                r = await client.delete(
-                    f"/v1/users/{user_id}", headers=ADMIN_HEADERS
-                )
+                r = await client.delete(f"/v1/users/{user_id}", headers=ADMIN_HEADERS)
                 if r.status_code not in (200, 204, 404):
                     print(
                         f"Warning: cleanup of user {user_id} returned {r.status_code}: {r.text}"
