@@ -41,14 +41,19 @@ jobs:
             namespace="${{ github.event.pull_request.user.login }}"
           else
             WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
-            ACTOR="${{ github.event.workflow_run.actor.login }}"
             if [[ "${WORKFLOW_NAME}" == "Deployment Workflow" ]]; then
               cluster="ai-trust-main"
               namespace="ai-trust"
             else
-              # PR Deployment Test — namespace is the PR author's GitHub username (lowercase)
+              # PR Deployment Test — namespace is the PR author's login.
+              # workflow_run.pull_requests[0].user.login is the PR author (set when the
+              # triggering workflow was itself triggered by a pull_request event).
+              # Fall back to actor.login only if pull_requests is empty (e.g. fork PRs).
+              PR_AUTHOR="${{ github.event.workflow_run.pull_requests[0].user.login }}"
+              ACTOR="${{ github.event.workflow_run.actor.login }}"
+              namespace="${PR_AUTHOR:-${ACTOR}}"
+              namespace="${namespace,,}"
               cluster="ai-trust-test"
-              namespace="${ACTOR,,}"
             fi
           fi
 
