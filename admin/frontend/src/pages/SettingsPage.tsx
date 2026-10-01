@@ -4,6 +4,7 @@ import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import type { GeneralSettings, GeneralSettingsUpdate } from "@/types";
 import { useToast } from "@/App";
 
@@ -14,6 +15,7 @@ export default function SettingsPage() {
   const [form, setForm] = useState<GeneralSettingsUpdate>({
     platform_name: "",
     support_email: "",
+    risk_library_editable: true,
   });
 
   const load = useCallback(async () => {
@@ -22,6 +24,7 @@ export default function SettingsPage() {
       setForm({
         platform_name: data.platform_name,
         support_email: data.support_email ?? "",
+        risk_library_editable: data.risk_library_editable,
       });
     } catch {
       showToast("Failed to load settings", true);
@@ -38,6 +41,7 @@ export default function SettingsPage() {
       await api.updateSettings({
         platform_name: form.platform_name || undefined,
         support_email: form.support_email || null,
+        risk_library_editable: form.risk_library_editable,
       });
       showToast("Settings saved");
     } catch (e) {
@@ -91,6 +95,22 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground">Contact email for platform support inquiries.</p>
             </div>
           </div>
+        </div>
+
+        <div className="pt-6 border-t border-border">
+          <h2 className="text-base font-semibold mb-1">Risk Management</h2>
+          <p className="text-sm text-muted-foreground mb-4">Controls for the Risk Management module.</p>
+          <div className="flex items-center gap-3">
+            <Switch
+              id="risk_library_editable"
+              checked={form.risk_library_editable ?? true}
+              onCheckedChange={(v) => setForm({ ...form, risk_library_editable: v })}
+            />
+            <Label htmlFor="risk_library_editable">Allow adding risks to the Risk Library</Label>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1.5">
+            When disabled, users can no longer flag a newly created risk for inclusion in the shared Risk Library. Existing library entries are unaffected.
+          </p>
         </div>
       </div>
 

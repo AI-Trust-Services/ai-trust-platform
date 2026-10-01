@@ -32,11 +32,13 @@ export interface SmtpTestResponse {
 export interface GeneralSettings {
   platform_name: string;
   support_email: string | null;
+  risk_library_editable: boolean;
 }
 
 export interface GeneralSettingsUpdate {
   platform_name?: string | null;
   support_email?: string | null;
+  risk_library_editable?: boolean | null;
 }
 
 export interface AdminStats {

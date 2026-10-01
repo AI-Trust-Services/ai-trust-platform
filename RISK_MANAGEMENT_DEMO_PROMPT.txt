@@ -1,0 +1,4 @@
+Clone https://github.com/AI-Trust-Services/ai-trust-platform.git, check out branch
+jw-poc-risk-management, then read risk-management/docs/DEMO_PROMPT.md and follow its
+instructions exactly to set up the platform and walk me through every feature of the
+Risk Management module, step by step, pausing for my input after each one.

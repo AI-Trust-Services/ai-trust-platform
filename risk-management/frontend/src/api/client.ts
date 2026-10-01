@@ -13,9 +13,12 @@ import type {
   LibraryRisk,
   LibraryRiskStats,
   RiskCandidate,
+  PermissionsResponse,
+  CurrentUser,
 } from "../types";
 
 const BASE = import.meta.env.VITE_RISK_MANAGEMENT_API_BASE ?? "/api/risk-management/v1";
+const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE ?? "/api/users/v1";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -31,6 +34,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`${res.status}: ${detail}`);
   }
   if (res.status === 204) return undefined as T;
+  return res.json();
+}
+
+async function requestUsers<T>(path: string): Promise<T> {
+  const res = await fetch(`${USERS_API_BASE}${path}`);
+  if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
   return res.json();
 }
 
@@ -88,7 +97,7 @@ export const api = {
 
   // Plan tasks
   getPlanTasks: (registerId: string) => request<PlanTask[]>(`/registers/${registerId}/plan-tasks`),
-  createPlanTask: (registerId: string, body: Omit<PlanTask, "id" | "register_id" | "created_at" | "updated_at"> & { mitigation_id?: string | null }) =>
+  createPlanTask: (registerId: string, body: Omit<PlanTask, "id" | "register_id" | "created_at" | "updated_at" | "approved" | "approved_by" | "approved_at" | "pending_delete" | "pending_delete_by" | "pending_delete_at"> & { mitigation_id?: string | null }) =>
     request<PlanTask>(`/registers/${registerId}/plan-tasks`, { method: "POST", ...json(body) }),
   patchPlanTask: (taskId: string, body: Partial<PlanTask>) =>
     request<PlanTask>(`/plan-tasks/${taskId}`, { method: "PATCH", ...json(body) }),
@@ -105,7 +114,7 @@ export const api = {
 
   // Incidents
   getIncidents: (registerId: string) => request<Incident[]>(`/registers/${registerId}/incidents`),
-  createIncident: (registerId: string, body: Omit<Incident, "id" | "register_id" | "created_at" | "updated_at">) =>
+  createIncident: (registerId: string, body: Omit<Incident, "id" | "register_id" | "created_at" | "updated_at" | "approved" | "approved_by" | "approved_at" | "pending_delete" | "pending_delete_by" | "pending_delete_at">) =>
     request<Incident>(`/registers/${registerId}/incidents`, { method: "POST", ...json(body) }),
   patchIncident: (incidentId: string, body: Partial<Incident>) =>
     request<Incident>(`/incidents/${incidentId}`, { method: "PATCH", ...json(body) }),
@@ -120,4 +129,10 @@ export const api = {
   createLibraryRisk: (body: Omit<LibraryRisk, "id" | "created_at" | "updated_at" | "incidents">) =>
     request<LibraryRisk>("/risk-library", { method: "POST", ...json(body) }),
   getRiskCandidates: () => request<RiskCandidate[]>("/risk-library/candidates"),
+  getRiskLibraryEditable: () =>
+    request<{ risk_library_editable: boolean }>("/settings/risk-library-editable"),
+
+  // Current user permissions (used to gate role-specific risk confirmation actions)
+  myPermissions: () => requestUsers<PermissionsResponse>("/me/permissions"),
+  me: () => requestUsers<CurrentUser>("/me"),
 };

@@ -79,8 +79,8 @@ class RiskEntry(Base):
     article_9_step: Mapped[str] = mapped_column(String(20), default="9(2)(a)")
 
     # Severity × Likelihood matrix
-    severity: Mapped[str] = mapped_column(String(20), default="medium")
-    # "critical" | "high" | "medium" | "low"
+    severity: Mapped[str] = mapped_column(String(20), default="moderate")
+    # "severe" | "significant" | "moderate" | "minor"
     likelihood: Mapped[str] = mapped_column(String(20), default="possible")
     # "very_likely" | "likely" | "possible" | "unlikely"
 
@@ -105,7 +105,7 @@ class RiskEntry(Base):
     impact: Mapped[str] = mapped_column(Text, default="")
     # Human-readable description of business/user impact
     risk_level_autocalculated: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    # Auto-calculated from severity × likelihood: "critical"|"high"|"medium"|"low"
+    # Auto-calculated from severity × likelihood: "unacceptable"|"substantial"|"moderate"|"acceptable"
     residual_likelihood: Mapped[str | None] = mapped_column(String(20), nullable=True)
     residual_severity: Mapped[str | None] = mapped_column(String(20), nullable=True)
     final_risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -135,6 +135,13 @@ class RiskEntry(Base):
     library_risk_id: Mapped[str | None] = mapped_column(
         String(30), ForeignKey("library_risks.id", ondelete="SET NULL"), nullable=True, index=True
     )
+
+    # Two-step delete: any user may propose (pending_delete=True); only the
+    # risk owner or the register's reviewer may confirm (DELETE) or cancel
+    # (pending_delete=False back). See owner_auth.py.
+    pending_delete: Mapped[bool] = mapped_column(Boolean, default=False)
+    pending_delete_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    pending_delete_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -286,6 +293,19 @@ class PlanTask(Base):
     status: Mapped[str] = mapped_column(String(50), default="open")
     # "open" | "in_progress" | "done"
 
+    # Owner-gated approval: only the linked risk's risk_owner (or, if the task
+    # isn't linked to a risk, assigned_to) may approve. See risks.py's
+    # engineer/officer confirmation for the analogous per-role pattern.
+    approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    approved_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Two-step delete: any user may propose; only the risk owner or the
+    # register's reviewer may confirm or cancel. See owner_auth.py.
+    pending_delete: Mapped[bool] = mapped_column(Boolean, default=False)
+    pending_delete_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    pending_delete_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -315,9 +335,22 @@ class Incident(Base):
     # "open" | "under_investigation" | "resolved" | "closed"
 
     reported_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    assigned_to: Mapped[str | None] = mapped_column(String(200), nullable=True)
     occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attachments: Mapped[str] = mapped_column(Text, default="")
     # JSON list of {name, url} objects
+
+    # Owner-gated approval: only the linked risk's risk_owner (or, if the
+    # incident isn't linked to a risk, assigned_to) may approve.
+    approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    approved_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Two-step delete: any user may propose; only the risk owner or the
+    # register's reviewer may confirm or cancel. See owner_auth.py.
+    pending_delete: Mapped[bool] = mapped_column(Boolean, default=False)
+    pending_delete_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    pending_delete_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

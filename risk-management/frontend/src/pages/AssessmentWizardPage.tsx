@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import type { RiskRegister, RiskEntry, MitigationMeasure, TestReport, PlanTask, LibraryRisk } from "../types";
+import { usePermissions } from "../hooks/usePermissions";
 
 const SEV_COLORS: Record<string, string> = {
   severe: "#8b0000", significant: "#8b3a00", moderate: "#7a5900", minor: "#1a5c35",
@@ -163,12 +164,12 @@ async function exportReport(systemName: string, register: RiskRegister, risks: R
   let statusBanner = "";
   if (archived) {
     statusBanner = `<div style="background:#fef9c3;border:2px solid #fde047;border-radius:10px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#713f12;font-weight:700">
-      ⚠ ARCHIVED REPORT — This is a historical record from a previous risk management cycle. It is retained for audit purposes and does not reflect the current state of risk management.
+      ARCHIVED REPORT — This is a historical record from a previous risk management cycle. It is retained for audit purposes and does not reflect the current state of risk management.
     </div>`;
   } else if (register.status === "approved") {
     const acceptability = register.residual_risk_acceptable === true ? "Acceptable" : register.residual_risk_acceptable === false ? "Not acceptable" : "—";
     statusBanner = `<div style="background:#d5f5e3;border:1.5px solid #9cdcb8;border-radius:10px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#1a5c35;font-weight:700">
-      ✅ APPROVED — by <strong>${esc(register.approver_username ?? "—")}</strong> on ${fmtDate(register.approved_at)}
+      APPROVED — by <strong>${esc(register.approver_username ?? "—")}</strong> on ${fmtDate(register.approved_at)}
       <span style="font-weight:400;margin-left:16px">Overall residual risk: <strong>${acceptability}</strong></span>
     </div>`;
   } else {
@@ -216,9 +217,9 @@ async function exportReport(systemName: string, register: RiskRegister, risks: R
 
     return `
     <div style="${borderStyle};border-radius:8px;padding:18px 20px;margin-bottom:14px;page-break-inside:avoid">
-      ${isRemovedInNext ? `<div style="background:#ffd5d5;color:#8b0000;font-size:11px;font-weight:700;padding:5px 10px;border-radius:4px;margin-bottom:10px">⚠ REMOVED IN NEXT VERSION</div>` : ""}
+      ${isRemovedInNext ? `<div style="background:#ffd5d5;color:#8b0000;font-size:11px;font-weight:700;padding:5px 10px;border-radius:4px;margin-bottom:10px">REMOVED IN NEXT VERSION</div>` : ""}
       ${hasChanges && entry ? `<div style="background:#fff3c4;color:#7a5900;font-size:11px;padding:6px 10px;border-radius:4px;margin-bottom:10px">
-        <div style="font-weight:700;margin-bottom:4px">⚠ CHANGED IN NEXT VERSION</div>
+        <div style="font-weight:700;margin-bottom:4px">CHANGED IN NEXT VERSION</div>
         <table style="border-collapse:collapse;font-size:11px">
           ${(entry.fields ?? []).map(fc => `<tr><td style="padding:1px 8px 1px 0;font-weight:600">${esc(fc.field)}</td><td style="text-decoration:line-through;color:#8b0000;padding-right:6px">${esc(fc.from_value)}</td><td style="color:#1a5c35">→ ${esc(fc.to_value)}</td></tr>`).join("")}
           ${(entry.mitigations_added ?? []).map(t => `<tr><td style="color:#1a5c35;font-weight:600">+ Mitigation added</td><td colspan="2" style="color:#1a5c35">${esc(t)}</td></tr>`).join("")}
@@ -248,7 +249,7 @@ async function exportReport(systemName: string, register: RiskRegister, risks: R
 
       ${r.description ? `<div style="font-size:12px;margin-bottom:6px"><strong>Description:</strong> ${np(r.description)}</div>` : ""}
       ${r.impact ? `<div style="font-size:12px;margin-bottom:8px"><strong>Impact:</strong> ${np(r.impact)}</div>` : ""}
-      ${r.affects_vulnerable_groups ? `<div style="font-size:12px;margin-bottom:8px;color:#92400e"><strong>⚠ Affects vulnerable groups:</strong> ${esc(vulnerableGroups) || "Specified"}</div>` : ""}
+      ${r.affects_vulnerable_groups ? `<div style="font-size:12px;margin-bottom:8px;color:#92400e"><strong>Affects vulnerable groups:</strong> ${esc(vulnerableGroups) || "Specified"}</div>` : ""}
 
       <div style="margin-top:10px">
         <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Misuse scenarios (${(r.misuse_scenarios ?? []).length})</div>
@@ -387,9 +388,9 @@ async function exportReport(systemName: string, register: RiskRegister, risks: R
     lines.push(`\n**Register:** ${register.id}  `);
     lines.push(`**Generated:** ${fmtDate(new Date().toISOString())}  `);
     lines.push(`**Status:** ${register.status.toUpperCase()}`);
-    if (archived) lines.push(`\n> ⚠ **ARCHIVED** — historical record from a previous cycle.`);
+    if (archived) lines.push(`\n> **ARCHIVED** — historical record from a previous cycle.`);
     if (register.status === "approved") {
-      lines.push(`\n> ✅ **APPROVED** by ${register.approver_username ?? "—"} on ${fmtDate(register.approved_at)}`);
+      lines.push(`\n> **APPROVED** by ${register.approver_username ?? "—"} on ${fmtDate(register.approved_at)}`);
       lines.push(`> Overall residual risk: **${register.residual_risk_acceptable === true ? "Acceptable" : register.residual_risk_acceptable === false ? "Not acceptable" : "—"}**`);
     }
     lines.push(`\n## Assessment scope\n\n${register.assessment_scope || "—"}`);
@@ -402,7 +403,7 @@ async function exportReport(systemName: string, register: RiskRegister, risks: R
       if (r.risk_owner) lines.push(`**Owner:** ${r.risk_owner}`);
       if (r.description) lines.push(`\n${r.description}`);
       if (r.impact) lines.push(`\n**Impact:** ${r.impact}`);
-      if (r.affects_vulnerable_groups) lines.push(`\n⚠ **Affects vulnerable groups**`);
+      if (r.affects_vulnerable_groups) lines.push(`\n**Affects vulnerable groups**`);
       if ((r.mitigations ?? []).length > 0) {
         lines.push(`\n**Mitigations:**`);
         r.mitigations.forEach(m => lines.push(`- [${m.hierarchy_level.toUpperCase()}] **${m.title}**${m.assigned_to ? ` (${m.assigned_to})` : ""}`));
@@ -468,9 +469,9 @@ async function exportReport(systemName: string, register: RiskRegister, risks: R
   </head><body>
 
   <div class="no-print toolbar">
-    <button class="btn btn-primary" onclick="window.print()">🖨 Print / Save as PDF</button>
-    <button class="btn btn-green" onclick="dlJson()">⬇ Download JSON</button>
-    <button class="btn btn-secondary" onclick="dlMd()">⬇ Download Markdown</button>
+    <button class="btn btn-primary" onclick="window.print()">Print / Save as PDF</button>
+    <button class="btn btn-green" onclick="dlJson()">Download JSON</button>
+    <button class="btn btn-secondary" onclick="dlMd()">Download Markdown</button>
     <button class="btn btn-secondary" onclick="window.close()">✕ Close</button>
   </div>
 
@@ -555,6 +556,58 @@ const RISK_LEVEL_MATRIX: Record<string, Record<string, string>> = {
 
 function calcRiskLevel(severity: string, likelihood: string): string {
   return RISK_LEVEL_MATRIX[severity]?.[likelihood] ?? "moderate";
+}
+
+// A risk is "completed" once every field required to specify and evaluate it
+// has been filled in — mirrors _risk_is_complete() in the backend.
+function isRiskComplete(r: RiskEntry): boolean {
+  return Boolean(
+    r.title?.trim() &&
+    r.category?.trim() &&
+    r.description?.trim() &&
+    r.impact?.trim() &&
+    r.severity?.trim() &&
+    r.likelihood?.trim() &&
+    r.risk_owner?.trim() &&
+    r.responsible_role?.trim() &&
+    r.deadline
+  );
+}
+
+type RiskSortKey = "title" | "category" | "severity" | "likelihood" | "risk_level" | "created_at" | "risk_owner" | "responsible_role" | "deadline" | "status";
+
+const RISK_SORT_OPTIONS: { value: RiskSortKey; label: string }[] = [
+  { value: "created_at", label: "Created at" },
+  { value: "title", label: "Title" },
+  { value: "category", label: "Risk category" },
+  { value: "severity", label: "Severity" },
+  { value: "likelihood", label: "Criticality" },
+  { value: "risk_level", label: "Risk level" },
+  { value: "risk_owner", label: "Risk owner" },
+  { value: "responsible_role", label: "Responsible role" },
+  { value: "deadline", label: "Deadline" },
+  { value: "status", label: "Approval status" },
+];
+
+// All columns sort alphabetically (per spec) on the raw underlying value.
+function sortRisks(risks: RiskEntry[], key: RiskSortKey, dir: "asc" | "desc"): RiskEntry[] {
+  const mul = dir === "asc" ? 1 : -1;
+  const val = (r: RiskEntry): string => {
+    switch (key) {
+      case "title": return r.title ?? "";
+      case "category": return r.category ?? "";
+      case "severity": return r.severity ?? "";
+      case "likelihood": return r.likelihood ?? "";
+      case "risk_level": return r.risk_level_autocalculated ?? "";
+      case "created_at": return r.created_at ?? "";
+      case "risk_owner": return r.risk_owner ?? "";
+      case "responsible_role": return r.responsible_role ?? "";
+      case "deadline": return r.deadline ?? "";
+      case "status": return r.status ?? "";
+      default: return "";
+    }
+  };
+  return [...risks].sort((a, b) => val(a).localeCompare(val(b)) * mul);
 }
 
 function RiskLevelBadge({ level }: { level: string }) {
@@ -650,6 +703,11 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   prefillRisk?: Partial<DraftRisk>;
   onBack: () => void;
 }) {
+  // ── Current user's confirmation permissions (only ai_engineer / ai_compliance_officer can confirm) ──
+  const { can: canPerm, email: currentUserEmail, username: currentUsername } = usePermissions();
+  const canConfirmEngineer = canPerm("risks:confirm_engineer");
+  const canConfirmOfficer = canPerm("risks:confirm_officer");
+
   // ── Scope section state ──
   const [registryInfo, setRegistryInfo] = useState<import("../types").RegistrySystemInfo | null>(null);
   const [registryLoading, setRegistryLoading] = useState(true);
@@ -671,6 +729,12 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   // ── Risk section state ──
   const [activeForm, setActiveForm] = useState<"none" | "risk" | "misuse">("none");
   const [expandedRisk, setExpandedRisk] = useState<Record<string, boolean>>({});
+  const [riskSortKey, setRiskSortKey] = useState<RiskSortKey>("created_at");
+  const [riskSortDir, setRiskSortDir] = useState<"asc" | "desc">("asc");
+  const [riskLibraryEditable, setRiskLibraryEditable] = useState(true);
+  useEffect(() => {
+    api.getRiskLibraryEditable().then(r => setRiskLibraryEditable(r.risk_library_editable)).catch(() => {});
+  }, []);
   const [addMit, setAddMit] = useState<Record<string, boolean>>({});
   const [mitDraft, setMitDraft] = useState<Record<string, Partial<MitigationMeasure>>>({});
   const [residualDraft, setResidualDraft] = useState<Record<string, { residual_status: string; residual_likelihood: string; residual_severity: string; date_of_assessment: string; review_notes: string }>>({});
@@ -717,11 +781,6 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     if (prefillRisk) setActiveForm("risk");
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Soft-delete state (for approved register) ──
-  const [pendingDeleteRisks, setPendingDeleteRisks] = useState<Set<string>>(new Set());
-  const [pendingDeleteTasks, setPendingDeleteTasks] = useState<Set<string>>(new Set());
-  const [pendingDeleteIncidents, setPendingDeleteIncidents] = useState<Set<string>>(new Set());
-
   // ── Delete confirmation modal ──
   const [deleteModal, setDeleteModal] = useState<{ label: string; onConfirm: () => void } | null>(null);
   function confirmDelete(label: string, onConfirm: () => void) {
@@ -748,9 +807,16 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   const [reviewDateErr, setReviewDateErr] = useState("");
   const [savingDate, setSavingDate] = useState(false);
   const [editingDate, setEditingDate] = useState(!register?.next_review_date);
-  const [reviewer, setReviewer] = useState(register?.reviewer_username ?? register?.created_by ?? "");
+  const [reviewer, setReviewer] = useState(register?.reviewer_username ?? "");
   const [savingReviewer, setSavingReviewer] = useState(false);
   const [editingReviewer, setEditingReviewer] = useState(!register?.reviewer_username);
+
+  // Default the reviewer field to the current user's email (not username) —
+  // only while nothing has been saved yet and the field is still untouched.
+  useEffect(() => {
+    if (!currentUserEmail || register?.reviewer_username) return;
+    setReviewer(v => v ? v : currentUserEmail);
+  }, [currentUserEmail, register?.reviewer_username]);
 
   // ── Incidents section state ──
   const [incidents, setIncidents] = useState<import("../types").Incident[]>([]);
@@ -795,6 +861,14 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     api.checkOverdueTasks(register.id).catch(() => {});
     api.getIncidents(register.id).then(setIncidents).catch(() => {});
   }, [register?.id]);
+
+  // Default the "risk owner" field to the current user's email once it's
+  // resolved — but only if the field is still untouched, so we never clobber
+  // a value the user already typed or one carried over from a prefill.
+  useEffect(() => {
+    if (!currentUserEmail) return;
+    setDraft(d => d.risk_owner ? d : { ...d, risk_owner: currentUserEmail });
+  }, [currentUserEmail]);
 
   useEffect(() => {
     if (!register || !registryInfo) return;
@@ -878,36 +952,46 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   }
 
   async function deleteTask(taskId: string) {
+    const task = tasks.find(t => t.id === taskId);
     if (register?.status === "approved") {
-      const task = tasks.find(t => t.id === taskId);
-      confirmDelete(`Delete task "${task?.title ?? taskId}"?`, () => {
-        setPendingDeleteTasks(s => new Set(s).add(taskId));
-      });
+      confirmDelete(`Delete task "${task?.title ?? taskId}"?`, () => proposeDeleteTask(taskId));
       return;
     }
-    const task = tasks.find(t => t.id === taskId);
     confirmDelete(`Delete task "${task?.title ?? taskId}"?`, async () => {
       await api.deletePlanTask(taskId);
       setTasks(prev => prev.filter(t => t.id !== taskId));
     });
   }
 
-  async function confirmDeleteTask(taskId: string) {
+  // Step 1: propose deletion — any user may do this. Persisted server-side so
+  // it's visible to everyone, not just the local session. May trigger a
+  // clone-on-write if the register is approved, so we route through
+  // onEnsureEditable() + remap-by-title first, same as every other mutation.
+  async function proposeDeleteTask(taskId: string) {
     const originalTask = tasks.find(t => t.id === taskId);
     const editable = await onEnsureEditable();
+    let targetId = taskId;
     if (editable) {
       const allTasks = await api.getPlanTasks(editable.register.id);
       setTasks(allTasks);
-      const mapped = allTasks.find(t => t.title === originalTask?.title && t.status === originalTask?.status);
-      if (mapped) {
-        await api.deletePlanTask(mapped.id);
-        setTasks(prev => prev.filter(t => t.id !== mapped.id));
-      }
-    } else {
-      await api.deletePlanTask(taskId);
-      setTasks(prev => prev.filter(t => t.id !== taskId));
+      const mapped = allTasks.find(t => t.title === originalTask?.title);
+      targetId = mapped?.id ?? taskId;
+      onRisksChange(editable.risks);
     }
-    setPendingDeleteTasks(s => { const n = new Set(s); n.delete(taskId); return n; });
+    const updated = await api.patchPlanTask(targetId, { pending_delete: true });
+    setTasks(prev => prev.map(t => t.id === targetId ? updated : t));
+  }
+
+  // Step 2: confirm deletion — server-gated to the risk owner or reviewer.
+  async function confirmDeleteTask(taskId: string) {
+    await api.deletePlanTask(taskId);
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+  }
+
+  // Cancel a pending deletion — server-gated to the risk owner or reviewer.
+  async function cancelDeleteTask(taskId: string) {
+    const updated = await api.patchPlanTask(taskId, { pending_delete: false });
+    setTasks(prev => prev.map(t => t.id === taskId ? updated : t));
   }
 
   async function saveEditTask(taskId: string) {
@@ -953,6 +1037,124 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     }
     const updated = await api.patchPlanTask(targetId, { status });
     setTasks(prev => prev.map(t => t.id === targetId ? updated : t));
+  }
+
+  async function approveTask(taskId: string, approved: boolean) {
+    const originalTask = tasks.find(t => t.id === taskId);
+    const editable = await onEnsureEditable();
+    let targetId = taskId;
+    if (editable) {
+      const allTasks = await api.getPlanTasks(editable.register.id);
+      setTasks(allTasks);
+      const mapped = allTasks.find(t => t.title === originalTask?.title);
+      targetId = mapped?.id ?? taskId;
+      onRisksChange(editable.risks);
+    }
+    const updated = await api.patchPlanTask(targetId, { approved });
+    setTasks(prev => prev.map(t => t.id === targetId ? updated : t));
+  }
+
+  async function approveIncident(incidentId: string, approved: boolean) {
+    const originalIncident = incidents.find(i => i.id === incidentId);
+    const editable = await onEnsureEditable();
+    let targetId = incidentId;
+    if (editable) {
+      const allIncidents = await api.getIncidents(editable.register.id);
+      setIncidents(allIncidents);
+      const mapped = allIncidents.find(i => i.title === originalIncident?.title);
+      targetId = mapped?.id ?? incidentId;
+      onRisksChange(editable.risks);
+    }
+    const updated = await api.patchIncident(targetId, { approved });
+    setIncidents(prev => prev.map(i => i.id === targetId ? updated : i));
+  }
+
+  function taskOwner(riskId: string | null, assignedTo: string | null): string | null {
+    if (riskId) {
+      const r = risks.find(x => x.id === riskId);
+      if (r?.risk_owner) return r.risk_owner;
+    }
+    return assignedTo;
+  }
+
+  function isOwnerMatch(owner: string | null): boolean {
+    if (!owner) return false;
+    const o = owner.trim().toLowerCase();
+    if (currentUsername && o === currentUsername.trim().toLowerCase()) return true;
+    if (currentUserEmail && o === currentUserEmail.trim().toLowerCase()) return true;
+    return false;
+  }
+
+  function ApprovalBadge({ approved, owner, onApprove, onUnapprove }: {
+    approved: boolean; owner: string | null;
+    onApprove: () => void; onUnapprove: () => void;
+  }) {
+    const mine = isOwnerMatch(owner);
+    if (approved) {
+      return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#16a34a" }}>✓ Approved{owner ? ` by ${owner}` : ""}</span>
+          {mine && (
+            <button onClick={onUnapprove}
+              style={{ fontSize: 10, background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 4, padding: "1px 6px", cursor: "pointer" }}>
+              Undo
+            </button>
+          )}
+        </span>
+      );
+    }
+    if (mine) {
+      return (
+        <button onClick={onApprove}
+          style={{ fontSize: 10, fontWeight: 600, background: "#f0f4ff", color: "#1147E9", border: "none", borderRadius: 4, padding: "2px 8px", cursor: "pointer" }}>
+          Approve
+        </button>
+      );
+    }
+    return (
+      <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>
+        {owner ? `Awaiting approval from ${owner}` : "No owner set — cannot be approved"}
+      </span>
+    );
+  }
+
+  // Only the risk owner or the register's reviewer may confirm/cancel a
+  // pending deletion — anyone may propose one, but only these two roles act on it.
+  function canConfirmDeletion(owner: string | null): boolean {
+    return isOwnerMatch(owner) || isOwnerMatch(register?.reviewer_username ?? null);
+  }
+
+  function PendingDeleteBar({ title, owner, pendingBy, onConfirm, onCancel, roundedTop }: {
+    title?: string; owner: string | null; pendingBy: string | null | undefined;
+    onConfirm: () => void; onCancel: () => void; roundedTop?: boolean;
+  }) {
+    const canAct = canConfirmDeletion(owner);
+    return (
+      <div style={{
+        background: canAct ? "#dc2626" : "#fef2f2",
+        color: canAct ? "#fff" : "#991b1b",
+        fontSize: 12, padding: "6px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+        borderRadius: roundedTop ? "10px 10px 0 0" : 6,
+        border: canAct ? undefined : "1px solid #fecaca",
+      }}>
+        {title && <span style={{ fontWeight: 700, textDecoration: "line-through" }}>{title}</span>}
+        <span style={{ fontWeight: 700 }}>Marked for deletion{pendingBy ? ` by ${pendingBy}` : ""}</span>
+        {canAct ? (
+          <>
+            <button onClick={onConfirm}
+              style={{ fontSize: 11, background: "#fff", color: "#dc2626", border: "none", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontWeight: 700 }}>
+              Confirm delete
+            </button>
+            <button onClick={onCancel}
+              style={{ fontSize: 11, background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.5)", borderRadius: 4, padding: "3px 10px", cursor: "pointer" }}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <span style={{ fontStyle: "italic", fontWeight: 400 }}>Awaiting confirmation from the risk owner or reviewer</span>
+        )}
+      </div>
+    );
   }
 
   async function saveRiskTask(riskId: string) {
@@ -1007,7 +1209,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     setErr("");
     setLibraryRisks(null);
     if (form === "risk") {
-      setDraft(emptyDraft());
+      setDraft({ ...emptyDraft(), risk_owner: currentUserEmail });
       setDraftMitigations([]);
       setDraftTestReports([]);
       setShowDraftMit(false);
@@ -1055,6 +1257,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
         status: incidentDraft.status ?? "open",
         risk_id: incidentDraft.risk_id ?? null,
         reported_by: incidentDraft.reported_by ?? null,
+        assigned_to: null,
         occurred_at: incidentDraft.occurred_at ?? null,
         attachments: incidentDraft.attachments ?? "",
       });
@@ -1084,6 +1287,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
         status: d.status ?? "open",
         risk_id: targetRiskId,
         reported_by: d.reported_by ?? null,
+        assigned_to: savedRisk?.risk_owner ?? null,
         occurred_at: d.occurred_at ?? null,
         attachments: d.attachments ?? "",
       });
@@ -1096,36 +1300,43 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   }
 
   async function deleteIncident(incidentId: string) {
+    const incident = incidents.find(i => i.id === incidentId);
     if (register?.status === "approved") {
-      const incident = incidents.find(i => i.id === incidentId);
-      confirmDelete(`Delete incident "${incident?.title ?? incidentId}"?`, () => {
-        setPendingDeleteIncidents(s => new Set(s).add(incidentId));
-      });
+      confirmDelete(`Delete incident "${incident?.title ?? incidentId}"?`, () => proposeDeleteIncident(incidentId));
       return;
     }
-    const incident = incidents.find(i => i.id === incidentId);
     confirmDelete(`Delete incident "${incident?.title ?? incidentId}"?`, async () => {
       await api.deleteIncident(incidentId);
       setIncidents(prev => prev.filter(i => i.id !== incidentId));
     });
   }
 
-  async function confirmDeleteIncident(incidentId: string) {
+  // Step 1: propose deletion — any user may do this (see proposeDeleteTask).
+  async function proposeDeleteIncident(incidentId: string) {
     const originalIncident = incidents.find(i => i.id === incidentId);
     const editable = await onEnsureEditable();
+    let targetId = incidentId;
     if (editable) {
       const allInc = await api.getIncidents(editable.register.id);
       setIncidents(allInc);
       const mapped = allInc.find(i => i.title === originalIncident?.title);
-      if (mapped) {
-        await api.deleteIncident(mapped.id);
-        setIncidents(prev => prev.filter(i => i.id !== mapped.id));
-      }
-    } else {
-      await api.deleteIncident(incidentId);
-      setIncidents(prev => prev.filter(i => i.id !== incidentId));
+      targetId = mapped?.id ?? incidentId;
+      onRisksChange(editable.risks);
     }
-    setPendingDeleteIncidents(s => { const n = new Set(s); n.delete(incidentId); return n; });
+    const updated = await api.patchIncident(targetId, { pending_delete: true });
+    setIncidents(prev => prev.map(i => i.id === targetId ? updated : i));
+  }
+
+  // Step 2: confirm deletion — server-gated to the risk owner or reviewer.
+  async function confirmDeleteIncident(incidentId: string) {
+    await api.deleteIncident(incidentId);
+    setIncidents(prev => prev.filter(i => i.id !== incidentId));
+  }
+
+  // Cancel a pending deletion — server-gated to the risk owner or reviewer.
+  async function cancelDeleteIncident(incidentId: string) {
+    const updated = await api.patchIncident(incidentId, { pending_delete: false });
+    setIncidents(prev => prev.map(i => i.id === incidentId ? updated : i));
   }
 
   async function saveEditIncident(incidentId: string) {
@@ -1165,6 +1376,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   }
 
   function canFullyConfirm(risk: RiskEntry): boolean {
+    if (!isRiskComplete(risk)) return false;
     const engReq = roleRequired(risk, "engineer");
     const offReq = roleRequired(risk, "officer");
     if (!engReq && !offReq) return true;
@@ -1236,28 +1448,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
     await applyRolePatch(risk, { status: "open" });
   }
 
-  async function confirmRisk(risk: RiskEntry) {
-    // Global override: mark engineer+officer confirmed if required, then confirm
-    const patch: Partial<RiskEntry> = { status: "confirmed" };
-    if (roleRequired(risk, "engineer")) patch.engineer_confirmed = true;
-    if (roleRequired(risk, "officer")) patch.officer_confirmed = true;
-    await applyRolePatch(risk, patch);
-  }
-
-  async function unconfirmRisk(risk: RiskEntry) {
-    const patch: Partial<RiskEntry> = { status: "open" };
-    if (roleRequired(risk, "engineer")) patch.engineer_confirmed = false;
-    if (roleRequired(risk, "officer")) patch.officer_confirmed = false;
-    await applyRolePatch(risk, patch);
-  }
-
-  async function dismissRisk(risk: RiskEntry) {
-    await applyRolePatch(risk, { status: "dismissed" });
-  }
-
   async function addRisk(uploadToLibrary = false) {
     if (!draft.title.trim()) { setErr("Short description is required."); return; }
     if (draft.categories.length === 0) { setErr("Impact category is required."); return; }
+    if (draft.responsible_role.length === 0) { setErr("Risk validator is required — select at least one role to confirm this risk."); return; }
     if (draft.affects_vulnerable_groups && !draft.vulnerable_groups.trim()) {
       setErr("Vulnerable groups field is mandatory when 'affects vulnerable groups' is checked.");
       return;
@@ -1325,7 +1519,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
 
       const baseRisks = editable?.risks ?? risks;
       onRisksChange([...baseRisks, { ...created, mitigations: newMitigations }]);
-      setDraft(emptyDraft());
+      setDraft({ ...emptyDraft(), risk_owner: currentUserEmail });
       setDraftMitigations([]);
       setDraftTestReports([]);
       setShowDraftMit(false);
@@ -1368,6 +1562,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   async function saveEditRisk() {
     if (!editRiskDraft.title.trim()) { setEditRiskErr("Short description is required."); return; }
     if (editRiskDraft.categories.length === 0) { setEditRiskErr("Impact category is required."); return; }
+    if (editRiskDraft.responsible_role.length === 0) { setEditRiskErr("Risk validator is required — select at least one role to confirm this risk."); return; }
     setEditRiskSaving(true); setEditRiskErr("");
     try {
       const { categories, ...rest } = editRiskDraft;
@@ -1424,31 +1619,40 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
   }
 
   async function removeRisk(id: string) {
+    const risk = risks.find(r => r.id === id);
     if (register?.status === "approved") {
-      const risk = risks.find(r => r.id === id);
-      confirmDelete(`Delete risk "${risk?.title ?? id}"?`, () => {
-        setPendingDeleteRisks(s => new Set(s).add(id));
-      });
+      confirmDelete(`Delete risk "${risk?.title ?? id}"?`, () => proposeDeleteRisk(id));
       return;
     }
-    const risk = risks.find(r => r.id === id);
     confirmDelete(`Delete risk "${risk?.title ?? id}"?`, async () => {
       await api.deleteRisk(id);
       onRisksChange(risks.filter(r => r.id !== id));
     });
   }
 
-  async function confirmDeleteRisk(id: string) {
+  // Step 1: propose deletion — any user may do this (see proposeDeleteTask).
+  async function proposeDeleteRisk(id: string) {
     const originalRisk = risks.find(r => r.id === id);
     const editable = await onEnsureEditable();
     const currentRisks = editable?.risks ?? risks;
     if (editable) { onRisksChange(editable.risks); }
-    const mappedId = editable
+    const targetId = editable
       ? (currentRisks.find(r => r.title === originalRisk?.title)?.id ?? id)
       : id;
-    await api.deleteRisk(mappedId);
-    onRisksChange(currentRisks.filter(r => r.id !== mappedId));
-    setPendingDeleteRisks(s => { const n = new Set(s); n.delete(id); return n; });
+    const updated = await api.patchRisk(targetId, { pending_delete: true });
+    onRisksChange(currentRisks.map(r => r.id === targetId ? updated : r));
+  }
+
+  // Step 2: confirm deletion — server-gated to the risk owner or reviewer.
+  async function confirmDeleteRisk(id: string) {
+    await api.deleteRisk(id);
+    onRisksChange(risks.filter(r => r.id !== id));
+  }
+
+  // Cancel a pending deletion — server-gated to the risk owner or reviewer.
+  async function cancelDeleteRisk(id: string) {
+    const updated = await api.patchRisk(id, { pending_delete: false });
+    onRisksChange(risks.map(r => r.id === id ? updated : r));
   }
 
   async function loadTestReports(riskId: string) {
@@ -1679,7 +1883,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
               </div>
             )}
             <div style={{ fontSize: 16, fontWeight: 700, color: textColor, marginBottom: 8 }}>
-              {hasIssues ? "⚠ Approval expired" : "✓ Risk Management approved"}
+              {hasIssues ? "Approval expired" : "✓ Risk Management approved"}
             </div>
             <div style={{ fontSize: 13, color: textColor }}>
               Approved by <strong>{register.approver_username}</strong> on {register.approved_at ? new Date(register.approved_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}.
@@ -1717,7 +1921,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
       {/* ── Reopened banner ── */}
       {register?.status !== "approved" && register?.last_assessment_completed_at && (
         <Card style={{ background: "#fff3c4", border: "1px solid #f6c343", marginBottom: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#92400e", marginBottom: 4 }}>⚠ Risk Management draft</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#92400e", marginBottom: 4 }}>Risk Management draft</div>
           <div style={{ fontSize: 13, color: "#92400e" }}>
             A change was made after the last approval. The register must be reviewed and approved before it is considered valid.
           </div>
@@ -1787,13 +1991,38 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
         Identified risks
       </div>
 
-      {risks.length > 0 && risks.map(r => {
+      {risks.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Sort by</span>
+          <select value={riskSortKey} onChange={e => setRiskSortKey(e.target.value as RiskSortKey)}
+            style={{ fontSize: 12, border: "1px solid var(--border)", borderRadius: 6, padding: "4px 8px", background: "var(--surface)", color: "var(--text)" }}>
+            {RISK_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <button onClick={() => setRiskSortDir(d => d === "asc" ? "desc" : "asc")}
+            title="Toggle sort direction"
+            style={{ fontSize: 12, border: "1px solid var(--border)", borderRadius: 6, padding: "4px 10px", background: "var(--surface)", color: "var(--text)", cursor: "pointer" }}>
+            {riskSortDir === "asc" ? "A → Z" : "Z → A"}
+          </button>
+        </div>
+      )}
+
+      {risks.length === 0 && activeForm === "none" && (
+        <Card style={{ textAlign: "center", padding: "32px 24px" }}>
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 16 }}>No risks have been identified for this system yet.</div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+            <button onClick={() => openForm("risk")} className="btn-primary btn-sm">+ Add Risk</button>
+            <button onClick={onBack} className="btn-ghost btn-sm">← Back to Overview</button>
+          </div>
+        </Card>
+      )}
+
+      {risks.length > 0 && sortRisks(risks, riskSortKey, riskSortDir).map(r => {
         const sc = { bg: SEV_BG[r.severity] ?? "#eef1f4", color: SEV_COLORS[r.severity] ?? "#556b82" };
         const hasMit = r.mitigations.length > 0;
         const hasResidual = !!(r.residual_status && r.residual_status !== "none");
         const trCount = (testReports[r.id] ?? []).length;
         const isExpanded = expandedRisk[r.id] ?? false;
-        const isPendingDelete = pendingDeleteRisks.has(r.id);
+        const isPendingDelete = r.pending_delete;
 
         const summaryParts: string[] = [];
         if (hasMit) summaryParts.push(`${r.mitigations.length} measure${r.mitigations.length !== 1 ? "s" : ""}`);
@@ -1802,19 +2031,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
 
         return (
           <Card key={r.id} style={{ borderLeft: `3px solid ${isPendingDelete ? "#dc2626" : sc.color}`, padding: 0, marginBottom: 8, background: isPendingDelete ? "#fff5f5" : undefined, opacity: isPendingDelete ? 0.85 : 1 }}>
-            {/* Soft-delete banner */}
+            {/* Soft-delete banner — persisted server-side; confirm/cancel gated to the risk owner or reviewer */}
             {isPendingDelete && (
-              <div style={{ background: "#dc2626", color: "#fff", fontSize: 12, fontWeight: 700, padding: "6px 16px", display: "flex", alignItems: "center", gap: 12, borderRadius: "10px 10px 0 0" }}>
-                <span>Deleted</span>
-                <button onClick={() => confirmDeleteRisk(r.id)}
-                  style={{ fontSize: 11, background: "#fff", color: "#dc2626", border: "none", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontWeight: 700 }}>
-                  Confirm delete
-                </button>
-                <button onClick={() => setPendingDeleteRisks(s => { const n = new Set(s); n.delete(r.id); return n; })}
-                  style={{ fontSize: 11, background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.5)", borderRadius: 4, padding: "3px 10px", cursor: "pointer" }}>
-                  Cancel
-                </button>
-              </div>
+              <PendingDeleteBar owner={r.risk_owner} pendingBy={r.pending_delete_by}
+                onConfirm={() => confirmDeleteRisk(r.id)} onCancel={() => cancelDeleteRisk(r.id)} roundedTop />
             )}
             {/* Header row — click anywhere to expand */}
             <div
@@ -1835,19 +2055,59 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                 <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   <span>{r.category.split(",").map(c => RISK_CATEGORIES.find(x => x.value === c.trim())?.label ?? c.trim()).join(", ")}</span>
                   {r.risk_level_autocalculated && <RiskLevelBadge level={r.risk_level_autocalculated} />}
-                  {r.affects_vulnerable_groups && <span style={{ color: "#8b3a00" }}>⚠ vulnerable groups</span>}
+                  {!isRiskComplete(r) && (
+                    <span style={{ fontSize: 11, background: "#fef3c7", color: "#92400e", padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>
+                      Incomplete
+                    </span>
+                  )}
+                  {r.affects_vulnerable_groups && <span style={{ color: "#8b3a00" }}>vulnerable groups</span>}
                   {r.misuse_scenarios.length > 0 && <span>{r.misuse_scenarios.length} misuse scenario(s)</span>}
                 </div>
 
                 {/* ── Validation bar — visible even while the risk is collapsed ── */}
-                {r.responsible_role && r.responsible_role.trim() && (() => {
+                {r.responsible_role && r.responsible_role.trim() ? (() => {
                   const roles: Array<{ role: "engineer" | "officer"; label: string; confirmed: boolean; declined: boolean; email: string | null }> = [];
                   if (roleRequired(r, "engineer")) roles.push({ role: "engineer", label: "AI Engineer", confirmed: r.engineer_confirmed, declined: r.engineer_declined, email: r.engineer_email });
                   if (roleRequired(r, "officer")) roles.push({ role: "officer", label: "Compliance Officer", confirmed: r.officer_confirmed, declined: r.officer_declined, email: r.officer_email });
                   if (roles.length === 0) return null;
+                  // The other role's read-only info always sits above your own
+                  // action panel, so your actionable row is never mistaken for
+                  // (or visually confused with) the other party's status.
+                  const orderedRoles = [...roles].sort((a, b) => {
+                    const aCanAct = a.role === "engineer" ? canConfirmEngineer : canConfirmOfficer;
+                    const bCanAct = b.role === "engineer" ? canConfirmEngineer : canConfirmOfficer;
+                    return Number(aCanAct) - Number(bCanAct);
+                  });
                   return (
                     <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 8 }} onClick={e => e.stopPropagation()}>
-                      {roles.map(({ role, label, confirmed, declined, email }) => (
+                      {orderedRoles.map(({ role, label, confirmed, declined, email }) => {
+                        const canAct = role === "engineer" ? canConfirmEngineer : canConfirmOfficer;
+                        const dismissed = r.status === "dismissed" && !confirmed && !declined;
+                        const pending = !confirmed && !declined && !dismissed;
+
+                        // The other role's row is read-only information, never an
+                        // action panel — plain inline text, no box/border/buttons,
+                        // so it's unmistakably not something you can act on.
+                        if (!canAct) {
+                          const statusText = confirmed ? "✓ Confirmed"
+                            : declined ? "⊘ Abstained"
+                            : dismissed ? "⊘ Dismissed"
+                            : "⏳ Awaiting confirmation";
+                          const statusColor = confirmed ? "#16a34a" : "var(--text-secondary)";
+                          return (
+                            <div key={role} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12, color: "var(--text-secondary)", padding: "2px 4px" }}>
+                              <span
+                                aria-hidden="true"
+                                style={{ display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: "var(--text-secondary)", opacity: 0.5 }}
+                              />
+                              <span>{label}:</span>
+                              <span style={{ color: statusColor }}>{statusText}</span>
+                              {email && <span style={{ fontStyle: "italic" }}>({email})</span>}
+                            </div>
+                          );
+                        }
+
+                        return (
                         <div key={role} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12, padding: "8px 12px", background: confirmed ? "#f0fdf4" : declined ? "#f9fafb" : "#f8fafc", borderRadius: 8, border: `1px solid ${confirmed ? "#bbf7d0" : declined ? "#e5e7eb" : "#e2e8f0"}` }}>
                           <span style={{ fontWeight: 600, minWidth: 140 }}>{label}</span>
                           {email && <span style={{ color: "var(--text-secondary)" }}>{email}</span>}
@@ -1869,7 +2129,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                               </button>
                             </>
                           )}
-                          {r.status === "dismissed" && !confirmed && !declined && (
+                          {dismissed && (
                             <>
                               <span style={{ color: "var(--text-secondary)" }}>⊘ Dismissed</span>
                               <button onClick={() => undoDismiss(r)}
@@ -1878,11 +2138,12 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                               </button>
                             </>
                           )}
-                          {!confirmed && !declined && r.status !== "dismissed" && (
+                          {pending && (
                             <>
+                              <span style={{ color: "#b45309", fontWeight: 600 }}>Confirmation required</span>
                               <button onClick={() => confirmAsRole(r, role)}
                                 style={{ fontSize: 11, padding: "3px 10px", background: "#d5f5e3", color: "#1a5c35", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}>
-                                ✓ Confirm as {label}
+                                ✓ Confirm
                               </button>
                               <button onClick={() => dismissAsRole(r)}
                                 style={{ fontSize: 11, padding: "3px 10px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 4, cursor: "pointer" }}>
@@ -1895,10 +2156,15 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                             </>
                           )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
-                })()}
+                })() : (
+                  <div style={{ marginTop: 6, fontSize: 11, color: "#8b3a00" }} onClick={e => e.stopPropagation()}>
+                    No risk validator assigned — edit this risk to select one before it can be confirmed.
+                  </div>
+                )}
 
                 {summaryParts.length > 0 && (
                   <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3 }}>
@@ -1907,28 +2173,9 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                 )}
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                {r.status === "confirmed" ? (
-                  <button onClick={() => unconfirmRisk(r)}
-                    style={{ fontSize: 11, padding: "4px 10px", background: "#fff", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}>
-                    ↩ Undo confirm
-                  </button>
-                ) : (
-                  <button onClick={() => confirmRisk(r)}
-                    style={{ fontSize: 11, padding: "4px 10px", background: "#d5f5e3", color: "#1a5c35", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}>
-                    ✓ Confirm
-                  </button>
-                )}
-                {r.status === "dismissed" ? (
-                  <button onClick={() => undoDismiss(r)}
-                    style={{ fontSize: 11, padding: "4px 10px", background: "#fff", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}>
-                    ↩ Undo dismiss
-                  </button>
-                ) : (
-                  <button onClick={() => dismissRisk(r)}
-                    style={{ fontSize: 11, padding: "4px 10px", background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}>
-                    Dismiss
-                  </button>
-                )}
+                {/* Dismiss/undo-dismiss is a per-role validation decision (see the
+                    per-role row above) — there is no "general" dismiss button here,
+                    so a single user can never override the other role's decision. */}
                 <button onClick={() => { setExpandedRisk(e => ({ ...e, [r.id]: true })); startEditRisk(r); }}
                   style={{ fontSize: 11, padding: "4px 10px", background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}>
                   Edit
@@ -1956,7 +2203,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                             style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "#fff", boxSizing: "border-box" }} />
                         </div>
                         <div style={{ gridColumn: "1 / -1" }}>
-                          <Label>Description</Label>
+                          <Label required>Description</Label>
                           <Textarea value={ed.description} onChange={v => setEd(d => ({ ...d, description: v }))} rows={2} placeholder="" />
                         </div>
                         <div style={{ gridColumn: "1 / -1" }}>
@@ -1975,25 +2222,30 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                           </div>
                         </div>
                         <div>
-                          <Label>Severity</Label>
+                          <Label required>Severity</Label>
                           <Select value={ed.severity} onChange={v => setEd(d => ({ ...d, severity: v }))}
                             options={[{ value: "severe", label: "Severe" }, { value: "significant", label: "Significant" }, { value: "moderate", label: "Moderate" }, { value: "minor", label: "Minor" }]} />
                         </div>
                         <div>
-                          <Label>Likelihood</Label>
+                          <Label required>Likelihood</Label>
                           <Select value={ed.likelihood} onChange={v => setEd(d => ({ ...d, likelihood: v }))}
                             options={[{ value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
                         </div>
                         <div style={{ gridColumn: "1 / -1" }}>
-                          <Label>Risk owner</Label>
+                          <Label required>Risk owner</Label>
                           <Input value={ed.risk_owner} onChange={v => setEd(d => ({ ...d, risk_owner: v }))} placeholder="e.g. jane.doe@company.com" />
                         </div>
                         <div style={{ gridColumn: "1 / -1" }}>
-                          <Label>Impact description</Label>
+                          <Label required>Deadline</Label>
+                          <input type="date" value={ed.due_date} onChange={e => setEd(d => ({ ...d, due_date: e.target.value }))}
+                            style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "#fff", boxSizing: "border-box" }} />
+                        </div>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <Label required>Impact description</Label>
                           <Textarea value={ed.impact} onChange={v => setEd(d => ({ ...d, impact: v }))} rows={2} placeholder="" />
                         </div>
                         <div style={{ gridColumn: "1 / -1" }}>
-                          <Label>Risk validator</Label>
+                          <Label required>Risk validator</Label>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
                             {[{ value: "ai_engineer", label: "AI Engineer" }, { value: "ai_compliance_officer", label: "Compliance Officer" }].map(opt => {
                               const checked = ed.responsible_role.includes(opt.value);
@@ -2358,6 +2610,14 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                         {riskTasks.map(task => {
                           const sk = taskStatusKey(task);
                           const sc = STATUS_COLORS[sk] ?? STATUS_COLORS.open;
+                          if (task.pending_delete) {
+                            return (
+                              <div key={task.id} style={{ padding: "6px 0", borderBottom: "1px solid #f4f4f5" }}>
+                                <PendingDeleteBar title={task.title} owner={taskOwner(task.risk_id, task.assigned_to)} pendingBy={task.pending_delete_by}
+                                  onConfirm={() => confirmDeleteTask(task.id)} onCancel={() => cancelDeleteTask(task.id)} />
+                              </div>
+                            );
+                          }
                           return (
                             <div key={task.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 0", borderBottom: "1px solid #f4f4f5", fontSize: 12 }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
@@ -2365,6 +2625,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                                 {task.description && <div style={{ color: "var(--text-secondary)", marginTop: 2 }}>{task.description}</div>}
                                 {task.assigned_to && <div style={{ color: "var(--text-secondary)", fontSize: 11, marginTop: 2 }}>Assigned to: {task.assigned_to}</div>}
                                 {task.due_date && <div style={{ color: "var(--text-secondary)", fontSize: 11 }}>Due: {task.due_date.slice(0, 10)}</div>}
+                                <div style={{ marginTop: 4 }}>
+                                  <ApprovalBadge approved={task.approved} owner={taskOwner(task.risk_id, task.assigned_to)}
+                                    onApprove={() => approveTask(task.id, true)} onUnapprove={() => approveTask(task.id, false)} />
+                                </div>
                               </div>
                               <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 6, background: sc.bg, color: sc.color, whiteSpace: "nowrap" }}>{sk.replace("_", " ")}</span>
                               <button onClick={() => { setEditingTask(task.id); setEditTaskDraft({ ...task }); }}
@@ -2448,6 +2712,14 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                         )}
                         {riskIncidents.map(inc => {
                           const isc = INCIDENT_STATUS[inc.status] ?? INCIDENT_STATUS.open;
+                          if (inc.pending_delete) {
+                            return (
+                              <div key={inc.id} style={{ padding: "6px 0", borderBottom: "1px solid #f4f4f5" }}>
+                                <PendingDeleteBar title={inc.title} owner={taskOwner(inc.risk_id, inc.assigned_to)} pendingBy={inc.pending_delete_by}
+                                  onConfirm={() => confirmDeleteIncident(inc.id)} onCancel={() => cancelDeleteIncident(inc.id)} />
+                              </div>
+                            );
+                          }
                           return (
                             <div key={inc.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 0", borderBottom: "1px solid #f4f4f5", fontSize: 12 }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
@@ -2455,6 +2727,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                                 {inc.description && <div style={{ color: "var(--text-secondary)", marginTop: 2 }}>{inc.description}</div>}
                                 {inc.reported_by && <div style={{ color: "var(--text-secondary)", fontSize: 11, marginTop: 2 }}>Reported by: {inc.reported_by}</div>}
                                 {inc.occurred_at && <div style={{ color: "var(--text-secondary)", fontSize: 11 }}>{inc.occurred_at.slice(0, 10)}</div>}
+                                <div style={{ marginTop: 4 }}>
+                                  <ApprovalBadge approved={inc.approved} owner={taskOwner(inc.risk_id, inc.assigned_to)}
+                                    onApprove={() => approveIncident(inc.id, true)} onUnapprove={() => approveIncident(inc.id, false)} />
+                                </div>
                               </div>
                               <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 6, background: isc.bg, color: isc.color, whiteSpace: "nowrap" }}>{isc.label}</span>
                               <button onClick={() => { setEditingIncident(inc.id); setEditIncidentDraft({ ...inc }); }}
@@ -2526,24 +2802,28 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
         );
       })}
 
-      {/* Action buttons */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        {[
-          { key: "risk" as const, label: "+ Add risk" },
-          { key: "misuse" as const, label: "+ Add misuse scenario" },
-        ].map(btn => (
-          <button key={btn.key} onClick={() => openForm(btn.key)}
-            style={{
-              flex: 1, padding: "8px 16px", fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: "pointer",
-              border: `1px solid ${activeForm === btn.key ? "var(--brand)" : "var(--border)"}`,
-              background: activeForm === btn.key ? "var(--brand)" : "var(--surface)",
-              color: activeForm === btn.key ? "#fff" : "var(--text)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-            {btn.label}
-          </button>
-        ))}
-      </div>
+      {/* Action buttons — hidden while the empty-state card above is showing
+          its own "+ Add Risk" trigger, so the empty state shows exactly the
+          two actions the spec requires (Add Risk, Back to Overview). */}
+      {risks.length > 0 && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {[
+            { key: "risk" as const, label: "+ Add risk" },
+            { key: "misuse" as const, label: "+ Add misuse scenario" },
+          ].map(btn => (
+            <button key={btn.key} onClick={() => openForm(btn.key)}
+              style={{
+                flex: 1, padding: "8px 16px", fontSize: 13, fontWeight: 600, borderRadius: 6, cursor: "pointer",
+                border: `1px solid ${activeForm === btn.key ? "var(--brand)" : "var(--border)"}`,
+                background: activeForm === btn.key ? "var(--brand)" : "var(--surface)",
+                color: activeForm === btn.key ? "#fff" : "var(--text)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+              {btn.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Form: Add risk */}
       {activeForm === "risk" && (
@@ -2617,11 +2897,11 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                 style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
-              <Label>Description</Label>
+              <Label required>Description</Label>
               <Textarea value={draft.description} onChange={v => setDraft(d => ({ ...d, description: v }))} rows={2} placeholder="Describe the risk, its root cause, and potential impact…" />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
-              <Label>Risk owner<InfoTooltip definitions={[{ value: "risk_owner", label: "Risk owner", desc: "Person accountable for managing this risk: assigns mitigation tasks, sets deadlines, monitors progress, and decides on escalation." }]} /></Label>
+              <Label required>Risk owner<InfoTooltip definitions={[{ value: "risk_owner", label: "Risk owner", desc: "Person accountable for managing this risk: assigns mitigation tasks, sets deadlines, monitors progress, and decides on escalation." }]} /></Label>
               <Input value={draft.risk_owner} onChange={v => setDraft(d => ({ ...d, risk_owner: v }))} placeholder="e.g. jane.doe@company.com" />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
@@ -2656,12 +2936,12 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
               </div>
             </div>
             <div>
-              <Label>Severity<InfoTooltip definitions={SEVERITY_DEFINITIONS} /></Label>
+              <Label required>Severity<InfoTooltip definitions={SEVERITY_DEFINITIONS} /></Label>
               <Select value={draft.severity} onChange={v => setDraft(d => ({ ...d, severity: v }))}
                 options={[{ value: "severe", label: "Severe" }, { value: "significant", label: "Significant" }, { value: "moderate", label: "Moderate" }, { value: "minor", label: "Minor" }]} />
             </div>
             <div>
-              <Label>Likelihood<InfoTooltip definitions={LIKELIHOOD_DEFINITIONS} /></Label>
+              <Label required>Likelihood<InfoTooltip definitions={LIKELIHOOD_DEFINITIONS} /></Label>
               <Select value={draft.likelihood} onChange={v => setDraft(d => ({ ...d, likelihood: v }))}
                 options={[{ value: "very_likely", label: "Very likely" }, { value: "likely", label: "Likely" }, { value: "possible", label: "Possible" }, { value: "unlikely", label: "Unlikely" }]} />
             </div>
@@ -2670,7 +2950,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
               <RiskLevelBadge level={calcRiskLevel(draft.severity, draft.likelihood)} />
             </div>
             <div>
-              <Label>Risk validator<InfoTooltip definitions={[{ value: "approver_role", label: "Risk validator", desc: "Role responsible for reviewing and confirming that this risk is valid and correctly assessed." }]} /></Label>
+              <Label required>Risk validator<InfoTooltip definitions={[{ value: "approver_role", label: "Risk validator", desc: "Role responsible for reviewing and confirming that this risk is valid and correctly assessed." }]} /></Label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
                 {[{ value: "ai_engineer", label: "AI Engineer" }, { value: "ai_compliance_officer", label: "Compliance Officer" }].map(opt => {
                   const checked = draft.responsible_role.includes(opt.value);
@@ -2713,7 +2993,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
               )}
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
-              <Label>Impact description</Label>
+              <Label required>Impact description</Label>
               <Textarea value={draft.impact} onChange={v => setDraft(d => ({ ...d, impact: v }))} rows={2} placeholder="Describe the business, operational, or user impact…" />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
@@ -2728,7 +3008,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                   fontWeight: draft.affects_vulnerable_groups ? 600 : 400,
                   transition: "all 0.1s",
                 }}>
-                ⚠ Affects vulnerable groups or children
+                Affects vulnerable groups or children
               </button>
               {draft.affects_vulnerable_groups && (
                 <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2748,6 +3028,11 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
             <div style={{ gridColumn: "1 / -1" }}>
               <Label>Date of identification</Label>
               <input type="date" value={draft.date_of_identification} onChange={e => setDraft(d => ({ ...d, date_of_identification: e.target.value }))}
+                style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Label required>Deadline</Label>
+              <input type="date" value={draft.due_date} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value }))}
                 style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
             </div>
           </div>
@@ -2972,7 +3257,8 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button onClick={() => addRisk(false)} disabled={saving} className="btn-primary btn-sm">{saving ? "Saving…" : "Save"}</button>
             {!draft.library_risk_id && (
-              <button onClick={() => addRisk(true)} disabled={saving} className="btn-secondary btn-sm" title="Save this risk and also add it to the shared Risk Library">
+              <button onClick={() => addRisk(true)} disabled={saving || !riskLibraryEditable} className="btn-secondary btn-sm"
+                title={riskLibraryEditable ? "Save this risk and also add it to the shared Risk Library" : "Risk Library is currently locked by the platform administrator"}>
                 {saving ? "Saving…" : "Save & upload to library"}
               </button>
             )}
@@ -3182,19 +3468,11 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
             );
           }
           return (
-            <div key={task.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)", fontSize: 13, background: pendingDeleteTasks.has(task.id) ? "#fff5f5" : undefined, borderRadius: pendingDeleteTasks.has(task.id) ? 6 : undefined, paddingLeft: pendingDeleteTasks.has(task.id) ? 8 : undefined }}>
-              {pendingDeleteTasks.has(task.id) ? (
-                <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontWeight: 600, color: "#dc2626", textDecoration: "line-through", fontSize: 13 }}>{task.title}</span>
-                  <span style={{ fontSize: 11, background: "#dc2626", color: "#fff", borderRadius: 4, padding: "2px 8px", fontWeight: 700 }}>Deleted</span>
-                  <button onClick={() => confirmDeleteTask(task.id)}
-                    style={{ fontSize: 11, background: "#dc2626", color: "#fff", border: "none", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontWeight: 700 }}>
-                    Confirm delete
-                  </button>
-                  <button onClick={() => setPendingDeleteTasks(s => { const n = new Set(s); n.delete(task.id); return n; })}
-                    style={{ fontSize: 11, background: "#f4f4f5", color: "#374151", border: "1px solid var(--border)", borderRadius: 4, padding: "3px 10px", cursor: "pointer" }}>
-                    Cancel
-                  </button>
+            <div key={task.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)", fontSize: 13, background: task.pending_delete ? "#fff5f5" : undefined, borderRadius: task.pending_delete ? 6 : undefined, paddingLeft: task.pending_delete ? 8 : undefined }}>
+              {task.pending_delete ? (
+                <div style={{ flex: 1 }}>
+                  <PendingDeleteBar title={task.title} owner={taskOwner(task.risk_id, task.assigned_to)} pendingBy={task.pending_delete_by}
+                    onConfirm={() => confirmDeleteTask(task.id)} onCancel={() => cancelDeleteTask(task.id)} />
                 </div>
               ) : (
               <>
@@ -3223,6 +3501,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                     )}
                   </tbody>
                 </table>
+                <div style={{ marginTop: 4 }}>
+                  <ApprovalBadge approved={task.approved} owner={taskOwner(task.risk_id, task.assigned_to)}
+                    onApprove={() => approveTask(task.id, true)} onUnapprove={() => approveTask(task.id, false)} />
+                </div>
               </div>
               <select
                 value={task.status}
@@ -3593,19 +3875,11 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                   );
                 }
                 return (
-                  <div key={incident.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)", fontSize: 13, background: pendingDeleteIncidents.has(incident.id) ? "#fff5f5" : undefined, borderRadius: pendingDeleteIncidents.has(incident.id) ? 6 : undefined, paddingLeft: pendingDeleteIncidents.has(incident.id) ? 8 : undefined }}>
-                    {pendingDeleteIncidents.has(incident.id) ? (
-                      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontWeight: 600, color: "#dc2626", textDecoration: "line-through", fontSize: 13 }}>{incident.title}</span>
-                        <span style={{ fontSize: 11, background: "#dc2626", color: "#fff", borderRadius: 4, padding: "2px 8px", fontWeight: 700 }}>Deleted</span>
-                        <button onClick={() => confirmDeleteIncident(incident.id)}
-                          style={{ fontSize: 11, background: "#dc2626", color: "#fff", border: "none", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontWeight: 700 }}>
-                          Confirm delete
-                        </button>
-                        <button onClick={() => setPendingDeleteIncidents(s => { const n = new Set(s); n.delete(incident.id); return n; })}
-                          style={{ fontSize: 11, background: "#f4f4f5", color: "#374151", border: "1px solid var(--border)", borderRadius: 4, padding: "3px 10px", cursor: "pointer" }}>
-                          Cancel
-                        </button>
+                  <div key={incident.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)", fontSize: 13, background: incident.pending_delete ? "#fff5f5" : undefined, borderRadius: incident.pending_delete ? 6 : undefined, paddingLeft: incident.pending_delete ? 8 : undefined }}>
+                    {incident.pending_delete ? (
+                      <div style={{ flex: 1 }}>
+                        <PendingDeleteBar title={incident.title} owner={taskOwner(incident.risk_id, incident.assigned_to)} pendingBy={incident.pending_delete_by}
+                          onConfirm={() => confirmDeleteIncident(incident.id)} onCancel={() => cancelDeleteIncident(incident.id)} />
                       </div>
                     ) : (
                     <>
@@ -3640,6 +3914,10 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                           )}
                         </tbody>
                       </table>
+                      <div style={{ marginTop: 4 }}>
+                        <ApprovalBadge approved={incident.approved} owner={taskOwner(incident.risk_id, incident.assigned_to)}
+                          onApprove={() => approveIncident(incident.id, true)} onUnapprove={() => approveIncident(incident.id, false)} />
+                      </div>
                     </div>
                     <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: isc.bg, color: isc.color, whiteSpace: "nowrap" }}>{isc.label}</span>
                     <button onClick={() => { setEditingIncident(incident.id); setEditIncidentDraft({ ...incident }); }}
@@ -3862,7 +4140,7 @@ function ArchivedRegisterCard({ reg, systemName, nextRegisterId }: { reg: RiskRe
           onClick={e => { e.stopPropagation(); exportReport(systemName, reg, reg.risks, true, nextRegisterId).catch(err => alert("Export failed: " + err)); }}
           style={{ marginLeft: "auto", background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
         >
-          📄 Export
+          Export
         </button>
         <span style={{ color: "var(--text-secondary)" }}>{open ? "▲" : "▼"}</span>
       </div>

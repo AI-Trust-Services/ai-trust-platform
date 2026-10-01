@@ -3,7 +3,21 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+# Roles that may be designated as the required validator(s) for a risk entry
+# (see engineer_confirmed/officer_confirmed on RiskEntry). Comma-separated in
+# the `responsible_role` string when both are required.
+VALID_RESPONSIBLE_ROLES = {"ai_engineer", "ai_compliance_officer"}
+
+
+def _validate_responsible_role_value(v: str) -> str:
+    roles = [r.strip() for r in v.split(",") if r.strip()]
+    if not roles:
+        raise ValueError("responsible_role is required — select at least one risk validator.")
+    if not set(roles).issubset(VALID_RESPONSIBLE_ROLES):
+        raise ValueError(f"responsible_role must be one of {sorted(VALID_RESPONSIBLE_ROLES)} (comma-separated).")
+    return v
 
 
 class MisuseScenarioIn(BaseModel):
@@ -46,7 +60,7 @@ class RiskEntryIn(BaseModel):
     description: str = ""
     category: str = ""
     article_9_step: str = "9(2)(a)"
-    severity: str = "medium"
+    severity: str = "moderate"
     likelihood: str = "possible"
     status: str = "identified"
     review_notes: str = ""
@@ -66,13 +80,18 @@ class RiskEntryIn(BaseModel):
     residual_status: str = "none"  # "none" | "acceptable" | "unacceptable"
     date_of_assessment: Optional[str] = None  # ISO date string
     # Issue #187: responsible role and deadline
-    responsible_role: Optional[str] = None
+    responsible_role: str  # required: who must confirm this risk ("ai_engineer" | "ai_compliance_officer" | "ai_engineer,ai_compliance_officer")
     deadline: Optional[datetime] = None
     engineer_email: Optional[str] = None
     officer_email: Optional[str] = None
     misuse_scenarios: list[MisuseScenarioIn] = []
     mitigations: list[MitigationMeasureIn] = []
     library_risk_id: Optional[str] = None
+
+    @field_validator("responsible_role")
+    @classmethod
+    def _validate_responsible_role(cls, v: str) -> str:
+        return _validate_responsible_role_value(v)
 
 
 class RiskEntryOut(BaseModel):
@@ -111,6 +130,9 @@ class RiskEntryOut(BaseModel):
     engineer_declined: bool = False
     officer_declined: bool = False
     library_risk_id: Optional[str] = None
+    pending_delete: bool = False
+    pending_delete_by: Optional[str] = None
+    pending_delete_at: Optional[datetime] = None
     misuse_scenarios: list[MisuseScenarioOut] = []
     mitigations: list[MitigationMeasureOut] = []
     created_at: datetime
@@ -151,6 +173,14 @@ class RiskEntryPatch(BaseModel):
     engineer_declined: Optional[bool] = None
     officer_declined: Optional[bool] = None
     library_risk_id: Optional[str] = None
+    pending_delete: Optional[bool] = None
+
+    @field_validator("responsible_role")
+    @classmethod
+    def _validate_responsible_role(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _validate_responsible_role_value(v)
 
 
 class RiskRegisterIn(BaseModel):
@@ -275,6 +305,12 @@ class PlanTaskIn(BaseModel):
 class PlanTaskOut(PlanTaskIn):
     id: str
     register_id: str
+    approved: bool = False
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    pending_delete: bool = False
+    pending_delete_by: Optional[str] = None
+    pending_delete_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
@@ -289,6 +325,8 @@ class PlanTaskPatch(BaseModel):
     assigned_to: Optional[str] = None
     due_date: Optional[datetime] = None
     status: Optional[str] = None
+    approved: Optional[bool] = None
+    pending_delete: Optional[bool] = None
 
 
 class RiskFieldChange(BaseModel):
@@ -317,6 +355,7 @@ class IncidentIn(BaseModel):
     status: str = "open"
     risk_id: Optional[str] = None
     reported_by: Optional[str] = None
+    assigned_to: Optional[str] = None
     occurred_at: Optional[datetime] = None
     attachments: str = ""
 
@@ -324,6 +363,12 @@ class IncidentIn(BaseModel):
 class IncidentOut(IncidentIn):
     id: str
     register_id: str
+    approved: bool = False
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    pending_delete: bool = False
+    pending_delete_by: Optional[str] = None
+    pending_delete_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
@@ -336,8 +381,11 @@ class IncidentPatch(BaseModel):
     status: Optional[str] = None
     risk_id: Optional[str] = None
     reported_by: Optional[str] = None
+    assigned_to: Optional[str] = None
     occurred_at: Optional[datetime] = None
     attachments: Optional[str] = None
+    approved: Optional[bool] = None
+    pending_delete: Optional[bool] = None
 
 
 class LibraryIncidentOut(BaseModel):
@@ -407,3 +455,7 @@ class LibraryRiskStats(BaseModel):
     dominant_severity: Optional[str] = None
     dominant_likelihood: Optional[str] = None
     linked_systems: list[LibraryRiskLinkedSystem] = []
+
+
+class RiskLibrarySettingsOut(BaseModel):
+    risk_library_editable: bool

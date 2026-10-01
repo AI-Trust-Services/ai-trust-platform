@@ -20,3 +20,6 @@ class PlatformSettings(Base):
     smtp_from_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     smtp_ssl: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     smtp_starttls: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    risk_library_editable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )

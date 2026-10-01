@@ -1,6 +1,10 @@
 # Risk Management Module — AI Trust Platform
 
-Module implementing the risk management cycle per **EU AI Act Article 9** for high-risk AI systems (Annex III). This is a proof-of-concept integrated into the AI Trust Platform as a Luigi microfrontend.
+Module implementing the iterative risk management cycle required by **EU AI Act Article 9** for
+high-risk AI systems (Annex III), as part of the AI Trust Platform's Luigi shell. Risk
+identification, evaluation, mitigation, and residual-risk sign-off are all **human-driven** —
+AI engineers and compliance officers enter and confirm every risk directly; there is no automated
+or LLM-assisted risk identification in this module.
 
 ---
 
@@ -8,12 +12,12 @@ Module implementing the risk management cycle per **EU AI Act Article 9** for hi
 
 | Art. 9 Step | Coverage |
 |---|---|
-| Art. 9(2)(a) — risk identification | ✅ Three backends: rule-based, LLM-assisted, IBM Risk Atlas Nexus stub |
-| Art. 9(2)(b) — evaluation and classification | ✅ Misuse scenarios, vulnerable groups, EU AI Act risk level classification |
-| Art. 9(2)(d) — mitigation measures | ✅ Mitigation library with hierarchy (eliminate → reduce → mitigate → inform) |
-| Art. 9(5) — residual risk argument | ✅ Structured GSN-inspired acceptability argument |
-| Art. 9(2)(c) — post-market monitoring | ✅ Webhook + file upload endpoint (`POST /v1/incidents/webhook`, `POST /v1/incidents/upload`) |
-| Art. 9(5) — formal assurance case | ❌ Out of scope for this PoC |
+| Art. 9(2)(a) — risk identification | Manual risk entry per AI system, optionally pre-filled from a shared, cross-system **Risk Library** |
+| Art. 9(2)(b) — evaluation and classification | Severity × likelihood risk-level matrix (Unacceptable / Substantial / Moderate / Acceptable), impact category, misuse scenarios |
+| Art. 9(2)(a)/(d) — independent review and mitigation | Per-role confirmation (AI Engineer **and** AI Compliance Officer must each confirm independently); mitigations grouped by hierarchy (eliminate → reduce → mitigate → inform), each linkable to a plan task |
+| Art. 9(5) — residual risk argument | Per-risk residual status (acceptable/unacceptable) plus an overall sign-off argument and verdict on the register |
+| Art. 9(2)(c) — post-market monitoring | Manual incident log per system, linkable to a specific risk; reassessment triggers re-open an approved register |
+| Art. 9(2) — iterative cycle | Prior approved registers are kept as read-only, diffable version history; a new cycle can be started pre-filled from the last one |
 
 ---
 
@@ -40,53 +44,24 @@ Backend logs:
 docker compose logs -f risk-management-backend
 ```
 
+### Demo data
+
+```bash
+docker compose --profile demo up risk-management-demo-seed
+```
+
+Registers 11 diverse AI systems with fully populated risk registers across every traffic-light
+state. See [`docs/DEMO_GUIDE.md`](docs/DEMO_GUIDE.md) for the full walkthrough, and
+[`docs/DEMO_WALKTHROUGH_EPA.md`](docs/DEMO_WALKTHROUGH_EPA.md) for a guided, field-by-field tour.
+
 ### Run the backend locally (without Docker)
 
 ```bash
 cd risk-management/backend
 make setup        # first run — creates .venv
-make test-unit    # run unit tests
+make test-unit    # no DB needed
+make test-e2e     # requires Postgres: docker compose up -d postgres
 ```
-
----
-
-## IBM Risk Atlas Nexus (optional)
-
-By default the module runs without IBM Risk Atlas Nexus — risk identification uses rule-based or LLM-assisted backends. To enable the Nexus backend:
-
-1. In your `.env` set:
-   ```
-   INSTALL_NEXUS=true
-   OLLAMA_BASE_URL=http://host-gateway:11434
-   OLLAMA_MODEL=granite3.3:8b   # recommended; llama3.2 also works
-   ```
-2. Rebuild the backend image (**first build takes ~10 min** — clones the repo and installs torch/transformers/docling):
-   ```bash
-   docker compose up --build -d risk-management-backend
-   ```
-3. Subsequent builds use Docker layer cache — fast unless `requirements.txt` or `INSTALL_NEXUS` changes.
-
-When `INSTALL_NEXUS=false` (default), the **IBM Risk Atlas Nexus** toggle in the UI is still shown but silently falls back to rule-based identification. No errors, no crashes.
-
-> **Why not installed by default?** The library pulls in `torch`, `transformers`, and `docling` — ~2 GB of ML dependencies. Keeping it optional makes the standard build fast and lightweight.
-
----
-
-## Ollama configuration (optional LLM assistance)
-
-By default the module runs in rule-based mode with no LLM. To enable LLM-assisted identification:
-
-1. Install [Ollama](https://ollama.com) locally
-2. Pull the model:
-   ```bash
-   ollama pull llama3.2
-   ```
-3. Set in `.env`:
-   ```
-   OLLAMA_BASE_URL=http://host-gateway:11434
-   OLLAMA_MODEL=llama3.2
-   ```
-4. Toggle **LLM-assisted identification** in the UI on the system selection screen
 
 ---
 
@@ -94,10 +69,17 @@ By default the module runs in rule-based mode with no LLM. To enable LLM-assiste
 
 | Variable | Default | Description |
 |---|---|---|
-| `ALLOWED_ORIGINS` | *(required)* | Comma-separated CORS origins |
-| `ROOT_PATH` | `/api/risk-management` | FastAPI path prefix |
-| `OLLAMA_BASE_URL` | `http://host-gateway:11434` | Ollama server address |
-| `OLLAMA_MODEL` | `llama3.2` | Ollama model name |
+| `ALLOWED_ORIGINS` | *(required, fails fast if unset)* | Comma-separated CORS origins |
+| `ROOT_PATH` | *(empty)* | FastAPI path prefix (set to `/api/risk-management` in docker-compose) |
+| `REGISTRY_INTERNAL_BASE` | `http://ai-system-registry-backend:8001` | In-cluster base URL for proxying AI System Registry data |
+| `USERS_BACKEND_URL` | `http://users-backend:8008` | Used to resolve reviewer/owner identities for authorization checks |
+| `ADMIN_BACKEND_URL` | `http://admin-backend:8010` | Used to read the platform-wide Risk Library editability setting |
+
+> **Known inconsistency:** `docker-compose.yml` sets `REGISTRY_API_BASE` for
+> `risk-management-backend`, but the code reads `REGISTRY_INTERNAL_BASE` instead. The code's
+> built-in default happens to match the compose service address, so this has no functional effect
+> today — but the compose variable is otherwise dead. Worth cleaning up (either rename the compose
+> var or add an alias in code) in a follow-up PR.
 
 ---
 
@@ -106,38 +88,44 @@ By default the module runs in rule-based mode with no LLM. To enable LLM-assiste
 ```
 risk-management/
 ├── backend/
-│   ├── app/                        # FastAPI — routers, schemas
-│   │   ├── routers/
-│   │   │   ├── assessments.py      # POST /v1/assessments/*
-│   │   │   ├── demos.py            # GET /v1/demos
-│   │   │   └── llm.py              # GET /v1/llm/status
-│   │   └── schemas/
-│   ├── risk_management/            # Business logic
-│   │   ├── models.py               # Pydantic models
-│   │   ├── identifier.py           # Risk identification engine
-│   │   ├── evaluator.py            # Evaluation and classification
-│   │   ├── mitigator.py            # Mitigation assignment
-│   │   ├── reporter.py             # JSON/Markdown export
-│   │   ├── llm_client.py           # LLM abstraction layer
-│   │   ├── classifier.py           # EU AI Act risk level classifier
-│   │   ├── vulnerable_groups.py    # Vulnerable group assessment
-│   │   ├── incident_lookup.py      # Related AI incidents
-│   │   └── residual_risk.py        # Residual risk argument
-│   ├── data/
-│   │   ├── risk_taxonomy.json      # ~25 risks with taxonomy mappings
-│   │   └── mitigation_library.json # ~45 mitigation measures
-│   └── demo/
-│       ├── creditsense/            # Demo: credit scoring system
-│       └── hirefilter/             # Demo: CV screening system
-├── frontend/                       # React 19 + Vite 6 + UI5
-│   └── src/pages/AssessmentPage.tsx  # 5-step wizard
+│   ├── app/
+│   │   ├── main.py                 # FastAPI app, CORS, logging middleware, router mounts
+│   │   ├── schemas.py              # Pydantic request/response models
+│   │   ├── ids.py                  # new_id() domain ID generation
+│   │   ├── owner_auth.py           # risk-owner / reviewer authorization for delete confirmation
+│   │   └── routers/
+│   │       ├── registers.py        # risk registers: CRUD, approve, traffic-light + version history
+│   │       ├── risks.py            # risk entries: CRUD, confirm/dismiss per role, mitigations, residual risk
+│   │       ├── triggers.py         # reassessment triggers (re-opens an approved register)
+│   │       ├── test_reports.py     # test reports linked to a risk
+│   │       ├── plan_tasks.py       # plan tasks linked to a risk or a specific mitigation
+│   │       ├── incidents.py        # manual incident log (CRUD), optionally linked to a risk
+│   │       ├── registry_proxy.py   # read-only proxy to the AI System Registry (system metadata)
+│   │       └── risk_library.py     # shared, cross-system reusable risk library
+│   └── tests/
+│       ├── unit/                   # pure unit tests, no DB
+│       └── e2e/                    # full stack via ASGITransport, requires Postgres only
+├── demo-seed/                      # one-shot seeder: registers demo systems + full risk registers
+├── frontend/                       # React 19 + Vite 6 + Tailwind/Radix (shadcn pattern)
+│   └── src/
+│       ├── pages/
+│       │   ├── SystemsListPage.tsx       # entry point: systems list + Risk Library tab
+│       │   └── AssessmentWizardPage.tsx  # single-page register view (risks, mitigations, approval)
+│       ├── hooks/usePermissions.ts       # current user's OpenFGA permissions
+│       └── api/client.ts                 # typed request<T>() wrapper
 └── docs/
-    ├── risk_identification_explained.md
-    ├── risk-atlas-nexus-how-it-works.md
-    ├── risk-atlas-nexus-integration-kickoff.md
-    ├── article9_checklist.md
-    └── review_checklist.md
+    ├── DEMO_GUIDE.md                # quick start + systems overview + module tour
+    ├── DEMO_WALKTHROUGH_EPA.md      # guided, field-by-field live walkthrough
+    ├── DEMO_PROMPT.md               # prompt for an AI assistant to run the walkthrough interactively
+    ├── article9_checklist.md        # regulatory checklist (Art. 9 obligations)
+    └── review_checklist.md          # checklist for reviewing a completed assessment before sign-off
 ```
+
+Database models live in the shared `libs/persistence` package (not inside this module), per the
+platform's single-schema convention: `risk_registers`, `risk_entries`, `misuse_scenarios`,
+`mitigation_measures`, `reassessment_triggers`, `test_reports`, `plan_tasks`, `incidents`
+(`models/risk_management.py`), plus `library_risks` and `library_incidents`
+(`models/risk_library.py`).
 
 ---
 
@@ -146,10 +134,14 @@ risk-management/
 ```bash
 cd risk-management/backend
 make setup
-make test-unit
+make test-unit   # no DB needed
+make test-e2e    # requires Postgres: docker compose up -d postgres
+make test        # both
 ```
 
-Tests cover: health check, demo list, risk identification (rule-based and stub), LLM status.
+E2E tests cover registers (CRUD, approve, traffic light, versioning), risks (CRUD, per-role
+confirm/dismiss, mitigations, residual risk), plan tasks, test reports, incidents, and the risk
+library.
 
 ---
 
@@ -157,24 +149,25 @@ Tests cover: health check, demo list, risk identification (rule-based and stub),
 
 The module consists of two containers:
 
-- **risk-management-backend** — FastAPI on port 8009, build context: repo root (required to copy `libs/logging`)
+- **risk-management-backend** — FastAPI on port 8009, build context: repo root (required to copy
+  `libs/logging`, `libs/persistence`, `libs/authorization`)
 - **risk-management-frontend** — React built by Vite, served by nginx
 
 All traffic passes through the shell nginx reverse proxy on port 8080:
 - `/risk-management/` → risk-management-frontend
 - `/api/risk-management/` → risk-management-backend
 
+Authorization is OpenFGA-based, consistent with the rest of the platform (see the repo-root
+`CLAUDE.md` for the full auth model): per-role risk confirmation
+(`risks:confirm_engineer` / `risks:confirm_officer`) and the usual `*:read` / `*:write` pairs are
+checked via `require_permission()` / `check_permission()`, not Keycloak realm roles.
+
 ---
 
 ## Roadmap
 
-- [x] IBM Risk Atlas Nexus integration — `RiskAtlasNexusBackend` using `ai-atlas-nexus[ollama]` (graceful fallback when library not installed)
-- [x] Post-market monitoring incident ingestion (Art. 9(2)(c)) — `POST /v1/incidents/webhook` and `POST /v1/incidents/upload`
-- [x] Art. 13-compliant "instructions for use" document generated from the risk register (`Reporter.to_instructions_for_use()`)
-- [x] Source code input support — optional source code tab in custom system form; passed to backend alongside documentation
-- [x] DPIA (Data Protection Impact Assessment) module — `DPIAAssessor`, `POST /v1/dpia`, DPIA tab in export view
-- [ ] PDF export
-- [ ] Risk register persistence in PostgreSQL
+- [ ] PDF export of the approved register report (currently HTML only)
+- [ ] Automated reassessment triggers from registry events (currently manually created)
 
 ---
 

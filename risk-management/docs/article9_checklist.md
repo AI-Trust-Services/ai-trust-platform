@@ -17,20 +17,24 @@ This checklist is intended for **AI engineers and compliance officers** reviewin
 ## Art. 9(2)(a) — Risks identified and analysed
 
 - [ ] Risks from the intended purpose have been identified
-- [ ] Risks from reasonably foreseeable misuse have been identified
-- [ ] Risks have been mapped to at least one recognised taxonomy (EU AI Act, NIST AI RMF, MIT AIRR, or OWASP LLM)
-- [ ] Each risk has been assigned a severity level (critical / high / medium / low)
-- [ ] Each risk has been assigned a likelihood level
-- [ ] At least one human reviewer has confirmed or dismissed each identified risk
+- [ ] Risks from reasonably foreseeable misuse have been identified (documented as misuse scenarios,
+      each linked to a specific risk)
+- [ ] Each risk has been assigned a severity level (Severe / Significant / Moderate / Minor)
+- [ ] Each risk has been assigned a likelihood level (Very likely / Likely / Possible / Unlikely)
+- [ ] Each risk has been assigned to at least one responsible role (AI Engineer and/or AI
+      Compliance Officer), and that role (or both, if both are responsible) has confirmed or
+      declined it
 
 ---
 
 ## Art. 9(2)(b) — Risks evaluated
 
-- [ ] Composite severity (severity × likelihood) has been calculated for each confirmed risk
-- [ ] Misuse scenarios have been generated for each confirmed risk
-- [ ] The AI system has been classified to an EU AI Act risk level (unacceptable / high / limited / minimal)
-- [ ] Classification rationale is documented
+- [ ] Risk level (severity × likelihood, auto-calculated as Unacceptable / Substantial / Moderate /
+      Acceptable) is reviewed for every risk
+- [ ] Misuse scenarios are documented for risks where reasonably foreseeable misuse applies
+- [ ] The system's EU AI Act tier (Prohibited / High-risk / Limited / Minimal, assigned at
+      registration in the AI System Registry) is correctly reflected in this register's context
+- [ ] The tier's classification rationale (recorded at registration) is available for reference
 
 ---
 
@@ -39,56 +43,69 @@ This checklist is intended for **AI engineers and compliance officers** reviewin
 - [ ] A plan for post-market monitoring is documented
 - [ ] Mechanism for collecting incident data after deployment is defined
 
-> **Note:** Post-market monitoring ingestion is not yet implemented in this module. See the roadmap in `README.md`.
+> **Note:** This module provides a manual incident log per register (the register's Incidents
+> section), optionally linked to a specific risk. There is no automated post-market monitoring
+> ingestion yet (e.g. a webhook or log-pipeline feed) — incidents must be entered by hand.
 
 ---
 
 ## Art. 9(2)(d) — Mitigation measures assigned
 
-- [ ] At least one mitigation measure has been assigned to each confirmed risk
+- [ ] At least one mitigation measure has been assigned to each risk (enforced by the platform at
+      approval time for HIGH-risk and prohibited-tier systems)
 - [ ] Mitigation measures follow the hierarchy: eliminate → reduce → mitigate → inform
 - [ ] Implementation guidance is documented for each measure
-- [ ] Source of each mitigation measure is recorded
 
 ---
 
 ## Art. 9(4) — Elimination or reduction of risks
 
 - [ ] Risk elimination measures (design-level) have been considered before risk reduction measures
-- [ ] Residual risks after mitigation have been identified
+- [ ] Residual risks after mitigation have been identified (each risk's residual status: acceptable
+      / unacceptable)
 
 ---
 
 ## Art. 9(5) — Residual risk acceptability
 
-- [ ] A residual risk argument has been produced
-- [ ] The argument includes: claim, evidence, assumptions, and open issues
-- [ ] Overall verdict is documented (acceptable / conditional / unacceptable)
-- [ ] Open issues are assigned for resolution
+- [ ] A residual risk argument has been produced for the register as a whole (free-text, referencing
+      concrete evidence such as test reports or audits — not a template copy-paste)
+- [ ] The overall verdict is documented (Acceptable / Not acceptable)
+- [ ] Risks with an unacceptable residual status have at least one linked plan task; risks with an
+      acceptable residual status have a plan task linked to every one of their mitigations
+      (both enforced by the platform at approval time)
 
 ---
 
 ## Art. 9(9) — Vulnerable groups
 
-- [ ] Groups that may be disproportionately affected have been identified
-- [ ] Specific safeguards for each affected group are documented
-- [ ] At least one human reviewer has reviewed vulnerable group impacts
+- [ ] Groups that may be disproportionately affected have been flagged on the relevant risk(s)
+      ("Affects vulnerable groups") and named
+- [ ] Specific impact on each affected group is documented
+- [ ] Vulnerable-group impacts are covered by the same per-role confirmation as the rest of the risk
+      (there is no separate confirmation step specific to vulnerable groups)
 
 ---
 
-## Art. 12 — Audit trail
+## Art. 12 — Record-keeping
 
-- [ ] An audit log of all assessment actions is available
-- [ ] The log records: timestamp, action type, actor, and affected entity
-- [ ] The log is exportable (JSON or JSONL)
+- [ ] Prior assessment cycles are retained as read-only archived versions (visible as collapsed
+      cards below the active register) — this is the primary record of how the register evolved
+      over time, including a diff of what changed between cycles
+
+> **Note:** This module does not currently write to the platform's central audit trail (the
+> `audit` module's immutable action log) — risk register and risk actions are not among its
+> instrumented action types yet. Register versioning (above) is the audit mechanism available
+> today for this module specifically.
 
 ---
 
 ## Export
 
-- [ ] Risk register has been exported in JSON format
-- [ ] Risk register has been exported in Markdown format
-- [ ] Both exports are stored in a document management system or version control
+- [ ] The approved register has been exported as an HTML report (**Export Report** button) and
+      opens correctly
+- [ ] For an archived version, its own export (**Export** on the collapsed card) is clearly marked
+      "ARCHIVED" and is not confused with the current approved state
 
 ---
 

@@ -33,6 +33,11 @@ from datetime import datetime, timedelta, timezone
 REGISTRY_BASE = os.environ.get("REGISTRY_API_BASE", "http://ai-system-registry-backend:8001")
 RISK_BASE = os.environ.get("RISK_API_BASE", "http://risk-management-backend:8009")
 ADMIN = os.environ.get("SEED_ADMIN_USERNAME", "admin")
+# Per-role confirmations must be made by the actual role holder — the backend
+# rejects a Platform Administrator confirming as AI Engineer / Compliance
+# Officer (no "general" approval bypass). These match the cluster's seeded users.
+ENGINEER_USER = os.environ.get("SEED_ENGINEER_USERNAME", "ai_engineer")
+OFFICER_USER = os.environ.get("SEED_OFFICER_USERNAME", "compliance-officer")
 
 HEADERS = {
     "X-Forwarded-Preferred-Username": ADMIN,
@@ -40,12 +45,18 @@ HEADERS = {
 }
 
 
-def _req(base, path, method="GET", body=None, *, retries=5, delay=3):
+def _role_required(responsible_role, role_key) -> bool:
+    """Mirrors the frontend's/backend's roleRequired(): is `role_key` listed?"""
+    return role_key in [r.strip() for r in (responsible_role or "").split(",") if r.strip()]
+
+
+def _req(base, path, method="GET", body=None, *, retries=5, delay=3, actor=None):
     url = f"{base}{path}"
     data = json.dumps(body).encode() if body is not None else None
+    headers = HEADERS if actor is None else {**HEADERS, "X-Forwarded-Preferred-Username": actor}
     for attempt in range(retries):
         try:
-            req = urllib.request.Request(url, data=data, method=method, headers=HEADERS)
+            req = urllib.request.Request(url, data=data, method=method, headers=headers)
             with urllib.request.urlopen(req, timeout=10) as r:
                 if r.status == 204:
                     return {}
@@ -82,10 +93,25 @@ def wait_for_services():
             sys.exit(1)
 
 
+# AISystemCreate (the /v1/intake schema) has no "lifecycle" field, so a
+# "lifecycle" key in the payload below is silently dropped by Pydantic and
+# every seeded system ends up with the ORM default ("development"). We pop it
+# out and apply it via a follow-up PUT instead, which is the only endpoint
+# that actually persists lifecycle. "operation" predates the terminology
+# alignment (see CLAUDE.md) and maps to the current "service" ("In Service")
+# value; the rest already match VALID_LIFECYCLES as-is.
+_LIFECYCLE_ALIASES = {"operation": "service"}
+
+
 def register_system(payload) -> str:
+    payload = dict(payload)
+    lifecycle = payload.pop("lifecycle", None)
     result = _req(REGISTRY_BASE, "/v1/intake", "POST", payload)
     sys_id = result["system"]["id"]
     print(f"  Registered {sys_id} ({result['system']['tier'].upper()}) — {result['system']['name']}")
+    if lifecycle:
+        _req(REGISTRY_BASE, f"/v1/systems/{sys_id}", "PUT",
+             {"lifecycle": _LIFECYCLE_ALIASES.get(lifecycle, lifecycle)})
     return sys_id
 
 
@@ -106,14 +132,41 @@ def create_register(sys_id, scope, notes="") -> str:
 
 
 def add_risk(reg_id, **fields) -> str:
-    """Add a risk. Pass residual_status='acceptable'|'unacceptable'|'none' explicitly."""
+    """Add a risk. Pass residual_status='acceptable'|'unacceptable'|'none' explicitly.
+
+    `responsible_role` is required by the API (who must confirm this risk); defaults
+    to requiring both AI Engineer and Compliance Officer sign-off unless overridden.
+
+    `deadline` defaults to 90 days out so seeded risks are "complete" (all required
+    evaluation fields filled) unless a call site deliberately omits it to demonstrate
+    the incomplete state.
+    """
+    fields.setdefault("responsible_role", "ai_engineer,ai_compliance_officer")
+    fields.setdefault("deadline", _days_from_now(90))
     r = _req(RISK_BASE, f"/v1/registers/{reg_id}/risks", "POST", fields)
     return r["id"]
 
 
 def confirm_risk(risk_id, residual_status="acceptable",
                  residual_likelihood=None, residual_severity=None,
-                 date_of_assessment=None, review_notes="", confirmed=False):
+                 date_of_assessment=None, review_notes="", responsible_role=None):
+    """Fully confirm a risk: performs the real per-role sign-off(s) as the correct
+    actor (AI Engineer / Compliance Officer — whichever role(s) `responsible_role`
+    requires), then finalises status. There is no "general" approval shortcut —
+    each required role must confirm as themselves, mirroring the real workflow.
+    """
+    role = responsible_role
+    if role is None:
+        current = _req(RISK_BASE, f"/v1/risks/{risk_id}")
+        role = current.get("responsible_role")
+
+    if _role_required(role, "ai_engineer"):
+        _req(RISK_BASE, f"/v1/risks/{risk_id}", "PATCH",
+             {"engineer_confirmed": True, "engineer_declined": False}, actor=ENGINEER_USER)
+    if _role_required(role, "ai_compliance_officer"):
+        _req(RISK_BASE, f"/v1/risks/{risk_id}", "PATCH",
+             {"officer_confirmed": True, "officer_declined": False}, actor=OFFICER_USER)
+
     patch = {
         "status": "confirmed",
         "residual_status": residual_status,
@@ -125,9 +178,6 @@ def confirm_risk(risk_id, residual_status="acceptable",
         patch["residual_severity"] = residual_severity
     if date_of_assessment:
         patch["date_of_assessment"] = date_of_assessment
-    if confirmed:
-        patch["engineer_confirmed"] = True
-        patch["officer_confirmed"] = True
     _req(RISK_BASE, f"/v1/risks/{risk_id}", "PATCH", patch)
 
 
@@ -246,7 +296,7 @@ def main():
     existing = _req(REGISTRY_BASE, "/v1/systems?limit=1")
     count = len(existing) if isinstance(existing, list) else existing.get("total", existing.get("count", 0))
     if count > 0:
-        print("\n⚠ Systems already exist in the registry — skipping seed to avoid duplicates.")
+        print("\nSystems already exist in the registry — skipping seed to avoid duplicates.")
         print("  To re-seed: run the cleanup SQL first (see DEMO_GUIDE.md).")
         return
 
@@ -396,7 +446,7 @@ def main():
         reg = create_register(hr_id, scope)
         hr_regs.append(reg)
 
-        bias_severity = "critical" if v >= 3 else "high"
+        bias_severity = "severe" if v >= 3 else "significant"
 
         r1 = add_risk(reg,
             title="Discriminatory screening based on protected characteristics",
@@ -486,6 +536,7 @@ def main():
                 severity="moderate",
                 likelihood="likely",
                 ai_lifecycle_phase="operation",
+                risk_owner="hr.director@company.com",
                 impact="Candidates denied without explanation, violating GDPR Art. 22.",
             )
             add_misuse_scenario(r2,
@@ -530,6 +581,7 @@ def main():
                 severity="minor",
                 likelihood="possible",
                 ai_lifecycle_phase="operation",
+                risk_owner="privacy.officer@company.com",
                 impact="Screening scores and CV data retained beyond GDPR storage limitation principle.",
             )
             m3a = add_mitigation(r3, "eliminate",
@@ -607,6 +659,7 @@ def main():
                 severity="severe",
                 likelihood="unlikely",
                 ai_lifecycle_phase="operation",
+                risk_owner="hr.director@company.com",
                 impact="Potential misuse to discriminate against protected activities.",
             )
             m_dis = add_mitigation(r_dis, "eliminate",
@@ -780,6 +833,7 @@ def main():
             severity="moderate",
             likelihood="possible",
             ai_lifecycle_phase="operation",
+            risk_owner="risk.owner@company.com",
             impact="Unreliable credit scores increasing default rates.",
         )
         add_misuse_scenario(r2,
@@ -843,6 +897,7 @@ def main():
             severity="moderate",
             likelihood="possible",
             ai_lifecycle_phase="operation",
+            risk_owner="ops.lead@company.com",
             impact="Factually incorrect answers leading to mis-selling liability.",
         )
         add_misuse_scenario(r1,
@@ -885,6 +940,7 @@ def main():
             severity="minor",
             likelihood="unlikely",
             ai_lifecycle_phase="operation",
+            risk_owner="ops.lead@company.com",
             impact="Violates EU AI Act Art. 50 obligation to disclose AI interaction.",
         )
         cs2a = add_mitigation(r2, "eliminate",
@@ -942,6 +998,7 @@ def main():
             ai_lifecycle_phase="operation",
             affects_vulnerable_groups=True,
             vulnerable_groups='["elderly","people with disabilities"]',
+            risk_owner="medtech.lead@company.com",
             impact="Reduced diagnostic vigilance, potentially missing pathologies.",
         )
         add_misuse_scenario(r1,
@@ -991,7 +1048,8 @@ def main():
         "Scope includes updated risk profile for multi-modal imaging and new deployment sites.",
         notes="In progress — scope agreed, risks under assessment.",
     )
-    # Risk 1: pending (not yet confirmed)
+    # Risk 1: pending — requires both roles, neither has acted yet
+    # (demonstrates "⏳ awaiting confirmation" shown to both AI Engineer and Compliance Officer)
     add_risk(reg3,
         title="Over-reliance on AI recommendations by radiologists",
         description=(
@@ -1006,6 +1064,94 @@ def main():
         impact="Reduced diagnostic vigilance across CT/MRI modalities.",
         risk_owner="medtech.lead@company.com",
     )
+
+    # Risk 1b: requires both roles — AI Engineer confirmed, Compliance Officer still
+    # pending (demonstrates the partial state: each role sees the other's status).
+    r_partial = add_risk(reg3,
+        title="Increased annotation workload for radiologists during CT/MRI transition",
+        description=(
+            "Expanding to CT and MRI modalities requires additional manual annotation for model "
+            "validation, increasing radiologist workload during the transition period."
+        ),
+        category="others",
+        severity="minor",
+        likelihood="likely",
+        ai_lifecycle_phase="operation",
+        risk_owner="medtech.lead@company.com",
+        impact="Temporary radiologist workload increase during multi-modal rollout.",
+    )
+    _req(RISK_BASE, f"/v1/risks/{r_partial}", "PATCH",
+         {"engineer_confirmed": True, "engineer_declined": False}, actor=ENGINEER_USER)
+
+    # Risk 1c: requires both roles — AI Engineer confirmed, Compliance Officer declined
+    # ("not my decision") — demonstrates the decline/abstain state visible to both roles.
+    r_declined = add_risk(reg3,
+        title="Deployment rollout coordination gap for new CT/MRI sites",
+        description=(
+            "New CT/MRI deployment sites are being onboarded on a rolling basis without a "
+            "centrally tracked rollout checklist, risking inconsistent configuration between sites."
+        ),
+        category="others",
+        severity="minor",
+        likelihood="possible",
+        ai_lifecycle_phase="deployment",
+        risk_owner="medtech.lead@company.com",
+        impact="Inconsistent site configuration during rollout.",
+    )
+    _req(RISK_BASE, f"/v1/risks/{r_declined}", "PATCH",
+         {"engineer_confirmed": True, "engineer_declined": False}, actor=ENGINEER_USER)
+    _req(RISK_BASE, f"/v1/risks/{r_declined}", "PATCH",
+         {"officer_declined": True, "officer_confirmed": False}, actor=OFFICER_USER,
+         )
+
+    # Risk 1d: single-role only — Compliance Officer alone is responsible (AI Engineer
+    # is not shown a confirmation row for this risk at all).
+    r_officer_only = add_risk(reg3,
+        title="Retention period unclear for CT/MRI derived diagnostic overlays",
+        description=(
+            "The retention schedule for AI-generated diagnostic overlays derived from CT/MRI scans "
+            "has not been documented against the hospital's data retention policy."
+        ),
+        category="health",
+        severity="minor",
+        likelihood="possible",
+        ai_lifecycle_phase="operation",
+        risk_owner="privacy.officer@company.com",
+        impact="Unclear retention obligations for AI-derived diagnostic artefacts.",
+        responsible_role="ai_compliance_officer",
+    )
+    confirm_risk(r_officer_only,
+        residual_status="acceptable",
+        residual_likelihood="unlikely",
+        residual_severity="minor",
+        date_of_assessment=_days_ago(1),
+        review_notes="Retention schedule aligned with existing medical records policy (7 years).",
+    )
+
+    # Risk 1e: single-role only — AI Engineer alone is responsible (Compliance Officer
+    # is not shown a confirmation row for this risk at all).
+    r_engineer_only = add_risk(reg3,
+        title="Model version pinning inconsistent across CT/MRI inference nodes",
+        description=(
+            "Newly onboarded inference nodes for CT/MRI processing were found running a mix of "
+            "model versions due to a manual deployment step being skipped."
+        ),
+        category="others",
+        severity="minor",
+        likelihood="possible",
+        ai_lifecycle_phase="operation",
+        risk_owner="ml.engineer@company.com",
+        impact="Inconsistent model behaviour across inference nodes.",
+        responsible_role="ai_engineer",
+    )
+    confirm_risk(r_engineer_only,
+        residual_status="acceptable",
+        residual_likelihood="unlikely",
+        residual_severity="minor",
+        date_of_assessment=_days_ago(1),
+        review_notes="Deployment pipeline fixed; automated version check added to rollout script.",
+    )
+
     # Risk 2: confirmed, monitoring-sourced
     r_mon = add_risk(reg3,
         title="CT image quality variance across deployment sites",
@@ -1059,10 +1205,11 @@ def main():
         ),
         category="fundamental_rights",
         severity="severe",
-        likelihood="certain",
+        likelihood="very_likely",
         ai_lifecycle_phase="design",
         affects_vulnerable_groups=True,
         vulnerable_groups='["minorities","people in financial difficulty","elderly"]',
+        risk_owner="compliance.officer@company.com",
         impact="Deployment would constitute a prohibited AI practice under Art. 5(1)(c).",
         closure_justification=(
             "SYSTEM MUST NOT BE DEPLOYED. Art. 5(1)(c) prohibition is absolute — "
@@ -1236,7 +1383,6 @@ def main():
             "Residual privacy risk acceptable: consent controls implemented, opt-out available, "
             "deletion on request within 72h."
         ),
-        confirmed=True,
     )
     set_review_date(reg, _days_from_now(180))
     approve_register(reg, True,
@@ -1252,7 +1398,7 @@ def main():
     print("  (Requires direct DB access via docker exec — skipping if not available)")
     _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_id, la_id)
 
-    print("\n✅ Demo seed complete. 9 systems registered, risk registers populated.")
+    print("\nDemo seed complete. 9 systems registered, risk registers populated.")
     print("   Open http://localhost:8080/risk-management/ to explore.")
     print()
     print("   Features demonstrated:")
@@ -1267,13 +1413,18 @@ def main():
     print("   ✓ Plan tasks including overdue (HR v4, Social Scoring)")
     print("   ✓ Voluntary risk management for minimal-risk system (Meeting Transcription)")
     print("   ✓ System with no register (Employee Performance Analytics — Start button)")
+    print("   ✓ Per-role risk approval (Medical Imaging v3 — in-progress register):")
+    print("       - both roles pending (Over-reliance on AI recommendations)")
+    print("       - AI Engineer confirmed, Compliance Officer pending (annotation workload)")
+    print("       - AI Engineer confirmed, Compliance Officer declined (rollout coordination gap)")
+    print("       - single-role only: Compliance Officer (retention period), AI Engineer (model version pinning)")
 
 
 def _set_historical_dates(hr_id, cr_id, cs_id, md_id, ss_id, epa_id, kb_id, mtt_id, la_id):
     """Back-date registers and triggers to simulate a realistic history."""
     import re
 
-    db_url = os.environ.get("DATABASE_URL", "")
+    db_url = os.environ.get("DATABASE_URL", "").replace("+asyncpg", "")
     # Parse postgresql://user:password@host:port/dbname
     m = re.match(r"postgresql://([^:]+):([^@]+)@([^:/]+):(\d+)/(.+)", db_url)
 

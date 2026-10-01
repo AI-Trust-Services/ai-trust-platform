@@ -82,6 +82,7 @@ async def logging_middleware(request: Request, call_next) -> Response:
 
 app.include_router(smtp.router)
 app.include_router(settings.router)
+app.include_router(settings.internal_router)
 app.include_router(stats.router)
 
 

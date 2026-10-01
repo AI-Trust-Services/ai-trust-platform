@@ -43,6 +43,7 @@ async def seed_settings_from_env() -> None:
             smtp_from_name=os.environ.get("SMTP_FROM_NAME", "").strip() or None,
             smtp_ssl=os.environ.get("SMTP_SSL", "false").lower() == "true",
             smtp_starttls=os.environ.get("SMTP_STARTTLS", "false").lower() == "true",
+            risk_library_editable=os.environ.get("RISK_LIBRARY_EDITABLE", "true").lower() == "true",
         )
         session.add(row)
         await session.commit()

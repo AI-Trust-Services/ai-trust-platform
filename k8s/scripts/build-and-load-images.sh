@@ -109,7 +109,8 @@ build decision-trace-analyzer-frontend ./decision-trace-analyzer/frontend ./deci
   --build-arg "VITE_DTA_API_BASE=${VITE_DTA_API_BASE}"
 
 build risk-management-frontend ./risk-management/frontend ./risk-management/frontend/Dockerfile \
-  --build-arg "VITE_RISK_MANAGEMENT_API_BASE=${VITE_RISK_MANAGEMENT_API_BASE:-/api/risk-management/v1}"
+  --build-arg "VITE_RISK_MANAGEMENT_API_BASE=${VITE_RISK_MANAGEMENT_API_BASE:-/api/risk-management/v1}" \
+  --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
 
 echo "==> loading ${#images[@]} images into kind cluster '${CLUSTER_NAME}'"
 kind load docker-image "${images[@]}" --name "$CLUSTER_NAME"

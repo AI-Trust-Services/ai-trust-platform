@@ -745,6 +745,7 @@ services:
       context: ./risk-management/frontend
       args:
         VITE_RISK_MANAGEMENT_API_BASE: ${VITE_RISK_MANAGEMENT_API_BASE:-/api/risk-management/v1}
+        VITE_USERS_API_BASE: ${VITE_USERS_API_BASE:-/api/users/v1}
     restart: on-failure
 
   risk-management-backend:
@@ -756,8 +757,15 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
       ROOT_PATH: "/api/risk-management"
       REGISTRY_API_BASE: "http://ai-system-registry-backend:8001/api/v1"
+      USERS_BACKEND_URL: http://users-backend:8008
+      ADMIN_BACKEND_URL: http://admin-backend:8010
+      OPENFGA_URL: http://openfga:8080
+    volumes:
+      - openfga-config:/config:ro
     depends_on:
       db-migrate:
+        condition: service_completed_successfully
+      openfga-provision:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "healthcheck.py"]
@@ -769,8 +777,8 @@ services:
 
   # ---------------------------------------------------------------------------
   # Risk Management demo seed (opt-in, profile: demo).
-  # Registers 5 diverse AI systems and fully populates their risk registers
-  # so the module is ready to demonstrate on a fresh install.
+  # Registers 11 diverse AI systems (incl. edge cases) and fully populates
+  # their risk registers so the module is ready to demonstrate on a fresh install.
   #
   # Usage:
   #   docker compose --profile demo up risk-management-demo-seed

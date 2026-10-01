@@ -35,6 +35,12 @@ IAM_MANAGE = "iam:manage"
 # Audit
 AUDIT_READ = "audit:read"
 
+# Risk management — per-role confirmation of a risk entry's required sign-off.
+# Each is granted to exactly one role so that only that role can confirm/decline
+# the approval required from it (see risk-management/backend/app/routers/risks.py).
+RISKS_CONFIRM_ENGINEER = "risks:confirm_engineer"
+RISKS_CONFIRM_OFFICER = "risks:confirm_officer"
+
 # All permissions, in matrix order. Used by /me/permissions to enumerate checks.
 ALL_PERMISSIONS = [
     SYSTEMS_READ,
@@ -52,6 +58,8 @@ ALL_PERMISSIONS = [
     MONITORING_READ,
     IAM_MANAGE,
     AUDIT_READ,
+    RISKS_CONFIRM_ENGINEER,
+    RISKS_CONFIRM_OFFICER,
 ]
 
 # Permission string → OpenFGA relation name on platform:global.
@@ -71,6 +79,8 @@ RELATION_BY_PERMISSION = {
     MONITORING_READ: "can_read_monitoring",
     IAM_MANAGE: "can_manage_iam",
     AUDIT_READ: "can_read_audit",
+    RISKS_CONFIRM_ENGINEER: "can_confirm_engineer_risks",
+    RISKS_CONFIRM_OFFICER: "can_confirm_officer_risks",
 }
 
 # The singleton resource all Phase 2 checks run against.
@@ -90,6 +100,7 @@ ROLE_PERMISSIONS = {
         ALERTS_HANDLE,
         MONITORING_READ,
         AUDIT_READ,
+        RISKS_CONFIRM_ENGINEER,
     ],
     "ai_compliance_officer": [
         SYSTEMS_READ,
@@ -103,6 +114,7 @@ ROLE_PERMISSIONS = {
         ALERTS_READ,
         ALERTS_HANDLE,
         AUDIT_READ,
+        RISKS_CONFIRM_OFFICER,
     ],
     "business_owner": [
         SYSTEMS_READ,

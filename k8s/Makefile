@@ -51,8 +51,12 @@ install:
 upgrade:
 	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
 
+# SEED_USER overrides the identity the seed job impersonates (must have
+# systems:write + assessments:write, e.g. a user with the ai_engineer role).
+# Defaults to the bootstrap admin (APP_ADMIN_USERNAME), which only works if
+# that admin still has full permissions.
 demo-seed:
-	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml --set demoSeed.enabled=true $(OLLAMA_SET)
+	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml --set demoSeed.enabled=true $(if $(SEED_USER),--set demoSeed.seedUsername=$(SEED_USER),) $(OLLAMA_SET)
 
 uninstall:
 	-helm uninstall $(RELEASE) -n $(NAMESPACE)

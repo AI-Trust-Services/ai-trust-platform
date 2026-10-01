@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 from collections import Counter
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,9 +13,34 @@ from ai_trust_persistence.models.risk_library import LibraryRisk, LibraryInciden
 from ai_trust_persistence.models.risk_management import RiskEntry, RiskRegister
 from ai_trust_persistence.models.ai_system import AISystem
 from app.ids import new_id
-from app.schemas import LibraryRiskOut, LibraryRiskIn, LibraryRiskStats, LibraryRiskLinkedSystem, RiskCandidateOut
+from app.schemas import (
+    LibraryRiskOut,
+    LibraryRiskIn,
+    LibraryRiskStats,
+    LibraryRiskLinkedSystem,
+    RiskCandidateOut,
+    RiskLibrarySettingsOut,
+)
 
 router = APIRouter(tags=["risk-library"])
+
+ADMIN_BACKEND_URL = os.environ.get("ADMIN_BACKEND_URL", "http://admin-backend:8010")
+
+
+@router.get("/settings/risk-library-editable", response_model=RiskLibrarySettingsOut)
+async def get_risk_library_editable() -> RiskLibrarySettingsOut:
+    """Read-through proxy to the admin service's platform-wide
+    risk_library_editable switch — fails open (editable=true) if the admin
+    backend is unreachable, since this is a soft governance gate, not a
+    security control.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{ADMIN_BACKEND_URL}/internal/settings/risk-library-editable")
+            resp.raise_for_status()
+            return RiskLibrarySettingsOut(risk_library_editable=resp.json().get("risk_library_editable", True))
+    except Exception:
+        return RiskLibrarySettingsOut(risk_library_editable=True)
 
 
 async def _load_risk(session: AsyncSession, risk_id: str) -> LibraryRisk | None:

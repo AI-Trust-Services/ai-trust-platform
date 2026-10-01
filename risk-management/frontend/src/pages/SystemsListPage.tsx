@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { api } from "../api/client";
 import type { SystemRiskSummary, LibraryRisk, LibraryRiskStats, RiskCandidate } from "../types";
 import type { DraftRisk } from "./AssessmentWizardPage";
@@ -498,7 +498,7 @@ function RiskLibraryCard({ systems, onSelectSystem }: RiskLibraryCardProps) {
           </thead>
           <tbody>
             {risks.map(r => (
-              <>
+              <Fragment key={r.id}>
                 <tr
                   key={r.id}
                   onClick={() => toggleExpand(r.id)}
@@ -666,7 +666,7 @@ function RiskLibraryCard({ systems, onSelectSystem }: RiskLibraryCardProps) {
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>

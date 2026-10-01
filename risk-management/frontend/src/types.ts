@@ -81,6 +81,9 @@ export interface RiskEntry {
   engineer_declined: boolean;
   officer_declined: boolean;
   library_risk_id: string | null;
+  pending_delete: boolean;
+  pending_delete_by: string | null;
+  pending_delete_at: string | null;
   misuse_scenarios: MisuseScenario[];
   mitigations: MitigationMeasure[];
   created_at: string;
@@ -147,6 +150,12 @@ export interface PlanTask {
   assigned_to: string | null;
   due_date: string | null;
   status: string;
+  approved: boolean;
+  approved_by: string | null;
+  approved_at: string | null;
+  pending_delete: boolean;
+  pending_delete_by: string | null;
+  pending_delete_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -196,8 +205,15 @@ export interface Incident {
   description: string;
   status: string;
   reported_by: string | null;
+  assigned_to: string | null;
   occurred_at: string | null;
   attachments: string;
+  approved: boolean;
+  approved_by: string | null;
+  approved_at: string | null;
+  pending_delete: boolean;
+  pending_delete_by: string | null;
+  pending_delete_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -253,4 +269,17 @@ export interface RiskCandidate {
   affects_vulnerable_groups: boolean;
   suggested_mitigation: string;
   system_name: string;
+}
+
+export interface PermissionsResponse {
+  username: string;
+  permissions: string[];
+}
+
+export interface CurrentUser {
+  username: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  roles: string[];
 }

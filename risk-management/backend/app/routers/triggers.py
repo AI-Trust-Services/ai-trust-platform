@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,11 @@ from app.ids import new_id
 from app.schemas import ReassessmentTriggerOut
 
 router = APIRouter(tags=["triggers"])
+
+
+class TriggerIn(BaseModel):
+    trigger_type: str
+    trigger_reason: str = ""
 
 
 async def get_session():
@@ -39,16 +45,15 @@ async def list_triggers(
 @router.post("/systems/{system_id}/triggers", response_model=ReassessmentTriggerOut, status_code=201)
 async def create_trigger(
     system_id: str,
-    trigger_type: str,
-    trigger_reason: str = "",
+    body: TriggerIn,
     session: AsyncSession = Depends(get_session),
 ):
     """Manually create a review trigger (e.g. after a documentation change)."""
     trigger = ReassessmentTrigger(
         id=new_id("RAT"),
         ai_system_id=system_id,
-        trigger_type=trigger_type,
-        trigger_reason=trigger_reason,
+        trigger_type=body.trigger_type,
+        trigger_reason=body.trigger_reason,
     )
     session.add(trigger)
     await session.commit()

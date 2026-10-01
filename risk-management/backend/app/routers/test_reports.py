@@ -45,7 +45,12 @@ async def create_test_report(risk_id: str, body: TestReportIn):
             raise HTTPException(status_code=422, detail="Test report title is required.")
         register_id = await _register_id_for_risk(session, risk_id)
         if register_id:
-            await _reopen_if_approved(session, register_id)
+            new_register_id = await _reopen_if_approved(session, register_id)
+            if new_register_id != register_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This risk's register was just approved and cloned into a new draft. Reload the risk and retry.",
+                )
         row = TestReport(
             id=new_id("TRP"),
             risk_id=risk_id,

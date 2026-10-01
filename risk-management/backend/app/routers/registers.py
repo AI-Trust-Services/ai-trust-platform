@@ -121,10 +121,31 @@ def _traffic_light(
     return "green"
 
 
-def _risk_fully_confirmed(risk: RiskEntry) -> bool:
-    """Mirrors the frontend's canFullyConfirm(): only roles actually listed in
-    responsible_role must confirm (or decline) before a risk counts as resolved.
+def _risk_is_complete(risk: RiskEntry) -> bool:
+    """A risk is "completed" once every field required to specify and evaluate
+    it has been filled in. Purely a computed readiness indicator — never
+    persisted, always derived from the current row.
     """
+    return bool(
+        (risk.title or "").strip()
+        and (risk.category or "").strip()
+        and (risk.description or "").strip()
+        and (risk.impact or "").strip()
+        and (risk.severity or "").strip()
+        and (risk.likelihood or "").strip()
+        and (risk.risk_owner or "").strip()
+        and (risk.responsible_role or "").strip()
+        and risk.deadline is not None
+    )
+
+
+def _risk_fully_confirmed(risk: RiskEntry) -> bool:
+    """Mirrors the frontend's canFullyConfirm(): a risk is confirmed only once
+    it is complete AND every role actually listed in responsible_role has
+    confirmed (or declined).
+    """
+    if not _risk_is_complete(risk):
+        return False
     roles = {r.strip() for r in (risk.responsible_role or "").split(",") if r.strip()}
     engineer_required = "ai_engineer" in roles
     officer_required = "ai_compliance_officer" in roles
@@ -208,11 +229,20 @@ async def _clone_if_approved(session: AsyncSession, register_id: str) -> str:
             residual_likelihood=old_risk.residual_likelihood,
             residual_severity=old_risk.residual_severity,
             final_risk_level=old_risk.final_risk_level,
+            residual_status=old_risk.residual_status,
             date_of_assessment=old_risk.date_of_assessment,
             responsible_role=old_risk.responsible_role,
             deadline=old_risk.deadline,
             engineer_confirmed=old_risk.engineer_confirmed,
             officer_confirmed=old_risk.officer_confirmed,
+            engineer_email=old_risk.engineer_email,
+            officer_email=old_risk.officer_email,
+            engineer_declined=old_risk.engineer_declined,
+            officer_declined=old_risk.officer_declined,
+            library_risk_id=old_risk.library_risk_id,
+            pending_delete=old_risk.pending_delete,
+            pending_delete_by=old_risk.pending_delete_by,
+            pending_delete_at=old_risk.pending_delete_at,
         )
         session.add(new_risk)
         await session.flush()
@@ -252,22 +282,29 @@ async def _clone_if_approved(session: AsyncSession, register_id: str) -> str:
                 override_notes=mit.override_notes,
             ))
 
-        # Clone test reports
-        tr_result = await session.execute(
-            select(TestReport).where(TestReport.risk_id == old_risk.id)
-        )
-        for tr in tr_result.scalars().all():
-            session.add(TestReport(
-                id=new_id("TRP"),
-                risk_id=new_risk_id,
-                mitigation_id=None,  # remapped below after mit flush
-                title=tr.title,
-                summary=tr.summary,
-                findings=tr.findings,
-                result=tr.result,
-                author=tr.author,
-                attachments=tr.attachments,
-            ))
+        # Test reports are cloned in a separate pass below, once mit_id_map is
+        # fully populated for every risk (a report's mitigation_id can point at
+        # a mitigation on a different risk than the report's own risk_id).
+
+    await session.flush()
+
+    # Clone test reports (remapped risk_id and mitigation_id) — done after all
+    # risks/mitigations above so mit_id_map is complete regardless of risk order.
+    tr_result = await session.execute(
+        select(TestReport).where(TestReport.risk_id.in_(risk_id_map.keys()))
+    )
+    for tr in tr_result.scalars().all():
+        session.add(TestReport(
+            id=new_id("TRP"),
+            risk_id=risk_id_map[tr.risk_id],
+            mitigation_id=mit_id_map.get(tr.mitigation_id) if tr.mitigation_id else None,
+            title=tr.title,
+            summary=tr.summary,
+            findings=tr.findings,
+            result=tr.result,
+            author=tr.author,
+            attachments=tr.attachments,
+        ))
 
     await session.flush()
 
@@ -286,6 +323,12 @@ async def _clone_if_approved(session: AsyncSession, register_id: str) -> str:
             assigned_to=task.assigned_to,
             due_date=task.due_date,
             status=task.status,
+            approved=task.approved,
+            approved_by=task.approved_by,
+            approved_at=task.approved_at,
+            pending_delete=task.pending_delete,
+            pending_delete_by=task.pending_delete_by,
+            pending_delete_at=task.pending_delete_at,
         ))
 
     # Clone incidents (with remapped risk_id)
@@ -301,8 +344,15 @@ async def _clone_if_approved(session: AsyncSession, register_id: str) -> str:
             description=inc.description,
             status=inc.status,
             reported_by=inc.reported_by,
+            assigned_to=inc.assigned_to,
             occurred_at=inc.occurred_at,
             attachments=inc.attachments,
+            approved=inc.approved,
+            approved_by=inc.approved_by,
+            approved_at=inc.approved_at,
+            pending_delete=inc.pending_delete,
+            pending_delete_by=inc.pending_delete_by,
+            pending_delete_at=inc.pending_delete_at,
         ))
 
     logger.info(
@@ -557,26 +607,12 @@ async def patch_register(
     if register is None:
         raise HTTPException(status_code=404, detail="Register not found")
 
-    if body.status is not None:
-        register.status = body.status
-    if body.assessment_scope is not None:
-        register.assessment_scope = body.assessment_scope
-    if body.residual_risk_acceptable is not None:
-        register.residual_risk_acceptable = body.residual_risk_acceptable
-    if body.residual_risk_argument is not None:
-        register.residual_risk_argument = body.residual_risk_argument
-    if body.residual_severity is not None:
-        register.residual_severity = body.residual_severity
-    if body.residual_likelihood is not None:
-        register.residual_likelihood = body.residual_likelihood
-    if body.residual_final_risk_level is not None:
-        register.residual_final_risk_level = body.residual_final_risk_level
-    if body.residual_date_of_identification is not None:
-        register.residual_date_of_identification = body.residual_date_of_identification
-    if body.notes is not None:
-        register.notes = body.notes
-    if body.next_review_date is not None:
-        register.next_review_date = body.next_review_date
+    provided = body.model_dump(exclude_unset=True)
+    for field in ("status", "assessment_scope", "residual_risk_acceptable", "residual_risk_argument",
+                  "residual_severity", "residual_likelihood", "residual_final_risk_level",
+                  "residual_date_of_identification", "notes", "next_review_date", "reviewer_username"):
+        if field in provided:
+            setattr(register, field, provided[field])
 
     session.add(register)
     await session.commit()

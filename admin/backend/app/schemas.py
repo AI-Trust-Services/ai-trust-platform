@@ -39,6 +39,7 @@ class SmtpTestResponse(BaseModel):
 class GeneralSettingsResponse(BaseModel):
     platform_name: str
     support_email: str | None
+    risk_library_editable: bool
 
     model_config = {"from_attributes": True}
 
@@ -46,9 +47,14 @@ class GeneralSettingsResponse(BaseModel):
 class GeneralSettingsUpdate(BaseModel):
     platform_name: str | None = None
     support_email: str | None = None
+    risk_library_editable: bool | None = None
 
 
 class AdminStatsResponse(BaseModel):
     user_count: int
     role_count: int
     mail_configured: bool
+
+
+class RiskLibraryEditableResponse(BaseModel):
+    risk_library_editable: bool

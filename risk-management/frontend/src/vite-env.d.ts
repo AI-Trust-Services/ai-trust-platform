@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_RISK_MANAGEMENT_API_BASE: string;
+  readonly VITE_USERS_API_BASE: string;
 }
 
 interface ImportMeta {

@@ -19,6 +19,12 @@ image:
 
 demoSeed:
   enabled: false
+  # Username the seed job impersonates (via X-Forwarded-Preferred-Username) when
+  # calling the registry/risk-management APIs. Must have systems:write and
+  # assessments:write permissions. Empty = fall back to the bootstrap admin
+  # (APP_ADMIN_USERNAME secret) - only works if that admin still has those
+  # permissions (not the case with the restricted platform_administrator role).
+  seedUsername: ""
 
 # Only needed against a real registry (e.g. ghcr.io on Gardener) when the
 # repository's packages are private. Empty for kind - see values-gardener.yaml
@@ -210,9 +216,12 @@ components:
     extraEnv:
       OLLAMA_BASE_URL: http://host-gateway:11434
       OLLAMA_MODEL: llama3.2
-    dependsOnJobs: []
+      OPENFGA_URL: http://openfga:8080
+      USERS_BACKEND_URL: http://users-backend:8008
+      ADMIN_BACKEND_URL: http://admin-backend:8010
+    dependsOnJobs: [openfga-provision]
     dependsOnServices: []
-    openfgaConfig: false
+    openfgaConfig: true
 
   - name: audit
     backendPort: 8009

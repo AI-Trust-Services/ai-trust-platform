@@ -263,10 +263,14 @@ spec:
             - name: RISK_API_BASE
               value: http://risk-management-backend:8009
             - name: SEED_ADMIN_USERNAME
+              {{- if .Values.demoSeed.seedUsername }}
+              value: {{ .Values.demoSeed.seedUsername | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secretName }}
                   key: APP_ADMIN_USERNAME
+              {{- end }}
 {{- end }}
 {{- if .Values.ollama.enabled }}
 ---
