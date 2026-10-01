@@ -45,7 +45,7 @@ ai-trust-platform/
 │   └── backend/                  ← FastAPI (internal port 8007, served at /api/compliance/), reads/writes Postgres + MinIO (evidence files)
 ├── audit/                        ← Audit Trail MFE
 │   ├── frontend/                 ← React 19 + TypeScript + Vite SPA (nginx, internal port 80, served at /audit/)
-│   └── backend/                  ← FastAPI (internal port 8008, served at /api/audit/), reads ClickHouse only
+│   └── backend/                  ← FastAPI (internal port 8009, served at /api/audit/), reads ClickHouse only
 ├── audit-flush-worker/           ← Standalone asyncio worker; drains Postgres audit_events buffer into ClickHouse then deletes
 ├── policy-checker-worker/                 ← Background job, evaluates alert rules every N seconds
 │   └── main.py                   ← reads Postgres rules, writes ClickHouse events

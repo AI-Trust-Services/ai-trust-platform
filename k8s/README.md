@@ -197,6 +197,20 @@ parallel via `docker buildx bake` (`docker-bake.hcl`) — a **separate build def
 "keep in sync"). It reports progress via PR comments; the single job's pass/fail **is** the PR check
 (`namespace-deployment-test`) — there is no separate `deploy-test` commit status.
 
+### Integration tests
+
+`tests/integration/` runs cross-service API tests against a **live cluster** via `kubectl port-forward`. The `Integration Tests` workflow (`.github/workflows/integration-tests.yml`) triggers automatically after a successful `PR Deployment Test` or `Deployment Workflow`, and on demand via the `garden-test` PR label — it is a separate workflow and does not affect deployment status.
+
+**Run locally** after `make up`:
+
+```bash
+make test-int    # kind cluster, namespace ai-trust
+```
+
+The make targets here are kind-only — the namespace is fixed to `ai-trust`. Targeting a remote Gardener
+namespace, the per-test configuration env vars, and the full suite breakdown are documented in
+[tests/integration/README.md](../tests/integration/README.md).
+
 ### OCM component structure
 
 The component descriptor lives at `ghcr.io/ai-trust-services/ocm` and contains **references** (not

@@ -58,6 +58,34 @@ make test                # all tests
 
 Workers (`audit-flush-worker`, `policy-checker-worker`, `consumers/clickhouse-consumer`) follow the same pattern but live without a `backend/` subdirectory — `cd <worker-dir>` instead of `cd <component>/backend`.
 
+### Integration tests (cross-service, live platform)
+`tests/integration/` is a **global** suite — it is not per-component and does not use ASGITransport. It
+drives real HTTP against a **running** platform (kind or a Gardener namespace) to verify contracts that
+span services: registry↔compliance shared `ai_systems` data, the evidence→requirement→obligation→assessment
+cascade, RBAC denials across backends, and the admin→users internal HTTP call.
+
+```bash
+cd k8s
+make test-int                       # kind cluster, namespace ai-trust
+```
+- The `k8s/` make targets are **kind-only** — the namespace is fixed to `ai-trust` and cannot be
+  overridden from the environment (`NAMESPACE := ai-trust` in the Makefile wins over the environment).
+  Remote Gardener namespaces are only ever targeted by CI, which calls `k8s/scripts/forward-ports.sh`
+  directly with the namespace.
+- `make test-int` starts the port-forwards, runs pytest, and stops them again **even on failure**.
+- Services are reached via `kubectl port-forward` (`k8s/scripts/forward-ports.sh` / `kill-port-forwards.sh`)
+  on their in-cluster ports; every URL is overridable via env var (`REGISTRY_URL`, `COMPLIANCE_URL`, …).
+  The suite covers the 7 backends that expose cross-service contracts — `overview` and `dta` are
+  read-only and out of scope.
+- Auth bypasses oauth2-proxy by setting `X-Forwarded-Preferred-Username` directly, the same pattern the
+  per-service e2e tests use. `APP_ADMIN_USERNAME` (default `admin`) selects the platform admin used to
+  assign roles.
+- **Not a PR gate.** The `Integration Tests` workflow (`.github/workflows/integration-tests.yml`) runs
+  *after* a successful `PR Deployment Test` or `Deployment Workflow`, or on demand when a PR gets the
+  `garden-test` label (tests the already-deployed namespace, no redeploy). Its result never changes the
+  deployment workflow's status.
+- Details → [tests/integration/README.md](tests/integration/README.md).
+
 ### Pre-push checks
 Run these from the repo root before pushing to avoid CI failures:
 ```bash
@@ -256,8 +284,11 @@ Trace viewer for GenAI spans, reads ClickHouse only. Details → [decision-trace
 ### compliance/ (port 8007, `/api/compliance/`)
 Governance chain — assessments, obligations, requirements, evidence for EU AI Act / NIST / ISO. Details → [compliance/CLAUDE.md](compliance/CLAUDE.md).
 
-### audit/ (port 8008, `/api/audit/`)
+### audit/ (port 8009, `/api/audit/`)
 Immutable audit trail across all platform actions (Postgres buffer → ClickHouse archive). Includes the `audit-flush-worker`. Details → [audit/CLAUDE.md](audit/CLAUDE.md).
+
+### users/ (port 8008, `/api/users/`)
+Keycloak-backed user management plus the IAM/roles API (see "Authorization — RBAC via OpenFGA"). Frontend is the separate `iam/` MFE at `/iam/`.
 
 ### admin/ (port 8010, `/api/admin/`)
 Platform administration — SMTP mail config, general platform settings, branding/white-labeling, summary dashboard. Details → [admin/CLAUDE.md](admin/CLAUDE.md).
