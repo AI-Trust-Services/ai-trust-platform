@@ -199,24 +199,17 @@ parallel via `docker buildx bake` (`docker-bake.hcl`) — a **separate build def
 
 ### Integration tests
 
-`tests/integration/` runs cross-service API tests against a **live cluster** via `kubectl port-forward`. The `Integration Tests` workflow (`.github/workflows/integration-tests.yml`) triggers automatically after a successful `PR Deployment Test` or `Deployment Workflow` — it is a separate workflow and does not affect deployment status.
+`tests/integration/` runs cross-service API tests against a **live cluster** via `kubectl port-forward`. The `Integration Tests` workflow (`.github/workflows/integration-tests.yml`) triggers automatically after a successful `PR Deployment Test` or `Deployment Workflow`, and on demand via the `garden-test` PR label — it is a separate workflow and does not affect deployment status.
 
 **Run locally** after `make up`:
 
 ```bash
-make test-int                      # default namespace=ai-trust
-NAMESPACE=<username> make test-int # against a remote namespace
+make test-int    # kind cluster, namespace ai-trust
 ```
 
-For manual iteration while debugging:
-
-```bash
-make forward-ports    # backgrounds 7 port-forwards, returns prompt
-pytest ../tests/integration/test_02_registry_compliance.py -v
-make stop-forwards
-```
-
-`APP_ADMIN_USERNAME` env var sets the platform admin username used by tests (default: `admin`, matching `APP_ADMIN_USERNAME` in `.env`).
+The make targets here are kind-only — the namespace is fixed to `ai-trust`. Targeting a remote Gardener
+namespace, the per-test configuration env vars, and the full suite breakdown are documented in
+[tests/integration/README.md](../tests/integration/README.md).
 
 ### OCM component structure
 

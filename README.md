@@ -120,7 +120,7 @@ Frontend unit tests (Vitest) and ESLint are not yet configured — contributions
 
 | Test file | Tests covered |
 |---|---|
-| `test_01_health.py` | All 7 backends `/health` → 200 |
+| `test_01_health.py` | 7 backends `/health` → 200 (`overview` and `dta` are read-only and out of scope) |
 | `test_02_registry_compliance.py` | Registry↔compliance shared model, assessment generation, evidence cascade to `ai_systems.compliance`, rejection revert |
 | `test_03_rbac.py` | RBAC 403s across services, admin→users internal HTTP call |
 
@@ -128,22 +128,12 @@ Frontend unit tests (Vitest) and ESLint are not yet configured — contributions
 
 ```bash
 cd k8s
-make test-int                    # namespace=ai-trust (kind default)
-NAMESPACE=sebastian make test-int  # against a remote namespace
+make test-int                    # kind cluster, namespace ai-trust
 ```
 
-`make test-int` starts port-forwards for all 7 backends, runs pytest, then kills the forwards — even on failure.
+`make test-int` starts port-forwards for all 7 backends, runs pytest, then kills the forwards — even on failure. The target is kind-only: the namespace is fixed to `ai-trust`. Targeting a remote Gardener namespace, debugging a single test, and the configuration env vars are documented in [tests/integration/README.md](tests/integration/README.md).
 
-**Manual iteration** (debug a single test):
-
-```bash
-cd k8s
-make forward-ports               # start forwards, returns prompt
-pytest ../tests/integration/test_03_rbac.py -v
-make stop-forwards
-```
-
-**CI**: the `Integration Tests` workflow triggers automatically after a successful `PR Deployment Test` (PR with `garden-deploy` label) or `Deployment Workflow` (merge to main). It runs as a separate workflow — deployment status is unaffected by integration test results.
+**CI**: the `Integration Tests` workflow triggers automatically after a successful `PR Deployment Test` (PR with `garden-deploy` label) or `Deployment Workflow` (merge to main), and on demand when a PR is given the `garden-test` label (tests the already-deployed namespace, no redeploy). It runs as a separate workflow — deployment status is unaffected by integration test results.
 
 ### Automated PR checks
 

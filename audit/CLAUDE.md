@@ -1,4 +1,4 @@
-# audit/ (port 8008, `/api/audit/`)
+# audit/ (port 8009, `/api/audit/`)
 Immutable audit trail — records who did what and when across all platform actions. Write-ahead buffer in Postgres, queryable archive in ClickHouse.
 
 **Data flow** — `log_audit_event()` in `libs/persistence/ai_trust_persistence/audit.py` adds an `AuditEvent` row to the caller's session (committed atomically with the business action). `audit-flush-worker/` polls Postgres every `AUDIT_FLUSH_INTERVAL` seconds (default 5), batch-inserts rows into ClickHouse `otel.audit_events`, then deletes them from Postgres. Postgres is a transient buffer only — presence means unflushed. ClickHouse uses a two-tier storage policy: hot (local disk, < 7 days) and cold (MinIO S3, auto-moved by TTL). Both tiers are queryable transparently via SQL — cold reads are slower but data is never deleted.
