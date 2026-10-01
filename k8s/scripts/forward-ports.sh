@@ -30,5 +30,18 @@ echo $! >> "${PID_FILE}"
 kubectl port-forward svc/admin-backend 8010:8010 -n "${NAMESPACE}" > /dev/null 2>&1 &
 echo $! >> "${PID_FILE}"
 
-sleep 5
+# Wait until every port is actually accepting TCP connections (up to 60s).
+PORTS=(8001 8003 8005 8007 8008 8009 8010)
+DEADLINE=$((SECONDS + 60))
+for PORT in "${PORTS[@]}"; do
+    while ! bash -c "echo > /dev/tcp/localhost/${PORT}" 2>/dev/null; do
+        if [[ ${SECONDS} -ge ${DEADLINE} ]]; then
+            echo "ERROR: port ${PORT} not ready after 60s" >&2
+            exit 1
+        fi
+        sleep 1
+    done
+    echo "    port ${PORT} ready"
+done
+
 echo "==> Port forwards ready (PIDs in ${PID_FILE})"
