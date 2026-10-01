@@ -57,8 +57,9 @@ async def test_ai_engineer_cannot_approve_evidence(
     engineer = "it-test-engineer"
     await assign_role(users, engineer, "ai_engineer")
 
-    # Admin creates system + assessment + evidence
-    system = await register_system(registry, tier="minimal")
+    # Admin creates system + assessment + evidence. Use high tier so obligations
+    # and requirements are generated (minimal tier yields no EU AI Act obligations).
+    system = await register_system(registry, tier="high")
     await create_assessment(compliance, system["id"])
 
     reqs = await compliance.get(
@@ -67,10 +68,7 @@ async def test_ai_engineer_cannot_approve_evidence(
         headers=TEST_USER_HEADERS,
     )
     req_list = reqs.json()
-    if not req_list:
-        pytest.skip(
-            "No requirements generated for minimal tier — cannot test evidence approval"
-        )
+    assert req_list, "No requirements generated for high tier — check obligation templates"
     req_id = req_list[0]["id"]
 
     ev_r = await compliance.post(
