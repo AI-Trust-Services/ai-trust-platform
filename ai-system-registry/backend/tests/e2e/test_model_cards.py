@@ -193,6 +193,56 @@ async def test_delete_model_card_not_found(client: httpx.AsyncClient):
     assert r.status_code == 404
 
 
+async def test_delete_model_card_cascades_all_children(client: httpx.AsyncClient):
+    """All child rows must be gone after deleting a model card."""
+    # Late import: ai_trust_persistence.database reads DATABASE_URL on import,
+    # which is only set after the e2e_setup session fixture runs.
+    from sqlalchemy import text
+    from ai_trust_persistence.database import engine
+
+    card = await _create_card(client, {"name": "Cascade Card"})
+    cid = card["id"]
+
+    await client.post(f"/v1/model-cards/{cid}/metrics", json={"value": 0.9, "name": "Accuracy"})
+    await client.post(f"/v1/model-cards/{cid}/sources", json={"url": "https://example.com"})
+    await client.post(
+        f"/v1/model-cards/{cid}/datasets",
+        json={
+            "name": "DS",
+            "type": "train",
+            "preparations": [{"operation": "norm"}],
+            "measurements": [{"measure": "size", "value": "100k"}],
+            "feature_stores": [{"store_name": "fs", "groups": [{"name": "g1"}]}],
+        },
+    )
+    r_sys = await client.post(
+        "/v1/intake",
+        json={"name": "Sys", "assignee_username": "user1"},
+        headers={"x-forwarded-preferred-username": "user1"},
+    )
+    system_id = r_sys.json()["system"]["id"]
+    await client.post(f"/v1/systems/{system_id}/models", json={"model_card_id": cid})
+
+    assert (await client.delete(f"/v1/model-cards/{cid}")).status_code == 200
+
+    assert (await client.get(f"/v1/model-cards/{cid}")).status_code == 404
+    assert (await client.get(f"/v1/systems/{system_id}/models")).json() == []
+
+    async with engine.connect() as conn:
+        for table in (
+            "model_card_metrics",
+            "model_card_sources",
+            "model_card_datasets",
+            "model_card_dataset_preparations",
+            "model_card_dataset_measurements",
+            "model_card_feature_stores",
+            "model_card_feature_store_groups",
+            "ai_system_model_cards",
+        ):
+            count = (await conn.execute(text(f"SELECT COUNT(*) FROM {table}"))).scalar()
+            assert count == 0, f"{table} hat {count} Zeile(n) nach dem Cascade-Löschen"
+
+
 # ---------------------------------------------------------------------------
 # POST /model-cards/{id}/metrics  +  DELETE /model-cards/{id}/metrics/{mid}
 # ---------------------------------------------------------------------------

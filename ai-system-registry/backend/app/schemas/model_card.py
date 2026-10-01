@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AnyHttpUrl, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -80,6 +80,14 @@ class MetricCreate(BaseModel):
 class SourceCreate(BaseModel):
     url: str = Field(..., max_length=500)
     name: str | None = Field(default=None, max_length=200)
+
+    @field_validator("url")
+    @classmethod
+    def _url_must_be_http(cls, v: str) -> str:
+        if not v.lower().startswith(("http://", "https://")):
+            raise ValueError("URL must use http or https scheme")
+        return v
+
 
 
 class DatasetCreate(BaseModel):
@@ -187,7 +195,7 @@ class ModelCardResponse(_OrmResponse):
     library_name: str | None
     license: str | None
     license_name: str | None
-    license_link: str | None
+    license_link: AnyHttpUrl | None
     training_commit: str | None
     validation_status: str | None
     task_type: str | None
