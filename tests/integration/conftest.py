@@ -194,6 +194,10 @@ async def register_system(
         )
         assert update_r.status_code == 200, update_r.text
         system = update_r.json()
+        assert system["tier"] == "high", (
+            f"Expected system to classify as 'high' after setting is_critical_infrastructure, "
+            f"got tier='{system['tier']}' — classifier or flag may have changed"
+        )
 
     return system
 
