@@ -113,15 +113,18 @@ A third path, alongside docker-compose and local `kind`. The platform is package
 
 ```
 build-push-deploy.yml
-  ├─ resolve namespace: ai-trust-main → "ai-trust"; ai-trust-test → PR author / github.actor
-  ├─ build & push ~22 Docker images  →  ghcr.io/ai-trust-services/ai-trust-platform/<name>:<namespace>-<sha>
-  ├─ build & push Helm chart OCI     →  ghcr.io/ai-trust-services/charts/ai-trust-platform:0.0.0-<namespace>-<sha>
-  ├─ publish OCM component           →  ghcr.io/ai-trust-services/ocm  (references images + chart by digest)
-  └─ calls bootstrap-gardener.yml
-       ├─ creates namespace/secrets/RBAC via bootstrap.sh
-       └─ applies k8s/ocm/ CRs (ComponentVersion, Resource, FluxDeployer), named
-          `ai-trust-platform-<namespace>` / `ai-trust-platform-chart-<namespace>` / `ai-trust-<namespace>`,
-          substituting the exact built version into ComponentVersion.spec.version.semver
+  ├─ prepare job: resolve namespace (ai-trust-main → "ai-trust"; else namespace input or github.actor)
+  └─ main-deployment job (single check run on the commit):
+       ├─ build & push ~22 Docker images  →  ghcr.io/ai-trust-services/ai-trust-platform/<name>:<prefix>-<sha>
+       ├─ build & push Helm chart OCI     →  ghcr.io/ai-trust-services/charts/ai-trust-platform:0.0.0-<prefix>-<sha>
+       ├─ publish OCM component           →  ghcr.io/ai-trust-services/ocm  (references images + chart by digest)
+       └─ apply-to-cluster composite action:
+            ├─ creates namespace/secrets/RBAC via bootstrap.sh
+            └─ applies k8s/ocm/ CRs (ComponentVersion, Resource, FluxDeployer), named
+               `ai-trust-platform-<namespace>` / `ai-trust-platform-chart-<namespace>` / `ai-trust-<namespace>`,
+               substituting the exact built version into ComponentVersion.spec.version.semver
+
+<prefix> = "ai-trust-main" when cluster is ai-trust-main, else the namespace name.
 
 On the cluster (OCM controller + Flux), all scoped to one namespace:
   ComponentVersion  →  resolves the exact pinned OCM component version
@@ -141,31 +144,15 @@ deployments side by side. Two namespace conventions are in use today:
 
 ### Workflows
 
-- **`build-push-deploy.yml`** — runs on every push to `main`, on version tags (`v*.*.*`), or manually via
-  `workflow_dispatch` (inputs: `branch`, `gardener_cluster`, `namespace`). (The PR deploy path no longer
-  calls this workflow — it builds inline via composite actions + `docker-bake.hcl`; see "PR deployment
-  test" below.) Namespace is resolved first — `ai-trust-main` always resolves to `ai-trust`; any other
-  cluster uses the explicit `namespace` input, falling back to `github.actor` (lowercase). Tags images
-  `<namespace>-<short-sha>` (isolated per namespace, so concurrent namespaces on one cluster never
-  collide); only `ai-trust-main` builds additionally tag `latest`. OCM component version:
-  `0.0.0-<namespace>-<sha>`. Feature branch pushes build images but do NOT publish OCM or trigger a
-  deploy unless a target cluster is given (`gardener_cluster=sr-test` in `workflow_dispatch`, or via
-  `workflow_call`).
-
-- **`bootstrap-gardener.yml`** — called by `build-push-deploy.yml` after successful publish, or manually
-  (`workflow_dispatch` inputs: `cluster`, `ocm_version`, `namespace`). Contains two jobs —
-  `bootstrap-main` (runs under the `main` GitHub environment for `ai-trust-main` deploys triggered by a
-  push to `main`, so they appear in the GitHub Deployments sidebar) and `bootstrap-other` (everything
-  else — other clusters, manual runs, PR-branch deploys). Both jobs delegate to the
-  **`.github/actions/apply-to-cluster`** composite action, which: resolves the namespace (explicit
-  `namespace` input wins, else `K8S_NAMESPACE` from that cluster's `k8s/env/<cluster>/.env`, else
-  `ai-trust`); authenticates via Gardener Structured Auth + GitHub OIDC (no stored kubeconfig); runs
-  `k8s/scripts/bootstrap.sh` (namespace, `ai-trust-env` secret, `ai-trust-flux-values-<namespace>`
-  secret in `ocm-system`, ConfigMaps, RBAC); applies `k8s/ocm/` with the namespace and exact built
-  version substituted into the CR names and `ComponentVersion.spec.version.semver` (an exact-match pin,
-  not a range); then **polls the HelmRelease** `ai-trust-<namespace>` every 60 s until it reaches
-  `Ready=True` at the expected version — failing fast on `InstallFailed`/`UpgradeFailed` and timing out
-  after 30 minutes.
+- **`build-push-deploy.yml`** — runs on every push to `main` or manually via `workflow_dispatch`
+  (inputs: `branch`, `gardener_cluster` [`ai-trust-main` | `ai-trust-test`], `namespace`). Produces a
+  **single `main-deployment` check run** on the commit. Namespace is resolved in a `prepare` job:
+  `ai-trust-main` always resolves to `ai-trust`; any other cluster uses the explicit `namespace` input,
+  falling back to `github.actor` (lowercase). Images are tagged `<prefix>-<short-sha>` where the prefix
+  is `ai-trust-main` for the production cluster and the namespace name otherwise — isolated per
+  namespace so concurrent deployments never collide. OCM component version: `0.0.0-<prefix>-<sha>`.
+  The deployment step is the `.github/actions/apply-to-cluster` composite action (shared with the PR
+  deploy path).
 
 **Two secrets, two namespaces:** bootstrap.sh creates two distinct secrets per cluster+namespace:
 - `ai-trust-env` in `<namespace>` — the full credential set from `.env` (plus computed connection
@@ -191,9 +178,9 @@ bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-u
 ```
 The workflow runs the whole build→package→publish→deploy pipeline as steps in a **single job**
 (`namespace-deployment-test`) using composite actions (`compute-vars`, `build-images`, `package-chart`,
-`publish-ocm`, `apply-to-cluster`) rather than calling `build-push-deploy.yml`. Images are built in
-parallel via `docker buildx bake` (`docker-bake.hcl`) — a **separate build definition** from
-`build-push-deploy.yml`'s matrix, so any new image must be added to **both** (see [CLAUDE.md](../CLAUDE.md)
+`publish-ocm`, `apply-to-cluster`) — the same composite actions used by `build-push-deploy.yml`. Images are built in
+parallel via `docker buildx bake` (`docker-bake.hcl`) — shared with `build-push-deploy.yml`,
+so a new image only needs one `target` + `group "default"` entry in `docker-bake.hcl` (see [CLAUDE.md](../CLAUDE.md)
 "keep in sync"). It reports progress via PR comments; the single job's pass/fail **is** the PR check
 (`namespace-deployment-test`) — there is no separate `deploy-test` commit status.
 
@@ -219,7 +206,7 @@ registry. The component constructor is `.ocm/component-constructor.yaml`.
 
 `k8s/ocm/manifests.yaml` pins `ComponentVersion.spec.version.semver` via a `${OCM_VERSION}`
 placeholder, and names every CR (ComponentVersion, Resource, FluxDeployer, HelmRelease) via
-`${NAMESPACE}` — `bootstrap-gardener.yml` substitutes both at apply time. To apply it by hand,
+`${NAMESPACE}` — the `apply-to-cluster` composite action substitutes both at deploy time. To apply it by hand,
 supply both yourself (a bare `kubectl apply -f k8s/ocm/` would apply the literal placeholders and
 fail):
 ```bash
@@ -261,11 +248,10 @@ known display bug in ocm-controller v0.33. The correct value is in `.status.reco
 
 | Scenario | OCM version published | Deploys to |
 |---|---|---|
-| Push to `main` | `0.0.0-ai-trust-<sha>` + `0.0.0-latest` | `ai-trust-main`, namespace `ai-trust` |
+| Push to `main` | `0.0.0-ai-trust-main-<sha>` | `ai-trust-main`, namespace `ai-trust` |
 | `garden-deploy` label on a PR | `0.0.0-<pr-author>-<sha>` | `ai-trust-test`, namespace `<pr-author>` |
-| `workflow_dispatch` → sr-test | `0.0.0-<namespace>-<sha>` | `sr-test`, namespace `github.actor` (or explicit `namespace` input) |
-| Feature branch push (no cluster) | *(not published)* | nowhere |
-| `workflow_dispatch` gardener_cluster=none | *(not published)* | nowhere |
+| `workflow_dispatch` → `ai-trust-test` | `0.0.0-<namespace>-<sha>` | `ai-trust-test`, namespace input or `github.actor` |
+| `workflow_dispatch` → `ai-trust-main` | `0.0.0-ai-trust-main-<sha>` | `ai-trust-main`, namespace `ai-trust` |
 
 Per-namespace SHA prefixes ensure versions never collide, even across concurrent namespaces on the
 same cluster. `--overwrite` in the publish step is safe because re-running the same workflow on the
@@ -349,8 +335,8 @@ All other config lives in `k8s/env/<cluster>/.env` (committed). No per-cluster G
 1. Run `bash k8s/gardener_init/garden-cluster-init.sh <cluster-name>` (Garden cluster — structured auth)
 2. Copy `k8s/gardener_init/env/example/.env` → `k8s/gardener_init/env/<cluster-name>/.env` and fill in hostnames
 3. Run `bash k8s/gardener_init/shoot-cluster-init.sh <cluster-name>` (installs OCM controller, Flux, Traefik, DNS, TLS cert, RBAC for the default `ai-trust` namespace; pass `--namespace=<name>` for additional namespaces)
-4. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/sr-test/.env`, fill in Gardener connection vars and hostnames)
-5. Add `<cluster-name>` to the `options` list in `build-push-deploy.yml` and `bootstrap-gardener.yml` `workflow_dispatch` inputs
+4. Create `k8s/env/<cluster-name>/.env` (copy from `k8s/env/ai-trust-test/.env`, fill in Gardener connection vars and hostnames)
+5. Add `<cluster-name>` to the `options` list in the `build-push-deploy.yml` `workflow_dispatch` input for `gardener_cluster`, and add the matching `k8s/env/<cluster-name>/.env` entry for `integration-tests.yml`
 6. Trigger `build-push-deploy.yml` with `gardener_cluster=<cluster-name>`
 
 ## Known limitations / gaps as of local-dev scope (same as docker-compose today)
