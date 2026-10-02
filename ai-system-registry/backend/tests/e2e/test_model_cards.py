@@ -5,7 +5,6 @@ from __future__ import annotations
 import httpx
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -197,8 +196,8 @@ async def test_delete_model_card_cascades_all_children(client: httpx.AsyncClient
     """All child rows must be gone after deleting a model card."""
     # Late import: ai_trust_persistence.database reads DATABASE_URL on import,
     # which is only set after the e2e_setup session fixture runs.
-    from sqlalchemy import text
     from ai_trust_persistence.database import engine
+    from sqlalchemy import text
 
     card = await _create_card(client, {"name": "Cascade Card"})
     cid = card["id"]
@@ -649,4 +648,16 @@ async def test_delete_dataset_wrong_card(client: httpx.AsyncClient):
     card_b = await _create_card(client)
     dataset = await _create_dataset(client, card_b["id"])
     r = await client.delete(f"/v1/model-cards/{card_a['id']}/datasets/{dataset['id']}")
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_put_dataset_wrong_card(client: httpx.AsyncClient):
+    card_a = await _create_card(client)
+    card_b = await _create_card(client)
+    dataset = await _create_dataset(client, card_a["id"])
+    r = await client.put(
+        f"/v1/model-cards/{card_b['id']}/datasets/{dataset['id']}",
+        json={"name": "X", "type": "train"},
+    )
     assert r.status_code == 404
