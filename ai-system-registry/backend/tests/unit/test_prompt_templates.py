@@ -115,6 +115,16 @@ def test_classify_builder_renders():
     _assert_system_message(prompts.build_classify_questionnaire_messages({}, {}))
 
 
+def test_json_repair_templates_render():
+    """The JSON auto-repair chat() call renders both prompts from templates."""
+    system = render_template("json_repair_system")
+    assert "valid JSON object" in system
+    user = render_template("json_repair_user", malformed_response="not json {oops}")
+    # The malformed response is embedded verbatim, including any stray braces.
+    assert "not json {oops}" in user
+    assert "{malformed_response}" not in user
+
+
 def test_every_template_id_has_a_file():
     """All ids the builders reference must resolve to a template on disk."""
     ids = [
@@ -128,6 +138,8 @@ def test_every_template_id_has_a_file():
         "questionnaire_business_doc_extract",
         "questionnaire_technical_doc_extract",
         "classify_questionnaire",
+        "json_repair_system",
+        "json_repair_user",
     ]
     for template_id in ids:
         assert load_template(template_id)

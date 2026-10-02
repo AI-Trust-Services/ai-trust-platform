@@ -1,0 +1,1 @@
+You return only a single valid JSON object. No prose, no code fences.

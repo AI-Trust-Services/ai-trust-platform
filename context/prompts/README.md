@@ -40,6 +40,8 @@ or from the `PROMPTS_DIR` env var if set. The Docker image bakes this directory 
 | `questionnaire_business_doc_extract` | Questionnaire — business doc extraction | `target_schema` |
 | `questionnaire_technical_doc_extract` | Questionnaire — technical doc extraction | `flag_schema` |
 | `classify_questionnaire` | AI-mode authoritative classification | `flag_names` |
+| `json_repair_system` | JSON auto-repair retry — system prompt | — |
+| `json_repair_user` | JSON auto-repair retry — user prompt | `malformed_response` |
 
 ## Editing & revisions
 
