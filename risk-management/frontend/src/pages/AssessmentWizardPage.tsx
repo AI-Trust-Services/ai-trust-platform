@@ -569,12 +569,11 @@ function isRiskComplete(r: RiskEntry): boolean {
     r.severity?.trim() &&
     r.likelihood?.trim() &&
     r.risk_owner?.trim() &&
-    r.responsible_role?.trim() &&
-    r.deadline
+    r.responsible_role?.trim()
   );
 }
 
-type RiskSortKey = "title" | "category" | "severity" | "likelihood" | "risk_level" | "created_at" | "risk_owner" | "responsible_role" | "deadline" | "status";
+type RiskSortKey = "title" | "category" | "severity" | "likelihood" | "risk_level" | "created_at" | "risk_owner" | "responsible_role" | "status";
 
 const RISK_SORT_OPTIONS: { value: RiskSortKey; label: string }[] = [
   { value: "created_at", label: "Created at" },
@@ -585,7 +584,6 @@ const RISK_SORT_OPTIONS: { value: RiskSortKey; label: string }[] = [
   { value: "risk_level", label: "Risk level" },
   { value: "risk_owner", label: "Risk owner" },
   { value: "responsible_role", label: "Responsible role" },
-  { value: "deadline", label: "Deadline" },
   { value: "status", label: "Approval status" },
 ];
 
@@ -602,7 +600,6 @@ function sortRisks(risks: RiskEntry[], key: RiskSortKey, dir: "asc" | "desc"): R
       case "created_at": return r.created_at ?? "";
       case "risk_owner": return r.risk_owner ?? "";
       case "responsible_role": return r.responsible_role ?? "";
-      case "deadline": return r.deadline ?? "";
       case "status": return r.status ?? "";
       default: return "";
     }
@@ -639,7 +636,6 @@ export interface DraftRisk {
   severity: string;
   likelihood: string;
   risk_owner: string;
-  due_date: string;
   ai_lifecycle_phase: string;
   impact: string;
   responsible_role: string[];
@@ -657,7 +653,7 @@ const emptyDraft = (): DraftRisk => ({
   title: "", description: "", categories: [],
   affects_vulnerable_groups: false, vulnerable_groups: "", vulnerable_group_impact: "",
   severity: "moderate", likelihood: "possible",
-  risk_owner: "", due_date: "", ai_lifecycle_phase: "", impact: "",
+  risk_owner: "", ai_lifecycle_phase: "", impact: "",
   responsible_role: [], date_of_identification: new Date().toISOString().slice(0, 10),
   engineer_email: "", officer_email: "",
   residual_status: "none", residual_severity: "", residual_likelihood: "", review_notes: "",
@@ -1475,7 +1471,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
           draft.vulnerable_groups ? draft.vulnerable_groups.split(",").map(s => s.trim()).filter(Boolean) : []
         ),
         risk_level_autocalculated: calcRiskLevel(draft.severity, draft.likelihood),
-        deadline: draft.due_date || null,
+        deadline: null,
         responsible_role: draft.responsible_role.length ? draft.responsible_role.join(",") : null,
         engineer_email: draft.engineer_email || null,
         officer_email: draft.officer_email || null,
@@ -1542,7 +1538,6 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
       severity: r.severity,
       likelihood: r.likelihood,
       risk_owner: r.risk_owner ?? "",
-      due_date: r.deadline ? (typeof r.deadline === "string" ? r.deadline.slice(0, 10) : "") : "",
       ai_lifecycle_phase: r.ai_lifecycle_phase ?? "",
       impact: r.impact ?? "",
       responsible_role: roles,
@@ -1578,7 +1573,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
         likelihood: rest.likelihood,
         risk_level_autocalculated: calcRiskLevel(rest.severity, rest.likelihood),
         risk_owner: rest.risk_owner || null,
-        deadline: rest.due_date || null,
+        deadline: null,
         ai_lifecycle_phase: rest.ai_lifecycle_phase || null,
         impact: rest.impact,
         responsible_role: rest.responsible_role.length ? rest.responsible_role.join(",") : null,
@@ -1586,8 +1581,14 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
         officer_email: rest.officer_email || null,
         date_of_assessment: rest.date_of_identification || null,
       };
-      const updated = await api.patchRisk(editingRiskId!, patch);
-      onRisksChange(risks.map(r => r.id === editingRiskId ? { ...r, ...updated, misuse_scenarios: r.misuse_scenarios, mitigations: r.mitigations } : r));
+      const editable = await onEnsureEditable();
+      const currentRisks = editable?.risks ?? risks;
+      if (editable) onRisksChange(editable.risks);
+      const targetId = editable
+        ? (currentRisks.find(r => r.title === risks.find(r2 => r2.id === editingRiskId)?.title)?.id ?? editingRiskId!)
+        : editingRiskId!;
+      const updated = await api.patchRisk(targetId, patch);
+      onRisksChange(currentRisks.map(r => r.id === targetId ? { ...r, ...updated, misuse_scenarios: r.misuse_scenarios, mitigations: r.mitigations } : r));
       setEditingRiskId(null);
     } catch (e) { setEditRiskErr(String(e)); }
     finally { setEditRiskSaving(false); }
@@ -1805,6 +1806,22 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
 
   async function handleApproveSubmit() {
     if (risks.length === 0) { setApproveErr("Cannot approve: at least one risk is required."); setApproveErrModal(true); return; }
+    // Gate: all risks must be fully confirmed by their assigned validators
+    const unconfirmedRisks = risks.filter(r => {
+      const roles = (r.responsible_role ?? "").split(",").map(s => s.trim()).filter(Boolean);
+      const engineerRequired = roles.includes("ai_engineer");
+      const officerRequired = roles.includes("ai_compliance_officer");
+      const engineerOk = !engineerRequired || r.engineer_confirmed || r.engineer_declined;
+      const officerOk = !officerRequired || r.officer_confirmed || r.officer_declined;
+      return !engineerOk || !officerOk;
+    });
+    if (unconfirmedRisks.length > 0) {
+      const names = unconfirmedRisks.slice(0, 3).map(r => `"${r.title}"`).join(", ");
+      const suffix = unconfirmedRisks.length > 3 ? "…" : "";
+      setApproveErr(`Cannot approve: the following risks are still awaiting confirmation from their assigned validators: ${names}${suffix}`);
+      setApproveErrModal(true);
+      return;
+    }
     // Gate 1: unacceptable residual → must have a plan task linked via risk_id
     const unacceptableWithoutTask = risks.filter(r => r.residual_status === "unacceptable" && !tasks.some(t => t.risk_id === r.id));
     if (unacceptableWithoutTask.length > 0) {
@@ -2236,11 +2253,6 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                           <Input value={ed.risk_owner} onChange={v => setEd(d => ({ ...d, risk_owner: v }))} placeholder="e.g. jane.doe@company.com" />
                         </div>
                         <div style={{ gridColumn: "1 / -1" }}>
-                          <Label required>Deadline</Label>
-                          <input type="date" value={ed.due_date} onChange={e => setEd(d => ({ ...d, due_date: e.target.value }))}
-                            style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "#fff", boxSizing: "border-box" }} />
-                        </div>
-                        <div style={{ gridColumn: "1 / -1" }}>
                           <Label required>Impact description</Label>
                           <Textarea value={ed.impact} onChange={v => setEd(d => ({ ...d, impact: v }))} rows={2} placeholder="" />
                         </div>
@@ -2260,13 +2272,13 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                           </div>
                           {ed.responsible_role.includes("ai_engineer") && (
                             <div style={{ marginTop: 8 }}>
-                              <Label>AI Engineer e-mail</Label>
+                              <Label required>AI Engineer e-mail</Label>
                               <Input value={ed.engineer_email} onChange={v => setEd(d => ({ ...d, engineer_email: v }))} placeholder="engineer@company.com" />
                             </div>
                           )}
                           {ed.responsible_role.includes("ai_compliance_officer") && (
                             <div style={{ marginTop: 8 }}>
-                              <Label>Compliance Officer e-mail</Label>
+                              <Label required>Compliance Officer e-mail</Label>
                               <Input value={ed.officer_email} onChange={v => setEd(d => ({ ...d, officer_email: v }))} placeholder="officer@company.com" />
                             </div>
                           )}
@@ -2298,14 +2310,6 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                     {r.risk_owner && <div><span style={{ color: "var(--text-secondary)" }}>Risk owner: </span>{r.risk_owner}</div>}
                     {r.ai_lifecycle_phase && <div><span style={{ color: "var(--text-secondary)" }}>Lifecycle phase: </span>{r.ai_lifecycle_phase}</div>}
                     {r.responsible_role && <div><span style={{ color: "var(--text-secondary)" }}>Risk validator: </span>{r.responsible_role.split(",").map(v => v === "ai_engineer" ? "AI Engineer" : "Compliance Officer").join(", ")}</div>}
-                    {r.deadline && (
-                      <div>
-                        <span style={{ color: "var(--text-secondary)" }}>Deadline: </span>
-                        <span style={{ color: new Date(r.deadline) < new Date() ? "#dc2626" : "inherit" }}>
-                          {new Date(r.deadline).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                        </span>
-                      </div>
-                    )}
                     {r.affects_vulnerable_groups && r.vulnerable_groups && (
                       <div style={{ gridColumn: "1 / -1" }}>
                         <span style={{ color: "var(--text-secondary)" }}>Vulnerable groups: </span>
@@ -2388,7 +2392,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                       </div>
                       <div>
                         <Label>Due date</Label>
-                        <input type="date" value={mitDraft[r.id]?.due_date ?? ""}
+                        <input type="date" value={mitDraft[r.id]?.due_date ?? default30d()}
                           onChange={e => setMitDraft(d => ({ ...d, [r.id]: { ...d[r.id], due_date: e.target.value } }))}
                           style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
                       </div>
@@ -2668,7 +2672,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                             </div>
                             <div>
                               <Label>Due date</Label>
-                              <input type="date" value={td.due_date ?? ""}
+                              <input type="date" value={td.due_date ?? default30d()}
                                 onChange={e => setRiskTaskDraft(d => ({ ...d, [r.id]: { ...d[r.id], due_date: e.target.value } }))}
                                 style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
                             </div>
@@ -2977,7 +2981,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
               </div>
               {draft.responsible_role.includes("ai_engineer") && (
                 <div style={{ marginTop: 8 }}>
-                  <Label>AI Engineer e-mail</Label>
+                  <Label required>AI Engineer e-mail</Label>
                   <Input value={draft.engineer_email}
                     onChange={v => setDraft(d => ({ ...d, engineer_email: v }))}
                     placeholder="engineer@company.com" />
@@ -2985,7 +2989,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
               )}
               {draft.responsible_role.includes("ai_compliance_officer") && (
                 <div style={{ marginTop: 8 }}>
-                  <Label>Compliance Officer e-mail</Label>
+                  <Label required>Compliance Officer e-mail</Label>
                   <Input value={draft.officer_email}
                     onChange={v => setDraft(d => ({ ...d, officer_email: v }))}
                     placeholder="officer@company.com" />
@@ -3028,11 +3032,6 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
             <div style={{ gridColumn: "1 / -1" }}>
               <Label>Date of identification</Label>
               <input type="date" value={draft.date_of_identification} onChange={e => setDraft(d => ({ ...d, date_of_identification: e.target.value }))}
-                style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Label required>Deadline</Label>
-              <input type="date" value={draft.due_date} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value }))}
                 style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
             </div>
           </div>
@@ -3092,7 +3091,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                 </div>
                 <div>
                   <Label>Due date</Label>
-                  <input type="date" value={draftMitDraft.due_date ?? ""}
+                  <input type="date" value={draftMitDraft.due_date ?? default30d()}
                     onChange={e => setDraftMitDraft(d => ({ ...d, due_date: e.target.value }))}
                     style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
                 </div>
@@ -3439,7 +3438,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                     </div>
                     <div>
                       <Label>Due date</Label>
-                      <input type="date" value={editTaskDraft.due_date?.slice(0, 10) ?? ""}
+                      <input type="date" value={editTaskDraft.due_date?.slice(0, 10) ?? default30d()}
                         onChange={e => setEditTaskDraft(d => ({ ...d, due_date: e.target.value || null }))}
                         style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }} />
                     </div>
@@ -3570,7 +3569,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
               </div>
               <div>
                 <Label>Due date</Label>
-                <input type="date" value={taskDraft.due_date?.slice(0, 10) ?? ""}
+                <input type="date" value={taskDraft.due_date?.slice(0, 10) ?? default30d()}
                   onChange={e => setTaskDraft(d => ({ ...d, due_date: e.target.value || null }))}
                   style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }} />
               </div>
@@ -3796,7 +3795,7 @@ function IdentifyStep({ register, risks, onRisksChange, onRegisterUpdated, onApp
                     {showAllIncidents ? "Show other incidents" : "Show all incidents"}
                   </button>
                   {register && (
-                    <button onClick={() => openIncidentModal("other")}
+                    <button onClick={() => openIncidentModal("free")}
                       style={{ fontSize: 12, background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontWeight: 600 }}>
                       + Report incident
                     </button>
@@ -4223,6 +4222,8 @@ function ArchivedRegisterCard({ reg, systemName, nextRegisterId }: { reg: RiskRe
 }
 
 // ── Main wizard ───────────────────────────────────────────────────────────────
+const default30d = () => { const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10); };
+
 export default function AssessmentWizardPage({ systemId, systemName, onBack, prefillRisk }: {
   systemId: string;
   systemName: string;

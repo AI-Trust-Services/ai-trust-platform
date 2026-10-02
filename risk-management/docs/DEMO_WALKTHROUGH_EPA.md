@@ -183,7 +183,7 @@ Scroll to **Overall residual risk**:
 
 | Field | Value |
 |---|---|
-| Residual risk acceptable | Yes |
+| Residual risk acceptable | **Acceptable** |
 | Argument | Residual risk is acceptable following implementation of bias elimination controls and mandatory explainability reporting. Quarterly independent audits ensure ongoing compliance. The system must not be deployed until the bias audit and SHAP reporting are implemented and verified. |
 
 ### Incidents (optional)

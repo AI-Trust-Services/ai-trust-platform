@@ -79,6 +79,35 @@ async def _load_register_full(session: AsyncSession, register_id: str) -> RiskRe
     return register
 
 
+def _missing_validator_emails(risks: list[RiskEntry]) -> int:
+    count = 0
+    for r in risks:
+        roles = {s.strip() for s in (r.responsible_role or "").split(",") if s.strip()}
+        if "ai_engineer" in roles and not (r.engineer_email or "").strip():
+            count += 1
+        elif "ai_compliance_officer" in roles and not (r.officer_email or "").strip():
+            count += 1
+    return count
+
+
+def _unconfirmed_risk_details(risks: list[RiskEntry]) -> list[str]:
+    details = []
+    for r in risks:
+        if _risk_fully_confirmed(r):
+            continue
+        roles = {s.strip() for s in (r.responsible_role or "").split(",") if s.strip()}
+        pending = []
+        if "ai_engineer" in roles and not r.engineer_confirmed and not r.engineer_declined:
+            who = r.engineer_email or "AI Engineer"
+            pending.append(who)
+        if "ai_compliance_officer" in roles and not r.officer_confirmed and not r.officer_declined:
+            who = r.officer_email or "Compliance Officer"
+            pending.append(who)
+        if pending:
+            details.append(f"{r.title} — {', '.join(pending)}")
+    return details
+
+
 def _traffic_light(
     tier: str | None,
     active_register: RiskRegister | None,
@@ -106,7 +135,11 @@ def _traffic_light(
         if has_unacceptable_residual:
             return "red"
         all_confirmed = all(_risk_fully_confirmed(r) for r in risks)
-        return "green" if all_confirmed else "orange"
+        if not all_confirmed:
+            return "orange"
+        if _missing_validator_emails(risks):
+            return "orange"
+        return "green"
 
     # non-high (limited, minimal, gpai-standard, gpai-systemic)
     if not active_register:
@@ -117,7 +150,10 @@ def _traffic_light(
         return "red"
     if risks:
         all_confirmed = all(_risk_fully_confirmed(r) for r in risks)
-        return "green" if all_confirmed else "orange"
+        if not all_confirmed:
+            return "orange"
+        if _missing_validator_emails(risks):
+            return "orange"
     return "green"
 
 
@@ -135,7 +171,6 @@ def _risk_is_complete(risk: RiskEntry) -> bool:
         and (risk.likelihood or "").strip()
         and (risk.risk_owner or "").strip()
         and (risk.responsible_role or "").strip()
-        and risk.deadline is not None
     )
 
 
@@ -424,14 +459,12 @@ async def list_systems(session: AsyncSession = Depends(get_session)):
 
         tl = _traffic_light(sys.tier, active_register, risks, unacknowledged, last_completed)
 
-        confirmed_statuses = {"confirmed", "dismissed"}
-        unconfirmed_risks = sum(
-            1 for r in risks
-            if r.status in confirmed_statuses and not _risk_fully_confirmed(r)
-        )
+        unconfirmed_risks = sum(1 for r in risks if not _risk_fully_confirmed(r))
+        unconfirmed_details = _unconfirmed_risk_details(risks)
         unacceptable_residual_risks = sum(1 for r in risks if r.residual_status == "unacceptable")
         total_risks = len(risks)
         open_risks = sum(1 for r in risks if r.status == "open")
+        missing_emails = _missing_validator_emails(risks)
 
         summaries.append(SystemRiskSummary(
             system_id=sys.id,
@@ -448,9 +481,11 @@ async def list_systems(session: AsyncSession = Depends(get_session)):
             reassessment_needed=reassessment_needed,
             registry_changed=registry_changed,
             unconfirmed_risks=unconfirmed_risks,
+            unconfirmed_risk_details=unconfirmed_details,
             unacceptable_residual_risks=unacceptable_residual_risks,
             total_risks=total_risks,
             open_risks=open_risks,
+            missing_validator_emails=missing_emails,
             traffic_light=tl,
         ))
 
@@ -722,6 +757,16 @@ async def approve_register(
         raise HTTPException(
             status_code=422,
             detail="Cannot approve: review date must be within 6 months from today.",
+        )
+
+    # Check: all risks must be fully confirmed by their required roles
+    unconfirmed = [r for r in all_risks if not _risk_fully_confirmed(r)]
+    if unconfirmed:
+        names = ", ".join(f'"{r.title}"' for r in unconfirmed[:3])
+        suffix = "…" if len(unconfirmed) > 3 else ""
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot approve: the following risks are still awaiting confirmation from their assigned validators: {names}{suffix}",
         )
 
     register.status = "approved"

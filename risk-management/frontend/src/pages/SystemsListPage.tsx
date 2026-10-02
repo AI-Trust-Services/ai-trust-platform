@@ -68,7 +68,7 @@ function actionBtn(sys: SystemRiskSummary): { label: string; color: string } {
   return { label: "Resume", color: "#d97706" };
 }
 
-function statusHint(sys: SystemRiskSummary): { label: string; color: string } | null {
+function statusHint(sys: SystemRiskSummary): { label: string; color: string; details?: string[] } | null {
   if (!sys.active_register_id) return null;
   const status = sys.active_register_status ?? "";
   if (status !== "approved") {
@@ -80,7 +80,8 @@ function statusHint(sys: SystemRiskSummary): { label: string; color: string } | 
   if (sys.unacknowledged_triggers > 0) return { label: "Review due", color: "#dc2626" };
   if (sys.reassessment_needed) return { label: "Overdue", color: "#dc2626" };
   if (sys.unacceptable_residual_risks > 0) return { label: "Residual risk unacceptable", color: "#dc2626" };
-  if (sys.unconfirmed_risks > 0) return { label: "Risks unconfirmed", color: "#d97706" };
+  if (sys.missing_validator_emails > 0) return { label: "Validator e-mail missing", color: "#d97706" };
+  if (sys.unconfirmed_risks > 0) return { label: "Risks unconfirmed", color: "#d97706", details: sys.unconfirmed_risk_details };
   return null;
 }
 
@@ -112,7 +113,7 @@ const COLUMNS: { key: SortKey | ""; label: string; sortable: boolean }[] = [
   { key: "system_tier",   label: "Risk Classification", sortable: true },
   { key: "last_assessment_completed_at", label: "Last Management Review", sortable: true },
   { key: "valid_until",   label: "Valid Until", sortable: true },
-  { key: "",              label: "Status", sortable: false },
+  { key: "",              label: "Alerts", sortable: false },
   { key: "",              label: "Action", sortable: false },
 ];
 
@@ -934,7 +935,17 @@ export default function SystemsListPage({ onSelectSystem }: {
                       const prohibitedNote = sys.system_tier === "prohibited"
                         ? <div style={{ fontSize: 10, color: "#dc2626", marginTop: 2 }}>Cannot be placed on the EU market</div>
                         : null;
-                      if (h) return <><span style={{ fontSize: 12, color: h.color, fontWeight: 600 }}>{h.label}</span>{voluntaryNote}{prohibitedNote}</>;
+                      if (h) return <>
+                        <span style={{ fontSize: 12, color: h.color, fontWeight: 600 }}>{h.label}</span>
+                        {h.details && h.details.length > 0 && (
+                          <div style={{ marginTop: 3 }}>
+                            {h.details.map((d, i) => (
+                              <div key={i} style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.4 }}>— {d}</div>
+                            ))}
+                          </div>
+                        )}
+                        {voluntaryNote}{prohibitedNote}
+                      </>;
                       if (sys.active_register_id && sys.active_register_status === "approved") {
                         return <><span style={{ fontSize: 12, color: "#16a34a", fontWeight: 600 }}>Completed</span>{voluntaryNote}{prohibitedNote}</>;
                       }
