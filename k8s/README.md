@@ -199,7 +199,7 @@ parallel via `docker buildx bake` (`docker-bake.hcl`) — a **separate build def
 
 ### Integration tests
 
-`tests/integration/` runs cross-service API tests against a **live cluster** via `kubectl port-forward`. The `Integration Tests` workflow (`.github/workflows/integration-tests.yml`) triggers automatically after a successful `PR Deployment Test` or `Deployment Workflow`, and on demand via the `garden-test` PR label — it is a separate workflow and does not affect deployment status.
+`tests/integration/` runs cross-service API tests against a **live cluster** via `kubectl port-forward`. The `Integration Tests` workflow (`.github/workflows/integration-tests.yml`) triggers automatically after a successful `PR Deployment Test` or `Deployment Workflow`, and on demand via **Run workflow** or the `garden-test` PR label — it is a separate workflow and does not affect deployment status. It reports its result as an `integration-tests` commit status on the deployed commit.
 
 **Run locally** after `make up`:
 

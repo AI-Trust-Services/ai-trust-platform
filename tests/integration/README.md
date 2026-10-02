@@ -61,8 +61,31 @@ The `Integration Tests` workflow (`.github/workflows/integration-tests.yml`) tri
 - **`PR Deployment Test`** — PR labeled `garden-deploy` → namespace = PR author, cluster = `ai-trust-test`
 - **`Deployment Workflow`** — merge to main → namespace = `ai-trust`, cluster = `ai-trust-main`
 
-It can also be run on demand by adding the **`garden-test`** label to a PR — that skips the deploy and
-tests the namespace already deployed for that PR author on `ai-trust-test`.
+It can also be re-run on demand, without redeploying, in two optional ways:
+- **Actions → Integration Tests → Run workflow** — both inputs have defaults, so it is a one-click
+  run; override them to target another cluster or namespace.
+- **`garden-test` label on a PR** — re-tests the namespace already deployed for that PR's author on
+  `ai-trust-test`.
+
+Everything reports to one commit status context, **`integration-tests`**, which is keyed by name and
+overwritten in place — so the PR shows a single entry that transitions rather than several separate
+results:
+
+| When | `integration-tests` status |
+|---|---|
+| `garden-deploy` added | 🟡 pending — "Waiting for deployment to finish..." |
+| deployment succeeds, tests start | 🟡 pending — "Running against `<cluster>`/`<namespace>`..." |
+| tests finish | ✅ success / ❌ failure, linking to the run log |
+
+A commit status is used rather than a check run for two reasons: a check run created by a skipped job
+cannot be updated by a later workflow, and `workflow_run` runs attach to the **default branch** rather
+than the PR head, so their native checks never appear on the PR at all. This is the same pattern
+`pr-full-update-test.yml` uses for its `deploy-test` status.
+
+> **Note on the label triggers.** `pull_request: [labeled]` fires for *every* label (GitHub has no
+> label-name filter in `on:`), so adding an unrelated label leaves harmless **Skipped** checks on the
+> PR. That is unavoidable with a label trigger. Ignore them — the `integration-tests` status is the
+> authoritative result.
 
 Deployment workflow status is not affected by integration test results — they run as a separate workflow.
 

@@ -81,9 +81,12 @@ make test-int                       # kind cluster, namespace ai-trust
   per-service e2e tests use. `APP_ADMIN_USERNAME` (default `admin`) selects the platform admin used to
   assign roles.
 - **Not a PR gate.** The `Integration Tests` workflow (`.github/workflows/integration-tests.yml`) runs
-  *after* a successful `PR Deployment Test` or `Deployment Workflow`, or on demand when a PR gets the
-  `garden-test` label (tests the already-deployed namespace, no redeploy). Its result never changes the
-  deployment workflow's status.
+  *after* a successful `PR Deployment Test` or `Deployment Workflow`, and optionally on demand via
+  **Run workflow** (`workflow_dispatch`) or the `garden-test` PR label (re-tests the already-deployed
+  namespace, no redeploy). All paths report to a single `integration-tests` commit status on the PR
+  head / pushed commit, overwritten in place: `garden-deploy` seeds it pending, and the post-deployment
+  run finalises it — so the result is visible on the PR and on main even though `workflow_run` runs are
+  attached to the default branch. Its result never changes the deployment workflow's status.
 - Details → [tests/integration/README.md](tests/integration/README.md).
 
 ### Pre-push checks
