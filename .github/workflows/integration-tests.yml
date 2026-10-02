@@ -18,7 +18,7 @@ name: Integration Tests
 #   A commit status is used rather than a check run because workflow_run runs are
 #   attached to the DEFAULT BRANCH, not the PR head, so their native checks never
 #   appear on the PR at all. Same pattern as the `deploy-test` status in
-#   pr-full-update-test.yml.
+#   pr-deployment-test.yml.
 #
 # Deliberately NO `pull_request:` trigger here. Every job in a pull_request-triggered
 # workflow is pinned to the PR as its own check run, and `pull_request: [labeled]`
@@ -144,7 +144,7 @@ jobs:
 
       # Publishes an "integration-tests" status onto the triggering commit so the
       # result is visible on the PR (and on the main commit) instead of only in
-      # the Actions tab. Mirrors the `deploy-test` status in pr-full-update-test.yml.
+      # the Actions tab.
       - name: Set pending commit status
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
