@@ -12,4 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY ai-system-registry/backend/ .
 RUN chmod +x entrypoint.sh
 
+# Externalized prompt templates (repo-root context/prompts). Baked into the
+# image at /app/context/prompts so the loader resolves it with WORKDIR /app.
+COPY context/prompts /app/context/prompts
+
 CMD ["./entrypoint.sh"]

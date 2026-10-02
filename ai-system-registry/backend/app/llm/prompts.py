@@ -8,6 +8,13 @@ columns / classifier flags. Three tasks (design Q11):
 
 Two role variants for turn/doc_extract: owner (plain-language, 7 fields) and
 engineer (technical tone, 8 fields).
+
+The prompt *wording* lives outside this module in ``context/prompts/*.md`` (one
+template per model-call system prompt). Each builder renders its template by a
+stable id via ``render_template`` and fills the runtime variables (field/flag
+schemas). This module keeps only the field/flag data and the message-assembly
+logic — edit the templates, not this file, to change prompt text. See
+``app/llm/templates.py`` and ``context/prompts/README.md``.
 """
 
 from __future__ import annotations
@@ -16,6 +23,7 @@ import json
 from typing import Any
 
 from app.classifier import CLASSIFIER_INPUTS
+from app.llm.templates import render_template
 
 # The 14 descriptive fields the owner questionnaire conversation converges on.
 # Keys match the frontend questionnaire.ts BUSINESS_QUESTIONS keys.
@@ -118,29 +126,10 @@ def _target_schema_block() -> str:
 # Turn extraction (conversation)
 # ---------------------------------------------------------------------------
 
-_TURN_SYSTEM = """You are an AI registration assistant helping complete an EU AI Act registration \
-questionnaire for an AI system. You drive a short, focused conversation.
-
-Rules:
-- Ask ONE question at a time. Be direct and concise — no lengthy explanations.
-- Infer values when the user's description makes them obvious (e.g. a recruiting tool → department "HR", \
-use_case_type "Internal development for own organisational use") and briefly confirm what you inferred.
-- All fields are optional — if the user says they don't know or want to skip a field, move on.
-- Only ask about fields that are still "(not set)".
-
-Target fields to collect:
-{target_schema}
-
-You MUST respond with a SINGLE JSON object and nothing else, in this exact shape:
-{{"message": "<your next question or acknowledgement>", "extracted_fields": {{<field:value pairs you learned this turn>}}, "next_field": "<the field key you are asking about, or null>", "complete": <true|false>}}
-
-Set "complete": true only once every target field is filled (either from the user or confidently inferred). \
-Use the exact field keys shown above."""
-
 
 def build_turn_messages(transcript: list[dict], fields: dict[str, Any]) -> list[dict]:
     """Messages for a conversation turn. ``transcript`` is [{role, content}, ...]."""
-    system = _TURN_SYSTEM.format(target_schema=_target_schema_block())
+    system = render_template("owner_turn", target_schema=_target_schema_block())
     system += "\n\n## Current field state:\n" + _field_state_block(fields)
     messages = [{"role": "system", "content": system}]
     messages.extend({"role": m["role"], "content": m["content"]} for m in transcript)
@@ -151,17 +140,6 @@ def build_turn_messages(transcript: list[dict], fields: dict[str, Any]) -> list[
 # Document extraction
 # ---------------------------------------------------------------------------
 
-_DOC_SYSTEM = """You are an AI documentation analyst. Extract information about an AI system from the \
-provided document for EU AI Act registration.
-
-Target fields to extract (only include the ones you can confidently determine):
-{target_schema}
-
-You MUST respond with a SINGLE JSON object and nothing else, in this exact shape:
-{{"extracted_fields": {{<field:value pairs>}}, "notes": "<one short sentence on what you found>"}}
-
-Use the exact field keys shown above."""
-
 
 def build_doc_extract_messages(
     parsed_text: str | None = None,
@@ -169,7 +147,7 @@ def build_doc_extract_messages(
     media_type: str | None = None,
 ) -> list[dict]:
     """Messages for document extraction. Pass ``parsed_text`` for docs, ``image_b64`` for images."""
-    system = _DOC_SYSTEM.format(target_schema=_target_schema_block())
+    system = render_template("owner_doc_extract", target_schema=_target_schema_block())
     messages = [{"role": "system", "content": system}]
     if image_b64:
         # OpenAI-compatible multimodal content (also accepted by the external adapter path).
@@ -204,30 +182,12 @@ def build_doc_extract_messages(
 # Flag inference (at completion)
 # ---------------------------------------------------------------------------
 
-_INFER_SYSTEM = """You are an EU AI Act classification analyst. Given the collected fields describing \
-an AI system, decide which boolean classifier flags apply. Do NOT decide the risk tier — a \
-deterministic classifier does that from your flags.
-
-The system's INTENDED PURPOSE is the single most important input: it describes what the system is \
-actually used for and therefore drives which flags apply. Weigh it above every other field, and when \
-other fields are vague or conflict with the stated intended purpose, let the intended purpose govern.
-
-Only set a flag when the evidence supports it. Boolean flags default to false; \
-training_compute_flops is a number (0 if unknown).
-
-Available classifier flags:
-{flag_names}
-
-You MUST respond with a SINGLE JSON object and nothing else, in this exact shape:
-{{"inferred_flags": [{{"flag": "<flag name>", "value": <true|false|number>, "rationale": "<one sentence>", "confidence": <0.0-1.0>}}]}}
-
-Include an entry ONLY for flags you are setting to true (or, for training_compute_flops, a non-zero number). \
-Use the exact flag names shown above."""
-
 
 def build_infer_flags_messages(fields: dict[str, Any]) -> list[dict]:
     """Messages for the completion-time flag-inference step."""
-    system = _INFER_SYSTEM.format(flag_names="\n".join(f"- {n}" for n in _FLAG_NAMES))
+    system = render_template(
+        "infer_flags", flag_names="\n".join(f"- {n}" for n in _FLAG_NAMES)
+    )
     user = "Collected fields:\n" + json.dumps(fields, indent=2, ensure_ascii=False)
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
@@ -281,42 +241,6 @@ ENGINEER_TARGET_FIELDS: list[dict[str, str]] = [
 
 ENGINEER_REQUIRED_FIELD_KEYS: list[str] = [f["key"] for f in ENGINEER_TARGET_FIELDS]
 
-_ENGINEER_TURN_SYSTEM = """You are an AI registration assistant helping an AI Engineer complete the \
-technical registration of an AI system for EU AI Act compliance.
-
-Rules:
-- Use precise technical language appropriate for an engineer audience.
-- Ask ONE question at a time. Be direct and concise.
-- Infer values when the context makes them unambiguous (e.g. "still in development" → lifecycle "development", \
-"REST API wrapper" → system_type "service") and briefly confirm what you inferred.
-- For enum fields, map natural language to the allowed value — never ask the engineer to pick from a list unless necessary.
-- Only ask about fields that are still "(not set)".
-
-Target fields to collect:
-{target_schema}
-
-You MUST respond with a SINGLE JSON object and nothing else, in this exact shape:
-{{"message": "<your next question or acknowledgement>", "extracted_fields": {{<field:value pairs you learned this turn>}}, "next_field": "<the field key you are asking about, or null>", "complete": <true|false>}}
-
-Set "complete": true only once every target field is filled (either from the engineer or confidently inferred). \
-Use the exact field keys shown above."""
-
-_ENGINEER_DOC_SYSTEM = """You are an AI documentation analyst. Extract technical registration information \
-about an AI system from the provided document for EU AI Act compliance.
-
-Target fields to extract (only include the ones you can confidently determine):
-{target_schema}
-
-You MUST respond with a SINGLE JSON object and nothing else, in this exact shape:
-{{"extracted_fields": {{<field:value pairs>}}, "notes": "<one short sentence on what you found>"}}
-
-For enum fields use only these allowed values:
-- system_type: application | model | component | service
-- lifecycle: development | testing | conformity | market
-- autonomy_level: decision_support | human_in_the_loop | human_on_the_loop | fully_automated
-
-Use the exact field keys shown above."""
-
 
 def _engineer_field_state_block(fields: dict[str, Any]) -> str:
     lines = []
@@ -336,7 +260,9 @@ def build_engineer_turn_messages(
     transcript: list[dict], fields: dict[str, Any]
 ) -> list[dict]:
     """Messages for one engineer conversation turn."""
-    system = _ENGINEER_TURN_SYSTEM.format(target_schema=_engineer_target_schema_block())
+    system = render_template(
+        "engineer_turn", target_schema=_engineer_target_schema_block()
+    )
     system += "\n\n## Current field state:\n" + _engineer_field_state_block(fields)
     messages = [{"role": "system", "content": system}]
     messages.extend({"role": m["role"], "content": m["content"]} for m in transcript)
@@ -349,7 +275,9 @@ def build_engineer_doc_extract_messages(
     media_type: str | None = None,
 ) -> list[dict]:
     """Messages for engineer document extraction."""
-    system = _ENGINEER_DOC_SYSTEM.format(target_schema=_engineer_target_schema_block())
+    system = render_template(
+        "engineer_doc_extract", target_schema=_engineer_target_schema_block()
+    )
     messages = [{"role": "system", "content": system}]
     if image_b64:
         messages.append(
@@ -490,64 +418,6 @@ def _technical_field_state_block(
     return "\n".join(lines)
 
 
-_BUSINESS_TURN_SYSTEM = """You are an AI compliance assistant helping complete the 'Use Case & Context' section \
-of an EU AI Act registration questionnaire. You drive a short, focused conversation with a business representative.
-
-Rules:
-- Ask ONE question at a time. Be direct and concise — no lengthy explanations.
-- Infer values when the user's description makes them obvious and briefly confirm what you inferred.
-- Only ask about fields that are still "(not set)".
-- Use plain business language (avoid technical jargon).
-
-Target fields to collect:
-{target_schema}
-
-You MUST respond with a SINGLE JSON object and nothing else, in this exact shape:
-{{"message": "<your next question or acknowledgement>", "extracted_fields": {{<field:value pairs you learned this turn>}}, "next_field": "<the field key you are asking about, or null>", "complete": <true|false>}}
-
-Set "complete": true only once every target field is filled. Use the exact field keys shown above."""
-
-_TECHNICAL_TURN_SYSTEM = """You are an EU AI Act compliance assistant helping complete the 'AI Risk Classification' section \
-of a registration questionnaire. You drive a short, focused conversation with a technical expert.
-
-Rules:
-- Ask ONE question at a time. Use precise technical language.
-- For boolean flags, interpret natural language answers as true/false.
-- Infer flag values when the context makes them unambiguous and briefly confirm.
-- Only ask about flags that are still "(not set)".
-
-Target flags to determine (all boolean unless noted):
-{flag_schema}
-
-You MUST respond with a SINGLE JSON object and nothing else, in this exact shape:
-{{"message": "<your next question or acknowledgement>", "extracted_fields": {{<flag:value pairs you determined this turn>}}, "next_field": "<the flag key you are asking about, or null>", "complete": <true|false>}}
-
-Set "complete": true only once every flag has been determined (true, false, or 0 for training_compute_flops). \
-Use the exact flag keys shown above."""
-
-_BUSINESS_DOC_SYSTEM = """You are an AI documentation analyst. Extract 'Use Case & Context' information \
-about an AI system from the provided document for EU AI Act registration.
-
-Target fields to extract (only include the ones you can confidently determine):
-{target_schema}
-
-You MUST respond with a SINGLE JSON object and nothing else, in this exact shape:
-{{"extracted_fields": {{<field:value pairs>}}, "notes": "<one short sentence on what you found>"}}
-
-Use the exact field keys shown above."""
-
-_TECHNICAL_DOC_SYSTEM = """You are an AI documentation analyst. Extract EU AI Act risk classification flags \
-from the provided document. These are used to determine the regulatory tier of the AI system.
-
-Target flags to extract (boolean unless noted — only include ones you can confidently determine):
-{flag_schema}
-
-You MUST respond with a SINGLE JSON object and nothing else, in this exact shape:
-{{"extracted_fields": {{<flag:value pairs>}}, "notes": "<one short sentence on what you found>"}}
-
-Use the exact flag keys shown above. For boolean flags use true/false."""
-
-
 def build_questionnaire_turn_messages(
     section: str,
     transcript: list[dict],
@@ -556,8 +426,8 @@ def build_questionnaire_turn_messages(
 ) -> list[dict]:
     """Messages for a questionnaire chatbot turn. ``section`` is 'business' or 'technical'."""
     if section == "business":
-        system = _BUSINESS_TURN_SYSTEM.format(
-            target_schema=_business_target_schema_block()
+        system = render_template(
+            "questionnaire_business_turn", target_schema=_business_target_schema_block()
         )
         system += "\n\n## Current field state:\n" + _business_field_state_block(
             fields, existing_data
@@ -566,7 +436,9 @@ def build_questionnaire_turn_messages(
         flag_schema = "\n".join(
             f"- {k} — {v}" for k, v in _TECHNICAL_FLAG_LABELS.items()
         )
-        system = _TECHNICAL_TURN_SYSTEM.format(flag_schema=flag_schema)
+        system = render_template(
+            "questionnaire_technical_turn", flag_schema=flag_schema
+        )
         system += "\n\n## Current flag state:\n" + _technical_field_state_block(
             fields, existing_data
         )
@@ -584,15 +456,18 @@ def build_questionnaire_extract_messages(
 ) -> list[dict]:
     """Messages for questionnaire document extraction."""
     if section == "business":
-        system = _BUSINESS_DOC_SYSTEM.format(
-            target_schema=_business_target_schema_block()
+        system = render_template(
+            "questionnaire_business_doc_extract",
+            target_schema=_business_target_schema_block(),
         )
         user_text = "Extract AI system business/use-case information from this document"
     else:
         flag_schema = "\n".join(
             f"- {k} — {v}" for k, v in _TECHNICAL_FLAG_LABELS.items()
         )
-        system = _TECHNICAL_DOC_SYSTEM.format(flag_schema=flag_schema)
+        system = render_template(
+            "questionnaire_technical_doc_extract", flag_schema=flag_schema
+        )
         user_text = (
             "Extract EU AI Act risk classification information from this document"
         )
@@ -624,38 +499,6 @@ def build_questionnaire_extract_messages(
 # AI-mode authoritative classification (submit-technical / submit-info)
 # ---------------------------------------------------------------------------
 
-_CLASSIFY_SYSTEM = """You are an EU AI Act classification analyst. You are given the free-text answers a \
-business owner and a technical owner provided about an AI system. Your job is to (1) infer which boolean \
-classifier flags apply, (2) explain your overall reasoning, (3) list any information still missing that \
-would change or firm up the classification, (4) give an overall confidence, and (5) determine the \
-organisation's EU AI Act role.
-
-Do NOT decide the risk tier — a deterministic classifier derives the tier from your flags.
-
-The system's INTENDED PURPOSE / PRIMARY PURPOSE is the single most important input: it describes what \
-the system is actually used for and therefore drives which flags apply. Weigh it above every other \
-answer, and when other answers are vague or conflict with the stated intended purpose, let the \
-intended purpose govern.
-
-Only set a flag when the evidence supports it. Boolean flags default to false; \
-training_compute_flops is a number (0 if unknown).
-
-Available classifier flags:
-{flag_names}
-
-For the org_role field, choose exactly one of:
-- "provider" — the organisation developed, trained, or places the system on the market under its own name
-- "deployer" — the organisation uses a third-party system in a professional context
-- "both" — the organisation both developed and uses the system
-- "importer" — the organisation brings the system from a third country into the EU market
-- "distributor" — the organisation makes the system available on the EU market but is not the provider or importer
-
-You MUST respond with a SINGLE JSON object and nothing else, in this exact shape:
-{{"inferred_flags": [{{"flag": "<flag name>", "value": <true|false|number>, "rationale": "<one sentence>", "confidence": <0.0-1.0>}}], "reasoning": "<2-3 sentences explaining the overall classification>", "missing_info": ["<information that would improve confidence>", ...], "confidence": <0.0-1.0 overall confidence>, "org_role": "<provider|deployer|both|importer|distributor>", "org_role_rationale": "<one sentence explaining why this role was assigned>"}}
-
-Include an entry in "inferred_flags" ONLY for flags you are setting to true (or, for training_compute_flops, \
-a non-zero number). Use the exact flag names shown above."""
-
 
 def build_classify_questionnaire_messages(
     business_answers: dict[str, Any],
@@ -667,8 +510,9 @@ def build_classify_questionnaire_messages(
     that returns inferred flags plus reasoning / missing_info / confidence — the
     extended rationale shown only to the compliance officer.
     """
-    system = _CLASSIFY_SYSTEM.format(
-        flag_names="\n".join(f"- {n}" for n in _FLAG_NAMES)
+    system = render_template(
+        "classify_questionnaire",
+        flag_names="\n".join(f"- {n}" for n in _FLAG_NAMES),
     )
     user = (
         "Business owner answers:\n"
