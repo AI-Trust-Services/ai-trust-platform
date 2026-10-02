@@ -1,31 +1,31 @@
 name: Integration Tests
 
-# Three ways in:
-#   1. workflow_run  — automatic, after a successful deployment (the main path)
+# Two ways in:
+#   1. workflow_run — automatic, after a successful deployment (the main path)
 #        PR   — "PR Deployment Test" (garden-deploy label) → ai-trust-test / <pr-author>
 #        main — "Deployment Workflow" (push to main)       → ai-trust-main  / ai-trust
-#   2. workflow_dispatch — optional manual run / re-run, no redeploy
-#   3. garden-test label — optional, re-tests the PR author's already-deployed
-#      namespace on ai-trust-test without redeploying
+#   2. workflow_dispatch — optional manual run / re-run against a live namespace,
+#      no redeploy. Both inputs are defaulted, so it is one click.
 #
 # How the PR reporting works (the `integration-tests` commit status):
-#   Everything reports to ONE commit status context, `integration-tests`, which is
-#   keyed by name and overwritten in place — so the PR shows a single entry that
+#   Results are published to ONE commit status context, `integration-tests`, which
+#   is keyed by name and overwritten in place, so the PR shows a single entry that
 #   transitions rather than a pile of separate results:
 #
-#     garden-deploy added  → seed-status job sets it PENDING ("waiting for deploy")
-#     deployment finishes  → workflow_run run overwrites it with success/failure
+#     garden-deploy added  → pr-deployment-test.yml seeds it PENDING
+#     deployment finishes  → this workflow overwrites it with success/failure
 #
-#   A commit status is used rather than a check run precisely because of this:
-#   check runs created by a skipped job cannot be updated by a later workflow,
-#   and workflow_run runs attach to the DEFAULT BRANCH rather than the PR head,
-#   so their native checks never appear on the PR at all. Same pattern as the
-#   `deploy-test` status in pr-full-update-test.yml.
+#   A commit status is used rather than a check run because workflow_run runs are
+#   attached to the DEFAULT BRANCH, not the PR head, so their native checks never
+#   appear on the PR at all. Same pattern as the `deploy-test` status in
+#   pr-full-update-test.yml.
 #
-# Known cosmetic tradeoff of the label triggers:
-#   `pull_request: [labeled]` fires for EVERY label — GitHub has no label-name
-#   filter in `on:` — so an unrelated label leaves "Skipped" checks on the PR.
-#   Ignore them; the `integration-tests` status is the authoritative result.
+# Deliberately NO `pull_request:` trigger here. Every job in a pull_request-triggered
+# workflow is pinned to the PR as its own check run, and `pull_request: [labeled]`
+# fires for EVERY label (GitHub has no label-name filter in `on:`) — which left a
+# permanently "Skipped" check plus a redundant seed-job check on the PR. The seeding
+# is therefore a STEP inside pr-deployment-test.yml's existing job (steps create no
+# check runs), and manual runs use workflow_dispatch.
 #
 # This workflow never gates the deployment — it reports its own status.
 on:
@@ -35,9 +35,6 @@ on:
       - "Deployment Workflow"
     types:
       - completed
-  # Optional: re-test the PR author's already-deployed namespace (no redeploy).
-  pull_request:
-    types: [labeled]
   # Optional on-demand run: re-test an already-deployed namespace without
   # redeploying. Both inputs have defaults, so "Run workflow" works with no edits.
   workflow_dispatch:
@@ -61,37 +58,14 @@ permissions:
   statuses: write
 
 jobs:
-  # garden-deploy means a deployment is starting and the automatic workflow_run
-  # path will test it once that finishes. Seed a PENDING `integration-tests`
-  # status now so the PR shows "tests are coming" instead of nothing, and so the
-  # later run has an existing entry to overwrite rather than adding a new one.
-  seed-status:
-    name: Seed pending status
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.label.name == 'garden-deploy'
-    steps:
-      - name: Mark integration-tests pending
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          gh api \
-            --method POST \
-            repos/${{ github.repository }}/statuses/${HEAD_SHA} \
-            -f state=pending \
-            -f context=integration-tests \
-            -f description="Waiting for deployment to finish..." \
-            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
     # workflow_run fires on completion regardless of outcome — only test a
-    # deployment that actually succeeded. The label path runs only for garden-test.
+    # deployment that actually succeeded.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'pull_request' && github.event.label.name == 'garden-test')
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
       - name: Checkout
@@ -99,7 +73,6 @@ jobs:
         with:
           ref: >-
             ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha
-             || github.event_name == 'pull_request' && github.event.pull_request.head.sha
              || github.sha }}
 
       - name: Derive cluster and namespace
@@ -118,12 +91,6 @@ jobs:
               fi
             fi
             head_sha="${GITHUB_SHA}"
-          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            # garden-test label — re-test the namespace already deployed for this
-            # PR's author on ai-trust-test. No redeploy.
-            cluster="ai-trust-test"
-            namespace="${{ github.event.pull_request.user.login }}"
-            head_sha="${{ github.event.pull_request.head.sha }}"
           else
             WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
             if [[ "${WORKFLOW_NAME}" == "Deployment Workflow" ]]; then
