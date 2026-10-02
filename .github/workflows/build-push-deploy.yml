@@ -60,6 +60,7 @@ jobs:
       cluster: ${{ steps.vars.outputs.cluster }}
       namespace: ${{ steps.vars.outputs.namespace }}
       ref: ${{ steps.vars.outputs.ref }}
+      head_sha: ${{ steps.sha.outputs.head_sha }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -94,6 +95,10 @@ jobs:
           gardener_cluster: ${{ steps.inputs.outputs.cluster }}
           namespace: ${{ steps.inputs.outputs.namespace }}
 
+      - name: Resolve commit SHA
+        id: sha
+        run: echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   main-deployment:
     name: main-deployment
     needs: prepare
@@ -101,7 +106,7 @@ jobs:
     if: inputs.gardener_cluster != 'none'
     environment: ${{ needs.prepare.outputs.cluster == 'ai-trust-main' && 'main' || '' }}
     env:
-      HEAD_SHA: ${{ needs.prepare.outputs.ref }}
+      HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Check out repository
