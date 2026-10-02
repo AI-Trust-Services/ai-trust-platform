@@ -60,9 +60,6 @@ jobs:
       ref: ${{ steps.vars.outputs.ref }}
       head_sha: ${{ steps.sha.outputs.head_sha }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
-
       - name: Resolve inputs
         id: inputs
         run: |
@@ -84,6 +81,11 @@ jobs:
             NS="ai-trust"
           fi
           echo "namespace=${NS}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.inputs.outputs.ref }}
 
       - name: Compute variables
         id: vars
