@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
-
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_WRITE
 from ai_trust_logging import get_logger
@@ -11,10 +9,11 @@ from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
+from app import email_sender
 from app.classifier import ClassificationResult
 from app.ids import new_id
 from app.schemas import AISystemCreate, AISystemResponse, IntakeResponse
-from app import email_sender
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
 router = APIRouter(tags=["intake"])
 logger = get_logger(__name__)

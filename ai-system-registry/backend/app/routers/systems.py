@@ -2,38 +2,38 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from sqlalchemy import select, delete
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import (
+    SYSTEMS_APPROVE,
     SYSTEMS_READ,
     SYSTEMS_WRITE,
-    SYSTEMS_APPROVE,
 )
 from ai_trust_logging import get_logger
-from app.classifier import classify, CLASSIFIER_INPUTS
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models.ai_system import AISystem
-from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
+from ai_trust_persistence.models.model_card import ModelCard
 from app import minio_client
+from app.classifier import CLASSIFIER_INPUTS, classify
 from app.routers.workflow import _active_sub_assignment, _get_steps
-from app.workflow_utils import section_owner
 from app.schemas import (
+    VALID_LIFECYCLES,
+    VALID_ROLES,
     AISystemResponse,
     AISystemUpdate,
     DownloadUrlResponse,
     IntakeResponse,
-    SystemModelLinkBody,
-    SystemModelResponse,
     QuestionnaireAnswersPatch,
     RegistrationDocument,
-    VALID_LIFECYCLES,
-    VALID_ROLES,
+    SystemModelLinkBody,
+    SystemModelResponse,
 )
+from app.workflow_utils import section_owner
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 router = APIRouter(tags=["systems"])
 logger = get_logger(__name__)
