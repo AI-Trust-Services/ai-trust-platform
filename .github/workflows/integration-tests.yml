@@ -64,6 +64,7 @@ permissions:
   contents: read
   id-token: write
   statuses: write
+  actions: read  # required to download artifacts from a different run (deployment-context)
 
 jobs:
   integration-tests:
