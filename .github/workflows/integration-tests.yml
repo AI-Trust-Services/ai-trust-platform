@@ -60,26 +60,6 @@ on:
         required: false
         type: string
 
-  # ---------------------------------------------------------------------------
-  # TEMPORARY — REMOVE BEFORE MERGING TO MAIN.
-  #
-  # Exists only to test this workflow pre-merge. `workflow_run` executes the
-  # DEFAULT BRANCH's copy of this file, so the status-reporting code below cannot
-  # be exercised from a branch by any other trigger. `pull_request` runs the PR's
-  # own copy, which is what makes it usable as a test harness.
-  #
-  # Cost of keeping it: GitHub has no label-name filter in `on:`, so this fires
-  # for EVERY label and the job-level `if` then skips it — leaving a stray
-  # "Skipped" check on the PR. That is the exact noise we removed in b1425b8.
-  #
-  # To remove: delete this `pull_request:` block, the `garden-test` clause in the
-  # job `if`, the `pull_request` branch in the Checkout `ref`, and the
-  # `pull_request` branch in "Derive cluster and namespace". All four are marked
-  # with "TEMPORARY".
-  # ---------------------------------------------------------------------------
-  pull_request:
-    types: [labeled]
-
 permissions:
   contents: read
   id-token: write
@@ -91,11 +71,9 @@ jobs:
     runs-on: ubuntu-latest
     # workflow_run fires on completion regardless of outcome — only test a
     # deployment that actually succeeded.
-    # The `garden-test` clause is TEMPORARY — remove with the pull_request trigger.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'pull_request' && github.event.label.name == 'garden-test')
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
       - name: Checkout
@@ -103,7 +81,6 @@ jobs:
         with:
           ref: >-
             ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha
-             || github.event_name == 'pull_request' && github.event.pull_request.head.sha
              || github.sha }}
 
       - name: Derive cluster and namespace
@@ -122,12 +99,6 @@ jobs:
               fi
             fi
             head_sha="${GITHUB_SHA}"
-          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            # TEMPORARY (garden-test label) — remove with the pull_request trigger.
-            # Re-tests the namespace garden-deploy already deployed, no redeploy.
-            cluster="ai-trust-test"
-            namespace="${{ github.event.pull_request.user.login }}"
-            head_sha="${{ github.event.pull_request.head.sha }}"
           else
             WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
             if [[ "${WORKFLOW_NAME}" == "Deployment Workflow" ]]; then
