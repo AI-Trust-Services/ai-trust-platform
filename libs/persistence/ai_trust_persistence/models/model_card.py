@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,7 +17,7 @@ class ModelCard(Base):
     version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     base_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
     library_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    license: Mapped[str | None] = mapped_column(Text, nullable=True)
+    license: Mapped[str | None] = mapped_column(String(100), nullable=True)
     license_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     license_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
     training_commit: Mapped[str | None] = mapped_column(String(100), nullable=True)
