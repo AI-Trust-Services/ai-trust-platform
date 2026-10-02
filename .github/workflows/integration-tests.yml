@@ -28,6 +28,14 @@ name: Integration Tests
 # check runs), and manual runs use workflow_dispatch.
 #
 # This workflow never gates the deployment — it reports its own status.
+#
+# EDITING THIS FILE: workflow_run does not just attach its runs to the default
+# branch, it also RUNS THE DEFAULT BRANCH'S COPY of this file. Changes here
+# therefore do nothing until they are merged to main — a branch cannot test them,
+# and a run triggered from a PR will silently execute main's version instead.
+# Validate the shell logic locally (it is plain bash; the runner is bash 5) and
+# merge before expecting any behaviour change. The same applies to workflow_dispatch:
+# the "Run workflow" button only appears once the trigger exists on main.
 on:
   workflow_run:
     workflows:
