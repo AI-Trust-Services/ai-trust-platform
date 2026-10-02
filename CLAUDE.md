@@ -271,7 +271,7 @@ Three paths are fully supported; **develop and change them together**. When you 
 12. Add a `new-component/CLAUDE.md` documenting its routes, data model, and any conventions (see the existing component `CLAUDE.md` files for the pattern).
 
 ### ai-system-registry/ (port 8001, `/api/registry/`)
-AI system registration and EU AI Act classification. Details → [ai-system-registry/CLAUDE.md](ai-system-registry/CLAUDE.md).
+AI system registration and EU AI Act classification. LLM prompt wording is externalized to repo-root `context/prompts/*.md` (loaded by `ai-system-registry/backend/app/llm/templates.py`, baked into the image via that backend's Dockerfile). Details → [ai-system-registry/CLAUDE.md](ai-system-registry/CLAUDE.md).
 
 ### overview/ (port 8004, `/api/overview/`)
 Compliance-posture MFE, reads Postgres only, static HTML frontend. Details → [overview/CLAUDE.md](overview/CLAUDE.md).
