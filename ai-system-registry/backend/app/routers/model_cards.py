@@ -3,9 +3,6 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import delete, select
-
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
 from ai_trust_logging import get_logger
@@ -44,6 +41,8 @@ from app.schemas import (
     SourceResponse,
 )
 from app.schemas.system_model import ModelSystemResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import delete, select
 
 router = APIRouter(tags=["model-cards"])
 logger = get_logger(__name__)
@@ -182,7 +181,7 @@ async def _load_card_tree(session, card_id: str) -> ModelCardResponse | None:
     fs_by_ds: defaultdict[str, list] = defaultdict(list)
     # create feature store by dataset
     for fs in feature_stores:
-        fs_feature_groups = list()
+        fs_feature_groups = []
         # checks if feature store has any feature groups
         for feature_group in feature_groups_by_store.get(fs.id, []):
             fs_feature_groups.append(
@@ -553,7 +552,6 @@ async def add_dataset(card_id: str, body: DatasetCreate) -> DatasetResponse:
 async def patch_dataset(
     card_id: str, ds_id: str, body: DatasetPatch
 ) -> DatasetResponse:
-    updates = body.model_dump(exclude_none=True)
     async with SessionLocal() as session:
         result = await session.execute(
             select(ModelCardDataset).where(
@@ -563,8 +561,8 @@ async def patch_dataset(
         row = result.scalar_one_or_none()
         if row is None:
             raise HTTPException(404, f"Dataset {ds_id} not found")
-        for field, value in updates.items():
-            setattr(row, field, value)
+        for field in body.model_fields_set:
+            setattr(row, field, getattr(body, field))
         await session.commit()
         response = await _load_dataset_response(session, ds_id)
     return response  # type: ignore[return-value]
@@ -620,7 +618,7 @@ async def replace_dataset(card_id: str, ds_id: str, body: DatasetCreate) -> None
         )
         await _insert_dataset_children(session, ds_id, body)
         await session.commit()
-        return None
+        return
 
 
 @router.delete(
