@@ -11,7 +11,7 @@ name: Deployment Workflow
 #   gh workflow run build-push-deploy.yml \
 #     --ref <branch> \
 #     -f branch=<branch> \
-#     -f gardener_cluster=sr-test
+#     -f gardener_cluster=ai-trust-test
 #
 # Produces a single "main-deployment" check run on the commit. Also seeds and
 # finalises an "integration-tests" commit status so integration-tests.yml can
@@ -34,8 +34,6 @@ on:
         options:
           - ai-trust-main
           - ai-trust-test
-          - sr-test
-          - none
       namespace:
         description: "Namespace to deploy into (derived from actor when blank)"
         required: false
@@ -72,9 +70,9 @@ jobs:
           REF="${{ inputs.branch }}"
           echo "ref=${REF:-${{ github.sha }}}" >> "$GITHUB_OUTPUT"
 
-          # cluster: explicit input wins (skip 'none'), else ai-trust-main
+          # cluster: explicit input wins, else ai-trust-main
           CLUSTER="${{ inputs.gardener_cluster }}"
-          if [[ -z "$CLUSTER" || "$CLUSTER" == "none" ]]; then
+          if [[ -z "$CLUSTER" ]]; then
             CLUSTER="ai-trust-main"
           fi
           echo "cluster=${CLUSTER}" >> "$GITHUB_OUTPUT"
@@ -128,7 +126,6 @@ jobs:
     name: main-deployment
     needs: prepare
     runs-on: ubuntu-latest
-    if: inputs.gardener_cluster != 'none'
     environment: ${{ needs.prepare.outputs.cluster == 'ai-trust-main' && 'main' || '' }}
     env:
       HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
