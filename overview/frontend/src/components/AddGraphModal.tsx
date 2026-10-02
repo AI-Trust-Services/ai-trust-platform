@@ -24,7 +24,7 @@ const REGISTRY_CHARTS: RecommendedChart[] = [
   { id: "chart_compliance_hist",   title: "Compliance Distribution", desc: "Systems spread across 0–100%",  type: "bar",   dataKey: "compliance_histogram", badge: "Bar"   },
   { id: "chart_by_type",           title: "Systems by Type",         desc: "Application, model, service…",  type: "pie",   dataKey: "by_type",             badge: "Pie"   },
   { id: "chart_by_model_type",     title: "Models by Type",          desc: "LLM, embedding, multimodal…",   type: "pie",   dataKey: "by_model_type",       badge: "Pie"   },
-  { id: "chart_by_model_provider", title: "Models by Provider",      desc: "Top model providers",            type: "bar",   dataKey: "by_model_provider",   badge: "Bar"   },
+  { id: "chart_by_model_validation", title: "Models by Validation Status", desc: "Validated vs. unvalidated models", type: "bar",   dataKey: "by_model_validation_status", badge: "Bar"   },
   { id: "table_recent",            title: "Recent Registrations",    desc: "Last 5 registered systems",     type: "table", badge: "Table" },
 ];
 

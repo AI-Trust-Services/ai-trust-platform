@@ -1,4 +1,4 @@
-import type { TierKey, LifecycleKey, ModelType } from "../types";
+import type { TierKey, LifecycleKey } from "../types";
 import { TIER_META, LIFECYCLE_LABELS, fmtDate } from "../utils";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -26,13 +26,6 @@ const LIFECYCLE_CLASSES: Record<LifecycleKey, string> = {
   decommissioned: "bg-[#eeeeee] text-[#666666]",
 };
 
-const MODEL_TYPE_CLASSES: Record<ModelType, string> = {
-  llm: "bg-[#e8f0fb] text-[#0a4a9e]",
-  embedding: "bg-[#e8fbf0] text-[#0a4a2e]",
-  multimodal: "bg-[#fbe8fb] text-[#4a0a4a]",
-  classifier: "bg-[#fbf0e8] text-[#4a2a0a]",
-};
-
 export function TierBadge({ tier, workflowStatus }: { tier: TierKey; workflowStatus?: string }) {
   const effectiveTier = workflowStatus === "draft" ? "pending" : tier;
   const meta = TIER_META[effectiveTier] || { label: tier };
@@ -47,14 +40,6 @@ export function LifecycleBadge({ lc }: { lc: LifecycleKey }) {
   return (
     <Badge className={cn("rounded-full font-medium", LIFECYCLE_CLASSES[lc])}>
       {LIFECYCLE_LABELS[lc] || lc}
-    </Badge>
-  );
-}
-
-export function ModelTypeBadge({ type }: { type: ModelType }) {
-  return (
-    <Badge className={cn("rounded-full font-medium", MODEL_TYPE_CLASSES[type])}>
-      {type}
     </Badge>
   );
 }
