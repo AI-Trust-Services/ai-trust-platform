@@ -1,65 +1,162 @@
 name: Integration Tests
 
-# Triggered after a successful deployment — either from a PR (garden-deploy label)
-# or after a merge to main. Deployment workflow status is unaffected by this workflow.
-# Also triggered directly on a PR by adding the "garden-test" label (skips deploy,
-# runs tests against the already-deployed namespace on ai-trust-test).
+# Two ways in:
+#   1. workflow_run — automatic, after a successful deployment (the main path)
+#        PR   — "PR Deployment Test" (garden-deploy label) → ai-trust-test / <pr-author>
+#        main — "Deployment Workflow" (push to main)       → ai-trust-main  / ai-trust
+#   2. workflow_dispatch — optional manual run / re-run against a live namespace,
+#      no redeploy. Both inputs are defaulted, so it is one click.
+#
+# How the PR reporting works (the `integration-tests` commit status):
+#   Results are published to ONE commit status context, `integration-tests`, which
+#   is keyed by name and overwritten in place, so the PR shows a single entry that
+#   transitions rather than a pile of separate results:
+#
+#     garden-deploy added  → pr-deployment-test.yml seeds it PENDING
+#     deployment finishes  → this workflow overwrites it with success/failure
+#
+#   A commit status is used rather than a check run because workflow_run runs are
+#   attached to the DEFAULT BRANCH, not the PR head, so their native checks never
+#   appear on the PR at all. Same pattern as the `deploy-test` status in
+#   pr-deployment-test.yml.
+#
+# Deliberately NO `pull_request:` trigger here. Every job in a pull_request-triggered
+# workflow is pinned to the PR as its own check run, and `pull_request: [labeled]`
+# fires for EVERY label (GitHub has no label-name filter in `on:`) — which left a
+# permanently "Skipped" check plus a redundant seed-job check on the PR. The seeding
+# is therefore a STEP inside pr-deployment-test.yml's existing job (steps create no
+# check runs), and manual runs use workflow_dispatch.
+#
+# This workflow never gates the deployment — it reports its own status.
+#
+# EDITING THIS FILE: workflow_run does not just attach its runs to the default
+# branch, it also RUNS THE DEFAULT BRANCH'S COPY of this file. Changes here
+# therefore do nothing until they are merged to main — a branch cannot test them,
+# and a run triggered from a PR will silently execute main's version instead.
+# Validate the shell logic locally (it is plain bash; the runner is bash 5) and
+# merge before expecting any behaviour change. The same applies to workflow_dispatch:
+# the "Run workflow" button only appears once the trigger exists on main.
 on:
-  pull_request:
-    types: [labeled]
   workflow_run:
     workflows:
       - "PR Deployment Test"
       - "Deployment Workflow"
     types:
       - completed
+  # Optional on-demand run: re-test an already-deployed namespace without
+  # redeploying. Both inputs have defaults, so "Run workflow" works with no edits.
+  workflow_dispatch:
+    inputs:
+      gardener_cluster:
+        description: "Cluster to test against"
+        required: false
+        default: ai-trust-test
+        type: choice
+        options:
+          - ai-trust-test
+          - ai-trust-main
+      namespace:
+        description: "Namespace to test (blank = ai-trust on ai-trust-main, else your username)"
+        required: false
+        type: string
 
 permissions:
   contents: read
   id-token: write
+  statuses: write
+  actions: read  # required to download artifacts from a different run (deployment-context)
 
 jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'pull_request' && github.event.label.name == 'garden-test') ||
+    # workflow_run fires on completion regardless of outcome — only test a
+    # deployment that actually succeeded.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Download deployment context (Deployment Workflow only)
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deployment Workflow'
+        uses: actions/download-artifact@v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+          name: deployment-context
+          path: /tmp/deployment-context
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Derive cluster and namespace
         id: vars
         shell: bash
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            cluster="ai-trust-test"
-            namespace="${{ github.event.pull_request.user.login }}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            cluster="${{ inputs.gardener_cluster }}"
+            cluster="${cluster:-ai-trust-test}"
+            namespace="${{ inputs.namespace }}"
+            if [[ -z "${namespace}" ]]; then
+              if [[ "${cluster}" == "ai-trust-main" ]]; then
+                namespace="ai-trust"
+              else
+                namespace="${GITHUB_ACTOR,,}"
+              fi
+            fi
+            head_sha="${GITHUB_SHA}"
           else
             WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
             if [[ "${WORKFLOW_NAME}" == "Deployment Workflow" ]]; then
-              cluster="ai-trust-main"
-              namespace="ai-trust"
+              # Read cluster/namespace/head_sha from the artifact uploaded by build-push-deploy.yml.
+              # head_sha identifies the deployed commit — use it for checkout and commit status,
+              # not workflow_run.head_sha which points to the workflow file's commit.
+              cluster=$(cat /tmp/deployment-context/cluster 2>/dev/null | tr -d '[:space:]' || echo "ai-trust-main")
+              namespace=$(cat /tmp/deployment-context/namespace 2>/dev/null | tr -d '[:space:]' || echo "ai-trust")
+              head_sha=$(cat /tmp/deployment-context/head_sha 2>/dev/null | tr -d '[:space:]' || echo "${{ github.event.workflow_run.head_sha }}")
             else
               # PR Deployment Test — namespace is the PR author's login.
-              # workflow_run.pull_requests[0].user.login is the PR author (set when the
-              # triggering workflow was itself triggered by a pull_request event).
-              # Fall back to actor.login only if pull_requests is empty (e.g. fork PRs).
               PR_AUTHOR="${{ github.event.workflow_run.pull_requests[0].user.login }}"
               ACTOR="${{ github.event.workflow_run.actor.login }}"
               namespace="${PR_AUTHOR:-${ACTOR}}"
-              namespace="${namespace,,}"
               cluster="ai-trust-test"
+              head_sha="${{ github.event.workflow_run.head_sha }}"
             fi
           fi
+          namespace="${namespace,,}"
 
           echo "cluster=${cluster}" >> "$GITHUB_OUTPUT"
           echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
-          echo "==> cluster=${cluster}, namespace=${namespace}"
+          echo "head_sha=${head_sha}" >> "$GITHUB_OUTPUT"
+          echo "==> cluster=${cluster}, namespace=${namespace}, head_sha=${head_sha}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.vars.outputs.head_sha }}
+
+      - name: Summary
+        run: |
+          echo "### Integration test variables" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| cluster | ${{ steps.vars.outputs.cluster }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| namespace | ${{ steps.vars.outputs.namespace }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| head_sha | ${{ steps.vars.outputs.head_sha }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| triggered_by | ${{ github.event_name }} |" >> "$GITHUB_STEP_SUMMARY"
+
+      # Publishes an "integration-tests" status onto the triggering commit so the
+      # result is visible on the PR (and on the main commit) instead of only in
+      # the Actions tab.
+      - name: Set pending commit status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.vars.outputs.head_sha }}
+        run: |
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${HEAD_SHA} \
+            -f state=pending \
+            -f context=integration-tests \
+            -f description="Running against ${{ steps.vars.outputs.cluster }}/${{ steps.vars.outputs.namespace }}..." \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Load cluster env (API server, OIDC audience)
         shell: bash
@@ -110,3 +207,24 @@ jobs:
       - name: Stop port forwards
         if: always()
         run: bash k8s/scripts/kill-port-forwards.sh
+
+      - name: Report final commit status
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.vars.outputs.head_sha }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          case "${JOB_STATUS}" in
+            success) state=success; desc="All integration tests passed on the live deployment." ;;
+            cancelled) state=error;   desc="Integration tests cancelled." ;;
+            *)         state=failure; desc="Integration tests failed — see the run log." ;;
+          esac
+
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${HEAD_SHA} \
+            -f state="${state}" \
+            -f context=integration-tests \
+            -f description="${desc}" \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
