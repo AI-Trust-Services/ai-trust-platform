@@ -77,13 +77,6 @@ jobs:
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: >-
-            ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha
-             || github.sha }}
-
       - name: Download deployment context (Deployment Workflow only)
         if: github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deployment Workflow'
         uses: actions/download-artifact@v4
@@ -112,16 +105,14 @@ jobs:
           else
             WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
             if [[ "${WORKFLOW_NAME}" == "Deployment Workflow" ]]; then
-              # Read cluster/namespace from the artifact uploaded by build-push-deploy.yml.
-              # This lets workflow_dispatch runs to non-main clusters be tested correctly.
+              # Read cluster/namespace/head_sha from the artifact uploaded by build-push-deploy.yml.
+              # head_sha identifies the deployed commit — use it for checkout and commit status,
+              # not workflow_run.head_sha which points to the workflow file's commit.
               cluster=$(cat /tmp/deployment-context/cluster 2>/dev/null | tr -d '[:space:]' || echo "ai-trust-main")
               namespace=$(cat /tmp/deployment-context/namespace 2>/dev/null | tr -d '[:space:]' || echo "ai-trust")
               head_sha=$(cat /tmp/deployment-context/head_sha 2>/dev/null | tr -d '[:space:]' || echo "${{ github.event.workflow_run.head_sha }}")
             else
               # PR Deployment Test — namespace is the PR author's login.
-              # workflow_run.pull_requests[0].user.login is the PR author (set when the
-              # triggering workflow was itself triggered by a pull_request event).
-              # Fall back to actor.login only if pull_requests is empty (e.g. fork PRs).
               PR_AUTHOR="${{ github.event.workflow_run.pull_requests[0].user.login }}"
               ACTOR="${{ github.event.workflow_run.actor.login }}"
               namespace="${PR_AUTHOR:-${ACTOR}}"
@@ -135,6 +126,11 @@ jobs:
           echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
           echo "head_sha=${head_sha}" >> "$GITHUB_OUTPUT"
           echo "==> cluster=${cluster}, namespace=${namespace}, head_sha=${head_sha}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.vars.outputs.head_sha }}
 
       - name: Summary
         run: |
