@@ -99,6 +99,31 @@ jobs:
         id: sha
         run: echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Summary
+        run: |
+          echo "### Deployment variables" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| cluster | ${{ steps.vars.outputs.cluster }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| namespace | ${{ steps.vars.outputs.namespace }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| tag | ${{ steps.vars.outputs.tag }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ref | ${{ steps.vars.outputs.ref }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| head_sha | ${{ steps.sha.outputs.head_sha }} |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write and upload deployment context
+        run: |
+          mkdir -p /tmp/deployment-context
+          echo "${{ steps.vars.outputs.cluster }}"  > /tmp/deployment-context/cluster
+          echo "${{ steps.vars.outputs.namespace }}" > /tmp/deployment-context/namespace
+          echo "${{ steps.sha.outputs.head_sha }}"  > /tmp/deployment-context/head_sha
+
+      - name: Upload deployment context artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-context
+          retention-days: 1
+          path: /tmp/deployment-context/
+
   main-deployment:
     name: main-deployment
     needs: prepare
