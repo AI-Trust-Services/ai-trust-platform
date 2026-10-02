@@ -57,7 +57,13 @@ runs:
         echo "namespace=${NAMESPACE}" >> "$GITHUB_OUTPUT"
 
         # Tag identifies the built commit. build-images checks out INPUT_REF
-        # (the PR head SHA), so tag from that — not GITHUB_SHA, which is the
-        # ephemeral pull_request merge commit and would mislabel the image.
+        # (the PR head SHA or branch ref), so tag from that — not GITHUB_SHA,
+        # which is the ephemeral pull_request merge commit and would mislabel the image.
+        # ai-trust-main uses a fixed prefix to avoid collisions with ai-trust-test images.
         SHORT_SHA="${INPUT_REF::12}"
-        echo "tag=${NAMESPACE}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+        if [[ "$INPUT_CLUSTER" == "ai-trust-main" ]]; then
+          TAG_PREFIX="ai-trust-main"
+        else
+          TAG_PREFIX="${NAMESPACE}"
+        fi
+        echo "tag=${TAG_PREFIX}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
