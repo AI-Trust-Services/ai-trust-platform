@@ -17,7 +17,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-EMBED_MODEL = os.environ.get("EMBED_MODEL", "BAAI/bge-m3")
+EMBED_MODEL = os.environ.get("EMBED_MODEL", "intfloat/multilingual-e5-small")
 CHUNK_MAX_TOKENS = int(os.environ.get("CHUNK_MAX_TOKENS", "512"))
 
 SUPPORTED_SUFFIXES = {".pdf", ".docx", ".pptx", ".md", ".markdown", ".html", ".htm", ".txt"}
@@ -35,13 +35,33 @@ class Chunk:
 
 
 def build_converter() -> "DocumentConverter":
-    from docling.document_converter import DocumentConverter
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import (
+        AcceleratorDevice,
+        AcceleratorOptions,
+        PdfPipelineOptions,
+    )
+    from docling.document_converter import DocumentConverter, PdfFormatOption
 
-    return DocumentConverter()
+    opts = PdfPipelineOptions()
+    # OCR (EasyOCR on CPU) dominates PDF parse time and is unnecessary for
+    # digitally-born PDFs, which already carry a text layer. Off by default;
+    # set INDEXING_DO_OCR=true to re-enable for scanned/image-only PDFs (a
+    # scanned PDF with OCR off yields no text → the version fails with a clear
+    # "no chunks" error rather than hanging).
+    opts.do_ocr = os.environ.get("INDEXING_DO_OCR", "false").lower() == "true"
+    opts.accelerator_options = AcceleratorOptions(
+        num_threads=int(os.environ.get("DOCLING_NUM_THREADS", str(os.cpu_count() or 4))),
+        device=AcceleratorDevice.CPU,
+    )
+    # Only the PDF pipeline is customised; other formats keep Docling defaults.
+    return DocumentConverter(
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}
+    )
 
 
 def build_chunker(max_tokens: int = CHUNK_MAX_TOKENS) -> "HybridChunker":
-    """HybridChunker aligned to the BGE-M3 tokenizer, ``local_files_only`` first."""
+    """HybridChunker aligned to the embedding model's tokenizer, ``local_files_only`` first."""
     from docling.chunking import HybridChunker
 
     try:

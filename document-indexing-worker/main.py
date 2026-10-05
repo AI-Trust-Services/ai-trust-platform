@@ -4,7 +4,7 @@ Polls Postgres for ``document_versions`` in status ``pending`` (the queue is the
 no broker), claims one with ``FOR UPDATE SKIP LOCKED``, then:
   1. download the original from MinIO
   2. Docling → structure-aware chunks with provenance
-  3. embed passages via the shared embedding service (BGE-M3 dense)
+  3. embed passages via the shared embedding service (dense vectors)
   4. insert chunks (embedding + generated FTS column) and mark the version ``indexed``
 
 On any failure the version is marked ``failed`` with the error message, so the API can
@@ -55,12 +55,21 @@ def _new_id(prefix: str) -> str:
 
 
 async def _claim_pending() -> dict | None:
-    """Atomically claim one pending version (→ processing). Returns its work info."""
+    """Atomically claim one pending version (→ processing). Returns its work info.
+
+    Skips versions whose document was soft-deleted — indexing them would be wasted
+    work (their chunks are filtered out of retrieval) and would delay live uploads.
+    """
     async with SessionLocal() as session:
         row = (
             await session.execute(
                 select(DocumentVersion)
-                .where(DocumentVersion.status == "pending")
+                .where(
+                    DocumentVersion.status == "pending",
+                    DocumentVersion.document_id.in_(
+                        select(Document.id).where(Document.deleted_at.is_(None))
+                    ),
+                )
                 .order_by(DocumentVersion.created_at)
                 .limit(1)
                 .with_for_update(skip_locked=True)
@@ -114,7 +123,21 @@ async def _mark_failed(version_id: str, error: str) -> None:
         ).scalar_one_or_none()
         if row is not None:
             row.status = "failed"
+            row.stage = None
             row.error = error[:2000]
+            await session.commit()
+
+
+async def _set_stage(version_id: str, stage: str) -> None:
+    """Record the current processing phase so the API/UI can show progress."""
+    async with SessionLocal() as session:
+        row = (
+            await session.execute(
+                select(DocumentVersion).where(DocumentVersion.id == version_id)
+            )
+        ).scalar_one_or_none()
+        if row is not None:
+            row.stage = stage
             await session.commit()
 
 
@@ -122,15 +145,18 @@ async def _process(work: dict) -> None:
     version_id = work["version_id"]
     ai_system_id = work["ai_system_id"]
 
+    await _set_stage(version_id, "parsing")
     data = await minio_client.download_file(work["minio_key"])
     chunks = await asyncio.to_thread(_parse_bytes, data, work["file_name"])
     if not chunks:
         raise ValueError("Document produced no chunks")
 
+    await _set_stage(version_id, "embedding")
     vectors = await embedding_client.embed([c.embed_text for c in chunks])
     if len(vectors) != len(chunks):
         raise ValueError("Embedding count does not match chunk count")
 
+    await _set_stage(version_id, "storing")
     async with SessionLocal() as session:
         for chunk, vector in zip(chunks, vectors):
             session.add(
@@ -154,6 +180,7 @@ async def _process(work: dict) -> None:
             )
         ).scalar_one()
         row.status = "indexed"
+        row.stage = None
         row.chunk_count = len(chunks)
         row.indexed_at = datetime.now(timezone.utc)
         await session.commit()
