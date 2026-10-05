@@ -74,9 +74,9 @@ Watch it come up with `make status` or `kubectl get pods -n ai-trust -w`. One-sh
 
 ## Day-to-day
 
-- Rebuilt an image after a code change? `make build` again, then
-  `kubectl rollout restart deployment/<name> -n ai-trust` (or `make upgrade` to reapply everything).
-- Changed something a one-shot **Job** runs (e.g. added a migration)? `make build` (rebuilds the image) → `make upgrade`. Each upgrade renders the Jobs under a new per-revision name (`<base>-r<N>`), so Helm creates fresh Jobs and prunes the previous revision's automatically — no manual cleanup, no Job immutability error (see [Per-revision Job names](#per-revision-job-names-one-shot-jobs)).
+- Rebuilt an image after a code change? `make build && make upgrade` — rebuilds all images and redeploys via Helm in one step. No need to recreate the cluster.
+- Changed only Helm chart / config (no code change)? `make upgrade` alone — skips the image build.
+- Changed something a one-shot **Job** runs (e.g. added a migration)? `make build && make upgrade`. Each upgrade renders the Jobs under a new per-revision name (`<base>-r<N>`), so Helm creates fresh Jobs and prunes the previous revision's automatically — no manual cleanup, no Job immutability error (see [Per-revision Job names](#per-revision-job-names-one-shot-jobs)).
 - `make down` tears down the Helm release and deletes the whole kind cluster (PVC-backed data goes with it).
 
 ## How dependency ordering works

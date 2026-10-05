@@ -58,6 +58,18 @@ See [k8s/README.md](k8s/README.md) for the full local setup guide, and [docs/arc
 make down        # uninstall Helm release + delete kind cluster (keeps .env)
 ```
 
+### Local development workflow
+
+After `make up`, you don't need to recreate the cluster for every change:
+
+```bash
+make build       # rebuild changed images and reload them into the cluster
+make upgrade     # redeploy via Helm (picks up config/chart changes)
+make lint        # format Python files in-place + run ruff lint check
+```
+
+For a code change to a backend or worker: `make build && make upgrade`. For a Helm/config-only change: `make upgrade` alone is enough.
+
 ## Testing
 
 ### Backend / Worker microservices

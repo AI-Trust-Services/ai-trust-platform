@@ -13,6 +13,13 @@ make down    # helm uninstall + kind delete cluster
 ```
 Manifests live in `k8s/helm/ai-trust-platform/`.
 
+**Day-to-day development** (cluster already running):
+```bash
+make build && make upgrade   # after a code change — rebuild images, redeploy via Helm
+make upgrade                 # after a Helm/config-only change — no image rebuild needed
+make lint                    # format Python in-place + ruff lint check (mirrors CI)
+```
+
 **Stateful workloads** (`postgres`, `clickhouse`, `minio`, `ollama`) are `kind: StatefulSet` with `volumeClaimTemplates` (not standalone PVCs). This gives each pod a stable PVC identity (`data-postgres-0` etc.) and lets the CSI driver safely detach/reattach the volume when a pod reschedules to a different node — preventing the RWO deadlock that occurs with plain Deployments on multi-node clusters. `updateStrategy: RollingUpdate` with `maxUnavailable: 1` ensures the old pod fully terminates (releasing the volume) before the new pod starts.
 
 **OpenFGA store ID** is distributed as a Kubernetes `Secret` (`openfga-store-id`) rather than a PVC. The `openfga-provision` Job writes the store ID to the Secret; all backends mount it read-only at `/config/store_id` via a `secret` volume. This avoids the RWO multi-node attach conflict that a shared PVC would cause when backends land on different nodes.
