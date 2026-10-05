@@ -1,7 +1,7 @@
 """Seed NVIDIA Nemotron-3-Ultra-550B model card with full dataset and benchmark data.
 
-Revision ID: 0028
-Revises: 0027
+Revision ID: 0030
+Revises: 0029
 Create Date: 2026-09-25
 """
 
@@ -9,8 +9,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0028"
-down_revision = "0027"
+revision = "0030"
+down_revision = "0029"
 branch_labels = None
 depends_on = None
 
