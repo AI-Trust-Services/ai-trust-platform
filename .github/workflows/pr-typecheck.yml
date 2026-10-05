@@ -24,6 +24,7 @@ jobs:
             audit/frontend
             compliance/frontend
             decision-trace-analyzer/frontend
+            document-indexing/frontend
             monitoring/frontend
             users/frontend
           )

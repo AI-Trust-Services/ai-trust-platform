@@ -13,6 +13,7 @@ variable "VITE_COMPLIANCE_API_BASE"  { default = "/api/compliance/v1" }
 variable "VITE_DTA_API_BASE"         { default = "/api/dta/v1" }
 variable "VITE_AUDIT_API_BASE"       { default = "/api/audit/v1" }
 variable "VITE_ADMIN_API_BASE"       { default = "/api/admin/v1" }
+variable "VITE_INDEXING_API_BASE"    { default = "/api/indexing/v1" }
 
 function "tag" {
   params = [name]
@@ -53,6 +54,7 @@ group "default" {
     "decision-trace-analyzer-frontend",
     "audit-frontend",
     "admin-frontend",
+    "document-indexing-frontend",
     "cognee-eval-backend",
     "ai-gateway",
   ]
@@ -390,6 +392,19 @@ target "admin-frontend" {
   }
   cache-from = ["type=gha,scope=admin-frontend"]
   cache-to   = ["type=gha,mode=max,scope=admin-frontend"]
+}
+
+target "document-indexing-frontend" {
+  context    = "./document-indexing/frontend"
+  dockerfile = "Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("document-indexing-frontend")]
+  args = {
+    VITE_INDEXING_API_BASE = VITE_INDEXING_API_BASE
+    VITE_USERS_API_BASE    = VITE_USERS_API_BASE
+  }
+  cache-from = ["type=gha,scope=document-indexing-frontend"]
+  cache-to   = ["type=gha,mode=max,scope=document-indexing-frontend"]
 }
 
 target "cognee-eval-backend" {
