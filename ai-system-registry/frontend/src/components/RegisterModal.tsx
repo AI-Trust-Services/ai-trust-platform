@@ -138,9 +138,13 @@ export default function RegisterModal({ open, onClose, onSuccess }: Props) {
               <Textarea id="reg_desc" rows={3} value={form.description} onChange={set("description")} placeholder="Brief description of the AI system…" />
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="reg_purpose">Purpose of Use</Label>
-              <Textarea id="reg_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="What is this AI system used for?" />
+            <div className="flex flex-col gap-1.5 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3">
+              <Label htmlFor="reg_purpose" className="flex flex-wrap items-center gap-2 text-[var(--brand)]">
+                Purpose of Use
+                <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk classification category</span>
+              </Label>
+              <Textarea id="reg_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="What is this AI system used for?" className="border-[var(--brand)]/40 focus-visible:ring-[var(--brand)]" />
+              <p className="text-xs text-muted-foreground">The intended purpose determines how your AI system is classified under the EU AI Act.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
