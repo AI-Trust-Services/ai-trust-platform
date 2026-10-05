@@ -15,7 +15,12 @@ from ai_trust_persistence.models import Document, DocumentVersion
 
 from app import minio_client
 from app.ids import new_id
-from app.schemas import DocumentStatusResponse, UploadResponse
+from app.schemas import (
+    DocumentStatusResponse,
+    DownloadUrlResponse,
+    UploadResponse,
+    VersionResponse,
+)
 
 router = APIRouter(tags=["documents"])
 logger = get_logger(__name__)
@@ -48,6 +53,7 @@ def _status_response(doc: Document, version: DocumentVersion) -> DocumentStatusR
         version_id=version.id,
         version_label=version.version_label,
         status=version.status,
+        stage=version.stage,
         chunk_count=version.chunk_count,
         error=version.error,
         created_at=doc.created_at,
@@ -55,16 +61,9 @@ def _status_response(doc: Document, version: DocumentVersion) -> DocumentStatusR
     )
 
 
-@router.post(
-    "/systems/{system_id}/documents",
-    response_model=UploadResponse,
-    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
-)
-async def upload_document(
-    system_id: str, request: Request, file: UploadFile = File(...)
-) -> UploadResponse:
-    """Upload a document for an AI system. Stores the original in MinIO and creates a
-    ``pending`` version; the worker picks it up and indexes it asynchronously."""
+async def _read_valid_upload(request: Request, file: UploadFile) -> tuple[str, bytes]:
+    """Validate an upload (name, extension, size, non-empty) and return (filename, bytes).
+    Shared by the first upload and the new-version upload."""
     filename = os.path.basename(file.filename or "")
     if not filename:
         raise HTTPException(422, "Missing filename")
@@ -83,6 +82,31 @@ async def upload_document(
         raise HTTPException(413, "File too large (max 50 MB)")
     if not data:
         raise HTTPException(422, "Empty file")
+    return filename, data
+
+
+def _next_version_label(versions: list[DocumentVersion]) -> str:
+    """Next major version label, e.g. existing 1.0 → '2.0'. Falls back to '1.0'."""
+    majors = []
+    for v in versions:
+        try:
+            majors.append(int(str(v.version_label).split(".")[0]))
+        except (ValueError, IndexError):
+            pass
+    return f"{(max(majors) + 1) if majors else 1}.0"
+
+
+@router.post(
+    "/systems/{system_id}/documents",
+    response_model=UploadResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
+async def upload_document(
+    system_id: str, request: Request, file: UploadFile = File(...)
+) -> UploadResponse:
+    """Upload a document for an AI system. Stores the original in MinIO and creates a
+    ``pending`` version; the worker picks it up and indexes it asynchronously."""
+    filename, data = await _read_valid_upload(request, file)
 
     document_id = new_id("DOC")
     version_id = new_id("DOCV")
@@ -187,6 +211,111 @@ async def get_document(document_id: str) -> DocumentStatusResponse:
     async with SessionLocal() as session:
         doc, version = await _load_current(session, document_id)
     return _status_response(doc, version)
+
+
+@router.post(
+    "/documents/{document_id}/versions",
+    response_model=UploadResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
+async def upload_version(
+    document_id: str, request: Request, file: UploadFile = File(...)
+) -> UploadResponse:
+    """Upload a new version of a document. The new version becomes current and is
+    re-indexed; the previous version's chunks drop out of new retrieval results
+    (``is_current=False``) while its history and file are retained (acceptance criterion 7)."""
+    filename, data = await _read_valid_upload(request, file)
+    new_version_id = new_id("DOCV")
+
+    await minio_client.ensure_bucket()
+    key = await minio_client.upload_file(
+        document_id, new_version_id, filename, data, file.content_type or ""
+    )
+
+    try:
+        async with SessionLocal() as session:
+            doc, current = await _load_current(session, document_id)
+            versions = list(
+                (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == document_id
+                        )
+                    )
+                ).scalars()
+            )
+            current.is_current = False
+            session.add(
+                DocumentVersion(
+                    id=new_version_id,
+                    document_id=document_id,
+                    version_label=_next_version_label(versions),
+                    minio_key=key,
+                    file_name=filename,
+                    file_size=len(data),
+                    status="pending",
+                    is_current=True,
+                )
+            )
+            # Keep the parent's display name/type in sync with the current version.
+            doc.filename = filename
+            doc.mime_type = file.content_type
+            await session.commit()
+    except Exception:
+        # Compensating delete so a failed swap doesn't orphan the object.
+        await minio_client.delete_file(key)
+        logger.exception(
+            "document.version_upload_failed", extra={"document_id": document_id}
+        )
+        raise
+
+    logger.info(
+        "document.version_uploaded",
+        extra={"document_id": document_id, "version_id": new_version_id},
+    )
+    return UploadResponse(
+        document_id=document_id, version_id=new_version_id, status="pending"
+    )
+
+
+@router.get(
+    "/documents/{document_id}/versions",
+    response_model=list[VersionResponse],
+    dependencies=[Depends(require_permission(SYSTEMS_READ))],
+)
+async def list_versions(document_id: str) -> list[VersionResponse]:
+    """Version history, oldest-first (acceptance criterion: maintain document versions)."""
+    async with SessionLocal() as session:
+        doc = (
+            await session.execute(select(Document).where(Document.id == document_id))
+        ).scalar_one_or_none()
+        if doc is None or doc.deleted_at is not None:
+            raise HTTPException(404, f"Document {document_id} not found")
+        rows = list(
+            (
+                await session.execute(
+                    select(DocumentVersion)
+                    .where(DocumentVersion.document_id == document_id)
+                    .order_by(DocumentVersion.created_at.asc())
+                )
+            ).scalars()
+        )
+    return [VersionResponse.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/documents/{document_id}/download-url",
+    response_model=DownloadUrlResponse,
+    dependencies=[Depends(require_permission(SYSTEMS_READ))],
+)
+async def document_download_url(document_id: str) -> DownloadUrlResponse:
+    """Presigned URL to the current version's original file, so a retrieved passage can
+    be traced back and opened at its source location (acceptance criterion 6)."""
+    async with SessionLocal() as session:
+        _, version = await _load_current(session, document_id)
+        key = version.minio_key
+    url = await minio_client.get_presigned_url(key)
+    return DownloadUrlResponse(url=url, expires_hours=1)
 
 
 @router.delete(

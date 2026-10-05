@@ -1,4 +1,4 @@
-"""Client for the shared embedding service (BGE-M3 dense vectors over HTTP).
+"""Client for the shared embedding service (dense vectors over HTTP).
 
 Both this backend (query embeddings) and the indexing worker (passage embeddings)
 call the same service so index- and query-time vectors are identical.
@@ -19,10 +19,16 @@ def _timeout() -> float:
     return float(os.environ.get("EMBEDDING_TIMEOUT", "60"))
 
 
-async def embed(texts: list[str]) -> list[list[float]]:
-    """Return one L2-normalised dense vector per input text."""
+async def embed(texts: list[str], kind: str = "query") -> list[list[float]]:
+    """Return one L2-normalised dense vector per input text.
+
+    ``kind`` selects the E5 prefix the service applies; this backend only ever embeds
+    queries, so it defaults to ``query`` (no-op for bge-m3).
+    """
     async with httpx.AsyncClient(timeout=_timeout()) as client:
-        resp = await client.post(f"{_service_url()}/embed", json={"texts": texts})
+        resp = await client.post(
+            f"{_service_url()}/embed", json={"texts": texts, "kind": kind}
+        )
         resp.raise_for_status()
         return resp.json()["vectors"]
 

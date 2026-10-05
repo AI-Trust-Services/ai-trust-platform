@@ -113,8 +113,9 @@ async def retrieve(
             {
                 "chunk_id": chunk.id,
                 "passage": chunk.text,
-                # Fused rank position → a simple descending score for the caller.
-                "score": 1.0 / (rank + 1),
+                # 1-based position in the fused ranking — a plain ordering number,
+                # not a relevance/confidence score (RRF produces no absolute score).
+                "rank": rank + 1,
                 "source": {
                     "document_id": doc.id,
                     "version_id": version.id,

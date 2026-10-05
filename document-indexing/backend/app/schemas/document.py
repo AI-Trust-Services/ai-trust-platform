@@ -22,10 +22,34 @@ class DocumentStatusResponse(BaseModel):
     version_id: str
     version_label: str
     status: str
+    # Fine-grained phase within `processing` (parsing | embedding | storing); null
+    # outside that state. Drives the UI progress indicator.
+    stage: str | None = None
     chunk_count: int
     error: str | None = None
     created_at: datetime
     indexed_at: datetime | None = None
+
+
+class VersionResponse(BaseModel):
+    """One entry in a document's version history (oldest-first)."""
+
+    model_config = {"from_attributes": True}
+
+    id: str
+    version_label: str
+    status: str
+    chunk_count: int
+    is_current: bool
+    error: str | None = None
+    created_at: datetime
+    indexed_at: datetime | None = None
+
+
+class DownloadUrlResponse(BaseModel):
+    url: str
+    expires_hours: int
+
 
 
 class RetrieveRequest(BaseModel):
@@ -49,5 +73,6 @@ class SourceRef(BaseModel):
 class RetrievedPassage(BaseModel):
     chunk_id: str
     passage: str
-    score: float
+    # 1-based position in the fused ranking (ordering only, not a relevance score).
+    rank: int
     source: SourceRef
