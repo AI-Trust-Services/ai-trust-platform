@@ -14,6 +14,7 @@ Create a new RabbitMQ consumer under `consumers/` that subscribes to the `otel.t
 
 1. Creates `consumers/<name>/` with all required files
 2. Adds the matching Deployment to the k8s Helm chart
+3. Registers the image in all three inventories: `build-and-load-images.sh` (kind), `docker-bake.hcl` (CI), `.ocm/component-constructor.yaml` (Gardener)
 
 ---
 
@@ -101,13 +102,48 @@ spec:
 ```
 
 Add an HTTP `readinessProbe`/`Service` too if the consumer exposes a port (same as
-`otel-rmq-bridge` in that file). Then add `<consumer-name>` to the image list in
-`k8s/scripts/build-and-load-images.sh`.
+`otel-rmq-bridge` in that file).
 
-### Step 7 — Report back
+### Step 7 — Add the image to all three inventories
+
+All three must be updated together — a missing entry silently breaks the corresponding deploy path.
+
+**`k8s/scripts/build-and-load-images.sh`** — kind local builds. Add `"<consumer-name>"` to the
+images array alongside `"otel-clickhouse-consumer"`.
+
+**`docker-bake.hcl`** — CI image builds (used by both `build-push-deploy.yml` and the PR deployment
+test). Add a new target block and include it in `group "default"`. Use `otel-clickhouse-consumer` as
+the reference pattern:
+
+```hcl
+target "<consumer-name>" {
+  context    = "."
+  dockerfile = "consumers/<name>/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("<consumer-name>")]
+  cache-from = ["type=gha,scope=<consumer-name>"]
+  cache-to   = ["type=gha,mode=max,scope=<consumer-name>"]
+}
+```
+
+Also add `"<consumer-name>"` to the `targets` list inside `group "default"`.
+
+**`.ocm/component-constructor.yaml`** — Gardener/OCM packaging. An image absent here ships broken
+to Gardener. Add a new `ociImage` resource block alongside `otel-clickhouse-consumer`:
+
+```yaml
+  - name: <consumer-name>
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/<consumer-name>:${IMAGE_TAG}
+```
+
+### Step 8 — Report back
 
 Tell the user:
 - Files created
 - The `QUEUE_NAME` used (important — must be unique)
 - Any TODOs left in `main.py` for them to fill in
-- How to test: `make build && make upgrade` (rebuilds and reloads into the kind cluster)
+- How to test: `make build && make upgrade && make rollout` (rebuilds and reloads into the kind cluster)
