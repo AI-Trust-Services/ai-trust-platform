@@ -6,7 +6,7 @@ indexing ``status`` (pending → processing → indexed / failed) — that statu
 is the single source of truth exposed by the API (acceptance criterion 1).
 
 Indexing produces ``DocumentChunk`` rows: the raw text (for display / full-text
-search), the contextualised text that was embedded, the BGE-M3 dense vector, a
+search), the contextualised text that was embedded, the dense embedding vector, a
 generated ``content_tsv`` for Postgres FTS, and provenance (page / bbox / structural
 anchor / heading path) so every retrieved passage traces back to its source location
 (acceptance criterion 6).
@@ -37,8 +37,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
 
-# BGE-M3 dense embedding dimensionality (see experiments/document-indexing/embed.py).
-EMBEDDING_DIM = 1024
+# Dense embedding dimensionality. Must match the active EMBED_MODEL served by
+# embedding-service: multilingual-e5-small = 384 (e5-base = 768, bge-m3 = 1024).
+# Changing the model means a migration altering document_chunks.embedding + re-index.
+EMBEDDING_DIM = 384
 
 
 class Document(Base):
@@ -75,6 +77,9 @@ class DocumentVersion(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="pending"
     )
+    # Fine-grained phase while status == 'processing' (parsing | embedding | storing),
+    # written by the worker so the API/UI can show progress; null otherwise.
+    stage: Mapped[str | None] = mapped_column(String(20), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -110,9 +115,14 @@ class DocumentChunk(Base):
     embedding: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     # Generated FTS column. 'simple' config (no stemming) keeps exact IDs/codes
     # matchable — the lexical channel's whole point (acceptance criterion 4).
+    # Built from embed_text (contextualised: heading path + body), NOT the raw body,
+    # so an identifier that lives in a heading — e.g. "Article 70" in a legal doc —
+    # is in the searched field. websearch_to_tsquery ANDs the query terms, so a bare
+    # `text` (body only) could never match a heading-only ID and the lexical channel
+    # silently missed it; embed_text puts the heading tokens in the index.
     content_tsv: Mapped[Any] = mapped_column(
         TSVECTOR,
-        Computed("to_tsvector('simple', text)", persisted=True),
+        Computed("to_tsvector('simple', embed_text)", persisted=True),
         nullable=True,
     )
     # Provenance — both forms: page/bbox (PDF) and structural anchor + heading path.
