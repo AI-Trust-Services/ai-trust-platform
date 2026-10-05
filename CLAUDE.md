@@ -15,10 +15,12 @@ Manifests live in `k8s/helm/ai-trust-platform/`.
 
 **Day-to-day development** (cluster already running):
 ```bash
-make build && make upgrade   # after a code change — rebuild images, redeploy via Helm
-make upgrade                 # after a Helm/config-only change — no image rebuild needed
-make lint                    # format Python in-place + ruff lint check (mirrors CI)
+make build && make upgrade && make rollout   # after a code change — rebuild images, redeploy via Helm, restart all Deployments
+make upgrade                                 # after a Helm/config-only change — no image rebuild or rollout needed
+make lint                                    # format Python in-place + ruff lint check (mirrors CI)
 ```
+
+> **Why `make rollout`?** All local images share the same `:local` tag and `imagePullPolicy: IfNotPresent`. `helm upgrade` only restarts pods whose rendered template changes, so Deployments whose manifests are unchanged (e.g. frontends, shell) keep running the old image. `make rollout` force-restarts every Deployment in the namespace so the newly-loaded image is picked up.
 
 **Stateful workloads** (`postgres`, `clickhouse`, `minio`, `ollama`) are `kind: StatefulSet` with `volumeClaimTemplates` (not standalone PVCs). This gives each pod a stable PVC identity (`data-postgres-0` etc.) and lets the CSI driver safely detach/reattach the volume when a pod reschedules to a different node — preventing the RWO deadlock that occurs with plain Deployments on multi-node clusters. `updateStrategy: RollingUpdate` with `maxUnavailable: 1` ensures the old pod fully terminates (releasing the volume) before the new pod starts.
 

@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# Interactive install-time prompt: choose single-tenant vs multi-tenant and write
-# TENANCY_MODE into .env (creating .env from .env.example on first run). Called by
-# `make up` / `make configure`. Non-interactive callers can skip the prompt by
-# setting TENANCY_MODE in the environment (e.g. TENANCY_MODE=jwt make up), or by
-# having already set it in .env.
+# Sets TENANCY_MODE in .env (creating .env from .env.example on first run).
+# Called by `make up` / `make configure`.
+#
+# Usage:
+#   configure-tenancy.sh           — single-tenant (default, non-interactive)
+#   configure-tenancy.sh multi     — multi-tenant
+#   TENANCY_MODE=jwt make up       — env-var override (same effect, skips prompt)
+#
+# When stdin is a TTY and no mode is given or env-set, prompts interactively.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,11 +29,16 @@ fi
 # current value (if any) from .env
 current="$(grep -E '^TENANCY_MODE=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r' || true)"
 
-# 1) explicit override from the environment wins and is non-interactive.
+# 1) positional argument wins (configure-tenancy.sh multi)
+# 2) TENANCY_MODE env var wins next
+# 3) interactive prompt when stdin is a TTY
+# 4) default to single (non-interactive / CI)
+arg="${1:-}"
 mode="${TENANCY_MODE:-}"
 
-# 2) otherwise prompt (unless stdin is not a TTY — then keep whatever .env has / default single).
-if [[ -z "$mode" ]]; then
+if [[ -n "$arg" ]]; then
+  mode="$arg"
+elif [[ -z "$mode" ]]; then
   if [[ -t 0 ]]; then
     echo ""
     echo "  Select the tenancy mode for this installation:"
@@ -44,20 +53,19 @@ if [[ -z "$mode" ]]; then
       *)           mode="single" ;;
     esac
   else
-    mode="${current:-single}"
-    echo "==> non-interactive shell; using TENANCY_MODE=$mode"
+    mode="single"
+    echo "==> non-interactive shell; defaulting to TENANCY_MODE=single"
   fi
 fi
 
 # normalize
 case "$mode" in
-  jwt|multi) mode="jwt" ;;
-  *)         mode="single" ;;
+  jwt|multi|2) mode="jwt" ;;
+  *)           mode="single" ;;
 esac
 
 # write it back into .env (replace existing line or append)
 if grep -qE '^TENANCY_MODE=' "$ENV_FILE"; then
-  # portable in-place edit (works on GNU + BSD sed) via a temp file
   tmp="$(mktemp)"
   sed -E "s|^TENANCY_MODE=.*|TENANCY_MODE=${mode}|" "$ENV_FILE" > "$tmp" && mv "$tmp" "$ENV_FILE"
 else

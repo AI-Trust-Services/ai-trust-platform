@@ -8,7 +8,7 @@ CHART := k8s/helm/ai-trust-platform
 # Auto-enable Ollama in Helm when LLM_PROVIDER=ollama is set in .env
 OLLAMA_SET := $(shell grep -s '^LLM_PROVIDER=ollama' .env > /dev/null 2>&1 && echo '--set ollama.enabled=true' || echo '')
 
-.PHONY: up down cluster delete-cluster configure bootstrap build install upgrade uninstall reset-jobs status forward-ports stop-forwards test-int lint
+.PHONY: up down cluster delete-cluster configure bootstrap build install upgrade rollout uninstall reset-jobs status forward-ports stop-forwards test-int lint
 
 # Full stack, from nothing.
 # `configure` runs first: it PROMPTS for the tenancy mode (single vs multi-tenant) and
@@ -32,10 +32,10 @@ delete-cluster:
 	kind delete cluster --name $(CLUSTER_NAME)
 
 # Interactive: choose single-tenant vs multi-tenant, written to .env (creates .env
-# from .env.example on first run). Run it standalone to change the mode later, then
-# `make bootstrap upgrade`.
+# from .env.example on first run). Defaults to single-tenant when non-interactive.
+# Override: `make configure MODE=multi` or `TENANCY_MODE=jwt make up`.
 configure:
-	bash k8s/scripts/configure-tenancy.sh
+	bash k8s/scripts/configure-tenancy.sh $(MODE)
 
 bootstrap:
 	bash k8s/scripts/bootstrap.sh
@@ -52,6 +52,13 @@ install:
 
 upgrade:
 	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
+
+# After `make build && make upgrade`, pods that weren't restarted by Helm (because
+# their rendered template didn't change) still run the old :local image. This target
+# force-restarts every Deployment in the namespace so the newly-loaded image is used.
+rollout:
+	kubectl rollout restart deployment -n $(NAMESPACE)
+	kubectl rollout status deployment -n $(NAMESPACE) --timeout=120s
 
 uninstall:
 	-helm uninstall $(RELEASE) -n $(NAMESPACE)
