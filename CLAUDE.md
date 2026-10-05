@@ -172,7 +172,7 @@ The platform is a **single codebase** that runs in one of two tenancy modes, sel
   per-tenant ClickHouse DB / MinIO bucket. This mode is normally provisioned by the MSP operator
   bundle, which stamps the per-tenant realm and wiring — selecting `jwt` alone is not enough.
 
-The kind installer (`cd k8s && make up`) **prompts** for the mode and writes `TENANCY_MODE` into
+The kind installer (`make up` from the repo root) **prompts** for the mode and writes `TENANCY_MODE` into
 `.env`. Set it non-interactively with `TENANCY_MODE=<single|jwt> make up`.
 
 

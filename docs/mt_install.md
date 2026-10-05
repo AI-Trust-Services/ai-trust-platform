@@ -17,7 +17,7 @@ explicitly ask for it.
 |---|---|---|
 | Application code | `single` | `libs/tenancy/config.py` → `os.environ.get("TENANCY_MODE", "single")` — the whole tenancy layer is a **no-op** in single mode |
 | `.env.example` | `TENANCY_MODE=single` | shipped default |
-| k8s installer (`cd k8s && make up`) | prompts; **Enter = single** | `k8s/scripts/configure-tenancy.sh` |
+| k8s installer (`make up` from repo root) | prompts; **Enter = single** | `k8s/scripts/configure-tenancy.sh` |
 
 **How the mode is selected, in priority order:**
 
