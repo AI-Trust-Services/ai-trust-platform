@@ -1,7 +1,7 @@
 """Add business_owners, technical_owners, git_repo_url to ai_systems
 
-Revision ID: 0028
-Revises: 0027
+Revision ID: 0029
+Revises: 0028
 Create Date: 2026-10-01
 """
 

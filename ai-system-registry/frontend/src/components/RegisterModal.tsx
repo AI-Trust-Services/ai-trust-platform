@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Loader2, X, Paperclip, ExternalLink } from "lucide-react";
+import { Loader2, X, ExternalLink } from "lucide-react";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import type { UserSummary } from "../types";
@@ -42,17 +42,14 @@ function displayName(u: UserSummary) {
 export default function RegisterModal({ open, onClose, onSuccess }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [users, setUsers] = useState<UserSummary[]>([]);
-  const [docFile, setDocFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const submitting = useRef(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const showToast = useToast();
   useModalControls();
 
   useEffect(() => {
     if (!open) return;
     setForm(EMPTY);
-    setDocFile(null);
     submitting.current = false;
     api.getAllUsers().catch(() => []).then(setUsers);
   }, [open]);
@@ -69,7 +66,7 @@ export default function RegisterModal({ open, onClose, onSuccess }: Props) {
     submitting.current = true;
     setLoading(true);
     try {
-      const system = await api.intake({
+      await api.intake({
         ...form,
         // Required fields with defaults for the simplified flow
         version: "1.0.0",
@@ -107,14 +104,6 @@ export default function RegisterModal({ open, onClose, onSuccess }: Props) {
         is_judicial_admin: false,
       });
 
-      if (docFile) {
-        try {
-          await api.uploadDocument(system.id, docFile);
-        } catch {
-          showToast("System registered, but document upload failed", true);
-        }
-      }
-
       showToast("AI system registered");
       onSuccess();
       onClose();
@@ -150,7 +139,7 @@ export default function RegisterModal({ open, onClose, onSuccess }: Props) {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="reg_purpose">Intended Purpose</Label>
+              <Label htmlFor="reg_purpose">Purpose of Use</Label>
               <Textarea id="reg_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="What is this AI system used for?" />
             </div>
 
@@ -199,37 +188,6 @@ export default function RegisterModal({ open, onClose, onSuccess }: Props) {
                 />
               </div>
               <p className="text-xs text-muted-foreground">Link to the source repository or application (e.g. GitHub, GitLab).</p>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label>Technical Documentation</Label>
-              <div
-                className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Paperclip className="size-4 shrink-0" />
-                {docFile ? (
-                  <span className="truncate text-foreground">{docFile.name}</span>
-                ) : (
-                  <span>Attach PDF document…</span>
-                )}
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.doc,.docx"
-                className="hidden"
-                onChange={(e) => setDocFile(e.target.files?.[0] ?? null)}
-              />
-              {docFile && (
-                <button
-                  type="button"
-                  className="self-start text-xs text-muted-foreground hover:text-[var(--danger-fg)]"
-                  onClick={() => { setDocFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
-                >
-                  Remove file
-                </button>
-              )}
             </div>
 
           </div>

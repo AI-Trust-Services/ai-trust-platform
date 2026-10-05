@@ -116,7 +116,7 @@ export default function Systems() {
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead>System</TableHead>
-                <TableHead>Intended Purpose</TableHead>
+                <TableHead>Purpose of Use</TableHead>
                 <TableHead>Business Owner</TableHead>
                 <TableHead>Technical Owner</TableHead>
                 <TableHead>Lifecycle</TableHead>
