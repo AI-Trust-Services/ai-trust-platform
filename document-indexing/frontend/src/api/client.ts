@@ -1,8 +1,10 @@
 import type {
   DocumentStatus,
+  DownloadUrlResponse,
   PermissionsResponse,
   RetrievedPassage,
   UploadResponse,
+  VersionInfo,
 } from "../types";
 
 const API_BASE = import.meta.env.VITE_INDEXING_API_BASE as string;
@@ -65,6 +67,21 @@ export const api = {
       body: form,
     });
   },
+
+  uploadVersion: (documentId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<UploadResponse>(`/documents/${encodeURIComponent(documentId)}/versions`, {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  listVersions: (documentId: string) =>
+    request<VersionInfo[]>(`/documents/${encodeURIComponent(documentId)}/versions`),
+
+  getDownloadUrl: (documentId: string) =>
+    request<DownloadUrlResponse>(`/documents/${encodeURIComponent(documentId)}/download-url`),
 
   deleteDocument: (documentId: string) =>
     request<{ deleted: boolean }>(`/documents/${encodeURIComponent(documentId)}`, {

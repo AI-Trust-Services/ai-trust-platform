@@ -1,12 +1,41 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileUp, Loader2, RefreshCw, Search, Trash2 } from "lucide-react";
+import {
+  ExternalLink,
+  FileUp,
+  History,
+  Loader2,
+  RefreshCw,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { api } from "../api/client";
-import type { DocumentStatus, IndexingStatus, RetrievedPassage } from "../types";
+import { registryApi } from "../api/registryClient";
+import type {
+  AISystem,
+  DocumentStatus,
+  IndexingStatus,
+  RetrievedPassage,
+  VersionInfo,
+} from "../types";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -25,8 +54,23 @@ const STATUS_VARIANT: Record<IndexingStatus, "default" | "secondary" | "outline"
 
 const ACTIVE: IndexingStatus[] = ["pending", "processing"];
 
+// Fine-grained phase → step position for the progress hint (5 phases total).
+const STAGE_STEP: Record<string, string> = {
+  parsing: "2/5",
+  embedding: "3/5",
+  storing: "4/5",
+};
+
+function progressHint(d: DocumentStatus): string | null {
+  if (d.status === "pending") return "queued (1/5)";
+  if (d.status === "processing" && d.stage) return `${d.stage} (${STAGE_STEP[d.stage] ?? ""})`;
+  if (d.status === "processing") return "processing…";
+  return null;
+}
+
 export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
-  const [systemId, setSystemId] = useState("");
+  const [systems, setSystems] = useState<AISystem[]>([]);
+  const [systemsError, setSystemsError] = useState<string | null>(null);
   const [loadedSystem, setLoadedSystem] = useState("");
   const [documents, setDocuments] = useState<DocumentStatus[]>([]);
   const [docError, setDocError] = useState<string | null>(null);
@@ -36,11 +80,26 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
+  // Per-row "upload new version" via one hidden input retargeted on click.
+  const versionInput = useRef<HTMLInputElement>(null);
+  const [versionDocId, setVersionDocId] = useState<string | null>(null);
+
+  const [historyDoc, setHistoryDoc] = useState<string | null>(null);
+  const [versions, setVersions] = useState<VersionInfo[] | null>(null);
+
   const [query, setQuery] = useState("");
   const [k, setK] = useState(10);
   const [results, setResults] = useState<RetrievedPassage[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Load the AI-system list for the selector (registry backend).
+  useEffect(() => {
+    registryApi
+      .getSystems()
+      .then((s) => setSystems(s.filter((x) => x.lifecycle !== "decommissioned")))
+      .catch((e) => setSystemsError(e instanceof Error ? e.message : String(e)));
+  }, []);
 
   const loadDocuments = useCallback(async (id: string) => {
     if (!id) return;
@@ -52,10 +111,10 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
     }
   }, []);
 
-  function onLoadSystem() {
-    const id = systemId.trim();
+  function onSelectSystem(id: string) {
     setLoadedSystem(id);
     setResults(null);
+    setDocuments([]);
     void loadDocuments(id);
   }
 
@@ -84,6 +143,37 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
     }
   }
 
+  function triggerVersionUpload(docId: string) {
+    setVersionDocId(docId);
+    versionInput.current?.click();
+  }
+
+  async function onVersionSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
+    if (versionInput.current) versionInput.current.value = "";
+    if (!f || !versionDocId) return;
+    setUploadError(null);
+    try {
+      await api.uploadVersion(versionDocId, f);
+      await loadDocuments(loadedSystem);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setVersionDocId(null);
+    }
+  }
+
+  async function openHistory(docId: string) {
+    setHistoryDoc(docId);
+    setVersions(null);
+    try {
+      setVersions(await api.listVersions(docId));
+    } catch (e) {
+      setDocError(e instanceof Error ? e.message : String(e));
+      setHistoryDoc(null);
+    }
+  }
+
   async function onDelete(id: string) {
     try {
       await api.deleteDocument(id);
@@ -107,6 +197,30 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
     }
   }
 
+  // Trace a passage back to its source: open the original, jumping to the page for PDFs.
+  async function openSource(r: RetrievedPassage) {
+    // Open the tab *synchronously*, inside the click's user-activation window. The
+    // await below consumes that activation, so a window.open() after the fetch is
+    // silently blocked by popup blockers — which is why the link appeared to do
+    // nothing. We open a blank tab now and navigate it once the URL resolves.
+    const win = window.open("", "_blank");
+    if (win) win.opener = null; // sever opener (we dropped noopener to keep the handle)
+    try {
+      const { url } = await api.getDownloadUrl(r.source.document_id);
+      const isPdf = r.source.filename.toLowerCase().endsWith(".pdf");
+      const target = isPdf && r.source.page != null ? `${url}#page=${r.source.page}` : url;
+      if (win) {
+        win.location.replace(target);
+      } else {
+        // Popup blocked outright — fall back to navigating the current tab.
+        window.location.assign(target);
+      }
+    } catch (e) {
+      win?.close();
+      setSearchError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5 px-6 py-5">
       {/* AI system selector */}
@@ -114,25 +228,35 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
         <CardHeader>
           <CardTitle>AI system</CardTitle>
         </CardHeader>
-        <CardContent className="flex items-end gap-3">
-          <div className="flex-1">
-            <Label htmlFor="system-id">AI system ID</Label>
-            <Input
-              id="system-id"
-              placeholder="SYS-XXXXXXXX"
-              value={systemId}
-              onChange={(e) => setSystemId(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && onLoadSystem()}
-            />
-          </div>
-          <Button onClick={onLoadSystem} disabled={!systemId.trim()}>
-            Load
-          </Button>
+        <CardContent className="flex flex-col gap-2">
+          <Label htmlFor="system-select">Select an AI system</Label>
+          <Select value={loadedSystem} onValueChange={onSelectSystem}>
+            <SelectTrigger id="system-select" className="max-w-md">
+              <SelectValue placeholder="Select an AI system…" />
+            </SelectTrigger>
+            <SelectContent>
+              {systems.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name} ({s.id})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {systemsError && <p className="text-[13px] text-destructive">{systemsError}</p>}
         </CardContent>
       </Card>
 
       {loadedSystem && (
         <>
+          {/* hidden input reused for all per-row "new version" uploads */}
+          <input
+            ref={versionInput}
+            type="file"
+            className="hidden"
+            accept=".pdf,.docx,.pptx,.md,.markdown,.html,.htm,.txt"
+            onChange={onVersionSelected}
+          />
+
           {/* Documents + upload */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -172,15 +296,16 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>File</TableHead>
+                    <TableHead className="w-20">Version</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Chunks</TableHead>
-                    {mayWrite && <TableHead className="w-10" />}
+                    <TableHead className="w-28" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {documents.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={mayWrite ? 4 : 3} className="text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
                         No documents yet.
                       </TableCell>
                     </TableRow>
@@ -188,25 +313,51 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
                     documents.map((d) => (
                       <TableRow key={d.id}>
                         <TableCell className="font-medium">{d.filename}</TableCell>
+                        <TableCell className="tabular-nums text-muted-foreground">
+                          {d.version_label}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={STATUS_VARIANT[d.status]}>{d.status}</Badge>
+                          {progressHint(d) && (
+                            <span className="ml-2 text-xs text-muted-foreground">{progressHint(d)}</span>
+                          )}
                           {d.status === "failed" && d.error && (
                             <span className="ml-2 text-xs text-destructive">{d.error}</span>
                           )}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{d.chunk_count}</TableCell>
-                        {mayWrite && (
-                          <TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => void onDelete(d.id)}
-                              title="Delete"
+                              onClick={() => void openHistory(d.id)}
+                              title="Version history"
                             >
-                              <Trash2 className="size-4 text-destructive" />
+                              <History className="size-4" />
                             </Button>
-                          </TableCell>
-                        )}
+                            {mayWrite && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => triggerVersionUpload(d.id)}
+                                  title="Upload new version"
+                                >
+                                  <Upload className="size-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => void onDelete(d.id)}
+                                  title="Delete"
+                                >
+                                  <Trash2 className="size-4 text-destructive" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -257,14 +408,27 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
                   ) : (
                     results.map((r) => (
                       <div key={r.chunk_id} className="rounded-lg border border-border p-3">
-                        <p className="whitespace-pre-wrap text-sm">{r.passage}</p>
+                        <div className="flex items-start gap-3">
+                          <span className="mt-0.5 shrink-0 text-sm font-semibold tabular-nums text-muted-foreground">
+                            #{r.rank}
+                          </span>
+                          <p className="whitespace-pre-wrap text-sm">{r.passage}</p>
+                        </div>
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                           <span className="font-medium text-foreground">{r.source.filename}</span>
+                          <span>v{r.source.version_label}</span>
                           {r.source.page != null && <span>p. {r.source.page}</span>}
                           {r.source.heading_path && r.source.heading_path.length > 0 && (
                             <span>{r.source.heading_path.join(" › ")}</span>
                           )}
-                          <span className="ml-auto tabular-nums">score {r.score.toFixed(3)}</span>
+                          <button
+                            type="button"
+                            onClick={() => void openSource(r)}
+                            className="ml-auto inline-flex items-center gap-1 text-foreground hover:underline"
+                            title="Open source document"
+                          >
+                            Open source <ExternalLink className="size-3" />
+                          </button>
                         </div>
                       </div>
                     ))
@@ -275,6 +439,41 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
           </Card>
         </>
       )}
+
+      {/* Version history */}
+      <Dialog open={historyDoc !== null} onOpenChange={(o) => !o && setHistoryDoc(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Version history</DialogTitle>
+          </DialogHeader>
+          {versions === null ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Version</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Chunks</TableHead>
+                  <TableHead>Current</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {versions.map((v) => (
+                  <TableRow key={v.id}>
+                    <TableCell className="tabular-nums">{v.version_label}</TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANT[v.status]}>{v.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{v.chunk_count}</TableCell>
+                    <TableCell>{v.is_current ? "✓" : ""}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
