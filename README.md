@@ -36,25 +36,26 @@ Organizations register their AI assets once and maintain continuous, automated c
 
 ### Requirements
 
-- Docker + Docker Compose
-- No local language runtime needed — everything runs in containers
+- Docker
+- [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/)
+- [Helm](https://helm.sh/)
 
 ### Quick start
 
 ```bash
-cp .env.example .env          # fill in credentials (defaults work for local dev)
-docker compose up --build -d
+cp .env.example .env   # fill in credentials (defaults work for local dev)
+make up
 ```
 
-All traffic enters through the portal at **http://localhost:8080**. Frontend and backend ports are not exposed directly — they are only reachable via the shell reverse proxy behind oauth2-proxy.
+`make up` creates a local kind cluster, provisions secrets, builds all images, and installs the platform via Helm. All traffic enters through the portal at **http://localhost:8080** via the shell reverse proxy behind oauth2-proxy.
 
-See [docs/architecture.md](docs/architecture.md) for the full repo layout, data flow diagrams, and Docker startup order.
+See [k8s/README.md](k8s/README.md) for the full local setup guide, and [docs/architecture.md](docs/architecture.md) for the repo layout and data flow diagrams.
 
 ### Tear down
 
 ```bash
-docker compose down --remove-orphans          # stop, keep data
-docker compose down -v --remove-orphans       # stop, wipe all data (fresh start)
+make down        # uninstall Helm release + delete kind cluster (keeps .env)
 ```
 
 ## Testing
@@ -93,7 +94,7 @@ Run tests for any component:
 cd <component>          # e.g. cd compliance/backend
 make setup              # first time only — creates .venv, installs deps
 make test-unit          # unit tests only, no Docker needed
-make test-e2e           # e2e tests, requires: docker compose up -d postgres
+make test-e2e           # e2e tests, requires Postgres: make up or docker run postgres
 make test               # all tests
 ```
 
@@ -124,10 +125,9 @@ Frontend unit tests (Vitest) and ESLint are not yet configured — contributions
 | `test_02_registry_compliance.py` | Registry↔compliance shared model, assessment generation, evidence cascade to `ai_systems.compliance`, rejection revert |
 | `test_03_rbac.py` | RBAC 403s across services, admin→users internal HTTP call |
 
-**Run locally** (after `cd k8s && make up`):
+**Run locally** (after `make up`):
 
 ```bash
-cd k8s
 make test-int                    # kind cluster, namespace ai-trust
 ```
 

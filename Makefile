@@ -3,28 +3,28 @@ CLUSTER_NAME := ai-trust
 # namespace is never passed in here (CI calls scripts/ directly with its own namespace).
 NAMESPACE := ai-trust
 RELEASE := ai-trust
-CHART := helm/ai-trust-platform
+CHART := k8s/helm/ai-trust-platform
 
-# Auto-enable Ollama in Helm when LLM_PROVIDER=ollama is set in ../.env
-OLLAMA_SET := $(shell grep -s '^LLM_PROVIDER=ollama' ../.env > /dev/null 2>&1 && echo '--set ollama.enabled=true' || echo '')
+# Auto-enable Ollama in Helm when LLM_PROVIDER=ollama is set in .env
+OLLAMA_SET := $(shell grep -s '^LLM_PROVIDER=ollama' .env > /dev/null 2>&1 && echo '--set ollama.enabled=true' || echo '')
 
 .PHONY: up down cluster delete-cluster configure bootstrap build install upgrade uninstall reset-jobs status forward-ports stop-forwards test-int
 
-# Full stack, from nothing - the kind/Helm equivalent of `docker compose up --build -d`.
+# Full stack, from nothing.
 # `configure` runs first: it PROMPTS for the tenancy mode (single vs multi-tenant) and
 # writes TENANCY_MODE into .env before bootstrap reads it. Skip the prompt in CI by
 # passing it explicitly, e.g. `TENANCY_MODE=single make up`.
 up: configure cluster bootstrap build install
 	@echo "==> open http://localhost:8080"
 
-# Tear the whole thing down - the kind/Helm equivalent of `docker compose down --remove-orphans`
+# Tear the whole thing down.
 down: uninstall delete-cluster
 
 cluster:
 	@if kind get clusters 2>/dev/null | grep -Fxq -- '$(CLUSTER_NAME)'; then \
 		echo "==> kind cluster '$(CLUSTER_NAME)' already exists, skipping create"; \
 	else \
-		kind create cluster --name $(CLUSTER_NAME) --config kind-config.yaml; \
+		kind create cluster --name $(CLUSTER_NAME) --config k8s/kind-config.yaml; \
 	fi
 	kind export kubeconfig --name $(CLUSTER_NAME)
 
@@ -35,13 +35,13 @@ delete-cluster:
 # from .env.example on first run). Run it standalone to change the mode later, then
 # `make bootstrap upgrade`.
 configure:
-	bash scripts/configure-tenancy.sh
+	bash k8s/scripts/configure-tenancy.sh
 
 bootstrap:
-	bash scripts/bootstrap.sh
+	bash k8s/scripts/bootstrap.sh
 
 build:
-	bash scripts/build-and-load-images.sh
+	bash k8s/scripts/build-and-load-images.sh
 
 install:
 	@if helm status $(RELEASE) -n $(NAMESPACE) >/dev/null 2>&1; then \
@@ -65,16 +65,16 @@ status:
 	kubectl get pods -n $(NAMESPACE)
 
 forward-ports:
-	bash scripts/forward-ports.sh $(NAMESPACE)
+	bash k8s/scripts/forward-ports.sh $(NAMESPACE)
 
 stop-forwards:
-	bash scripts/kill-port-forwards.sh
+	bash k8s/scripts/kill-port-forwards.sh
 
 # Run integration tests against the local kind cluster (namespace ai-trust).
 # Installs test deps, starts port-forwards, runs pytest, stops forwards (even on failure).
 test-int:
-	python3 -m pip install -q -r ../tests/integration/requirements.txt; \
-	bash scripts/forward-ports.sh $(NAMESPACE); \
-	python3 -m pytest ../tests/integration/ -v; EXIT=$$?; \
-	bash scripts/kill-port-forwards.sh; \
+	python3 -m pip install -q -r tests/integration/requirements.txt; \
+	bash k8s/scripts/forward-ports.sh $(NAMESPACE); \
+	python3 -m pytest tests/integration/ -v; EXIT=$$?; \
+	bash k8s/scripts/kill-port-forwards.sh; \
 	exit $$EXIT

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Builds every locally-built image (same context/Dockerfile/build-args as the
-# matching docker-compose service) and loads them into the kind cluster - no
+# Builds every locally-built image and loads them into the kind cluster — no
 # registry involved. Third-party images (postgres, keycloak, openfga,
 # oauth2-proxy, rabbitmq, clickhouse-server, otel-collector-contrib)
 # are pulled normally by kubelet and are not built here.
@@ -59,7 +58,7 @@ build mc ./infra/mc ./infra/mc/Dockerfile
 build shell ./shell ./shell/Dockerfile
 build otel-rmq-bridge ./otel-pipeline/rmq-bridge ./otel-pipeline/rmq-bridge/Dockerfile
 
-# ── frontends (Vite build args baked in, same as docker-compose args:) ──
+# ── frontends (Vite build args baked in) ──
 build ai-system-registry-frontend . ./ai-system-registry/frontend/Dockerfile \
   --build-arg "VITE_REGISTRY_API_BASE=${VITE_REGISTRY_API_BASE}" \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"

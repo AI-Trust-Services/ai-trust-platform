@@ -4,7 +4,7 @@ name: ai-trust
 nodes:
   - role: control-plane
     extraPortMappings:
-      # host port (unchanged from docker-compose / CLAUDE.md) -> NodePort on this node
+      # host port (from CLAUDE.md "Service URLs") -> NodePort on this node
       - containerPort: 30080
         hostPort: 8080 # oauth2-proxy - single entry point
       - containerPort: 30180

@@ -15,17 +15,12 @@ EU AI Act compliance registry — register AI systems, get automatic risk classi
 
 ## Running in isolation
 
-```bash
-cd ai-system-registry
-docker compose up --build -d
-```
+The registry can be run as part of the full platform (`make up` from the repo root). For standalone backend development, start Postgres separately:
 
-| Service | URL |
-|---|---|
-| Frontend UI | http://localhost:3001 |
-| Backend API | http://localhost:8001 |
-| API docs (Swagger) | http://localhost:8001/docs |
-| Health check | http://localhost:8001/health |
+```bash
+docker run -d --name pg -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=ai_trust -p 5432:5432 postgres:16-alpine
+```
 
 ## Running tests
 
@@ -34,7 +29,7 @@ cd ai-system-registry/backend
 make setup        # first time only — creates .venv and installs deps
 
 make test-unit    # pure unit tests, no Docker needed
-make test-e2e     # requires Postgres running (docker compose up -d postgres)
+make test-e2e     # requires Postgres running (see above)
 make test         # all tests
 ```
 

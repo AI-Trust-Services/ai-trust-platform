@@ -33,7 +33,7 @@ if [[ -z "$mode" ]]; then
   if [[ -t 0 ]]; then
     echo ""
     echo "  Select the tenancy mode for this installation:"
-    echo "    1) single  — one organization, no per-tenant isolation (default; docker-compose / kind / standalone)"
+    echo "    1) single  — one organization, no per-tenant isolation (default; kind / standalone)"
     echo "    2) multi   — multi-tenant (TENANCY_MODE=jwt); tenant from JWT claim, per-tenant data isolation"
     echo ""
     default_choice="1"; [[ "$current" == "jwt" ]] && default_choice="2"

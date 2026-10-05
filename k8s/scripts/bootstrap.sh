@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Creates everything the Helm chart expects to already exist: namespace, the
-# Secret sourced from .env (single source of truth shared with docker-compose),
-# ConfigMaps sourced from the existing (non-k8s-specific) config files, and the
-# RBAC needed for the "wait for job completion" initContainer pattern.
+# Secret sourced from .env, ConfigMaps sourced from the existing config files,
+# and the RBAC needed for the "wait for job completion" initContainer pattern.
 #
 # Safe to re-run - every command is idempotent (apply, not create).
 set -euo pipefail
@@ -20,10 +19,9 @@ echo "==> namespace/$NAMESPACE"
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> secret/ai-trust-env (from .env, plus computed connection strings)"
-# docker-compose builds DATABASE_URL/RABBITMQ_URL from .env via YAML anchors
-# (x-db-env/x-rmq-env) at `docker compose up` time - .env itself only has the
-# bare POSTGRES_*/RABBITMQ_* credentials. Compute the same two URLs here so
-# every backend can just `envFrom: secretRef: ai-trust-env` and get them too.
+# .env only has bare POSTGRES_*/RABBITMQ_* credentials. Compute DATABASE_URL and
+# RABBITMQ_URL here so every backend can just `envFrom: secretRef: ai-trust-env`
+# and get them too.
 # (kubectl create secret rejects --from-env-file combined with --from-literal,
 # so every .env line is passed through as its own --from-literal instead.)
 set -a

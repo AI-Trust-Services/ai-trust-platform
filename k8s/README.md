@@ -1,25 +1,21 @@
 # Local Kubernetes (kind) deployment
 
-An alternative to `docker compose up` for running the whole platform locally, on a
-single-node [kind](https://kind.sigs.k8s.io/) cluster. **docker-compose remains fully
-supported** - this is a second, independent deployment path that shares the same
-`.env` file, so there is nothing to keep in sync by hand.
+Run the whole platform locally on a single-node [kind](https://kind.sigs.k8s.io/) cluster.
 
 > Deploying to a real **Gardener shoot** (single-tenant, public HTTPS host via the cluster
 > gateway) instead of kind? See [SHOOT-INSTALL.md](SHOOT-INSTALL.md).
 
 Both paths use the exact same host ports (see the "Service URLs" table in
-`CLAUDE.md`), so don't run docker-compose and this kind cluster at the same time -
-they'll fight over ports 8080, 8180, 5432, etc. **Exception:** MinIO's API port is
-mapped to **19000** (not 9000) for the kind path only — port 9000 is commonly held by
+`CLAUDE.md`). **Exception:** MinIO's API port is
+mapped to **19000** (not 9000) for the kind path — port 9000 is commonly held by
 corporate VPN/proxy agents (e.g. Zscaler) on managed laptops. The MinIO console stays
 on 9001. If you need to reach the MinIO API from the host with the kind deployment,
 use `http://localhost:19000` instead of `:9000`.
 
 ## Prerequisites
 
-- `kind`, `kubectl`, `docker` (already required for docker-compose)
-- `helm` - not installed by default; e.g. `choco install kubernetes-helm` on Windows
+- `kind`, `kubectl`, `docker`
+- `helm` — not installed by default; e.g. `choco install kubernetes-helm` on Windows
 - A `.env` at the repo root (copy `.env.example` if you don't have one). If you don't
   have one, `make up` creates it from `.env.example` for you during the `configure` step.
 
@@ -30,7 +26,7 @@ This platform runs in one of two tenancy modes, selected by the `TENANCY_MODE` e
 
 | Mode | `TENANCY_MODE` | What it means | Use it for |
 |---|---|---|---|
-| **Single-tenant** (default) | `single` | One organization. One Keycloak realm, one shared Postgres schema, no per-tenant isolation. | docker-compose, this kind install, any standalone single-org deployment. |
+| **Single-tenant** (default) | `single` | One organization. One Keycloak realm, one shared Postgres schema, no per-tenant isolation. | This kind install, any standalone single-org deployment. |
 | **Multi-tenant** | `jwt` | Tenant resolved from a `tenant_id` OIDC claim; data isolated per tenant (schema-per-tenant Postgres + role, per-tenant Keycloak realm, per-tenant ClickHouse DB / MinIO bucket). Requires `TENANCY_JWKS_ISSUER_BASE`. | SaaS / MSP deployments. Normally installed via the MSP operator bundle, **not** this kind path. |
 
 **`make up` PROMPTS you to pick one** (the `configure` step) and writes `TENANCY_MODE`
@@ -47,30 +43,26 @@ set it explicitly: `TENANCY_MODE=single make up`. To change it later:
 
 ```bash
 cp .env.example .env
-cd k8s
-make up      
+make up
 # PROMPT tenancy mode → kind create cluster → bootstrap → build/load images → helm install
 ```
 
-Then open http://localhost:8080 and log in via Keycloak, same as with docker-compose.
+Then open http://localhost:8080 and log in via Keycloak.
 
 `make up` runs these steps individually, in order:
 
 1. `make configure` - **prompts** for the tenancy mode (single vs multi-tenant), creating
    `.env` from `.env.example` on first run and writing your choice to `TENANCY_MODE`. Skip
    with `TENANCY_MODE=<single|jwt> make up`.
-2. `make cluster` - `kind create cluster --config kind-config.yaml` (single node; `extraPortMappings`
-   map the same host ports docker-compose uses today straight onto NodePort Services - no ingress
-   controller needed, since oauth2-proxy is already the single routing gateway internally).
-3. `make bootstrap` - runs `scripts/bootstrap.sh`, which creates (idempotently) the `ai-trust`
+2. `make cluster` - `kind create cluster --config k8s/kind-config.yaml` (single node; `extraPortMappings`
+   map host ports straight onto NodePort Services — no ingress controller needed, since oauth2-proxy is already the single routing gateway internally).
+3. `make bootstrap` - runs `k8s/scripts/bootstrap.sh`, which creates (idempotently) the `ai-trust`
    namespace, a `Secret` called `ai-trust-env` from `.env` (plus a couple of computed connection
-   strings, e.g. `DATABASE_URL`, that docker-compose builds via YAML anchors), `ConfigMap`s from the
-   existing `infra/postgres/init.sh` and `otel-pipeline/**/config` files, and the small RBAC role
-   used by the "wait for job" pattern below.
-4. `make build` - runs `scripts/build-and-load-images.sh`, which `docker build`s all ~22
-   locally-built images (same context/Dockerfile/build-args as the matching docker-compose
-   service) and `kind load docker-image`s them into the cluster - no registry involved.
-5. `make install` - `helm install ai-trust helm/ai-trust-platform -n ai-trust -f helm/ai-trust-platform/values-kind.yaml`.
+   strings, e.g. `DATABASE_URL`), `ConfigMap`s from the existing `infra/postgres/init.sh` and
+   `otel-pipeline/**/config` files, and the small RBAC role used by the "wait for job" pattern below.
+4. `make build` - runs `k8s/scripts/build-and-load-images.sh`, which `docker build`s all ~22
+   locally-built images and `kind load docker-image`s them into the cluster — no registry involved.
+5. `make install` - `helm install ai-trust k8s/helm/ai-trust-platform -n ai-trust -f k8s/helm/ai-trust-platform/values-kind.yaml`.
    The `values-kind.yaml` overlay switches all infra services from `ClusterIP` (the chart default,
    safe for any real cluster) to `NodePort` so that `kind-config.yaml` `extraPortMappings` can bind
    them to localhost. **Never apply `values-kind.yaml` on a real cluster** — it exposes postgres,
@@ -85,14 +77,11 @@ Watch it come up with `make status` or `kubectl get pods -n ai-trust -w`. One-sh
 - Rebuilt an image after a code change? `make build` again, then
   `kubectl rollout restart deployment/<name> -n ai-trust` (or `make upgrade` to reapply everything).
 - Changed something a one-shot **Job** runs (e.g. added a migration)? `make build` (rebuilds the image) → `make upgrade`. Each upgrade renders the Jobs under a new per-revision name (`<base>-r<N>`), so Helm creates fresh Jobs and prunes the previous revision's automatically — no manual cleanup, no Job immutability error (see [Per-revision Job names](#per-revision-job-names-one-shot-jobs)).
-- `make down` tears down the Helm release and deletes the whole kind cluster (equivalent to
-  `docker compose down --remove-orphans`, but also throws away the cluster itself, not just the
-  containers - PVC-backed data goes with it).
+- `make down` tears down the Helm release and deletes the whole kind cluster (PVC-backed data goes with it).
 
-## How dependency ordering works (no image/app changes)
+## How dependency ordering works
 
-docker-compose's `depends_on: condition: service_healthy` / `service_completed_successfully` has
-no direct Kubernetes equivalent, and none of the app images were changed to add one. Instead:
+The Kubernetes equivalent of `depends_on: condition:` is implemented with initContainers:
 
 - Deployments that need another **service** to be reachable first get a small `busybox`
   initContainer that polls it (TCP or HTTP) until it responds.
@@ -100,14 +89,11 @@ no direct Kubernetes equivalent, and none of the app images were changed to add 
   initContainer running `kubectl wait --for=condition=complete job/<name>`, using the `job-waiter`
   ServiceAccount created by `bootstrap.sh`.
 
-Both patterns are defined once in `helm/ai-trust-platform/templates/_helpers.tpl` and reused
-everywhere docker-compose had a `depends_on`.
+Both patterns are defined once in `k8s/helm/ai-trust-platform/templates/_helpers.tpl` and reused throughout.
 
 ## Deploying to a real cluster (Gardener) via OCM + Flux + GitHub Actions
 
-A third path, alongside docker-compose and local `kind`. The platform is packaged as an
-**OCM (Open Component Model) component** and deployed to Gardener shoot clusters via
-**Flux HelmRelease** — driven entirely by two GitHub Actions workflows.
+The platform is packaged as an **OCM (Open Component Model) component** and deployed to Gardener shoot clusters via **Flux HelmRelease** — driven entirely by two GitHub Actions workflows.
 
 ### How it works end-to-end
 
@@ -181,7 +167,7 @@ The workflow runs the whole build→package→publish→deploy pipeline as steps
 `publish-ocm`, `apply-to-cluster`) — the same composite actions used by `build-push-deploy.yml`. Images are built in
 parallel via `docker buildx bake` (`docker-bake.hcl`) — shared with `build-push-deploy.yml`,
 so a new image only needs one `target` + `group "default"` entry in `docker-bake.hcl` (see [CLAUDE.md](../CLAUDE.md)
-"keep in sync"). It reports progress via PR comments; the single job's pass/fail **is** the PR check
+"Adding a new service"). It reports progress via PR comments; the single job's pass/fail **is** the PR check
 (`namespace-deployment-test`) — there is no separate `deploy-test` commit status.
 
 ### Integration tests
@@ -339,14 +325,14 @@ All other config lives in `k8s/env/<cluster>/.env` (committed). No per-cluster G
 5. Add `<cluster-name>` to the `options` list in the `build-push-deploy.yml` `workflow_dispatch` input for `gardener_cluster`, and add the matching `k8s/env/<cluster-name>/.env` entry for `integration-tests.yml`
 6. Trigger `build-push-deploy.yml` with `gardener_cluster=<cluster-name>`
 
-## Known limitations / gaps as of local-dev scope (same as docker-compose today)
+## Known limitations / gaps (local kind scope)
 
 - Single-node only for kind: `postgres-data`, `clickhouse-data`, `minio-data`, and `ollama-data`
   are `ReadWriteOnce` PVCs on kind's default local-path-provisioner — fine on a single schedulable
   node (kind's default), but won't work if you add worker nodes to `kind-config.yaml`.
   On Gardener (multi-node), all four are managed as **StatefulSet `volumeClaimTemplates`** so the
   CSI driver handles detach/reattach when a pod reschedules to a different node.
-- No resource `requests`/`limits` (docker-compose doesn't set any either).
-- No HTTPS / `cookie-secure=true` - same as docker-compose's local-dev oauth2-proxy config.
+- No resource `requests`/`limits`.
+- No HTTPS / `cookie-secure=true` — same as a local-dev oauth2-proxy config.
 - ReadWriteOnce access mode can not scale the deployment that mounts such volume. Apply ReadWriteMany for scalable application.
 - No horizontal pod autoscalers.

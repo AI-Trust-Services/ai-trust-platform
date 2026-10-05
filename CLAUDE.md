@@ -6,20 +6,12 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 ## Commands
 
-### Run the full platform
+### Run the full platform (local Kubernetes via kind)
 ```bash
-docker compose up --build -d
-docker compose down --remove-orphans
-```
-
-### Run on local Kubernetes (kind)
-Alternative to docker-compose — both are supported, share the same `.env`, and use identical host ports (don't run them at the same time). See [k8s/README.md](k8s/README.md).
-```bash
-cd k8s
 make up      # kind create cluster + bootstrap + build&load images + helm install
 make down    # helm uninstall + kind delete cluster
 ```
-Manifests live in `k8s/helm/ai-trust-platform/`. Every k8s Service name matches the docker-compose service name (`postgres`, `ai-system-registry-backend`, etc.) so `shell/nginx.conf` and backend env vars work unmodified.
+Manifests live in `k8s/helm/ai-trust-platform/`.
 
 **Stateful workloads** (`postgres`, `clickhouse`, `minio`, `ollama`) are `kind: StatefulSet` with `volumeClaimTemplates` (not standalone PVCs). This gives each pod a stable PVC identity (`data-postgres-0` etc.) and lets the CSI driver safely detach/reattach the volume when a pod reschedules to a different node — preventing the RWO deadlock that occurs with plain Deployments on multi-node clusters. `updateStrategy: RollingUpdate` with `maxUnavailable: 1` ensures the old pod fully terminates (releasing the volume) before the new pod starts.
 
@@ -50,7 +42,7 @@ kubectl get pods -n <namespace>
 cd <component>/backend   # e.g. cd compliance/backend
 make setup               # first time only — creates .venv, installs deps
 make test-unit           # no Docker needed
-make test-e2e            # requires Postgres: docker compose up -d postgres
+make test-e2e            # requires Postgres: make up or docker run postgres
 make test                # all tests
 ```
 - `tests/unit/` — pure unit tests, no DB
@@ -65,7 +57,6 @@ span services: registry↔compliance shared `ai_systems` data, the evidence→re
 cascade, RBAC denials across backends, and the admin→users internal HTTP call.
 
 ```bash
-cd k8s
 make test-int                       # kind cluster, namespace ai-trust
 ```
 - The `k8s/` make targets are **kind-only** — the namespace is fixed to `ai-trust` and cannot be
@@ -113,7 +104,7 @@ alembic downgrade -1
 **After merging main into a feature branch:** if revision IDs collide, renumber all feature migrations to follow the new main head (rename file + update `revision`/`down_revision`). Then check whether any feature migration touches the same table/column as the new main migrations — warn if so, don't auto-fix.
 
 ### VS Code debugging (any backend)
-Stop the Docker backend (`docker compose stop <service>`), `cd <component>/backend`, `make setup`, then press F5 — `launch.json` is pre-configured in each backend.
+Stop the kind-deployed backend (`kubectl scale deployment <name> -n ai-trust --replicas=0`), `cd <component>/backend`, `make setup`, then press F5 — `launch.json` is pre-configured in each backend.
 
 ---
 
@@ -165,7 +156,7 @@ The platform is a **single codebase** that runs in one of two tenancy modes, sel
 
 - **`single`** (default) — one organization. The tenant middleware is not registered, Postgres uses
   the plain `public` schema, one fixed Keycloak realm, no per-tenant scoping of ClickHouse/MinIO. This
-  is the mode for docker-compose, the local kind install (`k8s/`), and any standalone single-org deploy.
+  is the mode for the local kind install (`k8s/`) and any standalone single-org deploy.
 - **`jwt`** — multi-tenant. Each request's tenant is resolved from a `tenant_id` OIDC claim
   (`TENANT_CLAIM`), verified against `TENANCY_JWKS_ISSUER_BASE`. Data is isolated per tenant:
   schema-per-tenant Postgres (`tenant_<org>`) + a per-tenant role, a per-tenant Keycloak realm, and
@@ -240,21 +231,23 @@ All backends are **FastAPI 0.115 + Python 3.12** on port 8001+:
 
 Static HTML + `luigi-config.js` served by nginx (Luigi core from CDN). Nav nodes in `luigi-config.js` define mounted MFEs. The shell nginx also **reverse-proxies** all MFE (`/registry/`, …) and backend (`/api/registry/`, …) traffic.
 
-- If a container restarts and nginx returns 502, run `docker compose restart shell` to clear the stale DNS cache.
+- If a pod restarts and nginx returns 502, run `kubectl rollout restart deployment/shell -n ai-trust` to clear the stale DNS cache.
 - **Sidebar** — `responsiveNavigation: "Fiori3"`, custom animated hamburger injected via `luigiAfterInit`, `sideNavigation.collapsed: true`. Alerts is `hideFromNav: true` (reached via bell badge). `defaultChildNode: "overview"`. "Sign out" button injected into the shell bar, links to `/oauth2/sign_out`.
 
 ## Components
 
 Each component has `frontend/` (nginx, internal) and `backend/` (FastAPI, internal). All traffic routes through `:8080` via the shell proxy. **Per-component detail lives in each component's own `CLAUDE.md`** (linked below) and loads on demand when you work in that directory.
 
-### Dual deployment paths (docker-compose, k8s kind, and Gardener/OCM) — keep in sync
-Three paths are fully supported; **develop and change them together**. When you touch how a service runs:
-- New service in `docker-compose.yml` → add matching Deployment+Service (or Job) to the Helm chart + its image to `k8s/scripts/build-and-load-images.sh` + add it as a resource in `.ocm/component-constructor.yaml`.
-- **New image built in CI** → add it in **both** CI build definitions or the Gardener deploy will be missing it: the **Deployment Workflow** `build-images` composite action (`docker-bake.hcl` — used by `build-push-deploy.yml` for push-to-main and `workflow_dispatch`), the same `docker-bake.hcl` target reused by the **PR Deployment Test** (`.github/actions/build-images`), and as an `ociImage` resource in `.ocm/component-constructor.yaml`. Both deploy paths share the same `docker-bake.hcl`, so a single `target` + `group "default"` entry covers both. Nothing enforces parity with OCM — an image missing from `.ocm/component-constructor.yaml` silently ships broken. Frontends must also carry their `VITE_*` build args in the bake `target`'s `args`.
-- New/changed env var or secret → add to `.env.example`; it flows to k8s via `k8s/scripts/bootstrap.sh`'s Secret (sourced from the same `.env`, no separate k8s env file).
+### Adding a new service
+When you add a new service, update all of these together — nothing enforces parity in CI:
+- Add a Deployment+Service (or Job) to the Helm chart (`k8s/helm/ai-trust-platform/`).
+- Add the image to `k8s/scripts/build-and-load-images.sh` (kind local builds).
+- Add a `target` + include it in `group "default"` in `docker-bake.hcl` (used by both CI deploy paths — `build-push-deploy.yml` and the PR deployment test). Frontends must carry their `VITE_*` build args in the bake `target`'s `args`.
+- Add the image as an `ociImage` resource in `.ocm/component-constructor.yaml`. An image missing here silently ships broken to Gardener.
+- New/changed env var or secret → add to `.env.example`; it flows to k8s via `k8s/scripts/bootstrap.sh`'s Secret.
 - New `depends_on: condition:` → add the matching `waitForTcp`/`waitForHttp`/`waitForJob` initContainer (helpers in `_helpers.tpl`).
 - New one-shot Job → use the `ai-trust.jobName` helper for `metadata.name` (appends `-r<.Release.Revision>`) so each `helm upgrade` creates a new Job name instead of patching an immutable one. Do **not** add `helm.sh/hook` annotations — plain resources with per-revision names are the established pattern here (see `jobs.yaml`).
-- Renamed/moved a mounted file (e.g. `infra/*/init.sh`, `otel-pipeline/**/config`) → update both `docker-compose.yml` `volumes:` **and** `bootstrap.sh` `--from-file`. Nothing enforces this in CI — a rename on one side silently breaks the other.
+- Renamed/moved a mounted file (e.g. `infra/*/init.sh`, `otel-pipeline/**/config`) → update `bootstrap.sh` `--from-file`. Nothing enforces this in CI — a rename silently breaks the other side.
 
 ### Adding a new component
 1. Create `new-component/frontend/` and `new-component/backend/`.
@@ -263,11 +256,11 @@ Three paths are fully supported; **develop and change them together**. When you 
 4. Copy `ai-system-registry/backend/Dockerfile` (build context = repo root).
 5. Add needed libs to `requirements.txt`: `-e /app/libs/persistence`, `-e /app/libs/clickhouse`, `-e /app/libs/logging`.
 6. Add `healthcheck.py` (copy from ai-system-registry, update port).
-7. Add the service to `docker-compose.yml` with `depends_on: db-migrate: condition: service_completed_successfully` and a `healthcheck`. Do **not** add `ports:`.
+7. Add the service to the Helm chart with a `healthcheck` and appropriate initContainers. Do **not** expose ports outside the cluster.
 8. Add proxy routes to `shell/nginx.conf` (`/new-component/`, `/api/new-component/`).
 9. Add `base: "/new-component/"` to the frontend `vite.config.ts`.
 10. Add a nav node to `shell/luigi-config.js`.
-11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh` (kind), a `target` + `group "default"` entry in `docker-bake.hcl` (shared by both CI deploy paths — see "keep in sync" above), **and** as `ociImage` resources in `.ocm/component-constructor.yaml`.
+11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh` (kind), a `target` + `group "default"` entry in `docker-bake.hcl` (shared by both CI deploy paths — see "Adding a new service" above), **and** as `ociImage` resources in `.ocm/component-constructor.yaml`.
 12. Add a `new-component/CLAUDE.md` documenting its routes, data model, and any conventions (see the existing component `CLAUDE.md` files for the pattern).
 
 ### ai-system-registry/ (port 8001, `/api/registry/`)
