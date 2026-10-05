@@ -51,6 +51,7 @@
     "overview": ["systems:read", "systems:write", "assessments:read", "assessments:write", "assessments:approve", "evidence:read", "evidence:write", "evidence:approve", "monitoring:read", "alerts:read", "alerts:handle", "alerts:manage_rules", "audit:read"],
     "ai-system-registry": ["systems:read", "systems:write"],
     "model-catalog": ["systems:read", "systems:write"],
+    "document-indexing": ["systems:read", "systems:write"],
     // DTA has no dedicated permission — reuse monitoring:read (same audience).
     "decision-trace-analyzer": ["monitoring:read"],
     "monitoring": ["monitoring:read"],
@@ -92,6 +93,13 @@
         icon: "product",
         viewUrl: base + "/registry/#/models",
         navigationContext: "model-catalog",
+      },
+      {
+        pathSegment: "document-indexing",
+        label: "Document Indexing",
+        icon: "documents",
+        viewUrl: "/indexing/",
+        navigationContext: "document-indexing",
       },
       {
         pathSegment: "decision-trace-analyzer",

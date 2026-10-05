@@ -186,3 +186,45 @@ spec:
               value: {{ .Values.indexing.embedModel | quote }}
             - name: EMBEDDING_SERVICE_URL
               value: http://embedding-service:{{ .Values.indexing.embedding.port }}
+---
+{{/* ── document-indexing-frontend: test/UI MFE served by nginx, mounted at /indexing/ ── */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: document-indexing-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "document-indexing-frontend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "document-indexing-frontend") | nindent 8 }}
+    spec:
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: document-indexing-frontend
+          image: {{ .Values.image.repository }}/document-indexing-frontend:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: document-indexing-frontend
+spec:
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "document-indexing-frontend") | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+
