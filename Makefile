@@ -8,7 +8,7 @@ CHART := k8s/helm/ai-trust-platform
 # Auto-enable Ollama in Helm when LLM_PROVIDER=ollama is set in .env
 OLLAMA_SET := $(shell grep -s '^LLM_PROVIDER=ollama' .env > /dev/null 2>&1 && echo '--set ollama.enabled=true' || echo '')
 
-.PHONY: up down cluster delete-cluster configure bootstrap build install upgrade uninstall reset-jobs status forward-ports stop-forwards test-int
+.PHONY: up down cluster delete-cluster configure bootstrap build install upgrade uninstall reset-jobs status forward-ports stop-forwards test-int lint
 
 # Full stack, from nothing.
 # `configure` runs first: it PROMPTS for the tenancy mode (single vs multi-tenant) and
@@ -78,3 +78,10 @@ test-int:
 	python3 -m pytest tests/integration/ -v; EXIT=$$?; \
 	bash k8s/scripts/kill-port-forwards.sh; \
 	exit $$EXIT
+
+# Python lint + format (mirrors CI: pr-lint.yml).
+# Fixes formatting in-place, then checks for lint errors.
+# ruff is not on PATH — invoke via python3 -m.
+lint:
+	python3 -m ruff format .
+	python3 -m ruff check .
