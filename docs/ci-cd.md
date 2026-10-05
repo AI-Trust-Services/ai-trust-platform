@@ -22,7 +22,7 @@ flowchart LR
         subgraph actions["⚙️ GitHub Actions — build-push-deploy.yml"]
             direction LR
             resolve_ns["Resolve namespace NS<br/>ai-trust-main → ai-trust<br/>else namespace input<br/>or github.actor"]
-            build_images["Build Docker images<br/>~27 services"]
+            build_images["Build Docker images<br/>~22 services"]
             build_chart["Build Helm chart<br/>helm package"]
             build_component["Build OCM component<br/>0.0.0-NS-sha<br/>refs chart + images"]
             deploy["Deploy step<br/>bootstrap.sh +<br/>kubectl apply OCM CRs<br/>NAMESPACE substituted"]
@@ -105,12 +105,12 @@ without touching each other. The two clusters use that capability very different
 
 **`ai-trust-main` — production.** The namespace is always `ai-trust`, never derived from the actor.
 Every push to `main` deploys automatically; images, chart and OCM version are prefixed
-`ai-trust-main-<sha>` (not the namespace name) and additionally get a floating `latest` tag.
+`ai-trust-main-<sha>` (not the namespace name).
 
 ```mermaid
 flowchart TB
     subgraph gha["⚙️ GitHub Actions — build-push-deploy.yml"]
-        t_main["push to main<br/>cluster: ai-trust-main<br/>tag prefix: ai-trust-main-&lt;sha&gt; + latest"]
+        t_main["push to main<br/>cluster: ai-trust-main<br/>tag prefix: ai-trust-main-&lt;sha&gt;"]
     end
 
     subgraph cluster["🟪 Gardener shoot: ai-trust-main — production"]
@@ -208,14 +208,10 @@ Without it the deploy fails — the CI identity holds no rights in an unprovisio
 
 | Event | Namespace | Images built | OCM published | Deploys to |
 |---|---|---|---|---|
-| Push to `main` | `ai-trust` | ✓ `ai-trust-main-<sha>` + `latest` | ✓ `0.0.0-ai-trust-main-<sha>` + `0.0.0-latest` | `ai-trust-main` / `ai-trust` (automatic) |
+| Push to `main` | `ai-trust` | ✓ `ai-trust-main-<sha>` | ✓ `0.0.0-ai-trust-main-<sha>` | `ai-trust-main` / `ai-trust` (automatic) |
 | `garden-deploy` label on a PR | `<pr-author>` | ✓ `<pr-author>-<sha>` | ✓ `0.0.0-<pr-author>-<sha>` | `ai-trust-test` / `<pr-author>` |
 | `workflow_dispatch` → `ai-trust-test` | input, else `github.actor` | ✓ `<ns>-<sha>` | ✓ `0.0.0-<ns>-<sha>` | `ai-trust-test` / `<ns>` |
-| `workflow_dispatch` → `sr-test` | input, else `github.actor` | ✓ `<ns>-<sha>` | ✓ `0.0.0-<ns>-<sha>` | `sr-test` / `<ns>` |
-| `workflow_dispatch` → `ai-trust-main` | `ai-trust` (forced) | ✓ `ai-trust-main-<sha>` + `latest` | ✓ `0.0.0-ai-trust-main-<sha>` + `0.0.0-latest` | `ai-trust-main` / `ai-trust` |
-| `workflow_dispatch` → `none` | — | ✓ `<sha>` | ✗ | nowhere |
-| Push to feature branch | — | ✓ `<sha>` | ✗ | nowhere |
-| Push tag `v*.*.*` | — | ✓ `v1.2.3` | ✗ | nowhere |
+| `workflow_dispatch` → `ai-trust-main` | `ai-trust` (forced) | ✓ `ai-trust-main-<sha>` | ✓ `0.0.0-ai-trust-main-<sha>` | `ai-trust-main` / `ai-trust` |
 
 The tag prefix for `ai-trust-main` is the **cluster** name, not its namespace (`ai-trust-main-<sha>`,
 not `ai-trust-<sha>`) — otherwise it would collide with an `ai-trust` namespace on another cluster.
@@ -269,19 +265,15 @@ gh workflow run build-push-deploy.yml --repo AI-Trust-Services/ai-trust-platform
 
 # Deploy a feature branch to your own namespace on ai-trust-test
 gh workflow run build-push-deploy.yml --repo AI-Trust-Services/ai-trust-platform \
-  --ref <branch> -f gardener_cluster=ai-trust-test -f namespace=<github-username>
+  --ref <branch> -f branch=<branch> -f gardener_cluster=ai-trust-test -f namespace=<github-username>
 
 # Same, letting the namespace default to the triggering user (github.actor, lowercased)
 gh workflow run build-push-deploy.yml --repo AI-Trust-Services/ai-trust-platform \
-  --ref <branch> -f gardener_cluster=ai-trust-test
+  --ref <branch> -f branch=<branch> -f gardener_cluster=ai-trust-test
 
 # Deploy a feature branch to ai-trust-main (namespace is always ai-trust there)
 gh workflow run build-push-deploy.yml --repo AI-Trust-Services/ai-trust-platform \
-  --ref <branch> -f gardener_cluster=ai-trust-main
-
-# Build only, skip deploy
-gh workflow run build-push-deploy.yml --repo AI-Trust-Services/ai-trust-platform \
-  --ref <branch> -f gardener_cluster=none
+  --ref <branch> -f branch=<branch> -f gardener_cluster=ai-trust-main
 ```
 
 ---

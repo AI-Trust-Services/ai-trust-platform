@@ -4,14 +4,17 @@ Public surface:
   - ``chat`` — provider-dispatched LLM call with a uniform return shape.
   - ``parse_json_response`` / ``LLMParseError`` — JSON parsing with repair retry.
   - ``LLMResponseError`` — raised when the external provider returns an unexpected shape.
+  - ``PromptTemplateError`` — raised when a prompt template is missing or a required variable is unset.
   - prompt builders — owner: ``build_turn_messages``, ``build_doc_extract_messages``,
     ``build_infer_flags_messages``; engineer: ``build_engineer_turn_messages``,
     ``build_engineer_doc_extract_messages``; questionnaire: ``build_questionnaire_turn_messages``,
-    ``build_questionnaire_extract_messages``.
+    ``build_questionnaire_extract_messages``. Prompt wording lives in ``context/prompts/*.md``;
+    builders render templates by id via ``app.llm.templates``.
 """
 
 from app.llm.client import LLM_MODEL, LLM_VISION_MODEL, LLMResponseError, chat
 from app.llm.parsing import LLMParseError, parse_json_response
+from app.llm.templates import PromptTemplateError, render_template
 from app.llm.prompts import (
     REQUIRED_FIELD_KEYS,
     TARGET_FIELDS,
@@ -36,6 +39,8 @@ __all__ = [
     "parse_json_response",
     "LLMParseError",
     "LLMResponseError",
+    "PromptTemplateError",
+    "render_template",
     "build_turn_messages",
     "build_doc_extract_messages",
     "build_infer_flags_messages",

@@ -58,6 +58,38 @@ make test                # all tests
 
 Workers (`audit-flush-worker`, `policy-checker-worker`, `consumers/clickhouse-consumer`) follow the same pattern but live without a `backend/` subdirectory — `cd <worker-dir>` instead of `cd <component>/backend`.
 
+### Integration tests (cross-service, live platform)
+`tests/integration/` is a **global** suite — it is not per-component and does not use ASGITransport. It
+drives real HTTP against a **running** platform (kind or a Gardener namespace) to verify contracts that
+span services: registry↔compliance shared `ai_systems` data, the evidence→requirement→obligation→assessment
+cascade, RBAC denials across backends, and the admin→users internal HTTP call.
+
+```bash
+cd k8s
+make test-int                       # kind cluster, namespace ai-trust
+```
+- The `k8s/` make targets are **kind-only** — the namespace is fixed to `ai-trust` and cannot be
+  overridden from the environment (`NAMESPACE := ai-trust` in the Makefile wins over the environment).
+  Remote Gardener namespaces are only ever targeted by CI, which calls `k8s/scripts/forward-ports.sh`
+  directly with the namespace.
+- `make test-int` starts the port-forwards, runs pytest, and stops them again **even on failure**.
+- Services are reached via `kubectl port-forward` (`k8s/scripts/forward-ports.sh` / `kill-port-forwards.sh`)
+  on their in-cluster ports; every URL is overridable via env var (`REGISTRY_URL`, `COMPLIANCE_URL`, …).
+  The suite covers the 7 backends that expose cross-service contracts — `overview` and `dta` are
+  read-only and out of scope.
+- Auth bypasses oauth2-proxy by setting `X-Forwarded-Preferred-Username` directly, the same pattern the
+  per-service e2e tests use. `APP_ADMIN_USERNAME` (default `admin`) selects the platform admin used to
+  assign roles.
+- **Not a PR gate.** The `Integration Tests` workflow (`.github/workflows/integration-tests.yml`) runs
+  *after* a successful `PR Deployment Test` or `Deployment Workflow`, and optionally on demand via
+  **Run workflow** (`workflow_dispatch`). Both paths report to a single `integration-tests` commit
+  status on the PR head / pushed commit, overwritten in place: a step in `pr-deployment-test.yml` seeds
+  it pending, and the post-deployment run finalises it — so the result is visible on the PR and on main
+  even though `workflow_run` runs are attached to the default branch. `integration-tests.yml`
+  deliberately has no `pull_request:` trigger, because every job in such a workflow gets pinned to the
+  PR as its own check run. Its result never changes the deployment workflow's status.
+- Details → [tests/integration/README.md](tests/integration/README.md).
+
 ### Pre-push checks
 Run these from the repo root before pushing to avoid CI failures:
 ```bash
@@ -218,7 +250,7 @@ Each component has `frontend/` (nginx, internal) and `backend/` (FastAPI, intern
 ### Dual deployment paths (docker-compose, k8s kind, and Gardener/OCM) — keep in sync
 Three paths are fully supported; **develop and change them together**. When you touch how a service runs:
 - New service in `docker-compose.yml` → add matching Deployment+Service (or Job) to the Helm chart + its image to `k8s/scripts/build-and-load-images.sh` + add it as a resource in `.ocm/component-constructor.yaml`.
-- **New image built in CI** → add it in **all three** CI build definitions or the Gardener deploy will be missing it: the **Deployment Workflow** `build-push` matrix (`.github/workflows/build-push-deploy.yml`, used by push-to-main and `workflow_dispatch`), a matching `target` + the `group "default"` list in `docker-bake.hcl` (used by the **PR Deployment Test** `/garden-deploy` path via `.github/actions/build-images`), and as an `ociImage` resource in `.ocm/component-constructor.yaml`. Nothing enforces parity — an image added to only one silently ships broken on the other trigger. Frontends must also carry their `VITE_*` build args in both the matrix `build_args` and the bake `target`'s `args`.
+- **New image built in CI** → add it in **both** CI build definitions or the Gardener deploy will be missing it: the **Deployment Workflow** `build-images` composite action (`docker-bake.hcl` — used by `build-push-deploy.yml` for push-to-main and `workflow_dispatch`), the same `docker-bake.hcl` target reused by the **PR Deployment Test** (`.github/actions/build-images`), and as an `ociImage` resource in `.ocm/component-constructor.yaml`. Both deploy paths share the same `docker-bake.hcl`, so a single `target` + `group "default"` entry covers both. Nothing enforces parity with OCM — an image missing from `.ocm/component-constructor.yaml` silently ships broken. Frontends must also carry their `VITE_*` build args in the bake `target`'s `args`.
 - New/changed env var or secret → add to `.env.example`; it flows to k8s via `k8s/scripts/bootstrap.sh`'s Secret (sourced from the same `.env`, no separate k8s env file).
 - New `depends_on: condition:` → add the matching `waitForTcp`/`waitForHttp`/`waitForJob` initContainer (helpers in `_helpers.tpl`).
 - New one-shot Job → use the `ai-trust.jobName` helper for `metadata.name` (appends `-r<.Release.Revision>`) so each `helm upgrade` creates a new Job name instead of patching an immutable one. Do **not** add `helm.sh/hook` annotations — plain resources with per-revision names are the established pattern here (see `jobs.yaml`).
@@ -235,11 +267,27 @@ Three paths are fully supported; **develop and change them together**. When you 
 8. Add proxy routes to `shell/nginx.conf` (`/new-component/`, `/api/new-component/`).
 9. Add `base: "/new-component/"` to the frontend `vite.config.ts`.
 10. Add a nav node to `shell/luigi-config.js`.
-11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh` (kind), the `build-push` matrix in `.github/workflows/build-push-deploy.yml` **and** a `target` + `group "default"` entry in `docker-bake.hcl` (both CI build paths — see "keep in sync" above), **and** as `ociImage` resources in `.ocm/component-constructor.yaml`.
+11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh` (kind), a `target` + `group "default"` entry in `docker-bake.hcl` (shared by both CI deploy paths — see "keep in sync" above), **and** as `ociImage` resources in `.ocm/component-constructor.yaml`.
 12. Add a `new-component/CLAUDE.md` documenting its routes, data model, and any conventions (see the existing component `CLAUDE.md` files for the pattern).
 
 ### ai-system-registry/ (port 8001, `/api/registry/`)
-AI system registration and EU AI Act classification. Details → [ai-system-registry/CLAUDE.md](ai-system-registry/CLAUDE.md).
+AI system registration and EU AI Act classification. LLM prompt wording is externalized to repo-root `context/prompts/*.md` (loaded by `ai-system-registry/backend/app/llm/templates.py`, baked into the image via that backend's Dockerfile). Details → [ai-system-registry/CLAUDE.md](ai-system-registry/CLAUDE.md).
+
+**Model Cards** (`routers/model_cards.py`, IDs prefixed `MDL-`) — standalone model documentation objects, linked N:M to AI systems via `ai_system_model_cards` join table (with an optional `role` string).
+- `GET /model-cards` — flat list (no children loaded; `metrics`/`sources`/`datasets` always `[]`). `?limit=50&offset=0` (max 200).
+- `POST /model-cards` — creates a card; requires `name`. Returns full tree.
+- `GET /model-cards/{id}` — full nested tree (metrics, sources, datasets with preparations/measurements/feature_stores).
+- `PATCH /model-cards/{id}` — partial update of scalar fields via `model_fields_set`; empty body is a valid no-op (200).
+- `DELETE /model-cards/{id}` — returns the deleted card.
+- `POST /model-cards/{id}/metrics` (IDs `MCM-`) · `DELETE /model-cards/{id}/metrics/{mid}` — add/remove a metric row. DELETE filters by both `metric_id` AND `card_id` — wrong-card deletes return 404.
+- `POST /model-cards/{id}/sources` (IDs `MCS-`) · `DELETE /model-cards/{id}/sources/{sid}` — same pattern.
+- `POST /model-cards/{id}/datasets` (IDs `MCD-`) — creates dataset with nested `preparations` (ordered, IDs `MCP-`), `measurements` (`MCE-`), `feature_stores` (`MCF-`) + groups (`MCG-`). Returns the new dataset (not the full card).
+- `PATCH /model-cards/{id}/datasets/{did}` — scalar-only patch; children (preparations etc.) are untouched. Returns the updated dataset.
+- `PUT /model-cards/{id}/datasets/{did}` — **full replace**: deletes all children, re-inserts from body. Returns **204 No Content** (no body).
+- `DELETE /model-cards/{id}/datasets/{did}` — returns `{"status":"deleted","id":...}`. Wrong-card deletes return 404.
+- `GET /model-cards/{id}/systems` — AI systems that link to this card (`ModelSystemResponse`: system scalars + `role`).
+- `GET /systems/{id}/models` · `POST /systems/{id}/models` · `DELETE /systems/{id}/models/{card_id}` — list/link/unlink model cards on a system. POST is an upsert (updates `role` on repeat). DELETE returns `{"status":"unlinked","system_id":...,"model_card_id":...}`.
+- **Schemas** — `ModelCardResponse` (flat for list, nested for single GET), `SystemModelResponse` (extends `ModelCardResponse` + `role`), `ModelSystemResponse` (system scalars + `role: str | None = None`; `role` has a default because it comes from the join table, not the system row).
 
 ### overview/ (port 8004, `/api/overview/`)
 Compliance-posture MFE, reads Postgres only, static HTML frontend. Details → [overview/CLAUDE.md](overview/CLAUDE.md).
@@ -256,8 +304,11 @@ Trace viewer for GenAI spans, reads ClickHouse only. Details → [decision-trace
 ### compliance/ (port 8007, `/api/compliance/`)
 Governance chain — assessments, obligations, requirements, evidence for EU AI Act / NIST / ISO. Details → [compliance/CLAUDE.md](compliance/CLAUDE.md).
 
-### audit/ (port 8008, `/api/audit/`)
+### audit/ (port 8009, `/api/audit/`)
 Immutable audit trail across all platform actions (Postgres buffer → ClickHouse archive). Includes the `audit-flush-worker`. Details → [audit/CLAUDE.md](audit/CLAUDE.md).
+
+### users/ (port 8008, `/api/users/`)
+Keycloak-backed user management plus the IAM/roles API (see "Authorization — RBAC via OpenFGA"). Frontend is the separate `iam/` MFE at `/iam/`.
 
 ### admin/ (port 8010, `/api/admin/`)
 Platform administration — SMTP mail config, general platform settings, branding/white-labeling, summary dashboard. Details → [admin/CLAUDE.md](admin/CLAUDE.md).

@@ -281,6 +281,8 @@ async def reclassify_system(system_id: str, request: Request) -> IntakeResponse:
     response_model=list[SystemModelResponse],
     dependencies=[Depends(require_permission(SYSTEMS_READ))],
 )
+# ponytail: system↔model link UI not yet built; frontend client.ts has dead stubs for
+# addSystemModel, removeSystemModel, getSystemModels — metrics/sources/datasets empty until then
 async def list_system_models(system_id: str) -> list[SystemModelResponse]:
     async with SessionLocal() as session:
         sys_result = await session.execute(

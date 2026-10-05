@@ -1,4 +1,6 @@
 CLUSTER_NAME := ai-trust
+# Fixed for the local kind cluster. These targets are kind-only — a remote Gardener
+# namespace is never passed in here (CI calls scripts/ directly with its own namespace).
 NAMESPACE := ai-trust
 RELEASE := ai-trust
 CHART := helm/ai-trust-platform
@@ -6,7 +8,7 @@ CHART := helm/ai-trust-platform
 # Auto-enable Ollama in Helm when LLM_PROVIDER=ollama is set in ../.env
 OLLAMA_SET := $(shell grep -s '^LLM_PROVIDER=ollama' ../.env > /dev/null 2>&1 && echo '--set ollama.enabled=true' || echo '')
 
-.PHONY: up down cluster delete-cluster configure bootstrap build install upgrade uninstall reset-jobs status
+.PHONY: up down cluster delete-cluster configure bootstrap build install upgrade uninstall reset-jobs status forward-ports stop-forwards test-int
 
 # Full stack, from nothing - the kind/Helm equivalent of `docker compose up --build -d`.
 # `configure` runs first: it PROMPTS for the tenancy mode (single vs multi-tenant) and
@@ -61,3 +63,18 @@ reset-jobs:
 
 status:
 	kubectl get pods -n $(NAMESPACE)
+
+forward-ports:
+	bash scripts/forward-ports.sh $(NAMESPACE)
+
+stop-forwards:
+	bash scripts/kill-port-forwards.sh
+
+# Run integration tests against the local kind cluster (namespace ai-trust).
+# Installs test deps, starts port-forwards, runs pytest, stops forwards (even on failure).
+test-int:
+	python3 -m pip install -q -r ../tests/integration/requirements.txt; \
+	bash scripts/forward-ports.sh $(NAMESPACE); \
+	python3 -m pytest ../tests/integration/ -v; EXIT=$$?; \
+	bash scripts/kill-port-forwards.sh; \
+	exit $$EXIT

@@ -114,6 +114,27 @@ npm run typecheck
 
 Frontend unit tests (Vitest) and ESLint are not yet configured — contributions welcome.
 
+### Integration tests
+
+`tests/integration/` is a global cross-service suite that verifies microservice contracts against a **live platform** (kind locally, or a Gardener cluster). It requires all services running — not a substitute for unit or e2e tests.
+
+| Test file | Tests covered |
+|---|---|
+| `test_01_health.py` | 7 backends `/health` → 200 (`overview` and `dta` are read-only and out of scope) |
+| `test_02_registry_compliance.py` | Registry↔compliance shared model, assessment generation, evidence cascade to `ai_systems.compliance`, rejection revert |
+| `test_03_rbac.py` | RBAC 403s across services, admin→users internal HTTP call |
+
+**Run locally** (after `cd k8s && make up`):
+
+```bash
+cd k8s
+make test-int                    # kind cluster, namespace ai-trust
+```
+
+`make test-int` starts port-forwards for all 7 backends, runs pytest, then kills the forwards — even on failure. The target is kind-only: the namespace is fixed to `ai-trust`. Targeting a remote Gardener namespace, debugging a single test, and the configuration env vars are documented in [tests/integration/README.md](tests/integration/README.md).
+
+**CI**: the `Integration Tests` workflow triggers automatically after a successful `PR Deployment Test` (PR with `garden-deploy` label) or `Deployment Workflow` (merge to main), and optionally on demand via **Actions → Integration Tests → Run workflow**. It reports to a single `integration-tests` commit status on the deployed commit — `garden-deploy` seeds it pending, and the post-deployment run overwrites it with the final result, so the result is visible on the PR and on main. It runs as a separate workflow — deployment status is unaffected by integration test results.
+
 ### Automated PR checks
 
 Every pull request triggers three workflows:
@@ -151,4 +172,3 @@ We as members, contributors, and leaders pledge to make participation in our com
 Copyright 2026 SAP SE or an SAP affiliate company and ai-trust-platform contributors. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/AI-Trust-Services/ai-trust-platform).
 
 <p align="center"><img alt="Bundesministerium für Wirtschaft und Klimaschutz (BMWK)-EU funding logo" src="https://apeirora.eu/assets/img/BMWK-EU.png" width="400"/></p>
-

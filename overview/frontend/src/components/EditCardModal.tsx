@@ -23,7 +23,7 @@ const DATA_KEYS: { value: DataKey; label: string }[] = [
   { value: "compliance_by_tier",   label: "Avg Compliance by Tier" },
   { value: "compliance_histogram", label: "Compliance Distribution" },
   { value: "by_model_type",        label: "Models by Type" },
-  { value: "by_model_provider",    label: "Models by Provider" },
+  { value: "by_model_validation_status", label: "Models by Validation Status" },
 ];
 
 export default function EditCardModal({ card, onSave, onClose }: Props) {

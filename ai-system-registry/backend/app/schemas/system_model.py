@@ -28,7 +28,7 @@ class ModelSystemResponse(BaseModel):
     tier: str
     lifecycle: str
     compliance: float
-    role: str | None
+    role: str | None = None
 
     model_config = {"from_attributes": True}
 

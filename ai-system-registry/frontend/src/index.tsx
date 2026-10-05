@@ -4,7 +4,8 @@ import "./index.css";
 import App from "./App";
 import { RequirePermission } from "./components/RequirePermission";
 import Systems from "./views/Systems";
-import Models from "./views/Models";
+import ModelListPage from "./views/ModelListPage";
+import ModelPage from "./views/ModelPage";
 
 const SYSTEM_PERMS = ["systems:read", "systems:write"];
 
@@ -19,7 +20,11 @@ const router = createHashRouter([
       },
       {
         path: "models",
-        element: <RequirePermission anyOf={SYSTEM_PERMS}><Models /></RequirePermission>,
+        element: <RequirePermission anyOf={SYSTEM_PERMS}><ModelListPage /></RequirePermission>,
+      },
+      {
+        path: "models/:id",
+        element: <RequirePermission anyOf={SYSTEM_PERMS}><ModelPage /></RequirePermission>,
       },
       { index: true, element: <Navigate to="systems" replace /> },
       { path: "*", element: <Navigate to="systems" replace /> },
@@ -30,3 +35,4 @@ const router = createHashRouter([
 createRoot(document.getElementById("root")!).render(
   <RouterProvider router={router} />
 );
+

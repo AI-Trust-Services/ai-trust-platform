@@ -15,6 +15,7 @@ from typing import Any
 from ai_trust_logging import get_logger
 
 from app.llm.client import chat
+from app.llm.templates import render_template
 
 logger = get_logger(__name__)
 
@@ -56,11 +57,11 @@ async def parse_json_response(text: str, *, task: str = "parse") -> dict[str, An
     repair_messages = [
         {
             "role": "system",
-            "content": "You return only a single valid JSON object. No prose, no code fences.",
+            "content": render_template("json_repair_system"),
         },
         {
             "role": "user",
-            "content": f"Convert the following into a single valid JSON object and return ONLY that object:\n\n{text}",
+            "content": render_template("json_repair_user", malformed_response=text),
         },
     ]
     repaired: dict | None = None
