@@ -8,12 +8,11 @@ to call from the document-indexing orchestrator without touching workflow state.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
-
 from ai_trust_authorization.permissions import require_permission
 from app.classifier import classify_from_questionnaire_answers
 from app.llm import LLMParseError
 from app.schemas import EvaluateRequest, EvaluateResponse
+from fastapi import APIRouter, Depends
 
 router = APIRouter(tags=["classify"])
 
@@ -37,6 +36,7 @@ async def evaluate(req: EvaluateRequest) -> EvaluateResponse:
             injected_context=req.injected_context,
             prompt_override=req.prompt_override,
             model=req.model,
+            role=req.role,
         )
     except LLMParseError as exc:
         from fastapi import HTTPException

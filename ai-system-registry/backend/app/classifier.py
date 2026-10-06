@@ -159,6 +159,7 @@ async def classify_from_questionnaire_answers(
     injected_context: str = "",
     prompt_override: str | None = None,
     model: str | None = None,
+    role: str | None = None,
 ) -> tuple[ClassificationResult, dict]:
     """Core AI classification from raw questionnaire answers — no DB writes.
 
@@ -172,6 +173,9 @@ async def classify_from_questionnaire_answers(
     ``prompt_override`` replaces the system message entirely — for test-bed
     prompt experiments; the user message (answers) is always kept.
     ``model`` overrides the default LLM model for this call.
+    ``role`` adds role-specific framing to the system prompt: ``"engineer"``
+    emphasises technical flag drivers; ``"compliance_officer"`` emphasises
+    obligations and legal exposure. Ignored when ``prompt_override`` is set.
     """
     from app.llm import (
         build_classify_questionnaire_messages,
@@ -181,7 +185,10 @@ async def classify_from_questionnaire_answers(
     from app.schemas import InferredFlag
 
     messages = build_classify_questionnaire_messages(
-        business_answers, technical_answers, retrieved_context=injected_context
+        business_answers,
+        technical_answers,
+        retrieved_context=injected_context,
+        role=role,
     )
     if prompt_override:
         messages[0]["content"] = prompt_override

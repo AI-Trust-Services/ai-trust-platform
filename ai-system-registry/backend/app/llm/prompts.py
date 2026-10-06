@@ -107,6 +107,22 @@ REQUIRED_FIELD_KEYS: list[str] = [f["key"] for f in TARGET_FIELDS]
 # Sorted for deterministic prompt text.
 _FLAG_NAMES = sorted(CLASSIFIER_INPUTS)
 
+# Per-role framing inserted into the classify_questionnaire system prompt.
+# Rendered as a paragraph (with a leading newline) so the template variable
+# can be empty string for the default (no framing) without layout disruption.
+_ROLE_FRAMING: dict[str, str] = {
+    "engineer": (
+        "\n\nYou are assisting an AI engineer who needs to understand the technical "
+        "risk drivers. Prioritise: flag evidence and confidence, data and model "
+        "characteristics, automation level, and any technical gaps that raise or lower risk."
+    ),
+    "compliance_officer": (
+        "\n\nYou are assisting a compliance officer who needs legal clarity. Prioritise: "
+        "applicable obligations, org_role determination, regulatory reasoning, and any "
+        "information gaps that increase legal exposure or prevent a firm classification."
+    ),
+}
+
 
 def _field_state_block(fields: dict[str, Any]) -> str:
     lines = []
@@ -504,6 +520,7 @@ def build_classify_questionnaire_messages(
     business_answers: dict[str, Any],
     technical_answers: dict[str, Any],
     retrieved_context: str = "",
+    role: str | None = None,
 ) -> list[dict]:
     """Messages for AI-mode authoritative classification from questionnaire answers.
 
@@ -514,14 +531,21 @@ def build_classify_questionnaire_messages(
     ``retrieved_context`` is an optional pre-formatted block of retrieved passages
     (heading + text) appended to the system prompt; pass ``""`` (the default) when
     no retrieval context is available.
+
+    ``role`` adds a framing paragraph right after the opening sentence to direct
+    the model's focus: ``"engineer"`` emphasises technical flag drivers, while
+    ``"compliance_officer"`` emphasises obligations, org_role and legal exposure.
+    Any other value (or ``None``) uses the default (no framing).
     """
     context_block = (
         "\n\n## Retrieved context\n\n" + retrieved_context if retrieved_context else ""
     )
+    role_framing = _ROLE_FRAMING.get(role or "", "")
     system = render_template(
         "classify_questionnaire",
         flag_names="\n".join(f"- {n}" for n in _FLAG_NAMES),
         retrieved_context=context_block,
+        role_framing=role_framing,
     )
     user = (
         "Business owner answers:\n"

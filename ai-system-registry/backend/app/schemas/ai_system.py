@@ -339,6 +339,9 @@ class EvaluateRequest(BaseModel):
     injected_context: str = ""
     prompt_override: str | None = None
     model: str | None = None
+    role: str | None = (
+        None  # "engineer" | "compliance_officer" — adds role-specific prompt framing
+    )
 
 
 class EvaluateResponse(BaseModel):
