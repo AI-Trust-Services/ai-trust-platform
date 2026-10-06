@@ -105,16 +105,16 @@ auditFlush:
 
 # ── Document indexing (document-indexing-backend/-worker + embedding-service) ──
 # backend + worker use image.repository/<name>:image.tag like every other built
-# image; embedding-service loads BGE-M3 once and is shared by both.
+# image; embedding-service loads the embedModel once and is shared by both.
 indexing:
   backendPort: 8011
   rootPath: /api/indexing
   pollInterval: "10"
   bucket: indexing-docs
-  embedModel: BAAI/bge-m3
+  embedModel: intfloat/multilingual-e5-small # 384-dim; see libs/persistence …/models/document.py EMBEDDING_DIM
   embedding:
     port: 8012
-    storageSize: 10Gi # BGE-M3 (~2 GB) + Docling models cached on the HF-cache PVC
+    storageSize: 10Gi # embedding model + Docling models cached on the HF-cache PVC
     serviceType: ClusterIP
 
 # ── Ollama (optional local LLM for AI-assisted registration) ──

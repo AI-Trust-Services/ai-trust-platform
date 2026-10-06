@@ -402,6 +402,7 @@ target "document-indexing-frontend" {
   args = {
     VITE_INDEXING_API_BASE = VITE_INDEXING_API_BASE
     VITE_USERS_API_BASE    = VITE_USERS_API_BASE
+    VITE_REGISTRY_API_BASE = VITE_REGISTRY_API_BASE
   }
   cache-from = ["type=gha,scope=document-indexing-frontend"]
   cache-to   = ["type=gha,mode=max,scope=document-indexing-frontend"]

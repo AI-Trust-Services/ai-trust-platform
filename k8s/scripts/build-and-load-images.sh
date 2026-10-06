@@ -121,7 +121,8 @@ build decision-trace-analyzer-frontend . ./decision-trace-analyzer/frontend/Dock
 
 build document-indexing-frontend ./document-indexing/frontend ./document-indexing/frontend/Dockerfile \
   --build-arg "VITE_INDEXING_API_BASE=${VITE_INDEXING_API_BASE:-/api/indexing/v1}" \
-  --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
+  --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}" \
+  --build-arg "VITE_REGISTRY_API_BASE=${VITE_REGISTRY_API_BASE:-/api/registry/v1}"
 
 build cognee-eval-backend . cognee-eval/backend/Dockerfile
 build ai-gateway . ai-gateway/Dockerfile
