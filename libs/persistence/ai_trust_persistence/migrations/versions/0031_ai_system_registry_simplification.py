@@ -17,7 +17,9 @@ depends_on = None
 def upgrade() -> None:
     op.add_column("ai_systems", sa.Column("business_owners", sa.Text(), nullable=True))
     op.add_column("ai_systems", sa.Column("technical_owners", sa.Text(), nullable=True))
-    op.add_column("ai_systems", sa.Column("git_repo_url", sa.String(500), nullable=True))
+    op.add_column(
+        "ai_systems", sa.Column("git_repo_url", sa.String(500), nullable=True)
+    )
 
 
 def downgrade() -> None:
