@@ -13,8 +13,8 @@
   mandatory **integration** scenarios (see [MVP integration scenarios](#mvp-integration-scenarios)).
   They run in AI-assisted mode with the stub LLM and check registry and compliance together, because
   the Compliance UI drives each step across both services.
-- **Most of the functionality exists; most of the tests do not.** Functional gaps are marked ⚠️ / ❌;
-  decisions needed in the review are listed under [Open questions](#open-questions).
+- **Most of the functionality exists; most of the tests do not.** Scenarios with missing or partial
+  functionality are tracked as separate issues and not listed in the integration scenarios table.
 - **Coverage targets:** 🔶 TBD. No coverage targets for now.
 
 ## Test levels
@@ -62,12 +62,13 @@ flowchart LR
 
 ## MVP integration scenarios
 
-Legend: ✅ test exists · ⬜ test missing, functionality exists · ⚠️ functionality partly missing ·
-❌ functionality missing · 🔶 open decision
+Legend: ✅ test exists · ⬜ test missing, functionality exists
+
+Scenarios with missing or partial functionality are tracked as separate issues and are not listed here.
 
 Personas: Application Owner (`business_owner`), AI Engineer (`ai_engineer`), Compliance Officer
 (`ai_compliance_officer`). AI-mode scenarios assume the deterministic stub LLM provider on the target
-namespace (🔶 verify for `ai-trust-main`).
+namespace.
 
 ### 0. Health checks
 
@@ -91,8 +92,6 @@ in PM walkthroughs.
 | AI Engineer can register a system | ⬜ |
 | Role without write permission (e.g. Auditor) cannot register (403) | ✅ `test_03_rbac.py` |
 | AI-assisted registration: conversational intake and an uploaded document pre-fill the registration fields (the document is parsed, not stored) | ⬜ |
-| Full manual registration: supporting document stored with the system | ⚠️ document storage exists, but no path registers a system in full manual mode · 🔶 |
-| Model card linked to the system | ⬜ · 🔶 in MVP scope? |
 
 ### 2. Self-assessment
 
@@ -102,7 +101,6 @@ in PM walkthroughs.
 | Application Owner submits the business section → AI Engineer submits the technical section → system `pending_review` | ⬜ |
 | EU AI Act role (provider / deployer / both) set for the system: entered at registration, inferred by the AI at classification | ⬜ |
 | Single question delegated to a contributor and answered | ⬜ |
-| Self-assessment cannot reach confirmation without an assigned Compliance Officer | ⚠️ required in the UI, not enforced by the API |
 
 ### 3. Risk classification
 
@@ -113,10 +111,6 @@ in PM walkthroughs.
 | Obligation set generated for a system classified before the assessment starts | ✅ `test_02_registry_compliance.py` |
 | Changed flags + reclassify update the tier | ⬜ |
 | Platform administrator cannot read assessments (403) | ✅ `test_03_rbac.py` |
-| Manual questionnaire mode: tier and basis match the deterministic classifier for the answered flags | ⚠️ offered in the UI, but every system is registered in AI mode and the mode can't be changed, so the answered flags are not used · 🔶 |
-| External tier: tier entered directly → obligation set generated for that tier | ⚠️ offered in the UI, but the entered tier is ignored and the classification stays pending · 🔶 |
-| Confidence threshold routes the classification: fast track at or above, per-criterion review below | ❌ · 🔶 classification approach not confirmed |
-| AI analysis of linked source code and documentation | ❌ · 🔶 classification approach not confirmed |
 
 ### 4. Classification confirmation
 
@@ -125,12 +119,8 @@ in PM walkthroughs.
 | Assigned Compliance Officer reviews the AI rationale per criterion and the obligation set; other users don't see the rationale | ⬜ |
 | Compliance Officer approves → system `approved` (registry) and assessment `approved` (compliance); risk flags locked (422) | ⬜ |
 | Compliance Officer corrects tier and/or EU AI Act role on approval → corrected values stored (a tier correction is noted in the basis) | ⬜ |
-| Obligation set matches the confirmed classification after a correction or a send-back that changes the tier | ⚠️ obligations are generated once and not regenerated · 🔶 |
 | Reject → system back to the chosen section and assessment reopened (`questionnaire_pending`); request-info → only the reopened section editable | ⬜ |
-| Confirming in the Registry UI keeps the compliance assessment in step | ⚠️ the Registry UI approves or rejects the system only; the assessment stays `pending_review` |
 | Only the assigned Compliance Officer can confirm: AI Engineer and Application Owner get 403; unanswered required questions get 422 | ⬜ |
-| Confirmation recorded in the audit trail, including tier and role | ⚠️ the assessment approval is audited; classification transitions, tier/role corrections and reject/reopen are not |
-| Classification history kept: earlier tier, rationale and approval retrievable | ❌ tier and basis are overwritten · 🔶 |
 
 ### 5. Requirements — outside MVP scope (regression only)
 
@@ -180,7 +170,7 @@ Placeholder scope, to be confirmed:
 |---|---|
 | **PR mergeable** | Lint, format, typecheck, unit green · E2E green once it runs in CI · these configured as required checks on `main` |
 | **Deployed to `main`** | Deployment workflow green · integration suite green (investigate any red `integration-tests` status before the next merge) |
-| **MVP testable** | All four MVP steps deployed on `ai-trust-main` · every in-scope scenario in [MVP integration scenarios](#mvp-integration-scenarios) implemented and green there (🔶 scenarios once decided) |
+| **MVP testable** | All four MVP steps deployed on `ai-trust-main` · every in-scope scenario in [MVP integration scenarios](#mvp-integration-scenarios) implemented and green there |
 
 The MVP milestone also requires testing from the user (PM) perspective. That is done in PM
 walkthroughs, outside this document.
@@ -198,12 +188,7 @@ data exists. Until then, MVP acceptance is measured by the business scenarios ab
 
 | # | Question | Affects |
 |---|---|---|
-| 1 | Which classification modes are part of the MVP: AI-assisted (default), manual questionnaire, external tier, full manual? Today only AI mode takes effect in the backend. | Registration, Risk classification |
-| 2 | Is linking model cards to systems in MVP scope? The MVP scope excludes LLM card linking. | Registration |
-| 3 | Should the obligation set be regenerated when the confirmed classification differs from the first one (Compliance Officer correction, send-back)? | Classification confirmation |
-| 4 | Is classification versioning (history of tier, rationale and approval) required for the MVP? | Classification confirmation |
-| 5 | Are a confidence threshold with fast track and AI analysis of source code part of the MVP classification approach? | Risk classification, AI output evaluation |
-| 6 | Which LLM provider runs on `ai-trust-main`? AI-mode scenarios are deterministic only with the stub provider. | Steps 1–4 |
+| 1 | Which LLM provider runs on `ai-trust-main`? AI-mode scenarios are deterministic only with the stub provider. | Steps 1–4 |
 
 ---
 
@@ -219,25 +204,11 @@ data exists. Until then, MVP acceptance is measured by the business scenarios ab
 
 ### Proposed follow-up issues (create after approval)
 
-1. **Integration tests for the MVP flow:** implement every ⬜/⚠️ scenario in
+1. **Integration tests for the MVP flow:** implement every ⬜ scenario in
    [MVP integration scenarios](#mvp-integration-scenarios) in `tests/integration/`, in AI mode with
    the stub LLM, checking registry and compliance state together for steps 2–4, including the basic
    frontend availability checks (0. Health checks). Milestone: DevOps.
-2. **Record classification decisions in the audit trail:** `ai-system-registry`
-   `routers/workflow.py` (submit-technical, approve incl. tier/`org_role` correction old → new,
-   reject, request-info, submit-info) writes `system_workflow_steps` and logs, but no
-   `log_audit_event`. Compliance audits the assessment approval, but not the reopen. This blocks the
-   audit assertion in step 4 (Classification confirmation). Milestone: Core.
-3. **Required status checks on `main`:** make the existing PR checks blocking.
-4. **Keep registry and compliance consistent on confirmation:** confirming in the Registry UI
-   approves or rejects the system only; the compliance assessment stays `pending_review`.
-   Milestone: Core.
-5. **Classification modes (depends on open question 1):** make the selected mode take effect in the
-   backend, or remove it from the UI. Intake fixes every system to AI mode and the mode can't be
-   updated; the registry E2E workflow tests that assume manual questionnaire mode actually run in AI
-   mode with the stub. Milestone: RCE.
-6. **Depending on open questions 3 and 4:** regenerate the obligation set after a changed
-   classification; classification versioning. Milestone: RCE.
+2. **Required status checks on `main`:** make the existing PR checks blocking.
 
 ---
 
