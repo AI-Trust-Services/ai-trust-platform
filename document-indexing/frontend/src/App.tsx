@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { FileSearch, Loader2 } from "lucide-react";
 import { HEALTH_URL } from "./api/client";
 import { useLuigiInit } from "./hooks/useLuigi";
-import { useTheme } from "./hooks/useTheme";
+import { useTheme } from "@ai-trust/react-hooks";
 import { usePermissions } from "./hooks/usePermissions";
 import { NoAccess } from "./components/NoAccess";
 import { DocumentIndexing } from "./views/DocumentIndexing";

@@ -395,8 +395,8 @@ target "admin-frontend" {
 }
 
 target "document-indexing-frontend" {
-  context    = "./document-indexing/frontend"
-  dockerfile = "Dockerfile"
+  context    = "."
+  dockerfile = "document-indexing/frontend/Dockerfile"
   platforms  = ["linux/amd64"]
   tags       = [tag("document-indexing-frontend")]
   args = {
