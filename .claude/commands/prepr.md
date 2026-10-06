@@ -58,10 +58,10 @@ For each changed file, check:
 - Env vars: fail-fast on missing config (`os.environ["KEY"]`), never silent defaults that hide misconfiguration
 
 **Infrastructure (for new or changed services)**
-- Port assignments: verify no conflicts with existing services in `docker-compose.yml`
-- Every service must have `restart: on-failure` and a `healthcheck`
-- Env var chain: trace source code → Dockerfile ARG → docker-compose build arg → `.env.example` — all must use the same name with no silent remapping
+- Every service must have a `healthcheck` and appropriate initContainers in the Helm chart
+- Env var chain: trace source code → Dockerfile ARG → `.env.example` — all must use the same name with no silent remapping
 - New env vars must be documented in both `.env.example` and `CLAUDE.md`
+- New service → verify it's added to `k8s/scripts/build-and-load-images.sh`, `docker-bake.hcl`, and `.ocm/component-constructor.yaml`
 
 **Data fetching (frontend)**
 - Flag any unscoped list fetch in a modal or picker — dropdowns that load all records without filtering will degrade at scale

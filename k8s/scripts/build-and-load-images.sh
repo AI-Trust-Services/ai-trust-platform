@@ -1,15 +1,24 @@
 #!/usr/bin/env bash
-# Builds every locally-built image (same context/Dockerfile/build-args as the
-# matching docker-compose service) and loads them into the kind cluster - no
+# Builds locally-built images and loads them into the kind cluster — no
 # registry involved. Third-party images (postgres, keycloak, openfga,
 # oauth2-proxy, rabbitmq, clickhouse-server, otel-collector-contrib)
 # are pulled normally by kubelet and are not built here.
+#
+# Usage:
+#   build-and-load-images.sh              — build and load every image
+#   build-and-load-images.sh --service X  — build and load only image X
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CLUSTER_NAME="${CLUSTER_NAME:-ai-trust}"
 TAG="local"
+
+# Optional filter: --service <name> builds only that one image.
+FILTER=""
+if [[ "${1:-}" == "--service" ]]; then
+  FILTER="${2:?--service requires a name}"
+fi
 
 cd "$REPO_ROOT"
 
@@ -30,6 +39,7 @@ images=()
 build() {
   local name="$1" context="$2" dockerfile="$3"
   shift 3
+  [[ -n "$FILTER" && "$name" != "$FILTER" ]] && return 0
   local tag="ai-trust/${name}:${TAG}"
   echo "==> building ${tag}  (context=${context} dockerfile=${dockerfile})"
   docker build -t "$tag" -f "$dockerfile" "$@" "$context"
@@ -59,7 +69,7 @@ build mc ./infra/mc ./infra/mc/Dockerfile
 build shell ./shell ./shell/Dockerfile
 build otel-rmq-bridge ./otel-pipeline/rmq-bridge ./otel-pipeline/rmq-bridge/Dockerfile
 
-# ── frontends (Vite build args baked in, same as docker-compose args:) ──
+# ── frontends (Vite build args baked in) ──
 build ai-system-registry-frontend . ./ai-system-registry/frontend/Dockerfile \
   --build-arg "VITE_REGISTRY_API_BASE=${VITE_REGISTRY_API_BASE}" \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
@@ -107,6 +117,10 @@ build decision-trace-analyzer-frontend . ./decision-trace-analyzer/frontend/Dock
   --build-arg "VITE_DTA_API_BASE=${VITE_DTA_API_BASE}"
 
 echo "==> loading ${#images[@]} images into kind cluster '${CLUSTER_NAME}'"
+if [[ ${#images[@]} -eq 0 ]]; then
+  echo "error: no image named '${FILTER}' — check the name and retry" >&2
+  exit 1
+fi
 kind load docker-image "${images[@]}" --name "$CLUSTER_NAME"
 
 echo "==> done"

@@ -31,7 +31,7 @@ Use the `/add-consumer` skill in Claude Code, or follow the pattern manually:
 1. Create `consumers/<name>-consumer/main.py` — `asyncio.run(main())` entrypoint, no HTTP port
 2. Declare a durable queue with a unique name and bind it to `otel.traces`
 3. Add `Dockerfile`, `entrypoint.sh`, `requirements.txt`
-4. Add the service to root `docker-compose.yml` with `depends_on: rabbitmq + clickhouse`
+4. Add the service to the Helm chart with `depends_on` equivalents (waitForTcp initContainers for rabbitmq + clickhouse)
 
 ## Environment variables
 

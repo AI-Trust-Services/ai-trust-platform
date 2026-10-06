@@ -12,10 +12,10 @@ Cross-service API tests that verify microservice contracts against a live platfo
 
 ## Running locally
 
-Requires a running platform — `cd k8s && make up` (kind).
+Requires a running platform — `make up` from the repo root (kind).
 
 ```bash
-# From the k8s/ directory:
+# From the repo root:
 make test-int    # kind cluster, namespace ai-trust
 ```
 
@@ -34,9 +34,9 @@ bash k8s/scripts/kill-port-forwards.sh
 **Manual iteration** (when debugging a specific test):
 
 ```bash
-cd k8s
+# From the repo root:
 make forward-ports                 # backgrounds 7 port-forwards, returns prompt
-pytest ../tests/integration/test_03_rbac.py -v -k "test_auditor"
+pytest tests/integration/test_03_rbac.py -v -k "test_auditor"
 make stop-forwards
 ```
 

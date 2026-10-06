@@ -61,7 +61,7 @@ ai-trust-platform/
 ├── consumers/                    ← RabbitMQ consumers (one sub-dir per sink)
 │   └── clickhouse-consumer/      ← writes GenAI spans to ClickHouse
 │       └── main.py
-└── docker-compose.yml            ← orchestrates all services
+└── Makefile                  ← kind cluster orchestration (make up / make down)
 ```
 
 ## GenAI Observability Data Flow
@@ -157,7 +157,9 @@ ClickHouse uses a **tiered MergeTree** storage policy with three layers:
 
 **Cache invalidation:** Handled automatically by ClickHouse. When a mutation (`ALTER TABLE ... UPDATE/DELETE`) rewrites a part, the cached version is invalidated and the new part is fetched from MinIO on next read. In practice this is rare — `gen_ai_spans` is write-once (spans are never mutated), and `alert_events` mutations only occur when a user handles an alert.
 
-## Docker Startup Order
+## Service Startup Order
+
+The diagram below reflects the dependency chain enforced by Helm initContainers in the kind/Gardener deployment.
 
 ```mermaid
 flowchart TD
@@ -248,8 +250,8 @@ flowchart TD
 
 `keycloak-provision` is a one-shot container built from `infra/keycloak/Dockerfile`. It uses the Keycloak Admin REST API to idempotently configure the `ai-trust` realm, the `oauth2-proxy` OIDC client, and the bootstrap admin user (credentials from `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD`). oauth2-proxy depends on it completing successfully before starting.
 
-**If db-migrate fails:** check logs with `docker compose logs db-migrate`. Common causes: postgres not ready (retry `docker compose up db-migrate`), or a bad migration file. Fix the migration, then re-run with `docker compose up --build db-migrate`. The backend will not start until db-migrate exits successfully.
+**If db-migrate fails:** check logs with `kubectl logs job/db-migrate-r<N> -n ai-trust`. Common causes: postgres not ready (check initContainer status), or a bad migration file. Fix the migration, then `make build && make upgrade`.
 
-**If clickhouse-migrate fails:** check logs with `docker compose logs clickhouse-migrate`. Common causes: clickhouse not ready (retry `docker compose up clickhouse-migrate`), or a bad SQL file. Fix the migration, then re-run with `docker compose up --build clickhouse-migrate`. The consumer will not start until clickhouse-migrate exits successfully.
+**If clickhouse-migrate fails:** check logs with `kubectl logs job/clickhouse-migrate-r<N> -n ai-trust`. Common causes: clickhouse not ready, or a bad SQL file. Fix the migration, then `make build && make upgrade`.
 
-**If minio-init fails:** check logs with `docker compose logs minio-init`. Most likely cause: MinIO not ready yet. Retry with `docker compose up minio-init`. ClickHouse will not start until minio-init exits successfully.
+**If minio-init fails:** check logs with `kubectl logs job/minio-init-r<N> -n ai-trust`. Most likely cause: MinIO not ready yet. Run `make upgrade` to retry.
