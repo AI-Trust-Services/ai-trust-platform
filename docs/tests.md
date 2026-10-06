@@ -20,7 +20,7 @@
 | Unit | Unit | Pure logic, no I/O |
 | Deployment test | Smoke / deployment verification | Helm/OCM rollout healthy |
 | E2E | End to end micro service | One service in-process + real DB, other services mocked |
-| Integration | System / cross-service | Live namespace, MVP flow requirements check |
+| Integration | System / cross-service | [MVP integration scenarios](#mvp-integration-scenarios)  |
 
 ---
 
@@ -57,12 +57,8 @@ flowchart LR
 
 | Gate | Criteria |
 |---|---|
-| **PR mergeable** | Lint, format, typecheck, unit green · E2E green once it runs in CI · these configured as required checks on `main` |
-| **Deployed to `main`** | Deployment workflow green · integration suite green (investigate any red `integration-tests` status before the next merge) |
-| **MVP testable** | All four MVP steps deployed on `ai-trust-main` · every in-scope scenario in [MVP integration scenarios](#mvp-integration-scenarios) implemented and green there |
-
-The MVP milestone also requires testing from the user (PM) perspective. That is done in PM
-walkthroughs, outside this document.
+| **PR mergeable** | Lint, format, typecheck, unit, E2E, integration green checks |
+| **`main` deployment** | Deployment workflow green · E2E & integration green otherwise investigate any red `e2e-tests`/ `integration-tests` status before the next merge |
 
 ---
 
@@ -188,9 +184,8 @@ data exists. Until then, MVP acceptance is measured by the business scenarios ab
 
 | # | Action | State |
 |---|---|---|
-| 1 | Review and approve this document with PM and engineering lead, including the open questions | 🔶 pending |
-| 2 | Decide AI output evaluation metrics and thresholds with AI Lead | 🔶 pending |
-| 3 | After approval: create follow-up issues | 🔶 pending  |
+| 1 | Review and approve this document with PM and engineering lead, including the open questions | 🔶 open |
+| 2 | After approval: create follow-up issues | 🔶 open  |
 
 ### Proposed follow-up issues (create after approval)
 
