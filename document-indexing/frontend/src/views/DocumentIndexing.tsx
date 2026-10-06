@@ -230,7 +230,10 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
     const win = window.open("", "_blank");
     if (win) win.opener = null; // sever opener (we dropped noopener to keep the handle)
     try {
-      const { url } = await api.getDownloadUrl(r.source.document_id);
+      // Open the exact version the passage came from, not whatever is current now —
+      // a new version uploaded between search and click would otherwise reopen the
+      // wrong original (acceptance criterion: trace back to source).
+      const { url } = await api.getDownloadUrl(r.source.document_id, r.source.version_id);
       const isPdf = r.source.filename.toLowerCase().endsWith(".pdf");
       const target = isPdf && r.source.page != null ? `${url}#page=${r.source.page}` : url;
       if (win) {

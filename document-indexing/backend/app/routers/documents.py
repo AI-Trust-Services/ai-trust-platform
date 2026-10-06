@@ -10,7 +10,7 @@ from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
-from ai_trust_persistence.models import Document, DocumentVersion
+from ai_trust_persistence.models import AISystem, Document, DocumentVersion
 
 from app import minio_client
 from app.ids import new_id
@@ -43,6 +43,17 @@ def _ext(filename: str) -> str:
     return os.path.splitext(filename)[1].lower()
 
 
+async def _ensure_system_exists(session: AsyncSession, system_id: str) -> None:
+    """Reject uploads for unknown AI systems. ``documents.ai_system_id`` has no FK
+    (it points at the registry's table and retrieval scans by it directly), so without
+    this check an arbitrary path ID would create orphaned DB + MinIO data."""
+    exists = (
+        await session.execute(select(AISystem.id).where(AISystem.id == system_id))
+    ).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(404, f"AI system {system_id} not found")
+
+
 def _status_response(doc: Document, version: DocumentVersion) -> DocumentStatusResponse:
     return DocumentStatusResponse(
         id=doc.id,
@@ -73,8 +84,14 @@ async def _read_valid_upload(request: Request, file: UploadFile) -> tuple[str, b
             + ", ".join(sorted(ALLOWED_EXTENSIONS)),
         )
 
+    # Content-Length is client-controlled; a non-numeric value must not 500 here —
+    # the actual byte-length check below is the real guard, this is just an early-out.
     content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > MAX_DOC_BYTES:
+    if (
+        content_length
+        and content_length.isdigit()
+        and int(content_length) > MAX_DOC_BYTES
+    ):
         raise HTTPException(413, "File too large (max 50 MB)")
     data = await file.read()
     if len(data) > MAX_DOC_BYTES:
@@ -106,6 +123,9 @@ async def upload_document(
     """Upload a document for an AI system. Stores the original in MinIO and creates a
     ``pending`` version; the worker picks it up and indexes it asynchronously."""
     filename, data = await _read_valid_upload(request, file)
+
+    async with SessionLocal() as session:
+        await _ensure_system_exists(session, system_id)
 
     document_id = new_id("DOC")
     version_id = new_id("DOCV")
@@ -181,21 +201,24 @@ async def list_documents(system_id: str) -> list[DocumentStatusResponse]:
 
 
 async def _load_current(
-    session: AsyncSession, document_id: str
+    session: AsyncSession, document_id: str, *, for_update: bool = False
 ) -> tuple[Document, DocumentVersion]:
-    row = (
-        await session.execute(
-            select(Document, DocumentVersion)
-            .join(
-                DocumentVersion,
-                and_(
-                    DocumentVersion.document_id == Document.id,
-                    DocumentVersion.is_current.is_(True),
-                ),
-            )
-            .where(Document.id == document_id, Document.deleted_at.is_(None))
+    stmt = (
+        select(Document, DocumentVersion)
+        .join(
+            DocumentVersion,
+            and_(
+                DocumentVersion.document_id == Document.id,
+                DocumentVersion.is_current.is_(True),
+            ),
         )
-    ).first()
+        .where(Document.id == document_id, Document.deleted_at.is_(None))
+    )
+    # Lock the current version row during a version swap so two concurrent uploads
+    # can't both demote it and each insert a new is_current=True row.
+    if for_update:
+        stmt = stmt.with_for_update(of=DocumentVersion)
+    row = (await session.execute(stmt)).first()
     if row is None:
         raise HTTPException(404, f"Document {document_id} not found")
     return row[0], row[1]
@@ -233,7 +256,7 @@ async def upload_version(
 
     try:
         async with SessionLocal() as session:
-            doc, current = await _load_current(session, document_id)
+            doc, current = await _load_current(session, document_id, for_update=True)
             versions = list(
                 (
                     await session.execute(
@@ -307,11 +330,30 @@ async def list_versions(document_id: str) -> list[VersionResponse]:
     response_model=DownloadUrlResponse,
     dependencies=[Depends(require_permission(SYSTEMS_READ))],
 )
-async def document_download_url(document_id: str) -> DownloadUrlResponse:
-    """Presigned URL to the current version's original file, so a retrieved passage can
-    be traced back and opened at its source location (acceptance criterion 6)."""
+async def document_download_url(
+    document_id: str, version_id: str | None = None
+) -> DownloadUrlResponse:
+    """Presigned URL to a document's original file, so a retrieved passage can be traced
+    back and opened at its source (acceptance criterion 6). Defaults to the current
+    version; pass ``version_id`` to open the exact version a passage came from — a
+    retrieval result references ``source.version_id``, which may no longer be current if
+    a new version was uploaded between search and click."""
     async with SessionLocal() as session:
-        _, version = await _load_current(session, document_id)
+        if version_id is None:
+            _, version = await _load_current(session, document_id)
+        else:
+            version = (
+                await session.execute(
+                    select(DocumentVersion).where(
+                        DocumentVersion.id == version_id,
+                        DocumentVersion.document_id == document_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if version is None:
+                raise HTTPException(
+                    404, f"Version {version_id} not found for document {document_id}"
+                )
         key = version.minio_key
     url = await minio_client.get_presigned_url(key)
     return DownloadUrlResponse(url=url, expires_hours=1)

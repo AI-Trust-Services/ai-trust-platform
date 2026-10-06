@@ -31,6 +31,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
@@ -98,6 +99,14 @@ class DocumentVersion(Base):
         Index("ix_document_versions_document", "document_id"),
         # The worker polls this: pending rows first.
         Index("ix_document_versions_status", "status"),
+        # At most one current version per document — enforces the version-swap
+        # invariant at the DB level so concurrent uploads can't create two.
+        Index(
+            "uq_document_versions_one_current",
+            "document_id",
+            unique=True,
+            postgresql_where=text("is_current"),
+        ),
     )
 
 

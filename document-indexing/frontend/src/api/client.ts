@@ -81,8 +81,11 @@ export const api = {
   listVersions: (documentId: string) =>
     request<VersionInfo[]>(`/documents/${encodeURIComponent(documentId)}/versions`),
 
-  getDownloadUrl: (documentId: string) =>
-    request<DownloadUrlResponse>(`/documents/${encodeURIComponent(documentId)}/download-url`),
+  getDownloadUrl: (documentId: string, versionId?: string) =>
+    request<DownloadUrlResponse>(
+      `/documents/${encodeURIComponent(documentId)}/download-url` +
+        (versionId ? `?version_id=${encodeURIComponent(versionId)}` : ""),
+    ),
 
   deleteDocument: (documentId: string) =>
     request<{ deleted: boolean }>(`/documents/${encodeURIComponent(documentId)}`, {

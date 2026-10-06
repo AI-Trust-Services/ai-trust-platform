@@ -19,7 +19,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from ai_trust_logging import get_logger
@@ -34,16 +34,52 @@ log = get_logger(__name__)
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 POLL_INTERVAL = int(os.environ.get("INDEXING_POLL_INTERVAL", "10"))
+# Multi-tenancy: isolation is schema-per-tenant, so each poll runs once per tenant with the
+# tenant ContextVar set — install_tenant_scoping then routes every query into that tenant's
+# schema (and per-tenant role), and minio_client resolves that tenant's bucket from the same
+# ContextVar. OWNER_DATABASE_URL (a role that can see the tenant schemas in the catalog) is
+# used ONLY to enumerate the tenants; when unset the worker does a single unscoped pass
+# (single-tenant / local dev).
+OWNER_DATABASE_URL = os.environ.get("OWNER_DATABASE_URL", "")
 
 engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 try:
-    from ai_trust_tenancy import install_tenant_scoping
+    from ai_trust_tenancy import install_tenant_scoping, tenant_id_var
 
     install_tenant_scoping(engine)
 except ImportError:
-    pass
+    tenant_id_var = None
+
+_owner_engine = (
+    create_async_engine(OWNER_DATABASE_URL, pool_pre_ping=True)
+    if OWNER_DATABASE_URL
+    else None
+)
+
+
+async def _distinct_tenants() -> list[str]:
+    """Enumerate the tenants that own data, from the per-tenant Postgres schemas.
+
+    Isolation is schema-per-tenant (`tenant_<org>`), so the set of tenants is the set of
+    those schemas. The org id is recovered by stripping the `tenant_` prefix. Returns []
+    when no owner URL is configured or tenancy is off → the caller then does a single
+    unscoped pass (legacy single-tenant behaviour).
+    """
+    if _owner_engine is None or tenant_id_var is None:
+        return []
+    async with _owner_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    "SELECT schema_name FROM information_schema.schemata "
+                    "WHERE schema_name LIKE 'tenant\\_%'"
+                )
+            )
+        ).all()
+    return [r[0][len("tenant_") :] for r in rows if r[0].startswith("tenant_")]
+
 
 # Built once at startup and reused across documents (per-doc rebuild pings HF → 429).
 _converter = None
@@ -92,6 +128,26 @@ async def _claim_pending() -> dict | None:
             "file_name": row.file_name,
             "ai_system_id": ai_system_id,
         }
+
+
+async def _reset_stale_processing() -> int:
+    """Requeue versions stuck in ``processing`` from a previous worker run.
+
+    The claim commits ``status='processing'`` before parsing/embedding/storing. If the
+    pod dies mid-flight the row would stay ``processing`` forever — ``_claim_pending``
+    only ever selects ``pending``, so it is never retried and the UI shows it running
+    indefinitely. On startup (before the loop) flip any such row back to ``pending`` so
+    it is picked up again. Safe because only one replica runs; a multi-replica setup
+    would need a heartbeat/lease to tell a crashed claim from one still in flight.
+    """
+    async with SessionLocal() as session:
+        result = await session.execute(
+            update(DocumentVersion)
+            .where(DocumentVersion.status == "processing")
+            .values(status="pending", stage=None)
+        )
+        await session.commit()
+        return result.rowcount or 0
 
 
 def _parse_bytes(data: bytes, file_name: str) -> list[ingest.Chunk]:
@@ -204,19 +260,50 @@ async def process_once() -> bool:
     return True
 
 
+async def _drain() -> None:
+    """Process every pending version visible in the current tenant context, then return."""
+    did_work = await process_once()
+    while did_work:
+        did_work = await process_once()
+
+
+async def _for_each_tenant(coro_factory) -> None:
+    """Run an async nullary callable once per tenant (multi-tenant), setting the tenant
+    ContextVar before each run, or once unscoped when no tenants are enumerable
+    (single-tenant / no OWNER_DATABASE_URL)."""
+    tenants = await _distinct_tenants()
+    if not tenants:
+        await coro_factory()
+        return
+    for t in tenants:
+        tok = tenant_id_var.set(t) if tenant_id_var is not None else None
+        try:
+            log.info("document.tenant_pass", extra={"tenant_id": t})
+            await coro_factory()
+        finally:
+            if tenant_id_var is not None and tok is not None:
+                tenant_id_var.reset(tok)
+
+
+async def _requeue_stale() -> None:
+    n = await _reset_stale_processing()
+    if n:
+        log.info("document.requeued_stale", extra={"count": n})
+
+
 async def main() -> None:
     global _converter, _chunker
     log.info("Document indexing worker starting — loading Docling…")
     _converter = await asyncio.to_thread(ingest.build_converter)
     _chunker = await asyncio.to_thread(ingest.build_chunker)
+    # Recover any version left mid-flight by a previous crash before serving the queue.
+    await _for_each_tenant(_requeue_stale)
     log.info("Document indexing worker started (interval=%ds)", POLL_INTERVAL)
 
     while True:
         try:
-            # Drain all pending work, then sleep.
-            did_work = await process_once()
-            while did_work:
-                did_work = await process_once()
+            # Drain all pending work (once per tenant), then sleep.
+            await _for_each_tenant(_drain)
         except Exception:
             log.exception("document.worker_error")
         await asyncio.sleep(POLL_INTERVAL)
