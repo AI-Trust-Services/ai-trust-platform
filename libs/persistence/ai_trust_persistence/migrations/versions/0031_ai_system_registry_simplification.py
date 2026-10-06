@@ -1,15 +1,15 @@
 """Add business_owners, technical_owners, git_repo_url to ai_systems
 
-Revision ID: 0029
-Revises: 0028
+Revision ID: 0031
+Revises: 0030
 Create Date: 2026-10-01
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0029"
-down_revision = "0028"
+revision = "0031"
+down_revision = "0030"
 branch_labels = None
 depends_on = None
 
