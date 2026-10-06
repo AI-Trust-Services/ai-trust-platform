@@ -190,7 +190,4 @@ data exists. Until then, MVP acceptance is measured by the business scenarios ab
 ### Proposed follow-up issues (create after approval)
 
 1. **Integration tests for the MVP flow:** implement every ⬜ scenario in
-   [MVP integration scenarios](#mvp-integration-scenarios) in `tests/integration/`, in AI mode with
-   the stub LLM, checking registry and compliance state together for steps 2–4, including the basic
-   frontend availability checks (0. Health checks). Milestone: DevOps.
-
+   [MVP integration scenarios](#mvp-integration-scenarios) in `tests/integration/` Milestone: DevOps.
