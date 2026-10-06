@@ -33,7 +33,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6">
         <div className="flex items-center gap-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
@@ -53,7 +53,7 @@ export default function App() {
               <span>Backend is unavailable. Retrying…</span>
             </div>
           )}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1">
             <DocumentIndexing mayWrite={mayWrite} />
           </div>
         </>
