@@ -2,6 +2,7 @@ import type {
   DocumentStatus,
   DownloadUrlResponse,
   PermissionsResponse,
+  RetrieveMode,
   RetrievedPassage,
   UploadResponse,
   VersionInfo,
@@ -88,6 +89,14 @@ export const api = {
       method: "DELETE",
     }),
 
-  retrieve: (aiSystemId: string, query: string, k: number) =>
-    request<RetrievedPassage[]>(`/retrieve`, json({ ai_system_id: aiSystemId, query, k })),
+  retrieve: (
+    aiSystemId: string,
+    query: string,
+    k: number,
+    opts?: { mode?: RetrieveMode; rrfK?: number },
+  ) =>
+    request<RetrievedPassage[]>(
+      `/retrieve`,
+      json({ ai_system_id: aiSystemId, query, k, mode: opts?.mode, rrf_k: opts?.rrfK }),
+    ),
 };

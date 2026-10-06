@@ -60,9 +60,18 @@ export interface SourceRef {
   heading_path: string[] | null;
 }
 
+export type RetrieveMode = "dense" | "fts" | "hybrid";
+
 export interface RetrievedPassage {
   chunk_id: string;
   passage: string;
   rank: number;
+  // Per-channel diagnostics (Test Bed advanced panel); null when the chunk did not
+  // surface in that channel. rrf_score is set only in hybrid mode.
+  dense_rank: number | null;
+  dense_score: number | null;
+  fts_rank: number | null;
+  fts_score: number | null;
+  rrf_score: number | null;
   source: SourceRef;
 }

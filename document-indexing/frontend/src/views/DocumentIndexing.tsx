@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ChevronDown,
+  ChevronRight,
   ExternalLink,
   FileUp,
   History,
@@ -15,6 +17,7 @@ import type {
   AISystem,
   DocumentStatus,
   IndexingStatus,
+  RetrieveMode,
   RetrievedPassage,
   VersionInfo,
 } from "../types";
@@ -54,6 +57,17 @@ const STATUS_VARIANT: Record<IndexingStatus, "default" | "secondary" | "outline"
 
 const ACTIVE: IndexingStatus[] = ["pending", "processing"];
 
+// Validated defaults (Phase-1 harness): hybrid fusion, RRF k=60, top 10. The advanced
+// panel starts here and offers a one-click reset so a tweaked config can't quietly
+// become someone's "the retrieval is bad" baseline.
+const RECOMMENDED = { mode: "hybrid" as RetrieveMode, rrfK: 60, k: 10 };
+
+const MODE_LABEL: Record<RetrieveMode, string> = {
+  hybrid: "Hybrid (dense + FTS)",
+  dense: "Dense only",
+  fts: "Keyword (FTS) only",
+};
+
 // Fine-grained phase → step position for the progress hint (5 phases total).
 const STAGE_STEP: Record<string, string> = {
   parsing: "2/5",
@@ -88,10 +102,20 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
   const [versions, setVersions] = useState<VersionInfo[] | null>(null);
 
   const [query, setQuery] = useState("");
-  const [k, setK] = useState(10);
+  const [k, setK] = useState(RECOMMENDED.k);
+  const [mode, setMode] = useState<RetrieveMode>(RECOMMENDED.mode);
+  const [rrfK, setRrfK] = useState(RECOMMENDED.rrfK);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [results, setResults] = useState<RetrievedPassage[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  const atRecommended = mode === RECOMMENDED.mode && rrfK === RECOMMENDED.rrfK && k === RECOMMENDED.k;
+  function resetRetrieval() {
+    setMode(RECOMMENDED.mode);
+    setRrfK(RECOMMENDED.rrfK);
+    setK(RECOMMENDED.k);
+  }
 
   // Load the AI-system list for the selector (registry backend).
   useEffect(() => {
@@ -188,7 +212,7 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
     setSearching(true);
     setSearchError(null);
     try {
-      setResults(await api.retrieve(loadedSystem, query.trim(), k));
+      setResults(await api.retrieve(loadedSystem, query.trim(), k, { mode, rrfK }));
     } catch (e) {
       setSearchError(e instanceof Error ? e.message : String(e));
       setResults(null);
@@ -399,6 +423,71 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
                   <span className="ml-2">Search</span>
                 </Button>
               </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((v) => !v)}
+                  className="inline-flex w-fit items-center gap-1 text-[13px] font-medium text-muted-foreground hover:text-foreground"
+                >
+                  {showAdvanced ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                  Advanced
+                  {!atRecommended && (
+                    <Badge variant="secondary" className="ml-1">custom</Badge>
+                  )}
+                </button>
+
+                {showAdvanced && (
+                  <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="w-56">
+                        <Label htmlFor="mode">Retrieval mode</Label>
+                        <Select value={mode} onValueChange={(v) => setMode(v as RetrieveMode)}>
+                          <SelectTrigger id="mode">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(["hybrid", "dense", "fts"] as RetrieveMode[]).map((m) => (
+                              <SelectItem key={m} value={m}>{MODE_LABEL[m]}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="w-28">
+                        <Label htmlFor="rrfK">RRF k</Label>
+                        <Input
+                          id="rrfK"
+                          type="number"
+                          min={1}
+                          max={200}
+                          value={rrfK}
+                          disabled={mode !== "hybrid"}
+                          onChange={(e) =>
+                            setRrfK(Math.min(200, Math.max(1, Number(e.target.value) || RECOMMENDED.rrfK)))
+                          }
+                        />
+                      </div>
+                      {atRecommended ? (
+                        <span className="pb-2 text-xs text-muted-foreground">Recommended settings</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={resetRetrieval}
+                          className="pb-2 text-xs font-medium text-foreground hover:underline"
+                        >
+                          Reset to recommended
+                        </button>
+                      )}
+                    </div>
+                    {mode !== "hybrid" && (
+                      <p className="text-xs text-muted-foreground">
+                        Single-channel mode — Hybrid usually returns the best matches. Use this
+                        only to inspect one channel in isolation.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
               {searchError && <p className="text-[13px] text-destructive">{searchError}</p>}
 
               {results !== null && (
@@ -430,6 +519,25 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
                             Open source <ExternalLink className="size-3" />
                           </button>
                         </div>
+                        {showAdvanced && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {r.dense_rank != null && (
+                              <Badge variant="outline" className="font-normal tabular-nums">
+                                dense #{r.dense_rank} · {r.dense_score?.toFixed(2)}
+                              </Badge>
+                            )}
+                            {r.fts_rank != null && (
+                              <Badge variant="outline" className="font-normal tabular-nums">
+                                FTS #{r.fts_rank} · {r.fts_score?.toFixed(3)}
+                              </Badge>
+                            )}
+                            {r.rrf_score != null && (
+                              <Badge variant="outline" className="font-normal tabular-nums">
+                                RRF {r.rrf_score.toFixed(4)}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))
                   )}

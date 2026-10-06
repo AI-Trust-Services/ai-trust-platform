@@ -96,7 +96,7 @@
       },
       {
         pathSegment: "document-indexing",
-        label: "Document Indexing",
+        label: "Test Bed",
         icon: "documents",
         viewUrl: "/indexing/",
         navigationContext: "document-indexing",
