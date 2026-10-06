@@ -5,16 +5,11 @@
 
 ## Executive summary
 
-- **Five test levels:** lint/typecheck, unit, deployment test, E2E (per service) and integration
-  (see [Test levels](#test-levels)). AI output evaluation is planned on top (**🔶 open, review with
-  AI Lead**).
+- **Test levels:** lint/typecheck, unit, deployment test, E2E (per service) and integration
+  (see [Test levels](#test-levels)). AI output evaluation is planned on top (see [AI output evaluation](#ai-output-evaluation))
 - **MVP acceptance is defined by business flow, not code coverage.** Every MVP step
   (Registration → Self-assessment → Risk classification → Classification confirmation) has a set of
   mandatory **integration** scenarios (see [MVP integration scenarios](#mvp-integration-scenarios)).
-  They run in AI-assisted mode with the stub LLM and check registry and compliance together, because
-  the Compliance UI drives each step across both services.
-- **Most of the functionality exists; most of the tests do not.** Scenarios with missing or partial
-  functionality are tracked as separate issues and not listed in the integration scenarios table.
 - **Coverage targets:** 🔶 TBD. No coverage targets for now.
 
 ## Test levels
@@ -24,8 +19,8 @@
 | Lint / typecheck | Static analysis | No execution |
 | Unit | Unit | Pure logic, no I/O |
 | Deployment test | Smoke / deployment verification | Helm/OCM rollout healthy |
-| E2E | Service / component integration | One service in-process + real DB, other services mocked |
-| Integration | System / cross-service E2E | Live namespace, real HTTP between services |
+| E2E | End to end micro service | One service in-process + real DB, other services mocked |
+| Integration | System / cross-service | Live namespace, MVP flow requirements check |
 
 ---
 
@@ -37,13 +32,13 @@ merge → deploy to `ai-trust-main` → live tests → next change. A red step s
 
 ```mermaid
 flowchart LR
-    DEV(["① Develop<br/>local: lint · unit · E2E"])
-    PR["② PR checks<br/>lint · typecheck · unit · E2E (planned)"]
+    DEV(["① Local<br/>development: lint · typecheck · unit · E2E · integration"])
+    PR["② PR checks<br/>lint · typecheck · unit"]
     DT["③ Deploy PR<br/><b>ai-trust-test</b><br/>PR namespace"]
-    LT["④ Live tests on ai-trust-test<br/>integration (system E2E)"]
+    LT["④ Live tests on ai-trust-test<br/>E2E · integration"]
     MG{{"⑤ Merge to main"}}
     DM["⑥ Deploy main<br/><b>ai-trust-main</b><br/>namespace ai-trust"]
-    LM["⑦ Live tests on ai-trust-main<br/>integration (system E2E)"]
+    LM["⑦ Live tests on ai-trust-main<br/>E2E · integration"]
 
     DEV ==> PR ==> DT ==> LT ==> MG ==> DM ==> LM
     LM -- "next change" --> DEV
@@ -58,23 +53,29 @@ flowchart LR
     class MG gate
 ```
 
+### Quality gates
+
+| Gate | Criteria |
+|---|---|
+| **PR mergeable** | Lint, format, typecheck, unit green · E2E green once it runs in CI · these configured as required checks on `main` |
+| **Deployed to `main`** | Deployment workflow green · integration suite green (investigate any red `integration-tests` status before the next merge) |
+| **MVP testable** | All four MVP steps deployed on `ai-trust-main` · every in-scope scenario in [MVP integration scenarios](#mvp-integration-scenarios) implemented and green there |
+
+The MVP milestone also requires testing from the user (PM) perspective. That is done in PM
+walkthroughs, outside this document.
+
 ---
 
 ## MVP integration scenarios
 
-Legend: ✅ test exists · ⬜ test missing, functionality exists
+Legend: ✅ test covered · ⬜ test missing, functionality exists
 
-Scenarios with missing or partial functionality are tracked as separate issues and are not listed here.
-
-Personas: Application Owner (`business_owner`), AI Engineer (`ai_engineer`), Compliance Officer
-(`ai_compliance_officer`). AI-mode scenarios assume the deterministic stub LLM provider on the target
-namespace.
+Personas: Application Owner, AI Engineer, Compliance Officer.
 
 ### 0. Health checks
 
 Frontend checks are kept basic for MVP: plain HTTP requests in the same integration suite, with no
-browser and no login. They catch a missing bundle or a broken nginx route. UI behaviour is checked
-in PM walkthroughs.
+browser and no login. They catch a missing bundle or a broken nginx route.
 
 | Scenario | State |
 |---|---|
@@ -89,8 +90,8 @@ in PM walkthroughs.
 | Scenario | State |
 |---|---|
 | Application Owner registers a system → visible in registry and compliance | ✅ `test_02_registry_compliance.py` |
-| AI Engineer can register a system | ⬜ |
 | Role without write permission (e.g. Auditor) cannot register (403) | ✅ `test_03_rbac.py` |
+| AI Engineer can register a system | ⬜ |
 | AI-assisted registration: conversational intake and an uploaded document pre-fill the registration fields (the document is parsed, not stored) | ⬜ |
 
 ### 2. Self-assessment
@@ -106,11 +107,12 @@ in PM walkthroughs.
 
 | Scenario | State |
 |---|---|
+| Platform administrator cannot read assessments (403) | ✅ `test_03_rbac.py` |
+| Obligation set generated for a system classified before the assessment starts | ✅ `test_02_registry_compliance.py` |
 | AI mode (default): free-text technical answers → AI-inferred flags, tier, EU AI Act role and per-criterion rationale with confidence stored | ⬜ |
 | Classification completed → obligations and requirements generated for the classified tier and role; assessment `pending_review` | ⬜ |
-| Obligation set generated for a system classified before the assessment starts | ✅ `test_02_registry_compliance.py` |
 | Changed flags + reclassify update the tier | ⬜ |
-| Platform administrator cannot read assessments (403) | ✅ `test_03_rbac.py` |
+
 
 ### 4. Classification confirmation
 
@@ -147,14 +149,14 @@ Monitoring follows Approval in the lifecycle and is outside MVP scope; no integr
 
 ## AI output evaluation
 
-> **🔶 Open — to review with AI Lead.** Metrics and thresholds are not decided.
+> Metrics and thresholds are not decided. Will be covered with AI Assisted functionality implementation.
 
 Placeholder scope, to be confirmed:
 - **What:** accuracy of the AI-assisted RCE: flags extracted from questionnaire answers and uploaded
   documents, and the resulting tier and EU AI Act role, against a labelled dataset covering all tiers.
 - **Inputs:** labelled dataset, evaluation pipeline and test bed (planned).
 - **Relation to functional tests:** integration tests prove the workflow works with a deterministic
-  stub. Evaluation proves the AI output is good enough. A release needs both.
+  stub. Evaluation proves the AI output is good enough.
 - **To decide:**
   - metrics (per-tier precision/recall?) and MVP thresholds
   - confidence calibration, needed if a confidence threshold routes classifications
@@ -163,17 +165,6 @@ Placeholder scope, to be confirmed:
   - which LLM provider and model is evaluated, and whether evaluation runs in CI or on demand
 
 ---
-
-## Quality gates (proposed)
-
-| Gate | Criteria |
-|---|---|
-| **PR mergeable** | Lint, format, typecheck, unit green · E2E green once it runs in CI · these configured as required checks on `main` |
-| **Deployed to `main`** | Deployment workflow green · integration suite green (investigate any red `integration-tests` status before the next merge) |
-| **MVP testable** | All four MVP steps deployed on `ai-trust-main` · every in-scope scenario in [MVP integration scenarios](#mvp-integration-scenarios) implemented and green there |
-
-The MVP milestone also requires testing from the user (PM) perspective. That is done in PM
-walkthroughs, outside this document.
 
 ## Coverage targets
 
@@ -188,7 +179,8 @@ data exists. Until then, MVP acceptance is measured by the business scenarios ab
 
 | # | Question | Affects |
 |---|---|---|
-| 1 | Which LLM provider runs on `ai-trust-main`? AI-mode scenarios are deterministic only with the stub provider. | Steps 1–4 |
+| 1 | Is frontend tests part of MVP ? |
+| 2 | Is test coverage part of MVP ? |
 
 ---
 
@@ -198,9 +190,7 @@ data exists. Until then, MVP acceptance is measured by the business scenarios ab
 |---|---|---|
 | 1 | Review and approve this document with PM and engineering lead, including the open questions | 🔶 pending |
 | 2 | Decide AI output evaluation metrics and thresholds with AI Lead | 🔶 pending |
-| 3 | After approval: create follow-up issues (below) | not started |
-| 4 | Configure required status checks on `main` (lint, typecheck, unit; E2E once it runs in CI) | not started |
-| 5 | Define coverage targets once tooling and baseline exist | not started |
+| 3 | After approval: create follow-up issues | 🔶 pending  |
 
 ### Proposed follow-up issues (create after approval)
 
@@ -208,11 +198,4 @@ data exists. Until then, MVP acceptance is measured by the business scenarios ab
    [MVP integration scenarios](#mvp-integration-scenarios) in `tests/integration/`, in AI mode with
    the stub LLM, checking registry and compliance state together for steps 2–4, including the basic
    frontend availability checks (0. Health checks). Milestone: DevOps.
-2. **Required status checks on `main`:** make the existing PR checks blocking.
 
----
-
-## Maintaining this document
-
-Update `docs/tests.md` in the same PR whenever you add or change a test level, a CI test workflow,
-a quality gate, or an MVP integration scenario (flip ⬜ → ✅).
