@@ -155,6 +155,45 @@ async def search_entities(entity_type: str | None = None, limit: int = 50) -> li
     return out
 
 
+async def answer_question(question: str, passages: list[dict], app_port: int = 8011) -> str:
+    """Generate a grounded answer using the in-process SAP AI Core adapter.
+
+    Falls back to a plain concatenation of passages when SAP AI Core is not
+    configured (e.g. Ollama-only mode).
+    """
+    if not _sap_ai_configured():
+        if not passages:
+            return "No relevant passages found in the knowledge graph."
+        return "\n\n".join(p["text"] for p in passages[:5])
+
+    context = "\n\n".join(
+        f"[{i+1}] {p['text']}" for i, p in enumerate(passages[:5])
+    )
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are an EU AI Act compliance expert. "
+                "Answer the question using only the provided passages. "
+                "If the passages do not contain enough information, say so."
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"Passages:\n{context}\n\nQuestion: {question}",
+        },
+    ]
+    token = await get_sap_token()
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(
+            f"http://localhost:{app_port}/internal/v1/chat/completions",
+            json={"model": "openai/sap-ai-core", "messages": messages, "max_tokens": 2048},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"]
+
+
 async def ingest_feedback(feedback_id: str, text: str, node_ids: list[str]) -> None:
     """Ingest approved feedback as a tagged node into Cognee's graph.
 

@@ -11,6 +11,8 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+import aiohttp
+
 from app.cognee_client import (
     _AI_DEPLOYMENT_ENDPOINT,
     _AI_RESOURCE_GROUP,
@@ -20,7 +22,7 @@ from app.cognee_client import (
     setup_sap_ai_core,
 )
 from app.database import init_db
-from app.routers import graph, ingest
+from app.routers import evaluate, feedback, graph, ingest, ui
 
 logger = get_logger(__name__)
 
@@ -42,7 +44,33 @@ async def lifespan(app: FastAPI):
         logger.info("startup.sap_ai_core_configured")
     else:
         logger.info("startup.sap_ai_core_skipped", extra={"reason": "credentials absent"})
+    await _warm_embedding_model()
     yield
+
+
+async def _warm_embedding_model() -> None:
+    """Pin the Ollama embedding model in memory so the first ingest doesn't time out.
+
+    Ollama takes 20-60s to load nomic-embed-text on a cold start. cognee's aiohttp
+    client has a 60s timeout, which fires before the response arrives on the first
+    call after a clean volume. Sending keep_alive=-1 at startup keeps the model
+    loaded indefinitely.
+    """
+    endpoint = os.environ.get("EMBEDDING_ENDPOINT", "")
+    model = os.environ.get("EMBEDDING_MODEL", "")
+    if not endpoint or not model or "/api/" not in endpoint:
+        return
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                endpoint,
+                json={"model": model, "input": ["warmup"], "keep_alive": -1},
+                timeout=aiohttp.ClientTimeout(total=120),
+            ) as resp:
+                await resp.read()
+        logger.info("startup.embedding_model_warmed", extra={"model": model})
+    except Exception as exc:
+        logger.warning("startup.embedding_warmup_failed", extra={"error": str(exc)})
 
 
 app = FastAPI(
@@ -96,6 +124,9 @@ async def logging_middleware(request: Request, call_next) -> Response:
 
 app.include_router(ingest.router, prefix="/v1")
 app.include_router(graph.router, prefix="/v1")
+app.include_router(evaluate.router, prefix="/v1")
+app.include_router(feedback.router, prefix="/v1")
+app.include_router(ui.router)
 
 
 @app.get("/health")

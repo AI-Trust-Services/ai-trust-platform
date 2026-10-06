@@ -34,13 +34,13 @@ open http://localhost:8888
 
 | # | Scope | Status |
 |---|---|---|
-| 1 | Skeleton + Ingestion | In progress |
-| 2 | Graph Inspection API | Pending |
-| 3 | Grounded Q&A | Pending |
-| 4 | Feedback Capture + Graph Update | Pending |
+| 1 | Skeleton + Ingestion | Done |
+| 2 | Graph Inspection API | Done |
+| 3 | Grounded Q&A | Done |
+| 4 | Feedback Capture + Graph Update | Done |
 | 5 | Verification Scenarios | Pending |
 
-## Routes (Milestone 1)
+## Routes
 
 | Method | Path | Description |
 |---|---|---|
@@ -48,6 +48,17 @@ open http://localhost:8888
 | `GET` | `/v1/ingest/status` | Check ingestion status |
 | `GET` | `/v1/graph/stats` | Knowledge graph summary |
 | `GET` | `/v1/graph/entities` | List entities, filterable by `?type=Article` |
+| `GET` | `/v1/graph/raw` | Raw nodes + edges from Kuzu |
+| `GET` | `/v1/graph/viz` | Interactive vis-network graph visualization |
+| `POST` | `/v1/evaluate` | Ask a question — recall + LLM answer + save |
+| `GET` | `/v1/evaluate` | List past evaluations |
+| `GET` | `/v1/evaluate/{id}` | Get single evaluation |
+| `POST` | `/v1/feedback` | Submit feedback on an evaluation |
+| `GET` | `/v1/feedback` | List feedback (`?status=pending\|approved\|rejected`) |
+| `GET` | `/v1/feedback/{id}` | Get single feedback |
+| `PATCH` | `/v1/feedback/{id}/approve` | Approve + re-ingest into graph |
+| `PATCH` | `/v1/feedback/{id}/reject` | Reject feedback |
+| `GET` | `/ui` | Single-page evaluation UI |
 | `GET` | `/health` | Health check — also reports PDF mount status |
 
 ## Environment variables
