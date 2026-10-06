@@ -130,7 +130,7 @@ Codebase-specific decisions. Follow them even where an external pattern is more 
 - **Pydantic schemas** — response schemas set `model_config = {"from_attributes": True}`. Convert rows with `Schema.model_validate(row)` — never `.from_orm()` (Pydantic v1, removed in v2).
 - **Test deps** — `requirements-test.txt` lists PyPI deps only; never `-r requirements.txt`. Editable libs (`-e ../libs/…`) are installed by `make setup`, not from this file. The service `requirements.txt` uses Docker-path `-e /app/libs/…` which is invalid outside containers and would break CI.
 - **Lint** — `pyproject.toml` at repo root configures ruff. `ruff` is not on PATH — invoke as `python3 -m ruff check .` and `python3 -m ruff format --check .`; both run as PR gates. Rules F401/F811/E402/E701/E712 are suppressed for pre-existing violations — don't add new suppressions for new code.
-- **TypeScript typecheck** — all 8 frontends run `npm run typecheck` (`tsc --noEmit`) as a PR gate (`.github/workflows/pr-typecheck.yml`). Run `cd <component>/frontend && npm ci && npm run typecheck` locally before pushing frontend changes. Do not leave unused imports or type errors — the check fails the PR.
+- **TypeScript typecheck** — all 9 frontends run `npm run typecheck` (`tsc --noEmit`) as a PR gate (`.github/workflows/pr-typecheck.yml`). Run `cd <component>/frontend && npm ci && npm run typecheck` locally before pushing frontend changes. Do not leave unused imports or type errors — the check fails the PR.
 - **CLAUDE.md** — update it as part of any PR that adds or changes a feature, service, endpoint, env var, migration, or architectural pattern. It is the primary reference for AI assistants working in this repo — stale docs cause wrong suggestions and wasted effort. Component-specific detail goes in that component's own `CLAUDE.md` (see "Nested docs" at the top); keep this root file for cross-cutting concerns.
 
 ---
@@ -143,7 +143,7 @@ All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports 
 |---|---|
 | Luigi shell / entry point | http://localhost:8080 |
 | Keycloak (browser login) | http://localhost:8180 |
-| Frontends | `/registry/`, `/overview/`, `/monitoring/`, `/alerts/`, `/dta/`, `/compliance/`, `/iam/`, `/audit/`, `/admin/` under `:8080` |
+| Frontends | `/registry/`, `/overview/`, `/monitoring/`, `/alerts/`, `/dta/`, `/compliance/`, `/iam/`, `/audit/`, `/admin/`, `/indexing/` under `:8080` |
 | Backend APIs | `/api/{registry,overview,monitoring,alerts,dta,compliance,audit,admin}/v1` under `:8080` (health at `/api/*/health`, docs at `/api/registry/docs`) |
 | IAM / roles API | `/api/users/v1/iam` · current-user permissions `/api/users/v1/me/permissions` |
 | PostgreSQL | localhost:5432 / db `ai_trust` |
@@ -202,7 +202,7 @@ See [docs/architecture.md](docs/architecture.md) for repo layout, GenAI observab
 
 ## Frontend stacks
 
-All React frontends (registry, alerts, DTA, compliance, monitoring, users, iam) share:
+All React frontends (registry, alerts, DTA, compliance, monitoring, users, iam, document-indexing) share:
 - **Stack** — React 19, React Router 8, TypeScript 5.8. Use React 19 APIs (no `forwardRef`/`React.FC`, `use()` where applicable).
 - **Build** — Vite 6 (`npm run build → dist/`), multi-stage Dockerfile (`node:24-alpine` build → `nginx:alpine` serve).
 - **Base path** — `base` in `vite.config.ts` (e.g. `/registry/`) for correct asset resolution under the shell sub-path.
@@ -314,6 +314,35 @@ Keycloak-backed user management plus the IAM/roles API (see "Authorization — R
 
 ### admin/ (port 8010, `/api/admin/`)
 Platform administration — SMTP mail config, general platform settings, branding/white-labeling, summary dashboard. Details → [admin/CLAUDE.md](admin/CLAUDE.md).
+
+### document-indexing/ (port 8011, `/api/indexing/`) — k8s-only
+Reusable document indexing + retrieval for an AI system: uploaded documents are chunked, embedded, and made searchable so multiple workflows (assessment prefill, classification, evidence review) can retrieve relevant passages **with traceable source references** through one shared interface. Retrieved content is source material — not a verified fact or a compliance decision. Phase-1 quality validation lives in `experiments/document-indexing/`; design + status in [document-indexing-plan.md](document-indexing-plan.md).
+
+> **Deployment: k8s/kind + Gardener only — no docker-compose entry** (deliberate exception to "Dual deployment paths" for this feature). Verify via `cd k8s && make up`.
+
+Three cooperating workloads (sibling top-level dirs, like the other workers) plus a test/UI MFE:
+- **`document-indexing/backend`** (FastAPI, port 8011) — upload, status, retrieval API.
+- **`document-indexing-worker`** — DB-polling indexer (no HTTP port; pattern mirrors `audit-flush-worker`). Claims `document_versions` rows in status `pending` (`FOR UPDATE SKIP LOCKED`), parses with Docling, embeds via the embedding service, writes chunks, sets `indexed`/`failed`. The `status` column is the queue and the single source of truth for progress.
+- **`embedding-service`** (FastAPI, port 8012) — loads the `EMBED_MODEL` once and serves `POST /embed` to both the worker (index time, `kind=passage`) and the backend (query time, `kind=query`), so vectors are identical. A small model registry selects the backend + E5 input prefixes: default `intfloat/multilingual-e5-small` (384-dim, `sentence-transformers`, needs `query:`/`passage:` prefixes — applied server-side by `kind`), also `intfloat/multilingual-e5-base` (768-dim) and `BAAI/bge-m3` (1024-dim, `FlagEmbedding`, no prefix). Helm `StatefulSet` with an HF-cache PVC (analogue of `ollama.yaml`).
+- **`document-indexing/frontend`** — React MFE at `/indexing/` (nav label **"Test Bed"**, gated on `systems:read`): pick an AI system from a dropdown (list from the registry backend `GET /systems`), upload documents, watch indexing status poll through its phase (`parsing → embedding → storing → indexed`), upload new versions / view version history, and run retrieval queries showing passages with their source (filename, version, page, heading path) and an "Open source" link that opens the original (PDFs jump to the page via `#page=N`). An **Advanced panel** on the retrieve card exposes query-time knobs (`mode`, `rrf_k`, `k`) with validated defaults + a reset-to-recommended, and shows per-channel rank/score diagnostics per passage. Built from the shared frontend stack; nav node in `shell/public/luigi-config.js`.
+
+**Data model** (migrations `0026`+`0027`, needs the pgvector extension — Postgres image is `pgvector/pgvector:pg16`):
+- `documents` (id `DOC-`, `ai_system_id`, `filename`, soft-delete `deleted_at`), `document_versions` (id `DOCV-`, `minio_key`, `status` ∈ `pending|processing|indexed|failed`, `stage` ∈ `parsing|embedding|storing|null` — the fine-grained phase the worker writes while `processing`, `chunk_count`, `is_current`), `document_chunks` (id `CHNK-`, `embedding vector(384)` — dimension tracks `EMBEDDING_DIM` in `…/models/document.py`, changes with `EMBED_MODEL` via a migration + re-index, generated `content_tsv tsvector`, provenance `page`/`bbox`/`self_ref`/`heading_path`). IDs via `document-indexing/backend/app/ids.py`.
+- Retrieval is **brute-force, no ANN index**, always scoped `WHERE ai_system_id = X`; a GIN index backs FTS.
+
+**Retrieval** (`app/retrieval.py`) — hybrid, ported from the validated Phase-1 harness: **dense** (pgvector cosine `<=>`, vectors from the shared embedding-service) + Postgres **FTS** (`websearch_to_tsquery('simple', …)`, exact terms/IDs) fused with **RRF**. Reranker is deliberately omitted for now (optional per the plan). Each passage carries `rank` (1-based position in the fused list — an ordering number only, **not** a relevance/confidence score; RRF produces no absolute score). Numeric relevance/eval lives in the `experiments/document-indexing/` harness, not the live service. Originals stored in MinIO bucket `indexing-docs` (single mode) / `tenant-<org>` (multi-tenant), same client pattern as compliance evidence.
+
+**Endpoints** (all `/v1`, gated `require_permission`; documents are system-scoped so this reuses `systems:read`/`systems:write` rather than dedicated `documents:*` permissions):
+- `POST /systems/{id}/documents` (multipart, `systems:write`) — store original, create a `pending` version.
+- `GET /systems/{id}/documents`, `GET /documents/{id}` (`systems:read`) — status incl. `stage`/`chunk_count`/`error`.
+- `POST /documents/{id}/versions` (multipart, `systems:write`) — upload a new version: the new version becomes `is_current` + `pending` (re-indexed), the previous one is kept but `is_current=False` so its chunks drop out of new results (auto-incremented major `version_label`, e.g. `1.0 → 2.0`).
+- `GET /documents/{id}/versions` (`systems:read`) — version history, oldest-first.
+- `GET /documents/{id}/download-url` (`systems:read`) — presigned URL to the current version's original (traces a passage back to its source).
+- `POST /retrieve` `{ai_system_id, query, k, mode?, rrf_k?}` (`systems:read`) — ranked passages (`rank`) + source refs. `mode` ∈ `hybrid` (default; dense + FTS fused with RRF), `dense`, `fts`; `rrf_k` (default 60) tunes the fusion constant (hybrid only). Single-channel modes order by that channel's own score and skip the other channel. Each passage also carries optional per-channel diagnostics (`dense_rank`/`dense_score`, `fts_rank`/`fts_score`, `rrf_score`) surfaced by the Test Bed advanced panel; non-UI consumers ignore them.
+- `DELETE /documents/{id}` (`systems:write`) — soft delete; chunks drop out of new results.
+
+**Env** — `EMBED_MODEL` (`intfloat/multilingual-e5-small`; also `-base` / `BAAI/bge-m3`), `EMBED_USE_FP16`, `INDEXING_BUCKET`, `INDEXING_POLL_INTERVAL`, `EMBEDDING_SERVICE_URL` (backend/worker → `http://embedding-service:8012`).
+
 
 ## Environment variables
 
