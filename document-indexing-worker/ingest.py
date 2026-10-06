@@ -27,7 +27,16 @@ if TYPE_CHECKING:
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "intfloat/multilingual-e5-small")
 CHUNK_MAX_TOKENS = int(os.environ.get("CHUNK_MAX_TOKENS", "512"))
 
-SUPPORTED_SUFFIXES = {".pdf", ".docx", ".pptx", ".md", ".markdown", ".html", ".htm", ".txt"}
+SUPPORTED_SUFFIXES = {
+    ".pdf",
+    ".docx",
+    ".pptx",
+    ".md",
+    ".markdown",
+    ".html",
+    ".htm",
+    ".txt",
+}
 
 # Structured legal/standards texts (e.g. the EU AI Act) number their sections with a
 # bare "Article N" heading that sits as a *sibling* of the section title at the same
@@ -35,7 +44,9 @@ SUPPORTED_SUFFIXES = {".pdf", ".docx", ".pptx", ".md", ".markdown", ".html", ".h
 # the number from a chunk's heading path — and a search for "Article 70" then finds
 # nothing, because the identifier is absent from every indexed field. We detect these
 # markers and re-attach them to each section's chunks (see _section_markers).
-_SECTION_MARKER_RE = re.compile(r"^\s*(Article|Annex)\s+([0-9IVXLCDM]+)\b", re.IGNORECASE)
+_SECTION_MARKER_RE = re.compile(
+    r"^\s*(Article|Annex)\s+([0-9IVXLCDM]+)\b", re.IGNORECASE
+)
 # self_ref of a body text item, e.g. "#/texts/1620" → 1620 (its reading-order index).
 _TEXTS_REF_RE = re.compile(r"^#/texts/(\d+)$")
 
@@ -68,7 +79,9 @@ def build_converter() -> "DocumentConverter":
     # "no chunks" error rather than hanging).
     opts.do_ocr = os.environ.get("INDEXING_DO_OCR", "false").lower() == "true"
     opts.accelerator_options = AcceleratorOptions(
-        num_threads=int(os.environ.get("DOCLING_NUM_THREADS", str(os.cpu_count() or 4))),
+        num_threads=int(
+            os.environ.get("DOCLING_NUM_THREADS", str(os.cpu_count() or 4))
+        ),
         device=AcceleratorDevice.CPU,
     )
     # Only the PDF pipeline is customised; other formats keep Docling defaults.
@@ -168,13 +181,18 @@ def _marker_for(
     return markers[pos][1] if pos >= 0 else None
 
 
-def parse_and_chunk(path: Path, converter: "DocumentConverter", chunker: "HybridChunker") -> list[Chunk]:
+def parse_and_chunk(
+    path: Path, converter: "DocumentConverter", chunker: "HybridChunker"
+) -> list[Chunk]:
     """One document → chunks. Raises on conversion failure so the caller can mark the
     version ``failed`` with a clear error (acceptance criterion 1, resilient)."""
     from docling.datamodel.base_models import ConversionStatus
 
     result = converter.convert(str(path), raises_on_error=False)
-    if result.status not in (ConversionStatus.SUCCESS, ConversionStatus.PARTIAL_SUCCESS):
+    if result.status not in (
+        ConversionStatus.SUCCESS,
+        ConversionStatus.PARTIAL_SUCCESS,
+    ):
         raise ValueError(f"Docling conversion failed with status {result.status.value}")
     document = result.document
     markers = _section_markers(document)

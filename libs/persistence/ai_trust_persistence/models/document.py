@@ -71,7 +71,9 @@ class DocumentVersion(Base):
     document_id: Mapped[str] = mapped_column(
         String(20), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
     )
-    version_label: Mapped[str] = mapped_column(String(50), nullable=False, default="1.0")
+    version_label: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="1.0"
+    )
     minio_key: Mapped[str] = mapped_column(String(500), nullable=False)
     file_name: Mapped[str] = mapped_column(String(300), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

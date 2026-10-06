@@ -51,7 +51,6 @@ class DownloadUrlResponse(BaseModel):
     expires_hours: int
 
 
-
 class RetrieveRequest(BaseModel):
     ai_system_id: str
     query: str = Field(..., min_length=1)

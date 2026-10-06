@@ -37,8 +37,7 @@ def _rebuild_tsv(source_column: str) -> None:
         f"GENERATED ALWAYS AS (to_tsvector('simple', {source_column})) STORED"
     )
     op.execute(
-        "CREATE INDEX ix_document_chunks_tsv "
-        "ON document_chunks USING gin (content_tsv)"
+        "CREATE INDEX ix_document_chunks_tsv ON document_chunks USING gin (content_tsv)"
     )
 
 

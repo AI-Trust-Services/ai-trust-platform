@@ -64,9 +64,7 @@ def upgrade() -> None:
         sa.Column("status", sa.String(20), nullable=False, server_default="pending"),
         sa.Column("error", sa.Text, nullable=True),
         sa.Column("chunk_count", sa.Integer, nullable=False, server_default="0"),
-        sa.Column(
-            "is_current", sa.Boolean, nullable=False, server_default=sa.true()
-        ),
+        sa.Column("is_current", sa.Boolean, nullable=False, server_default=sa.true()),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -111,9 +109,7 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.create_index(
-        "ix_document_chunks_ai_system", "document_chunks", ["ai_system_id"]
-    )
+    op.create_index("ix_document_chunks_ai_system", "document_chunks", ["ai_system_id"])
     op.create_index(
         "ix_document_chunks_version", "document_chunks", ["document_version_id"]
     )

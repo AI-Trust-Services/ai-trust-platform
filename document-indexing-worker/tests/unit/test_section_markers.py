@@ -41,7 +41,9 @@ def _doc():
         [
             _FakeTextItem("section_header", "National competent authorities"),
             _FakeTextItem("section_header", "Article  70"),
-            _FakeTextItem("section_header", "Designation of national competent authorities"),
+            _FakeTextItem(
+                "section_header", "Designation of national competent authorities"
+            ),
             _FakeTextItem("list_item", "1. Each Member State shall establish ..."),
             _FakeTextItem("section_header", "Annex III"),
             _FakeTextItem("list_item", "High-risk AI systems ..."),
