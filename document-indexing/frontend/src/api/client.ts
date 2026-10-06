@@ -4,6 +4,11 @@ import type {
   PermissionsResponse,
   RetrieveMode,
   RetrievedPassage,
+  TestBedEnabledSources,
+  TestBedRole,
+  TestBedRunResult,
+  TestBedRunSummary,
+  TestBedSample,
   UploadResponse,
   VersionInfo,
 } from "../types";
@@ -102,4 +107,23 @@ export const api = {
       `/retrieve`,
       json({ ai_system_id: aiSystemId, query, k, mode: opts?.mode, rrf_k: opts?.rrfK }),
     ),
+
+  // ---- AI Test Bed ----
+  listTestBedSamples: () => request<TestBedSample[]>("/testbed/samples"),
+
+  runTestBed: (body: {
+    sample_id: string;
+    role: TestBedRole;
+    enabled_sources: TestBedEnabledSources;
+    prompt_override?: string | null;
+    model?: string | null;
+  }) => request<TestBedRunResult>("/testbed/run", json(body)),
+
+  listTestBedRuns: (sampleId?: string) =>
+    request<TestBedRunSummary[]>(
+      `/testbed/runs${sampleId ? `?sample_id=${encodeURIComponent(sampleId)}` : ""}`,
+    ),
+
+  getTestBedRun: (runId: string) =>
+    request<TestBedRunResult>(`/testbed/runs/${encodeURIComponent(runId)}`),
 };

@@ -35,6 +35,7 @@ from ai_trust_persistence.models.model_card_feature_store_group import (
 )
 from ai_trust_persistence.models.obligation import Obligation
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
+from ai_trust_persistence.models.test_bed import TestBedRun
 
 __all__ = [
     "AISystem",
@@ -63,5 +64,6 @@ __all__ = [
     "PlatformSettings",
     "SystemWorkflowStep",
     "QuestionAssignment",
+    "TestBedRun",
     "evidence_requirements",
 ]

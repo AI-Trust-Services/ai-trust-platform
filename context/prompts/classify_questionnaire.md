@@ -20,3 +20,4 @@ You MUST respond with a SINGLE JSON object and nothing else, in this exact shape
 {"inferred_flags": [{"flag": "<flag name>", "value": <true|false|number>, "rationale": "<one sentence>", "confidence": <0.0-1.0>}], "reasoning": "<2-3 sentences explaining the overall classification>", "missing_info": ["<information that would improve confidence>", ...], "confidence": <0.0-1.0 overall confidence>, "org_role": "<provider|deployer|both|importer|distributor>", "org_role_rationale": "<one sentence explaining why this role was assigned>"}
 
 Include an entry in "inferred_flags" ONLY for flags you are setting to true (or, for training_compute_flops, a non-zero number). Use the exact flag names shown above.
+{retrieved_context}

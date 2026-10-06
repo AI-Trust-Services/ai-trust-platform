@@ -503,16 +503,25 @@ def build_questionnaire_extract_messages(
 def build_classify_questionnaire_messages(
     business_answers: dict[str, Any],
     technical_answers: dict[str, Any],
+    retrieved_context: str = "",
 ) -> list[dict]:
     """Messages for AI-mode authoritative classification from questionnaire answers.
 
     Combines the business + technical free-text answers into one inference call
     that returns inferred flags plus reasoning / missing_info / confidence — the
     extended rationale shown only to the compliance officer.
+
+    ``retrieved_context`` is an optional pre-formatted block of retrieved passages
+    (heading + text) appended to the system prompt; pass ``""`` (the default) when
+    no retrieval context is available.
     """
+    context_block = (
+        "\n\n## Retrieved context\n\n" + retrieved_context if retrieved_context else ""
+    )
     system = render_template(
         "classify_questionnaire",
         flag_names="\n".join(f"- {n}" for n in _FLAG_NAMES),
+        retrieved_context=context_block,
     )
     user = (
         "Business owner answers:\n"

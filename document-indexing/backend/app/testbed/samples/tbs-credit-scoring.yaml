@@ -1,0 +1,66 @@
+id: tbs-credit-scoring
+name: Retail Credit Risk Scorer
+description: >
+  An ML-based credit-scoring system used by a retail bank to assess the
+  creditworthiness of personal loan applicants. The model produces a risk
+  score that feeds directly into an automated approval/rejection decision
+  for loan amounts below a threshold; above the threshold a human underwriter
+  reviews.
+expected_tier: high
+business_answers:
+  intended_purpose: >
+    Assess the creditworthiness of personal loan applicants and produce a
+    risk score used in the loan approval workflow.
+  department: Retail Banking — Credit Risk
+  use_case: >
+    When a customer applies for a personal loan through the bank's mobile app
+    or branch, the system receives the application data (income, employment,
+    existing obligations, credit bureau data) and produces a credit risk score
+    (0–1000). For loan amounts under €25,000 the score triggers an automated
+    decision; above that threshold a human underwriter reviews the score and
+    supporting data before deciding.
+  people_affected: >
+    Retail banking customers applying for personal loans. Adverse decisions
+    (rejection) affect access to credit.
+  decision_context: >
+    The score drives automated approvals/rejections for small-amount loans.
+    For larger amounts the score informs but does not replace human underwriter
+    judgement. Applicants receive a written explanation of any adverse decision
+    and can request a manual review.
+  data_sources: >
+    Credit bureau reports, application form data (income, employment, assets,
+    liabilities), repayment history from the bank's own systems.
+  oversight_mechanism: >
+    Human underwriter mandatory for loans above €25k. Automated decisions
+    subject to quarterly fairness audits. Adverse-decision explanation letters
+    issued automatically.
+  deployment_context: >
+    Internal decisioning engine, integrated with the bank's core banking
+    platform. Not sold to third parties. Operates in the EU (Germany,
+    Austria, Netherlands).
+technical_answers:
+  data_and_inputs: >
+    Credit bureau scores, income verification, employment status, existing
+    debt obligations, transaction history. All data is personal financial data
+    covered by GDPR.
+  decision_domain: >
+    Access to essential private financial services — credit scoring and loan
+    approval decisions affecting natural persons.
+  automation_and_oversight: >
+    Automated for loans < €25k; human-in-the-loop for larger amounts.
+    Quarterly bias/fairness audit; automated explanation generation.
+  affected_people: >
+    Retail banking customers applying for personal loans; potentially hundreds
+    of thousands of decisions per year.
+  model_nature: >
+    Gradient-boosted ensemble (XGBoost) trained on historical loan data.
+    Training compute well below 10^25 FLOPs. Organisation is the provider
+    (trained and deploys the model).
+  user_interaction: >
+    No direct user interaction — purely a back-end decisioning service.
+    Results surfaced to customers via the loan application workflow.
+  prohibited_practices: >
+    No prohibited practices. No social scoring by a public authority, no
+    biometric identification, no emotion recognition. Scores are used for
+    creditworthiness assessment only (Annex III area 5 — essential private
+    services).

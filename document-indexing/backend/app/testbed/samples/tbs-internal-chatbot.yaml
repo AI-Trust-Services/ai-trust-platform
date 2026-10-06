@@ -1,0 +1,54 @@
+id: tbs-internal-chatbot
+name: Internal Knowledge Assistant
+description: >
+  A conversational AI assistant deployed on the company intranet. Employees
+  ask questions about HR policies, IT procedures, and company guidelines.
+  The system retrieves and synthesises answers from internal documentation.
+expected_tier: limited
+business_answers:
+  intended_purpose: >
+    Answer employee questions about internal policies, procedures, and
+    guidelines using a retrieval-augmented generation approach.
+  department: Information Technology
+  use_case: >
+    Employees interact with a chat interface to find information from internal
+    wikis, policy documents, and procedural guides. The system retrieves
+    relevant passages and generates a natural-language response. No decisions
+    that affect employees are made by the system; it is purely informational.
+  people_affected: >
+    Internal employees (approx. 5000 FTEs) who voluntarily use the assistant.
+  decision_context: >
+    Informational only. Employees use the system to find answers faster
+    than searching the intranet manually. No binding decisions, approvals,
+    or evaluations of employees are made.
+  data_sources: >
+    Internal wikis (Confluence), HR policy PDFs, IT runbooks, company handbook.
+    All documents are internal and non-personal.
+  oversight_mechanism: >
+    Employees can always consult HR or IT directly. The system displays its
+    source references so answers are traceable. A quarterly audit reviews
+    response quality.
+  deployment_context: >
+    Intranet web application, accessible only on the corporate network or VPN.
+    Not exposed to external users or the public internet.
+technical_answers:
+  data_and_inputs: >
+    Internal policy and procedure documents (no personal data). Queries are
+    employee text input.
+  decision_domain: >
+    Informational Q&A — no binding decisions, evaluations, or resource
+    allocation.
+  automation_and_oversight: >
+    Fully automated response generation; human oversight via source references
+    and optional escalation to HR/IT.
+  affected_people: >
+    Internal employees who voluntarily use the assistant.
+  model_nature: >
+    Third-party hosted LLM (API-based) combined with an internal retrieval
+    index. The organisation is a deployer, not a provider or trainer.
+  user_interaction: >
+    Conversational chat interface (chatbot). Users type questions and receive
+    text responses.
+  prohibited_practices: >
+    No prohibited practices apply. The system does not identify, score,
+    manipulate, or categorise employees. No biometric processing.

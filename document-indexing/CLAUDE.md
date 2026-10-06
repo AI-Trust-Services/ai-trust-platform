@@ -24,4 +24,35 @@ Three cooperating workloads (sibling top-level dirs, like the other workers) plu
 - `POST /retrieve` `{ai_system_id, query, k, mode?, rrf_k?}` (`systems:read`) — ranked passages (`rank`) + source refs. `mode` ∈ `hybrid` (default; dense + FTS fused with RRF), `dense`, `fts`; `rrf_k` (default 60) tunes the fusion constant (hybrid only). Single-channel modes order by that channel's own score and skip the other channel. Each passage also carries optional per-channel diagnostics (`dense_rank`/`dense_score`, `fts_rank`/`fts_score`, `rrf_score`) surfaced by the Test Bed advanced panel; non-UI consumers ignore them.
 - `DELETE /documents/{id}` (`systems:write`) — **hard delete**: removes the document row (ON DELETE CASCADE drops its versions + chunks) and purges every version's original from MinIO. Nothing of a deleted document is retained. (The `deleted_at` column is retained but now vestigial — hard delete never sets it; the `deleted_at IS NULL` filters stay as always-true no-ops.)
 
-**Env** — `EMBED_MODEL` (`intfloat/multilingual-e5-small`; also `-base` / `BAAI/bge-m3`), `EMBED_USE_FP16`, `INDEXING_BUCKET`, `INDEXING_POLL_INTERVAL`, `EMBEDDING_SERVICE_URL` (backend/worker → `http://embedding-service:8012`), `OWNER_DATABASE_URL` (worker, multi-tenant only — enumerates `tenant_*` schemas for the per-tenant poll; unset → single unscoped pass).
+**Env** — `EMBED_MODEL` (`intfloat/multilingual-e5-small`; also `-base` / `BAAI/bge-m3`), `EMBED_USE_FP16`, `INDEXING_BUCKET`, `INDEXING_POLL_INTERVAL`, `EMBEDDING_SERVICE_URL` (backend/worker → `http://embedding-service:8012`), `OWNER_DATABASE_URL` (worker, multi-tenant only — enumerates `tenant_*` schemas for the per-tenant poll; unset → single unscoped pass), `REGISTRY_BACKEND_URL` (testbed orchestrator → `http://ai-system-registry-backend:8001`).
+
+---
+
+## AI Test Bed
+
+Interactive EU AI Act classification test harness inside the document-indexing MFE. Not a separate service — all routes live in the same `document-indexing/backend` FastAPI app and the same `/indexing/` frontend.
+
+### Backend (`app/routers/testbed.py`, all `/v1/testbed/`, gated `systems:read`)
+
+- `GET /testbed/samples` — list all YAML fixture summaries (`id`, `title`, `expected_tier`, `description`).
+- `POST /testbed/run` — orchestrator: load sample → retrieve context from enabled sources → call registry `POST /v1/classify/evaluate` via httpx → persist `TestBedRun` → return result. Body: `{sample_id, role?, enabled_sources: {system_docs, eu_ai_act, cognee}, prompt_override?, model?}`. Sources: `system_docs` retrieves from the sample's linked AI system (if `ai_system_id` set); `eu_ai_act` retrieves from a well-known EU AI Act document sentinel (`__eu_ai_act__`); `cognee` is a no-op stub in Phase 1. The username from `x-forwarded-preferred-username` is forwarded to the registry call.
+- `GET /testbed/runs` — list run summaries (`run_id`, `sample_id`, `role`, `tier`, `confidence`, `created_at`). `?sample_id=` filter. Latest 50, descending.
+- `GET /testbed/runs/{run_id}` — full run with payload including `source_passages`.
+
+### Sample fixtures (`app/testbed/samples/*.yaml`)
+
+Git-versioned YAML test scenarios. Fields: `id`, `title`, `description`, `expected_tier`, `ai_system_id?`, `role`, `answers: {business: {…}, technical: {…}}`. Loaded at import time by `samples_loader.py` into `SAMPLES` dict. IDs prefix `tbs-`.
+
+Included fixtures: `tbs-hiring-screener` (automated CV ranking → high), `tbs-internal-chatbot` (employee Q&A → limited), `tbs-credit-scoring` (retail credit risk → high).
+
+### KnowledgeBrain (`app/testbed/knowledge_brain.py`)
+
+Abstract ABC (`add_reviewed_knowledge`, `query`, `export`, `import_items`) defining the interface for swappable knowledge sources. Phase 1 ships `JsonbKnowledgeBrainStub` (backed by `test_bed_runs` rows with `sample_id="__knowledge_brain__"` and `kind="knowledge_item"`; substring scoring). Module-level singleton `knowledge_brain` in `knowledge_brain_stub.py`. Phase 2 will swap for a Cognee implementation without touching call sites.
+
+### JSONB log table (`test_bed_runs`, migration `0036`)
+
+One row per test run, `kind="run"`. Top-level columns for cheap filtering: `id` (IDs `TBR-`), `sample_id`, `role`, `enabled_sources` (JSONB), `model`, `knowledge_revision`, `prompt_revision`, `created_by`, `created_at`. Full input/output in `payload` JSONB (answers, source passages, tier, rationale, etc.).
+
+### Context assembly
+
+`_format_passages_as_context(passages, label)` formats retrieved passages as a numbered citation block for the LLM. Called once per enabled source; results are concatenated and passed as `injected_context` to the registry evaluate endpoint. Returns `""` for an empty passage list (no heading added).

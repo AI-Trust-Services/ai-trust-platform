@@ -13,7 +13,7 @@ from ai_trust_persistence import SessionLocal
 from ai_trust_tenancy import install_tenant_middleware
 
 from app import minio_client
-from app.routers import documents, retrieval
+from app.routers import documents, retrieval, testbed
 
 logger = get_logger(__name__)
 
@@ -89,6 +89,7 @@ async def logging_middleware(request: Request, call_next) -> Response:
 
 app.include_router(documents.router, prefix="/v1")
 app.include_router(retrieval.router, prefix="/v1")
+app.include_router(testbed.router, prefix="/v1")
 
 
 @app.get("/health")

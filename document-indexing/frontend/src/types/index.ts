@@ -75,3 +75,65 @@ export interface RetrievedPassage {
   rrf_score: number | null;
   source: SourceRef;
 }
+
+// ---------------------------------------------------------------------------
+// AI Test Bed
+// ---------------------------------------------------------------------------
+
+export interface TestBedSample {
+  id: string;
+  name: string;
+  description: string;
+  expected_tier: string | null;
+}
+
+export type TestBedRole = "engineer" | "compliance_officer";
+
+export interface TestBedEnabledSources {
+  system_docs: boolean;
+  eu_ai_act: boolean;
+  cognee: boolean;
+}
+
+export interface InferredFlag {
+  flag: string;
+  value: boolean | number;
+  rationale: string;
+  confidence: number;
+}
+
+export interface TestBedRationale {
+  flags: InferredFlag[];
+  confidence: number | null;
+  reasoning: string | null;
+  missing_info: string[];
+  org_role: string | null;
+  org_role_rationale: string | null;
+}
+
+export interface TestBedRunResult {
+  run_id: string;
+  sample_id: string;
+  role: TestBedRole;
+  tier: string;
+  basis: string;
+  obligations: string[];
+  confidence: number | null;
+  rationale: TestBedRationale | null;
+  source_passages: Array<RetrievedPassage & { _source_label?: string }>;
+  enabled_sources: TestBedEnabledSources;
+  created_at: string;
+  created_by: string;
+}
+
+export interface TestBedRunSummary {
+  run_id: string;
+  sample_id: string;
+  role: TestBedRole;
+  enabled_sources: TestBedEnabledSources;
+  model: string | null;
+  tier: string | null;
+  confidence: number | null;
+  created_at: string;
+  created_by: string;
+}

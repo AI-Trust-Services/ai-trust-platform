@@ -6,6 +6,8 @@ import { useTheme } from "@ai-trust/react-hooks";
 import { usePermissions } from "./hooks/usePermissions";
 import { NoAccess } from "./components/NoAccess";
 import { DocumentIndexing } from "./views/DocumentIndexing";
+import { TestBed } from "./views/TestBed";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 
 export default function App() {
   useLuigiInit(() => {});
@@ -39,7 +41,7 @@ export default function App() {
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
             <FileSearch className="size-5" />
           </span>
-          <h1 className="text-lg font-semibold tracking-[-0.01em]">Document Indexing</h1>
+          <h1 className="text-lg font-semibold tracking-[-0.01em]">AI Test Bed</h1>
         </div>
       </header>
 
@@ -54,7 +56,18 @@ export default function App() {
             </div>
           )}
           <div className="flex-1">
-            <DocumentIndexing mayWrite={mayWrite} />
+            <Tabs defaultValue="testbed" className="flex flex-col">
+              <TabsList className="mx-6 mt-4 w-fit">
+                <TabsTrigger value="indexing">Document Indexing</TabsTrigger>
+                <TabsTrigger value="testbed">AI Test Bed</TabsTrigger>
+              </TabsList>
+              <TabsContent value="indexing" className="flex-1">
+                <DocumentIndexing mayWrite={mayWrite} />
+              </TabsContent>
+              <TabsContent value="testbed" className="flex-1">
+                <TestBed mayWrite={mayWrite} />
+              </TabsContent>
+            </Tabs>
           </div>
         </>
       )}
