@@ -53,8 +53,10 @@ class Document(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    # Soft delete: a deleted document's chunks are excluded from new retrieval
-    # results (acceptance criterion 7) without touching the indexed rows.
+    # Vestigial: delete is now a hard delete (the document row is removed and its
+    # versions/chunks/MinIO originals purged), so nothing ever sets this. Retained so
+    # the `deleted_at IS NULL` retrieval filters stay valid no-ops; drop in a future
+    # cleanup migration if soft delete is not reintroduced.
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

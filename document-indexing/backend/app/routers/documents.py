@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy import and_, select
@@ -323,15 +322,40 @@ async def document_download_url(document_id: str) -> DownloadUrlResponse:
     dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
 )
 async def delete_document(document_id: str) -> dict:
-    """Soft delete — the document's chunks stop appearing in new retrieval results
-    (acceptance criterion 7). Indexed rows are retained."""
+    """Hard delete — the document row is removed; the ON DELETE CASCADE FKs drop every
+    version and chunk with it, and the originals are purged from MinIO. Nothing of a
+    deleted document is retained (chunks naturally stop appearing in retrieval)."""
     async with SessionLocal() as session:
-        doc = (
-            await session.execute(select(Document).where(Document.id == document_id))
-        ).scalar_one_or_none()
-        if doc is None or doc.deleted_at is not None:
-            raise HTTPException(404, f"Document {document_id} not found")
-        doc.deleted_at = datetime.now(timezone.utc)
+        keys = await _purge_document(session, document_id)
         await session.commit()
+    # MinIO has no cascade — delete each version's original after the DB row is gone
+    # (best-effort: delete_file logs failures instead of raising, so an orphaned object
+    # never blocks the delete; a dangling DB row would be the worse outcome).
+    for key in keys:
+        await minio_client.delete_file(key)
     logger.info("document.deleted", extra={"document_id": document_id})
     return {"deleted": True, "document_id": document_id}
+
+
+async def _purge_document(session: AsyncSession, document_id: str) -> list[str]:
+    """Delete the document row (cascading to its versions + chunks) and return the
+    MinIO keys of every version so the caller can purge the originals. Raises 404 if
+    the document does not exist."""
+    doc = (
+        await session.execute(select(Document).where(Document.id == document_id))
+    ).scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(404, f"Document {document_id} not found")
+    keys = list(
+        (
+            await session.execute(
+                select(DocumentVersion.minio_key).where(
+                    DocumentVersion.document_id == document_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    await session.delete(doc)  # ON DELETE CASCADE removes versions + chunks
+    return keys

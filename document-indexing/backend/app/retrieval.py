@@ -8,7 +8,8 @@ Search is brute-force and always scoped ``WHERE ai_system_id = X`` (small per-sy
 space, no ANN index). Dense finds semantically similar passages even when wording
 differs (AK 3); FTS ('simple', no stemming) matches exact terms/IDs (AK 4); RRF
 fuses the two rank lists without needing comparable scores. Filters exclude
-non-current versions and soft-deleted documents so updated/deleted docs behave per AK 7.
+non-current versions (and, as an always-true no-op, non-deleted documents — delete is
+now a hard delete) so updated documents behave per AK 7.
 """
 
 from __future__ import annotations
