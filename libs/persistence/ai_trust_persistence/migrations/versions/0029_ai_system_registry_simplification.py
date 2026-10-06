@@ -8,6 +8,11 @@ Create Date: 2026-10-01
 import sqlalchemy as sa
 from alembic import op
 
+revision = "0029"
+down_revision = "0028"
+branch_labels = None
+depends_on = None
+
 
 def upgrade() -> None:
     op.add_column("ai_systems", sa.Column("business_owners", sa.Text(), nullable=True))

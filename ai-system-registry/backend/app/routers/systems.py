@@ -129,7 +129,7 @@ async def update_system(
     system_id: str, body: AISystemUpdate, request: Request
 ) -> AISystemResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
-    updates = body.model_dump(exclude_none=True)
+    updates = body.model_dump(exclude_unset=True)
 
     immutable_attempted = _IMMUTABLE_FIELDS & updates.keys()
     if immutable_attempted:
@@ -453,7 +453,7 @@ async def upload_registration_document(
     request: Request,
     file: UploadFile = File(...),
 ) -> AISystemResponse:
-    """Attach a supporting document to a registered AI system.
+    """Attach a supporting document to a registered AI system (any registration mode).
 
     Stored in the ``registration-docs`` MinIO bucket; a metadata entry is appended to
     the system's ``registration_documents`` JSONB array."""
