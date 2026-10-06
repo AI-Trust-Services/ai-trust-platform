@@ -27,6 +27,37 @@
 
 ---
 
+## Development loop
+
+One change goes round the loop: develop → PR checks → deploy to `ai-trust-test` → live tests →
+merge → deploy to `ai-trust-main` → live tests → next change. A red step sends the change back to
+**Develop**.
+
+```mermaid
+flowchart LR
+    DEV(["① Develop<br/>local: lint · unit · E2E"])
+    PR["② PR checks<br/>lint · typecheck · unit"]
+    DT["③ Deploy PR<br/><b>ai-trust-test</b><br/>PR namespace"]
+    LT["④ Live tests on ai-trust-test<br/>E2E · integration"]
+    MG{{"⑤ Merge to main"}}
+    DM["⑥ Deploy main<br/><b>ai-trust-main</b><br/>namespace ai-trust"]
+    LM["⑦ Live tests on ai-trust-main<br/>E2E · integration"]
+
+    DEV ==> PR ==> DT ==> LT ==> MG ==> DM ==> LM
+    LM -- "next change" --> DEV
+    PR -. "red → fix" .-> DEV
+    LT -. "red → fix" .-> DEV
+
+    classDef test fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+    classDef main fill:#d1fae5,stroke:#059669,color:#064e3b
+    classDef gate fill:#fef3c7,stroke:#d97706,color:#78350f
+    class DEV,PR,DT,LT test
+    class DM,LM main
+    class MG gate
+```
+
+---
+
 ## MVP integration scenarios
 
 Legend: ✅ test exists · ⬜ test missing, functionality exists · ⚠️ functionality partly missing
@@ -136,10 +167,9 @@ data exists. Until then, MVP acceptance is measured by the business scenarios ab
 |---|---|---|
 | 1 | Review and approve this document with PM and engineering lead | 🔶 pending |
 | 2 | Decide AI output evaluation metrics and thresholds with AI Lead | 🔶 pending |
-| 3 | Choose the "When tests run" visualization (`docs/tests-visuals.md`) | 🔶 pending |
-| 4 | After approval: create follow-up issues (below) | not started |
-| 5 | Configure required status checks on `main` (lint, typecheck, unit; E2E once it runs in CI) | not started |
-| 6 | Define coverage targets once tooling and baseline exist | not started |
+| 3 | After approval: create follow-up issues (below) | not started |
+| 4 | Configure required status checks on `main` (lint, typecheck, unit; E2E once it runs in CI) | not started |
+| 5 | Define coverage targets once tooling and baseline exist | not started |
 
 ### Proposed follow-up issues (create after approval)
 
