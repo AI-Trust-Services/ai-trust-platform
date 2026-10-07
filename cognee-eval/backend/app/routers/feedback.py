@@ -149,7 +149,7 @@ async def reject_feedback(feedback_id: str, request: Request) -> FeedbackRespons
         row = await session.get(Feedback, feedback_id)
         if not row:
             raise HTTPException(status_code=404, detail="Feedback not found")
-        if row.status != "pending":
+        if row.status not in ("pending", "failed"):
             raise HTTPException(
                 status_code=409, detail=f"Feedback is already {row.status}"
             )
