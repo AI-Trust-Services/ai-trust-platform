@@ -68,6 +68,19 @@
     .badge-approved { background: #0a2a0a; color: #5dbb63; }
     .badge-rejected { background: #2a0a0a; color: #e07070; }
 
+    /* ── Ingest tab ── */
+    .ingest-status-box { background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 6px; padding: 14px; margin-bottom: 16px; }
+    .ingest-status-box .label { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .ingest-status-box .value { font-size: 13px; }
+    .status-ok { color: #5dbb63; }
+    .status-none { color: #f0c040; }
+    .progress-bar { width: 100%; height: 6px; background: #2a2a4a; border-radius: 3px; margin-top: 12px; overflow: hidden; display: none; }
+    .progress-bar-fill { height: 100%; width: 0%; background: #4e8ef7; border-radius: 3px; transition: width 0.4s; animation: progress-pulse 1.5s ease-in-out infinite; }
+    @keyframes progress-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    input[type=file] { background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 4px; color: #e0e0e0; padding: 6px 10px; font-size: 13px; width: 100%; cursor: pointer; }
+    input[type=file]::file-selector-button { background: #2a2a4a; color: #aaa; border: none; border-radius: 3px; padding: 4px 10px; font-size: 12px; cursor: pointer; margin-right: 10px; }
+    .ingest-log { background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 4px; padding: 10px; font-size: 11px; color: #888; font-family: monospace; min-height: 48px; margin-top: 12px; white-space: pre-wrap; line-height: 1.6; }
+
     /* ── Status bar ── */
     #status { font-size: 12px; color: #888; margin-top: 8px; min-height: 18px; }
     #status.error { color: #e07070; }
@@ -85,6 +98,7 @@
     <button class="active" onclick="showTab('ask', this)">Ask</button>
     <button onclick="showTab('evaluations', this)">Evaluations</button>
     <button onclick="showTab('feedback', this)">Feedback</button>
+    <button onclick="showTab('ingest', this)">Ingest</button>
   </nav>
 </header>
 
@@ -130,6 +144,25 @@
     </table>
   </div>
 
+  <!-- ── Ingest tab ─────────────────────────────────────────────────── -->
+  <div id="tab-ingest" class="tab">
+    <div class="ingest-status-box">
+      <div class="label">Knowledge graph status</div>
+      <div class="value" id="ingest-status-value"><span class="spin"></span> Checking…</div>
+    </div>
+
+    <label for="pdf-file">Upload EU AI Act PDF</label>
+    <input type="file" id="pdf-file" accept=".pdf" onchange="onFileSelected(this)" />
+
+    <button class="btn" id="ingest-btn" onclick="uploadPdf()" disabled style="margin-top:12px">Upload &amp; Ingest</button>
+
+    <div class="progress-bar" id="ingest-progress">
+      <div class="progress-bar-fill" id="ingest-progress-fill"></div>
+    </div>
+
+    <div class="ingest-log" id="ingest-log">Select a PDF to begin.</div>
+  </div>
+
   <!-- ── Feedback tab ────────────────────────────────────────────────── -->
   <div id="tab-feedback" class="tab">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -163,6 +196,7 @@
     btn.classList.add('active');
     if (name === 'evaluations') loadEvaluations();
     if (name === 'feedback') loadFeedback();
+    if (name === 'ingest') loadIngestStatus();
   }
 
   // ── Mark as wrong ────────────────────────────────────────────────────────
@@ -354,6 +388,84 @@
       allBtns.forEach(b => { b.disabled = false; });
       btn.innerHTML = action === 'approve' ? 'Approve' : 'Reject';
       alert('Error: ' + err.message);
+    }
+  }
+
+  // ── Ingest tab ───────────────────────────────────────────────────────────
+  async function loadIngestStatus() {
+    const el = document.getElementById('ingest-status-value');
+    try {
+      const res = await fetch(API_BASE + '/ingest/status');
+      const data = await res.json();
+      if (data.ingested) {
+        el.innerHTML = `<span class="status-ok">&#10003; Knowledge graph ready</span> <span style="color:#888;font-size:11px">(dataset: ${escHtml(data.dataset)})</span>`;
+      } else {
+        el.innerHTML = `<span class="status-none">&#9888; Not ingested yet</span> — upload a PDF below to build the knowledge graph.`;
+      }
+    } catch (err) {
+      el.innerHTML = `<span style="color:#e07070">Error checking status: ${escHtml(err.message)}</span>`;
+    }
+  }
+
+  function onFileSelected(input) {
+    const btn = document.getElementById('ingest-btn');
+    const log = document.getElementById('ingest-log');
+    if (input.files && input.files[0]) {
+      const f = input.files[0];
+      btn.disabled = false;
+      log.textContent = `Selected: ${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)\nClick "Upload & Ingest" to start.`;
+    } else {
+      btn.disabled = true;
+      log.textContent = 'Select a PDF to begin.';
+    }
+  }
+
+  async function uploadPdf() {
+    const input = document.getElementById('pdf-file');
+    if (!input.files || !input.files[0]) return;
+
+    const btn = document.getElementById('ingest-btn');
+    const log = document.getElementById('ingest-log');
+    const bar = document.getElementById('ingest-progress');
+    const fill = document.getElementById('ingest-progress-fill');
+
+    btn.disabled = true;
+    input.disabled = true;
+    bar.style.display = 'block';
+    fill.style.width = '15%';
+    log.textContent = 'Uploading PDF…';
+
+    const form = new FormData();
+    form.append('file', input.files[0]);
+
+    // Simulate progress while waiting — ingestion takes several minutes.
+    // The bar creeps toward 90% while the request is in flight, then jumps to 100% on completion.
+    let pct = 15;
+    const ticker = setInterval(() => {
+      pct = Math.min(pct + 1, 90);
+      fill.style.width = pct + '%';
+    }, 3000);
+
+    try {
+      log.textContent = 'Ingesting… this takes several minutes while the knowledge graph is built. Please keep this tab open.';
+      const res = await fetch(API_BASE + '/ingest', { method: 'POST', body: form });
+      clearInterval(ticker);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`HTTP ${res.status}: ${txt}`);
+      }
+      const data = await res.json();
+      fill.style.width = '100%';
+      log.textContent = `Done! Dataset "${data.dataset}" ingested successfully.\nYou can now ask questions in the Ask tab.`;
+      loadIngestStatus();
+    } catch (err) {
+      clearInterval(ticker);
+      fill.style.background = '#e07070';
+      fill.style.width = '100%';
+      log.textContent = 'Ingestion failed: ' + err.message;
+      btn.disabled = false;
+    } finally {
+      input.disabled = false;
     }
   }
 
