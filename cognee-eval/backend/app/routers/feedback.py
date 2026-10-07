@@ -72,8 +72,9 @@ async def create_feedback(body: FeedbackRequest) -> FeedbackResponse:
     async with SessionLocal() as session:
         session.add(row)
         evaluation = await session.get(Evaluation, body.evaluation_id)
-        if evaluation:
-            evaluation.knowledge_gap = True
+        if not evaluation:
+            raise HTTPException(status_code=404, detail="Evaluation not found")
+        evaluation.knowledge_gap = True
         await session.commit()
         await session.refresh(row)
     return _to_response(row)
