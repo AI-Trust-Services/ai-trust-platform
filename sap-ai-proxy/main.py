@@ -35,6 +35,8 @@ _API_VERSION = os.environ.get("AI_API_VERSION", "bedrock-2023-05-31")
 
 _INVOKE_URL = f"{_API_URL.rstrip('/')}/v2/inference/deployments/{_DEPLOYMENT_ID}/invoke"
 
+_MAX_REQUEST_BYTES = int(os.environ.get("SAP_PROXY_MAX_REQUEST_BYTES", str(4 * 1024 * 1024)))
+
 # Retry on SAP throttling / transient upstream errors.
 _RETRY_STATUSES = {429, 500, 502, 503, 529}
 _MAX_RETRIES = int(os.environ.get("SAP_PROXY_MAX_RETRIES", "6"))
@@ -118,7 +120,13 @@ async def _invoke_with_retry(
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request) -> JSONResponse:
     """OpenAI chat/completions → Anthropic /invoke → OpenAI response shape."""
-    body = await request.json()
+    content_length = request.headers.get("content-length")
+    if content_length is not None and int(content_length) > _MAX_REQUEST_BYTES:
+        raise HTTPException(status_code=413, detail="Request body too large")
+    raw = await request.body()
+    if len(raw) > _MAX_REQUEST_BYTES:
+        raise HTTPException(status_code=413, detail="Request body too large")
+    body = json.loads(raw)
     messages: list[dict] = body.get("messages", [])
     max_tokens: int = body.get("max_tokens", 8192)
     response_format = body.get("response_format")
