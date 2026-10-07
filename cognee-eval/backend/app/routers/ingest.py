@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -6,6 +7,8 @@ from pydantic import BaseModel
 from app import cognee_client
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
+
+_DATA_DIR = Path("/data").resolve()
 
 
 class IngestRequest(BaseModel):
@@ -16,12 +19,16 @@ class IngestRequest(BaseModel):
 async def trigger_ingest(body: IngestRequest | None = None) -> dict:
     """Ingest a document into Cognee.
 
-    Uses EU_AI_ACT_PDF_PATH env var by default. Pass {"path": "/data/file.txt"}
-    in the request body to ingest a different file.
+    Uses EU_AI_ACT_PDF_PATH env var by default. Pass {"path": "file.txt"}
+    to ingest a different file from the /data directory.
     """
-    doc_path = (body.path if body and body.path else None) or os.environ.get(
-        "EU_AI_ACT_PDF_PATH", "/data/EU-AI-ACT.pdf"
-    )
+    if body and body.path:
+        resolved = (_DATA_DIR / Path(body.path).name).resolve()
+        if not str(resolved).startswith(str(_DATA_DIR)):
+            raise HTTPException(status_code=400, detail="Path outside allowed directory")
+        doc_path = str(resolved)
+    else:
+        doc_path = os.environ.get("EU_AI_ACT_PDF_PATH", "/data/EU-AI-ACT.pdf")
     try:
         result = await cognee_client.ingest_pdf(doc_path)
     except FileNotFoundError as e:
