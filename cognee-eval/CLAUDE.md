@@ -67,24 +67,24 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 |---|---|---|
 | `EU_AI_ACT_PDF_PATH` | `/data/EU-AI-ACT.pdf` | Path to PDF inside container |
 | `EU_AI_ACT_PDF_HOST_PATH` | `./data` | Host directory mounted at `/data` |
-| `LLM_ENDPOINT` / `LLM_EXTRACTION_ENDPOINT` | `http://sap-ai-proxy:8000/v1` | SAP AI Core proxy — all cognee generation |
+| `LLM_ENDPOINT` / `LLM_EXTRACTION_ENDPOINT` | `http://ai-gateway:8000/v1` | AI gateway — all cognee generation |
 | `COGNEE_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | fastembed in-process embedding model (384-dim) |
-| `COGNEE_LLM_RATE_LIMIT_REQUESTS` | `12` | cognee LLM calls/min cap (keeps SAP under its token quota) |
+| `COGNEE_LLM_RATE_LIMIT_REQUESTS` | `12` | cognee LLM calls/min cap (keeps the gateway under its token quota) |
 | `COGNEE_DATA_PATH` | `/app/.cognee_system` | Where Cognee stores its databases |
 | `ALLOWED_ORIGINS` | — | Required — comma-separated CORS origins |
 
 ## Key files
 
-- `app/cognee_client.py` — wrapper around `cognee.remember()` / `cognee.recall()`; `answer_question()` calls the SAP AI Core proxy
+- `app/cognee_client.py` — wrapper around `cognee.remember()` / `cognee.recall()`; `answer_question()` calls the AI gateway
 - `app/database.py` — own SQLite engine for feedback data (`cognee_eval.db`)
 - `app/ids.py` — `new_id("EVL")` evaluations, `new_id("EFB")` feedback
 
-## SAP AI Core
+## AI Gateway
 
 All cognee generation (main LLM + graph extraction) runs through the standalone
-`sap-ai-proxy` service (repo-root `sap-ai-proxy/`), an OpenAI-compatible façade over an
-AI Core deployment that owns the OAuth2 token refresh. cognee reaches it at
-`http://sap-ai-proxy:8000/v1`; the proxy holds the `AI_CLIENT_ID/SECRET/AUTH_URL/API_URL/DEPLOYMENT_ID`
+`ai-gateway` service (repo-root `ai-gateway/`), an OpenAI-compatible façade over an
+Anthropic deployment that owns the OAuth2 token refresh. cognee reaches it at
+`http://ai-gateway:8000/v1`; the gateway holds the `AI_CLIENT_ID/SECRET/AUTH_URL/API_URL/DEPLOYMENT_ID`
 creds. Embeddings run in-process via fastembed (`BAAI/bge-small-en-v1.5`, 384-dim).
 
 ## Notes
@@ -94,6 +94,6 @@ creds. Embeddings run in-process via fastembed (`BAAI/bge-small-en-v1.5`, 384-di
 - **Embeddings**: use fastembed (in-process ONNX), NOT Ollama. Ollama's HTTP embed path is CPU-bound
   and could not drain a full-document edge-indexing batch within cognee's hardcoded 60s-per-embed
   timeout — the whole ingest rolled back. fastembed embeds in-process, far faster on CPU.
-- **SAP rate**: `COGNEE_LLM_RATE_LIMIT_REQUESTS` paces cognee's generation calls under SAP AI Core's
-  sustained token quota; the proxy adds 429/5xx retry-backoff. SAP throttling is a sustained quota,
-  not a per-request wall (short bursts pass; sustained volume throttles).
+- **Rate limiting**: `COGNEE_LLM_RATE_LIMIT_REQUESTS` paces cognee's generation calls under the upstream
+  model's sustained token quota; the gateway adds 429/5xx retry-backoff. Upstream throttling is a
+  sustained quota, not a per-request wall (short bursts pass; sustained volume throttles).

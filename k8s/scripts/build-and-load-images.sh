@@ -117,7 +117,7 @@ build decision-trace-analyzer-frontend . ./decision-trace-analyzer/frontend/Dock
   --build-arg "VITE_DTA_API_BASE=${VITE_DTA_API_BASE}"
 
 build cognee-eval-backend . cognee-eval/backend/Dockerfile
-build sap-ai-proxy . sap-ai-proxy/Dockerfile
+build ai-gateway . ai-gateway/Dockerfile
 
 echo "==> loading ${#images[@]} images into kind cluster '${CLUSTER_NAME}'"
 if [[ ${#images[@]} -eq 0 ]]; then

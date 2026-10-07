@@ -1,8 +1,8 @@
 """Thin wrapper around the Cognee 1.6.x pipeline for the EU AI Act evaluation.
 
 Configuration is driven entirely by environment variables set in docker-compose.yml.
-All cognee generation (main + extraction) is pointed at the standalone sap-ai-proxy
-service via the LLM_*/LLM_EXTRACTION_* env vars; grounded answers call the same proxy
+All cognee generation (main + extraction) is pointed at the standalone ai-gateway
+service via the LLM_*/LLM_EXTRACTION_* env vars; grounded answers call the same gateway
 directly. Embeddings run in-process via fastembed (BAAI/bge-small-en-v1.5).
 """
 
@@ -15,8 +15,8 @@ from cognee.modules.search.types.SearchType import SearchType
 
 _DATASET = "eu_ai_act_v1"
 
-_SAP_PROXY_URL = os.environ.get("LLM_ENDPOINT", "http://sap-ai-proxy:8000/v1")
-_SAP_MODEL = os.environ.get("LLM_MODEL", "sap-ai-core")
+_GATEWAY_URL = os.environ.get("LLM_ENDPOINT", "http://ai-gateway:8000/v1")
+_GATEWAY_MODEL = os.environ.get("LLM_MODEL", "ai-gateway")
 
 
 async def ingest_pdf(pdf_path: str) -> dict:
@@ -93,7 +93,7 @@ async def search_entities(
 
 
 async def answer_question(question: str, passages: list[dict]) -> str:
-    """Generate a grounded answer via the SAP AI Core proxy."""
+    """Generate a grounded answer via the AI gateway."""
     if not passages:
         return "No relevant passages found in the knowledge graph."
 
@@ -114,8 +114,8 @@ async def answer_question(question: str, passages: list[dict]) -> str:
     ]
     async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(
-            f"{_SAP_PROXY_URL.rstrip('/')}/chat/completions",
-            json={"model": _SAP_MODEL, "messages": messages, "max_tokens": 2048},
+            f"{_GATEWAY_URL.rstrip('/')}/chat/completions",
+            json={"model": _GATEWAY_MODEL, "messages": messages, "max_tokens": 2048},
         )
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]

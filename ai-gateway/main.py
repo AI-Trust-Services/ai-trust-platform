@@ -1,8 +1,8 @@
-"""SAP AI Core OpenAI-compatible proxy.
+"""AI Gateway — OpenAI-compatible proxy over an Anthropic deployment.
 
 Presents a standard OpenAI /v1/chat/completions endpoint so any litellm-based
 client (e.g. cognee) can use it unmodified, and translates to the Anthropic
-bedrock /invoke format the AI Core deployment (claude-*) actually accepts.
+bedrock /invoke format the upstream deployment (claude-*) actually accepts.
 Handles OAuth2 client-credentials token refresh transparently.
 """
 
@@ -19,10 +19,10 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-logger = logging.getLogger("sap-ai-proxy")
+logger = logging.getLogger("ai-gateway")
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="SAP AI Core Proxy", version="1.0.0")
+app = FastAPI(title="AI Gateway", version="1.0.0")
 
 # ── config from env ──────────────────────────────────────────────────────────
 _CLIENT_ID = os.environ["AI_CLIENT_ID"]
@@ -35,11 +35,13 @@ _API_VERSION = os.environ.get("AI_API_VERSION", "bedrock-2023-05-31")
 
 _INVOKE_URL = f"{_API_URL.rstrip('/')}/v2/inference/deployments/{_DEPLOYMENT_ID}/invoke"
 
-_MAX_REQUEST_BYTES = int(os.environ.get("SAP_PROXY_MAX_REQUEST_BYTES", str(4 * 1024 * 1024)))
+_MAX_REQUEST_BYTES = int(
+    os.environ.get("AI_GATEWAY_MAX_REQUEST_BYTES", str(4 * 1024 * 1024))
+)
 
-# Retry on SAP throttling / transient upstream errors.
+# Retry on upstream throttling / transient errors.
 _RETRY_STATUSES = {429, 500, 502, 503, 529}
-_MAX_RETRIES = int(os.environ.get("SAP_PROXY_MAX_RETRIES", "6"))
+_MAX_RETRIES = int(os.environ.get("AI_GATEWAY_MAX_RETRIES", "6"))
 
 # ── token cache ──────────────────────────────────────────────────────────────
 _token: str | None = None
@@ -56,7 +58,7 @@ async def _get_token(client: httpx.AsyncClient) -> str:
         now = time.time()
         if _token and now < _token_expires_at - 60:
             return _token
-        logger.info("Fetching new SAP AI Core OAuth token")
+        logger.info("Fetching new upstream OAuth token")
         resp = await client.post(
             _AUTH_URL,
             data={
@@ -82,7 +84,7 @@ async def health() -> dict:
 async def _invoke_with_retry(
     client: httpx.AsyncClient, invoke_body: dict
 ) -> httpx.Response:
-    """POST to SAP /invoke, retrying 429/5xx with exponential backoff + Retry-After."""
+    """POST to the upstream /invoke, retrying 429/5xx with exponential backoff + Retry-After."""
     last: httpx.Response | None = None
     for attempt in range(_MAX_RETRIES + 1):
         token = await _get_token(client)
@@ -196,9 +198,9 @@ async def chat_completions(request: Request) -> JSONResponse:
 
     return JSONResponse(
         {
-            "id": data.get("id", "sap-" + str(uuid.uuid4())),
+            "id": data.get("id", "aigw-" + str(uuid.uuid4())),
             "object": "chat.completion",
-            "model": body.get("model", "sap-ai-core"),
+            "model": body.get("model", "ai-gateway"),
             "choices": [
                 {
                     "index": 0,
@@ -222,6 +224,11 @@ async def list_models() -> dict:
     return {
         "object": "list",
         "data": [
-            {"id": "sap-ai-core", "object": "model", "created": 0, "owned_by": "sap"},
+            {
+                "id": "ai-gateway",
+                "object": "model",
+                "created": 0,
+                "owned_by": "ai-gateway",
+            },
         ],
     }

@@ -51,7 +51,7 @@ group "default" {
     "audit-frontend",
     "admin-frontend",
     "cognee-eval-backend",
-    "sap-ai-proxy",
+    "ai-gateway",
   ]
 }
 
@@ -371,11 +371,11 @@ target "cognee-eval-backend" {
   cache-to   = ["type=gha,mode=max,scope=cognee-eval-backend"]
 }
 
-target "sap-ai-proxy" {
+target "ai-gateway" {
   context    = "."
-  dockerfile = "sap-ai-proxy/Dockerfile"
+  dockerfile = "ai-gateway/Dockerfile"
   platforms  = ["linux/amd64"]
-  tags       = [tag("sap-ai-proxy")]
-  cache-from = ["type=gha,scope=sap-ai-proxy"]
-  cache-to   = ["type=gha,mode=max,scope=sap-ai-proxy"]
+  tags       = [tag("ai-gateway")]
+  cache-from = ["type=gha,scope=ai-gateway"]
+  cache-to   = ["type=gha,mode=max,scope=ai-gateway"]
 }
