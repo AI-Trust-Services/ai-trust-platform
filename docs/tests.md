@@ -7,39 +7,30 @@
 
 - **Test levels:** lint/typecheck, unit, deployment test, E2E (per service), integration and E2E system
   (see [Test levels](#test-levels)). AI output evaluation is planned on top (see [AI output evaluation](#ai-output-evaluation))
+- **Two live-platform levels, two perspectives**:
+  - **Integration** is the technical perspective: cross-service integration (contracts, shared data,
+    cascades, internal calls), see
+    [MVP integration scenarios](#mvp-integration-scenarios).
+  - **E2E system** is the domain perspective: MVP business requirements driven through persona flows,
+    see [MVP E2E system scenarios](#mvp-e2e-system-scenarios).
 - **MVP acceptance is defined by business flow, not code coverage.** Every MVP step
   (Registration → Self-assessment → Risk classification → Classification confirmation) has a set of
-  mandatory **E2E system** scenarios (see [MVP E2E system scenarios](#mvp-e2e-system-scenarios)).
-  **Integration** scenarios back them with technical proof that services work together
-  (see [MVP integration scenarios](#mvp-integration-scenarios)).
+  mandatory **E2E system** scenarios. **Integration** scenarios back them with technical proof.
 - **Coverage targets:** 🔶 TBD. No coverage targets for now.
 
 ## Test levels
 
 | Repo term | Industry term | Boundary |
 |---|---|---|
-| Lint / typecheck | Static analysis | No execution |
+| Lint / typecheck | Static analysis | Code validation |
 | Unit | Unit | Pure logic, no I/O |
-| Deployment test | Smoke / deployment verification | Helm/OCM rollout healthy |
-| E2E | End to end micro service | One service in-process + real DB, other services mocked |
-| Integration | Cross-service integration | Real HTTP between deployed services: shared data contracts, cascades, RBAC across backends. See [MVP integration scenarios](#mvp-integration-scenarios) |
-| E2E System | System / end-to-end (API level) | Business flows driven black-box through the whole deployed platform, incl. the shell proxy; no browser or login. See [MVP E2E system scenarios](#mvp-e2e-system-scenarios) |
+| Deployment test | Smoke / deployment verification | Helm/OCM rollout healthy, K8s (liveness & readiness probes) |
+| E2E per service | End to end micro service | One service in-process + real DB, other services mocked |
+| Integration | Cross-service technical integration | Technical contracts between deployed services over real HTTP: shared data, cascades, internal calls. See [integration scenarios](#mvp-integration-scenarios) |
+| E2E System | System / end-to-end (API level), domain | MVP business requirements: persona flows driven black-box through the whole deployed platform; no browser or login. See [E2E system scenarios](#mvp-e2e-system-scenarios) |
 
-### Integration vs E2E system
-
-Both run against the deployed platform over real HTTP. They differ in what they prove.
-
-| | Integration | E2E system |
-|---|---|---|
-| **Proves** | Technical: services work together | Business: requirements and personas' flows are met |
-| **Question** | Do services agree on a contract? | Can a user complete the MVP flow? |
-| **Scope** | One interaction between services (shared data, cascade, internal call, permission denial) | A journey of many steps handed over between personas |
-| **Entry point** | Service APIs directly | User-facing path, incl. the shell proxy |
-| **A failure means** | A technical seam is broken | A business requirement is not met |
-| **Role in MVP** | Supporting technical proof | Acceptance criteria |
-
-Rule of thumb: a scenario that exists because of a **technical contract** is Integration; one that
-exists because of a **business requirement or persona flow** is E2E system.
+Rule of thumb: a scenario that exists because of a **technical contract between services** is
+Integration; one that exists because of a **business requirement or persona flow** is E2E system.
 
 ---
 
@@ -83,33 +74,113 @@ flowchart LR
 
 ## MVP integration scenarios
 
-**Technical proof that services work together**: contracts, shared data, cascades and permission
-enforcement across backends. A failure points to a broken technical seam. Business-flow scenarios live
-in [MVP E2E system scenarios](#mvp-e2e-system-scenarios). How the two differ: see
-[Integration vs E2E system](#integration-vs-e2e-system).
+**Cross-service technical integration**: proof that services work together: contracts, shared data,
+internal calls and platform wiring. A failure points to a broken technical seam. MVP business
+requirements and the 1–7 lifecycle structure are covered in
+[MVP E2E system scenarios](#mvp-e2e-system-scenarios).
 
-Legend: ✅ test covered · ⬜ test missing, functionality exists
+Organised by technical seam, not by MVP step. Legend: ✅ test covered · ⬜ test missing, functionality
+exists · 🔶 proposed, expected behaviour to be confirmed with the owning team
 
-### 0. Health checks
+### A. Platform wiring and reachability
+
+Basic for MVP: plain HTTP requests, with no browser and no login. They catch a missing bundle, a broken
+nginx route or an unhealthy backend.
 
 | Scenario | State |
 |---|---|
-| Health of all 7 backends | ✅ `test_01_health.py` |
+| Health of all 7 backends (each `/health` also checks its DB connection) | ✅ `test_01_health.py` |
+| Shell entry page is served (HTTP 200, HTML) | ⬜ |
+| MVP frontends (Registry, Compliance) are served through the shell proxy (HTTP 200, HTML) | ⬜ |
+| MVP backend APIs (Registry, Compliance) are reachable through the shell proxy | ⬜ |
+| `/api/*/health` of every backend answers through the shell proxy (route per backend) | 🔶 |
+
+### B. Shared data: registry ↔ compliance (`ai_systems`)
+
+| Scenario | State |
+|---|---|
+| System registered in the registry is visible in compliance | ✅ `test_02_registry_compliance.py` |
+| Reclassification in the registry (tier change) is visible in compliance | 🔶 |
+| System deleted in the registry is no longer visible in compliance | 🔶 |
+
+### C. Service-to-service HTTP
+
+| Scenario | State |
+|---|---|
 | Admin stats call the users backend | ✅ `test_03_rbac.py` |
+
+### D. Authorization: backends ↔ OpenFGA via the IAM API
+
+Role changes are made through the users/IAM API and must take effect in other backends. This checks the
+technical wiring (tuples written by one service, read by another), not which persona may do what (that
+is E2E system).
+
+| Scenario | State |
+|---|---|
+| Role assigned via IAM API grants access on registry / compliance; reassigning replaces the previous role (single-role invariant) | 🔶 |
+| Custom role created via IAM API grants its permissions on another backend; deleting it revokes them | 🔶 |
+| User without any role is denied on every protected backend (fails closed) | 🔶 |
+| Identity header fallback: `X-Forwarded-User` (OIDC `sub`) is accepted when the username header is absent | 🔶 |
+
+### E. Platform dependencies used by one service
+
+| Scenario | State |
+|---|---|
+| Registry ↔ LLM provider: an AI-assist call with the deterministic stub provider returns a well-formed response | 🔶 |
+| Compliance ↔ MinIO: an uploaded evidence file can be retrieved through its presigned URL | 🔶 |
+
+Out of scope for now (async timing or extra infrastructure): audit trail flush
+(Postgres buffer → ClickHouse), alert rule firing, OTel pipeline (RabbitMQ → ClickHouse).
+
+---
+
+## MVP E2E system scenarios
+
+**Domain MVP business requirements**: proof that the MVP flow behaves as the business requires for
+each persona. These scenarios are the MVP acceptance criteria. A failure points to an unmet
+requirement. Technical contract checks live in
+[MVP integration scenarios](#mvp-integration-scenarios).
+
+Legend: ✅ test covered · ⬜ test missing, functionality exists
+
+Structure follows the lifecycle steps 1–7. Personas: Application Owner, AI Engineer, Compliance Officer.
 
 ### 1. Registration
 
 | Scenario | State |
 |---|---|
-| Application Owner registers a system → visible in registry and compliance | ✅ `test_02_registry_compliance.py` |
-| Role without write permission (e.g. Auditor) cannot register (403) | ✅ `test_03_rbac.py` |
 | AI Engineer can register a system | ⬜ |
+| Role without write permission (e.g. Auditor) cannot register (403) | ✅ `test_03_rbac.py` |
+| AI-assisted registration: conversational intake and an uploaded document pre-fill the registration fields (the document is parsed, not stored) | ⬜ |
+
+### 2. Self-assessment
+
+| Scenario | State |
+|---|---|
+| Self-assessment started for a registered system → assessment `questionnaire_pending` (compliance); section assignees, Compliance Officer and intended purpose recorded on the system (registry) | ⬜ |
+| Application Owner submits the business section → AI Engineer submits the technical section → system `pending_review` | ⬜ |
+| EU AI Act role (provider / deployer / both) set for the system: entered at registration, inferred by the AI at classification | ⬜ |
+| Single question delegated to a contributor and answered | ⬜ |
 
 ### 3. Risk classification
 
 | Scenario | State |
 |---|---|
+| Obligation set generated for a system classified before the assessment starts | ✅ `test_02_registry_compliance.py` |
+| AI mode (default): free-text technical answers → AI-inferred flags, tier, EU AI Act role and per-criterion rationale with confidence stored | ⬜ |
+| Classification completed → obligations and requirements generated for the classified tier and role; assessment `pending_review` | ⬜ |
 | Platform administrator cannot read assessments (403) | ✅ `test_03_rbac.py` |
+| Changed flags + reclassify update the tier | ⬜ |
+
+### 4. Classification confirmation
+
+| Scenario | State |
+|---|---|
+| Assigned Compliance Officer reviews the AI rationale per criterion and the obligation set; other users don't see the rationale | ⬜ |
+| Compliance Officer approves → system `approved` (registry) and assessment `approved` (compliance); risk flags locked (422) | ⬜ |
+| Compliance Officer corrects tier and/or EU AI Act role on approval → corrected values stored (a tier correction is noted in the basis) | ⬜ |
+| Reject → system back to the chosen section and assessment reopened (`questionnaire_pending`); request-info → only the reopened section editable | ⬜ |
+| Only the assigned Compliance Officer can confirm: AI Engineer and Application Owner get 403; unanswered required questions get 422 | ⬜ |
 
 ### 5. Requirements — outside MVP scope (regression only)
 
@@ -130,64 +201,7 @@ Legend: ✅ test covered · ⬜ test missing, functionality exists
 | Evidence approval / rejection cascades compliance score to registry | ✅ `test_02_registry_compliance.py` |
 | AI Engineer cannot approve evidence (403) | ✅ `test_03_rbac.py` |
 
-Monitoring follows Approval in the lifecycle and is outside MVP scope; no integration scenarios.
-
----
-
-## MVP E2E system scenarios
-
-**Proof of business requirements**: the MVP flow works for each persona as the product intends. These
-scenarios are the MVP acceptance criteria. A failure points to an unmet requirement. Technical
-contract checks live in [MVP integration scenarios](#mvp-integration-scenarios).
-
-Legend: ✅ test covered · ⬜ test missing, functionality exists
-
-Personas: Application Owner, AI Engineer, Compliance Officer.
-
-### 0. Platform reachable
-
-Frontend checks are kept basic for MVP: plain HTTP requests, with no browser and no login. They catch
-a missing bundle or a broken nginx route.
-
-| Scenario | State |
-|---|---|
-| Shell entry page is served (HTTP 200, HTML) | ⬜ |
-| MVP frontends (Registry, Compliance) are served through the shell proxy (HTTP 200, HTML) | ⬜ |
-| MVP backend APIs (Registry, Compliance) are reachable through the shell proxy | ⬜ |
-
-### 1. Registration
-
-| Scenario | State |
-|---|---|
-| AI-assisted registration: conversational intake and an uploaded document pre-fill the registration fields (the document is parsed, not stored) | ⬜ |
-
-### 2. Self-assessment
-
-| Scenario | State |
-|---|---|
-| Self-assessment started for a registered system → assessment `questionnaire_pending` (compliance); section assignees, Compliance Officer and intended purpose recorded on the system (registry) | ⬜ |
-| Application Owner submits the business section → AI Engineer submits the technical section → system `pending_review` | ⬜ |
-| EU AI Act role (provider / deployer / both) set for the system: entered at registration, inferred by the AI at classification | ⬜ |
-| Single question delegated to a contributor and answered | ⬜ |
-
-### 3. Risk classification
-
-| Scenario | State |
-|---|---|
-| Obligation set generated for a system classified before the assessment starts | ✅ `test_02_registry_compliance.py` |
-| AI mode (default): free-text technical answers → AI-inferred flags, tier, EU AI Act role and per-criterion rationale with confidence stored | ⬜ |
-| Classification completed → obligations and requirements generated for the classified tier and role; assessment `pending_review` | ⬜ |
-| Changed flags + reclassify update the tier | ⬜ |
-
-### 4. Classification confirmation
-
-| Scenario | State |
-|---|---|
-| Assigned Compliance Officer reviews the AI rationale per criterion and the obligation set; other users don't see the rationale | ⬜ |
-| Compliance Officer approves → system `approved` (registry) and assessment `approved` (compliance); risk flags locked (422) | ⬜ |
-| Compliance Officer corrects tier and/or EU AI Act role on approval → corrected values stored (a tier correction is noted in the basis) | ⬜ |
-| Reject → system back to the chosen section and assessment reopened (`questionnaire_pending`); request-info → only the reopened section editable | ⬜ |
-| Only the assigned Compliance Officer can confirm: AI Engineer and Application Owner get 403; unanswered required questions get 422 | ⬜ |
+Monitoring follows Approval in the lifecycle and is outside MVP scope; no E2E system scenarios.
 
 
 ---
@@ -238,7 +252,7 @@ data exists. Until then, MVP acceptance is measured by the business scenarios ab
 
 ### Proposed follow-up issues (create after approval)
 
-1. **Integration tests:** implement every ⬜ scenario in
+1. **Integration tests:** implement every ⬜ scenario and, once confirmed, the 🔶 proposals in
    [MVP integration scenarios](#mvp-integration-scenarios) in `tests/integration/` Milestone: DevOps.
 2. **E2E system tests for the MVP flow:** implement every ⬜ scenario in
    [MVP E2E system scenarios](#mvp-e2e-system-scenarios). 🔶 Location and CI status name to decide
