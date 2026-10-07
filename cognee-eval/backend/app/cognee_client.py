@@ -3,7 +3,7 @@
 Configuration is driven entirely by environment variables set in docker-compose.yml.
 All cognee generation (main + extraction) is pointed at the standalone sap-ai-proxy
 service via the LLM_*/LLM_EXTRACTION_* env vars; grounded answers call the same proxy
-directly. Embeddings run on local Ollama.
+directly. Embeddings run in-process via fastembed (BAAI/bge-small-en-v1.5).
 """
 
 import os
