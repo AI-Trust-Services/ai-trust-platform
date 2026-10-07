@@ -3,29 +3,25 @@
 > **Status: DRAFT — for review with PM and engineering lead**.
 > Sections marked **🔶 Open** need a decision before this document is approved.
 
-## Executive summary
-
-- **Test levels:** lint/typecheck, unit, deployment test, E2E and integration
-  (see [Test levels](#test-levels)). AI output evaluation is planned on top (see [AI output evaluation](#ai-output-evaluation))
-- **MVP acceptance is defined by business flow, not code coverage.** Every MVP step
-  (Registration → Self-assessment → Risk classification → Classification confirmation) has a set of
-  mandatory **E2E system** scenarios. **Integration** scenarios back them with technical proof.
-- **Coverage: measure, don't gate.** `pytest-cov` runs in report-only mode with no threshold; it never
-  fails a build (see [Coverage](#coverage)).
+---
 
 ## Test levels
 
-| Repo term | Industry term | Boundary |
-|---|---|---|
-| Lint / typecheck | Static analysis | Code validation |
-| Unit | Unit | Pure logic, no I/O |
-| Deployment test | Smoke / deployment verification | Helm/OCM rollout healthy, K8s (liveness & readiness probes) |
-| E2E per service | End to end micro service | One service in-process + real DB, other services mocked |
-| Integration | Cross-service technical integration | Technical contracts between deployed services over real HTTP: shared data, cascades, internal calls. See [integration scenarios](#integration-scenarios) |
-| E2E System | System / end-to-end (API level), domain | MVP business requirements: persona flows driven black-box through the whole deployed platform; no browser or login. See [E2E system scenarios](#mvp-e2e-system-scenarios) |
+| Repo term | Industry term | Boundary | MVP |
+|---|---|---|---|
+| Lint / typecheck | Static analysis | Code validation | ✅ |
+| Unit | Unit | Pure logic, no I/O | ✅ |
+| E2E per service | End-to-end micro service | One service in-process, other services mocked | ✅ |
+| Integration | Cross-service technical integration | Technical contracts between deployed services over real HTTP: shared data, RBAC enforcement, cascades, internal calls. See [Integration scenarios](#integration-scenarios) | ✅ |
+| E2E System | System / end-to-end (API level), domain | MVP business requirements: full happy-path persona flows driven black-box through the whole deployed platform; no browser or login. See [E2E system scenarios](#e2e-system-scenarios) | ✅ |
+| Frontend tests | Component / visual regression | React component behaviour and visual states; proposed tool: Playwright (Apache 2.0). See [Frontend tests](#frontend-tests) | 🔶 open |
+| Deployment test | Deployment verification | Helm/OCM rollout healthy, K8s liveness & readiness probes.| ✅ |
+| Performance / load | Performance | Throughput, latency, and race-condition checks under load | TBD |
+| Security | Security | Server-side RBAC, upload constraints, URL expiry, append-only audit | TBD |
+| AI output evaluation | ML evaluation | Accuracy of AI-assisted classification against a labelled dataset. See [AI output evaluation](#ai-output-evaluation) | ✅ |
 
-Rule of thumb: a scenario that exists because of a **technical contract between services** is
-Integration; one that exists because of a **business requirement or persona flow** is E2E system.
+**Coverage: measure, don't gate.** `pytest-cov` runs in report-only mode with no threshold; it never
+fails a build (see [Code Coverage](#code-coverage)).
 
 ---
 
@@ -69,10 +65,12 @@ flowchart LR
 
 ## Integration scenarios
 
-**Cross-service technical integration**: proof that services work together: contracts, shared data,
-internal calls and platform wiring. A failure points to a broken technical seam.
+**Cross-service technical integration**: proof that deployed services work together at their technical
+seams — shared data integrity, RBAC enforcement across backends, cascade side-effects, internal HTTP
+calls, and platform wiring. These run in-cluster (kind or Gardener) over real HTTP. A failure points
+to a broken technical contract, not a missing business requirement.
 
-Legend: ✅ test covered · ⬜ test missing, functionality
+Legend: ✅ test covered · ⬜ test missing, functionality exists
 
 ### A. Platform wiring and reachability
 
@@ -81,60 +79,85 @@ nginx route or an unhealthy backend.
 
 | Scenario | State |
 |---|---|
-| Health of all 7 backends (each `/health` also checks its DB connection) | ✅ `test_01_health.py` |
+| Health of all backends (each `/health` also checks its DB connection) | ✅ `test_01_health.py` |
 | Shell entry page is served (HTTP 200, HTML) | ⬜ |
 | MVP frontends (Registry, Compliance) are served through the shell proxy (HTTP 200, HTML) | ⬜ |
 | MVP backend APIs (Registry, Compliance) are reachable through the shell proxy | ⬜ |
 
+### B. Registry ↔ Compliance
+
+| Scenario | State |
+|---|---|
+| Registered system is resolvable by compliance (shared FK integrity) | ✅ `test_02_registry_compliance.py` |
+| Assessment creation auto-generates obligations and requirements for all tiers | ✅ `test_02_registry_compliance.py` (post-MVP) |
+| Approved evidence cascades compliance score back to `ai_systems.compliance` | ✅ `test_02_registry_compliance.py` (post-MVP) |
+| Rejected evidence reverts compliance score | ✅ `test_02_registry_compliance.py` (post-MVP) |
+| Delete assessment including dependencies (obligations, requirements) and associated risk classification on the system | ⬜ |
+| Document upload → link to system → delete attempt blocked → unlink → delete succeeds | ⬜ |
+| Audit flush worker — event written to Postgres buffer → flushed to ClickHouse → deleted from Postgres | ⬜ |
+| Assessment submitted to CO → `workflow_status` transitions correctly through all states (`draft → pending_assessment → pending_review → approved`) | ⬜ |
+| CO request-info → section re-opened → submit-info → reclassification → back to `pending_review` | ⬜ |
+| Per-question assignment → contributor answers → approval gate enforced | ⬜ |
+
+### C. RBAC (cross-service)
+
+These scenarios verify that role checks are enforced at the API level across service boundaries, not
+just in the frontend.
+
+| Scenario | State |
+|---|---|
+| Auditor cannot write systems (403) | ✅ `test_03_rbac.py` |
+| AI Engineer can write systems | ⬜ |
+| AI Business Owner can write systems | ⬜ |
+| AI Engineer can start an assessment | ⬜ |
+| AI Business Owner can start an assessment | ⬜ |
+| Assignee can unassign themselves within an assessment | ⬜ |
+| Person who assigned others can unassign those assignees within an assessment | ⬜ |
+| Compliance Officer can forward an assessment to a different Compliance Officer | ⬜ |
+| Compliance Officer can send an assessment back to the responsible person to provide more information | ⬜ |
+| Compliance Officer can confirm and finish an assessment | ⬜ |
+| Platform Administrator cannot read assessments (403) | ✅ `test_03_rbac.py` |
+| Admin stats endpoint aggregates correctly across backends | ✅ `test_03_rbac.py` |
+| AI Engineer cannot approve evidence (403) | ✅ `test_03_rbac.py` |
+
 ---
 
-## MVP E2E system scenarios
+## E2E system scenarios
 
-**Domain MVP business requirements**: proof that the MVP flow behaves as the business requires for
-each persona. These scenarios are the MVP acceptance criteria. A failure points to an unmet
-requirement. Technical contract checks live in
-[MVP integration scenarios](#mvp-integration-scenarios).
+**Full happy-path business flows**: proof that the MVP flow works end-to-end as the business requires
+for each persona. Each scenario is a complete flow driven black-box through the deployed platform.
+These are the MVP acceptance criteria. A failure points to an unmet business requirement. Technical
+contract checks live in [Integration scenarios](#integration-scenarios).
 
 Legend: ✅ test covered · ⬜ test missing, functionality exists
-
-Structure follows the lifecycle steps 1–7. Personas: Application Owner, AI Engineer, Compliance Officer.
 
 ### 1. Registration
 
 | Scenario | State |
 |---|---|
-| AI Engineer can register a system | ⬜ |
-| Role without write permission (e.g. Auditor) cannot register (403) | ✅ `test_03_rbac.py` |
-| AI-assisted registration: conversational intake and an uploaded document pre-fill the registration fields (the document is parsed, not stored) | ⬜ |
+| AI Engineer registers a new system end-to-end through the shell proxy | ⬜ |
+| AI-assisted registration: conversational intake and an uploaded document pre-fill the registration fields | ⬜ |
 
 ### 2. Self-assessment
 
 | Scenario | State |
 |---|---|
-| Self-assessment started for a registered system → assessment `questionnaire_pending` (compliance); section assignees, Compliance Officer and intended purpose recorded on the system (registry) | ⬜ |
 | Application Owner submits the business section → AI Engineer submits the technical section → system `pending_review` | ⬜ |
-| EU AI Act role (provider / deployer / both) set for the system: entered at registration, inferred by the AI at classification | ⬜ |
-| Single question delegated to a contributor and answered | ⬜ |
+| Section owner delegates a question to a sub-assignee → sub-assignee answers → owner reclaims | ⬜ |
 
 ### 3. Risk classification
 
 | Scenario | State |
 |---|---|
-| Obligation set generated for a system classified before the assessment starts | ✅ `test_02_registry_compliance.py` |
-| AI mode (default): free-text technical answers → AI-inferred flags, tier, EU AI Act role and per-criterion rationale with confidence stored | ⬜ |
-| Classification completed → obligations and requirements generated for the classified tier and role; assessment `pending_review` | ⬜ |
-| Platform administrator cannot read assessments (403) | ✅ `test_03_rbac.py` |
-| Changed flags + reclassify update the tier | ⬜ |
+| Full governance chain: register system → fill assessment (AI Engineer + Application Owner) → AI-based preclassification → submit to CO → CO approves → confirmed classification | ⬜ |
+| Bounce-back flow: CO requests info → section reopened → owner resubmits → system reclassified → CO approves | ⬜ |
 
 ### 4. Classification confirmation
 
 | Scenario | State |
 |---|---|
-| Assigned Compliance Officer reviews the AI rationale per criterion and the obligation set; other users don't see the rationale | ⬜ |
-| Compliance Officer approves → system `approved` (registry) and assessment `approved` (compliance); risk flags locked (422) | ⬜ |
-| Compliance Officer corrects tier and/or EU AI Act role on approval → corrected values stored (a tier correction is noted in the basis) | ⬜ |
-| Reject → system back to the chosen section and assessment reopened (`questionnaire_pending`); request-info → only the reopened section editable | ⬜ |
-| Only the assigned Compliance Officer can confirm: AI Engineer and Application Owner get 403; unanswered required questions get 422 | ⬜ |
+| Compliance Officer approves → system `approved` (registry) and assessment `approved` (compliance); risk flags locked | ⬜ |
+| Compliance Officer corrects tier and/or EU AI Act role on approval → corrected values stored | ⬜ |
 
 ### 5. Requirements — outside MVP scope (regression only)
 
@@ -146,6 +169,7 @@ Structure follows the lifecycle steps 1–7. Personas: Application Owner, AI Eng
 
 | Scenario | State |
 |---|---|
+| Document upload → link to system; oversized file rejected; disallowed extension rejected; valid PDF, txt, and Word doc accepted | ⬜ |
 | Evidence uploaded and linked to a requirement | ✅ `test_02_registry_compliance.py` |
 
 ### 7. Approval — outside MVP scope (regression only)
@@ -153,10 +177,37 @@ Structure follows the lifecycle steps 1–7. Personas: Application Owner, AI Eng
 | Scenario | State |
 |---|---|
 | Evidence approval / rejection cascades compliance score to registry | ✅ `test_02_registry_compliance.py` |
-| AI Engineer cannot approve evidence (403) | ✅ `test_03_rbac.py` |
+| Audit trail completeness: all instrumented actions appear in ClickHouse with correct actor, action, and changes | ⬜ |
 
 Monitoring follows Approval in the lifecycle and is outside MVP scope; no E2E system scenarios.
 
+---
+
+## Frontend tests
+
+> **Currently zero coverage — identified gap.** 🔶 See open question #1.
+
+**Proposed tool: [Playwright](https://playwright.dev/)** — Apache 2.0 licensed, runs on standard
+GitHub-hosted runners without additional infrastructure, and covers both component-level interaction
+and visual regression via screenshot comparison. It replaces the need for a separate Storybook +
+Chromatic stack.
+
+### Component tests (React Testing Library or Playwright component testing)
+
+| Scenario |
+|---|
+| Registry table renders correct columns (Title, Owner) |
+| Detail view opens on row click and displays all fields |
+| Add/Edit form — required field validation prevents submission |
+| Document library table — version number and actions rendered correctly |
+| Task view — correct actions shown per task type (unassign vs. forward) |
+| Login pop-up — renders when tasks open; dismiss and navigate actions work |
+
+### Visual regression (Playwright screenshot)
+
+| Scenario |
+|---|
+| Key UI states: empty states, error states, and loading states across all tables and forms |
 
 ---
 
@@ -179,7 +230,7 @@ Placeholder scope, to be confirmed:
 
 ---
 
-## Coverage
+## Code Coverage
 
 **Measure, don't gate.** Coverage is reported, not enforced:
 
@@ -202,8 +253,8 @@ Placeholder scope, to be confirmed:
 
 | # | Question | Affects |
 |---|---|---|
-| 1 | Is frontend tests part of MVP ? |
-| 2 | Coverage is report-only for MVP (no threshold). When do we introduce a threshold or gate? |
+| 1 | Are frontend tests part of MVP? Proposed tool: Playwright (Apache 2.0, GitHub-hosted runners). | Frontend tests section |
+| 2 | Code Coverage is report-only for MVP (no threshold). When do we introduce a threshold or gate? | Code Coverage section |
 
 ---
 
@@ -212,15 +263,13 @@ Placeholder scope, to be confirmed:
 | # | Action | State |
 |---|---|---|
 | 1 | Review and approve this document with PM and engineering lead, including the open questions | 🔶 open |
-| 2 | After approval: create follow-up issues | 🔶 open  |
+| 2 | After approval: create follow-up issues | 🔶 open |
 
 ### Proposed follow-up issues (create after approval)
 
-1. **Integration tests:** implement every ⬜ scenario and, once confirmed, the 🔶 proposals in
-   [MVP integration scenarios](#mvp-integration-scenarios) in `tests/integration/` Milestone: DevOps.
-2. **E2E system tests for the MVP flow:** implement every ⬜ scenario in
-   [MVP E2E system scenarios](#mvp-e2e-system-scenarios). 🔶 Location and CI status name to decide
-   (new suite vs. a marker in `tests/integration/`). Milestone: DevOps.
-3. **Coverage reporting:** add `pytest-cov` to each backend's `requirements-test.txt` and `make test-unit` /
-   `make test-e2e`, report-only with no threshold, and publish the reports as CI artifacts in
-   `pr-unit-tests.yml`. Milestone: DevOps.
+1. **Integration tests — platform wiring:** implement every ⬜ scenario in section A in `tests/integration/`. Milestone: DevOps.
+2. **Integration tests — Registry ↔ Compliance gaps:** implement every ⬜ scenario in section B in `tests/integration/`. Milestone: DevOps.
+3. **Integration tests — RBAC cross-service:** implement every ⬜ scenario in section C in `tests/integration/`. Milestone: DevOps.
+4. **E2E system tests for the MVP flow:** implement every ⬜ scenario in [E2E system scenarios](#e2e-system-scenarios) as a dedicated suite (separate from `tests/integration/`). Milestone: DevOps.
+5. **Frontend tests:** evaluate Playwright for component and visual regression tests across all MFEs. Milestone: DevOps (pending Q1 decision).
+6. **Coverage reporting:** add `pytest-cov` to each backend's `requirements-test.txt` and `make test-unit` / `make test-e2e`, report-only with no threshold, and publish the reports as CI artifacts in `pr-unit-tests.yml`. Milestone: DevOps.
