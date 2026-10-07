@@ -1,3 +1,4 @@
+import glob
 import json
 import os
 
@@ -9,12 +10,23 @@ from app import cognee_client
 
 router = APIRouter(prefix="/graph", tags=["graph"])
 
-_KUZU_PATH = os.path.join(
+_DB_ROOT = os.path.join(
     os.environ.get("COGNEE_DATA_PATH", "/app/.cognee_system"),
     "system",
     "databases",
-    "cognee_graph_kuzu",
 )
+
+
+def _find_graph_db() -> str | None:
+    """Return the most recently written per-dataset Kuzu graph file.
+
+    cognee.remember() persists each dataset's graph as a `<uuid>.pkl` Kuzu
+    database inside its own dataset directory (the shipped `kuzu` package is
+    the ladybug fork, so the `.pkl` is a Kuzu DB, not a Python pickle). There
+    is no single shared `cognee_graph_kuzu` DB on this path.
+    """
+    matches = glob.glob(os.path.join(_DB_ROOT, "*", "*.pkl"))
+    return max(matches, key=os.path.getmtime) if matches else None
 
 
 @router.get("/stats")
@@ -46,7 +58,11 @@ async def list_entities(
 @router.get("/raw")
 def graph_raw() -> dict:
     """Return all nodes and edges directly from the Kuzu graph database."""
-    db = kuzu.Database(_KUZU_PATH, read_only=True)
+    db_path = _find_graph_db()
+    if not db_path:
+        return {"nodes": [], "edges": []}
+
+    db = kuzu.Database(db_path, read_only=True)
     conn = kuzu.Connection(db)
     try:
         nodes = []

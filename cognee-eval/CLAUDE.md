@@ -12,6 +12,13 @@ All Cognee data (LanceDB vectors, Kuzu graph, SQLite relational) lives under `CO
 (`/app/.cognee_system` in the container), mounted on the `data` PVC of the `cognee-eval-backend`
 StatefulSet. Our feedback data lives in `cognee_eval.db` inside the same directory.
 
+**Graph storage layout** — cognee 1.6 persists each dataset's graph as a per-dataset
+`system/databases/<dataset-uuid>/<graph-uuid>.pkl` **Kuzu** database (the shipped `kuzu` package is
+the ladybug fork, so despite the `.pkl` extension these are Kuzu DBs, *not* Python pickles — never
+`pickle.load()` them). There is no single shared `cognee_graph_kuzu` database. `graph.py` globs for the
+most recently written per-dataset `.pkl` and opens it with `kuzu.Database(path, read_only=True)`; the
+`Node`/`EDGE` tables carry the extracted knowledge graph.
+
 ## Running
 
 The component ships disabled by default — set `cogneeEval.enabled: true` in `values.yaml` (or the
