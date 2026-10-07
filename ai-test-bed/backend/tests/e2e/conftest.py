@@ -1,4 +1,4 @@
-"""E2E test infrastructure for document-indexing backend.
+"""E2E test infrastructure for ai-test-bed backend.
 
 Uses httpx.AsyncClient + ASGITransport — no running server needed.
 The registry's evaluate endpoint is mocked so no registry backend is required.
