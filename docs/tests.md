@@ -16,7 +16,8 @@
 - **MVP acceptance is defined by business flow, not code coverage.** Every MVP step
   (Registration → Self-assessment → Risk classification → Classification confirmation) has a set of
   mandatory **E2E system** scenarios. **Integration** scenarios back them with technical proof.
-- **Coverage targets:** 🔶 TBD. No coverage targets for now.
+- **Coverage: measure, don't gate.** `pytest-cov` runs in report-only mode with no threshold; it never
+  fails a build (see [Coverage](#coverage)).
 
 ## Test levels
 
@@ -225,10 +226,20 @@ Placeholder scope, to be confirmed:
 
 ---
 
-## Coverage targets
+## Coverage
 
-🔶 **TBD.** No coverage tooling (`pytest-cov`) is configured. Targets will be defined once baseline
-data exists. Until then, MVP acceptance is measured by the business scenarios above.
+**Measure, don't gate.** Coverage is reported, not enforced:
+
+- **Tool:** `pytest-cov` (line coverage; branch coverage optional).
+- **Mode:** report-only. **No threshold**, no `--cov-fail-under`, no PR or `main` gate. A low number
+  never fails a build.
+- **Scope:** the in-process levels: unit and per-service E2E (`tests/unit/`, `tests/e2e/`). The live
+  platform levels (integration, E2E system) are black-box over HTTP and are not measured for code
+  coverage; they are measured by the business and technical scenarios above.
+- **Output:** a terminal summary and an XML/HTML report per backend, available as CI artifacts. No
+  external coverage service for now.
+- **Purpose:** build a baseline and spot untested areas. Targets and any gate are decided later,
+  once baseline data exists. Until then, MVP acceptance is measured by the business scenarios above.
 
 ---
 
@@ -239,7 +250,7 @@ data exists. Until then, MVP acceptance is measured by the business scenarios ab
 | # | Question | Affects |
 |---|---|---|
 | 1 | Is frontend tests part of MVP ? |
-| 2 | Is test coverage part of MVP ? |
+| 2 | Coverage is report-only for MVP (no threshold). When do we introduce a threshold or gate? |
 
 ---
 
@@ -257,3 +268,6 @@ data exists. Until then, MVP acceptance is measured by the business scenarios ab
 2. **E2E system tests for the MVP flow:** implement every ⬜ scenario in
    [MVP E2E system scenarios](#mvp-e2e-system-scenarios). 🔶 Location and CI status name to decide
    (new suite vs. a marker in `tests/integration/`). Milestone: DevOps.
+3. **Coverage reporting:** add `pytest-cov` to each backend's `requirements-test.txt` and `make test-unit` /
+   `make test-e2e`, report-only with no threshold, and publish the reports as CI artifacts in
+   `pr-unit-tests.yml`. Milestone: DevOps.
