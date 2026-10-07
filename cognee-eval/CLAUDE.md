@@ -18,7 +18,7 @@ lives in `cognee_eval.db` inside the same directory.
 # Place EU-AI-ACT.pdf in ./data/ first
 cp /path/to/EU-AI-ACT.pdf data/
 
-docker compose --profile ollama up --build -d cognee-eval-backend kuzu-explorer
+docker compose --profile ollama up --build -d cognee-eval-backend
 
 # Trigger ingestion (takes several minutes on first run)
 curl -X POST http://localhost:8080/api/cognee/v1/ingest
@@ -27,7 +27,7 @@ curl -X POST http://localhost:8080/api/cognee/v1/ingest
 curl http://localhost:8080/api/cognee/v1/ingest/status
 
 # Inspect graph visually
-open http://localhost:8888
+open http://localhost:8080/api/cognee/v1/graph/viz
 ```
 
 ## Milestones
@@ -54,9 +54,9 @@ open http://localhost:8888
 | `GET` | `/v1/evaluate` | List past evaluations |
 | `GET` | `/v1/evaluate/{id}` | Get single evaluation |
 | `POST` | `/v1/feedback` | Submit feedback on an evaluation |
-| `GET` | `/v1/feedback` | List feedback (`?status=pending\|approved\|rejected`) |
+| `GET` | `/v1/feedback` | List feedback (`?status=pending\|approving\|approved\|failed\|rejected`) |
 | `GET` | `/v1/feedback/{id}` | Get single feedback |
-| `PATCH` | `/v1/feedback/{id}/approve` | Approve + re-ingest into graph |
+| `PATCH` | `/v1/feedback/{id}/approve` | Approve + re-ingest into graph (async, returns 202) |
 | `PATCH` | `/v1/feedback/{id}/reject` | Reject feedback |
 | `GET` | `/ui` | Single-page evaluation UI |
 | `GET` | `/health` | Health check — also reports PDF mount status |
@@ -89,8 +89,6 @@ creds. Embeddings run in-process via fastembed (`BAAI/bge-small-en-v1.5`, 384-di
 
 ## Notes
 
-- `kuzu-explorer` at `localhost:8888` — stop `cognee-eval-backend` first to avoid Kuzu file lock.
-  Also needs `user: root` (or a chmod of the volume) to read the root-owned Kuzu files.
 - Ingestion is synchronous; the nginx `proxy_read_timeout` is set to 600s for this route
 - No OpenFGA wiring — reviewer identity comes from `X-Forwarded-Preferred-Username` header only
 - **Embeddings**: use fastembed (in-process ONNX), NOT Ollama. Ollama's HTTP embed path is CPU-bound
