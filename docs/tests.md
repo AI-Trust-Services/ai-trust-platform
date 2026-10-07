@@ -14,14 +14,14 @@
 | E2E per service | End-to-end micro service | One service in-process, other services mocked | ✅ |
 | Integration | Cross-service technical integration | Technical contracts between deployed services over real HTTP: shared data, RBAC enforcement, cascades, internal calls. See [Integration scenarios](#integration-scenarios) | ✅ |
 | E2E System | System / end-to-end (API level), domain | MVP business requirements: full happy-path persona flows driven black-box through the whole deployed platform; no browser or login. See [E2E system scenarios](#e2e-system-scenarios) | ✅ |
-| Frontend tests | Component / visual regression | React component behaviour and visual states; proposed tool: Playwright (Apache 2.0). See [Frontend tests](#frontend-tests) | 🔶 open |
 | Deployment test | Deployment verification | Helm/OCM rollout healthy, K8s liveness & readiness probes.| ✅ |
+| AI output evaluation | ML evaluation | Accuracy of AI-assisted classification against a labelled dataset. See [AI output evaluation](#ai-output-evaluation) | ✅ |
+| Frontend tests | Component / visual regression | React component behaviour and visual states; proposed tool: Playwright (Apache 2.0). See [Frontend tests](#frontend-tests) | TBD |
 | Performance / load | Performance | Throughput, latency, and race-condition checks under load | TBD |
 | Security | Security | Server-side RBAC, upload constraints, URL expiry, append-only audit | TBD |
-| AI output evaluation | ML evaluation | Accuracy of AI-assisted classification against a labelled dataset. See [AI output evaluation](#ai-output-evaluation) | ✅ |
 
-**Coverage: measure, don't gate.** `pytest-cov` runs in report-only mode with no threshold; it never
-fails a build (see [Code Coverage](#code-coverage)).
+**Test Coverage: measure, don't gate.** `pytest-cov` runs in report-only mode with no threshold; it never
+fails a build (see [Test Code Coverage](#test-code-coverage)).
 
 ---
 
@@ -54,15 +54,6 @@ flowchart LR
     class MG gate
 ```
 
-### Quality gates
-
-| Gate | Criteria |
-|---|---|
-| **PR mergeable** | Lint, format, typecheck, unit, E2E, integration green checks |
-| **`main` deployment** | Deployment workflow green · E2E & integration green otherwise investigate any red `e2e-tests`/ `integration-tests` status before the next merge |
-
----
-
 ## Integration scenarios
 
 **Cross-service technical integration**: proof that deployed services work together at their technical
@@ -73,9 +64,6 @@ to a broken technical contract, not a missing business requirement.
 Legend: ✅ test covered · ⬜ test missing, functionality exists
 
 ### A. Platform wiring and reachability
-
-Basic for MVP: plain HTTP requests, with no browser and no login. They catch a missing bundle, a broken
-nginx route or an unhealthy backend.
 
 | Scenario | State |
 |---|---|
@@ -89,9 +77,9 @@ nginx route or an unhealthy backend.
 | Scenario | State |
 |---|---|
 | Registered system is resolvable by compliance (shared FK integrity) | ✅ `test_02_registry_compliance.py` |
-| Assessment creation auto-generates obligations and requirements for all tiers | ✅ `test_02_registry_compliance.py` (post-MVP) |
-| Approved evidence cascades compliance score back to `ai_systems.compliance` | ✅ `test_02_registry_compliance.py` (post-MVP) |
-| Rejected evidence reverts compliance score | ✅ `test_02_registry_compliance.py` (post-MVP) |
+| Assessment creation auto-generates obligations and requirements for all tiers | ✅ `test_02_registry_compliance.py` |
+| Approved evidence cascades compliance score back to `ai_systems.compliance` | ✅ `test_02_registry_compliance.py` |
+| Rejected evidence reverts compliance score | ✅ `test_02_registry_compliance.py` |
 | Delete assessment including dependencies (obligations, requirements) and associated risk classification on the system | ⬜ |
 | Document upload → link to system → delete attempt blocked → unlink → delete succeeds | ⬜ |
 | Audit flush worker — event written to Postgres buffer → flushed to ClickHouse → deleted from Postgres | ⬜ |
@@ -126,8 +114,7 @@ just in the frontend.
 
 **Full happy-path business flows**: proof that the MVP flow works end-to-end as the business requires
 for each persona. Each scenario is a complete flow driven black-box through the deployed platform.
-These are the MVP acceptance criteria. A failure points to an unmet business requirement. Technical
-contract checks live in [Integration scenarios](#integration-scenarios).
+These are the MVP acceptance criteria. A failure points to an unmet business requirement.
 
 Legend: ✅ test covered · ⬜ test missing, functionality exists
 
@@ -169,7 +156,6 @@ Legend: ✅ test covered · ⬜ test missing, functionality exists
 
 | Scenario | State |
 |---|---|
-| Document upload → link to system; oversized file rejected; disallowed extension rejected; valid PDF, txt, and Word doc accepted | ⬜ |
 | Evidence uploaded and linked to a requirement | ✅ `test_02_registry_compliance.py` |
 
 ### 7. Approval — outside MVP scope (regression only)
@@ -177,7 +163,6 @@ Legend: ✅ test covered · ⬜ test missing, functionality exists
 | Scenario | State |
 |---|---|
 | Evidence approval / rejection cascades compliance score to registry | ✅ `test_02_registry_compliance.py` |
-| Audit trail completeness: all instrumented actions appear in ClickHouse with correct actor, action, and changes | ⬜ |
 
 Monitoring follows Approval in the lifecycle and is outside MVP scope; no E2E system scenarios.
 
@@ -230,7 +215,7 @@ Placeholder scope, to be confirmed:
 
 ---
 
-## Code Coverage
+## Test Code Coverage
 
 **Measure, don't gate.** Coverage is reported, not enforced:
 
@@ -254,7 +239,7 @@ Placeholder scope, to be confirmed:
 | # | Question | Affects |
 |---|---|---|
 | 1 | Are frontend tests part of MVP? Proposed tool: Playwright (Apache 2.0, GitHub-hosted runners). | Frontend tests section |
-| 2 | Code Coverage is report-only for MVP (no threshold). When do we introduce a threshold or gate? | Code Coverage section |
+| 2 | Test Code Coverage is report-only for MVP (no threshold). When do we introduce a threshold or gate? | Test Code Coverage section |
 
 ---
 
@@ -264,12 +249,3 @@ Placeholder scope, to be confirmed:
 |---|---|---|
 | 1 | Review and approve this document with PM and engineering lead, including the open questions | 🔶 open |
 | 2 | After approval: create follow-up issues | 🔶 open |
-
-### Proposed follow-up issues (create after approval)
-
-1. **Integration tests — platform wiring:** implement every ⬜ scenario in section A in `tests/integration/`. Milestone: DevOps.
-2. **Integration tests — Registry ↔ Compliance gaps:** implement every ⬜ scenario in section B in `tests/integration/`. Milestone: DevOps.
-3. **Integration tests — RBAC cross-service:** implement every ⬜ scenario in section C in `tests/integration/`. Milestone: DevOps.
-4. **E2E system tests for the MVP flow:** implement every ⬜ scenario in [E2E system scenarios](#e2e-system-scenarios) as a dedicated suite (separate from `tests/integration/`). Milestone: DevOps.
-5. **Frontend tests:** evaluate Playwright for component and visual regression tests across all MFEs. Milestone: DevOps (pending Q1 decision).
-6. **Coverage reporting:** add `pytest-cov` to each backend's `requirements-test.txt` and `make test-unit` / `make test-e2e`, report-only with no threshold, and publish the reports as CI artifacts in `pr-unit-tests.yml`. Milestone: DevOps.
