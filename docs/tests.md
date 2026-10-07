@@ -5,14 +5,8 @@
 
 ## Executive summary
 
-- **Test levels:** lint/typecheck, unit, deployment test, E2E (per service), integration and E2E system
+- **Test levels:** lint/typecheck, unit, deployment test, E2E and integration
   (see [Test levels](#test-levels)). AI output evaluation is planned on top (see [AI output evaluation](#ai-output-evaluation))
-- **Two live-platform levels, two perspectives**:
-  - **Integration** is the technical perspective: cross-service integration (contracts, shared data,
-    cascades, internal calls), see
-    [MVP integration scenarios](#mvp-integration-scenarios).
-  - **E2E system** is the domain perspective: MVP business requirements driven through persona flows,
-    see [MVP E2E system scenarios](#mvp-e2e-system-scenarios).
 - **MVP acceptance is defined by business flow, not code coverage.** Every MVP step
   (Registration → Self-assessment → Risk classification → Classification confirmation) has a set of
   mandatory **E2E system** scenarios. **Integration** scenarios back them with technical proof.
@@ -27,7 +21,7 @@
 | Unit | Unit | Pure logic, no I/O |
 | Deployment test | Smoke / deployment verification | Helm/OCM rollout healthy, K8s (liveness & readiness probes) |
 | E2E per service | End to end micro service | One service in-process + real DB, other services mocked |
-| Integration | Cross-service technical integration | Technical contracts between deployed services over real HTTP: shared data, cascades, internal calls. See [integration scenarios](#mvp-integration-scenarios) |
+| Integration | Cross-service technical integration | Technical contracts between deployed services over real HTTP: shared data, cascades, internal calls. See [integration scenarios](#integration-scenarios) |
 | E2E System | System / end-to-end (API level), domain | MVP business requirements: persona flows driven black-box through the whole deployed platform; no browser or login. See [E2E system scenarios](#mvp-e2e-system-scenarios) |
 
 Rule of thumb: a scenario that exists because of a **technical contract between services** is
@@ -73,15 +67,12 @@ flowchart LR
 
 ---
 
-## MVP integration scenarios
+## Integration scenarios
 
 **Cross-service technical integration**: proof that services work together: contracts, shared data,
-internal calls and platform wiring. A failure points to a broken technical seam. MVP business
-requirements and the 1–7 lifecycle structure are covered in
-[MVP E2E system scenarios](#mvp-e2e-system-scenarios).
+internal calls and platform wiring. A failure points to a broken technical seam.
 
-Organised by technical seam, not by MVP step. Legend: ✅ test covered · ⬜ test missing, functionality
-exists · 🔶 proposed, expected behaviour to be confirmed with the owning team
+Legend: ✅ test covered · ⬜ test missing, functionality
 
 ### A. Platform wiring and reachability
 
@@ -94,44 +85,6 @@ nginx route or an unhealthy backend.
 | Shell entry page is served (HTTP 200, HTML) | ⬜ |
 | MVP frontends (Registry, Compliance) are served through the shell proxy (HTTP 200, HTML) | ⬜ |
 | MVP backend APIs (Registry, Compliance) are reachable through the shell proxy | ⬜ |
-| `/api/*/health` of every backend answers through the shell proxy (route per backend) | 🔶 |
-
-### B. Shared data: registry ↔ compliance (`ai_systems`)
-
-| Scenario | State |
-|---|---|
-| System registered in the registry is visible in compliance | ✅ `test_02_registry_compliance.py` |
-| Reclassification in the registry (tier change) is visible in compliance | 🔶 |
-| System deleted in the registry is no longer visible in compliance | 🔶 |
-
-### C. Service-to-service HTTP
-
-| Scenario | State |
-|---|---|
-| Admin stats call the users backend | ✅ `test_03_rbac.py` |
-
-### D. Authorization: backends ↔ OpenFGA via the IAM API
-
-Role changes are made through the users/IAM API and must take effect in other backends. This checks the
-technical wiring (tuples written by one service, read by another), not which persona may do what (that
-is E2E system).
-
-| Scenario | State |
-|---|---|
-| Role assigned via IAM API grants access on registry / compliance; reassigning replaces the previous role (single-role invariant) | 🔶 |
-| Custom role created via IAM API grants its permissions on another backend; deleting it revokes them | 🔶 |
-| User without any role is denied on every protected backend (fails closed) | 🔶 |
-| Identity header fallback: `X-Forwarded-User` (OIDC `sub`) is accepted when the username header is absent | 🔶 |
-
-### E. Platform dependencies used by one service
-
-| Scenario | State |
-|---|---|
-| Registry ↔ LLM provider: an AI-assist call with the deterministic stub provider returns a well-formed response | 🔶 |
-| Compliance ↔ MinIO: an uploaded evidence file can be retrieved through its presigned URL | 🔶 |
-
-Out of scope for now (async timing or extra infrastructure): audit trail flush
-(Postgres buffer → ClickHouse), alert rule firing, OTel pipeline (RabbitMQ → ClickHouse).
 
 ---
 
