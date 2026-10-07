@@ -24,16 +24,18 @@ _EMBEDDING_DIMENSIONS = int(os.environ.get("COGNEE_EMBEDDING_DIMENSIONS", "384")
 
 def setup_cognee() -> None:
     """Configure cognee to use ai-gateway for LLM and fastembed for embeddings."""
-    cognee.config.set_llm_config({
-        "llm_provider": "openai",
-        "llm_model": f"openai/{_GATEWAY_MODEL}",
-        "llm_endpoint": _GATEWAY_URL,
-        "llm_api_key": "ai-gateway",
-        "llm_extraction_provider": "openai",
-        "llm_extraction_model": f"openai/{_GATEWAY_MODEL}",
-        "llm_extraction_endpoint": _GATEWAY_URL,
-        "llm_extraction_api_key": "ai-gateway",
-    })
+    cognee.config.set_llm_config(
+        {
+            "llm_provider": "openai",
+            "llm_model": f"openai/{_GATEWAY_MODEL}",
+            "llm_endpoint": _GATEWAY_URL,
+            "llm_api_key": "ai-gateway",
+            "llm_extraction_provider": "openai",
+            "llm_extraction_model": f"openai/{_GATEWAY_MODEL}",
+            "llm_extraction_endpoint": _GATEWAY_URL,
+            "llm_extraction_api_key": "ai-gateway",
+        }
+    )
     cognee.config.set_embedding_provider(_EMBEDDING_PROVIDER)
     cognee.config.set_embedding_model(_EMBEDDING_MODEL)
     cognee.config.set_embedding_dimensions(_EMBEDDING_DIMENSIONS)
