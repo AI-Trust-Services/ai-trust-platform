@@ -50,11 +50,16 @@ spec:
 ---
 {{/* Cognee eval backend — graph-based grounded Q&A over the EU AI Act. */}}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: cognee-eval-backend
 spec:
+  serviceName: cognee-eval-backend
   replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       {{- include "ai-trust.labels" (dict "name" "cognee-eval-backend") | nindent 6 }}
@@ -94,20 +99,14 @@ spec:
               port: {{ .Values.cogneeEval.backendPort }}
             initialDelaySeconds: 20
             periodSeconds: 15
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: cognee-eval-data
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: cognee-eval-data
-spec:
-  accessModes: ["ReadWriteOnce"]
-  resources:
-    requests:
-      storage: {{ .Values.cogneeEval.dataStorageSize }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.cogneeEval.dataStorageSize }}
 ---
 apiVersion: v1
 kind: Service
