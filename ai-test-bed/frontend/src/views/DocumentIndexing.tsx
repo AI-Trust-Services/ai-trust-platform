@@ -121,7 +121,9 @@ export function DocumentIndexing({ mayWrite }: { mayWrite: boolean }) {
   useEffect(() => {
     registryApi
       .getSystems()
-      .then((s) => setSystems(s.filter((x) => x.lifecycle !== "decommissioned")))
+      // Exclude decommissioned systems and internal sentinels (IDs prefixed "__")
+      // such as "__eu_ai_act__" which are managed through the Test Bed UI only.
+      .then((s) => setSystems(s.filter((x) => x.lifecycle !== "decommissioned" && !x.id.startsWith("__"))))
       .catch((e) => setSystemsError(e instanceof Error ? e.message : String(e)));
   }, []);
 

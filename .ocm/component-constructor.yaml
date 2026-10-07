@@ -88,12 +88,19 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/document-indexing-worker:${IMAGE_TAG}
 
-  - name: document-indexing-frontend
+  - name: ai-test-bed-backend
     type: ociImage
     version: "${VERSION}"
     access:
       type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/document-indexing-frontend:${IMAGE_TAG}
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/ai-test-bed-backend:${IMAGE_TAG}
+
+  - name: ai-test-bed-frontend
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/ai-test-bed-frontend:${IMAGE_TAG}
 
   - name: otel-clickhouse-consumer
     type: ociImage

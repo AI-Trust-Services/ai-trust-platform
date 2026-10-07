@@ -264,3 +264,34 @@ spec:
               ollama pull "${LLM_MODEL:-llama3.2}" &&
               ollama pull "${LLM_VISION_MODEL:-llama3.2-vision}"
 {{- end }}
+---
+# AI Test Bed seed — creates stub AISystem rows for the 3 sample scenarios and
+# the EU AI Act sentinel, then uploads each sample's Markdown system card to the
+# document-indexing backend (POST /v1/systems/{id}/documents) so the worker can
+# index them asynchronously.
+# Runs after db-migrate (AISystem table exists), the registry backend (AISystem
+# existence is validated by the DI upload handler), and document-indexing-backend
+# (the upload target). Does NOT wait for minio-init — the seed no longer touches
+# MinIO directly; the document-indexing backend and worker own that layer.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ai-trust.jobName" (dict "base" "testbed-seed" "rev" .Release.Revision) }}
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        {{- include "ai-trust.waitForJob" (dict "job" "db-migrate" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
+        {{- include "ai-trust.waitForHttp" (dict "name" "ai-system-registry-backend" "port" 8001 "path" "/health" "image" .Values.waitImages.busybox) | nindent 8 }}
+        {{- include "ai-trust.waitForHttp" (dict "name" "document-indexing-backend" "port" 8011 "path" "/health" "image" .Values.waitImages.busybox) | nindent 8 }}
+      containers:
+        - name: testbed-seed
+          image: {{ .Values.image.repository }}/ai-test-bed-backend:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "app.seed"]
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # DATABASE_URL, APP_ADMIN_USERNAME

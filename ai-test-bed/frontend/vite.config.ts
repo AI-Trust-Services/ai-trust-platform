@@ -5,7 +5,7 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: "/indexing/",
+  base: "/ai-test-bed/",
   envDir: path.resolve(__dirname, "../.."),
   resolve: {
     alias: {
@@ -18,6 +18,6 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 3011,
+    port: 3013,
   },
 });

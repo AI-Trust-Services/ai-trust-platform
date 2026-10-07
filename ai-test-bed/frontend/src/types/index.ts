@@ -87,12 +87,26 @@ export interface TestBedSample {
   expected_tier: string | null;
 }
 
+/** Full fixture including scenario answers and legal rationale. */
+export interface TestBedSampleDetail extends TestBedSample {
+  expected_rationale: string;
+  ai_system_id: string | null;
+  business_answers: Record<string, string>;
+  technical_answers: Record<string, string>;
+}
+
 export type TestBedRole = "engineer" | "compliance_officer";
 
 export interface TestBedEnabledSources {
   system_docs: boolean;
   eu_ai_act: boolean;
   cognee: boolean;
+}
+
+export interface RetrievalKnobs {
+  k: number;
+  mode: RetrieveMode;
+  rrf_k: number;
 }
 
 export interface InferredFlag {
@@ -122,6 +136,7 @@ export interface TestBedRunResult {
   rationale: TestBedRationale | null;
   source_passages: Array<RetrievedPassage & { _source_label?: string }>;
   enabled_sources: TestBedEnabledSources;
+  retrieval_knobs: RetrievalKnobs | null;
   created_at: string;
   created_by: string;
 }

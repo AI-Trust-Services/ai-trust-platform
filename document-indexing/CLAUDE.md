@@ -3,11 +3,12 @@ Reusable document indexing + retrieval for an AI system: uploaded documents are 
 
 > **Deployment: k8s/kind + Gardener only — no docker-compose entry** (deliberate exception to "Dual deployment paths" for this feature). Verify via `cd k8s && make up`.
 
-Three cooperating workloads (sibling top-level dirs, like the other workers) plus a test/UI MFE:
+Three cooperating workloads (sibling top-level dirs, like the other workers):
 - **`document-indexing/backend`** (FastAPI, port 8011) — upload, status, retrieval API.
 - **`document-indexing-worker`** — DB-polling indexer (no HTTP port; pattern mirrors `audit-flush-worker`). Claims `document_versions` rows in status `pending` (`FOR UPDATE SKIP LOCKED`), parses with Docling, embeds via the embedding service, writes chunks, sets `indexed`/`failed`. The `status` column is the queue and the single source of truth for progress. On startup it requeues any row stuck in `processing` (left behind by a crashed pod — the claim commits `processing` before the long parse/embed/store, so without this reset it would never be retried); safe for the single replica that runs today, a multi-replica setup would need a heartbeat/lease instead. Multi-tenant (`TENANCY_MODE=jwt`): mirrors `policy-checker-worker` — `OWNER_DATABASE_URL` enumerates the `tenant_*` schemas and each poll runs once per tenant with `tenant_id_var` set, so Postgres queries route to that tenant's schema and `minio_client` resolves that tenant's bucket; unset → a single unscoped pass (single-tenant / local dev).
 - **`embedding-service`** (FastAPI, port 8012) — loads the `EMBED_MODEL` once and serves `POST /embed` to both the worker (index time, `kind=passage`) and the backend (query time, `kind=query`), so vectors are identical. A small model registry selects the backend + E5 input prefixes: default `intfloat/multilingual-e5-small` (384-dim, `sentence-transformers`, needs `query:`/`passage:` prefixes — applied server-side by `kind`), also `intfloat/multilingual-e5-base` (768-dim) and `BAAI/bge-m3` (1024-dim, `FlagEmbedding`, no prefix). Helm `StatefulSet` with an HF-cache PVC (analogue of `ollama.yaml`).
-- **`document-indexing/frontend`** — React MFE at `/indexing/` (nav label **"Test Bed"**, gated on `systems:read`): pick an AI system from a dropdown (list from the registry backend `GET /systems`), upload documents, watch indexing status poll through its phase (`parsing → embedding → storing → indexed`), upload new versions / view version history, and run retrieval queries showing passages with their source (filename, version, page, heading path) and an "Open source" link that opens the original (PDFs jump to the page via `#page=N`). An **Advanced panel** on the retrieve card exposes query-time knobs (`mode`, `rrf_k`, `k`) with validated defaults + a reset-to-recommended, and shows per-channel rank/score diagnostics per passage. Built from the shared frontend stack (`useTheme` from `@ai-trust/react-hooks`); nav node in `shell/public/luigi-config.js`.
+
+The frontend MFE (document management + AI Test Bed UI) lives in **`ai-test-bed/frontend`** — that MFE makes API calls to this backend for all document operations.
 
 **Data model** (migrations `0031`–`0035`, needs the pgvector extension — Postgres image is `pgvector/pgvector:pg16`): `0031` creates the tables, `0032` adds `document_versions.stage`, `0033` switches the embedding to `multilingual-e5-small` (`vector(384)`), `0034` builds the FTS column from `embed_text`, `0035` adds the partial unique index `uq_document_versions_one_current` (`(document_id) WHERE is_current`) so concurrent version uploads can't create two current versions.
 - `documents` (id `DOC-`, `ai_system_id`, `filename`, `deleted_at` — vestigial since delete is now hard; see the DELETE endpoint), `document_versions` (id `DOCV-`, `minio_key`, `status` ∈ `pending|processing|indexed|failed`, `stage` ∈ `parsing|embedding|storing|null` — the fine-grained phase the worker writes while `processing`, `chunk_count`, `is_current`), `document_chunks` (id `CHNK-`, `embedding vector(384)` — dimension tracks `EMBEDDING_DIM` in `…/models/document.py`, changes with `EMBED_MODEL` via a migration + re-index, generated `content_tsv tsvector`, provenance `page`/`bbox`/`self_ref`/`heading_path`). IDs via `document-indexing/backend/app/ids.py`.
@@ -20,39 +21,8 @@ Three cooperating workloads (sibling top-level dirs, like the other workers) plu
 - `GET /systems/{id}/documents`, `GET /documents/{id}` (`systems:read`) — status incl. `stage`/`chunk_count`/`error`.
 - `POST /documents/{id}/versions` (multipart, `systems:write`) — upload a new version: the new version becomes `is_current` + `pending` (re-indexed), the previous one is kept but `is_current=False` so its chunks drop out of new results (auto-incremented major `version_label`, e.g. `1.0 → 2.0`).
 - `GET /documents/{id}/versions` (`systems:read`) — version history, oldest-first.
-- `GET /documents/{id}/download-url` (`systems:read`) — presigned URL to an original (traces a passage back to its source). Defaults to the current version; pass `?version_id=` to open a specific version (validated to belong to the document). Retrieval results reference `source.version_id`, so the Test Bed "Open source" link passes it — otherwise a version uploaded between search and click would reopen the wrong original.
-- `POST /retrieve` `{ai_system_id, query, k, mode?, rrf_k?}` (`systems:read`) — ranked passages (`rank`) + source refs. `mode` ∈ `hybrid` (default; dense + FTS fused with RRF), `dense`, `fts`; `rrf_k` (default 60) tunes the fusion constant (hybrid only). Single-channel modes order by that channel's own score and skip the other channel. Each passage also carries optional per-channel diagnostics (`dense_rank`/`dense_score`, `fts_rank`/`fts_score`, `rrf_score`) surfaced by the Test Bed advanced panel; non-UI consumers ignore them.
+- `GET /documents/{id}/download-url` (`systems:read`) — presigned URL to an original (traces a passage back to its source). Defaults to the current version; pass `?version_id=` to open a specific version (validated to belong to the document). Retrieval results reference `source.version_id`, so the AI Test Bed "Open source" link passes it — otherwise a version uploaded between search and click would reopen the wrong original.
+- `POST /retrieve` `{ai_system_id, query, k, mode?, rrf_k?}` (`systems:read`) — ranked passages (`rank`) + source refs. `mode` ∈ `hybrid` (default; dense + FTS fused with RRF), `dense`, `fts`; `rrf_k` (default 60) tunes the fusion constant (hybrid only). Single-channel modes order by that channel's own score and skip the other channel. Each passage also carries optional per-channel diagnostics (`dense_rank`/`dense_score`, `fts_rank`/`fts_score`, `rrf_score`) surfaced by the AI Test Bed advanced panel; non-UI consumers ignore them.
 - `DELETE /documents/{id}` (`systems:write`) — **hard delete**: removes the document row (ON DELETE CASCADE drops its versions + chunks) and purges every version's original from MinIO. Nothing of a deleted document is retained. (The `deleted_at` column is retained but now vestigial — hard delete never sets it; the `deleted_at IS NULL` filters stay as always-true no-ops.)
 
-**Env** — `EMBED_MODEL` (`intfloat/multilingual-e5-small`; also `-base` / `BAAI/bge-m3`), `EMBED_USE_FP16`, `INDEXING_BUCKET`, `INDEXING_POLL_INTERVAL`, `EMBEDDING_SERVICE_URL` (backend/worker → `http://embedding-service:8012`), `OWNER_DATABASE_URL` (worker, multi-tenant only — enumerates `tenant_*` schemas for the per-tenant poll; unset → single unscoped pass), `REGISTRY_BACKEND_URL` (testbed orchestrator → `http://ai-system-registry-backend:8001`).
-
----
-
-## AI Test Bed
-
-Interactive EU AI Act classification test harness inside the document-indexing MFE. Not a separate service — all routes live in the same `document-indexing/backend` FastAPI app and the same `/indexing/` frontend.
-
-### Backend (`app/routers/testbed.py`, all `/v1/testbed/`, gated `systems:read`)
-
-- `GET /testbed/samples` — list all YAML fixture summaries (`id`, `title`, `expected_tier`, `description`).
-- `POST /testbed/run` — orchestrator: load sample → retrieve context from enabled sources → call registry `POST /v1/classify/evaluate` via httpx → persist `TestBedRun` → return result. Body: `{sample_id, role?, enabled_sources: {system_docs, eu_ai_act, cognee}, prompt_override?, model?}`. Sources: `system_docs` retrieves from the sample's linked AI system (if `ai_system_id` set); `eu_ai_act` retrieves from a well-known EU AI Act document sentinel (`__eu_ai_act__`); `cognee` is a no-op stub in Phase 1. The username from `x-forwarded-preferred-username` is forwarded to the registry call.
-- `GET /testbed/runs` — list run summaries (`run_id`, `sample_id`, `role`, `tier`, `confidence`, `created_at`). `?sample_id=` filter. Latest 50, descending.
-- `GET /testbed/runs/{run_id}` — full run with payload including `source_passages`.
-
-### Sample fixtures (`app/testbed/samples/*.yaml`)
-
-Git-versioned YAML test scenarios. Fields: `id`, `title`, `description`, `expected_tier`, `ai_system_id?`, `role`, `answers: {business: {…}, technical: {…}}`. Loaded at import time by `samples_loader.py` into `SAMPLES` dict. IDs prefix `tbs-`.
-
-Included fixtures: `tbs-hiring-screener` (automated CV ranking → high), `tbs-internal-chatbot` (employee Q&A → limited), `tbs-credit-scoring` (retail credit risk → high).
-
-### KnowledgeBrain (`app/testbed/knowledge_brain.py`)
-
-Abstract ABC (`add_reviewed_knowledge`, `query`, `export`, `import_items`) defining the interface for swappable knowledge sources. Phase 1 ships `JsonbKnowledgeBrainStub` (backed by `test_bed_runs` rows with `sample_id="__knowledge_brain__"` and `kind="knowledge_item"`; substring scoring). Module-level singleton `knowledge_brain` in `knowledge_brain_stub.py`. Phase 2 will swap for a Cognee implementation without touching call sites.
-
-### JSONB log table (`test_bed_runs`, migration `0036`)
-
-One row per test run, `kind="run"`. Top-level columns for cheap filtering: `id` (IDs `TBR-`), `sample_id`, `role`, `enabled_sources` (JSONB), `model`, `knowledge_revision`, `prompt_revision`, `created_by`, `created_at`. Full input/output in `payload` JSONB (answers, source passages, tier, rationale, etc.).
-
-### Context assembly
-
-`_format_passages_as_context(passages, label)` formats retrieved passages as a numbered citation block for the LLM. Called once per enabled source; results are concatenated and passed as `injected_context` to the registry evaluate endpoint. Returns `""` for an empty passage list (no heading added).
+**Env** — `EMBED_MODEL` (`intfloat/multilingual-e5-small`; also `-base` / `BAAI/bge-m3`), `EMBED_USE_FP16`, `INDEXING_BUCKET`, `INDEXING_POLL_INTERVAL`, `EMBEDDING_SERVICE_URL` (backend/worker → `http://embedding-service:8012`), `OWNER_DATABASE_URL` (worker, multi-tenant only — enumerates `tenant_*` schemas for the per-tenant poll; unset → single unscoped pass).

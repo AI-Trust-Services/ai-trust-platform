@@ -14,6 +14,7 @@ variable "VITE_DTA_API_BASE"         { default = "/api/dta/v1" }
 variable "VITE_AUDIT_API_BASE"       { default = "/api/audit/v1" }
 variable "VITE_ADMIN_API_BASE"       { default = "/api/admin/v1" }
 variable "VITE_INDEXING_API_BASE"    { default = "/api/indexing/v1" }
+variable "VITE_TESTBED_API_BASE"     { default = "/api/ai-test-bed/v1" }
 
 function "tag" {
   params = [name]
@@ -33,6 +34,7 @@ group "default" {
     "embedding-service",
     "document-indexing-backend",
     "document-indexing-worker",
+    "ai-test-bed-backend",
     "audit-backend",
     "audit-flush-worker",
     "admin-backend",
@@ -55,6 +57,7 @@ group "default" {
     "audit-frontend",
     "admin-frontend",
     "document-indexing-frontend",
+    "ai-test-bed-frontend",
     "cognee-eval-backend",
     "ai-gateway",
   ]
@@ -394,18 +397,28 @@ target "admin-frontend" {
   cache-to   = ["type=gha,mode=max,scope=admin-frontend"]
 }
 
-target "document-indexing-frontend" {
+target "ai-test-bed-backend" {
   context    = "."
-  dockerfile = "document-indexing/frontend/Dockerfile"
+  dockerfile = "ai-test-bed/backend/Dockerfile"
   platforms  = ["linux/amd64"]
-  tags       = [tag("document-indexing-frontend")]
+  tags       = [tag("ai-test-bed-backend")]
+  cache-from = ["type=gha,scope=ai-test-bed-backend"]
+  cache-to   = ["type=gha,mode=max,scope=ai-test-bed-backend"]
+}
+
+target "ai-test-bed-frontend" {
+  context    = "."
+  dockerfile = "ai-test-bed/frontend/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("ai-test-bed-frontend")]
   args = {
+    VITE_TESTBED_API_BASE  = VITE_TESTBED_API_BASE
     VITE_INDEXING_API_BASE = VITE_INDEXING_API_BASE
     VITE_USERS_API_BASE    = VITE_USERS_API_BASE
     VITE_REGISTRY_API_BASE = VITE_REGISTRY_API_BASE
   }
-  cache-from = ["type=gha,scope=document-indexing-frontend"]
-  cache-to   = ["type=gha,mode=max,scope=document-indexing-frontend"]
+  cache-from = ["type=gha,scope=ai-test-bed-frontend"]
+  cache-to   = ["type=gha,mode=max,scope=ai-test-bed-frontend"]
 }
 
 target "cognee-eval-backend" {

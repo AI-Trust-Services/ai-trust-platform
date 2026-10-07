@@ -31,6 +31,7 @@ jobs:
             document-indexing/backend
             document-indexing-worker
             embedding-service
+            ai-test-bed/backend
             libs/authorization
             monitoring/backend
             otel-pipeline/rmq-bridge

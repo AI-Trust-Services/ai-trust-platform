@@ -2,14 +2,15 @@
 
 Orchestrates a side-effect-free classification run:
   1. Load the sample fixture (answers, context).
-  2. For each enabled source, retrieve relevant passages.
+  2. For each enabled source, retrieve relevant passages via the document-indexing
+     HTTP endpoint (POST /v1/retrieve) — no in-process retrieval import.
   3. Assemble injected_context from the passages.
   4. Call the registry's /v1/classify/evaluate endpoint.
   5. Persist a test_bed_runs row.
   6. Return the result with source passages.
 
-The registry HTTP call passes the same x-forwarded-preferred-username header so
-the registry's permission check is satisfied without a separate auth token.
+Both HTTP calls (retrieve + evaluate) forward x-forwarded-preferred-username so
+downstream permission checks pass without a separate auth token.
 """
 
 from __future__ import annotations
@@ -18,17 +19,15 @@ import os
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
-
 from ai_trust_authorization import require_permission
-from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
+from ai_trust_authorization.constants import SYSTEMS_READ
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.test_bed import TestBedRun
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
 
 from app.ids import new_id
-from app.retrieval import retrieve as db_retrieve
 from app.testbed.samples_loader import get_sample, list_samples
 
 router = APIRouter(tags=["testbed"])
@@ -37,11 +36,17 @@ logger = get_logger(__name__)
 _REGISTRY_URL = os.environ.get(
     "REGISTRY_BACKEND_URL", "http://ai-system-registry-backend:8001"
 )
+_INDEXING_URL = os.environ.get(
+    "INDEXING_BACKEND_URL", "http://document-indexing-backend:8011"
+)
 
 # Sentinel AI-system id used to store the EU AI Act document index.
 _EU_AI_ACT_SYSTEM_ID = "__eu_ai_act__"
 
-_RETRIEVE_K = 5  # passages to pull per enabled source
+# Default retrieval parameters when the caller omits them.
+_DEFAULT_K = 5
+_DEFAULT_MODE = "hybrid"
+_DEFAULT_RRF_K = 60
 
 
 def _format_passages_as_context(passages: list[dict], label: str) -> str:
@@ -62,13 +67,34 @@ def _format_passages_as_context(passages: list[dict], label: str) -> str:
     dependencies=[Depends(require_permission(SYSTEMS_READ))],
 )
 async def list_samples_endpoint() -> list[dict]:
-    """List available test-bed sample fixtures."""
+    """List available test-bed sample fixtures (summary: id, name, description, expected_tier)."""
     return list_samples()
+
+
+@router.get(
+    "/testbed/samples/{sample_id}",
+    dependencies=[Depends(require_permission(SYSTEMS_READ))],
+)
+async def get_sample_detail(sample_id: str) -> dict:
+    """Return the full sample fixture including business/technical answers and expected_rationale."""
+    sample = get_sample(sample_id)
+    if sample is None:
+        raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
+    return {
+        "id": sample["id"],
+        "name": sample.get("name", sample["id"]),
+        "description": str(sample.get("description", "")).strip(),
+        "expected_tier": sample.get("expected_tier"),
+        "expected_rationale": str(sample.get("expected_rationale", "")).strip(),
+        "ai_system_id": sample.get("ai_system_id"),
+        "business_answers": sample.get("business_answers") or {},
+        "technical_answers": sample.get("technical_answers") or {},
+    }
 
 
 @router.post(
     "/testbed/run",
-    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+    dependencies=[Depends(require_permission(SYSTEMS_READ))],
 )
 async def run_testbed(request: Request) -> dict:
     """Run an interactive classification against a sample fixture.
@@ -79,6 +105,9 @@ async def run_testbed(request: Request) -> dict:
       - enabled_sources (dict) — {system_docs: bool, eu_ai_act: bool, cognee: bool}
       - prompt_override (str | null)
       - model (str | null)
+      - retrieval_k (int, default 5) — passages to retrieve per source
+      - retrieval_mode (str, default "hybrid") — "hybrid" | "dense" | "fts"
+      - retrieval_rrf_k (int, default 60) — RRF fusion constant (hybrid only)
     """
     body = await request.json()
     sample_id: str = body.get("sample_id", "")
@@ -86,7 +115,13 @@ async def run_testbed(request: Request) -> dict:
     enabled_sources: dict = body.get("enabled_sources", {})
     prompt_override: str | None = body.get("prompt_override") or None
     model: str | None = body.get("model") or None
-    created_by: str = request.headers.get("x-forwarded-preferred-username", "unknown")
+    retrieval_k: int = int(body.get("retrieval_k") or _DEFAULT_K)
+    retrieval_mode: str = body.get("retrieval_mode") or _DEFAULT_MODE
+    retrieval_rrf_k: int = int(body.get("retrieval_rrf_k") or _DEFAULT_RRF_K)
+    username_header: str = request.headers.get(
+        "x-forwarded-preferred-username", "unknown"
+    )
+    created_by: str = username_header
 
     sample = get_sample(sample_id)
     if sample is None:
@@ -103,62 +138,106 @@ async def run_testbed(request: Request) -> dict:
         k: " ".join(str(v).split()) for k, v in technical_answers.items()
     }
 
-    # Assemble injected context from enabled sources.
-    context_blocks: list[str] = []
-    source_passages: list[dict] = []
     query_text = (
         business_answers.get("intended_purpose", "")
         + " "
         + business_answers.get("use_case", "")
     ).strip()
 
-    async with SessionLocal() as session:
+    context_blocks: list[str] = []
+    source_passages: list[dict] = []
+
+    retrieve_url = f"{_INDEXING_URL}/v1/retrieve"
+    retrieve_headers = {"x-forwarded-preferred-username": username_header}
+
+    # HTTP retrieval + evaluate in a single client session for connection reuse.
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # --- Retrieval: system_docs ---
         if enabled_sources.get("system_docs") and query_text:
             sys_id = sample.get("ai_system_id")
             if sys_id:
-                passages = await db_retrieve(session, sys_id, query_text, k=_RETRIEVE_K)
-                if passages:
-                    source_passages.extend(
-                        [{**p, "_source_label": "system_docs"} for p in passages]
+                try:
+                    r = await client.post(
+                        retrieve_url,
+                        json={
+                            "ai_system_id": sys_id,
+                            "query": query_text,
+                            "k": retrieval_k,
+                            "mode": retrieval_mode,
+                            "rrf_k": retrieval_rrf_k,
+                        },
+                        headers=retrieve_headers,
                     )
-                    context_blocks.append(
-                        _format_passages_as_context(passages, "System documents")
+                    if r.status_code == 200:
+                        passages = r.json()
+                        if passages:
+                            source_passages.extend(
+                                [
+                                    {**p, "_source_label": "system_docs"}
+                                    for p in passages
+                                ]
+                            )
+                            context_blocks.append(
+                                _format_passages_as_context(
+                                    passages, "System documents"
+                                )
+                            )
+                except httpx.RequestError as exc:
+                    logger.warning(
+                        "testbed.retrieve.failed",
+                        extra={"source": "system_docs", "error": str(exc)},
                     )
 
+        # --- Retrieval: eu_ai_act ---
         if enabled_sources.get("eu_ai_act") and query_text:
-            passages = await db_retrieve(
-                session, _EU_AI_ACT_SYSTEM_ID, query_text, k=_RETRIEVE_K
-            )
-            if passages:
+            try:
+                r = await client.post(
+                    retrieve_url,
+                    json={
+                        "ai_system_id": _EU_AI_ACT_SYSTEM_ID,
+                        "query": query_text,
+                        "k": retrieval_k,
+                        "mode": retrieval_mode,
+                        "rrf_k": retrieval_rrf_k,
+                    },
+                    headers=retrieve_headers,
+                )
+                if r.status_code == 200:
+                    passages = r.json()
+                    if passages:
+                        source_passages.extend(
+                            [{**p, "_source_label": "eu_ai_act"} for p in passages]
+                        )
+                        context_blocks.append(
+                            _format_passages_as_context(passages, "EU AI Act")
+                        )
+            except httpx.RequestError as exc:
+                logger.warning(
+                    "testbed.retrieve.failed",
+                    extra={"source": "eu_ai_act", "error": str(exc)},
+                )
+
+        # --- KnowledgeBrain (Cognee stub, uses DB directly) ---
+        if enabled_sources.get("cognee") and query_text:
+            from app.testbed.knowledge_brain_stub import knowledge_brain
+
+            kb_items = await knowledge_brain.query(query_text, k=retrieval_k)
+            if kb_items:
+                lines = ["### Reviewed expert knowledge"]
+                for i, item in enumerate(kb_items, 1):
+                    lines.append(
+                        f"\n[{i}] {item.get('source', 'knowledge base')}\n{item.get('content', '')}"
+                    )
+                context_blocks.append("\n".join(lines))
                 source_passages.extend(
-                    [{**p, "_source_label": "eu_ai_act"} for p in passages]
-                )
-                context_blocks.append(
-                    _format_passages_as_context(passages, "EU AI Act")
+                    [{**item, "_source_label": "cognee"} for item in kb_items]
                 )
 
-    if enabled_sources.get("cognee") and query_text:
-        from app.testbed.knowledge_brain_stub import knowledge_brain
+        injected_context = "\n\n".join(context_blocks)
 
-        kb_items = await knowledge_brain.query(query_text, k=_RETRIEVE_K)
-        if kb_items:
-            lines = ["### Reviewed expert knowledge"]
-            for i, item in enumerate(kb_items, 1):
-                lines.append(
-                    f"\n[{i}] {item.get('source', 'knowledge base')}\n{item.get('content', '')}"
-                )
-            context_blocks.append("\n".join(lines))
-            source_passages.extend(
-                [{**item, "_source_label": "cognee"} for item in kb_items]
-            )
-
-    injected_context = "\n\n".join(context_blocks)
-
-    # Call the registry's evaluate endpoint.
-    username_header = request.headers.get("x-forwarded-preferred-username", "unknown")
-    evaluate_url = f"{_REGISTRY_URL}/v1/classify/evaluate"
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # --- Evaluate ---
+        evaluate_url = f"{_REGISTRY_URL}/v1/classify/evaluate"
+        try:
             resp = await client.post(
                 evaluate_url,
                 json={
@@ -170,14 +249,15 @@ async def run_testbed(request: Request) -> dict:
                     "injected_context": injected_context,
                     "prompt_override": prompt_override,
                     "model": model,
+                    "role": role,
                 },
                 headers={"x-forwarded-preferred-username": username_header},
             )
-    except httpx.RequestError as exc:
-        logger.error("testbed.registry_unreachable", extra={"error": str(exc)})
-        raise HTTPException(
-            status_code=502, detail="Registry backend is unavailable"
-        ) from exc
+        except httpx.RequestError as exc:
+            logger.error("testbed.registry_unreachable", extra={"error": str(exc)})
+            raise HTTPException(
+                status_code=502, detail="Registry backend is unavailable"
+            ) from exc
 
     if resp.status_code != 200:
         raise HTTPException(
@@ -187,7 +267,12 @@ async def run_testbed(request: Request) -> dict:
 
     result = resp.json()
 
-    # Persist the run.
+    retrieval_knobs = {
+        "k": retrieval_k,
+        "mode": retrieval_mode,
+        "rrf_k": retrieval_rrf_k,
+    }
+
     run_id = new_id("TBR")
     async with SessionLocal() as session:
         row = TestBedRun(
@@ -205,8 +290,10 @@ async def run_testbed(request: Request) -> dict:
                     "technical_answers": technical_answers,
                     "prompt_override": prompt_override,
                     "injected_context": injected_context,
+                    "retrieval_knobs": retrieval_knobs,
                 },
                 "output": result,
+                "source_passages": source_passages,
             },
             created_by=created_by,
         )
@@ -234,6 +321,7 @@ async def run_testbed(request: Request) -> dict:
         "rationale": result.get("rationale"),
         "source_passages": source_passages,
         "enabled_sources": enabled_sources,
+        "retrieval_knobs": retrieval_knobs,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "created_by": created_by,
     }
@@ -289,12 +377,13 @@ async def get_run(run_id: str) -> dict:
         "enabled_sources": row.enabled_sources,
         "model": row.model,
         "prompt_revision": row.prompt_revision,
+        "retrieval_knobs": payload.get("input", {}).get("retrieval_knobs"),
         "tier": output.get("tier"),
         "basis": output.get("basis"),
         "obligations": output.get("obligations", []),
         "confidence": output.get("confidence"),
         "rationale": output.get("rationale"),
-        "source_passages": payload.get("input", {}).get("source_passages", []),
+        "source_passages": payload.get("source_passages", []),
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "created_by": row.created_by,
     }

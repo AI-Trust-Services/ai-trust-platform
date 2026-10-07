@@ -3,17 +3,15 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
+from ai_trust_logging import correlation_id_var, get_logger
+from ai_trust_persistence import SessionLocal
+from ai_trust_tenancy import install_tenant_middleware
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from ai_trust_logging import correlation_id_var, get_logger
-from ai_trust_persistence import SessionLocal
-from ai_trust_tenancy import install_tenant_middleware
-
-from app import minio_client
-from app.routers import documents, retrieval
+from app.routers import testbed
 
 logger = get_logger(__name__)
 
@@ -28,15 +26,11 @@ if not _allowed_origins:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        await minio_client.ensure_bucket()
-    except Exception as e:
-        logger.warning("startup.bucket_ensure_failed", extra={"error": str(e)})
     yield
 
 
 app = FastAPI(
-    title="Document Indexing API",
+    title="AI Test Bed API",
     version="1.0.0",
     lifespan=lifespan,
     root_path=os.environ.get("ROOT_PATH", ""),
@@ -49,7 +43,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Multi-tenancy: resolve the tenant per request (no-op when TENANCY_MODE=single).
 install_tenant_middleware(app)
 
 
@@ -87,8 +80,7 @@ async def logging_middleware(request: Request, call_next) -> Response:
     return response
 
 
-app.include_router(documents.router, prefix="/v1")
-app.include_router(retrieval.router, prefix="/v1")
+app.include_router(testbed.router, prefix="/v1")
 
 
 @app.get("/health")

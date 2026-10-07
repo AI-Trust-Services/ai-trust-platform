@@ -5,6 +5,15 @@ description: >
   structured assessments, and job-fit scores. Used by the HR department to
   reduce manual screening effort for high-volume roles.
 expected_tier: high
+expected_rationale: >
+  The system falls under Annex III, point 4 of the EU AI Act (employment —
+  AI systems used for recruitment, CV sorting, and candidate shortlisting).
+  Although a human recruiter reviews the top-20 shortlist, the initial
+  filtering and ranking are fully automated and have a material influence on
+  which candidates advance. This indirect effect on employment decisions
+  triggers the high-risk classification regardless of the final human review
+  step. No prohibited practices are present, and the system is not GPAI.
+ai_system_id: SYS-TBHIRING
 business_answers:
   intended_purpose: >
     Automatically screen, score, and rank job applicants from a pool of incoming

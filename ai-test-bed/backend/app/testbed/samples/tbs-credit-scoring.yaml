@@ -7,6 +7,16 @@ description: >
   for loan amounts below a threshold; above the threshold a human underwriter
   reviews.
 expected_tier: high
+expected_rationale: >
+  The system falls under Annex III, point 5 of the EU AI Act (access to
+  essential private services — credit scoring systems that assess
+  creditworthiness of natural persons). Automated decisions for loans below
+  €25k are legally binding and directly affect access to credit, placing
+  this firmly in the high-risk category. The partial human review for larger
+  loans does not remove the system from Annex III scope. No prohibited
+  practices are present (no social scoring by a public authority, no biometric
+  ID). Not GPAI (XGBoost, well below 10^25 FLOPs threshold).
+ai_system_id: SYS-TBCREDIT
 business_answers:
   intended_purpose: >
     Assess the creditworthiness of personal loan applicants and produce a

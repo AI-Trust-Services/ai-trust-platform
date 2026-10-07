@@ -119,7 +119,10 @@ build admin-frontend . ./admin/frontend/Dockerfile \
 build decision-trace-analyzer-frontend . ./decision-trace-analyzer/frontend/Dockerfile \
   --build-arg "VITE_DTA_API_BASE=${VITE_DTA_API_BASE}"
 
-build document-indexing-frontend . ./document-indexing/frontend/Dockerfile \
+build ai-test-bed-backend . ./ai-test-bed/backend/Dockerfile
+
+build ai-test-bed-frontend . ./ai-test-bed/frontend/Dockerfile \
+  --build-arg "VITE_TESTBED_API_BASE=${VITE_TESTBED_API_BASE:-/api/ai-test-bed/v1}" \
   --build-arg "VITE_INDEXING_API_BASE=${VITE_INDEXING_API_BASE:-/api/indexing/v1}" \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}" \
   --build-arg "VITE_REGISTRY_API_BASE=${VITE_REGISTRY_API_BASE:-/api/registry/v1}"

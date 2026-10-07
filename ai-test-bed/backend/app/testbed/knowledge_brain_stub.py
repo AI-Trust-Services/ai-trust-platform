@@ -15,10 +15,9 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import select
-
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.test_bed import TestBedRun
+from sqlalchemy import select
 
 from app.testbed.knowledge_brain import KnowledgeBrain
 

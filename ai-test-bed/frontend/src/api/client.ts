@@ -9,14 +9,18 @@ import type {
   TestBedRunResult,
   TestBedRunSummary,
   TestBedSample,
+  TestBedSampleDetail,
   UploadResponse,
   VersionInfo,
 } from "../types";
 
-const API_BASE = import.meta.env.VITE_INDEXING_API_BASE as string;
+// Test Bed backend (ai-test-bed-backend)
+const TESTBED_API_BASE = import.meta.env.VITE_TESTBED_API_BASE as string;
+// Document Indexing backend (document-indexing-backend) — for document management
+const INDEXING_API_BASE = import.meta.env.VITE_INDEXING_API_BASE as string;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE as string;
 
-export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
+export const HEALTH_URL = TESTBED_API_BASE.replace("/v1", "") + "/health";
 
 /** Normalise a FastAPI error body (string detail, or a validation-error array) into one message. */
 function formatDetail(body: unknown, status: number): string {
@@ -40,12 +44,17 @@ async function requestBase<T>(base: string, path: string, options: RequestInit =
     const body = await res.json().catch(() => ({}));
     throw new Error(formatDetail(body, res.status));
   }
-  // 200 with empty body (e.g. some deletes) → tolerate.
   return res.json().catch(() => ({} as T));
 }
 
+/** Calls the AI Test Bed backend. */
 function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  return requestBase<T>(API_BASE, path, options);
+  return requestBase<T>(TESTBED_API_BASE, path, options);
+}
+
+/** Calls the Document Indexing backend. */
+function indexingRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return requestBase<T>(INDEXING_API_BASE, path, options);
 }
 
 function json(body: unknown): RequestInit {
@@ -59,16 +68,17 @@ function json(body: unknown): RequestInit {
 export const api = {
   myPermissions: () => requestBase<PermissionsResponse>(USERS_API_BASE, "/me/permissions"),
 
+  // ---- Document Indexing (document-indexing-backend) ----
   listDocuments: (systemId: string) =>
-    request<DocumentStatus[]>(`/systems/${encodeURIComponent(systemId)}/documents`),
+    indexingRequest<DocumentStatus[]>(`/systems/${encodeURIComponent(systemId)}/documents`),
 
   getDocument: (documentId: string) =>
-    request<DocumentStatus>(`/documents/${encodeURIComponent(documentId)}`),
+    indexingRequest<DocumentStatus>(`/documents/${encodeURIComponent(documentId)}`),
 
   uploadDocument: (systemId: string, file: File) => {
     const form = new FormData();
     form.append("file", file);
-    return request<UploadResponse>(`/systems/${encodeURIComponent(systemId)}/documents`, {
+    return indexingRequest<UploadResponse>(`/systems/${encodeURIComponent(systemId)}/documents`, {
       method: "POST",
       body: form,
     });
@@ -77,23 +87,23 @@ export const api = {
   uploadVersion: (documentId: string, file: File) => {
     const form = new FormData();
     form.append("file", file);
-    return request<UploadResponse>(`/documents/${encodeURIComponent(documentId)}/versions`, {
+    return indexingRequest<UploadResponse>(`/documents/${encodeURIComponent(documentId)}/versions`, {
       method: "POST",
       body: form,
     });
   },
 
   listVersions: (documentId: string) =>
-    request<VersionInfo[]>(`/documents/${encodeURIComponent(documentId)}/versions`),
+    indexingRequest<VersionInfo[]>(`/documents/${encodeURIComponent(documentId)}/versions`),
 
   getDownloadUrl: (documentId: string, versionId?: string) =>
-    request<DownloadUrlResponse>(
+    indexingRequest<DownloadUrlResponse>(
       `/documents/${encodeURIComponent(documentId)}/download-url` +
         (versionId ? `?version_id=${encodeURIComponent(versionId)}` : ""),
     ),
 
   deleteDocument: (documentId: string) =>
-    request<{ deleted: boolean }>(`/documents/${encodeURIComponent(documentId)}`, {
+    indexingRequest<{ deleted: boolean }>(`/documents/${encodeURIComponent(documentId)}`, {
       method: "DELETE",
     }),
 
@@ -103,13 +113,16 @@ export const api = {
     k: number,
     opts?: { mode?: RetrieveMode; rrfK?: number },
   ) =>
-    request<RetrievedPassage[]>(
+    indexingRequest<RetrievedPassage[]>(
       `/retrieve`,
       json({ ai_system_id: aiSystemId, query, k, mode: opts?.mode, rrf_k: opts?.rrfK }),
     ),
 
-  // ---- AI Test Bed ----
+  // ---- AI Test Bed (ai-test-bed-backend) ----
   listTestBedSamples: () => request<TestBedSample[]>("/testbed/samples"),
+
+  getTestBedSample: (sampleId: string) =>
+    request<TestBedSampleDetail>(`/testbed/samples/${encodeURIComponent(sampleId)}`),
 
   runTestBed: (body: {
     sample_id: string;
@@ -117,6 +130,9 @@ export const api = {
     enabled_sources: TestBedEnabledSources;
     prompt_override?: string | null;
     model?: string | null;
+    retrieval_k?: number;
+    retrieval_mode?: RetrieveMode;
+    retrieval_rrf_k?: number;
   }) => request<TestBedRunResult>("/testbed/run", json(body)),
 
   listTestBedRuns: (sampleId?: string) =>

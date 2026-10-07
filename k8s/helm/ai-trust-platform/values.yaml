@@ -246,3 +246,14 @@ components:
     dependsOnJobs: [db-migrate, minio-init, openfga-provision]
     dependsOnServices: []
     openfgaConfig: true
+
+  - name: ai-test-bed
+    backendPort: 8013
+    rootPath: /api/ai-test-bed
+    extraEnv:
+      OPENFGA_URL: http://openfga:8080
+      REGISTRY_BACKEND_URL: http://ai-system-registry-backend:8001
+      INDEXING_BACKEND_URL: http://document-indexing-backend:8011
+    dependsOnJobs: [db-migrate, openfga-provision]
+    dependsOnServices: []
+    openfgaConfig: true

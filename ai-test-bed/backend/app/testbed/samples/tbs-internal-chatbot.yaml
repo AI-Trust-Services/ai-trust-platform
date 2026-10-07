@@ -5,6 +5,16 @@ description: >
   ask questions about HR policies, IT procedures, and company guidelines.
   The system retrieves and synthesises answers from internal documentation.
 expected_tier: limited
+expected_rationale: >
+  The system is a conversational interface (chatbot) that generates
+  natural-language responses, triggering Art. 50 of the EU AI Act (limited
+  risk — transparency obligations for chatbots). It does not fall into any
+  Annex III high-risk category: it makes no employment decisions, does not
+  evaluate individuals, and is purely informational. The organisation is a
+  deployer (third-party LLM via API), which still carries Art. 50 transparency
+  obligations. No prohibited practices apply. Limited risk is the correct
+  classification.
+ai_system_id: SYS-TBCHATBOT
 business_answers:
   intended_purpose: >
     Answer employee questions about internal policies, procedures, and
