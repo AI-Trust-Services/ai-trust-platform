@@ -23,10 +23,7 @@ async def trigger_ingest(body: IngestRequest | None = None) -> dict:
     to ingest a different file from the /data directory.
     """
     if body and body.path:
-        resolved = (_DATA_DIR / Path(body.path).name).resolve()
-        if not str(resolved).startswith(str(_DATA_DIR)):
-            raise HTTPException(status_code=400, detail="Path outside allowed directory")
-        doc_path = str(resolved)
+        doc_path = str(_DATA_DIR / Path(body.path).name)
     else:
         doc_path = os.environ.get("EU_AI_ACT_PDF_PATH", "/data/EU-AI-ACT.pdf")
     try:
