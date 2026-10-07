@@ -18,14 +18,12 @@ The component ships disabled by default — set `cogneeEval.enabled: true` in `v
 cluster's override) before deploying. On kind:
 
 ```bash
-# Place EU-AI-ACT.pdf in ./data/ first (mounted into cognee-eval-backend)
-cp /path/to/EU-AI-ACT.pdf data/
-
 # Build + deploy via Helm (see root CLAUDE.md for the full make workflow)
 make build && make upgrade && make rollout
 
-# Trigger ingestion (takes several minutes on first run)
-curl -X POST http://localhost:8080/api/cognee/v1/ingest
+# Trigger ingestion — upload the EU AI Act PDF as a multipart file
+curl -X POST http://localhost:8080/api/cognee/v1/ingest \
+  -F "file=@/path/to/EU-AI-ACT.pdf"
 
 # Check status
 curl http://localhost:8080/api/cognee/v1/ingest/status
@@ -48,7 +46,7 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/v1/ingest` | Ingest EU AI Act PDF — runs full Cognee pipeline |
+| `POST` | `/v1/ingest` | Ingest a PDF — upload as multipart/form-data (`file` field) |
 | `GET` | `/v1/ingest/status` | Check ingestion status |
 | `GET` | `/v1/graph/stats` | Knowledge graph summary |
 | `GET` | `/v1/graph/entities` | List entities, filterable by `?type=Article` |
@@ -69,8 +67,6 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 
 | Variable | Default | Description |
 |---|---|---|
-| `EU_AI_ACT_PDF_PATH` | `/data/EU-AI-ACT.pdf` | Path to PDF inside container |
-| `EU_AI_ACT_PDF_HOST_PATH` | `./data` | Host directory mounted at `/data` |
 | `LLM_ENDPOINT` / `LLM_EXTRACTION_ENDPOINT` | `http://ai-gateway:8000/v1` | AI gateway — all cognee generation |
 | `COGNEE_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | fastembed in-process embedding model (384-dim) |
 | `COGNEE_LLM_RATE_LIMIT_REQUESTS` | `12` | cognee LLM calls/min cap (keeps the gateway under its token quota) |

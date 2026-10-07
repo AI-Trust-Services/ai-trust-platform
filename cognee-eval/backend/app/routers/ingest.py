@@ -1,35 +1,40 @@
-import os
+import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, UploadFile
 
 from app import cognee_client
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
-_DATA_DIR = Path("/data").resolve()
-
-
-class IngestRequest(BaseModel):
-    path: str | None = None
+_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 
 @router.post("")
-async def trigger_ingest(body: IngestRequest | None = None) -> dict:
+async def trigger_ingest(file: UploadFile) -> dict:
     """Ingest a document into Cognee.
 
-    Uses EU_AI_ACT_PDF_PATH env var by default. Pass {"path": "file.txt"}
-    to ingest a different file from the /data directory.
+    Upload a PDF file (multipart/form-data, field name: file).
+    Runs the full cognee pipeline: extraction → chunking → embedding → graph build.
     """
-    if body and body.path:
-        doc_path = str(_DATA_DIR / Path(body.path).name)
-    else:
-        doc_path = os.environ.get("EU_AI_ACT_PDF_PATH", "/data/EU-AI-ACT.pdf")
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+    contents = await file.read()
+    if len(contents) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(contents)
+        tmp_path = tmp.name
+
     try:
-        result = await cognee_client.ingest_pdf(doc_path)
+        result = await cognee_client.ingest_pdf(tmp_path)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
     return result
 
 

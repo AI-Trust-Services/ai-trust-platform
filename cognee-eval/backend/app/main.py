@@ -87,12 +87,4 @@ app.include_router(ui.router)
 
 @app.get("/health")
 async def health() -> Response:
-    pdf_path = os.environ.get("EU_AI_ACT_PDF_PATH", "/data/EU-AI-ACT.pdf")
-    pdf_ok = os.path.exists(pdf_path)
-    return JSONResponse(
-        {
-            "status": "ok",
-            "pdf_mounted": pdf_ok,
-            "pdf_path": pdf_path,
-        }
-    )
+    return JSONResponse({"status": "ok"})
