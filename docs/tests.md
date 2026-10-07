@@ -61,6 +61,8 @@ seams — shared data integrity, RBAC enforcement across backends, cascade side-
 calls, and platform wiring. These run in-cluster (kind or Gardener) over real HTTP. A failure points
 to a broken technical contract, not a missing business requirement.
 
+The integration tests talk directly to backend ports (via kubectl port-forward), so they never go through oauth2-proxy or Keycloak
+
 Legend: ✅ test covered · ⬜ test missing, functionality exists
 
 ### A. Platform wiring and reachability
