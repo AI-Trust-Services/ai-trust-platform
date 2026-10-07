@@ -3,7 +3,6 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
-import httpx
 from ai_trust_logging import correlation_id_var, get_logger
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,31 +26,7 @@ if not _allowed_origins:
 async def lifespan(app: FastAPI):
     await init_db()
     logger.info("startup.db_ready")
-    await _warm_embedding_model()
     yield
-
-
-async def _warm_embedding_model() -> None:
-    """Pin the Ollama embedding model in memory so the first ingest doesn't time out.
-
-    Ollama takes 20-60s to load nomic-embed-text on a cold start. cognee's
-    embedding client has a hardcoded 60s timeout, which can fire before the
-    response arrives on the first call after a clean volume. Sending
-    keep_alive=-1 at startup keeps the model loaded indefinitely.
-    """
-    endpoint = os.environ.get("EMBEDDING_ENDPOINT", "")
-    model = os.environ.get("EMBEDDING_MODEL", "")
-    if not endpoint or not model or "/api/" not in endpoint:
-        return
-    try:
-        async with httpx.AsyncClient(timeout=120) as client:
-            await client.post(
-                endpoint,
-                json={"model": model, "input": ["warmup"], "keep_alive": -1},
-            )
-        logger.info("startup.embedding_model_warmed", extra={"model": model})
-    except Exception as exc:
-        logger.warning("startup.embedding_warmup_failed", extra={"error": str(exc)})
 
 
 app = FastAPI(
