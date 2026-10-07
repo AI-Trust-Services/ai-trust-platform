@@ -44,10 +44,12 @@ async def create_evaluation(body: EvaluateRequest) -> EvaluationResponse:
         id=new_id("EVL"),
         question=body.question,
         answer=answer,
-        source_evidence=json.dumps([
-            {"text": p["text"], "node_id": p["node_id"], "score": p.get("score")}
-            for p in passages[:5]
-        ]),
+        source_evidence=json.dumps(
+            [
+                {"text": p["text"], "node_id": p["node_id"], "score": p.get("score")}
+                for p in passages[:5]
+            ]
+        ),
         knowledge_gap=knowledge_gap,
     )
     async with SessionLocal() as session:

@@ -1,26 +1,14 @@
-import json
 import os
-import re
 import time
 import uuid
 from contextlib import asynccontextmanager
 
 import httpx
 from ai_trust_logging import correlation_id_var, get_logger
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-import aiohttp
-
-from app.cognee_client import (
-    _AI_DEPLOYMENT_ENDPOINT,
-    _AI_RESOURCE_GROUP,
-    _AI_API_VERSION,
-    _sap_ai_configured,
-    get_sap_token,
-    setup_sap_ai_core,
-)
 from app.database import init_db
 from app.routers import evaluate, feedback, graph, ingest, ui
 
@@ -39,11 +27,6 @@ if not _allowed_origins:
 async def lifespan(app: FastAPI):
     await init_db()
     logger.info("startup.db_ready")
-    sap_configured = await setup_sap_ai_core()
-    if sap_configured:
-        logger.info("startup.sap_ai_core_configured")
-    else:
-        logger.info("startup.sap_ai_core_skipped", extra={"reason": "credentials absent"})
     await _warm_embedding_model()
     yield
 
@@ -51,23 +34,21 @@ async def lifespan(app: FastAPI):
 async def _warm_embedding_model() -> None:
     """Pin the Ollama embedding model in memory so the first ingest doesn't time out.
 
-    Ollama takes 20-60s to load nomic-embed-text on a cold start. cognee's aiohttp
-    client has a 60s timeout, which fires before the response arrives on the first
-    call after a clean volume. Sending keep_alive=-1 at startup keeps the model
-    loaded indefinitely.
+    Ollama takes 20-60s to load nomic-embed-text on a cold start. cognee's
+    embedding client has a hardcoded 60s timeout, which can fire before the
+    response arrives on the first call after a clean volume. Sending
+    keep_alive=-1 at startup keeps the model loaded indefinitely.
     """
     endpoint = os.environ.get("EMBEDDING_ENDPOINT", "")
     model = os.environ.get("EMBEDDING_MODEL", "")
     if not endpoint or not model or "/api/" not in endpoint:
         return
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
+        async with httpx.AsyncClient(timeout=120) as client:
+            await client.post(
                 endpoint,
                 json={"model": model, "input": ["warmup"], "keep_alive": -1},
-                timeout=aiohttp.ClientTimeout(total=120),
-            ) as resp:
-                await resp.read()
+            )
         logger.info("startup.embedding_model_warmed", extra={"model": model})
     except Exception as exc:
         logger.warning("startup.embedding_warmup_failed", extra={"error": str(exc)})
@@ -133,118 +114,10 @@ app.include_router(ui.router)
 async def health() -> Response:
     pdf_path = os.environ.get("EU_AI_ACT_PDF_PATH", "/data/EU-AI-ACT.pdf")
     pdf_ok = os.path.exists(pdf_path)
-    return JSONResponse({
-        "status": "ok",
-        "pdf_mounted": pdf_ok,
-        "pdf_path": pdf_path,
-    })
-
-
-# ---------------------------------------------------------------------------
-# SAP AI Core adapter — OpenAI-compatible endpoint used by cognee internally.
-# Translates /v1/chat/completions (OpenAI format) → {deployment}/invoke
-# (AWS Bedrock/Anthropic format) → OpenAI response shape.
-# Only registered when SAP AI Core credentials are present.
-# ---------------------------------------------------------------------------
-
-@app.post("/internal/v1/chat/completions")
-async def sap_ai_core_adapter(request: Request) -> JSONResponse:
-    if not _sap_ai_configured():
-        raise HTTPException(status_code=503, detail="SAP AI Core not configured")
-
-    body = await request.json()
-    messages: list[dict] = body.get("messages", [])
-    max_tokens: int = body.get("max_tokens", 8192)
-    response_format = body.get("response_format")
-
-    # Separate system messages; Anthropic /invoke takes them as a top-level field.
-    system_parts = [m["content"] for m in messages if m["role"] == "system"]
-    convo = [m for m in messages if m["role"] != "system"]
-    # Anthropic requires the conversation to start and end with a user turn.
-    while convo and convo[0]["role"] != "user":
-        convo = convo[1:]
-    while convo and convo[-1]["role"] != "user":
-        convo = convo[:-1]
-    if not convo:
-        convo = [{"role": "user", "content": "(start)"}]
-
-    # If the caller asks for JSON output, add schema instructions so Claude uses
-    # the exact field names cognee's Pydantic models expect.
-    if response_format and response_format.get("type") == "json_object":
-        schema_hint = (
-            "\n\nRespond with valid JSON only. No markdown fences."
-            " For knowledge graph nodes use exactly: id (string), name (string), description (string), type (string)."
-            " For edges use exactly: source_node_id (string), target_node_id (string), relationship_name (string)."
-            " Do NOT use: source, target, type (for edges), from, to."
-            " Every node MUST have a description field."
-        )
-        convo[-1]["content"] = str(convo[-1]["content"]) + schema_hint
-
-    invoke_body: dict = {
-        "anthropic_version": _AI_API_VERSION,
-        "max_tokens": max_tokens,
-        "messages": convo,
-    }
-    if system_parts:
-        invoke_body["system"] = "\n\n".join(system_parts)
-
-    token = await get_sap_token()
-    invoke_url = _AI_DEPLOYMENT_ENDPOINT.rstrip("/") + "/invoke"
-
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(
-            invoke_url,
-            json=invoke_body,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "AI-Resource-Group": _AI_RESOURCE_GROUP,
-                "Content-Type": "application/json",
-            },
-        )
-
-    if resp.status_code >= 400:
-        logger.error(
-            "sap_ai_core.upstream_error",
-            extra={"status": resp.status_code, "body": resp.text[:300]},
-        )
-        raise HTTPException(status_code=resp.status_code, detail=resp.text[:300])
-
-    data = resp.json()
-    content_blocks = data.get("content", [])
-    text = content_blocks[0].get("text", "") if content_blocks else ""
-    usage = data.get("usage", {})
-
-    # Strip markdown fences and remap KnowledgeGraph edge field names so cognee's
-    # Pydantic schema validates correctly. Claude uses source/target/type but cognee
-    # expects source_node_id/target_node_id/relationship_name.
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
-    try:
-        parsed = json.loads(text)
-        if isinstance(parsed, dict) and "edges" in parsed:
-            for edge in parsed["edges"]:
-                if "source" in edge and "source_node_id" not in edge:
-                    edge["source_node_id"] = edge.pop("source")
-                if "target" in edge and "target_node_id" not in edge:
-                    edge["target_node_id"] = edge.pop("target")
-                if "type" in edge and "relationship_name" not in edge:
-                    edge["relationship_name"] = edge.pop("type")
-            text = json.dumps(parsed)
-    except (json.JSONDecodeError, AttributeError):
-        pass
-
-    # Return OpenAI-compatible response shape.
-    return JSONResponse({
-        "id": data.get("id", "sap-" + str(uuid.uuid4())),
-        "object": "chat.completion",
-        "model": body.get("model", "sap-ai-core"),
-        "choices": [{
-            "index": 0,
-            "message": {"role": "assistant", "content": text},
-            "finish_reason": data.get("stop_reason", "stop"),
-        }],
-        "usage": {
-            "prompt_tokens": usage.get("input_tokens", 0),
-            "completion_tokens": usage.get("output_tokens", 0),
-            "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
-        },
-    })
+    return JSONResponse(
+        {
+            "status": "ok",
+            "pdf_mounted": pdf_ok,
+            "pdf_path": pdf_path,
+        }
+    )

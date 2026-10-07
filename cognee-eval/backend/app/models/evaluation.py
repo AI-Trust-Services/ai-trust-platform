@@ -13,7 +13,6 @@ class Evaluation(Base):
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_evidence: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
-    feedback_applied: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
     knowledge_gap: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

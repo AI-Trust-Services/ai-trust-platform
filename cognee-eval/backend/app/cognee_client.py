@@ -1,17 +1,13 @@
-"""Thin wrapper around Cognee 1.6.x pipeline for the EU AI Act evaluation.
+"""Thin wrapper around the Cognee 1.6.x pipeline for the EU AI Act evaluation.
 
 Configuration is driven entirely by environment variables set in docker-compose.yml.
-When SAP AI Core credentials are present, a thin OpenAI-compatible adapter route is
-registered at /internal/v1/chat/completions and cognee's extraction stage is pointed
-at it. The adapter fetches a Bearer token from SAP AI Core, calls {deployment}/invoke
-(bedrock-style), and returns an OpenAI-compatible response.
+All cognee generation (main + extraction) is pointed at the standalone sap-ai-proxy
+service via the LLM_*/LLM_EXTRACTION_* env vars; grounded answers call the same proxy
+directly. Embeddings run on local Ollama.
 """
 
-import asyncio
 import os
-import time
 from pathlib import Path
-from typing import Any
 
 import httpx
 import cognee
@@ -19,69 +15,8 @@ from cognee.modules.search.types.SearchType import SearchType
 
 _DATASET = "eu_ai_act_v1"
 
-# ── SAP AI Core token cache (shared with the adapter route) ──────────────────
-_ai_token: str = ""
-_ai_token_expiry: float = 0.0
-_ai_token_lock = asyncio.Lock()
-
-_AI_CLIENT_ID = os.environ.get("AI_CLIENT_ID", "")
-_AI_CLIENT_SECRET = os.environ.get("AI_CLIENT_SECRET", "")
-_AI_AUTH_URL = os.environ.get("AI_AUTH_URL", "")
-_AI_DEPLOYMENT_ENDPOINT = os.environ.get("LLM_EXTRACTION_ENDPOINT", "")
-_AI_RESOURCE_GROUP = os.environ.get("AI_RESOURCE_GROUP", "default")
-_AI_API_VERSION = os.environ.get("AI_API_VERSION", "bedrock-2023-05-31")
-
-
-async def get_sap_token() -> str:
-    global _ai_token, _ai_token_expiry
-    async with _ai_token_lock:
-        if _ai_token and time.monotonic() < _ai_token_expiry - 60:
-            return _ai_token
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                _AI_AUTH_URL,
-                data={"grant_type": "client_credentials"},
-                auth=(_AI_CLIENT_ID, _AI_CLIENT_SECRET),
-            )
-        resp.raise_for_status()
-        data = resp.json()
-        _ai_token = data["access_token"]
-        _ai_token_expiry = time.monotonic() + data.get("expires_in", 43200)
-        return _ai_token
-
-
-def _sap_ai_configured() -> bool:
-    return bool(_AI_CLIENT_ID and _AI_CLIENT_SECRET and _AI_AUTH_URL and _AI_DEPLOYMENT_ENDPOINT)
-
-
-async def setup_sap_ai_core(app_port: int = 8011) -> bool:
-    """Configure all cognee LLM stages to use the in-process SAP AI Core adapter.
-
-    Points both the main and extraction-stage LLM endpoints at
-    localhost:{app_port}/internal/v1 so all cognee LLM calls go through SAP AI
-    Core. Returns True if configured, False if credentials are absent.
-    """
-    if not _sap_ai_configured():
-        return False
-
-    # Pre-fetch the token to fail fast if credentials are wrong.
-    await get_sap_token()
-
-    local_endpoint = f"http://localhost:{app_port}/internal/v1"
-    cognee.config.set_llm_config({
-        # openai/sap-ai-core: litellm routes to openai provider (hits our adapter)
-        # but doesn't recognise the model name as schema-native, so it takes the
-        # json-object fallback path which injects the schema into the prompt.
-        "llm_provider": "openai",
-        "llm_model": "openai/sap-ai-core",
-        "llm_endpoint": local_endpoint,
-        "llm_api_key": "sap-ai-core-local",
-        "llm_extraction_provider": "openai",
-        "llm_extraction_model": "openai/sap-ai-core",
-        "llm_extraction_endpoint": local_endpoint,
-        "llm_extraction_api_key": "sap-ai-core-local",
-    })
-    return True
+_SAP_PROXY_URL = os.environ.get("LLM_ENDPOINT", "http://sap-ai-proxy:8000/v1")
+_SAP_MODEL = os.environ.get("LLM_MODEL", "sap-ai-core")
 
 
 async def ingest_pdf(pdf_path: str) -> dict:
@@ -143,7 +78,9 @@ async def get_graph_stats() -> dict:
     return {"summary": summaries}
 
 
-async def search_entities(entity_type: str | None = None, limit: int = 50) -> list[dict]:
+async def search_entities(
+    entity_type: str | None = None, limit: int = 50
+) -> list[dict]:
     """Return entities from the graph, optionally filtered by type."""
     query = f"List {entity_type} entities" if entity_type else "List all entities"
     results = await cognee.search(query, SearchType.GRAPH_COMPLETION)
@@ -155,20 +92,12 @@ async def search_entities(entity_type: str | None = None, limit: int = 50) -> li
     return out
 
 
-async def answer_question(question: str, passages: list[dict], app_port: int = 8011) -> str:
-    """Generate a grounded answer using the in-process SAP AI Core adapter.
+async def answer_question(question: str, passages: list[dict]) -> str:
+    """Generate a grounded answer via the SAP AI Core proxy."""
+    if not passages:
+        return "No relevant passages found in the knowledge graph."
 
-    Falls back to a plain concatenation of passages when SAP AI Core is not
-    configured (e.g. Ollama-only mode).
-    """
-    if not _sap_ai_configured():
-        if not passages:
-            return "No relevant passages found in the knowledge graph."
-        return "\n\n".join(p["text"] for p in passages[:5])
-
-    context = "\n\n".join(
-        f"[{i+1}] {p['text']}" for i, p in enumerate(passages[:5])
-    )
+    context = "\n\n".join(f"[{i+1}] {p['text']}" for i, p in enumerate(passages[:5]))
     messages = [
         {
             "role": "system",
@@ -183,12 +112,10 @@ async def answer_question(question: str, passages: list[dict], app_port: int = 8
             "content": f"Passages:\n{context}\n\nQuestion: {question}",
         },
     ]
-    token = await get_sap_token()
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(
-            f"http://localhost:{app_port}/internal/v1/chat/completions",
-            json={"model": "openai/sap-ai-core", "messages": messages, "max_tokens": 2048},
-            headers={"Authorization": f"Bearer {token}"},
+            f"{_SAP_PROXY_URL.rstrip('/')}/chat/completions",
+            json={"model": _SAP_MODEL, "messages": messages, "max_tokens": 2048},
         )
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
@@ -200,5 +127,7 @@ async def ingest_feedback(feedback_id: str, text: str, node_ids: list[str]) -> N
     Stored in a separate dataset to keep source text and human
     interpretation distinguishable.
     """
-    tagged = f"[FEEDBACK:{feedback_id}] {text}\nLinked provisions: {', '.join(node_ids)}"
+    tagged = (
+        f"[FEEDBACK:{feedback_id}] {text}\nLinked provisions: {', '.join(node_ids)}"
+    )
     await cognee.remember(tagged, dataset_name=f"feedback_{feedback_id}")

@@ -34,7 +34,13 @@ def _to_response(row: Feedback) -> FeedbackResponse:
 
 @router.post("", response_model=FeedbackResponse, status_code=201)
 async def create_feedback(body: FeedbackRequest) -> FeedbackResponse:
-    """Capture feedback on an evaluation (status starts as pending)."""
+    """Capture feedback on an evaluation (status starts as pending).
+
+    Also marks the linked evaluation as a knowledge gap so the Evaluations
+    table reflects user-confirmed bad answers, not just missing passages.
+    """
+    from app.models.evaluation import Evaluation
+
     row = Feedback(
         id=new_id("EFB"),
         evaluation_id=body.evaluation_id,
@@ -46,6 +52,9 @@ async def create_feedback(body: FeedbackRequest) -> FeedbackResponse:
     )
     async with SessionLocal() as session:
         session.add(row)
+        evaluation = await session.get(Evaluation, body.evaluation_id)
+        if evaluation:
+            evaluation.knowledge_gap = True
         await session.commit()
         await session.refresh(row)
     return _to_response(row)
@@ -83,7 +92,9 @@ async def approve_feedback(feedback_id: str, request: Request) -> FeedbackRespon
         if not row:
             raise HTTPException(status_code=404, detail="Feedback not found")
         if row.status != "pending":
-            raise HTTPException(status_code=409, detail=f"Feedback is already {row.status}")
+            raise HTTPException(
+                status_code=409, detail=f"Feedback is already {row.status}"
+            )
         row.status = "approved"
         row.reviewer = reviewer
         row.reviewed_at = datetime.now(timezone.utc)
@@ -111,7 +122,9 @@ async def reject_feedback(feedback_id: str, request: Request) -> FeedbackRespons
         if not row:
             raise HTTPException(status_code=404, detail="Feedback not found")
         if row.status != "pending":
-            raise HTTPException(status_code=409, detail=f"Feedback is already {row.status}")
+            raise HTTPException(
+                status_code=409, detail=f"Feedback is already {row.status}"
+            )
         row.status = "rejected"
         row.reviewer = reviewer
         row.reviewed_at = datetime.now(timezone.utc)

@@ -13,7 +13,9 @@ class Feedback(Base):
     evaluation_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     conclusion: Mapped[str] = mapped_column(Text, nullable=False)
     reasoning: Mapped[str] = mapped_column(Text, nullable=False)
-    supporting_node_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]")  # JSON
+    supporting_node_ids: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]"
+    )  # JSON
     conditions: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
     reviewer: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -21,4 +23,6 @@ class Feedback(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

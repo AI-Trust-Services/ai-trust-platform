@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 # ── Evaluate ─────────────────────────────────────────────────────────────────
 
+
 class EvaluateRequest(BaseModel):
     question: str
 
@@ -27,6 +28,7 @@ class EvaluationResponse(BaseModel):
 
 
 # ── Feedback ──────────────────────────────────────────────────────────────────
+
 
 class FeedbackRequest(BaseModel):
     evaluation_id: str

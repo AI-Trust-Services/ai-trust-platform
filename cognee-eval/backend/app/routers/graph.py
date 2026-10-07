@@ -1,7 +1,7 @@
 import json
 import os
 
-import ladybug
+import kuzu
 from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse
 
@@ -30,7 +30,9 @@ async def graph_stats() -> dict:
 
 @router.get("/entities")
 async def list_entities(
-    type: str | None = Query(None, description="Filter by entity type e.g. Article, Obligation"),
+    type: str | None = Query(
+        None, description="Filter by entity type e.g. Article, Obligation"
+    ),
     limit: int = Query(50, le=200),
 ) -> list[dict]:
     """List entities extracted from the EU AI Act knowledge graph.
@@ -44,8 +46,8 @@ async def list_entities(
 @router.get("/raw")
 def graph_raw() -> dict:
     """Return all nodes and edges directly from the Kuzu graph database."""
-    db = ladybug.Database(_KUZU_PATH, read_only=True)
-    conn = ladybug.Connection(db)
+    db = kuzu.Database(_KUZU_PATH, read_only=True)
+    conn = kuzu.Connection(db)
     try:
         nodes = []
         r = conn.execute("MATCH (n:Node) RETURN n.id, n.name, n.type")
@@ -54,7 +56,9 @@ def graph_raw() -> dict:
             nodes.append({"id": row[0], "name": row[1], "type": row[2]})
 
         edges = []
-        r = conn.execute("MATCH (a:Node)-[e:EDGE]->(b:Node) RETURN a.id, e.relationship_name, b.id")
+        r = conn.execute(
+            "MATCH (a:Node)-[e:EDGE]->(b:Node) RETURN a.id, e.relationship_name, b.id"
+        )
         while r.has_next():
             row = r.get_next()
             edges.append({"from": row[0], "label": row[1], "to": row[2]})
@@ -69,14 +73,20 @@ def graph_raw() -> dict:
 def graph_viz() -> HTMLResponse:
     """Interactive graph visualization using vis-network."""
     data = graph_raw()
-    nodes_json = json.dumps([
-        {"id": n["id"], "label": n["name"], "group": n["type"], "title": n["type"]}
-        for n in data["nodes"] if n["id"]
-    ])
-    edges_json = json.dumps([
-        {"from": e["from"], "to": e["to"], "label": e["label"]}
-        for e in data["edges"] if e["from"] and e["to"]
-    ])
+    nodes_json = json.dumps(
+        [
+            {"id": n["id"], "label": n["name"], "group": n["type"], "title": n["type"]}
+            for n in data["nodes"]
+            if n["id"]
+        ]
+    )
+    edges_json = json.dumps(
+        [
+            {"from": e["from"], "to": e["to"], "label": e["label"]}
+            for e in data["edges"]
+            if e["from"] and e["to"]
+        ]
+    )
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -110,4 +120,3 @@ def graph_viz() -> HTMLResponse:
 </body>
 </html>"""
     return HTMLResponse(html)
-

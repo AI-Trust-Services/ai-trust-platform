@@ -38,6 +38,8 @@
     button.btn-approve:hover { background: #1e8449; }
     button.btn-reject { background: #c0392b; }
     button.btn-reject:hover { background: #a93226; }
+    button.btn-wrong { background: #7d3c00; color: #f0a060; border: 1px solid #a04a00; }
+    button.btn-wrong:hover { background: #a04a00; }
 
     /* ── Answer box ── */
     #answer-box { background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 6px; padding: 14px; margin-top: 16px; white-space: pre-wrap; line-height: 1.6; min-height: 60px; }
@@ -96,6 +98,9 @@
     <div id="status"></div>
 
     <div id="answer-box"><span class="placeholder">Answer will appear here.</span></div>
+    <div id="answer-actions" style="display:none; margin-top:8px;">
+      <button class="btn btn-sm btn-wrong" onclick="markWrong()">&#x2715; Mark as wrong</button>
+    </div>
     <div id="sources-list"></div>
 
     <div id="feedback-form" style="display:none">
@@ -160,6 +165,15 @@
     if (name === 'feedback') loadFeedback();
   }
 
+  // ── Mark as wrong ────────────────────────────────────────────────────────
+  function markWrong() {
+    document.getElementById('fb-conclusion').value = '';
+    document.getElementById('fb-reasoning').value = '';
+    document.getElementById('fb-conditions').value = '';
+    document.getElementById('feedback-form').style.display = 'block';
+    document.getElementById('fb-conclusion').focus();
+  }
+
   // ── Ask ─────────────────────────────────────────────────────────────────
   async function askQuestion() {
     const q = document.getElementById('question').value.trim();
@@ -170,6 +184,7 @@
     document.getElementById('answer-box').innerHTML = '<span class="placeholder">Generating answer…</span>';
     document.getElementById('sources-list').innerHTML = '';
     document.getElementById('feedback-form').style.display = 'none';
+    document.getElementById('answer-actions').style.display = 'none';
     _currentEvalId = null;
     _currentNodeIds = [];
 
@@ -184,6 +199,7 @@
       _currentEvalId = data.id;
 
       document.getElementById('answer-box').textContent = data.answer || '(no answer generated)';
+      document.getElementById('answer-actions').style.display = 'block';
 
       // Sources
       const sources = data.source_evidence || [];
@@ -261,7 +277,7 @@
         return;
       }
       tbody.innerHTML = rows.map(r => `
-        <tr style="cursor:pointer" onclick="loadEval('${escHtml(r.id)}', ${JSON.stringify(escHtml(r.question))})">
+        <tr style="cursor:pointer" data-id="${escHtml(r.id)}" data-question="${escHtml(r.question)}" onclick="loadEval(this.dataset.id, this.dataset.question)">
           <td style="font-family:monospace;font-size:11px">${escHtml(r.id)}</td>
           <td>${escHtml(r.question.slice(0, 80))}${r.question.length > 80 ? '…' : ''}</td>
           <td>${r.knowledge_gap ? '<span style="color:#e07070">Yes</span>' : 'No'}</td>
@@ -282,6 +298,7 @@
       const data = await res.json();
       _currentEvalId = data.id;
       document.getElementById('answer-box').textContent = data.answer || '(no answer)';
+      document.getElementById('answer-actions').style.display = 'block';
       const sources = data.source_evidence || [];
       _currentNodeIds = sources.map(s => s.node_id).filter(Boolean);
       document.getElementById('fb-nodes').value = _currentNodeIds.join(', ');
@@ -315,8 +332,8 @@
           <td><span class="badge badge-${r.status}">${r.status}</span></td>
           <td style="color:#888">${r.reviewer || '—'}</td>
           <td>${r.status === 'pending' ? `
-            <button class="btn btn-sm btn-approve" onclick="reviewFeedback('${r.id}','approve')">Approve</button>
-            <button class="btn btn-sm btn-reject" style="margin-left:4px" onclick="reviewFeedback('${r.id}','reject')">Reject</button>` : ''}
+            <button class="btn btn-sm btn-approve" onclick="reviewFeedback('${r.id}','approve',this)">Approve</button>
+            <button class="btn btn-sm btn-reject" style="margin-left:4px" onclick="reviewFeedback('${r.id}','reject',this)">Reject</button>` : ''}
           </td>
         </tr>`).join('');
     } catch (err) {
@@ -324,12 +341,18 @@
     }
   }
 
-  async function reviewFeedback(id, action) {
+  async function reviewFeedback(id, action, btn) {
+    const row = btn.closest('tr');
+    const allBtns = row.querySelectorAll('button');
+    allBtns.forEach(b => { b.disabled = true; });
+    btn.innerHTML = '<span class="spin"></span>' + (action === 'approve' ? 'Approving…' : 'Rejecting…');
     try {
       const res = await fetch(`${API_BASE}/feedback/${id}/${action}`, {method: 'PATCH'});
       if (!res.ok) throw new Error(await res.text());
       await loadFeedback();
     } catch (err) {
+      allBtns.forEach(b => { b.disabled = false; });
+      btn.innerHTML = action === 'approve' ? 'Approve' : 'Reject';
       alert('Error: ' + err.message);
     }
   }

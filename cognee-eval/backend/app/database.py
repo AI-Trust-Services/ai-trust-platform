@@ -21,4 +21,5 @@ async def init_db() -> None:
     """Create all tables on startup. Safe to call repeatedly."""
     async with _engine.begin() as conn:
         from app.models import evaluation, feedback
+
         await conn.run_sync(Base.metadata.create_all)
