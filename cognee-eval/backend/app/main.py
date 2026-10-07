@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.database import init_db
+from app.cognee_client import setup_cognee
 from app.routers import evaluate, feedback, graph, ingest, ui
 
 logger = get_logger(__name__)
@@ -26,6 +27,8 @@ if not _allowed_origins:
 async def lifespan(app: FastAPI):
     await init_db()
     logger.info("startup.db_ready")
+    setup_cognee()
+    logger.info("startup.cognee_configured")
     yield
 
 

@@ -17,6 +17,26 @@ _DATASET = "eu_ai_act_v1"
 
 _GATEWAY_URL = os.environ.get("LLM_ENDPOINT", "http://ai-gateway:8000/v1")
 _GATEWAY_MODEL = os.environ.get("LLM_MODEL", "ai-gateway")
+_EMBEDDING_PROVIDER = os.environ.get("COGNEE_EMBEDDING_PROVIDER", "fastembed")
+_EMBEDDING_MODEL = os.environ.get("COGNEE_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+_EMBEDDING_DIMENSIONS = int(os.environ.get("COGNEE_EMBEDDING_DIMENSIONS", "384"))
+
+
+def setup_cognee() -> None:
+    """Configure cognee to use ai-gateway for LLM and fastembed for embeddings."""
+    cognee.config.set_llm_config({
+        "llm_provider": "openai",
+        "llm_model": f"openai/{_GATEWAY_MODEL}",
+        "llm_endpoint": _GATEWAY_URL,
+        "llm_api_key": "ai-gateway",
+        "llm_extraction_provider": "openai",
+        "llm_extraction_model": f"openai/{_GATEWAY_MODEL}",
+        "llm_extraction_endpoint": _GATEWAY_URL,
+        "llm_extraction_api_key": "ai-gateway",
+    })
+    cognee.config.set_embedding_provider(_EMBEDDING_PROVIDER)
+    cognee.config.set_embedding_model(_EMBEDDING_MODEL)
+    cognee.config.set_embedding_dimensions(_EMBEDDING_DIMENSIONS)
 
 
 async def ingest_pdf(pdf_path: str) -> dict:
