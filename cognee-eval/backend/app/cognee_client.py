@@ -97,7 +97,7 @@ async def answer_question(question: str, passages: list[dict]) -> str:
     if not passages:
         return "No relevant passages found in the knowledge graph."
 
-    context = "\n\n".join(f"[{i+1}] {p['text']}" for i, p in enumerate(passages[:5]))
+    context = "\n\n".join(f"[{i + 1}] {p['text']}" for i, p in enumerate(passages[:5]))
     messages = [
         {
             "role": "system",

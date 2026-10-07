@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 
-async def _ingest_feedback_background(feedback_id: str, text: str, node_ids: list[str]) -> None:
+async def _ingest_feedback_background(
+    feedback_id: str, text: str, node_ids: list[str]
+) -> None:
     """Run cognee ingestion and update status to approved or failed."""
     try:
         await cognee_client.ingest_feedback(feedback_id, text, node_ids)
@@ -82,7 +84,9 @@ async def create_feedback(body: FeedbackRequest) -> FeedbackResponse:
 
 @router.get("", response_model=list[FeedbackResponse])
 async def list_feedback(
-    status: str | None = Query(None, description="pending | approving | approved | failed | rejected"),
+    status: str | None = Query(
+        None, description="pending | approving | approved | failed | rejected"
+    ),
     limit: int = Query(50, le=200),
 ) -> list[FeedbackResponse]:
     async with SessionLocal() as session:
@@ -103,7 +107,9 @@ async def get_feedback(feedback_id: str) -> FeedbackResponse:
     return _to_response(row)
 
 
-@router.patch("/{feedback_id}/approve", response_model=FeedbackResponse, status_code=202)
+@router.patch(
+    "/{feedback_id}/approve", response_model=FeedbackResponse, status_code=202
+)
 async def approve_feedback(
     feedback_id: str, request: Request, background_tasks: BackgroundTasks
 ) -> FeedbackResponse:
