@@ -4,21 +4,25 @@ Standalone evaluation component for [Cognee](https://cognee.ai) as a knowledge g
 Ingests the EU AI Act PDF, builds a knowledge graph, and supports grounded Q&A with a human
 feedback cycle.
 
-**Port:** 8011 · **Profile:** `ollama` · **API docs:** `/api/cognee/docs`
+**Port:** 8011 · **Helm flag:** `cogneeEval.enabled` · **API docs:** `/api/cognee/docs`
 
 ## Storage
 
 All Cognee data (LanceDB vectors, Kuzu graph, SQLite relational) lives under `COGNEE_DATA_PATH`
-(`/app/.cognee_system` in Docker), mounted as the `cognee_eval_data` volume. Our feedback data
-lives in `cognee_eval.db` inside the same directory.
+(`/app/.cognee_system` in the container), mounted on the `data` PVC of the `cognee-eval-backend`
+StatefulSet. Our feedback data lives in `cognee_eval.db` inside the same directory.
 
 ## Running
 
+The component ships disabled by default — set `cogneeEval.enabled: true` in `values.yaml` (or the
+cluster's override) before deploying. On kind:
+
 ```bash
-# Place EU-AI-ACT.pdf in ./data/ first
+# Place EU-AI-ACT.pdf in ./data/ first (mounted into cognee-eval-backend)
 cp /path/to/EU-AI-ACT.pdf data/
 
-docker compose --profile ollama up --build -d cognee-eval-backend
+# Build + deploy via Helm (see root CLAUDE.md for the full make workflow)
+make build && make upgrade && make rollout
 
 # Trigger ingestion (takes several minutes on first run)
 curl -X POST http://localhost:8080/api/cognee/v1/ingest

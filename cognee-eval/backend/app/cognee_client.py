@@ -1,6 +1,6 @@
 """Thin wrapper around the Cognee 1.6.x pipeline for the EU AI Act evaluation.
 
-Configuration is driven entirely by environment variables set in docker-compose.yml.
+Configuration is driven entirely by environment variables injected by the Helm deployment.
 All cognee generation (main + extraction) is pointed at the standalone ai-gateway
 service via the LLM_*/LLM_EXTRACTION_* env vars; grounded answers call the same gateway
 directly. Embeddings run in-process via fastembed (BAAI/bge-small-en-v1.5).
