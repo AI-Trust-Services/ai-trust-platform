@@ -330,7 +330,7 @@
           <td style="font-family:monospace;font-size:11px">${escHtml(r.evaluation_id)}</td>
           <td>${escHtml(r.conclusion.slice(0, 60))}${r.conclusion.length > 60 ? '…' : ''}</td>
           <td><span class="badge badge-${r.status}">${r.status}</span></td>
-          <td style="color:#888">${r.reviewer || '—'}</td>
+          <td style="color:#888">${escHtml(r.reviewer || '—')}</td>
           <td>${r.status === 'pending' ? `
             <button class="btn btn-sm btn-approve" onclick="reviewFeedback('${r.id}','approve',this)">Approve</button>
             <button class="btn btn-sm btn-reject" style="margin-left:4px" onclick="reviewFeedback('${r.id}','reject',this)">Reject</button>` : ''}
