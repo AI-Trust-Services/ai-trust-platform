@@ -106,12 +106,19 @@ spec:
               port: {{ .Values.cogneeEval.backendPort }}
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 5
+          # Ingestion is synchronous and blocks the asyncio event loop for minutes
+          # (entity extraction + node/edge merge for a full document), so /health
+          # cannot answer promptly during a large ingest. Keep the liveness probe
+          # tolerant enough that a long ingest is never mistaken for a hung pod.
           livenessProbe:
             httpGet:
               path: /health
               port: {{ .Values.cogneeEval.backendPort }}
             initialDelaySeconds: 20
-            periodSeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 10
   volumeClaimTemplates:
     - metadata:
         name: data
