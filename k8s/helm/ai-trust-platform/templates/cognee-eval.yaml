@@ -1,0 +1,122 @@
+{{- if .Values.cogneeEval.enabled }}
+{{/* SAP AI Core OpenAI-compatible proxy — holds OAuth token, retries 429/5xx.
+     cognee-eval-backend points its LLM_ENDPOINT here. */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sap-ai-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "sap-ai-proxy") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "sap-ai-proxy") | nindent 8 }}
+    spec:
+      {{- include "ai-trust.imagePullSecrets" $ | nindent 6 }}
+      containers:
+        - name: sap-ai-proxy
+          image: {{ .Values.image.repository }}/sap-ai-proxy:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} }
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sap-ai-proxy
+spec:
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "sap-ai-proxy") | nindent 4 }}
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+{{/* Cognee eval backend — graph-based grounded Q&A over the EU AI Act. */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cognee-eval-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "cognee-eval-backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "cognee-eval-backend") | nindent 8 }}
+    spec:
+      {{- include "ai-trust.imagePullSecrets" $ | nindent 6 }}
+      containers:
+        - name: cognee-eval-backend
+          image: {{ .Values.image.repository }}/cognee-eval-backend:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} }
+          env:
+            - name: ALLOWED_ORIGINS
+              value: {{ .Values.appPublicUrl | quote }}
+            - name: LLM_ENDPOINT
+              value: "http://sap-ai-proxy:8000/v1"
+            - name: LLM_EXTRACTION_ENDPOINT
+              value: "http://sap-ai-proxy:8000/v1"
+          ports:
+            - containerPort: {{ .Values.cogneeEval.backendPort }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/.cognee_system
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.cogneeEval.backendPort }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.cogneeEval.backendPort }}
+            initialDelaySeconds: 20
+            periodSeconds: 15
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: cognee-eval-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cognee-eval-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.cogneeEval.dataStorageSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cognee-eval-backend
+spec:
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "cognee-eval-backend") | nindent 4 }}
+  ports:
+    - port: {{ .Values.cogneeEval.backendPort }}
+      targetPort: {{ .Values.cogneeEval.backendPort }}
+{{- end }}

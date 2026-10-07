@@ -50,6 +50,8 @@ group "default" {
     "decision-trace-analyzer-frontend",
     "audit-frontend",
     "admin-frontend",
+    "cognee-eval-backend",
+    "sap-ai-proxy",
   ]
 }
 
@@ -358,4 +360,22 @@ target "admin-frontend" {
   }
   cache-from = ["type=gha,scope=admin-frontend"]
   cache-to   = ["type=gha,mode=max,scope=admin-frontend"]
+}
+
+target "cognee-eval-backend" {
+  context    = "."
+  dockerfile = "cognee-eval/backend/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("cognee-eval-backend")]
+  cache-from = ["type=gha,scope=cognee-eval-backend"]
+  cache-to   = ["type=gha,mode=max,scope=cognee-eval-backend"]
+}
+
+target "sap-ai-proxy" {
+  context    = "."
+  dockerfile = "sap-ai-proxy/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("sap-ai-proxy")]
+  cache-from = ["type=gha,scope=sap-ai-proxy"]
+  cache-to   = ["type=gha,mode=max,scope=sap-ai-proxy"]
 }
