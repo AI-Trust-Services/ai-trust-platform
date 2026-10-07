@@ -97,6 +97,9 @@ just in the frontend.
 | Scenario | State |
 |---|---|
 | Auditor cannot write systems (403) | ✅ `test_03_rbac.py` |
+| Platform Administrator cannot read assessments (403) | ✅ `test_03_rbac.py` |
+| Admin stats endpoint aggregates correctly across backends | ✅ `test_03_rbac.py` |
+| AI Engineer cannot approve evidence (403) | ✅ `test_03_rbac.py` |
 | AI Engineer can write systems | ⬜ |
 | AI Business Owner can write systems | ⬜ |
 | AI Engineer can start an assessment | ⬜ |
@@ -106,19 +109,22 @@ just in the frontend.
 | Compliance Officer can forward an assessment to a different Compliance Officer | ⬜ |
 | Compliance Officer can send an assessment back to the responsible person to provide more information | ⬜ |
 | Compliance Officer can confirm and finish an assessment | ⬜ |
-| Platform Administrator cannot read assessments (403) | ✅ `test_03_rbac.py` |
-| Admin stats endpoint aggregates correctly across backends | ✅ `test_03_rbac.py` |
-| AI Engineer cannot approve evidence (403) | ✅ `test_03_rbac.py` |
 
 ---
 
 ## E2E system scenarios
 
 **Full happy-path business flows**: proof that the MVP flow works end-to-end as the business requires
-for each persona. Each scenario is a complete flow driven black-box through the deployed platform.
-These are the MVP acceptance criteria. A failure points to an unmet business requirement.
+for each persona. Each scenario is a complete flow driven black-box through the whole deployed
+platform. These are the MVP acceptance criteria. A failure points to an unmet business requirement.
 
 Legend: ✅ test covered · ⬜ test missing, functionality exists
+
+### 0. Authentication
+
+| Scenario | State |
+|---|---|
+| User authenticates via Keycloak OIDC → oauth2-proxy issues a session cookie → shell is reachable through port 8080 | ⬜ |
 
 ### 1. Registration
 
