@@ -83,6 +83,18 @@ spec:
               value: "http://ai-gateway:8000/v1"
             - name: LLM_EXTRACTION_ENDPOINT
               value: "http://ai-gateway:8000/v1"
+            - name: LLM_PROVIDER
+              value: "openai"
+            - name: LLM_MODEL
+              value: "openai/ai-gateway"
+            - name: LLM_API_KEY
+              value: "ai-gateway"
+            - name: LLM_EXTRACTION_PROVIDER
+              value: "openai"
+            - name: LLM_EXTRACTION_MODEL
+              value: "openai/ai-gateway"
+            - name: LLM_EXTRACTION_API_KEY
+              value: "ai-gateway"
           ports:
             - containerPort: {{ .Values.cogneeEval.backendPort }}
           volumeMounts:
