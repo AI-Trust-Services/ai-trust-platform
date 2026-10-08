@@ -83,7 +83,7 @@ class JsonbKnowledgeBrainStub(KnowledgeBrain):
             scored.append((score, p))
 
         scored.sort(key=lambda x: x[0], reverse=True)
-        return [item for _, item in scored[:k] if scored[0][0] > 0]
+        return [item for _, item in scored[:k] if scored and scored[0][0] > 0]
 
     async def export(self) -> list[dict]:
         async with SessionLocal() as session:
