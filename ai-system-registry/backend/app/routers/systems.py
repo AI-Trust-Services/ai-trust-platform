@@ -220,7 +220,6 @@ async def delete_system(system_id: str, request: Request) -> dict:
     # can_write is only consulted for non-approvers, so fetch it lazily to avoid a
     # second OpenFGA round-trip on the common approve path.
     can_approve = await check_permission(current_user, SYSTEMS_APPROVE)
-    can_write = False
     if not can_approve:
         can_write = await check_permission(current_user, SYSTEMS_WRITE)
         if not can_write:
