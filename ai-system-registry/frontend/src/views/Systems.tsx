@@ -30,7 +30,7 @@ export default function Systems() {
   const [lifecycleFilter, setLifecycleFilter] = useState("");
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const { wizardOpen, setWizardOpen, mayRegister } = useModalControls();
+  const { wizardOpen, setWizardOpen, mayRegister, mayApprove } = useModalControls();
   const showToast = useToast();
 
   const loadSystems = useCallback(async () => {
@@ -119,6 +119,7 @@ export default function Systems() {
                 <TableHead>Purpose of Use</TableHead>
                 <TableHead>Business Owner</TableHead>
                 <TableHead>Technical Owner</TableHead>
+                <TableHead>Role</TableHead>
                 <TableHead>Lifecycle</TableHead>
                 <TableHead>Risk</TableHead>
                 <TableHead>Registered</TableHead>
@@ -128,7 +129,7 @@ export default function Systems() {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                     {systems.length === 0 ? 'No systems registered yet. Click "Register System" to add one.' : "No systems match the current filters."}
                   </TableCell>
                 </TableRow>
@@ -145,6 +146,13 @@ export default function Systems() {
                   </TableCell>
                   <TableCell className="text-[13px]">{ownerLabel(s.business_owners)}</TableCell>
                   <TableCell className="text-[13px]">{ownerLabel(s.technical_owners)}</TableCell>
+                  <TableCell>
+                    {s.org_role ? (
+                      <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs capitalize">{s.org_role}</span>
+                    ) : (
+                      <span className="text-[13px] text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell><LifecycleBadge lc={s.lifecycle} /></TableCell>
                   <TableCell><TierBadge tier={s.tier} workflowStatus={s.workflow_status} /></TableCell>
                   <TableCell className="text-[13px] text-muted-foreground"><FormattedDate iso={s.created_at} /></TableCell>
@@ -172,8 +180,13 @@ export default function Systems() {
                         variant="ghost"
                         size="icon"
                         className="size-8 text-muted-foreground hover:text-[var(--danger-fg)]"
-                        title={mayRegister ? "Delete" : "Requires role: business owner or administrator"}
-                        disabled={!mayRegister}
+                        title={(() => {
+                          if (mayApprove) return "Delete";
+                          if (!mayRegister) return "Requires permission: systems:write";
+                          if (s.workflow_status !== "draft") return "Cannot delete — workflow already started";
+                          return "Delete";
+                        })()}
+                        disabled={!mayApprove && (!mayRegister || s.workflow_status !== "draft")}
                         onClick={async () => {
                           if (!confirm(`Delete "${s.name}"?\n\nThis action cannot be undone.`)) return;
                           try {
