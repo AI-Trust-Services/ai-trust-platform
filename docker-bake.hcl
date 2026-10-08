@@ -56,7 +56,6 @@ group "default" {
     "decision-trace-analyzer-frontend",
     "audit-frontend",
     "admin-frontend",
-    "document-indexing-frontend",
     "ai-test-bed-frontend",
     "cognee-eval-backend",
     "ai-gateway",
