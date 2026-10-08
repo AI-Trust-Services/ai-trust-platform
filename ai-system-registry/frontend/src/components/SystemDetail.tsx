@@ -747,7 +747,7 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
   const [saving, setSaving] = useState(false);
   const [allUsers, setAllUsers] = useState<Array<{ username: string; firstName: string; lastName: string }>>([]);
   const showToast = useToast();
-  const { mayRegister, mayWrite, mayApprove, username } = useModalControls();
+  const { mayWrite, mayApprove, username } = useModalControls();
 
   const isDirty = (Object.keys(form) as (keyof EditableFields)[]).some(
     (k) => form[k] !== formBase[k],
@@ -1084,10 +1084,10 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
 
             <SheetFooter className="flex-row items-center">
               <Button variant="destructive" onClick={handleDelete}
-                disabled={!mayApprove && (!mayRegister || system.workflow_status !== "draft")}
+                disabled={!mayApprove && (!mayWrite || system.workflow_status !== "draft")}
                 title={(() => {
                   if (mayApprove) return undefined;
-                  if (!mayRegister) return "Requires permission: systems:write";
+                  if (!mayWrite) return "Requires permission: systems:write";
                   if (system.workflow_status !== "draft") return "Cannot delete — workflow already started";
                   return undefined;
                 })()}>Delete System</Button>

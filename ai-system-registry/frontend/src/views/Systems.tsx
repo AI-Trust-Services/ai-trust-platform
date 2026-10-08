@@ -30,7 +30,7 @@ export default function Systems() {
   const [lifecycleFilter, setLifecycleFilter] = useState("");
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const { wizardOpen, setWizardOpen, mayRegister, mayApprove } = useModalControls();
+  const { wizardOpen, setWizardOpen, mayWrite, mayApprove } = useModalControls();
   const showToast = useToast();
 
   const loadSystems = useCallback(async () => {
@@ -182,11 +182,11 @@ export default function Systems() {
                         className="size-8 text-muted-foreground hover:text-[var(--danger-fg)]"
                         title={(() => {
                           if (mayApprove) return "Delete";
-                          if (!mayRegister) return "Requires permission: systems:write";
+                          if (!mayWrite) return "Requires permission: systems:write";
                           if (s.workflow_status !== "draft") return "Cannot delete — workflow already started";
                           return "Delete";
                         })()}
-                        disabled={!mayApprove && (!mayRegister || s.workflow_status !== "draft")}
+                        disabled={!mayApprove && (!mayWrite || s.workflow_status !== "draft")}
                         onClick={async () => {
                           if (!confirm(`Delete "${s.name}"?\n\nThis action cannot be undone.`)) return;
                           try {
