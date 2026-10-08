@@ -38,7 +38,7 @@ function formatDetail(body: unknown, status: number): string {
   return `HTTP ${status}`;
 }
 
-async function requestBase<T>(base: string, path: string, options: RequestInit = {}): Promise<T> {
+export async function requestBase<T>(base: string, path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${base}${path}`, options);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
