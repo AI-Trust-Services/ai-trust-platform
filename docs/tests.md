@@ -1,10 +1,5 @@
 # Test Strategy — AI Trust Platform MVP
 
-> **Status: DRAFT — for review with PM and engineering lead**.
-> Sections marked **🔶 Open** need a decision before this document is approved.
-
----
-
 ## Test levels
 
 | Repo term | Industry term | Boundary | MVP |
@@ -187,10 +182,6 @@ Monitoring follows Approval in the lifecycle and is outside MVP scope; no E2E sy
 
 ## Frontend tests
 
-> **To be refined.**
-
-> **Currently zero coverage — identified gap.** 🔶 See open question #1.
-
 **Proposed tool: [Playwright](https://playwright.dev/)** — Apache 2.0 licensed, runs on standard
 GitHub-hosted runners without additional infrastructure, and covers both component-level interaction
 and visual regression via screenshot comparison. It replaces the need for a separate Storybook +
@@ -232,9 +223,3 @@ Placeholder scope, to be confirmed:
 - **Purpose:** build a baseline and spot untested areas. Targets and any gate are decided later,
   once baseline data exists. Until then, MVP acceptance is measured by the business scenarios above.
 
-## Next steps
-
-| # | Action | State |
-|---|---|---|
-| 1 | Review and approve this document with PM and engineering lead, including the open questions | 🔶 open |
-| 2 | After approval: create follow-up issues | 🔶 open |
