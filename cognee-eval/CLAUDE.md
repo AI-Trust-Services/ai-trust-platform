@@ -8,7 +8,7 @@ feedback cycle.
 
 ## Storage
 
-All Cognee data (LanceDB vectors, Kuzu graph, SQLite relational) lives under `COGNEE_DATA_PATH`
+All Cognee data (LanceDB vectors, per-dataset Kuzu graphs, SQLite relational) lives under `COGNEE_DATA_PATH`
 (`/app/.cognee_system` in the container), mounted on the `data` PVC of the `cognee-eval-backend`
 StatefulSet. Our feedback data lives in `cognee_eval.db` inside the same directory.
 
