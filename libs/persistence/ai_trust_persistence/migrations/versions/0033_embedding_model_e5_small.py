@@ -9,8 +9,8 @@ This migration therefore clears all indexed chunks and resets their versions to
 ``pending`` so the worker re-indexes them with the new model. (On this branch nothing
 is in production yet; a re-index is the intended, documented behaviour for a model swap.)
 
-Revision ID: 0028
-Revises: 0027
+Revision ID: 0033
+Revises: 0032
 Create Date: 2026-10-05
 """
 
@@ -18,8 +18,8 @@ import sqlalchemy as sa
 from alembic import op
 from pgvector.sqlalchemy import Vector
 
-revision = "0028"
-down_revision = "0027"
+revision = "0033"
+down_revision = "0032"
 branch_labels = None
 depends_on = None
 

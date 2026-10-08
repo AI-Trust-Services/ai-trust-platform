@@ -15,15 +15,15 @@ existing row as soon as it is re-added, so already-indexed documents are fixed i
 A generated column's expression cannot be altered in Postgres 16, so the column is
 dropped and recreated; the GIN index drops with it and is rebuilt.
 
-Revision ID: 0029
-Revises: 0028
+Revision ID: 0034
+Revises: 0033
 Create Date: 2026-10-05
 """
 
 from alembic import op
 
-revision = "0029"
-down_revision = "0028"
+revision = "0034"
+down_revision = "0033"
 branch_labels = None
 depends_on = None
 

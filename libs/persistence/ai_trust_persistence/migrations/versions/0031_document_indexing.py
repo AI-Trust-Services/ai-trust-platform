@@ -8,8 +8,8 @@ and provenance (page/bbox + structural anchor/heading path).
 No ANN index on the embedding: retrieval is brute-force and always scoped
 `WHERE ai_system_id = X` (small per-system search space) — see document-indexing-plan.md.
 
-Revision ID: 0026
-Revises: 0025
+Revision ID: 0031
+Revises: 0030
 Create Date: 2026-09-30
 """
 
@@ -18,8 +18,8 @@ from alembic import op
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects import postgresql
 
-revision = "0026"
-down_revision = "0025"
+revision = "0031"
+down_revision = "0030"
 branch_labels = None
 depends_on = None
 

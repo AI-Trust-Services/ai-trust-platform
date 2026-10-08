@@ -5,16 +5,16 @@ processed (parsing | embedding | storing), so the API/UI can show progress betwe
 the coarse `pending → processing → indexed` status transitions. Null outside the
 `processing` state.
 
-Revision ID: 0027
-Revises: 0026
+Revision ID: 0032
+Revises: 0031
 Create Date: 2026-10-05
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0027"
-down_revision = "0026"
+revision = "0032"
+down_revision = "0031"
 branch_labels = None
 depends_on = None
 
