@@ -23,6 +23,7 @@ interface FormState {
   business_owners: string;
   technical_owners: string;
   git_repo_url: string;
+  org_role: string;
 }
 
 const EMPTY: FormState = {
@@ -32,6 +33,16 @@ const EMPTY: FormState = {
   business_owners: "",
   technical_owners: "",
   git_repo_url: "",
+  org_role: "",
+};
+
+const ORG_ROLE_LABELS: Record<string, string> = {
+  provider: "Provider (Art. 3(3))",
+  deployer: "Deployer (Art. 3(4))",
+  both: "Both Provider and Deployer",
+  importer: "Importer",
+  distributor: "Distributor",
+  authorised_representative: "Authorised Representative",
 };
 
 function displayName(u: UserSummary) {
@@ -72,7 +83,7 @@ export default function RegisterModal({ open, onClose, onSuccess }: Props) {
         version: "1.0.0",
         provider: "",
         org_name: "",
-        org_role: "provider",
+        org_role: (form.org_role || "provider") as "provider" | "deployer" | "both" | "importer" | "distributor" | "authorised_representative",
         provider_country: "DE",
         deployment_country: "",
         eu_output_usage: null,
@@ -138,13 +149,10 @@ export default function RegisterModal({ open, onClose, onSuccess }: Props) {
               <Textarea id="reg_desc" rows={3} value={form.description} onChange={set("description")} placeholder="Brief description of the AI system…" />
             </div>
 
-            <div className="flex flex-col gap-1.5 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3">
-              <Label htmlFor="reg_purpose" className="flex flex-wrap items-center gap-2 text-[var(--brand)]">
-                Purpose of Use
-                <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk classification category</span>
-              </Label>
-              <Textarea id="reg_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="What is this AI system used for?" className="border-[var(--brand)]/40 focus-visible:ring-[var(--brand)]" />
-              <p className="text-xs text-muted-foreground">The intended purpose determines how your AI system is classified under the EU AI Act.</p>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="reg_purpose">Purpose of Use</Label>
+              <Textarea id="reg_purpose" rows={3} value={form.intended_purpose} onChange={set("intended_purpose")} placeholder="What is this AI system used for?" />
+              <p className="text-xs text-muted-foreground">Please enter the purpose of the AI system — how and for what it is to be used.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -192,6 +200,21 @@ export default function RegisterModal({ open, onClose, onSuccess }: Props) {
                 />
               </div>
               <p className="text-xs text-muted-foreground">Link to the source repository or application (e.g. GitHub, GitLab).</p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="reg_org_role">Organisation Role</Label>
+              <select
+                id="reg_org_role"
+                value={form.org_role}
+                onChange={set("org_role")}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+              >
+                <option value="">Select role…</option>
+                {Object.entries(ORG_ROLE_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
             </div>
 
           </div>

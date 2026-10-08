@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 
-from ai_trust_authorization import require_permission
+from ai_trust_authorization import check_permission, require_permission
 from ai_trust_authorization.constants import (
     SYSTEMS_APPROVE,
     SYSTEMS_READ,
@@ -198,16 +198,25 @@ async def update_system(
     return AISystemResponse.model_validate(row)
 
 
-@router.delete(
-    "/systems/{system_id}", dependencies=[Depends(require_permission(SYSTEMS_APPROVE))]
-)
+@router.delete("/systems/{system_id}")
 async def delete_system(system_id: str, request: Request) -> dict:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
+    can_approve = await check_permission(current_user, SYSTEMS_APPROVE)
+    can_write = await check_permission(current_user, SYSTEMS_WRITE)
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
         row = result.scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
+        if not can_approve:
+            if not can_write:
+                raise HTTPException(403, "Permission denied")
+            if row.workflow_status != "draft":
+                raise HTTPException(
+                    403,
+                    "Cannot delete a system once workflow has started. "
+                    "Contact a compliance officer to remove it.",
+                )
         name = row.name
         await session.delete(row)
         log_audit_event(

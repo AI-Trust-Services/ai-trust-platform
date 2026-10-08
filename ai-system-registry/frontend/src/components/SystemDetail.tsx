@@ -702,6 +702,15 @@ function RegistrationDocuments({ system }: { system: AISystem }) {
 }
 
 // Editable fields that appear immediately when the sheet opens — no "edit" tab needed.
+const ORG_ROLE_LABELS: Record<string, string> = {
+  provider: "Provider (Art. 3(3))",
+  deployer: "Deployer (Art. 3(4))",
+  both: "Both Provider and Deployer",
+  importer: "Importer",
+  distributor: "Distributor",
+  authorised_representative: "Authorised Representative",
+};
+
 type EditableFields = {
   name: string;
   description: string;
@@ -710,6 +719,7 @@ type EditableFields = {
   technical_owners: string;
   git_repo_url: string;
   lifecycle: string;
+  org_role: string;
 };
 
 function extractEditableFields(sys: AISystem | null): EditableFields {
@@ -721,6 +731,7 @@ function extractEditableFields(sys: AISystem | null): EditableFields {
     technical_owners: sys?.technical_owners ?? "",
     git_repo_url: sys?.git_repo_url ?? "",
     lifecycle: sys?.lifecycle ?? "development",
+    org_role: sys?.org_role ?? "",
   };
 }
 
@@ -744,7 +755,7 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
   const [saving, setSaving] = useState(false);
   const [allUsers, setAllUsers] = useState<Array<{ username: string; firstName: string; lastName: string }>>([]);
   const showToast = useToast();
-  const { mayRegister, mayWrite, username } = useModalControls();
+  const { mayRegister, mayWrite, mayApprove, username } = useModalControls();
 
   const isDirty = (Object.keys(form) as (keyof EditableFields)[]).some(
     (k) => form[k] !== formBase[k],
@@ -793,6 +804,7 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
         technical_owners: form.technical_owners || null,
         git_repo_url: form.git_repo_url || null,
         lifecycle: form.lifecycle,
+        org_role: form.org_role || null,
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const updated = await api.updateSystem(system.id, payload as any);
@@ -869,19 +881,15 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
                         <Label htmlFor="field_description">Description</Label>
                         <Textarea id="field_description" rows={2} value={form.description} onChange={setField("description")} />
                       </div>
-                      <div className="flex flex-col gap-1.5 rounded-md border border-[var(--brand)]/40 bg-[var(--brand)]/5 p-3">
-                        <Label htmlFor="field_purpose" className="flex flex-wrap items-center gap-2 text-[var(--brand)]">
-                          Purpose of Use
-                          <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Drives risk classification category</span>
-                        </Label>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="field_purpose">Purpose of Use</Label>
                         <Textarea
                           id="field_purpose"
                           rows={3}
                           value={form.intended_purpose}
                           onChange={setField("intended_purpose")}
-                          className="border-[var(--brand)]/40 focus-visible:ring-[var(--brand)]"
                         />
-                        <p className="text-xs text-muted-foreground">The intended purpose determines how your AI system is classified under the EU AI Act.</p>
+                        <p className="text-xs text-muted-foreground">Please enter the purpose of the AI system — how and for what it is to be used.</p>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="flex flex-col gap-1.5">
@@ -924,6 +932,13 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
                         <Label htmlFor="field_lifecycle">Lifecycle State</Label>
                         <select className={SELECT_CLASS} id="field_lifecycle" value={form.lifecycle} onChange={setField("lifecycle")}>
                           {Object.entries(LIFECYCLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="field_org_role">Organisation Role</Label>
+                        <select className={SELECT_CLASS} id="field_org_role" value={form.org_role} onChange={setField("org_role")}>
+                          <option value="">— not set —</option>
+                          {Object.entries(ORG_ROLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                         </select>
                       </div>
                     </div>
@@ -999,6 +1014,7 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
                   <Section title="Classification">
                     <DetailGrid rows={[
                       ["Risk Classification", <TierBadge key="tier" tier={system.tier} workflowStatus={system.workflow_status} />],
+                      ["Organisation Role", <span key="org_role" className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs capitalize">{system.org_role ? (ORG_ROLE_LABELS[system.org_role] ?? system.org_role) : "—"}</span>],
                       ["Classification Basis", <span key="basis" className="text-[13px]">{system.basis}</span>],
                       system.annex_iii_area != null && ["Annex III Area", `Area ${system.annex_iii_area}`],
                       ["GPAI", system.is_gpai ? <span key="gpai" className="text-[var(--brand)]">Yes</span> : "No"],
@@ -1075,8 +1091,14 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
             </Tabs>
 
             <SheetFooter className="flex-row items-center">
-              <Button variant="destructive" onClick={handleDelete} disabled={!mayRegister}
-                title={mayRegister ? undefined : "Requires role: business owner or administrator"}>Delete System</Button>
+              <Button variant="destructive" onClick={handleDelete}
+                disabled={!mayApprove && (!mayRegister || system.workflow_status !== "draft")}
+                title={(() => {
+                  if (mayApprove) return undefined;
+                  if (!mayRegister) return "Requires permission: systems:write";
+                  if (system.workflow_status !== "draft") return "Cannot delete — workflow already started";
+                  return undefined;
+                })()}>Delete System</Button>
               <div className="flex-1" />
               {isDirty && (
                 <Button onClick={handleSave} disabled={saving || !mayWrite} title={mayWrite ? undefined : "Requires permission: systems:write"}>
