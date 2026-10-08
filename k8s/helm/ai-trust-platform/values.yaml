@@ -134,7 +134,7 @@ ollama:
 # Requires ollama.enabled: true (or an external LLM endpoint via LLM_ENDPOINT).
 cogneeEval:
   enabled: false
-  backendPort: 8011
+  backendPort: 8014
   dataStorageSize: 5Gi # cognee graph + vector + SQLite data
 
 # ── the 7 near-identical backend+frontend MFE pairs ──
