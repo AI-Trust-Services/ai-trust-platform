@@ -18,7 +18,6 @@
 | AI output evaluation | ML evaluation | Accuracy of AI-assisted classification against a labelled dataset. See [AI output evaluation](#ai-output-evaluation) | ✅ |
 | Frontend tests | Component / visual regression | React component behaviour and visual states; proposed tool: Playwright (Apache 2.0). See [Frontend tests](#frontend-tests) | TBD |
 | Performance / load | Performance | Throughput, latency, and race-condition checks under load | TBD |
-| Security | Security | Server-side RBAC, upload constraints, URL expiry, append-only audit | TBD |
 
 **Test Coverage: measure, don't gate.** `pytest-cov` runs in report-only mode with no threshold; it never
 fails a build (see [Test Code Coverage](#test-code-coverage)).
@@ -230,7 +229,7 @@ Placeholder scope, to be confirmed:
 | # | Question | Affects |
 |---|---|---|
 | 1 | Are frontend tests part of MVP? Proposed tool: Playwright (Apache 2.0, GitHub-hosted runners). | Frontend tests section |
-| 2 | Test Code Coverage is report-only for MVP (no threshold). When do we introduce a threshold or gate? | Test Code Coverage section |
+| 2 | Test Code Coverage is report-only for MVP (no threshold). | Test Code Coverage section |
 
 ---
 
