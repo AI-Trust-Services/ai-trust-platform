@@ -122,17 +122,14 @@ async def test_evaluate_with_prompt_override(client: httpx.AsyncClient):
     assert "tier" in body
 
 
-async def test_evaluate_requires_auth(client: httpx.AsyncClient):
-    # No x-forwarded-preferred-username → 403 from the permission check.
+async def test_evaluate_no_username_header_still_reachable(client: httpx.AsyncClient):
+    # The e2e permission override allows any caller regardless of username header,
+    # so this only verifies the endpoint is wired up and returns a parseable response.
     r = await client.post(
         "/v1/classify/evaluate",
         json={"answers": {"business": {}, "technical": {}}, "enabled_sources": {}},
     )
-    # The test suite overrides permissions to always allow for "test-user",
-    # but an empty/missing header still passes in the override because it returns
-    # the lambda user. This test just checks the endpoint is reachable and
-    # returns a parseable response.
-    assert r.status_code in (200, 403)
+    assert r.status_code == 200
 
 
 async def test_evaluate_empty_answers_returns_minimal(client: httpx.AsyncClient):
