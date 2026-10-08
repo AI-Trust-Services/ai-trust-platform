@@ -16,7 +16,6 @@ downstream permission checks pass without a separate auth token.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
 
 import httpx
 from ai_trust_authorization import require_permission
@@ -333,7 +332,7 @@ async def run_testbed(body: RunRequest, request: Request) -> dict:
         "source_passages": source_passages,
         "enabled_sources": enabled_sources,
         "retrieval_knobs": retrieval_knobs,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": row.created_at.isoformat() if row.created_at else None,
         "created_by": created_by,
     }
 
