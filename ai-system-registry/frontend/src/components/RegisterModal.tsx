@@ -3,6 +3,7 @@ import { Loader2, X, ExternalLink } from "lucide-react";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import type { UserSummary } from "../types";
+import { ORG_ROLE_LABELS } from "../constants/orgRoles";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,15 +35,6 @@ const EMPTY: FormState = {
   technical_owners: "",
   git_repo_url: "",
   org_role: "",
-};
-
-const ORG_ROLE_LABELS: Record<string, string> = {
-  provider: "Provider (Art. 3(3))",
-  deployer: "Deployer (Art. 3(4))",
-  both: "Both Provider and Deployer",
-  importer: "Importer",
-  distributor: "Distributor",
-  authorised_representative: "Authorised Representative",
 };
 
 function displayName(u: UserSummary) {

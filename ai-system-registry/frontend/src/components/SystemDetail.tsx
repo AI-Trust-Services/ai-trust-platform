@@ -4,6 +4,7 @@ import { Loader2, ChevronDown, ChevronRight, Copy, FileText, Download, Sparkles,
 import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS, TIER_META } from "../utils";
 import { api } from "../api/client";
+import { ORG_ROLE_LABELS } from "../constants/orgRoles";
 import { useToast, useModalControls } from "../App";
 import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary } from "../types";
 import {
@@ -702,15 +703,6 @@ function RegistrationDocuments({ system }: { system: AISystem }) {
 }
 
 // Editable fields that appear immediately when the sheet opens — no "edit" tab needed.
-const ORG_ROLE_LABELS: Record<string, string> = {
-  provider: "Provider (Art. 3(3))",
-  deployer: "Deployer (Art. 3(4))",
-  both: "Both Provider and Deployer",
-  importer: "Importer",
-  distributor: "Distributor",
-  authorised_representative: "Authorised Representative",
-};
-
 type EditableFields = {
   name: string;
   description: string;
