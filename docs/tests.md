@@ -88,10 +88,20 @@ Legend: ✅ test covered · ⬜ test missing, functionality exists
 | CO request-info → section re-opened → submit-info → reclassification → back to `pending_review` | ⬜ |
 | Per-question assignment → contributor answers → approval gate enforced | ⬜ |
 
+### B2. Backend contracts
+
+Technical invariants enforced by individual backends, independent of cross-service data flow.
+
+| Scenario | State |
+|---|---|
+| Document upload size cap (20 MB) rejected by the backend before reaching MinIO | ⬜ |
+| Presigned MinIO URLs expire within the configured TTL and are not reusable after expiry | ⬜ |
+| Audit trail is append-only — no DELETE or UPDATE path exists in the audit backend API | ⬜ |
+
 ### C. RBAC (cross-service)
 
 These scenarios verify that role checks are enforced at the API level across service boundaries, not
-just in the frontend.
+just in the frontend. All 403 scenarios are tested at the API level, not the frontend.
 
 | Scenario | State |
 |---|---|
