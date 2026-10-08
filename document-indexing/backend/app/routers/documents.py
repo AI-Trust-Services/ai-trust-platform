@@ -160,7 +160,13 @@ async def upload_document(
             await session.commit()
     except Exception:
         # Compensating delete so a failed insert doesn't orphan the object.
-        await minio_client.delete_file(key)
+        try:
+            await minio_client.delete_file(key)
+        except Exception:
+            logger.exception(
+                "document.upload_cleanup_failed",
+                extra={"system_id": system_id, "key": key},
+            )
         logger.exception("document.upload_failed", extra={"system_id": system_id})
         raise
 
@@ -285,7 +291,13 @@ async def upload_version(
             await session.commit()
     except Exception:
         # Compensating delete so a failed swap doesn't orphan the object.
-        await minio_client.delete_file(key)
+        try:
+            await minio_client.delete_file(key)
+        except Exception:
+            logger.exception(
+                "document.version_upload_cleanup_failed",
+                extra={"document_id": document_id, "key": key},
+            )
         logger.exception(
             "document.version_upload_failed", extra={"document_id": document_id}
         )
