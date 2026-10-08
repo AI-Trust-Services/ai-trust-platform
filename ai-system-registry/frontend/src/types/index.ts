@@ -339,7 +339,7 @@ export interface AISystemFormData {
   org_name: string;
   org_role: OrgRole;
   provider_country: string;
-  deployment_country: string;
+  deployment_country: string | null;
   eu_output_usage: boolean | null;
   eu_market_placement: boolean | null;
   system_type: SystemType;

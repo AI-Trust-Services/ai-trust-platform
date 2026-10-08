@@ -85,7 +85,7 @@ export default function RegisterModal({ open, onClose, onSuccess }: Props) {
         org_name: "",
         org_role: (form.org_role || "provider") as "provider" | "deployer" | "both" | "importer" | "distributor" | "authorised_representative",
         provider_country: "DE",
-        deployment_country: "",
+        deployment_country: null,
         eu_output_usage: null,
         eu_market_placement: null,
         system_type: "application",
