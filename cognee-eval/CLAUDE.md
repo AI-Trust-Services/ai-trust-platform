@@ -4,7 +4,7 @@ Standalone evaluation component for [Cognee](https://cognee.ai) as a knowledge g
 Ingests the EU AI Act PDF, builds a knowledge graph, and supports grounded Q&A with a human
 feedback cycle.
 
-**Port:** 8011 · **Helm flag:** `cogneeEval.enabled` · **API docs:** `/api/cognee/docs`
+**Port:** 8014 · **Helm flag:** `cogneeEval.enabled` · **API docs:** `/api/cognee/docs`
 
 ## Storage
 
