@@ -154,7 +154,7 @@ def truncate_tables():
     from ai_trust_persistence.database import engine
     import asyncio
 
-    asyncio.get_event_loop().run_until_complete(engine.dispose())
+    asyncio.run(engine.dispose())
 
 
 @pytest.fixture
