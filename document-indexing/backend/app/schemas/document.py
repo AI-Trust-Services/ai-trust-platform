@@ -15,6 +15,8 @@ class UploadResponse(BaseModel):
 class DocumentStatusResponse(BaseModel):
     """Per-document indexing status (acceptance criterion 1)."""
 
+    model_config = {"from_attributes": True}
+
     id: str
     ai_system_id: str
     filename: str
