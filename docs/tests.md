@@ -185,23 +185,6 @@ GitHub-hosted runners without additional infrastructure, and covers both compone
 and visual regression via screenshot comparison. It replaces the need for a separate Storybook +
 Chromatic stack.
 
-### Component tests (React Testing Library or Playwright component testing)
-
-| Scenario |
-|---|
-| Registry table renders correct columns (Title, Owner) |
-| Detail view opens on row click and displays all fields |
-| Add/Edit form — required field validation prevents submission |
-| Document library table — version number and actions rendered correctly |
-| Task view — correct actions shown per task type (unassign vs. forward) |
-| Login pop-up — renders when tasks open; dismiss and navigate actions work |
-
-### Visual regression (Playwright screenshot)
-
-| Scenario |
-|---|
-| Key UI states: empty states, error states, and loading states across all tables and forms |
-
 ---
 
 ## AI output evaluation
