@@ -25,6 +25,7 @@ from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.test_bed import TestBedRun
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.ids import new_id
@@ -47,6 +48,17 @@ _EU_AI_ACT_SYSTEM_ID = "__eu_ai_act__"
 _DEFAULT_K = 5
 _DEFAULT_MODE = "hybrid"
 _DEFAULT_RRF_K = 60
+
+
+class RunRequest(BaseModel):
+    sample_id: str
+    role: str = "engineer"
+    enabled_sources: dict = {}
+    prompt_override: str | None = None
+    model: str | None = None
+    retrieval_k: int = _DEFAULT_K
+    retrieval_mode: str = _DEFAULT_MODE
+    retrieval_rrf_k: int = _DEFAULT_RRF_K
 
 
 def _format_passages_as_context(passages: list[dict], label: str) -> str:
@@ -96,7 +108,7 @@ async def get_sample_detail(sample_id: str) -> dict:
     "/testbed/run",
     dependencies=[Depends(require_permission(SYSTEMS_READ))],
 )
-async def run_testbed(request: Request) -> dict:
+async def run_testbed(body: RunRequest, request: Request) -> dict:
     """Run an interactive classification against a sample fixture.
 
     Body fields:
@@ -109,15 +121,14 @@ async def run_testbed(request: Request) -> dict:
       - retrieval_mode (str, default "hybrid") — "hybrid" | "dense" | "fts"
       - retrieval_rrf_k (int, default 60) — RRF fusion constant (hybrid only)
     """
-    body = await request.json()
-    sample_id: str = body.get("sample_id", "")
-    role: str = body.get("role", "engineer")
-    enabled_sources: dict = body.get("enabled_sources", {})
-    prompt_override: str | None = body.get("prompt_override") or None
-    model: str | None = body.get("model") or None
-    retrieval_k: int = int(body.get("retrieval_k") or _DEFAULT_K)
-    retrieval_mode: str = body.get("retrieval_mode") or _DEFAULT_MODE
-    retrieval_rrf_k: int = int(body.get("retrieval_rrf_k") or _DEFAULT_RRF_K)
+    sample_id = body.sample_id
+    role = body.role
+    enabled_sources = body.enabled_sources
+    prompt_override = body.prompt_override
+    model = body.model
+    retrieval_k = body.retrieval_k
+    retrieval_mode = body.retrieval_mode
+    retrieval_rrf_k = body.retrieval_rrf_k
     username_header: str = request.headers.get(
         "x-forwarded-preferred-username", "unknown"
     )
