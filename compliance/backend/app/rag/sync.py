@@ -1,11 +1,12 @@
 """Auto-sync: re-index only when the official PDF has changed.
 
-If EUR_LEX_PDF_URL is set, downloads that URL and compares its SHA-256.
-Otherwise, queries the Cellar for the latest consolidated version of the
-regulation, and re-indexes only if the CELEX or PDF content changed.
+Strategy:
+1. Find the latest consolidated CELEX via SPARQL (cheap metadata call).
+2. Compare against the CELEX stored in the current index meta.json.
+3. Only if different: download the new PDF and re-index.
 
-Previous versions stay on disk under their own sha so older snapshots remain
-queryable.
+This means a weekly CronJob costs one SPARQL call when nothing changed —
+no PDF download, no LLM indexing, no cost.
 """
 
 from __future__ import annotations
@@ -16,8 +17,8 @@ from . import config, index, ingest
 
 
 def main() -> None:
-    # Resolve the target: explicit URL overrides CELEX-based discovery.
     if config.EUR_LEX_PDF_URL:
+        # Manual URL override — skip CELEX discovery, fall back to SHA comparison.
         target_celex = config.EUR_LEX_CELEX
         target_url = config.EUR_LEX_PDF_URL
     else:
@@ -25,30 +26,30 @@ def main() -> None:
         target_url = ingest.resolve_pdf_url(target_celex)
         print(f"latest consolidated: {target_celex}")
 
+    # Compare CELEX first — avoids downloading the PDF if nothing changed.
+    try:
+        current_meta = index.load_current()
+        if current_meta.get("celex") == target_celex:
+            print(f"up to date ({target_celex}) — no re-index needed")
+            return
+    except RuntimeError:
+        pass  # no index yet — proceed to build
+
     tmp = config.DATA_DIR / ".sync_tmp.pdf"
-    new_sha = ingest.download_pdf(tmp)
-
-    current_sha = (
-        config.CURRENT_POINTER.read_text().strip()
-        if config.CURRENT_POINTER.exists()
-        else None
-    )
-
-    if new_sha == current_sha:
-        tmp.unlink(missing_ok=True)
-        print(f"up to date (sha {new_sha[:12]}) — no re-index needed")
-        return
+    new_sha = ingest.download_pdf(tmp, url=target_url)
 
     tmp.replace(config.PDF_PATH)
-    doc_id = index.index_pdf(config.PDF_PATH, new_sha)
+    doc_id = index.index_pdf(config.PDF_PATH, new_sha, celex=target_celex)
     index.set_current(new_sha)
 
-    if current_sha:
+    try:
+        current_sha = index.load_current().get("sha256", "")
         print(f"Act changed: {current_sha[:12]} -> {new_sha[:12]}")
         print(f"previous version archived at {index.version_dir(current_sha)}")
-    else:
+    except RuntimeError:
         print(f"first index built (sha {new_sha[:12]})")
-    print(f"current -> {new_sha}  doc_id={doc_id}  celex={target_celex}")
+
+    print(f"current -> {new_sha}  celex={target_celex}  doc_id={doc_id}")
 
 
 if __name__ == "__main__":

@@ -97,9 +97,9 @@ def latest_consolidated_celex(base_number: str = "2024R1689") -> str:
     return bindings[0]["celex"]["value"]
 
 
-def download_pdf(dest: Path) -> str:
+def download_pdf(dest: Path, url: str | None = None) -> str:
     """Download the Act PDF to dest. Returns its SHA-256 hex digest."""
-    url = config.EUR_LEX_PDF_URL or resolve_pdf_url(config.EUR_LEX_CELEX)
+    url = url or config.EUR_LEX_PDF_URL or resolve_pdf_url(config.EUR_LEX_CELEX)
     dest.parent.mkdir(parents=True, exist_ok=True)
     with httpx.Client(follow_redirects=True, timeout=120, headers=_HEADERS) as c:
         resp = c.get(url)

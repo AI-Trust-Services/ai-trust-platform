@@ -25,7 +25,7 @@ def version_dir(sha: str) -> Path:
     return config.INDEX_DIR / sha
 
 
-def index_pdf(pdf_path: Path, sha: str) -> str:
+def index_pdf(pdf_path: Path, sha: str, celex: str = "") -> str:
     """Build the tree index for pdf_path into <INDEX_DIR>/<sha>/. Returns doc_id."""
     vdir = version_dir(sha)
     vdir.mkdir(parents=True, exist_ok=True)
@@ -34,8 +34,9 @@ def index_pdf(pdf_path: Path, sha: str) -> str:
     doc_id = client.submit_document(str(pdf_path), wait=True)["doc_id"]
     meta = {
         "sha256": sha,
+        "celex": celex or config.EUR_LEX_CELEX,
         "doc_id": doc_id,
-        "source_url": config.EUR_LEX_PDF_URL,
+        "source_url": config.EUR_LEX_PDF_URL or f"cellar:{celex}",
         "indexed_at": datetime.now(timezone.utc).isoformat(),
         "provider": config.LLM_PROVIDER,
         "model": config.LLM_MODEL,
