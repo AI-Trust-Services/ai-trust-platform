@@ -8,6 +8,11 @@ from ai_trust_persistence.models.assessment import Assessment
 from ai_trust_persistence.models.audit_event import AuditEvent
 from ai_trust_persistence.models.requirement import Requirement
 from ai_trust_persistence.models.custom_role import CustomRole
+from ai_trust_persistence.models.document import (
+    Document,
+    DocumentChunk,
+    DocumentVersion,
+)
 from ai_trust_persistence.models.evidence import (
     Evidence,
     EvidenceVersion,
@@ -30,6 +35,7 @@ from ai_trust_persistence.models.model_card_feature_store_group import (
 )
 from ai_trust_persistence.models.obligation import Obligation
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
+from ai_trust_persistence.models.test_bed import TestBedRun
 
 __all__ = [
     "AISystem",
@@ -38,6 +44,9 @@ __all__ = [
     "AuditEvent",
     "Branding",
     "CustomRole",
+    "Document",
+    "DocumentVersion",
+    "DocumentChunk",
     "ModelCard",
     "ModelCardMetric",
     "ModelCardSource",
@@ -55,5 +64,6 @@ __all__ = [
     "PlatformSettings",
     "SystemWorkflowStep",
     "QuestionAssignment",
+    "TestBedRun",
     "evidence_requirements",
 ]

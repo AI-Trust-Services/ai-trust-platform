@@ -1,0 +1,9 @@
+-e /app/libs/tenancy
+-e /app/libs/persistence
+-e /app/libs/logging
+-e /app/libs/authorization
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+httpx==0.28.1
+PyJWT[crypto]==2.13.0
+PyYAML==6.0.2

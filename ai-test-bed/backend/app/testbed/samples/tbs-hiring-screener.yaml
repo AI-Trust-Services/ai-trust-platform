@@ -1,0 +1,64 @@
+id: tbs-hiring-screener
+name: Automated Hiring Screener
+description: >
+  An AI system that ranks and shortlists job applicants based on CV content,
+  structured assessments, and job-fit scores. Used by the HR department to
+  reduce manual screening effort for high-volume roles.
+expected_tier: high
+expected_rationale: >
+  The system falls under Annex III, point 4 of the EU AI Act (employment —
+  AI systems used for recruitment, CV sorting, and candidate shortlisting).
+  Although a human recruiter reviews the top-20 shortlist, the initial
+  filtering and ranking are fully automated and have a material influence on
+  which candidates advance. This indirect effect on employment decisions
+  triggers the high-risk classification regardless of the final human review
+  step. No prohibited practices are present, and the system is not GPAI.
+ai_system_id: SYS-TBHIRING
+business_answers:
+  intended_purpose: >
+    Automatically screen, score, and rank job applicants from a pool of incoming
+    CVs for open positions across all departments.
+  department: Human Resources
+  use_case: >
+    Recruiters upload batches of CVs; the system parses them, extracts
+    structured signals (skills, experience, education), scores candidates
+    against a job description, and returns a ranked shortlist. A recruiter
+    reviews the top 20 before scheduling interviews. No autonomous hiring
+    decisions are made without human review.
+  people_affected: >
+    External job applicants who submit CVs through the corporate careers portal.
+    Hiring managers who rely on the shortlist for interview planning.
+  decision_context: >
+    The system's output is a ranked list with scores. Recruiters use it as a
+    starting point; the final shortlist selection and all interview invitations
+    are made by a human recruiter.
+  data_sources: >
+    CV documents (PDF/DOCX), LinkedIn profiles (optional), structured
+    assessment results from third-party psychometric tools.
+  oversight_mechanism: >
+    Recruiter reviews the top-20 shortlist before any candidate is contacted.
+    Rejected applicants can request a manual review within 30 days.
+  deployment_context: >
+    Internal HR portal, accessible to recruiters and HR business partners.
+    Deployed on-premise; no external market placement.
+technical_answers:
+  data_and_inputs: >
+    CV documents, job descriptions, optional psychometric scores. No sensitive
+    special-category personal data (e.g. health, ethnicity) is ingested.
+  decision_domain: >
+    Employment — candidate screening and shortlisting for job positions.
+  automation_and_oversight: >
+    Human recruiter reviews every shortlist before contacting candidates.
+    Fully automated scoring; decision support only.
+  affected_people: >
+    Job applicants (external); hiring managers (internal).
+  model_nature: >
+    Transformer-based NLP model fine-tuned for semantic similarity between
+    CV and job description. Training compute < 10^23 FLOPs.
+  user_interaction: >
+    Batch processing: recruiters upload CV bundles and receive a ranked list.
+    No conversational interface.
+  prohibited_practices: >
+    No emotion recognition, no biometric identification, no social scoring,
+    no subliminal manipulation. System does not use real-time biometric ID
+    in public spaces.

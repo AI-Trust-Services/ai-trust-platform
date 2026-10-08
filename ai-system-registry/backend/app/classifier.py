@@ -153,21 +153,29 @@ def classify_from_flags(flags: list[Any]) -> ClassificationResult:
     return classify(obj)
 
 
-async def classify_ai_questionnaire(row: Any) -> tuple[ClassificationResult, dict]:
-    """AI-mode classification from a system's stored questionnaire answers.
+async def classify_from_questionnaire_answers(
+    business_answers: dict,
+    technical_answers: dict,
+    injected_context: str = "",
+    prompt_override: str | None = None,
+    model: str | None = None,
+    role: str | None = None,
+) -> tuple[ClassificationResult, dict]:
+    """Core AI classification from raw questionnaire answers — no DB writes.
 
-    Infers the hidden classifier flags from the free-text business + technical
-    answers via the LLM, runs the deterministic ``classify()`` over them, and
-    returns ``(ClassificationResult, extended_rationale)`` where the rationale is
-    the ``ClassificationRationale`` shape ``{flags, confidence, reasoning,
-    missing_info}`` — visible only to the compliance officer.
+    Infers classifier flags from the free-text answers via the LLM, runs the
+    deterministic ``classify()`` over them, and returns
+    ``(ClassificationResult, rationale)`` where rationale has the shape
+    ``{flags, confidence, reasoning, missing_info, org_role, org_role_rationale}``.
 
-    Called identically by submit-technical and submit-info. The LLM call happens
-    *before* any status mutation in the router, so an ``LLMParseError`` leaves the
-    row untouched and the router can return 502 without corrupting workflow state.
-
-    Imports from ``app.llm`` are deferred to avoid a circular import
-    (``app.llm.prompts`` imports ``CLASSIFIER_INPUTS`` from this module at import time).
+    ``injected_context`` is pre-formatted retrieved text (from system docs,
+    EU AI Act, Cognee) appended to the classification prompt.
+    ``prompt_override`` replaces the system message entirely — for test-bed
+    prompt experiments; the user message (answers) is always kept.
+    ``model`` overrides the default LLM model for this call.
+    ``role`` adds role-specific framing to the system prompt: ``"engineer"``
+    emphasises technical flag drivers; ``"compliance_officer"`` emphasises
+    obligations and legal exposure. Ignored when ``prompt_override`` is set.
     """
     from app.llm import (
         build_classify_questionnaire_messages,
@@ -176,21 +184,20 @@ async def classify_ai_questionnaire(row: Any) -> tuple[ClassificationResult, dic
     )
     from app.schemas import InferredFlag
 
-    answers = dict(row.questionnaire_answers or {})
-    technical_answers = answers.pop("technical", {}) or {}
-    business_answers = {
-        "intended_purpose": row.intended_purpose or "",
-        "department": row.department or "",
-        "use_case": row.use_case or "",
-        "people_affected": row.people_affected or "",
-        "decision_context": row.decision_context or "",
-        **answers,
-    }
-
     messages = build_classify_questionnaire_messages(
-        business_answers, technical_answers
+        business_answers,
+        technical_answers,
+        retrieved_context=injected_context,
+        role=role,
     )
-    result = await chat(messages, json_mode=True, task="classify_questionnaire")
+    if prompt_override:
+        messages[0]["content"] = prompt_override
+
+    kwargs: dict = {"json_mode": True, "task": "classify_questionnaire"}
+    if model:
+        kwargs["model"] = model
+
+    result = await chat(messages, **kwargs)
     parsed = await parse_json_response(result["text"], task="classify_questionnaire")
 
     inferred = [InferredFlag(**f) for f in parsed.get("inferred_flags", [])]
@@ -208,3 +215,34 @@ async def classify_ai_questionnaire(row: Any) -> tuple[ClassificationResult, dic
         "org_role_rationale": parsed.get("org_role_rationale"),
     }
     return classification, rationale
+
+
+async def classify_ai_questionnaire(row: Any) -> tuple[ClassificationResult, dict]:
+    """AI-mode classification from a system's stored questionnaire answers.
+
+    Infers the hidden classifier flags from the free-text business + technical
+    answers via the LLM, runs the deterministic ``classify()`` over them, and
+    returns ``(ClassificationResult, extended_rationale)`` where the rationale is
+    the ``ClassificationRationale`` shape ``{flags, confidence, reasoning,
+    missing_info}`` — visible only to the compliance officer.
+
+    Called identically by submit-technical and submit-info. The LLM call happens
+    *before* any status mutation in the router, so an ``LLMParseError`` leaves the
+    row untouched and the router can return 502 without corrupting workflow state.
+
+    Imports from ``app.llm`` are deferred to avoid a circular import
+    (``app.llm.prompts`` imports ``CLASSIFIER_INPUTS`` from this module at import time).
+    """
+    answers = dict(row.questionnaire_answers or {})
+    technical_answers = answers.pop("technical", {}) or {}
+    business_answers = {
+        "intended_purpose": row.intended_purpose or "",
+        "department": row.department or "",
+        "use_case": row.use_case or "",
+        "people_affected": row.people_affected or "",
+        "decision_context": row.decision_context or "",
+        **answers,
+    }
+    return await classify_from_questionnaire_answers(
+        business_answers, technical_answers
+    )

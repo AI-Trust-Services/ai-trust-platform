@@ -130,7 +130,7 @@ Codebase-specific decisions. Follow them even where an external pattern is more 
 - **Pydantic schemas** — response schemas set `model_config = {"from_attributes": True}`. Convert rows with `Schema.model_validate(row)` — never `.from_orm()` (Pydantic v1, removed in v2).
 - **Test deps** — `requirements-test.txt` lists PyPI deps only; never `-r requirements.txt`. Editable libs (`-e ../libs/…`) are installed by `make setup`, not from this file. The service `requirements.txt` uses Docker-path `-e /app/libs/…` which is invalid outside containers and would break CI.
 - **Lint** — `pyproject.toml` at repo root configures ruff. `ruff` is not on PATH — invoke as `python3 -m ruff check .` and `python3 -m ruff format --check .`; both run as PR gates. Rules F401/F811/E402/E701/E712 are suppressed for pre-existing violations — don't add new suppressions for new code.
-- **TypeScript typecheck** — all 8 frontends run `npm run typecheck` (`tsc --noEmit`) as a PR gate (`.github/workflows/pr-typecheck.yml`). Run `cd <component>/frontend && npm ci && npm run typecheck` locally before pushing frontend changes. Do not leave unused imports or type errors — the check fails the PR.
+- **TypeScript typecheck** — all 9 frontends run `npm run typecheck` (`tsc --noEmit`) as a PR gate (`.github/workflows/pr-typecheck.yml`). Run `cd <component>/frontend && npm ci && npm run typecheck` locally before pushing frontend changes. Do not leave unused imports or type errors — the check fails the PR.
 - **CLAUDE.md** — update it as part of any PR that adds or changes a feature, service, endpoint, env var, migration, or architectural pattern. It is the primary reference for AI assistants working in this repo — stale docs cause wrong suggestions and wasted effort. Component-specific detail goes in that component's own `CLAUDE.md` (see "Nested docs" at the top); keep this root file for cross-cutting concerns.
 
 ---
@@ -143,7 +143,7 @@ All traffic enters through port 8080 (oauth2-proxy). Frontend and backend ports 
 |---|---|
 | Luigi shell / entry point | http://localhost:8080 |
 | Keycloak (browser login) | http://localhost:8180 |
-| Frontends | `/registry/`, `/overview/`, `/monitoring/`, `/alerts/`, `/dta/`, `/compliance/`, `/iam/`, `/audit/`, `/admin/` under `:8080` |
+| Frontends | `/registry/`, `/overview/`, `/monitoring/`, `/alerts/`, `/dta/`, `/compliance/`, `/iam/`, `/audit/`, `/admin/`, `/ai-test-bed/` under `:8080` |
 | Backend APIs | `/api/{registry,overview,monitoring,alerts,dta,compliance,audit,admin}/v1` under `:8080` (health at `/api/*/health`, docs at `/api/registry/docs`) |
 | IAM / roles API | `/api/users/v1/iam` · current-user permissions `/api/users/v1/me/permissions` |
 | PostgreSQL | localhost:5432 / db `ai_trust` |
@@ -202,7 +202,7 @@ See [docs/architecture.md](docs/architecture.md) for repo layout, GenAI observab
 
 ## Frontend stacks
 
-All React frontends (registry, alerts, DTA, compliance, monitoring, users, iam) share:
+All React frontends (registry, alerts, DTA, compliance, monitoring, users, iam, audit, admin, ai-test-bed) share:
 - **Stack** — React 19, React Router 8, TypeScript 5.8. Use React 19 APIs (no `forwardRef`/`React.FC`, `use()` where applicable).
 - **Build** — Vite 6 (`npm run build → dist/`), multi-stage Dockerfile (`node:24-alpine` build → `nginx:alpine` serve).
 - **Base path** — `base` in `vite.config.ts` (e.g. `/registry/`) for correct asset resolution under the shell sub-path.
@@ -255,8 +255,8 @@ When you add a new service, update all of these together — nothing enforces pa
 - Add the image as an `ociImage` resource in `.ocm/component-constructor.yaml`. An image missing here silently ships broken to Gardener.
 - New/changed env var or secret → add to `.env.example`; it flows to k8s via `k8s/scripts/bootstrap.sh`'s Secret.
 - New `depends_on: condition:` → add the matching `waitForTcp`/`waitForHttp`/`waitForJob` initContainer (helpers in `_helpers.tpl`).
-- New one-shot Job → use the `ai-trust.jobName` helper for `metadata.name` (appends `-r<.Release.Revision>`) so each `helm upgrade` creates a new Job name instead of patching an immutable one. Do **not** add `helm.sh/hook` annotations — plain resources with per-revision names are the established pattern here (see `jobs.yaml`).
-- Renamed/moved a mounted file (e.g. `infra/*/init.sh`, `otel-pipeline/**/config`) → update `bootstrap.sh` `--from-file`. Nothing enforces this in CI — a rename silently breaks the other side.
+- New one-shot Job → use the `ai-trust.jobName` helper for `metadata.name` (appends `-r<.Release.Revision>`) so each `helm upgrade` creates a new Job name instead of patching an immutable one. Do **not** add `helm.sh/hook` annotations — plain resources with per-revision names are the established pattern here (see `jobs.yaml`). A Job that reuses an existing image (command-override only) does **not** need a new `docker-bake.hcl` target, `build-and-load-images.sh` entry, or OCM resource — see the `testbed-seed` Job (reuses `ai-test-bed-backend` with `command: ["python", "-m", "app.seed"]`) as the reference pattern.
+- Renamed/moved a mounted file (e.g. `infra/*/init.sh`, `otel-pipeline/**/config`) → update both `docker-compose.yml` `volumes:` **and** `bootstrap.sh` `--from-file`. Nothing enforces this in CI — a rename on one side silently breaks the other.
 
 ### Adding a new component
 1. Create `new-component/frontend/` and `new-component/backend/`.
@@ -314,6 +314,12 @@ Keycloak-backed user management plus the IAM/roles API (see "Authorization — R
 
 ### admin/ (port 8010, `/api/admin/`)
 Platform administration — SMTP mail config, general platform settings, branding/white-labeling, summary dashboard. Details → [admin/CLAUDE.md](admin/CLAUDE.md).
+
+### document-indexing/ (port 8011, `/api/indexing/`) — k8s-only
+Reusable document indexing + retrieval service (chunk → embed → hybrid dense+FTS retrieval with traceable source refs), served by `document-indexing/backend`, `document-indexing-worker`, and `embedding-service`. **Backend-only** — no frontend MFE in this component; the UI lives in `ai-test-bed/`. **k8s/kind + Gardener only — no docker-compose entry.** Details → [document-indexing/CLAUDE.md](document-indexing/CLAUDE.md).
+
+### ai-test-bed/ (port 8013, `/api/ai-test-bed/`) — k8s-only
+Interactive EU AI Act classification test harness that consumes document-indexing (retrieval over HTTP) and the registry (classification over HTTP). Hosts the document-management UI and the test-bed run UI in a single MFE at `/ai-test-bed/`. **k8s/kind + Gardener only — no docker-compose entry.** Details → [ai-test-bed/CLAUDE.md](ai-test-bed/CLAUDE.md).
 
 ## Environment variables
 

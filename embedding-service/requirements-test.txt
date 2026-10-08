@@ -1,0 +1,7 @@
+# PyPI deps only. FlagEmbedding/torch are NOT installed here — the unit test hits
+# /health without triggering model load (no lifespan), so the heavy model stays out
+# of the test lane.
+fastapi==0.115.6
+httpx==0.28.1
+pytest==9.0.3
+pytest-asyncio==1.4.0

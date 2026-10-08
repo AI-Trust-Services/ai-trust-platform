@@ -317,3 +317,38 @@ class QuestionnaireAnswersPatch(BaseModel):
 
     answers: dict[str, str]
     section: Literal["business", "technical"] = "business"
+
+
+# ---------------------------------------------------------------------------
+# Side-effect-free classification evaluate (Test Bed)
+# ---------------------------------------------------------------------------
+
+
+class EvaluateAnswers(BaseModel):
+    """Business + technical free-text answers for the evaluate endpoint."""
+
+    business: dict[str, str] = Field(default_factory=dict)
+    technical: dict[str, str] = Field(default_factory=dict)
+
+
+class EvaluateRequest(BaseModel):
+    """Request body for POST /v1/classify/evaluate."""
+
+    answers: EvaluateAnswers
+    enabled_sources: dict[str, bool] = Field(default_factory=dict)
+    injected_context: str = ""
+    prompt_override: str | None = None
+    model: str | None = None
+    role: str | None = (
+        None  # "engineer" | "compliance_officer" — adds role-specific prompt framing
+    )
+
+
+class EvaluateResponse(BaseModel):
+    """Response from POST /v1/classify/evaluate."""
+
+    tier: str
+    basis: str
+    obligations: list[str]
+    confidence: float | None
+    rationale: dict
