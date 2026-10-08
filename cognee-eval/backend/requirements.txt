@@ -1,0 +1,2 @@
+cognee==1.6.2
+-e /app/libs/logging

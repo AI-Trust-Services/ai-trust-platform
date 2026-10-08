@@ -13,10 +13,8 @@ Create a new RabbitMQ consumer under `consumers/` that subscribes to the `otel.t
 ## What this skill does
 
 1. Creates `consumers/<name>/` with all required files
-2. Adds the service to `docker-compose.yml`
-3. Adds the matching Deployment to the k8s Helm chart (this app has two independent, fully-supported
-   deployment paths — docker-compose and k8s/kind — that must be kept in sync; see CLAUDE.md's
-   "Dual deployment paths" section)
+2. Adds the matching Deployment to the k8s Helm chart
+3. Registers the image in all three inventories: `build-and-load-images.sh` (kind), `docker-bake.hcl` (CI), `.ocm/component-constructor.yaml` (Gardener)
 
 ---
 
@@ -29,7 +27,6 @@ Parse `$ARGUMENTS` — the first word is the consumer name (kebab-case), the res
 ### Step 1 — Read existing files first
 
 Read these files before making any changes:
-- `docker-compose.yml` — to understand the current structure and find where to add the new service
 - `consumers/clickhouse-consumer/main.py` — reference implementation
 - `consumers/clickhouse-consumer/Dockerfile` — reference Dockerfile
 - `consumers/clickhouse-consumer/requirements.txt` — reference requirements
@@ -72,26 +69,7 @@ Model it on `consumers/clickhouse-consumer/main.py` (read that file first). Key 
 - Queue declared as `durable=True` — survives consumer restarts; messages accumulate while consumer is down
 - Replace the clickhouse-specific logic with the new consumer's logic; keep the RabbitMQ plumbing identical
 
-### Step 6 — Add service to `docker-compose.yml`
-
-Find the `x-rmq-env: &rmq-env` anchor. Add the new service after `otel-clickhouse-consumer`:
-
-```yaml
-  <consumer-name>:
-    build: ./consumers/<consumer-name>
-    environment:
-      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    restart: on-failure
-```
-
-If the consumer exposes an HTTP port, add a `ports:` entry and a `healthcheck:`.
-
-**YAML merge key note**: YAML does not allow two `<<:` merge keys in the same mapping. If this service needs both `*rmq-env` and another anchor (e.g. `*ch-env`), expand the variables inline instead of using `<<:`.
-
-### Step 7 — Add the matching Deployment to the k8s Helm chart
+### Step 6 — Add the matching Deployment to the k8s Helm chart
 
 Read `k8s/helm/ai-trust-platform/templates/otel.yaml` (the `otel-clickhouse-consumer` Deployment)
 as the reference pattern, then add a new Deployment for `<consumer-name>` to the same file (or a
@@ -124,8 +102,43 @@ spec:
 ```
 
 Add an HTTP `readinessProbe`/`Service` too if the consumer exposes a port (same as
-`otel-rmq-bridge` in that file). Then add `<consumer-name>` to the image list in
-`k8s/scripts/build-and-load-images.sh`.
+`otel-rmq-bridge` in that file).
+
+### Step 7 — Add the image to all three inventories
+
+All three must be updated together — a missing entry silently breaks the corresponding deploy path.
+
+**`k8s/scripts/build-and-load-images.sh`** — kind local builds. Add `"<consumer-name>"` to the
+images array alongside `"otel-clickhouse-consumer"`.
+
+**`docker-bake.hcl`** — CI image builds (used by both `build-push-deploy.yml` and the PR deployment
+test). Add a new target block and include it in `group "default"`. Use `otel-clickhouse-consumer` as
+the reference pattern:
+
+```hcl
+target "<consumer-name>" {
+  context    = "."
+  dockerfile = "consumers/<name>/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("<consumer-name>")]
+  cache-from = ["type=gha,scope=<consumer-name>"]
+  cache-to   = ["type=gha,mode=max,scope=<consumer-name>"]
+}
+```
+
+Also add `"<consumer-name>"` to the `targets` list inside `group "default"`.
+
+**`.ocm/component-constructor.yaml`** — Gardener/OCM packaging. An image absent here ships broken
+to Gardener. Add a new `ociImage` resource block alongside `otel-clickhouse-consumer`:
+
+```yaml
+  - name: <consumer-name>
+    type: ociImage
+    version: "${VERSION}"
+    access:
+      type: ociArtifact
+      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/<consumer-name>:${IMAGE_TAG}
+```
 
 ### Step 8 — Report back
 
@@ -133,5 +146,4 @@ Tell the user:
 - Files created
 - The `QUEUE_NAME` used (important — must be unique)
 - Any TODOs left in `main.py` for them to fill in
-- How to test: `docker compose up --build -d <consumer-name>` then watch logs (docker-compose path),
-  and `cd k8s && make build && make upgrade` (k8s path)
+- How to test: `make build && make upgrade && make rollout` (rebuilds and reloads into the kind cluster)

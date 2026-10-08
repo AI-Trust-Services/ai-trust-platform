@@ -1,0 +1,141 @@
+{{- if .Values.cogneeEval.enabled }}
+{{/* AI Gateway — OpenAI-compatible proxy over an Anthropic deployment.
+     Holds the OAuth token, retries 429/5xx.
+     cognee-eval-backend points its LLM_ENDPOINT here. */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "ai-gateway") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "ai-gateway") | nindent 8 }}
+    spec:
+      {{- include "ai-trust.imagePullSecrets" $ | nindent 6 }}
+      containers:
+        - name: ai-gateway
+          image: {{ .Values.image.repository }}/ai-gateway:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} }
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-gateway
+spec:
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "ai-gateway") | nindent 4 }}
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+{{/* Cognee eval backend — graph-based grounded Q&A over the EU AI Act. */}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cognee-eval-backend
+spec:
+  serviceName: cognee-eval-backend
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "cognee-eval-backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "cognee-eval-backend") | nindent 8 }}
+    spec:
+      {{- include "ai-trust.imagePullSecrets" $ | nindent 6 }}
+      containers:
+        - name: cognee-eval-backend
+          image: {{ .Values.image.repository }}/cognee-eval-backend:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} }
+          env:
+            - name: ALLOWED_ORIGINS
+              value: {{ .Values.appPublicUrl | quote }}
+            - name: LLM_ENDPOINT
+              value: "http://ai-gateway:8000/v1"
+            - name: LLM_EXTRACTION_ENDPOINT
+              value: "http://ai-gateway:8000/v1"
+            - name: LLM_PROVIDER
+              value: "openai"
+            - name: LLM_MODEL
+              value: "openai/ai-gateway"
+            - name: LLM_API_KEY
+              value: "ai-gateway"
+            - name: LLM_EXTRACTION_PROVIDER
+              value: "openai"
+            - name: LLM_EXTRACTION_MODEL
+              value: "openai/ai-gateway"
+            - name: LLM_EXTRACTION_API_KEY
+              value: "ai-gateway"
+          ports:
+            - containerPort: {{ .Values.cogneeEval.backendPort }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/.cognee_system
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.cogneeEval.backendPort }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          # Ingestion is synchronous and blocks the asyncio event loop for minutes
+          # (entity extraction + node/edge merge for a full document), so /health
+          # cannot answer promptly during a large ingest. Keep the liveness probe
+          # tolerant enough that a long ingest is never mistaken for a hung pod.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.cogneeEval.backendPort }}
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.cogneeEval.dataStorageSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cognee-eval-backend
+spec:
+  selector:
+    {{- include "ai-trust.labels" (dict "name" "cognee-eval-backend") | nindent 4 }}
+  ports:
+    - port: {{ .Values.cogneeEval.backendPort }}
+      targetPort: {{ .Values.cogneeEval.backendPort }}
+{{- end }}

@@ -42,3 +42,6 @@ otel:
 ollama:
   serviceType: NodePort
   nodePort: 30434
+
+cogneeEval:
+  enabled: true
