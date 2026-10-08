@@ -46,7 +46,6 @@ kubectl get pods -n <namespace>
 - **PR deployment test** — adding the `garden-deploy` label to a PR (`.github/workflows/pr-deployment-test.yml`) deploys the PR branch to a namespace derived from the PR author on `ai-trust-test`. It runs the whole build→package→publish→deploy pipeline as one job (`namespace-deployment-test`) via composite actions + `docker-bake.hcl` (not a `workflow_call` to `build-push-deploy.yml`); the job's pass/fail is the PR check. That namespace must be initialized once via `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`.
 
 ### Run tests (any backend)
-Test strategy (levels, quality gates, MVP integration scenarios) → [docs/tests.md](docs/tests.md). Update it in the same PR when you add/change a test level, CI test workflow, gate, or MVP scenario.
 ```bash
 cd <component>/backend   # e.g. cd compliance/backend
 make setup               # first time only — creates .venv, installs deps
