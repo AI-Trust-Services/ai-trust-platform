@@ -148,9 +148,7 @@ async def update_system(
         f for f in _REQUIRED_FIELDS & updates.keys() if updates[f] is None
     }
     if nulled_required:
-        raise HTTPException(
-            422, f"Fields cannot be null: {sorted(nulled_required)}"
-        )
+        raise HTTPException(422, f"Fields cannot be null: {sorted(nulled_required)}")
 
     if body.lifecycle is not None and body.lifecycle not in VALID_LIFECYCLES:
         raise HTTPException(422, f"Invalid lifecycle '{body.lifecycle}'")
