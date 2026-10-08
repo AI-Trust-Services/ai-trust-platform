@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cognee Eval</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #1a1a2e; color: #e0e0e0; font-family: sans-serif; font-size: 14px; }
+    a { color: #7da8f7; }
+
+    /* ── Layout ── */
+    header { background: #16213e; padding: 14px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #2a2a4a; }
+    header h1 { font-size: 16px; font-weight: 600; color: #fff; flex: 1; }
+    nav button { background: none; border: none; color: #aaa; cursor: pointer; font-size: 13px; padding: 6px 14px; border-radius: 4px; }
+    nav button.active { background: #2a2a4a; color: #7da8f7; }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
+
+    /* ── Tabs ── */
+    .tab { display: none; }
+    .tab.active { display: block; }
+
+    /* ── Forms ── */
+    label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; margin-top: 12px; }
+    textarea, input[type=text] {
+      width: 100%; background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 4px;
+      color: #e0e0e0; padding: 8px 10px; font-size: 13px; font-family: inherit; resize: vertical;
+    }
+    textarea:focus, input[type=text]:focus { outline: none; border-color: #4e8ef7; }
+    button.btn {
+      background: #4e8ef7; color: #fff; border: none; border-radius: 4px;
+      padding: 8px 18px; font-size: 13px; cursor: pointer; margin-top: 10px;
+    }
+    button.btn:hover { background: #3a7ae0; }
+    button.btn:disabled { background: #2a2a4a; color: #666; cursor: default; }
+    button.btn-sm { padding: 4px 10px; font-size: 12px; margin-top: 0; }
+    button.btn-approve { background: #27ae60; }
+    button.btn-approve:hover { background: #1e8449; }
+    button.btn-reject { background: #c0392b; }
+    button.btn-reject:hover { background: #a93226; }
+    button.btn-wrong { background: #7d3c00; color: #f0a060; border: 1px solid #a04a00; }
+    button.btn-wrong:hover { background: #a04a00; }
+
+    /* ── Answer box ── */
+    #answer-box { background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 6px; padding: 14px; margin-top: 16px; white-space: pre-wrap; line-height: 1.6; min-height: 60px; }
+    #answer-box .placeholder { color: #555; }
+
+    /* ── Sources ── */
+    #sources-list { margin-top: 12px; }
+    .source-item { background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 4px; margin-bottom: 6px; }
+    .source-item summary { cursor: pointer; padding: 8px 10px; font-size: 12px; color: #7da8f7; list-style: none; }
+    .source-item summary::-webkit-details-marker { display: none; }
+    .source-item summary::before { content: "▶ "; }
+    details[open] .source-item summary::before { content: "▼ "; }
+    .source-item .source-body { padding: 8px 10px; font-size: 12px; color: #ccc; border-top: 1px solid #2a2a4a; white-space: pre-wrap; }
+
+    /* ── Feedback form ── */
+    #feedback-form { background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 6px; padding: 14px; margin-top: 20px; }
+    #feedback-form h3 { font-size: 13px; color: #aaa; margin-bottom: 4px; }
+
+    /* ── Tables ── */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; color: #888; font-weight: 500; padding: 8px 10px; border-bottom: 1px solid #2a2a4a; }
+    td { padding: 8px 10px; border-bottom: 1px solid #1e1e3a; vertical-align: top; }
+    tr:hover td { background: #0f0f1e; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; }
+    .badge-pending { background: #2a2a00; color: #f0c040; }
+    .badge-approved { background: #0a2a0a; color: #5dbb63; }
+    .badge-rejected { background: #2a0a0a; color: #e07070; }
+
+    /* ── Ingest tab ── */
+    .ingest-status-box { background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 6px; padding: 14px; margin-bottom: 16px; }
+    .ingest-status-box .label { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .ingest-status-box .value { font-size: 13px; }
+    .status-ok { color: #5dbb63; }
+    .status-none { color: #f0c040; }
+    .progress-bar { width: 100%; height: 6px; background: #2a2a4a; border-radius: 3px; margin-top: 12px; overflow: hidden; display: none; }
+    .progress-bar-fill { height: 100%; width: 0%; background: #4e8ef7; border-radius: 3px; transition: width 0.4s; animation: progress-pulse 1.5s ease-in-out infinite; }
+    @keyframes progress-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    input[type=file] { background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 4px; color: #e0e0e0; padding: 6px 10px; font-size: 13px; width: 100%; cursor: pointer; }
+    input[type=file]::file-selector-button { background: #2a2a4a; color: #aaa; border: none; border-radius: 3px; padding: 4px 10px; font-size: 12px; cursor: pointer; margin-right: 10px; }
+    .ingest-log { background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 4px; padding: 10px; font-size: 11px; color: #888; font-family: monospace; min-height: 48px; margin-top: 12px; white-space: pre-wrap; line-height: 1.6; }
+
+    /* ── Status bar ── */
+    #status { font-size: 12px; color: #888; margin-top: 8px; min-height: 18px; }
+    #status.error { color: #e07070; }
+
+    /* ── Spinner ── */
+    .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid #4e8ef7; border-top-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Cognee Eval</h1>
+  <nav>
+    <button class="active" onclick="showTab('ask', this)">Ask</button>
+    <button onclick="showTab('evaluations', this)">Evaluations</button>
+    <button onclick="showTab('feedback', this)">Feedback</button>
+    <button onclick="showTab('ingest', this)">Ingest</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ── Ask tab ─────────────────────────────────────────────────────── -->
+  <div id="tab-ask" class="tab active">
+    <label for="question">Question</label>
+    <textarea id="question" rows="3" placeholder="What are the transparency obligations for high-risk AI systems?"></textarea>
+    <button class="btn" id="ask-btn" onclick="askQuestion()">Ask</button>
+    <div id="status"></div>
+
+    <div id="answer-box"><span class="placeholder">Answer will appear here.</span></div>
+    <div id="answer-actions" style="display:none; margin-top:8px;">
+      <button class="btn btn-sm btn-wrong" onclick="markWrong()">&#x2715; Mark as wrong</button>
+    </div>
+    <div id="sources-list"></div>
+
+    <div id="feedback-form" style="display:none">
+      <h3>Submit Feedback</h3>
+      <label>Corrected conclusion</label>
+      <input type="text" id="fb-conclusion" placeholder="The answer is correct / incorrect because…" />
+      <label>Reasoning</label>
+      <textarea id="fb-reasoning" rows="3" placeholder="Explain why this answer is right or wrong…"></textarea>
+      <label>Conditions (optional)</label>
+      <input type="text" id="fb-conditions" placeholder="e.g. Only applies to GPAI models" />
+      <label>Supporting node IDs (auto-filled from sources)</label>
+      <input type="text" id="fb-nodes" placeholder="node-id-1, node-id-2" />
+      <button class="btn" onclick="submitFeedback()">Send Feedback</button>
+      <div id="fb-status"></div>
+    </div>
+  </div>
+
+  <!-- ── Evaluations tab ─────────────────────────────────────────────── -->
+  <div id="tab-evaluations" class="tab">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <span style="color:#888; font-size:12px;">Past Q&amp;A — click a row to load it in Ask.</span>
+      <button class="btn btn-sm" onclick="loadEvaluations()">Refresh</button>
+    </div>
+    <table>
+      <thead><tr><th>ID</th><th>Question</th><th>Gap?</th><th>Created</th></tr></thead>
+      <tbody id="eval-tbody"><tr><td colspan="4" style="color:#555">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- ── Ingest tab ─────────────────────────────────────────────────── -->
+  <div id="tab-ingest" class="tab">
+    <div class="ingest-status-box">
+      <div class="label">Knowledge graph status</div>
+      <div class="value" id="ingest-status-value"><span class="spin"></span> Checking…</div>
+    </div>
+
+    <label for="pdf-file">Upload EU AI Act PDF</label>
+    <input type="file" id="pdf-file" accept=".pdf" onchange="onFileSelected(this)" />
+
+    <button class="btn" id="ingest-btn" onclick="uploadPdf()" disabled style="margin-top:12px">Upload &amp; Ingest</button>
+
+    <div class="progress-bar" id="ingest-progress">
+      <div class="progress-bar-fill" id="ingest-progress-fill"></div>
+    </div>
+
+    <div class="ingest-log" id="ingest-log">Select a PDF to begin.</div>
+  </div>
+
+  <!-- ── Feedback tab ────────────────────────────────────────────────── -->
+  <div id="tab-feedback" class="tab">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <span style="color:#888; font-size:12px;">Pending feedback awaiting review.</span>
+      <button class="btn btn-sm" onclick="loadFeedback()">Refresh</button>
+    </div>
+    <table>
+      <thead><tr><th>ID</th><th>Eval</th><th>Conclusion</th><th>Status</th><th>Reviewer</th><th></th></tr></thead>
+      <tbody id="fb-tbody"><tr><td colspan="6" style="color:#555">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+</main>
+
+<script>
+  const API = '/v1';   // relative — works both direct (8011) and via shell proxy (/api/cognee)
+
+  // Detect if we're being served through the shell proxy and adjust API base accordingly.
+  // When served at /api/cognee/ui, the backend is at /api/cognee/v1.
+  // When served directly at port 8011, the backend is at /v1.
+  const API_BASE = window.location.pathname.startsWith('/api/cognee') ? '/api/cognee/v1' : '/v1';
+
+  let _currentEvalId = null;
+  let _currentNodeIds = [];
+
+  // ── Tab switching ────────────────────────────────────────────────────────
+  function showTab(name, btn) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    btn.classList.add('active');
+    if (name === 'evaluations') loadEvaluations();
+    if (name === 'feedback') loadFeedback();
+    if (name === 'ingest') loadIngestStatus();
+  }
+
+  // ── Mark as wrong ────────────────────────────────────────────────────────
+  function markWrong() {
+    document.getElementById('fb-conclusion').value = '';
+    document.getElementById('fb-reasoning').value = '';
+    document.getElementById('fb-conditions').value = '';
+    document.getElementById('feedback-form').style.display = 'block';
+    document.getElementById('fb-conclusion').focus();
+  }
+
+  // ── Ask ─────────────────────────────────────────────────────────────────
+  async function askQuestion() {
+    const q = document.getElementById('question').value.trim();
+    if (!q) return;
+
+    setStatus('<span class="spin"></span>Thinking…');
+    document.getElementById('ask-btn').disabled = true;
+    document.getElementById('answer-box').innerHTML = '<span class="placeholder">Generating answer…</span>';
+    document.getElementById('sources-list').innerHTML = '';
+    document.getElementById('feedback-form').style.display = 'none';
+    document.getElementById('answer-actions').style.display = 'none';
+    _currentEvalId = null;
+    _currentNodeIds = [];
+
+    try {
+      const res = await fetch(API_BASE + '/evaluate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({question: q}),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      _currentEvalId = data.id;
+
+      document.getElementById('answer-box').textContent = data.answer || '(no answer generated)';
+      document.getElementById('answer-actions').style.display = 'block';
+
+      // Sources
+      const sources = data.source_evidence || [];
+      _currentNodeIds = sources.map(s => s.node_id).filter(Boolean);
+      document.getElementById('fb-nodes').value = _currentNodeIds.join(', ');
+
+      const sl = document.getElementById('sources-list');
+      if (sources.length) {
+        sl.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:6px;">Sources (${sources.length})</div>`;
+        sources.forEach((s, i) => {
+          const d = document.createElement('details');
+          d.className = 'source-item';
+          d.innerHTML = `<summary>Passage ${i+1}${s.score != null ? ' · score ' + s.score.toFixed(3) : ''}</summary>
+            <div class="source-body">${escHtml(s.text)}</div>`;
+          sl.appendChild(d);
+        });
+      } else {
+        sl.innerHTML = '<div style="font-size:12px;color:#e07070;margin-top:8px;">No relevant passages found — knowledge gap.</div>';
+      }
+
+      document.getElementById('feedback-form').style.display = 'block';
+      setStatus('');
+    } catch (err) {
+      setStatus(err.message, true);
+      document.getElementById('answer-box').innerHTML = '<span class="placeholder">Error — see status above.</span>';
+    } finally {
+      document.getElementById('ask-btn').disabled = false;
+    }
+  }
+
+  // ── Submit feedback ──────────────────────────────────────────────────────
+  async function submitFeedback() {
+    if (!_currentEvalId) return;
+    const conclusion = document.getElementById('fb-conclusion').value.trim();
+    const reasoning = document.getElementById('fb-reasoning').value.trim();
+    if (!conclusion || !reasoning) {
+      document.getElementById('fb-status').textContent = 'Conclusion and reasoning are required.';
+      return;
+    }
+    const nodeIds = document.getElementById('fb-nodes').value
+      .split(',').map(s => s.trim()).filter(Boolean);
+    const conditions = document.getElementById('fb-conditions').value.trim() || null;
+
+    document.getElementById('fb-status').textContent = 'Submitting…';
+    try {
+      const res = await fetch(API_BASE + '/feedback', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          evaluation_id: _currentEvalId,
+          conclusion, reasoning,
+          supporting_node_ids: nodeIds,
+          conditions,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      document.getElementById('fb-status').textContent = 'Feedback submitted. Head to the Feedback tab to review it.';
+      document.getElementById('fb-conclusion').value = '';
+      document.getElementById('fb-reasoning').value = '';
+      document.getElementById('fb-conditions').value = '';
+    } catch (err) {
+      document.getElementById('fb-status').textContent = 'Error: ' + err.message;
+    }
+  }
+
+  // ── Evaluations tab ─────────────────────────────────────────────────────
+  async function loadEvaluations() {
+    const tbody = document.getElementById('eval-tbody');
+    tbody.innerHTML = '<tr><td colspan="4" style="color:#555">Loading…</td></tr>';
+    try {
+      const res = await fetch(API_BASE + '/evaluate');
+      const rows = await res.json();
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="color:#555">No evaluations yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(r => `
+        <tr style="cursor:pointer" data-id="${escHtml(r.id)}" data-question="${escHtml(r.question)}" onclick="loadEval(this.dataset.id, this.dataset.question)">
+          <td style="font-family:monospace;font-size:11px">${escHtml(r.id)}</td>
+          <td>${escHtml(r.question.slice(0, 80))}${r.question.length > 80 ? '…' : ''}</td>
+          <td>${r.knowledge_gap ? '<span style="color:#e07070">Yes</span>' : 'No'}</td>
+          <td style="color:#888">${new Date(r.created_at).toLocaleString()}</td>
+        </tr>`).join('');
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="4" style="color:#e07070">${escHtml(err.message)}</td></tr>`;
+    }
+  }
+
+  async function loadEval(id, question) {
+    // Switch to Ask tab and pre-fill with the evaluation
+    showTab('ask', document.querySelector('nav button'));
+    document.getElementById('question').value = question;
+    document.getElementById('status').textContent = 'Loading evaluation ' + id + '…';
+    try {
+      const res = await fetch(API_BASE + '/evaluate/' + id);
+      const data = await res.json();
+      _currentEvalId = data.id;
+      document.getElementById('answer-box').textContent = data.answer || '(no answer)';
+      document.getElementById('answer-actions').style.display = 'block';
+      const sources = data.source_evidence || [];
+      _currentNodeIds = sources.map(s => s.node_id).filter(Boolean);
+      document.getElementById('fb-nodes').value = _currentNodeIds.join(', ');
+      const sl = document.getElementById('sources-list');
+      sl.innerHTML = sources.map((s, i) =>
+        `<details class="source-item"><summary>Passage ${i+1}</summary><div class="source-body">${escHtml(s.text)}</div></details>`
+      ).join('');
+      document.getElementById('feedback-form').style.display = 'block';
+      document.getElementById('status').textContent = '';
+    } catch (err) {
+      document.getElementById('status').textContent = 'Error: ' + err.message;
+    }
+  }
+
+  // ── Feedback tab ─────────────────────────────────────────────────────────
+  async function loadFeedback() {
+    const tbody = document.getElementById('fb-tbody');
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#555">Loading…</td></tr>';
+    try {
+      const res = await fetch(API_BASE + '/feedback');
+      const rows = await res.json();
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color:#555">No feedback yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td style="font-family:monospace;font-size:11px">${escHtml(r.id)}</td>
+          <td style="font-family:monospace;font-size:11px">${escHtml(r.evaluation_id)}</td>
+          <td>${escHtml(r.conclusion.slice(0, 60))}${r.conclusion.length > 60 ? '…' : ''}</td>
+          <td><span class="badge badge-${r.status}">${r.status}</span></td>
+          <td style="color:#888">${escHtml(r.reviewer || '—')}</td>
+          <td>${r.status === 'pending' ? `
+            <button class="btn btn-sm btn-approve" onclick="reviewFeedback('${r.id}','approve',this)">Approve</button>
+            <button class="btn btn-sm btn-reject" style="margin-left:4px" onclick="reviewFeedback('${r.id}','reject',this)">Reject</button>` : ''}
+          </td>
+        </tr>`).join('');
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6" style="color:#e07070">${escHtml(err.message)}</td></tr>`;
+    }
+  }
+
+  async function reviewFeedback(id, action, btn) {
+    const row = btn.closest('tr');
+    const allBtns = row.querySelectorAll('button');
+    allBtns.forEach(b => { b.disabled = true; });
+    btn.innerHTML = '<span class="spin"></span>' + (action === 'approve' ? 'Approving…' : 'Rejecting…');
+    try {
+      const res = await fetch(`${API_BASE}/feedback/${id}/${action}`, {method: 'PATCH'});
+      if (!res.ok) throw new Error(await res.text());
+      await loadFeedback();
+    } catch (err) {
+      allBtns.forEach(b => { b.disabled = false; });
+      btn.innerHTML = action === 'approve' ? 'Approve' : 'Reject';
+      alert('Error: ' + err.message);
+    }
+  }
+
+  // ── Ingest tab ───────────────────────────────────────────────────────────
+  async function loadIngestStatus() {
+    const el = document.getElementById('ingest-status-value');
+    try {
+      const res = await fetch(API_BASE + '/ingest/status');
+      const data = await res.json();
+      if (data.ingested) {
+        el.innerHTML = `<span class="status-ok">&#10003; Knowledge graph ready</span> <span style="color:#888;font-size:11px">(dataset: ${escHtml(data.dataset)})</span>`;
+      } else {
+        el.innerHTML = `<span class="status-none">&#9888; Not ingested yet</span> — upload a PDF below to build the knowledge graph.`;
+      }
+    } catch (err) {
+      el.innerHTML = `<span style="color:#e07070">Error checking status: ${escHtml(err.message)}</span>`;
+    }
+  }
+
+  function onFileSelected(input) {
+    const btn = document.getElementById('ingest-btn');
+    const log = document.getElementById('ingest-log');
+    if (input.files && input.files[0]) {
+      const f = input.files[0];
+      btn.disabled = false;
+      log.textContent = `Selected: ${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)\nClick "Upload & Ingest" to start.`;
+    } else {
+      btn.disabled = true;
+      log.textContent = 'Select a PDF to begin.';
+    }
+  }
+
+  async function uploadPdf() {
+    const input = document.getElementById('pdf-file');
+    if (!input.files || !input.files[0]) return;
+
+    const btn = document.getElementById('ingest-btn');
+    const log = document.getElementById('ingest-log');
+    const bar = document.getElementById('ingest-progress');
+    const fill = document.getElementById('ingest-progress-fill');
+
+    btn.disabled = true;
+    input.disabled = true;
+    bar.style.display = 'block';
+    fill.style.width = '15%';
+    log.textContent = 'Uploading PDF…';
+
+    const form = new FormData();
+    form.append('file', input.files[0]);
+
+    // Simulate progress while waiting — ingestion takes several minutes.
+    // The bar creeps toward 90% while the request is in flight, then jumps to 100% on completion.
+    let pct = 15;
+    const ticker = setInterval(() => {
+      pct = Math.min(pct + 1, 90);
+      fill.style.width = pct + '%';
+    }, 3000);
+
+    try {
+      log.textContent = 'Ingesting… this takes several minutes while the knowledge graph is built. Please keep this tab open.';
+      const res = await fetch(API_BASE + '/ingest', { method: 'POST', body: form });
+      clearInterval(ticker);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`HTTP ${res.status}: ${txt}`);
+      }
+      const data = await res.json();
+      fill.style.width = '100%';
+      log.textContent = `Done! Dataset "${data.dataset}" ingested successfully.\nYou can now ask questions in the Ask tab.`;
+      loadIngestStatus();
+    } catch (err) {
+      clearInterval(ticker);
+      fill.style.background = '#e07070';
+      fill.style.width = '100%';
+      log.textContent = 'Ingestion failed: ' + err.message;
+      btn.disabled = false;
+    } finally {
+      input.disabled = false;
+    }
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function setStatus(msg, isError = false) {
+    const el = document.getElementById('status');
+    el.innerHTML = msg;
+    el.className = isError ? 'error' : '';
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // Keyboard shortcut: Ctrl+Enter to ask
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') askQuestion();
+  });
+</script>
+</body>
+</html>

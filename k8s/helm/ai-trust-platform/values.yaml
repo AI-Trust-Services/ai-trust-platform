@@ -112,6 +112,14 @@ ollama:
   storageSize: 20Gi # model blobs live here; qwen2.5:7b + a vision model easily exceed 10Gi
   serviceType: ClusterIP # NodePort on kind (values-kind.yaml)
 
+# Cognee eval — graph-based grounded Q&A over the EU AI Act.
+# Mirrors the compose `ollama` profile; disabled by default.
+# Requires ollama.enabled: true (or an external LLM endpoint via LLM_ENDPOINT).
+cogneeEval:
+  enabled: false
+  backendPort: 8011
+  dataStorageSize: 5Gi # cognee graph + vector + SQLite data
+
 # ── the 7 near-identical backend+frontend MFE pairs ──
 # dependsOnJobs: Job names that must Complete before this backend starts
 #   (mirrors compose `depends_on: condition: service_completed_successfully`)
