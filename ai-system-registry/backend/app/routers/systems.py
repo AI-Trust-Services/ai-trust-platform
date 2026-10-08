@@ -40,6 +40,9 @@ logger = get_logger(__name__)
 
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
 
+# Fields backed by NOT NULL columns — an explicit null in an update is a 422, not a 500.
+_REQUIRED_FIELDS = frozenset({"name", "lifecycle", "org_role"})
+
 # Supporting documents accepted for full-manual registration (extension allowlist).
 _ALLOWED_DOC_EXTENSIONS = frozenset(
     {
@@ -138,9 +141,20 @@ async def update_system(
             f"Fields are immutable (use /reclassify): {sorted(immutable_attempted)}",
         )
 
-    if body.lifecycle and body.lifecycle not in VALID_LIFECYCLES:
+    # These map to NOT NULL columns. With exclude_unset an explicit null is "set",
+    # so reject it up front — otherwise setattr(row, field, None) reaches commit()
+    # and raises an IntegrityError (500) instead of a clean 422.
+    nulled_required = {
+        f for f in _REQUIRED_FIELDS & updates.keys() if updates[f] is None
+    }
+    if nulled_required:
+        raise HTTPException(
+            422, f"Fields cannot be null: {sorted(nulled_required)}"
+        )
+
+    if body.lifecycle is not None and body.lifecycle not in VALID_LIFECYCLES:
         raise HTTPException(422, f"Invalid lifecycle '{body.lifecycle}'")
-    if body.org_role and body.org_role not in VALID_ROLES:
+    if body.org_role is not None and body.org_role not in VALID_ROLES:
         raise HTTPException(422, f"Invalid org_role '{body.org_role}'")
 
     async with SessionLocal() as session:
