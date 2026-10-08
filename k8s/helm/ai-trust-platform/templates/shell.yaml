@@ -20,6 +20,11 @@ spec:
         - name: shell
           image: {{ .Values.image.repository }}/shell:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           ports:
             - containerPort: 80
           readinessProbe:
