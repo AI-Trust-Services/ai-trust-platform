@@ -16,7 +16,7 @@
 | E2E System | System / end-to-end (API level), domain | MVP business requirements: full happy-path persona flows driven black-box through the whole deployed platform; no browser or login. See [E2E system scenarios](#e2e-system-scenarios) | ✅ |
 | Deployment test | Deployment verification | Helm/OCM rollout healthy, K8s liveness & readiness probes.| ✅ |
 | AI output evaluation | ML evaluation | Accuracy of AI-assisted classification against a labelled dataset. See [AI output evaluation](#ai-output-evaluation) | ✅ |
-| Frontend tests | Component / visual regression | React component behaviour and visual states; proposed tool: Playwright (Apache 2.0). See [Frontend tests](#frontend-tests) | TBD |
+| Frontend tests | Component / visual regression | React component behaviour and visual states; proposed tool: Playwright (Apache 2.0). See [Frontend tests](#frontend-tests) | ✅ |
 | Performance / load | Performance | Throughput, latency, and race-condition checks under load | TBD |
 
 **Test Coverage: measure, don't gate.** `pytest-cov` runs in report-only mode with no threshold; it never
@@ -187,6 +187,8 @@ Monitoring follows Approval in the lifecycle and is outside MVP scope; no E2E sy
 
 ## Frontend tests
 
+> **To be refined.**
+
 > **Currently zero coverage — identified gap.** 🔶 See open question #1.
 
 **Proposed tool: [Playwright](https://playwright.dev/)** — Apache 2.0 licensed, runs on standard
@@ -198,7 +200,7 @@ Chromatic stack.
 
 ## AI output evaluation
 
-> Metrics and thresholds are not decided. Will be covered with AI Assisted functionality implementation.
+> **To be refined.** Metrics and thresholds are not decided. Will be covered with AI Assisted functionality implementation.
 
 Placeholder scope, to be confirmed:
 - **What:** accuracy of the AI-assisted RCE: flags extracted from questionnaire answers and uploaded
@@ -229,19 +231,6 @@ Placeholder scope, to be confirmed:
   external coverage service for now.
 - **Purpose:** build a baseline and spot untested areas. Targets and any gate are decided later,
   once baseline data exists. Until then, MVP acceptance is measured by the business scenarios above.
-
----
-
-## Open questions
-
-🔶 To decide in the review with PM and engineering lead:
-
-| # | Question | Affects |
-|---|---|---|
-| 1 | Are frontend tests part of MVP? Proposed tool: Playwright (Apache 2.0, GitHub-hosted runners). | Frontend tests section |
-| 2 | Test Code Coverage is report-only for MVP (no threshold). | Test Code Coverage section |
-
----
 
 ## Next steps
 
