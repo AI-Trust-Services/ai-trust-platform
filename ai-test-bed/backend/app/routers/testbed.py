@@ -47,6 +47,7 @@ _EU_AI_ACT_SYSTEM_ID = "__eu_ai_act__"
 _DEFAULT_K = 5
 _DEFAULT_MODE = "hybrid"
 _DEFAULT_RRF_K = 60
+_MAX_CONTEXT = int(os.environ.get("ASSIST_MAX_TEXT_LENGTH", "15000"))
 
 
 class RunRequest(BaseModel):
@@ -243,7 +244,7 @@ async def run_testbed(body: RunRequest, request: Request) -> dict:
                     [{**item, "_source_label": "cognee"} for item in kb_items]
                 )
 
-        injected_context = "\n\n".join(context_blocks)
+        injected_context = "\n\n".join(context_blocks)[:_MAX_CONTEXT]
 
         # --- Evaluate ---
         evaluate_url = f"{_REGISTRY_URL}/v1/classify/evaluate"
