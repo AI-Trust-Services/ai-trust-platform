@@ -763,12 +763,13 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
     setFormBase(fields);
   }, [initialSystem]);
 
-  // Load all users once for the owner dropdowns.
+  // Load all users once for the owner dropdowns — only for writers who can edit them.
   useEffect(() => {
+    if (!mayWrite) return;
     api.getAllUsers()
       .then((users) => setAllUsers(users))
       .catch(() => setAllUsers([]));
-  }, []);
+  }, [mayWrite]);
 
   // Load the RCE summary when the CO is viewing a pending_review system.
   useEffect(() => {
