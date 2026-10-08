@@ -35,11 +35,23 @@ _forward compliance-backend          8007
 _forward users-backend               8008
 _forward audit-backend               8009
 _forward admin-backend               8010
-_forward cognee-eval-backend         8011
+
+# cognee-eval-backend is opt-in (cogneeEval.enabled); skip silently if not deployed.
+COGNEE_ENABLED=false
+if kubectl get svc cognee-eval-backend -n "${NAMESPACE}" > /dev/null 2>&1; then
+    _forward cognee-eval-backend 8011
+    COGNEE_ENABLED=true
+else
+    echo "    cognee-eval-backend not found in ${NAMESPACE} — skipping port 8011"
+fi
 
 # Wait until every port is actually accepting TCP connections (up to 60s).
-PORTS=(8001 8003 8005 8007 8008 8009 8010 8011)
-SVCS=(ai-system-registry-backend monitoring-backend alerts-backend compliance-backend users-backend audit-backend admin-backend cognee-eval-backend)
+PORTS=(8001 8003 8005 8007 8008 8009 8010)
+SVCS=(ai-system-registry-backend monitoring-backend alerts-backend compliance-backend users-backend audit-backend admin-backend)
+if [[ "$COGNEE_ENABLED" == "true" ]]; then
+    PORTS+=(8011)
+    SVCS+=(cognee-eval-backend)
+fi
 DEADLINE=$((SECONDS + 60))
 for i in "${!PORTS[@]}"; do
     PORT="${PORTS[$i]}"
