@@ -33,13 +33,13 @@ merge → deploy to `ai-trust-main` → live tests → next change. A red step s
 
 ```mermaid
 flowchart LR
-    DEV(["① Local<br/>development: lint · typecheck · unit · E2E · integration"])
+    DEV(["① Local<br/>development: lint · typecheck · unit · integration · E2E"])
     PR["② PR checks<br/>lint · typecheck · unit"]
     DT["③ Deploy PR<br/><b>ai-trust-test</b><br/>PR namespace"]
-    LT["④ Live tests on ai-trust-test<br/>E2E · integration"]
+    LT["④ Live tests on ai-trust-test<br/>integration · E2E"]
     MG{{"⑤ Merge to main"}}
     DM["⑥ Deploy main<br/><b>ai-trust-main</b><br/>namespace ai-trust"]
-    LM["⑦ Live tests on ai-trust-main<br/>E2E · integration"]
+    LM["⑦ Live tests on ai-trust-main<br/>integration · E2E"]
 
     DEV ==> PR ==> DT ==> LT ==> MG ==> DM ==> LM
     LM -- "next change" --> DEV
