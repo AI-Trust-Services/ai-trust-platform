@@ -329,9 +329,18 @@ async def test_attention_includes_high_risk_low_compliance_on_market(
         mc = _model()
         session.add(mc)
         await session.flush()
-        session.add(_sys(tier="high", lifecycle="market", compliance=30.0))
-        # high on market but compliance >= 50 → not in attention
-        session.add(_sys(tier="high", lifecycle="market", compliance=60.0))
+        low_sys = _sys(tier="high", lifecycle="market", compliance=30.0)
+        high_sys = _sys(tier="high", lifecycle="market", compliance=60.0)
+        session.add(low_sys)
+        session.add(high_sys)
+        await session.flush()
+        # Link the model card to the high-compliance system so it doesn't also
+        # appear in attention under the "no model card" rule.
+        await session.execute(
+            pg_insert(AISystemModelCard.__table__)
+            .values(system_id=high_sys.id, model_card_id=mc.id)
+            .on_conflict_do_nothing()
+        )
         await session.commit()
 
     r = await client.get("/v1/stats")
@@ -546,7 +555,9 @@ async def test_expired_counts_only_approved(client: httpx.AsyncClient):
         session.add(_sys(id=sys_id))
         await session.flush()
         session.add(_evd(status="approved", validity_until=today - timedelta(days=1)))
-        session.add(_evd(status="pending", validity_until=today - timedelta(days=1)))
+        session.add(
+            _evd(status="awaiting_review", validity_until=today - timedelta(days=1))
+        )
         await session.commit()
 
     r = await client.get("/v1/compliance-stats")

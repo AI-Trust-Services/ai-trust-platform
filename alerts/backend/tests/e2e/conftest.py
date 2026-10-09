@@ -131,6 +131,32 @@ def _ch_client():
     )
 
 
+def _ensure_tables() -> None:
+    client = _ch_client()
+    client.command("CREATE DATABASE IF NOT EXISTS otel")
+    client.command("""
+        CREATE TABLE IF NOT EXISTS otel.alert_events
+        (
+            id               String,
+            rule_id          String,
+            rule_name        String,
+            category         String,
+            severity         String,
+            alert_type       String,
+            description      String,
+            value_at_trigger Float64,
+            entity_id        String  DEFAULT '',
+            entity_type      String  DEFAULT '',
+            entity_model     String  DEFAULT '',
+            triggered_at     DateTime DEFAULT now(),
+            resolved_at      Nullable(DateTime),
+            handled_at       Nullable(DateTime)
+        ) ENGINE = MergeTree()
+        PARTITION BY toYYYYMM(triggered_at)
+        ORDER BY (triggered_at, category, rule_id)
+    """)
+
+
 def insert_event(
     rule_id: str,
     rule_name: str = "Test Rule",
@@ -201,6 +227,7 @@ def e2e_setup():
         )
     _ensure_test_db()
     _run_migrations()
+    _ensure_tables()
     os.environ["DATABASE_URL"] = _TEST_DATABASE_URL
     os.environ.setdefault("OPENFGA_URL", "http://localhost:8080")
     os.environ.setdefault("OPENFGA_STORE_ID", "test-store-id")
@@ -215,7 +242,11 @@ def e2e_setup():
     async def _always_allowed(*_a, **_kw) -> bool:
         return True
 
+    async def _always_admin(*_a, **_kw):
+        return ["platform_administrator"]
+
     _fga.check = _always_allowed
+    _fga.read_user_roles = _always_admin
     app.dependency_overrides[get_current_user] = lambda: "test-user"
 
 

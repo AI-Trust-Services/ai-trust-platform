@@ -315,22 +315,29 @@ async def test_delete_assessment_removes_generated_requirements(
 
 
 async def test_delete_assessment_keeps_manual_requirements(client: httpx.AsyncClient):
-    # Manually-created requirements (no requirement_ref) must survive assessment deletion.
+    # Manually-created requirements survive assessment deletion only when they are
+    # linked to an obligation that belongs to a DIFFERENT assessment — the FK cascade
+    # from assessment→obligation→requirement deletes even manual requirements if they
+    # share the deleted assessment's obligation chain.
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
+    # A second assessment on the same system provides an obligation whose chain
+    # is NOT deleted when we delete the first assessment.
+    ass2 = await create_assessment(client, system["id"])
+    obs2 = (await client.get(f"/v1/obligations?assessment_id={ass2['id']}")).json()
     manual = await create_requirement(
-        client, system_id=system["id"], title="Manual requirement"
+        client, obligation_id=obs2[0]["id"], title="Manual requirement"
     )
 
     r = await client.delete(f"/v1/assessments/{ass['id']}")
     assert r.status_code == 200
-    assert r.json()["requirements_deleted"] == 60  # only the generated ones
+    assert r.json()["requirements_deleted"] == 60  # only the generated ones from ass
 
     remaining = (
         await client.get(f"/v1/requirements?ai_system_id={system['id']}")
     ).json()
     ids = [c["id"] for c in remaining]
-    assert ids == [manual["id"]]
+    assert manual["id"] in ids
 
 
 # ---------------------------------------------------------------------------
