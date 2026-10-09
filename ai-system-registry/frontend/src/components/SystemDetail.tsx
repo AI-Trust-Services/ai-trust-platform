@@ -1,11 +1,11 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import LuigiClient from "@luigi-project/client";
-import { Loader2, ChevronDown, ChevronRight, Copy, FileText, Download, Sparkles, ClipboardList } from "lucide-react";
+import { Loader2, ChevronDown, ChevronRight, Copy, FileText, Download, Sparkles, ClipboardList, FileUp, History, RefreshCw, Trash2, Upload } from "lucide-react";
 import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS, TIER_META } from "../utils";
-import { api } from "../api/client";
+import { api, indexingApi } from "../api/client";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary } from "../types";
+import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary, TechDocument, TechDocVersion, WorkflowStatus } from "../types";
 import {
   BUSINESS_QUESTIONS,
   AI_TECHNICAL_QUESTIONS,
@@ -22,7 +22,10 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
 // Hands off to the Compliance MFE and asks it to open the "New assessment" modal on arrival.
@@ -754,6 +757,349 @@ function ClassificationRationalePanel({ rationale }: { rationale: Classification
   );
 }
 
+}
+
+const INDEXING_STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+  indexed: "default",
+  processing: "secondary",
+  pending: "outline",
+  failed: "destructive",
+};
+
+const ACTIVE_STATUSES = ["pending", "processing"];
+
+function indexingProgressHint(doc: TechDocument): string | null {
+  if (doc.status === "pending") return "queued (1/5)";
+  const stageStep: Record<string, string> = { parsing: "2/5", embedding: "3/5", storing: "4/5" };
+  if (doc.status === "processing" && doc.stage) return `${doc.stage} (${stageStep[doc.stage] ?? ""})`;
+  if (doc.status === "processing") return "processing…";
+  return null;
+}
+
+// RCE state bucket used for replacement warnings.
+type RceState = "not_started" | "in_progress" | "in_review" | "completed";
+
+function rceState(workflowStatus: WorkflowStatus | undefined): RceState {
+  if (!workflowStatus || workflowStatus === "draft") return "not_started";
+  if (workflowStatus === "pending_review") return "in_review";
+  if (workflowStatus === "approved" || workflowStatus === "rejected") return "completed";
+  return "in_progress";
+}
+
+const RCE_WARNING: Record<Exclude<RceState, "not_started">, { title: string; body: string }> = {
+  in_progress: {
+    title: "Risk classification in progress",
+    body: "The RCE questionnaire has been started for this system. Uploading a new version of the technical documentation will require re-running the risk classification process.",
+  },
+  in_review: {
+    title: "Risk classification under review",
+    body: "The RCE is currently under review by the Compliance Officer. Uploading a new version will abort the current review. The Compliance Officer will need to be informed and the process restarted. The previous documentation will remain linked to the ongoing review.",
+  },
+  completed: {
+    title: "Risk classification completed",
+    body: "The RCE has been completed for this system. Uploading a new version of the technical documentation will reset the classification status to 'not classified'. A new assessment will be required, and the previous assessment will be historicised.",
+  },
+};
+
+// Technical documentation managed via the document-indexing backend.
+function TechnicalDocumentation({ system, mayWrite }: { system: AISystem; mayWrite: boolean }) {
+  const showToast = useToast();
+  const [documents, setDocuments] = useState<TechDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [docError, setDocError] = useState<string | null>(null);
+
+  const fileInput = useRef<HTMLInputElement>(null);
+  const versionInput = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Version-upload confirmation state
+  const [pendingVersionDocId, setPendingVersionDocId] = useState<string | null>(null);
+  const [pendingVersionFile, setPendingVersionFile] = useState<File | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Version history dialog
+  const [historyDocId, setHistoryDocId] = useState<string | null>(null);
+  const [versions, setVersions] = useState<TechDocVersion[] | null>(null);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
+
+  const loadDocuments = useCallback(async () => {
+    try {
+      const docs = await indexingApi.listDocuments(system.id);
+      setDocuments(docs);
+      setDocError(null);
+    } catch (e) {
+      setDocError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [system.id]);
+
+  useEffect(() => { void loadDocuments(); }, [loadDocuments]);
+
+  // Poll while any document is indexing.
+  useEffect(() => {
+    if (!documents.some((d) => ACTIVE_STATUSES.includes(d.status))) return;
+    const t = setInterval(() => void loadDocuments(), 3000);
+    return () => clearInterval(t);
+  }, [documents, loadDocuments]);
+
+  async function handleUpload(file: File) {
+    setUploading(true);
+    setUploadError(null);
+    try {
+      await indexingApi.uploadDocument(system.id, file);
+      if (fileInput.current) fileInput.current.value = "";
+      await loadDocuments();
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function triggerVersionUpload(docId: string) {
+    setPendingVersionDocId(docId);
+    versionInput.current?.click();
+  }
+
+  function onVersionFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    if (versionInput.current) versionInput.current.value = "";
+    if (!file || !pendingVersionDocId) return;
+    const state = rceState(system.workflow_status);
+    if (state !== "not_started") {
+      setPendingVersionFile(file);
+      setConfirmOpen(true);
+    } else {
+      void performVersionUpload(pendingVersionDocId, file);
+    }
+  }
+
+  async function performVersionUpload(docId: string, file: File) {
+    setUploadError(null);
+    try {
+      await indexingApi.uploadVersion(docId, file);
+      if (system.workflow_status === "pending_review") {
+        await api.notifyDocumentReplacement(system.id).catch(() => {
+          // fire-and-forget — email failure must not block the upload response
+        });
+      }
+      await loadDocuments();
+      showToast("New version uploaded");
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPendingVersionDocId(null);
+      setPendingVersionFile(null);
+    }
+  }
+
+  async function handleConfirmVersionUpload() {
+    setConfirmOpen(false);
+    if (pendingVersionDocId && pendingVersionFile) {
+      await performVersionUpload(pendingVersionDocId, pendingVersionFile);
+    }
+  }
+
+  function handleCancelVersionUpload() {
+    setConfirmOpen(false);
+    setPendingVersionDocId(null);
+    setPendingVersionFile(null);
+  }
+
+  async function handleDelete(docId: string) {
+    if (!confirm("Delete this document and all its versions? This cannot be undone.")) return;
+    try {
+      await indexingApi.deleteDocument(docId);
+      await loadDocuments();
+    } catch (e) {
+      showToast(`Delete failed: ${(e as Error).message}`, true);
+    }
+  }
+
+  async function openHistory(docId: string) {
+    setHistoryDocId(docId);
+    setVersions(null);
+    setVersionsError(null);
+    try {
+      setVersions(await indexingApi.listVersions(docId));
+    } catch (e) {
+      setVersionsError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function handleDownload(docId: string) {
+    try {
+      const { url } = await indexingApi.getDownloadUrl(docId);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      showToast(`Download failed: ${(e as Error).message}`, true);
+    }
+  }
+
+  const activeRceState = rceState(system.workflow_status);
+  const warning = activeRceState !== "not_started" ? RCE_WARNING[activeRceState] : null;
+
+  return (
+    <>
+      {/* hidden input reused for per-row "upload new version" */}
+      <input ref={versionInput} type="file" className="hidden"
+        accept=".pdf,.docx,.pptx,.md,.markdown,.html,.htm,.txt,.xlsx,.xls,.csv,.odt,.odp"
+        onChange={onVersionFileSelected}
+      />
+
+      {/* RCE warning banner — shown when a completed/in-progress RCE exists */}
+      {warning && (
+        <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+          <span className="font-semibold">{warning.title}.</span>{" "}
+          Replacing the technical documentation now will prompt a warning.
+        </div>
+      )}
+
+      {mayWrite && (
+        <div className="mb-4 flex items-end gap-3">
+          <div className="flex-1">
+            <Label htmlFor="tech-doc-upload">Upload latest technical documentation (PDF, DOCX, PPTX, MD, HTML, TXT, XLSX, CSV)</Label>
+            <Input
+              id="tech-doc-upload"
+              type="file"
+              ref={fileInput}
+              accept=".pdf,.docx,.pptx,.md,.markdown,.html,.htm,.txt,.xlsx,.xls,.csv,.odt,.odp"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleUpload(file);
+              }}
+            />
+          </div>
+          {uploading && <Loader2 className="size-5 animate-spin text-muted-foreground" />}
+        </div>
+      )}
+      {uploadError && <p className="mb-2 text-[13px] text-destructive">{uploadError}</p>}
+      {docError && <p className="mb-2 text-[13px] text-destructive">{docError}</p>}
+
+      {loading ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">{documents.length} document{documents.length !== 1 ? "s" : ""}</span>
+            <Button variant="ghost" size="sm" onClick={() => void loadDocuments()} title="Refresh">
+              <RefreshCw className="size-3.5" />
+            </Button>
+          </div>
+          {documents.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground">No technical documentation uploaded yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>File</TableHead>
+                  <TableHead className="w-16">Version</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-24" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {documents.map((doc) => (
+                  <TableRow key={doc.id}>
+                    <TableCell className="font-medium text-[13px]">{doc.filename}</TableCell>
+                    <TableCell className="tabular-nums text-muted-foreground text-xs">{doc.version_label}</TableCell>
+                    <TableCell>
+                      <Badge variant={INDEXING_STATUS_VARIANT[doc.status] ?? "outline"}>{doc.status}</Badge>
+                      {indexingProgressHint(doc) && (
+                        <span className="ml-2 text-xs text-muted-foreground">{indexingProgressHint(doc)}</span>
+                      )}
+                      {doc.status === "failed" && doc.error && (
+                        <span className="ml-2 text-xs text-destructive">{doc.error}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => void handleDownload(doc.id)} title="Download current version">
+                          <Download className="size-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => void openHistory(doc.id)} title="Version history">
+                          <History className="size-3.5" />
+                        </Button>
+                        {mayWrite && (
+                          <>
+                            <Button variant="ghost" size="icon" onClick={() => triggerVersionUpload(doc.id)} title="Upload new version">
+                              <Upload className="size-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => void handleDelete(doc.id)} title="Delete document">
+                              <Trash2 className="size-3.5 text-destructive" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      )}
+
+      {/* Version upload confirmation dialog */}
+      {confirmOpen && activeRceState !== "not_started" && (
+        <Dialog open={confirmOpen} onOpenChange={(o) => !o && handleCancelVersionUpload()}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{RCE_WARNING[activeRceState].title}</DialogTitle>
+            </DialogHeader>
+            <p className="text-[13px] text-foreground">{RCE_WARNING[activeRceState].body}</p>
+            <p className="mt-2 text-[13px] font-medium">Do you want to continue and upload the new version?</p>
+            <DialogFooter className="mt-4">
+              <Button variant="outline" onClick={handleCancelVersionUpload}>Cancel</Button>
+              <Button variant="destructive" onClick={() => void handleConfirmVersionUpload()}>
+                Upload new version
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Version history dialog */}
+      <Dialog open={historyDocId !== null} onOpenChange={(o) => !o && setHistoryDocId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Version history</DialogTitle>
+          </DialogHeader>
+          {versionsError && <p className="text-[13px] text-destructive">{versionsError}</p>}
+          {versions === null && !versionsError ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : versions && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Version</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Chunks</TableHead>
+                  <TableHead>Current</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {versions.map((v) => (
+                  <TableRow key={v.id}>
+                    <TableCell className="tabular-nums">{v.version_label}</TableCell>
+                    <TableCell>
+                      <Badge variant={INDEXING_STATUS_VARIANT[v.status] ?? "outline"}>{v.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{v.chunk_count}</TableCell>
+                    <TableCell>{v.is_current ? "✓" : ""}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 // Supporting documents attached in the full-manual override flow, with presigned download.
 function RegistrationDocuments({ system }: { system: AISystem }) {
   const [downloading, setDownloading] = useState<number | null>(null);
@@ -934,6 +1280,9 @@ export default function SystemDetail({ system: initialSystem, models, open, onCl
                       <RegistrationDocuments system={system} />
                     </Section>
                   )}
+                  <Section title="Technical Documentation">
+                    <TechnicalDocumentation system={system} mayWrite={mayRegister} />
+                  </Section>
                   <Section title="Identity">
                     <DetailGrid rows={[
                       ["Name", system.name],

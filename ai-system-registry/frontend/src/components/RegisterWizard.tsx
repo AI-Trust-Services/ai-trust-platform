@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import LuigiClient from "@luigi-project/client";
-import { Loader2, X, ChevronDown, ChevronRight, Copy, ClipboardList } from "lucide-react";
+import { Loader2, X, ChevronDown, ChevronRight, Copy, ClipboardList, FileUp } from "lucide-react";
 import { TierBadge } from "./Badges";
 import { previewClassify, copyToClipboard, SELECT_CLASS } from "../utils";
-import { api } from "../api/client";
+import { api, indexingApi } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import type { AISystem, AISystemFormData } from "../types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -111,6 +111,68 @@ interface Props {
   onClose: () => void;
   onSuccess: () => void;
   system?: AISystem;
+}
+
+// Inline doc-upload block shown on the success screen of the owner registration flow.
+function DocUploadBlock({ systemId }: { systemId: string }) {
+  const showToast = useToast();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploaded, setUploaded] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (fileInput.current) fileInput.current.value = "";
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      await indexingApi.uploadDocument(systemId, file);
+      setUploaded((prev) => [...prev, file.name]);
+      showToast(`"${file.name}" uploaded`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-md border border-border">
+      <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Technical Documentation</div>
+      <div className="p-4">
+        <p className="mb-3 text-[13px] text-muted-foreground">
+          Upload the latest technical documentation for this AI system. The document will be indexed
+          and used to pre-fill the risk classification questionnaire.
+        </p>
+        <div className="flex items-end gap-3">
+          <div className="flex-1">
+            <Label htmlFor="wizard-doc-upload">Upload document (PDF, DOCX, PPTX, MD, HTML, TXT, XLSX, CSV)</Label>
+            <Input
+              id="wizard-doc-upload"
+              type="file"
+              ref={fileInput}
+              accept=".pdf,.docx,.pptx,.md,.markdown,.html,.htm,.txt,.xlsx,.xls,.csv,.odt,.odp"
+              onChange={handleFile}
+            />
+          </div>
+          {uploading && <Loader2 className="size-5 animate-spin text-muted-foreground" />}
+        </div>
+        {error && <p className="mt-2 text-[13px] text-destructive">{error}</p>}
+        {uploaded.length > 0 && (
+          <div className="mt-2 flex flex-col gap-1">
+            {uploaded.map((name) => (
+              <div key={name} className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                <FileUp className="size-3.5 text-green-600" />
+                <span>{name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function RegisterWizard({ open, onClose, onSuccess, system }: Props) {
@@ -271,6 +333,9 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                 ? "System details saved and submitted for review. The compliance officer has been notified."
                 : "AI system registered. Choose a framework to start compliance, or do it later from Assessments."}
             </Alert>
+            {isEngineerMode && (
+              <DocUploadBlock systemId={doneId!} />
+            )}
             {!isEngineerMode && (
               <>
                 <div className="mb-4 grid grid-cols-[1.2fr_1fr] gap-4">
@@ -350,6 +415,9 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
                     </div>
                   </div>
                 </div>
+
+                {/* Technical documentation upload */}
+                <DocUploadBlock systemId={doneId!} />
               </>
             )}
           </div>
