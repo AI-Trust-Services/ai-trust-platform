@@ -222,7 +222,7 @@ def e2e_setup():
     _ensure_test_db()
     _run_migrations()
     _ensure_tables()
-os.environ["DATABASE_URL"] = _TEST_DATABASE_URL
+    os.environ["DATABASE_URL"] = _TEST_DATABASE_URL
     os.environ.setdefault("OPENFGA_URL", "http://localhost:8080")
     os.environ.setdefault("OPENFGA_STORE_ID", "test-store-id")
     _truncate_pg()  # clear any seeded rows from migrations before tests begin

@@ -242,7 +242,11 @@ def e2e_setup():
     async def _always_allowed(*_a, **_kw) -> bool:
         return True
 
+    async def _always_admin(*_a, **_kw):
+        return ["platform_administrator"]
+
     _fga.check = _always_allowed
+    _fga.read_user_roles = _always_admin
     app.dependency_overrides[get_current_user] = lambda: "test-user"
 
 

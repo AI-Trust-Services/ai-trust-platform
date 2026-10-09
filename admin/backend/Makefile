@@ -4,7 +4,7 @@ PYTHON := $(shell command -v python3.12 || command -v python3)
 setup:
 	$(PYTHON) -m venv .venv
 	.venv/bin/pip install -r requirements-test.txt
-	.venv/bin/pip install -e ../../libs/logging -e ../../libs/authorization -e ../../libs/persistence
+	.venv/bin/pip install -e ../../libs/logging -e ../../libs/authorization -e ../../libs/tenancy -e ../../libs/persistence
 
 test:
 	.venv/bin/pytest tests/ -v

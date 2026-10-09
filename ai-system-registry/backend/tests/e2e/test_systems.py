@@ -64,9 +64,9 @@ async def test_intake_registers_system_and_returns_classification(
     body = r.json()
     assert body["system"]["id"].startswith("SYS-")
     assert body["system"]["name"] == "E2E Test System"
-    # Intake creates a draft stub — classification is deferred until risk flags
-    # are filled in (via PUT) or /reclassify is called.
-    assert body["classification"]["tier"] == "minimal"
+    # Intake always creates a pending stub — risk flags are filled in later via PUT
+    # and tier is determined when flags are set or /reclassify is called explicitly.
+    assert body["classification"]["tier"] == "pending"
     assert body["system"]["workflow_status"] == "draft"
 
 
@@ -180,31 +180,34 @@ async def test_get_system_returns_correct_record(client: httpx.AsyncClient):
     assert r.json()["id"] == system_id
 
 
-async def test_get_system_returns_classifier_flags_set_at_intake(
+async def test_get_system_returns_classifier_flags_set_via_put(
     client: httpx.AsyncClient,
 ):
-    """Flags saved during AI-assisted intake are returned by GET so the engineer
-    flow can pre-seed the risk checkboxes from the existing system data."""
+    """Flags set via PUT /systems/{id} are persisted and returned by GET so the
+    engineer flow can pre-seed the risk checkboxes from the existing system data."""
     r = await client.post(
         "/v1/intake",
-        json={
-            "name": "Flag Test System",
-            "assignee_username": "engineer1",
-            "is_employment_related": True,
-            "is_credit_scoring": False,
-            "is_gpai": True,
-            "training_compute_flops": 1e24,
-        },
+        json={"name": "Flag Test System"},
         headers={"x-forwarded-preferred-username": "engineer1"},
     )
     assert r.status_code == 201
     system_id = r.json()["system"]["id"]
 
+    r = await client.put(
+        f"/v1/systems/{system_id}",
+        json={
+            "is_employment_related": True,
+            "is_gpai": True,
+            "training_compute_flops": 1e24,
+        },
+        headers={"x-forwarded-preferred-username": "engineer1"},
+    )
+    assert r.status_code == 200
+
     r = await client.get(f"/v1/systems/{system_id}")
     assert r.status_code == 200
     body = r.json()
     assert body["is_employment_related"] is True
-    assert body["is_credit_scoring"] is False
     assert body["is_gpai"] is True
 
 
@@ -229,7 +232,14 @@ async def test_update_system_mutable_field(client: httpx.AsyncClient):
 
 async def test_update_system_rejected_for_non_assignee(client: httpx.AsyncClient):
     # Only the assigned user may mutate the system.
+    # Assignees are set via /workflow/assign after intake — intake never stores them.
     system_id = (await _create_system(client))["system"]["id"]
+    r = await client.post(
+        f"/v1/systems/{system_id}/workflow/assign",
+        json={"business_assignee_username": _ASSIGNEE},
+        headers=_HEADERS,
+    )
+    assert r.status_code == 200
     r = await client.put(
         f"/v1/systems/{system_id}",
         json={"name": "Hijacked"},
@@ -361,20 +371,34 @@ async def test_remove_system_model_404(client: httpx.AsyncClient):
 
 @pytest.mark.asyncio
 async def test_reclassify_tier_change_logs_changes(client: httpx.AsyncClient):
-    # Create a minimal system (tier=minimal), then set a high-risk flag to change tier.
+    # A fresh intake stub has tier=pending. Reclassify with a high-risk flag set
+    # via PUT changes tier from pending to high — reclassify logs the change.
     system_id = (await _create_system(client))["system"]["id"]
+
+    # Set a high-risk flag while still in draft (no PUT classify — use reclassify
+    # so that the tier transition is recorded by the /reclassify endpoint).
     await client.put(
         f"/v1/systems/{system_id}",
         json={"is_biometric_identification": True},
         headers=_HEADERS,
     )
+    # PUT already set tier=high via its own classify call. Force it back to pending
+    # so that /reclassify has an actual before→after transition to log.
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.ai_system import AISystem
+    from ai_trust_persistence.models.audit_event import AuditEvent
+
+    async with AsyncSession(engine) as session:
+        result = await session.execute(
+            select(AISystem).where(AISystem.id == system_id)
+        )
+        system_row = result.scalar_one()
+        system_row.tier = "pending"
+        await session.commit()
 
     r = await client.post(f"/v1/systems/{system_id}/reclassify", headers=_HEADERS)
     assert r.status_code == 200
     assert r.json()["classification"]["tier"] == "high"
-
-    from ai_trust_persistence.database import engine
-    from ai_trust_persistence.models.audit_event import AuditEvent
 
     async with AsyncSession(engine) as session:
         row = (
@@ -397,9 +421,16 @@ async def test_reclassify_tier_change_logs_changes(client: httpx.AsyncClient):
 
 @pytest.mark.asyncio
 async def test_reclassify_no_tier_change_omits_changes(client: httpx.AsyncClient):
-    # Reclassify a system that hasn't changed — tier stays minimal, changes should be None/empty.
+    # Reclassify a system twice — second call has same tier (minimal→minimal),
+    # so changes should be None/empty on the second audit event.
     system_id = (await _create_system(client))["system"]["id"]
 
+    # First reclassify: pending→minimal (has changes, logs tier change)
+    r = await client.post(f"/v1/systems/{system_id}/reclassify", headers=_HEADERS)
+    assert r.status_code == 200
+    assert r.json()["classification"]["tier"] == "minimal"
+
+    # Second reclassify: minimal→minimal (no change — changes must be None/empty)
     r = await client.post(f"/v1/systems/{system_id}/reclassify", headers=_HEADERS)
     assert r.status_code == 200
     assert r.json()["classification"]["tier"] == "minimal"
@@ -414,6 +445,7 @@ async def test_reclassify_no_tier_change_omits_changes(client: httpx.AsyncClient
                     select(AuditEvent)
                     .where(AuditEvent.action == "system.reclassified")
                     .where(AuditEvent.resource_id == system_id)
+                    .order_by(AuditEvent.created_at.desc())
                 )
             )
             .scalars()

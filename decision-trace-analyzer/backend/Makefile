@@ -9,7 +9,7 @@ setup:
 	grep -v '^-e /app/libs/' requirements.txt > .requirements.local.txt
 	.venv/bin/pip install -r .requirements.local.txt
 	.venv/bin/pip install -r requirements-test.txt
-	.venv/bin/pip install -e ../../libs/clickhouse -e ../../libs/logging
+	.venv/bin/pip install -e ../../libs/clickhouse -e ../../libs/logging -e ../../libs/authorization -e ../../libs/tenancy
 	rm -f .requirements.local.txt
 
 test:
