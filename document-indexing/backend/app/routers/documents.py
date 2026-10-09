@@ -10,6 +10,7 @@ from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models import AISystem, Document, DocumentVersion
 
 from app import minio_client
@@ -122,6 +123,7 @@ async def upload_document(
 ) -> UploadResponse:
     """Upload a document for an AI system. Stores the original in MinIO and creates a
     ``pending`` version; the worker picks it up and indexes it asynchronously."""
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     filename, data = await _read_valid_upload(request, file)
 
     async with SessionLocal() as session:
@@ -157,9 +159,16 @@ async def upload_document(
                     is_current=True,
                 )
             )
+            log_audit_event(
+                session,
+                actor=current_user,
+                action="document.uploaded",
+                resource_type="document",
+                resource_id=document_id,
+                ai_system_id=system_id,
+            )
             await session.commit()
     except Exception:
-        # Compensating delete so a failed insert doesn't orphan the object.
         try:
             await minio_client.delete_file(key)
         except Exception:
@@ -252,6 +261,7 @@ async def upload_version(
     """Upload a new version of a document. The new version becomes current and is
     re-indexed; the previous version's chunks drop out of new retrieval results
     (``is_current=False``) while its history and file are retained (acceptance criterion 7)."""
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     filename, data = await _read_valid_upload(request, file)
     new_version_id = new_id("DOCV")
 
@@ -288,6 +298,14 @@ async def upload_version(
             # Keep the parent's display name/type in sync with the current version.
             doc.filename = filename
             doc.mime_type = file.content_type
+            log_audit_event(
+                session,
+                actor=current_user,
+                action="document.version_replaced",
+                resource_type="document",
+                resource_id=document_id,
+                ai_system_id=doc.ai_system_id,
+            )
             await session.commit()
     except Exception:
         # Compensating delete so a failed swap doesn't orphan the object.
@@ -375,12 +393,21 @@ async def document_download_url(
     "/documents/{document_id}",
     dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
 )
-async def delete_document(document_id: str) -> dict:
+async def delete_document(document_id: str, request: Request) -> dict:
     """Hard delete — the document row is removed; the ON DELETE CASCADE FKs drop every
     version and chunk with it, and the originals are purged from MinIO. Nothing of a
     deleted document is retained (chunks naturally stop appearing in retrieval)."""
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
-        keys = await _purge_document(session, document_id)
+        keys, ai_system_id = await _purge_document(session, document_id)
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="document.deleted",
+            resource_type="document",
+            resource_id=document_id,
+            ai_system_id=ai_system_id,
+        )
         await session.commit()
     # MinIO has no cascade — delete each version's original after the DB row is gone
     # (best-effort: delete_file logs failures instead of raising, so an orphaned object
@@ -391,15 +418,16 @@ async def delete_document(document_id: str) -> dict:
     return {"deleted": True, "document_id": document_id}
 
 
-async def _purge_document(session: AsyncSession, document_id: str) -> list[str]:
+async def _purge_document(session: AsyncSession, document_id: str) -> tuple[list[str], str | None]:
     """Delete the document row (cascading to its versions + chunks) and return the
-    MinIO keys of every version so the caller can purge the originals. Raises 404 if
-    the document does not exist."""
+    MinIO keys of every version and the ai_system_id so the caller can purge the
+    originals and log audit events. Raises 404 if the document does not exist."""
     doc = (
         await session.execute(select(Document).where(Document.id == document_id))
     ).scalar_one_or_none()
     if doc is None:
         raise HTTPException(404, f"Document {document_id} not found")
+    ai_system_id = doc.ai_system_id
     keys = list(
         (
             await session.execute(
@@ -412,4 +440,4 @@ async def _purge_document(session: AsyncSession, document_id: str) -> list[str]:
         .all()
     )
     await session.delete(doc)  # ON DELETE CASCADE removes versions + chunks
-    return keys
+    return keys, ai_system_id
