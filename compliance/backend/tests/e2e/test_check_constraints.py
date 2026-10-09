@@ -126,7 +126,6 @@ async def test_invalid_requirement_status_rejected():
 
 @pytest.mark.asyncio
 async def test_invalid_evidence_status_rejected():
-    system = await create_system()
     with pytest.raises(IntegrityError, match="ck_evidence_status"):
         await _insert_raw(
             "evidence",
