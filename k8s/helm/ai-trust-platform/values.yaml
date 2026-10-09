@@ -172,12 +172,16 @@ components:
     rootPath: /api/compliance
     extraEnv:
       OPENFGA_URL: http://openfga:8080
+      RAG_DATA_DIR: /app/data/rag
     dependsOnJobs: [db-migrate, openfga-provision]
     dependsOnServices:
       - name: minio
         port: 9000
         httpPath: /minio/health/live
     openfgaConfig: true
+    ragData:
+      mountPath: /app/data/rag
+      storageSize: 5Gi
 
   - name: decision-trace-analyzer
     backendPort: 8006

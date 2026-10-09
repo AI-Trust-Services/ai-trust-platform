@@ -1,0 +1,41 @@
+{{/* rag-sync — weekly CronJob that checks Cellar SPARQL for a new consolidated
+     EU AI Act version and re-indexes only if the CELEX changed.
+     Cost when nothing changed: one SPARQL call, no LLM, no PDF download.
+     Cost when changed: PDF download + LLM indexing (same cost as first build). */}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rag-sync
+spec:
+  # Every Sunday at 03:17 UTC — off-peak, avoids the top-of-hour burst.
+  # The EU typically publishes new consolidated versions mid-week; the Sunday run
+  # ensures the index is fresh by the start of the work week.
+  schedule: "17 3 * * 0"
+  concurrencyPolicy: Forbid        # don't pile up if a run takes longer than a week
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          {{- include "ai-trust.imagePullSecrets" . | nindent 10 }}
+          containers:
+            - name: rag-sync
+              # Re-uses the compliance-backend image — same Python env, same app.rag package.
+              image: {{ .Values.image.repository }}/compliance-backend:{{ .Values.image.tag }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: ["python", "-m", "app.rag.sync"]
+              envFrom:
+                - secretRef: { name: {{ .Values.secretName }} }
+              env:
+                - name: RAG_DATA_DIR
+                  value: /app/data/rag
+              volumeMounts:
+                - name: rag-data
+                  mountPath: /app/data/rag
+          volumes:
+            - name: rag-data
+              persistentVolumeClaim:
+                claimName: compliance-backend-rag-data

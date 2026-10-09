@@ -12,7 +12,7 @@ from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_tenancy import install_tenant_middleware
 from ai_trust_persistence import SessionLocal
 from app import minio_client
-from app.routers import assessments, requirements, evidence, frameworks, obligations
+from app.routers import assessments, requirements, evidence, frameworks, obligations, rag
 
 logger = get_logger(__name__)
 
@@ -91,6 +91,7 @@ app.include_router(assessments.router, prefix="/v1")
 app.include_router(obligations.router, prefix="/v1")
 app.include_router(requirements.router, prefix="/v1")
 app.include_router(evidence.router, prefix="/v1")
+app.include_router(rag.router, prefix="/v1")
 
 
 @app.get("/health")

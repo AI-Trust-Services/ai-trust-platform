@@ -1,7 +1,7 @@
 import type {
   AISystem, Assessment, AssessmentDetail, Requirement, RequirementDetail,
   Evidence, EvidenceDetail, EvidenceVersion, Framework, GenerateObligationsResponse,
-  DownloadUrlResponse, Obligation, ObligationDetail, PermissionsResponse,
+  DownloadUrlResponse, Obligation, ObligationDetail, PermissionsResponse, RagAskResponse,
 } from "../types";
 
 const API_BASE = import.meta.env.VITE_COMPLIANCE_API_BASE as string;
@@ -142,4 +142,8 @@ export const api = {
   // Current user's effective permissions — served by the registry backend.
   myPermissions: (): Promise<PermissionsResponse> =>
     request<PermissionsResponse>(USERS_API_BASE, "/me/permissions"),
+
+  // EU AI Act compliance assistant — CO-only.
+  ragAsk: (question: string): Promise<RagAskResponse> =>
+    request<RagAskResponse>(API_BASE, "/rag/ask", json("POST", { question })),
 };

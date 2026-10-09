@@ -6,13 +6,34 @@ Backend (`compliance/backend/app/`):
 - `obligation_templates.py` — hardcoded obligation sets per (framework, tier, org_role). EU AI Act High/Limited are **obligation clusters** (keyed by a stable `cluster_id` like `P-RM`, `D-LIM`) translated from the AI Act Requirements catalogue; a cluster is emitted for a (tier, org_role) only when ≥1 of its requirements survives `requirements_for(...)`. NIST AI RMF + ISO/IEC 42001 apply their full set regardless of tier/role. `obligations_for(framework, tier, org_role="provider")`; minimal/prohibited/GPAI/unknown tiers yield no EU obligations.
 - `requirement_templates.py` — hardcoded per-requirement templates keyed by obligation `cluster_id`, filtered by risk tier **and** org_role via `requirements_for(cluster_id, tier, org_role)`. `requirement_ref` is the Requirement ID (e.g. `P-RM-01`); retained NIST/ISO sets carry no `role` and match any org_role. `cluster_articles(...)` aggregates a cluster's distinct top-level AI Act articles for display.
 - `minio_client.py` — async wrapper over the sync `minio` SDK (blocking calls in `asyncio.to_thread`). Two clients: `_client` (in-cluster, uploads) and `_presign_client` (public, presigned download URLs).
-- Routers: `frameworks.py`, `assessments.py` (CRUD + `/generate-obligations`, `/generate-requirements`, `/submit`, `/approve`), `obligations.py`, `requirements.py` (CRUD + `/link/{obligation_id}` POST/DELETE), `evidence.py` (multipart + CRUD + `/approve`, `/reject`, `/download-url`, `/versions`, `/upload-version`).
+- Routers: `frameworks.py`, `assessments.py` (CRUD + `/generate-obligations`, `/generate-requirements`, `/submit`, `/approve`), `obligations.py`, `requirements.py` (CRUD + `/link/{obligation_id}` POST/DELETE), `evidence.py` (multipart + CRUD + `/approve`, `/reject`, `/download-url`, `/versions`, `/upload-version`), `rag.py` (EU AI Act assistant, CO-only).
 
 **Governance chain** — `POST /api/v1/assessments` is the entry point: it auto-generates obligations **and** requirements in one transaction. Obligations come from `obligation_templates.py` by (tier, org_role), with owner/not-applicable pre-filled from the most recent approved prior assessment for the same (system, framework). For each obligation, `requirements_for(cluster_id, tier, org_role)` yields requirements (stable `requirement_ref` = the Requirement ID, e.g. `P-RM-01`) stored with a direct `obligation_id` FK (1:N); a fresh requirement is `open`, so the cascade immediately moves each obligation `applicable → in_progress`. Owner (only) is carried forward from the most recent prior requirement with the same `requirement_ref` for that system. `POST /assessments/{id}/generate-requirements` re-runs for API consumers and is idempotent (skips obligations that already have a requirement). Requirements can also be linked manually via `POST /requirements/{id}/link/{obligation_id}`. Approving evidence cascades automatically.
 
 **Delete** — `DELETE /api/v1/assessments/{id}` cascades obligations (FK `ondelete=CASCADE`) and removes auto-generated requirements (`requirement_ref` not null) linked **only** to that assessment's obligations. Manual requirements (`requirement_ref` null) and shared requirements are kept. Response includes `requirements_deleted`.
 
 **Evidence** — `POST /api/v1/evidence` accepts `requirement_ids` as repeated form fields (multi-value, one M2M row each); at least one `requirement_id` required. Versioned: `/upload-version` snapshots current file metadata to `evidence_versions` before replacing (old MinIO file deleted, snapshot retained); `/versions` returns history oldest-first; `version_label` tracks the current label. Stored in MinIO bucket `evidence-files`, key `evidence/{evidence_id}/{filename}`.
+
+## RAG — EU AI Act compliance assistant
+
+`POST /api/v1/rag/ask` — gated on `assessments:approve` (held exclusively by `ai_compliance_officer` among default roles; permission-based so custom roles can also have it). Body: `{question: str}`. Response: `{answer: str, articles: list[str]}`. Returns 503 when the index hasn't been built yet or `LLM_PROVIDER=stub`.
+
+**Architecture:**
+- `app/rag/` — self-contained package. `query.ask()` is the only public entry point for the router.
+- **Index** lives on a PVC (`compliance-backend-rag-data`, 5 Gi, `helm.sh/resource-policy: keep`) mounted at `/app/data/rag` on both the compliance backend (read-only queries) and the `rag-sync` CronJob (writes).
+- **`rag-sync` CronJob** — runs every Sunday 03:17 UTC. Queries Cellar SPARQL for the latest consolidated CELEX, compares against the current index's stored CELEX. If unchanged: exits in seconds (one SPARQL call, no LLM cost). If changed: downloads the PDF from Cellar and re-indexes.
+- **`RAG_DATA_DIR`** — required env var, no default (platform convention). Set by Helm to `/app/data/rag`; set locally in `.env` to any writable path when running `make rag-ingest` / `make rag-index`.
+- **LLM routing** — uses the same `LLM_PROVIDER` / `AI_*` vars as the registry. For `external`, a local OpenAI→Anthropic proxy (`app/rag/proxy.py`) handles the shim; concurrency is capped by `RAG_LLM_CONCURRENCY` (default 2) to avoid 429s on rate-limited deployments.
+- **Frontend** — `RagChat` component in `AssessmentsPage.tsx`, rendered inside the assessment detail panel, visible only when the user has `assessments:approve`. Conversation history is client-side only.
+
+**Local smoke test:**
+```bash
+cd compliance/backend
+# set RAG_DATA_DIR in .env to a local writable path
+make rag-ingest   # download PDF from Cellar
+make rag-index    # build PageIndex tree (requires LLM_PROVIDER != stub)
+make rag-ask Q="What are the obligations for high-risk AI systems?"
+```
 
 ## Evidence expiry (policy-checker-worker)
 Three alert rules seeded in migration `0004` drive evidence expiry:

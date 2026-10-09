@@ -49,11 +49,17 @@ spec:
             {{- end }}
           ports:
             - containerPort: {{ $c.backendPort }}
-          {{- if $c.openfgaConfig }}
+          {{- if or $c.openfgaConfig $c.ragData }}
           volumeMounts:
+            {{- if $c.openfgaConfig }}
             - name: openfga-config
               mountPath: /config
               readOnly: true
+            {{- end }}
+            {{- if $c.ragData }}
+            - name: rag-data
+              mountPath: {{ $c.ragData.mountPath }}
+            {{- end }}
           {{- end }}
           readinessProbe:
             httpGet:
@@ -67,15 +73,41 @@ spec:
               port: {{ $c.backendPort }}
             initialDelaySeconds: 20
             periodSeconds: 15
-      {{- if $c.openfgaConfig }}
+      {{- if or $c.openfgaConfig $c.ragData }}
       volumes:
+        {{- if $c.openfgaConfig }}
         - name: openfga-config
           secret:
             secretName: openfga-store-id
             items:
               - key: store_id
                 path: store_id
+        {{- end }}
+        {{- if $c.ragData }}
+        - name: rag-data
+          persistentVolumeClaim:
+            claimName: {{ $backend }}-rag-data
+        {{- end }}
       {{- end }}
+{{- if $c.ragData }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $backend }}-rag-data
+  annotations:
+    # Preserve the built index across helm upgrades and uninstalls — re-indexing
+    # is expensive (LLM calls per PDF node). Remove manually only to force a full rebuild.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  # ponytail: RWO works on single-node (kind, Gardener single-node). For multi-node
+  # clusters where the CronJob may land on a different node than the Deployment,
+  # override storageClassName to a ReadWriteMany-capable class.
+  resources:
+    requests:
+      storage: {{ $c.ragData.storageSize }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service

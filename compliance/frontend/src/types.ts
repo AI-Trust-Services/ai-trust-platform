@@ -203,3 +203,8 @@ export interface PermissionsResponse {
   username: string;
   permissions: string[];
 }
+
+export interface RagAskResponse {
+  answer: string;
+  articles: string[];
+}

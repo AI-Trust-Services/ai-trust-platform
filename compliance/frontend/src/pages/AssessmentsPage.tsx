@@ -14,6 +14,7 @@ import QuestionnaireSection from "../components/QuestionnaireSection";
 import { ASSESSMENT_STATUS_META, fmtDate, humanize } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import { TECHNICAL_QUESTIONS } from "../config/questionnaire";
+import RagChat from "../components/RagChat";
 import type { Assessment, AssessmentDetail, AISystem, Framework, ClassificationRationale } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -963,6 +964,13 @@ export default function AssessmentsPage() {
                 {!isAssignedCO && (
                   <p className="text-sm text-muted-foreground">Only the assigned compliance officer can review this system.</p>
                 )}
+
+                {/* EU AI Act assistant — CO-only, always visible when CO views an assessment */}
+                {mayApprove && (
+                  <div className="px-0 pt-2">
+                    <RagChat />
+                  </div>
+                )}
               </div>
             )}
 
@@ -997,6 +1005,11 @@ export default function AssessmentsPage() {
                       onClick={() => act(api.approveAssessment, selectedDetail.id, (r) => `Approved — score ${r.score ?? "N/A"}%`)}>Approve</Button>
                   )}
                 </div>
+                {mayApprove && (
+                  <div className="px-5 pt-4 pb-2">
+                    <RagChat />
+                  </div>
+                )}
               </>
             )}
           </>
