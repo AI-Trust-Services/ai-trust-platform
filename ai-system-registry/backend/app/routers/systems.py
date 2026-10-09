@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
 from sqlalchemy import select, delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -19,7 +19,7 @@ from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
-from app import minio_client
+from app import minio_client, email_sender
 from app.routers.workflow import _active_sub_assignment, _get_steps
 from app.workflow_utils import section_owner
 from app.schemas import (
@@ -554,3 +554,48 @@ async def get_document_download_url(
 
     url = await minio_client.get_presigned_url(key)
     return DownloadUrlResponse(url=url)
+
+
+@router.post(
+    "/systems/{system_id}/documents/notify-replacement",
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
+async def notify_document_replacement(
+    system_id: str,
+    background_tasks: BackgroundTasks,
+) -> dict:
+    """Fire a background email to the Compliance Officer when a technical document is
+    replaced while the RCE is under their active review (``pending_review``).
+    Returns ``{"notified": true}`` if a CO is assigned and an email was queued,
+    ``{"notified": false}`` if no CO is assigned or the system is not in ``pending_review``."""
+    async with SessionLocal() as session:
+        row = (
+            await session.execute(select(AISystem).where(AISystem.id == system_id))
+        ).scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+
+        if row.workflow_status != "pending_review" or not row.compliance_officer_username:
+            return {"notified": False}
+
+        co_username = row.compliance_officer_username
+        system_name = row.name
+
+    background_tasks.add_task(
+        email_sender.notify,
+        to_username=co_username,
+        subject=f"[{{platform_name}}] Technical documentation replaced — {system_name}",
+        body=(
+            f"Hi,\n\n"
+            f"The technical documentation for AI system '{system_name}' ({system_id}) has been "
+            f"replaced while your risk classification review was in progress. "
+            f"The new version is now being indexed.\n\n"
+            f"Please review the updated documentation before continuing your assessment.\n\n"
+            f"{{platform_name}}: {{registry_url}}"
+        ),
+    )
+    logger.info(
+        "system.document_replacement_notified",
+        extra={"system_id": system_id, "co": co_username},
+    )
+    return {"notified": True}
