@@ -3,12 +3,13 @@ import type {
   Source, Dataset, MetricCreate, SourceCreate, DatasetCreate,
   DatasetPatch, ModelSystemResponse, AISystemFormData, PermissionsResponse, WorkflowStep,
   UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult,
-  QuestionAssignment,
+  QuestionAssignment, TechDocument, TechDocVersion, TechDocUploadResponse,
 } from "../types"
 import type { SectionKey } from "../config/questionnaire";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
+const INDEXING_API_BASE = import.meta.env.VITE_INDEXING_API_BASE as string;
 export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 
 async function request<T>(path: string, options: RequestInit = {}, base: string = API_BASE): Promise<T> {
@@ -334,5 +335,42 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+
+  notifyDocumentReplacement: (systemId: string) =>
+    request<{ notified: boolean }>(`/systems/${encodeURIComponent(systemId)}/documents/notify-replacement`, {
+      method: "POST",
+    }),
+};
+
+// Technical documentation via the document-indexing backend (/api/indexing/v1).
+export const indexingApi = {
+  listDocuments: (systemId: string) =>
+    request<TechDocument[]>(`/systems/${encodeURIComponent(systemId)}/documents`, {}, INDEXING_API_BASE),
+
+  uploadDocument: (systemId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<TechDocUploadResponse>(`/systems/${encodeURIComponent(systemId)}/documents`, { method: "POST", body: fd }, INDEXING_API_BASE);
+  },
+
+  uploadVersion: (documentId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<TechDocUploadResponse>(`/documents/${encodeURIComponent(documentId)}/versions`, { method: "POST", body: fd }, INDEXING_API_BASE);
+  },
+
+  listVersions: (documentId: string) =>
+    request<TechDocVersion[]>(`/documents/${encodeURIComponent(documentId)}/versions`, {}, INDEXING_API_BASE),
+
+  getDownloadUrl: (documentId: string, versionId?: string) =>
+    request<{ url: string; expires_hours: number }>(
+      `/documents/${encodeURIComponent(documentId)}/download-url` +
+        (versionId ? `?version_id=${encodeURIComponent(versionId)}` : ""),
+      {},
+      INDEXING_API_BASE,
+    ),
+
+  deleteDocument: (documentId: string) =>
+    request<{ deleted: boolean }>(`/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" }, INDEXING_API_BASE),
 };
 

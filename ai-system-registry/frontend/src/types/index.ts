@@ -307,6 +307,41 @@ export interface RegistrationDocument {
   uploaded_at: string;
 }
 
+// Technical documentation managed via the document-indexing service.
+export type IndexingStatus = "pending" | "processing" | "indexed" | "failed";
+
+export interface TechDocument {
+  id: string;
+  ai_system_id: string;
+  filename: string;
+  mime_type: string | null;
+  version_id: string;
+  version_label: string;
+  status: IndexingStatus;
+  stage: string | null;
+  chunk_count: number;
+  error: string | null;
+  created_at: string;
+  indexed_at: string | null;
+}
+
+export interface TechDocVersion {
+  id: string;
+  version_label: string;
+  status: IndexingStatus;
+  chunk_count: number;
+  is_current: boolean;
+  error: string | null;
+  created_at: string;
+  indexed_at: string | null;
+}
+
+export interface TechDocUploadResponse {
+  document_id: string;
+  version_id: string;
+  status: IndexingStatus;
+}
+
 export interface ClassificationResult {
   tier: TierKey;
   basis: string;
