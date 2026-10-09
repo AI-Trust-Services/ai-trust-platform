@@ -12,13 +12,11 @@ OLLAMA_SET := $(shell grep -s '^LLM_PROVIDER=ollama' .env > /dev/null 2>&1 && ec
 
 # Install all local development prerequisites via Homebrew.
 # Safe to re-run — Homebrew skips already-installed packages.
-# Covers: cluster tooling (kind, kubectl, helm), container runtime (docker),
-# Python 3.12, Node.js (frontend typechecks), and ruff (lint).
+# Covers: cluster tooling (kind, kubectl, helm), Python 3.12,
+# Node.js (frontend typechecks), and ruff (lint).
 prereqs:
 	@command -v brew >/dev/null 2>&1 || { echo "Homebrew not found — install from https://brew.sh"; exit 1; }
-	brew install kind kubectl helm node python@3.12
-	brew install --cask docker || true
-	python3.12 -m pip install --quiet ruff==0.9.10
+	brew install kind kubectl helm node python@3.12 ruff
 	@echo "==> All prerequisites installed. You may need to restart your shell for PATH changes to take effect."
 
 

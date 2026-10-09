@@ -8,7 +8,7 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 ### Run the full platform (local Kubernetes via kind)
 ```bash
-make prereqs     # first time only — installs kind, kubectl, helm, docker, python@3.12, node, ruff via Homebrew
+make prereqs     # first time only — installs kind, kubectl, helm, python@3.12, node, ruff via Homebrew
 make up          # kind create cluster + bootstrap + build&load images + helm install
 make down    # helm uninstall + kind delete cluster
 ```
