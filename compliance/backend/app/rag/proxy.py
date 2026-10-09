@@ -10,6 +10,7 @@ Start with proxy.start() → returns the base_url PageIndex/LiteLLM expects.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,6 +18,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import httpx
 
 from . import config
+
+# PageIndex fans out one LLM call per PDF node; without a cap they stampede the
+# shared deployment and it returns 429. Cap concurrency and back off on 429.
+# ponytail: fixed semaphore + exponential backoff; tune via env if the
+# deployment's real rate limit differs.
+_MAX_CONCURRENCY = int(os.environ.get("RAG_LLM_CONCURRENCY", "2"))
+_MAX_RETRIES = int(os.environ.get("RAG_LLM_MAX_RETRIES", "6"))
+_TIMEOUT = float(os.environ.get("RAG_LLM_TIMEOUT", "300"))
+_sem = threading.Semaphore(_MAX_CONCURRENCY)
 
 _token: str = ""
 _token_expiry: float = 0.0
@@ -178,6 +188,34 @@ def _ant_to_oai(data: dict, model: str) -> dict:
     }
 
 
+def _invoke(ant_body: dict) -> httpx.Response:
+    """POST to the deployment, bounded by _sem, retrying on 429 with backoff."""
+    url = f"{config.AI_API_URL}/v2/inference/deployments/{config.AI_DEPLOYMENT_ID}/invoke"
+    backoff = 2.0
+    r = None
+    for _ in range(_MAX_RETRIES):
+        token = _get_token()
+        with _sem:
+            r = httpx.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "AI-Resource-Group": config.AI_RESOURCE_GROUP,
+                },
+                json=ant_body,
+                timeout=_TIMEOUT,
+            )
+        if r.status_code != 429:
+            r.raise_for_status()
+            return r
+        wait = float(r.headers.get("Retry-After", backoff))
+        time.sleep(wait)
+        backoff = min(backoff * 2, 30)
+    assert r is not None
+    r.raise_for_status()  # retries exhausted — surface the last 429
+    return r
+
+
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *args) -> None:
         pass
@@ -186,20 +224,7 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         oai = json.loads(self.rfile.read(length))
 
-        ant_body = _oai_to_ant(oai)
-        invoke_url = (
-            f"{config.AI_API_URL}/v2/inference/deployments/{config.AI_DEPLOYMENT_ID}/invoke"
-        )
-        r = httpx.post(
-            invoke_url,
-            headers={
-                "Authorization": f"Bearer {_get_token()}",
-                "AI-Resource-Group": config.AI_RESOURCE_GROUP,
-            },
-            json=ant_body,
-            timeout=120,
-        )
-        r.raise_for_status()
+        r = _invoke(_oai_to_ant(oai))
 
         resp = _ant_to_oai(r.json(), oai.get("model", "claude"))
         body_bytes = json.dumps(resp).encode()

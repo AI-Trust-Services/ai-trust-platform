@@ -1,8 +1,8 @@
 """RAG module config — reads the platform's existing env vars, no new ones required.
 
-Data directory defaults to /app/data/eu-ai-act-rag; override with RAG_DATA_DIR
-(needs to be a persistent volume in k8s — add a PVC to the compliance deployment
-when wiring this up).
+RAG_DATA_DIR is required (fail-fast, per platform convention). In k8s it points
+at a PVC mount shared by the rag-sync CronJob (writer) and the compliance
+backend (reader); locally set it in .env to any writable path.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-DATA_DIR = Path(os.environ.get("RAG_DATA_DIR", "/app/data/eu-ai-act-rag"))
+DATA_DIR = Path(os.environ["RAG_DATA_DIR"])
 INDEX_DIR = DATA_DIR / "index"
 PDF_PATH = DATA_DIR / "eu_ai_act.pdf"
 CURRENT_POINTER = INDEX_DIR / "current"

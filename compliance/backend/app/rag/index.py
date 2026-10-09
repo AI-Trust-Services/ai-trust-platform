@@ -39,7 +39,7 @@ def index_pdf(pdf_path: Path, sha: str, celex: str = "") -> str:
         "source_url": config.EUR_LEX_PDF_URL or f"cellar:{celex}",
         "indexed_at": datetime.now(timezone.utc).isoformat(),
         "provider": config.LLM_PROVIDER,
-        "model": config.LLM_MODEL,
+        "model": config.AI_DEPLOYMENT_ID if config.LLM_PROVIDER == "external" else config.LLM_MODEL,
     }
     (vdir / "meta.json").write_text(json.dumps(meta, indent=2))
     return doc_id

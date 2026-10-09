@@ -52,7 +52,10 @@ def make_client(storage_path: str):
         from app.rag import proxy
 
         base_url = proxy.start()
-        model = f"openai/{config.LLM_MODEL}"
+        # The deployment pins the real model; LLM_MODEL is an ollama-only knob.
+        # The proxy routes by AI_DEPLOYMENT_ID and ignores this string, so label
+        # it with the deployment for honest logs.
+        model = f"openai/{config.AI_DEPLOYMENT_ID}"
         backend = {"api_key": "rag-proxy", "base_url": base_url}
         return PageIndexClient(
             index_model=model,
@@ -72,4 +75,6 @@ def make_client(storage_path: str):
 
 
 def summary() -> str:
+    if config.LLM_PROVIDER == "external":
+        return f"provider=external deployment={config.AI_DEPLOYMENT_ID}"
     return f"provider={config.LLM_PROVIDER} model={config.LLM_MODEL}"

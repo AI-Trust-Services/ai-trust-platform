@@ -38,10 +38,13 @@ _HEADERS = {
 
 def _cellar_uuid(celex: str) -> str:
     """Return the Cellar UUID for the given CELEX identifier via SPARQL."""
+    # Direct literal match fails on the Cellar endpoint due to RDF datatype
+    # mismatch — STR() coerces the typed literal to a plain string first.
     query = (
         "PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>\n"
         "SELECT ?work WHERE {\n"
-        f'  ?work cdm:resource_legal_id_celex "{celex}" .\n'
+        "  ?work cdm:resource_legal_id_celex ?celex .\n"
+        f'  FILTER(STR(?celex) = "{celex}")\n'
         "} LIMIT 1"
     )
     with httpx.Client(timeout=15) as c:
@@ -81,8 +84,8 @@ def latest_consolidated_celex(base_number: str = "2024R1689") -> str:
         "PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>\n"
         "SELECT ?celex WHERE {\n"
         "  ?work cdm:resource_legal_id_celex ?celex .\n"
-        f'  FILTER(STRSTARTS(?celex, "0{base_number}-"))\n'
-        "} ORDER BY DESC(?celex) LIMIT 1"
+        f'  FILTER(STRSTARTS(STR(?celex), "0{base_number}-"))\n'
+        "} ORDER BY DESC(STR(?celex)) LIMIT 1"
     )
     with httpx.Client(timeout=15) as c:
         resp = c.get(
