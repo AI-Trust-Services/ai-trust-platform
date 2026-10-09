@@ -55,7 +55,7 @@ make test-e2e            # requires Postgres: make up or docker run postgres
 make test                # all tests
 ```
 - `tests/unit/` — pure unit tests, no DB
-- `tests/e2e/` — full stack via ASGITransport, requires Postgres only (no running server); auto-creates `ai_trust_test` DB and runs migrations on first run
+- `tests/e2e/` — full stack via ASGITransport; auto-creates `ai_trust_test` DB and runs Postgres migrations. Alerts, audit, and monitoring also require ClickHouse (tables created by the conftest with plain `MergeTree()`, no storage policy). All other external services (MinIO, OpenFGA, etc.) are mocked.
 
 Workers (`audit-flush-worker`, `policy-checker-worker`, `consumers/clickhouse-consumer`) follow the same pattern but live without a `backend/` subdirectory — `cd <worker-dir>` instead of `cd <component>/backend`.
 
@@ -66,6 +66,8 @@ span services: registry↔compliance shared `ai_systems` data, the evidence→re
 cascade, RBAC denials across backends, and the admin→users internal HTTP call.
 
 ```bash
+make test-e2e                       # per-service e2e tests (kind cluster, forwards Postgres + ClickHouse only)
+make test                           # test-e2e then test-int (full local suite)
 make test-int                       # kind cluster, namespace ai-trust
 ```
 - The `k8s/` make targets are **kind-only** — the namespace is fixed to `ai-trust` and cannot be

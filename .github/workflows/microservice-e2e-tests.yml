@@ -1,0 +1,89 @@
+name: "Pre-merge check: microservice E2E tests"
+
+# Runs per-service e2e tests on every PR. Each service under test loads its
+# FastAPI app in-process via ASGITransport (no running server or deployed
+# namespace required). External dependencies are provided as service containers:
+#   - Postgres  — for services whose e2e suite exercises real DB persistence
+#   - ClickHouse — for alerts, audit, and monitoring (event storage)
+#
+# MinIO is NOT needed: admin and compliance mock all MinIO calls in their
+# e2e conftests. ClickHouse tables are created by each conftest with plain
+# MergeTree() — no tiered storage policy, no MinIO dependency.
+#
+# cognee-eval is excluded: its tests/e2e/ directory is empty.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  microservice-e2e-tests:
+    name: "Pre-merge check: microservice E2E tests"
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      clickhouse:
+        image: clickhouse/clickhouse-server:24
+        ports:
+          - 8123:8123
+          - 9000:9000
+        options: >-
+          --health-cmd "wget -qO- http://localhost:8123/ping || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run e2e tests for all components
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        run: |
+          COMPONENTS=(
+            admin/backend
+            ai-system-registry/backend
+            alerts/backend
+            audit/backend
+            compliance/backend
+            decision-trace-analyzer/backend
+            monitoring/backend
+            overview/backend
+            users/backend
+          )
+          FAILED=()
+          for component in "${COMPONENTS[@]}"; do
+            echo "::group::$component"
+            if (cd "$component" && make setup && make test-e2e); then
+              echo "✓ $component passed"
+            else
+              echo "✗ $component FAILED"
+              FAILED+=("$component")
+            fi
+            echo "::endgroup::"
+          done
+          if [ ${#FAILED[@]} -gt 0 ]; then
+            echo ""
+            echo "Failed:"
+            for f in "${FAILED[@]}"; do echo "  - $f"; done
+            exit 1
+          fi
