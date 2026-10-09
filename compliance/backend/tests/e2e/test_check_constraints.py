@@ -131,7 +131,6 @@ async def test_invalid_evidence_status_rejected():
         await _insert_raw(
             "evidence",
             id=new_id("EVD"),
-            ai_system_id=system["id"],
             title="Bad Evidence",
             evidence_type="document",
             status="in_review",  # not in the allowed set
