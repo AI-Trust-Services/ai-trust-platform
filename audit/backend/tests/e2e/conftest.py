@@ -67,7 +67,7 @@ def _ensure_table() -> None:
             source           String       DEFAULT 'ui'
         ) ENGINE = ReplacingMergeTree()
         PARTITION BY toYYYYMM(created_at)
-        ORDER BY (created_at, ai_system_id, action)
+        ORDER BY (created_at, id)
     """)
 
 
