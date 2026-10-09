@@ -389,9 +389,7 @@ async def test_reclassify_tier_change_logs_changes(client: httpx.AsyncClient):
     from ai_trust_persistence.models.audit_event import AuditEvent
 
     async with AsyncSession(engine) as session:
-        result = await session.execute(
-            select(AISystem).where(AISystem.id == system_id)
-        )
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
         system_row = result.scalar_one()
         system_row.tier = "pending"
         await session.commit()
