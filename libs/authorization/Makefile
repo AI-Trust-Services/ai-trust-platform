@@ -1,7 +1,8 @@
+PYTHON := $(shell command -v python3.12 || command -v python3)
 .PHONY: setup test test-unit
 
 setup:
-	python3.12 -m venv .venv
+	$(PYTHON) -m venv .venv
 	.venv/bin/pip install -r requirements-test.txt
 
 test:
