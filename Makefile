@@ -8,9 +8,20 @@ CHART := k8s/helm/ai-trust-platform
 # Auto-enable Ollama in Helm when LLM_PROVIDER=ollama is set in .env
 OLLAMA_SET := $(shell grep -s '^LLM_PROVIDER=ollama' .env > /dev/null 2>&1 && echo '--set ollama.enabled=true' || echo '')
 
-.PHONY: up down cluster delete-cluster configure bootstrap build install upgrade rollout reload uninstall reset-jobs status forward-ports stop-forwards test test-e2e test-int lint
+.PHONY: up down cluster delete-cluster configure bootstrap build install upgrade rollout reload uninstall reset-jobs status forward-ports stop-forwards prereqs test test-e2e test-int lint
 
-# Full stack, from nothing.
+# Install all local development prerequisites via Homebrew.
+# Safe to re-run — Homebrew skips already-installed packages.
+# Covers: cluster tooling (kind, kubectl, helm), container runtime (docker),
+# Python 3.12, Node.js (frontend typechecks), and ruff (lint).
+prereqs:
+	@command -v brew >/dev/null 2>&1 || { echo "Homebrew not found — install from https://brew.sh"; exit 1; }
+	brew install kind kubectl helm node python@3.12
+	brew install --cask docker || true
+	python3.12 -m pip install --quiet ruff==0.9.10
+	@echo "==> All prerequisites installed. You may need to restart your shell for PATH changes to take effect."
+
+
 # `configure` runs first: it PROMPTS for the tenancy mode (single vs multi-tenant) and
 # writes TENANCY_MODE into .env before bootstrap reads it. Skip the prompt in CI by
 # passing it explicitly, e.g. `TENANCY_MODE=single make up`.

@@ -8,7 +8,8 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 ### Run the full platform (local Kubernetes via kind)
 ```bash
-make up      # kind create cluster + bootstrap + build&load images + helm install
+make prereqs     # first time only — installs kind, kubectl, helm, docker, python@3.12, node, ruff via Homebrew
+make up          # kind create cluster + bootstrap + build&load images + helm install
 make down    # helm uninstall + kind delete cluster
 ```
 Manifests live in `k8s/helm/ai-trust-platform/`.
