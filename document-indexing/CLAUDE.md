@@ -25,4 +25,9 @@ The frontend MFE (document management + AI Test Bed UI) lives in **`ai-test-bed/
 - `POST /retrieve` `{ai_system_id, query, k, mode?, rrf_k?}` (`systems:read`) — ranked passages (`rank`) + source refs. `mode` ∈ `hybrid` (default; dense + FTS fused with RRF), `dense`, `fts`; `rrf_k` (default 60) tunes the fusion constant (hybrid only). Single-channel modes order by that channel's own score and skip the other channel. Each passage also carries optional per-channel diagnostics (`dense_rank`/`dense_score`, `fts_rank`/`fts_score`, `rrf_score`) surfaced by the AI Test Bed advanced panel; non-UI consumers ignore them.
 - `DELETE /documents/{id}` (`systems:write`) — **hard delete**: removes the document row (ON DELETE CASCADE drops its versions + chunks) and purges every version's original from MinIO. Nothing of a deleted document is retained. (The `deleted_at` column is retained but now vestigial — hard delete never sets it; the `deleted_at IS NULL` filters stay as always-true no-ops.)
 
+**Audit logging** (issue #254) — all three write endpoints call `log_audit_event` from `ai_trust_persistence.audit` inside the same DB transaction:
+- `document.uploaded` — on first upload (actor = `x-forwarded-preferred-username` header).
+- `document.version_replaced` — on new-version upload; `ai_system_id` is read from the document row.
+- `document.deleted` — on hard delete; `ai_system_id` recovered from the document before deletion.
+
 **Env** — `EMBED_MODEL` (`intfloat/multilingual-e5-small`; also `-base` / `BAAI/bge-m3`), `EMBED_USE_FP16`, `INDEXING_BUCKET`, `INDEXING_POLL_INTERVAL`, `EMBEDDING_SERVICE_URL` (backend/worker → `http://embedding-service:8012`), `OWNER_DATABASE_URL` (worker, multi-tenant only — enumerates `tenant_*` schemas for the per-tenant poll; unset → single unscoped pass).

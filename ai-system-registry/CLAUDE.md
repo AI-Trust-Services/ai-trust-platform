@@ -49,3 +49,14 @@ An owner who registers with only name + description creates a **`pending`-tier**
 **Other registry routes** (`routers/systems.py`):
 - `PATCH /systems/{id}/questionnaire` — merge-patch questionnaire answers (`section` = `business` | `technical`).
 - `POST /systems/{id}/documents` — multipart upload of a `full_manual` supporting doc to MinIO (extension allowlist + `MAX_DOC_SIZE` 20 MB; filename sanitized/capped in `minio_client.object_key`). Metadata appended to `registration_documents` (JSONB). `GET /systems/{id}/documents/{index}/download-url` returns a presigned URL.
+
+**Technical documentation** (issue #254) — registry frontend integrates with the `document-indexing` backend at `/api/indexing/v1` to manage versioned technical documentation for **any** AI system (not just `full_manual`). Documents are chunked, embedded, and indexed for RAG-based RCE pre-fill.
+- `VITE_INDEXING_API_BASE` (build-time env var) points to the indexing backend; added to `Dockerfile` and `docker-bake.hcl`.
+- `indexingApi` in `src/api/client.ts` wraps: `listDocuments`, `uploadDocument`, `uploadVersion`, `listVersions`, `getDownloadUrl`, `deleteDocument`.
+- `TechnicalDocumentation` component in `SystemDetail.tsx` — shown for all systems (overview tab). Upload, replace with version history, polling for indexing status, download. RCE-state-aware confirmation dialog before replacing a document:
+  - `workflow_status === "draft"` → no warning.
+  - `business_pending / technical_pending / info_requested` → "RCE in progress" warning.
+  - `pending_review` → "RCE under CO review" warning (stronger).
+  - `approved / rejected` → "RCE completed — will reset classification" warning.
+- `DocUploadBlock` in `RegisterWizard.tsx` — shown on the **owner** and **engineer** registration success screens so documentation can be uploaded immediately after registration.
+- `POST /v1/systems/{id}/documents/notify-replacement` (`systems:write`) — fires a background email to the Compliance Officer when a technical document is replaced while `workflow_status == "pending_review"`. Returns `{"notified": true/false}`. Called automatically by the frontend after every version upload when the system is in `pending_review`.
