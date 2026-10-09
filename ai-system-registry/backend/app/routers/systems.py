@@ -2,43 +2,46 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from sqlalchemy import select, delete
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from ai_trust_authorization import require_permission
+from ai_trust_authorization import check_permission, require_permission
 from ai_trust_authorization.constants import (
+    SYSTEMS_APPROVE,
     SYSTEMS_READ,
     SYSTEMS_WRITE,
-    SYSTEMS_APPROVE,
 )
 from ai_trust_logging import get_logger
-from app.classifier import classify, CLASSIFIER_INPUTS
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.models.ai_system import AISystem
-from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
+from ai_trust_persistence.models.model_card import ModelCard
 from app import minio_client
+from app.classifier import CLASSIFIER_INPUTS, classify
 from app.routers.workflow import _active_sub_assignment, _get_steps
-from app.workflow_utils import section_owner
 from app.schemas import (
+    VALID_LIFECYCLES,
+    VALID_ROLES,
     AISystemResponse,
     AISystemUpdate,
     DownloadUrlResponse,
     IntakeResponse,
-    SystemModelLinkBody,
-    SystemModelResponse,
     QuestionnaireAnswersPatch,
     RegistrationDocument,
-    VALID_LIFECYCLES,
-    VALID_ROLES,
+    SystemModelLinkBody,
+    SystemModelResponse,
 )
+from app.workflow_utils import section_owner
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 router = APIRouter(tags=["systems"])
 logger = get_logger(__name__)
 
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
+
+# Fields backed by NOT NULL columns — an explicit null in an update is a 422, not a 500.
+_REQUIRED_FIELDS = frozenset({"name", "lifecycle", "org_role"})
 
 # Supporting documents accepted for full-manual registration (extension allowlist).
 _ALLOWED_DOC_EXTENSIONS = frozenset(
@@ -129,7 +132,7 @@ async def update_system(
     system_id: str, body: AISystemUpdate, request: Request
 ) -> AISystemResponse:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
-    updates = body.model_dump(exclude_none=True)
+    updates = body.model_dump(exclude_unset=True)
 
     immutable_attempted = _IMMUTABLE_FIELDS & updates.keys()
     if immutable_attempted:
@@ -138,9 +141,18 @@ async def update_system(
             f"Fields are immutable (use /reclassify): {sorted(immutable_attempted)}",
         )
 
-    if body.lifecycle and body.lifecycle not in VALID_LIFECYCLES:
+    # These map to NOT NULL columns. With exclude_unset an explicit null is "set",
+    # so reject it up front — otherwise setattr(row, field, None) reaches commit()
+    # and raises an IntegrityError (500) instead of a clean 422.
+    nulled_required = {
+        f for f in _REQUIRED_FIELDS & updates.keys() if updates[f] is None
+    }
+    if nulled_required:
+        raise HTTPException(422, f"Fields cannot be null: {sorted(nulled_required)}")
+
+    if body.lifecycle is not None and body.lifecycle not in VALID_LIFECYCLES:
         raise HTTPException(422, f"Invalid lifecycle '{body.lifecycle}'")
-    if body.org_role and body.org_role not in VALID_ROLES:
+    if body.org_role is not None and body.org_role not in VALID_ROLES:
         raise HTTPException(422, f"Invalid org_role '{body.org_role}'")
 
     async with SessionLocal() as session:
@@ -198,16 +210,29 @@ async def update_system(
     return AISystemResponse.model_validate(row)
 
 
-@router.delete(
-    "/systems/{system_id}", dependencies=[Depends(require_permission(SYSTEMS_APPROVE))]
-)
+@router.delete("/systems/{system_id}")
 async def delete_system(system_id: str, request: Request) -> dict:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
+    # Deny callers with neither permission *before* touching the DB, so a 404
+    # (missing row) vs 403 (real row) response can't be used to enumerate SYS-* IDs.
+    # can_write is only consulted for non-approvers, so fetch it lazily to avoid a
+    # second OpenFGA round-trip on the common approve path.
+    can_approve = await check_permission(current_user, SYSTEMS_APPROVE)
+    if not can_approve:
+        can_write = await check_permission(current_user, SYSTEMS_WRITE)
+        if not can_write:
+            raise HTTPException(403, "Permission denied")
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
         row = result.scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
+        if not can_approve and row.workflow_status != "draft":
+            raise HTTPException(
+                403,
+                "Cannot delete a system once workflow has started. "
+                "Contact a compliance officer to remove it.",
+            )
         name = row.name
         await session.delete(row)
         log_audit_event(
@@ -453,7 +478,7 @@ async def upload_registration_document(
     request: Request,
     file: UploadFile = File(...),
 ) -> AISystemResponse:
-    """Attach a supporting document to a full-manual registration.
+    """Attach a supporting document to a registered AI system (any registration mode).
 
     Stored in the ``registration-docs`` MinIO bucket; a metadata entry is appended to
     the system's ``registration_documents`` JSONB array."""
@@ -483,8 +508,6 @@ async def upload_registration_document(
     if not data:
         raise HTTPException(422, "The uploaded file is empty")
 
-    # Single session, row locked for update: validate → upload → write is atomic, so the
-    # system can't be deleted or switched away from full_manual between check and write.
     async with SessionLocal() as session:
         result = await session.execute(
             select(AISystem).where(AISystem.id == system_id).with_for_update()
@@ -492,11 +515,6 @@ async def upload_registration_document(
         row = result.scalar_one_or_none()
         if not row:
             raise HTTPException(404, f"System {system_id} not found")
-        if row.registration_mode != "full_manual":
-            raise HTTPException(
-                422,
-                "Supporting documents may only be uploaded for full-manual registrations",
-            )
 
         key = await minio_client.upload_file(
             system_id, filename, data, file.content_type or "application/octet-stream"

@@ -127,6 +127,10 @@ class AISystemCreate(BaseModel):
         None
     )
 
+    business_owners: str | None = None
+    technical_owners: str | None = None
+    git_repo_url: str | None = Field(default=None, max_length=500)
+
     registration_mode: Literal["ai", "manual_questionnaire", "full_manual"] = "ai"
     org_role: str = "provider"
     # Full-manual override: creator supplies the tier directly (validated against VALID_TIERS
@@ -188,6 +192,9 @@ class AISystemUpdate(BaseModel):
     eu_output_usage: bool | None = None
     eu_market_placement: bool | None = None
     lifecycle: str | None = None
+    business_owners: str | None = None
+    technical_owners: str | None = None
+    git_repo_url: str | None = Field(default=None, max_length=500)
 
     # Risk flags (editable in draft/rejected)
     subliminal_manipulation: bool | None = None
@@ -293,6 +300,9 @@ class AISystemResponse(BaseModel):
     info_requested_section: str | None = None
     questionnaire_answers: dict | None
     registration_documents: list[RegistrationDocument] | None = None
+    business_owners: str | None = None
+    technical_owners: str | None = None
+    git_repo_url: str | None = None
 
     model_config = {"from_attributes": True}
 
