@@ -129,6 +129,9 @@ async def consistency_check() -> tuple[bool, str]:
         db.close()
 
     return False, "no recalled node id resolved in the graph"
+
+
+async def get_graph_stats() -> dict:
     """Return a high-level summary of the knowledge graph."""
     results = await cognee.search(
         "List all entity types and relationship types in the knowledge graph",
