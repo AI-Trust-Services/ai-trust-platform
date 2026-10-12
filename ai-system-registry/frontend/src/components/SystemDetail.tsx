@@ -757,8 +757,6 @@ function ClassificationRationalePanel({ rationale }: { rationale: Classification
   );
 }
 
-}
-
 const INDEXING_STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   indexed: "default",
   processing: "secondary",
