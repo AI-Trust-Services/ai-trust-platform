@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # Build context is repo root (not ai-system-registry/frontend/) to access shared libs
 FROM node:24-alpine AS build
 WORKDIR /app
@@ -7,7 +8,7 @@ COPY libs/react-hooks /libs/react-hooks
 
 # Copy frontend package.json and install deps
 COPY ai-system-registry/frontend/package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Copy frontend source
 COPY ai-system-registry/frontend/ .

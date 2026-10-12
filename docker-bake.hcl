@@ -21,6 +21,20 @@ function "tag" {
   result = "ghcr.io/${OWNER}/ai-trust-platform/${name}:${TAG}"
 }
 
+# Shared Python base for all repo-root backends/workers. Built once; wired into
+# each backend target via `contexts = { backend-base = "target:backend-base" }`
+# so bake resolves the FROM without a registry round-trip (works for --push and
+# --load). Not in group "default" — it is a build dependency, not a shipped image,
+# and must not be pushed as a release artifact.
+target "backend-base" {
+  context    = "."
+  dockerfile = "infra/backend-base/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("backend-base")]
+  cache-from = ["type=gha,scope=backend-base"]
+  cache-to   = ["type=gha,mode=max,scope=backend-base"]
+}
+
 group "default" {
   targets = [
     "users-backend",
@@ -67,6 +81,7 @@ group "default" {
 target "users-backend" {
   context    = "."
   dockerfile = "users/backend/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("users-backend")]
   cache-from = ["type=gha,scope=users-backend"]
@@ -76,6 +91,7 @@ target "users-backend" {
 target "ai-system-registry-backend" {
   context    = "."
   dockerfile = "ai-system-registry/backend/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("ai-system-registry-backend")]
   cache-from = ["type=gha,scope=ai-system-registry-backend"]
@@ -85,6 +101,7 @@ target "ai-system-registry-backend" {
 target "monitoring-backend" {
   context    = "."
   dockerfile = "monitoring/backend/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("monitoring-backend")]
   cache-from = ["type=gha,scope=monitoring-backend"]
@@ -94,6 +111,7 @@ target "monitoring-backend" {
 target "overview-backend" {
   context    = "."
   dockerfile = "overview/backend/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("overview-backend")]
   cache-from = ["type=gha,scope=overview-backend"]
@@ -103,6 +121,7 @@ target "overview-backend" {
 target "alerts-backend" {
   context    = "."
   dockerfile = "alerts/backend/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("alerts-backend")]
   cache-from = ["type=gha,scope=alerts-backend"]
@@ -112,6 +131,7 @@ target "alerts-backend" {
 target "compliance-backend" {
   context    = "."
   dockerfile = "compliance/backend/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("compliance-backend")]
   cache-from = ["type=gha,scope=compliance-backend"]
@@ -121,6 +141,7 @@ target "compliance-backend" {
 target "decision-trace-analyzer-backend" {
   context    = "."
   dockerfile = "decision-trace-analyzer/backend/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("decision-trace-analyzer-backend")]
   cache-from = ["type=gha,scope=decision-trace-analyzer-backend"]
@@ -130,6 +151,7 @@ target "decision-trace-analyzer-backend" {
 target "policy-checker-worker" {
   context    = "."
   dockerfile = "policy-checker-worker/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("policy-checker-worker")]
   cache-from = ["type=gha,scope=policy-checker-worker"]
@@ -139,6 +161,7 @@ target "policy-checker-worker" {
 target "embedding-service" {
   context    = "."
   dockerfile = "embedding-service/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("embedding-service")]
   cache-from = ["type=gha,scope=embedding-service"]
@@ -148,6 +171,7 @@ target "embedding-service" {
 target "document-indexing-backend" {
   context    = "."
   dockerfile = "document-indexing/backend/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("document-indexing-backend")]
   cache-from = ["type=gha,scope=document-indexing-backend"]
@@ -157,6 +181,7 @@ target "document-indexing-backend" {
 target "document-indexing-worker" {
   context    = "."
   dockerfile = "document-indexing-worker/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("document-indexing-worker")]
   cache-from = ["type=gha,scope=document-indexing-worker"]
@@ -166,6 +191,7 @@ target "document-indexing-worker" {
 target "audit-backend" {
   context    = "."
   dockerfile = "audit/backend/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("audit-backend")]
   cache-from = ["type=gha,scope=audit-backend"]
@@ -175,6 +201,7 @@ target "audit-backend" {
 target "audit-flush-worker" {
   context    = "."
   dockerfile = "audit-flush-worker/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("audit-flush-worker")]
   cache-from = ["type=gha,scope=audit-flush-worker"]
@@ -184,6 +211,7 @@ target "audit-flush-worker" {
 target "admin-backend" {
   context    = "."
   dockerfile = "admin/backend/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("admin-backend")]
   cache-from = ["type=gha,scope=admin-backend"]
@@ -193,6 +221,7 @@ target "admin-backend" {
 target "otel-clickhouse-consumer" {
   context    = "."
   dockerfile = "consumers/clickhouse-consumer/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("otel-clickhouse-consumer")]
   cache-from = ["type=gha,scope=otel-clickhouse-consumer"]
@@ -399,6 +428,7 @@ target "admin-frontend" {
 target "ai-test-bed-backend" {
   context    = "."
   dockerfile = "ai-test-bed/backend/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("ai-test-bed-backend")]
   cache-from = ["type=gha,scope=ai-test-bed-backend"]
@@ -423,6 +453,7 @@ target "ai-test-bed-frontend" {
 target "cognee-eval-backend" {
   context    = "."
   dockerfile = "cognee-eval/backend/Dockerfile"
+  contexts   = { backend-base = "target:backend-base" }
   platforms  = ["linux/amd64"]
   tags       = [tag("cognee-eval-backend")]
   cache-from = ["type=gha,scope=cognee-eval-backend"]

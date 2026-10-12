@@ -1,13 +1,12 @@
-FROM python:3.12-slim
+# syntax=docker/dockerfile:1.7
+# `backend-base` is resolved by docker-bake.hcl via
+# `contexts = { backend-base = "target:backend-base" }` (built once, shared).
+FROM backend-base
 
 WORKDIR /app
 
-COPY libs/tenancy /app/libs/tenancy
-COPY libs/logging /app/libs/logging
-COPY libs/authorization /app/libs/authorization
-COPY libs/persistence /app/libs/persistence
 COPY users/backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
 
 COPY users/backend/ .
 RUN chmod +x entrypoint.sh

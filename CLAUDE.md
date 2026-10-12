@@ -247,11 +247,34 @@ Static HTML + `luigi-config.js` served by nginx (Luigi core from CDN). Nav nodes
 
 Each component has `frontend/` (nginx, internal) and `backend/` (FastAPI, internal). All traffic routes through `:8080` via the shell proxy. **Per-component detail lives in each component's own `CLAUDE.md`** (linked below) and loads on demand when you work in that directory.
 
+### Build system (local kind + CI)
+Both the local build (`k8s/scripts/build-and-load-images.sh`, invoked by `make build`) and both CI
+deploy paths run **`docker buildx bake`** over `docker-bake.hcl` — all images build in parallel on one
+BuildKit instance. The local script rewrites each target's tag to `ai-trust/<name>:local`, strips the
+CI-only `type=gha` cache, loads the result into kind, and still honours `--service <name>` (used by
+`make reload`). Key conventions new Dockerfiles must follow:
+- **Shared Python base** — all repo-root Python backends/workers do `FROM backend-base` (bare name),
+  resolved by bake via `contexts = { backend-base = "target:backend-base" }` on their target.
+  `infra/backend-base/Dockerfile` installs the five editable libs (tenancy, persistence, logging,
+  authorization, clickhouse) at `/app/libs/*` once; children inherit them and only install their own
+  leaf `requirements.txt`. **Do not re-add `COPY libs/*` lines** — the base provides them. `backend-base`
+  is a build-time parent only: never in `group "default"`, never an OCM `ociImage`, never loaded into kind.
+- **Cache mounts** — every `pip install` uses `RUN --mount=type=cache,target=/root/.cache/pip` and every
+  frontend `npm ci` uses `RUN --mount=type=cache,target=/root/.npm`, so downloads persist across builds.
+  Both require the `# syntax=docker/dockerfile:1.7` first line.
+- Services that can't use the base (own-context migrations `libs/persistence`/`libs/clickhouse`, the
+  alpine `openfga-provision`, the lib-free `ai-gateway`) keep their own `FROM` but still add the pip
+  cache mount + syntax header.
+
 ### Adding a new service
 When you add a new service, update all of these together — nothing enforces parity in CI:
 - Add a Deployment+Service (or Job) to the Helm chart (`k8s/helm/ai-trust-platform/`).
-- Add the image to `k8s/scripts/build-and-load-images.sh` (kind local builds).
-- Add a `target` + include it in `group "default"` in `docker-bake.hcl` (used by both CI deploy paths — `build-push-deploy.yml` and the PR deployment test). Frontends must carry their `VITE_*` build args in the bake `target`'s `args`.
+- Add a `target` to `docker-bake.hcl` and include it in `group "default"` (used by both the local build
+  and both CI deploy paths — `build-push-deploy.yml` and the PR deployment test). A Python backend/worker
+  target must also carry `contexts = { backend-base = "target:backend-base" }` (see "Build system" above);
+  frontends must carry their `VITE_*` build args in the target's `args`. The local
+  `build-and-load-images.sh` discovers targets from the bake `default` group automatically — no separate
+  per-image entry to maintain there.
 - Add the image as an `ociImage` resource in `.ocm/component-constructor.yaml`. An image missing here silently ships broken to Gardener.
 - New/changed env var or secret → add to `.env.example`; it flows to k8s via `k8s/scripts/bootstrap.sh`'s Secret.
 - New `depends_on: condition:` → add the matching `waitForTcp`/`waitForHttp`/`waitForJob` initContainer (helpers in `_helpers.tpl`).
@@ -262,14 +285,14 @@ When you add a new service, update all of these together — nothing enforces pa
 1. Create `new-component/frontend/` and `new-component/backend/`.
 2. Add `libs/persistence/ai_trust_persistence/models/your_model.py` and import it in `models/__init__.py`.
 3. Add a migration to `libs/persistence/migrations/versions/` and `alembic upgrade head`.
-4. Copy `ai-system-registry/backend/Dockerfile` (build context = repo root).
-5. Add needed libs to `requirements.txt`: `-e /app/libs/persistence`, `-e /app/libs/clickhouse`, `-e /app/libs/logging`.
+4. Copy `ai-system-registry/backend/Dockerfile` (build context = repo root): `FROM backend-base`, pip-install the service's own `requirements.txt` with a cache mount. Do **not** add `COPY libs/*` lines — the base provides them.
+5. Add needed libs to `requirements.txt` as editable installs: `-e /app/libs/persistence`, `-e /app/libs/clickhouse`, `-e /app/libs/logging` (etc.). The base already provides these dirs at `/app/libs/*`, so the `-e` entries resolve against the inherited filesystem.
 6. Add `healthcheck.py` (copy from ai-system-registry, update port).
 7. Add the service to the Helm chart with a `healthcheck` and appropriate initContainers. Do **not** expose ports outside the cluster.
 8. Add proxy routes to `shell/nginx.conf` (`/new-component/`, `/api/new-component/`).
 9. Add `base: "/new-component/"` to the frontend `vite.config.ts`.
 10. Add a nav node to `shell/luigi-config.js`.
-11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add the image(s) to `build-and-load-images.sh` (kind), a `target` + `group "default"` entry in `docker-bake.hcl` (shared by both CI deploy paths — see "Adding a new service" above), **and** as `ociImage` resources in `.ocm/component-constructor.yaml`.
+11. Add the Deployment+Service to the Helm chart — if it fits the generic backend+frontend pattern, add an entry to `components` in `k8s/helm/ai-trust-platform/values.yaml`; else a new template file. Add a `target` + `group "default"` entry in `docker-bake.hcl` (shared by the local build and both CI deploy paths — see "Build system" / "Adding a new service" above; a Python backend/worker target needs `contexts = { backend-base = "target:backend-base" }`), **and** `ociImage` resources in `.ocm/component-constructor.yaml`. The local `build-and-load-images.sh` picks the target up from the bake group automatically.
 12. Add a `new-component/CLAUDE.md` documenting its routes, data model, and any conventions (see the existing component `CLAUDE.md` files for the pattern).
 
 ### ai-system-registry/ (port 8001, `/api/registry/`)

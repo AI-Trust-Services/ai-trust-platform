@@ -1,8 +1,9 @@
+# syntax=docker/dockerfile:1.7
 FROM node:24-alpine AS build
 WORKDIR /app
 COPY libs/react-hooks /libs/react-hooks
 COPY ai-test-bed/frontend/package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY ai-test-bed/frontend/ .
 ARG VITE_TESTBED_API_BASE
 ENV VITE_TESTBED_API_BASE=$VITE_TESTBED_API_BASE

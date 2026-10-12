@@ -1,8 +1,9 @@
+# syntax=docker/dockerfile:1.7
 FROM node:24-alpine AS build
 WORKDIR /app
 COPY libs/react-hooks /libs/react-hooks
 COPY users/frontend/package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY users/frontend/ .
 ARG VITE_USERS_API_BASE
 ARG VITE_REGISTRY_API_BASE
