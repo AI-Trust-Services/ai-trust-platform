@@ -50,8 +50,8 @@ spec:
       targetPort: 8000
 ---
 {{/* Cognee eval backend — graph-based grounded Q&A over the EU AI Act. */}}
-{{- if and .Values.cogneeEval.readOnly (not .Values.cogneeEval.graphImage) }}
-{{- fail "cogneeEval.readOnly=true requires cogneeEval.graphImage (pin the frozen graph image by digest)" }}
+{{- if and .Values.cogneeEval.readOnly (not (regexMatch "@sha256:[a-fA-F0-9]{64}$" (.Values.cogneeEval.graphImage | default ""))) }}
+{{- fail "cogneeEval.readOnly=true requires cogneeEval.graphImage pinned by sha256 digest" }}
 {{- end }}
 {{- if .Values.cogneeEval.readOnly }}
 {{/* Read-only production: frozen graph snapshot hydrated into an emptyDir by an
