@@ -115,18 +115,21 @@ async def consistency_check() -> tuple[bool, str]:
     if not node_ids:
         return False, "recall returned no resolvable node ids"
 
-    db = kuzu.Database(db_path, read_only=True)
-    conn = kuzu.Connection(db)
     try:
-        for node_id in node_ids:
-            r = conn.execute(
-                "MATCH (n:Node {id: $id}) RETURN n.id LIMIT 1", {"id": node_id}
-            )
-            if r.has_next():
-                return True, f"graph consistent (resolved node {node_id})"
-    finally:
-        conn.close()
-        db.close()
+        db = kuzu.Database(db_path, read_only=True)
+        conn = kuzu.Connection(db)
+        try:
+            for node_id in node_ids:
+                r = conn.execute(
+                    "MATCH (n:Node {id: $id}) RETURN n.id LIMIT 1", {"id": node_id}
+                )
+                if r.has_next():
+                    return True, f"graph consistent (resolved node {node_id})"
+        finally:
+            conn.close()
+            db.close()
+    except Exception as e:  # noqa: BLE001
+        return False, f"graph database validation failed: {e}"
 
     return False, "no recalled node id resolved in the graph"
 
