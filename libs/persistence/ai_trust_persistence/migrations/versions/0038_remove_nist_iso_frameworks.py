@@ -10,8 +10,8 @@ rows. Obligations are also cascade-deleted when their parent assessment is remov
 but we delete them explicitly first so the migration is safe regardless of which
 rows exist. In practice an EU-only deployment has no NIST/ISO assessments.
 
-Revision ID: 0037
-Revises: 0036
+Revision ID: 0038
+Revises: 0037
 Create Date: 2026-10-12
 """
 
@@ -20,8 +20,8 @@ from datetime import datetime, timezone
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0037"
-down_revision = "0036"
+revision = "0038"
+down_revision = "0037"
 branch_labels = None
 depends_on = None
 

@@ -20,7 +20,6 @@ import AddGraphModal from "../components/AddGraphModal";
 import EditCardModal from "../components/EditCardModal";
 import DateRangeFilter from "../components/DateRangeFilter";
 import ObligationDonut from "../components/ObligationDonut";
-import FrameworkBreakdown from "../components/FrameworkBreakdown";
 import EvidenceGapCard from "../components/EvidenceGapCard";
 import AlertFeed from "../components/AlertFeed";
 import ComplianceTrend from "../components/ComplianceTrend";
@@ -230,15 +229,11 @@ export default function Overview() {
           onClick={() => navigateTo("/home/alerts", ALERTS_URL)} />
       </div>
 
-      {/* Fixed 3-col widget row: obligation donut | framework bar | evidence gap */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 print:grid-cols-3">
+      {/* Fixed 2-col widget row: obligation donut | evidence gap */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 print:grid-cols-2">
         <ObligationDonut
           data={complianceStats?.obligation_status ?? { applicable: 0, in_progress: 0, overdue: 0, fulfilled: 0, not_applicable: 0 }}
           onClick={() => navigateTo("/home/obligations", COMPLIANCE_URL)}
-        />
-        <FrameworkBreakdown
-          data={complianceStats?.framework_compliance ?? []}
-          onClick={() => navigateTo("/home/assessments", COMPLIANCE_URL)}
         />
         <EvidenceGapCard
           data={complianceStats?.evidence_gap ?? { expired: 0, expiring_soon: 0, missing: 0 }}
