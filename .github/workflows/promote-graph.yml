@@ -67,19 +67,30 @@ jobs:
 
       - name: Compute digest and write provenance manifest
         working-directory: cognee-eval/graph-image
+        env:
+          INPUT_GRAPH_TAG: ${{ inputs.graph_tag }}
+          INPUT_SOURCE_DOC_SHA256: ${{ inputs.source_doc_sha256 }}
+          INPUT_APPROVED_FEEDBACK_IDS: ${{ inputs.approved_feedback_ids }}
+          INPUT_APPROVER: ${{ inputs.approver || github.actor }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           ARCHIVE_SHA256="$(sha256sum graph.tar.gz | cut -d' ' -f1)"
-          cat > manifest.json <<EOF
-          {
-            "graph_tag": "${{ inputs.graph_tag }}",
-            "source_doc_sha256": "${{ inputs.source_doc_sha256 }}",
-            "approved_feedback_ids": "${{ inputs.approved_feedback_ids }}",
-            "approver": "${{ inputs.approver || github.actor }}",
-            "release_tag": "${{ inputs.release_tag }}",
-            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "archive_sha256": "${ARCHIVE_SHA256}"
-          }
-          EOF
+          jq --arg graph_tag "$INPUT_GRAPH_TAG" \
+             --arg source_doc_sha256 "$INPUT_SOURCE_DOC_SHA256" \
+             --arg approved_feedback_ids "$INPUT_APPROVED_FEEDBACK_IDS" \
+             --arg approver "$INPUT_APPROVER" \
+             --arg release_tag "$INPUT_RELEASE_TAG" \
+             --arg built_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+             --arg archive_sha256 "$ARCHIVE_SHA256" \
+             -n '{
+               graph_tag: $graph_tag,
+               source_doc_sha256: $source_doc_sha256,
+               approved_feedback_ids: $approved_feedback_ids,
+               approver: $approver,
+               release_tag: $release_tag,
+               built_at: $built_at,
+               archive_sha256: $archive_sha256
+             }' > manifest.json
           echo "Manifest:"; cat manifest.json
 
       - name: Lowercase the owner for GHCR
