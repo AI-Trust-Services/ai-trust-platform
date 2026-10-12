@@ -11,7 +11,6 @@ from pathlib import Path
 
 import httpx
 import cognee
-import kuzu
 from cognee.modules.search.types.SearchType import SearchType
 
 _DATASET = "eu_ai_act_v1"
@@ -92,46 +91,25 @@ _PROBE_QUERY = "What are the obligations for high-risk AI systems?"
 
 
 async def consistency_check() -> tuple[bool, str]:
-    """Verify the on-disk graph snapshot is present and internally consistent.
+    """Verify the graph snapshot is present and answerable before serving.
 
-    Run at startup in read-only prod before serving traffic: a torn or empty
-    snapshot (e.g. a bad artifact) must fail readiness rather than serve wrong
-    answers. Confirms a recall() returns at least one node id that actually
-    resolves in the Kuzu graph on disk.
+    Run at startup in read-only prod: a torn or empty snapshot (e.g. a bad
+    artifact) must fail readiness rather than serve wrong answers. Validates
+    through the same federated recall() path the product serves from, so it
+    correctly accounts for the full graph (and any merged content) regardless
+    of the on-disk dataset layout — and avoids opening a second Kuzu handle
+    (which would contend with the live process's exclusive lock).
     """
-    # Local import avoids a router<->client import cycle at module load.
-    from app.routers.graph import find_graph_db
-
-    db_path = find_graph_db()
-    if not db_path:
-        return False, "no graph database found on disk"
-
     try:
         results = await recall(_PROBE_QUERY)
     except Exception as e:  # noqa: BLE001
         return False, f"recall failed: {e}"
 
-    node_ids = [r["node_id"] for r in results if r.get("node_id")]
-    if not node_ids:
-        return False, "recall returned no resolvable node ids"
+    for r in results:
+        if r.get("node_id"):
+            return True, f"graph answerable (resolved node {r['node_id']})"
 
-    try:
-        db = kuzu.Database(db_path, read_only=True)
-        conn = kuzu.Connection(db)
-        try:
-            for node_id in node_ids:
-                r = conn.execute(
-                    "MATCH (n:Node {id: $id}) RETURN n.id LIMIT 1", {"id": node_id}
-                )
-                if r.has_next():
-                    return True, f"graph consistent (resolved node {node_id})"
-        finally:
-            conn.close()
-            db.close()
-    except Exception as e:  # noqa: BLE001
-        return False, f"graph database validation failed: {e}"
-
-    return False, "no recalled node id resolved in the graph"
+    return False, "recall returned no resolvable nodes — graph missing or empty"
 
 
 async def get_graph_stats() -> dict:
@@ -193,12 +171,14 @@ async def answer_question(question: str, passages: list[dict]) -> str:
 
 
 async def ingest_feedback(feedback_id: str, text: str, node_ids: list[str]) -> None:
-    """Ingest approved feedback as a tagged node into Cognee's graph.
+    """Merge approved feedback into the main knowledge graph.
 
-    Stored in a separate dataset to keep source text and human
-    interpretation distinguishable.
+    Ingested into the same dataset as the source document so cognify() links
+    the feedback's entities into the existing graph (true enrichment), keeping
+    a single graph/.pkl for read-only snapshots. The [FEEDBACK:id] prefix
+    preserves provenance within the one graph.
     """
     tagged = (
         f"[FEEDBACK:{feedback_id}] {text}\nLinked provisions: {', '.join(node_ids)}"
     )
-    await cognee.remember(tagged, dataset_name=f"feedback_{feedback_id}")
+    await cognee.remember(tagged, dataset_name=_DATASET)
