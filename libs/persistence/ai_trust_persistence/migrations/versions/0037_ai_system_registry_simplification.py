@@ -26,4 +26,3 @@ def downgrade() -> None:
     op.drop_column("ai_systems", "git_repo_url")
     op.drop_column("ai_systems", "technical_owners")
     op.drop_column("ai_systems", "business_owners")
-
