@@ -16,7 +16,7 @@ interface ModalControls {
   modelCreateOpen: boolean;
   setModelCreateOpen: (open: boolean) => void;
   mayWrite: boolean;
-  mayRegister: boolean;
+  mayApprove: boolean;
   username: string;
 }
 
@@ -35,7 +35,7 @@ export default function App() {
   const location = useLocation();
   const { can, username } = usePermissions();
   const mayWrite = can("systems:write");
-  const mayRegister = can("systems:write");
+  const mayApprove = can("systems:approve");
   const noWriteTitle = "Requires permission: systems:write";
 
   useLuigiInit(() => {});
@@ -68,7 +68,7 @@ export default function App() {
 
   return (
     <ToastContext.Provider value={showToast}>
-      <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen, mayWrite, mayRegister, username }}>
+      <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen, mayWrite, mayApprove, username }}>
         <div className="flex h-screen flex-col overflow-hidden">
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6 shadow-[var(--shadow-xs)]">
           <div className="flex items-center gap-3">
@@ -79,8 +79,8 @@ export default function App() {
           </div>
           <div>
             {activeView === "systems" ? (
-              <Button disabled={!mayRegister}
-                title={mayRegister ? undefined : "Requires permission: systems:write"}
+              <Button disabled={!mayWrite}
+                title={mayWrite ? undefined : "Requires permission: systems:write"}
                 onClick={() => setWizardOpen(true)}>
                 + Register System
               </Button>
