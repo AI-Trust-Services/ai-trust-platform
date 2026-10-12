@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 import cognee
+import kuzu
 from cognee.modules.search.types.SearchType import SearchType
 
 _DATASET = "eu_ai_act_v1"
@@ -87,7 +88,47 @@ async def recall(query: str) -> list[dict]:
     return out
 
 
-async def get_graph_stats() -> dict:
+_PROBE_QUERY = "What are the obligations for high-risk AI systems?"
+
+
+async def consistency_check() -> tuple[bool, str]:
+    """Verify the on-disk graph snapshot is present and internally consistent.
+
+    Run at startup in read-only prod before serving traffic: a torn or empty
+    snapshot (e.g. a bad artifact) must fail readiness rather than serve wrong
+    answers. Confirms a recall() returns at least one node id that actually
+    resolves in the Kuzu graph on disk.
+    """
+    # Local import avoids a router<->client import cycle at module load.
+    from app.routers.graph import find_graph_db
+
+    db_path = find_graph_db()
+    if not db_path:
+        return False, "no graph database found on disk"
+
+    try:
+        results = await recall(_PROBE_QUERY)
+    except Exception as e:  # noqa: BLE001
+        return False, f"recall failed: {e}"
+
+    node_ids = [r["node_id"] for r in results if r.get("node_id")]
+    if not node_ids:
+        return False, "recall returned no resolvable node ids"
+
+    db = kuzu.Database(db_path, read_only=True)
+    conn = kuzu.Connection(db)
+    try:
+        for node_id in node_ids:
+            r = conn.execute(
+                "MATCH (n:Node {id: $id}) RETURN n.id LIMIT 1", {"id": node_id}
+            )
+            if r.has_next():
+                return True, f"graph consistent (resolved node {node_id})"
+    finally:
+        conn.close()
+        db.close()
+
+    return False, "no recalled node id resolved in the graph"
     """Return a high-level summary of the knowledge graph."""
     results = await cognee.search(
         "List all entity types and relationship types in the knowledge graph",
@@ -125,8 +166,10 @@ async def answer_question(question: str, passages: list[dict]) -> str:
             "role": "system",
             "content": (
                 "You are an EU AI Act compliance expert. "
-                "Answer the question using only the provided passages. "
-                "If the passages do not contain enough information, say so."
+                "Answer ONLY using the provided passages. "
+                "If the passages do not contain information relevant to the question, "
+                "respond with exactly: 'The knowledge graph does not contain information about this topic.' "
+                "Do NOT use any external knowledge or training data under any circumstances."
             ),
         },
         {

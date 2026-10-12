@@ -1,0 +1,118 @@
+name: Promote Cognee Graph
+
+# Freezes an expert-approved cognee knowledge graph into an immutable, digest-pinned
+# OCI image in GHCR for read-only production serving. See cognee-eval/CLAUDE.md.
+#
+# Operator flow:
+#   1. Export the graph from the test instance (kubectl exec, excluding cognee_eval.db):
+#        kubectl exec -n <ns> cognee-eval-backend-0 -c cognee-eval-backend -- \
+#          tar czf - -C /app/.cognee_system --exclude=./cognee_eval.db . > graph.tar.gz
+#   2. Attach graph.tar.gz to a DRAFT GitHub Release (workflow_dispatch can't take a file).
+#   3. Run this workflow with that release's tag.
+#   4. Pin the printed cognee-graph@sha256:<digest> in the prod Helm values
+#      (cogneeEval.graphImage) and deploy.
+#
+# This image is deliberately NOT in docker-bake.hcl, build-and-load-images.sh, or
+# cleanup-images.yml — it is produced only here and must never be pruned.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag of the draft release holding graph.tar.gz"
+        required: true
+      graph_tag:
+        description: "Image tag for the graph (e.g. eu-ai-act-2026-10-12)"
+        required: true
+      source_doc_sha256:
+        description: "sha256 of the source document the graph was built from"
+        required: true
+      approved_feedback_ids:
+        description: "Comma-separated approved feedback IDs baked into this graph"
+        required: false
+        default: ""
+      approver:
+        description: "Who approved this graph (defaults to the triggering actor)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download graph.tar.gz from the draft release
+        run: |
+          gh release download "${{ inputs.release_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern graph.tar.gz \
+            --dir cognee-eval/graph-image
+          test -s cognee-eval/graph-image/graph.tar.gz
+
+      - name: Reject archive if it contains the feedback PII DB
+        working-directory: cognee-eval/graph-image
+        run: |
+          if tar tzf graph.tar.gz | grep -q 'cognee_eval.db'; then
+            echo "::error::graph.tar.gz contains cognee_eval.db — re-export with --exclude=./cognee_eval.db"
+            exit 1
+          fi
+
+      - name: Compute digest and write provenance manifest
+        working-directory: cognee-eval/graph-image
+        run: |
+          ARCHIVE_SHA256="$(sha256sum graph.tar.gz | cut -d' ' -f1)"
+          cat > manifest.json <<EOF
+          {
+            "graph_tag": "${{ inputs.graph_tag }}",
+            "source_doc_sha256": "${{ inputs.source_doc_sha256 }}",
+            "approved_feedback_ids": "${{ inputs.approved_feedback_ids }}",
+            "approver": "${{ inputs.approver || github.actor }}",
+            "release_tag": "${{ inputs.release_tag }}",
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "archive_sha256": "${ARCHIVE_SHA256}"
+          }
+          EOF
+          echo "Manifest:"; cat manifest.json
+
+      - name: Lowercase the owner for GHCR
+        run: echo "OWNER_LC=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push the graph image
+        uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: cognee-eval/graph-image
+          file: cognee-eval/graph-image/Dockerfile
+          push: true
+          tags: ghcr.io/${{ env.OWNER_LC }}/ai-trust-platform/cognee-graph:${{ inputs.graph_tag }}
+
+      - name: Report the pinned digest
+        run: |
+          REF="ghcr.io/${OWNER_LC}/ai-trust-platform/cognee-graph@${{ steps.build.outputs.digest }}"
+          {
+            echo "## Cognee graph promoted"
+            echo ""
+            echo "Pin this in the prod Helm values (\`cogneeEval.graphImage\`):"
+            echo ""
+            echo '```'
+            echo "${REF}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
