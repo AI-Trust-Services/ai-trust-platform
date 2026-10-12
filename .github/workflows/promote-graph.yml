@@ -60,7 +60,8 @@ jobs:
       - name: Reject archive if it contains the feedback PII DB
         working-directory: cognee-eval/graph-image
         run: |
-          if tar tzf graph.tar.gz | grep -q 'cognee_eval.db'; then
+          tar tzf graph.tar.gz > archive-listing.txt
+          if grep -q 'cognee_eval.db' archive-listing.txt; then
             echo "::error::graph.tar.gz contains cognee_eval.db — re-export with --exclude=./cognee_eval.db"
             exit 1
           fi
