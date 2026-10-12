@@ -110,6 +110,9 @@ class AISystem(Base):
         String(30), nullable=True
     )
     questionnaire_answers: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    business_owners: Mapped[str | None] = mapped_column(Text, nullable=True)
+    technical_owners: Mapped[str | None] = mapped_column(Text, nullable=True)
+    git_repo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Full-manual supporting docs: a JSON array of {filename, minio_key, uploaded_at}.
     registration_documents: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
 
