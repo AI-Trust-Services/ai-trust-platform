@@ -304,7 +304,7 @@ Rule-based alerting. Rules in Postgres, events in ClickHouse. Includes the `poli
 Trace viewer for GenAI spans, reads ClickHouse only. Details → [decision-trace-analyzer/CLAUDE.md](decision-trace-analyzer/CLAUDE.md).
 
 ### compliance/ (port 8007, `/api/compliance/`)
-Governance chain — assessments, obligations, requirements, evidence for EU AI Act / NIST / ISO. Details → [compliance/CLAUDE.md](compliance/CLAUDE.md).
+Governance chain — assessments, obligations, requirements, evidence for the EU AI Act. Details → [compliance/CLAUDE.md](compliance/CLAUDE.md).
 
 ### audit/ (port 8009, `/api/audit/`)
 Immutable audit trail across all platform actions (Postgres buffer → ClickHouse archive). Includes the `audit-flush-worker`. Details → [audit/CLAUDE.md](audit/CLAUDE.md).

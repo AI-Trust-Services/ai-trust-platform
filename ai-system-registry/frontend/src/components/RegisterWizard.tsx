@@ -27,12 +27,6 @@ function startFrameworkAssessment(systemId: string, frameworkId: string) {
 
 const EU_AI_ACT_ID = "FRM-EU-AI-ACT";
 
-// Non-EU-AI-Act frameworks shown on the right ("Other frameworks"). Dummies for now.
-const OTHER_FRAMEWORKS: Array<{ frameworkId: string; title: string; description: string }> = [
-  { frameworkId: "FRM-ISO-42001", title: "ISO/IEC 42001", description: "Coming soon." },
-  { frameworkId: "FRM-NIST-AI-RMF", title: "NIST AI RMF", description: "Coming soon." },
-];
-
 const EMPTY_FORM: AISystemFormData = {
   name: "", version: "1.0.0", provider: "", org_name: "",
   org_role: "provider", provider_country: "DE", system_type: "application",
@@ -273,67 +267,45 @@ export default function RegisterWizard({ open, onClose, onSuccess, system }: Pro
             </Alert>
             {!isEngineerMode && (
               <>
-                <div className="mb-4 grid grid-cols-[1.2fr_1fr] gap-4">
-                  {/* LEFT — recommended framework (EU AI Act) */}
-                  <div className="flex flex-col gap-2">
-                    {(() => {
-                      const recommended = euActRecommended(form.eu_output_usage, form.eu_market_placement);
-                      return (
-                        <button
-                          className={cn(
-                            "flex flex-1 w-full flex-col gap-4 rounded-lg border-2 p-5 text-left transition-all cursor-pointer",
-                            recommended
-                              ? "border-[var(--brand)] bg-[var(--brand)]/5 hover:shadow-[0_0_0_1px_var(--brand)]"
-                              : "border-border bg-muted/20 opacity-80 hover:opacity-100",
-                          )}
-                          onClick={() => startFrameworkAssessment(doneId!, EU_AI_ACT_ID)}
-                        >
-                          <div className={cn(
-                            "flex size-11 shrink-0 items-center justify-center rounded-xl",
-                            recommended ? "bg-[var(--brand)]/10 text-[var(--brand)]" : "bg-[#f0f2f4] text-[#5a6e82]",
-                          )}>
-                            <ClipboardList className="size-5" />
-                          </div>
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-[15px] font-semibold">EU AI Act Risk Classification</span>
-                              <span className={cn(
-                                "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                                recommended ? "bg-[var(--brand)]/15 text-[var(--brand)]" : "bg-muted text-muted-foreground",
-                              )}>
-                                {recommended ? "Strongly Recommended" : "Not applicable"}
-                              </span>
-                            </div>
-                            <div className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">
-                              {recommended
-                                ? "Run the risk classification questionnaire, determine the category, and generate obligations."
-                                : "Your answers indicate the system or its output is not used in the EU. The EU AI Act is likely not applicable. You may still want to perform an EU AI Act Risk Classification"}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })()}
-                  </div>
-
-                  {/* RIGHT — other frameworks (dummies for now) */}
-                  <div className="flex flex-col gap-2">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Other frameworks</div>
-                    {OTHER_FRAMEWORKS.map((c) => (
+                <div className="mb-4 flex flex-col gap-2">
+                  {/* Recommended framework (EU AI Act) */}
+                  {(() => {
+                    const recommended = euActRecommended(form.eu_output_usage, form.eu_market_placement);
+                    return (
                       <button
-                        key={c.frameworkId}
-                        disabled
-                        className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg border border-border p-4 text-left opacity-50"
+                        className={cn(
+                          "flex flex-1 w-full flex-col gap-4 rounded-lg border-2 p-5 text-left transition-all cursor-pointer",
+                          recommended
+                            ? "border-[var(--brand)] bg-[var(--brand)]/5 hover:shadow-[0_0_0_1px_var(--brand)]"
+                            : "border-border bg-muted/20 opacity-80 hover:opacity-100",
+                        )}
+                        onClick={() => startFrameworkAssessment(doneId!, EU_AI_ACT_ID)}
                       >
-                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#f0f2f4] text-[#5a6e82]">
-                          <ClipboardList className="size-4" />
+                        <div className={cn(
+                          "flex size-11 shrink-0 items-center justify-center rounded-xl",
+                          recommended ? "bg-[var(--brand)]/10 text-[var(--brand)]" : "bg-[#f0f2f4] text-[#5a6e82]",
+                        )}>
+                          <ClipboardList className="size-5" />
                         </div>
                         <div>
-                          <div className="text-[14px] font-semibold">{c.title}</div>
-                          <div className="text-[12px] text-muted-foreground">{c.description}</div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[15px] font-semibold">EU AI Act Risk Classification</span>
+                            <span className={cn(
+                              "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                              recommended ? "bg-[var(--brand)]/15 text-[var(--brand)]" : "bg-muted text-muted-foreground",
+                            )}>
+                              {recommended ? "Strongly Recommended" : "Not applicable"}
+                            </span>
+                          </div>
+                          <div className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">
+                            {recommended
+                              ? "Run the risk classification questionnaire, determine the category, and generate obligations."
+                              : "Your answers indicate the system or its output is not used in the EU. The EU AI Act is likely not applicable. You may still want to perform an EU AI Act Risk Classification"}
+                          </div>
                         </div>
                       </button>
-                    ))}
-                  </div>
+                    );
+                  })()}
                 </div>
                 <div className="overflow-hidden rounded-md border border-border">
                   <div className="bg-muted/40 px-4 py-2.5 text-sm font-medium">Telemetry Configuration</div>

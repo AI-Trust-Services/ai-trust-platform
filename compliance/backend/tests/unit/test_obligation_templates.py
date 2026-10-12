@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import re
 
-import pytest
-
 from app.ids import new_id
 from app.obligation_templates import obligations_for
 
@@ -115,51 +113,6 @@ def test_eu_limited_provider_includes_all_risk_cluster():
 
 def test_eu_limited_importer_is_empty():
     assert obligations_for("FRM-EU-AI-ACT", "limited", "importer") == []
-
-
-# ---------------------------------------------------------------------------
-# obligations_for — NIST AI RMF
-# ---------------------------------------------------------------------------
-
-
-def test_nist_count():
-    assert len(obligations_for("FRM-NIST-AI-RMF", "high")) == 6
-
-
-def test_nist_tier_independent():
-    for tier in (
-        "high",
-        "limited",
-        "minimal",
-        "prohibited",
-        "gpai-standard",
-        "gpai-systemic",
-    ):
-        assert len(obligations_for("FRM-NIST-AI-RMF", tier)) == 6
-
-
-def test_nist_has_govern():
-    titles = [ob["title"] for ob in obligations_for("FRM-NIST-AI-RMF", "high")]
-    assert any("GOVERN" in t for t in titles)
-
-
-# ---------------------------------------------------------------------------
-# obligations_for — ISO/IEC 42001
-# ---------------------------------------------------------------------------
-
-
-def test_iso_count():
-    assert len(obligations_for("FRM-ISO-42001", "high")) == 5
-
-
-def test_iso_tier_independent():
-    for tier in ("high", "limited", "minimal", "prohibited"):
-        assert len(obligations_for("FRM-ISO-42001", tier)) == 5
-
-
-def test_iso_has_clause_4():
-    refs = {ob["article_ref"] for ob in obligations_for("FRM-ISO-42001", "high")}
-    assert "Clause 4" in refs
 
 
 # ---------------------------------------------------------------------------

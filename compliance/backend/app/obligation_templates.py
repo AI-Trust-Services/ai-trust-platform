@@ -1,9 +1,8 @@
-"""Obligation templates per (framework, risk tier, org_role).
+"""Obligation templates per (risk tier, org_role) for the EU AI Act.
 
 Source of truth for auto-generated obligations. When an assessment's obligations
-are generated, the AI system's stored `tier` (and, for EU High/Limited, its
-`org_role`) selects the obligation set; NIST and ISO frameworks apply their full
-obligation set regardless of tier/role.
+are generated, the AI system's stored `tier` and `org_role` select the obligation
+set.
 
 The EU AI Act High and Limited sets are the **obligation clusters** translated
 from the authoritative AI Act Requirements catalogue (see requirement_templates.py for
@@ -196,71 +195,6 @@ _EU_CLUSTERS = [
     },
 ]
 
-# --- NIST AI RMF (tier-independent) ------------------------------------------
-
-_NIST = [
-    {
-        "cluster_id": "GOVERN",
-        "title": "GOVERN: Establish AI governance structures",
-        "article_ref": "GOVERN",
-    },
-    {
-        "cluster_id": "MAP",
-        "title": "MAP: Establish context and categorise risks",
-        "article_ref": "MAP",
-    },
-    {
-        "cluster_id": "MEASURE",
-        "title": "MEASURE: Analyse and track AI risks",
-        "article_ref": "MEASURE",
-    },
-    {
-        "cluster_id": "MANAGE",
-        "title": "MANAGE: Prioritise and respond to risks",
-        "article_ref": "MANAGE",
-    },
-    {
-        "cluster_id": "MAP 1",
-        "title": "Document AI system provenance",
-        "article_ref": "MAP 1",
-    },
-    {
-        "cluster_id": "MANAGE 4",
-        "title": "Establish incident response for AI",
-        "article_ref": "MANAGE 4",
-    },
-]
-
-# --- ISO/IEC 42001 (tier-independent) ----------------------------------------
-
-_ISO = [
-    {
-        "cluster_id": "Clause 4",
-        "title": "Understand organisational context (Clause 4)",
-        "article_ref": "Clause 4",
-    },
-    {
-        "cluster_id": "Clause 5",
-        "title": "Demonstrate leadership and commitment (Clause 5)",
-        "article_ref": "Clause 5",
-    },
-    {
-        "cluster_id": "Clause 6",
-        "title": "Plan to address risks and opportunities (Clause 6)",
-        "article_ref": "Clause 6",
-    },
-    {
-        "cluster_id": "Clause 8",
-        "title": "Establish operational controls (Clause 8)",
-        "article_ref": "Clause 8",
-    },
-    {
-        "cluster_id": "Clause 9",
-        "title": "Evaluate performance (Clause 9)",
-        "article_ref": "Clause 9",
-    },
-]
-
 
 def obligations_for(
     framework_id: str, tier: str, org_role: str = "provider"
@@ -270,17 +204,11 @@ def obligations_for(
     For the EU AI Act at High/Limited tiers, obligation clusters are emitted only
     when at least one of their controls survives the (tier, org_role) filter — so
     provider systems get the provider set, deployer systems get the deployer set,
-    and unsupported roles (importer/distributor) get an empty list. Other EU tiers
-    and the NIST/ISO frameworks are role-independent.
+    and unsupported roles (importer/distributor) get an empty list.
 
     Returns an empty list when no obligations apply. Callers treat an empty result
     as "no obligations to generate".
     """
-    if framework_id == "FRM-NIST-AI-RMF":
-        return list(_NIST)
-    if framework_id == "FRM-ISO-42001":
-        return list(_ISO)
-
     if framework_id == "FRM-EU-AI-ACT":
         if tier in ("high", "limited"):
             result: list[dict] = []

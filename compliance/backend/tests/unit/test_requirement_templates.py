@@ -32,7 +32,7 @@ def test_all_applies_to_every_tier():
 
 
 def test_high_risk_matches_high_only():
-    # Both the CSV token ("High") and the retained-library token ("High-Risk").
+    # Both the "High" token and the "High-Risk" variant map to the high tier.
     assert _tier_allows("High-Risk", "high")
     assert _tier_allows("High", "high")
     assert not _tier_allows("High-Risk", "minimal")
@@ -150,19 +150,12 @@ def test_limited_transparency_requirements():
 
 
 def test_requirements_have_required_fields():
-    # Both shapes: CSV templates use `risk`, retained sets use `risk_category`.
     for c in requirements_for("P-RM", "high", "provider"):
         assert c["title"]
         assert c["description"]
         assert c["category"]
         assert c.get("risk") or c.get("risk_category")
         assert c["requirement_ref"]
-    for c in requirements_for("GOVERN", "high"):
-        assert c["title"]
-        assert c["description"]
-        assert c["category"]
-        assert c.get("risk") or c.get("risk_category")
-        assert c["slug"]
 
 
 # ---------------------------------------------------------------------------
@@ -171,8 +164,7 @@ def test_requirements_have_required_fields():
 
 
 def test_every_eu_requirement_ref_has_an_article():
-    # Every explicit Requirement ID (EU CSV set) is mapped; retained sets (slug-based)
-    # carry no requirement_ref and are intentionally absent.
+    # Every explicit Requirement ID (EU AI Act set) is mapped to an article.
     csv_refs = {
         c["requirement_ref"]
         for templates in _REQUIREMENT_TEMPLATES.values()
@@ -197,36 +189,19 @@ def test_cluster_articles_aggregates_distinct_top_level():
     assert cluster_articles("P-DG", "high", "provider") == "Art. 10 EU AI Act"
 
 
-def test_cluster_articles_empty_for_retained_and_wrong_role():
-    # Retained sets (NIST/ISO) carry no per-requirement article.
-    assert cluster_articles("GOVERN", "high") == ""
-    # No provider requirements survive for a deployer cluster.
+def test_cluster_articles_empty_for_wrong_role():
+    # No provider requirements survive for a deployer cluster -> no articles.
     assert cluster_articles("P-RM", "high", "deployer") == ""
 
 
 def test_cluster_articles_no_suffix_for_non_eu_framework():
     # If a future non-EU framework gains per-requirement articles, the suffix
     # must not read "EU AI Act".
-    result = cluster_articles("P-RM", "high", "provider", framework="nist_ai_rmf")
+    result = cluster_articles("P-RM", "high", "provider", framework="other")
     if result:
         assert "EU AI Act" not in result
     # Default (no framework arg) still appends the EU AI Act suffix.
     assert cluster_articles("P-RM", "high", "provider").endswith(" EU AI Act")
-
-
-# ---------------------------------------------------------------------------
-# requirements_for — retained sets (tier-independent NIST/ISO)
-# ---------------------------------------------------------------------------
-
-
-def test_nist_controls_tier_independent():
-    for tier in ("high", "minimal", "prohibited"):
-        assert len(requirements_for("GOVERN", tier)) == 1
-
-
-def test_iso_controls_tier_independent():
-    for tier in ("high", "minimal", "prohibited"):
-        assert len(requirements_for("Clause 4", tier)) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -268,20 +243,10 @@ def test_every_eu_obligation_has_requirements_at_its_tier_and_role():
     assert gaps == [], f"obligation clusters without requirements: {gaps}"
 
 
-def test_every_nist_obligation_has_requirements():
-    for ob in obligations_for("FRM-NIST-AI-RMF", "high"):
-        assert requirements_for(ob["cluster_id"], "high"), ob["cluster_id"]
-
-
-def test_every_iso_obligation_has_requirements():
-    for ob in obligations_for("FRM-ISO-42001", "high"):
-        assert requirements_for(ob["cluster_id"], "high"), ob["cluster_id"]
-
-
 def test_requirement_refs_unique_within_each_cluster():
     for cid, templates in _REQUIREMENT_TEMPLATES.items():
-        refs = [t.get("requirement_ref") or t["slug"] for t in templates]
-        assert len(refs) == len(set(refs)), f"duplicate requirement_ref/slug in {cid}"
+        refs = [t["requirement_ref"] for t in templates]
+        assert len(refs) == len(set(refs)), f"duplicate requirement_ref in {cid}"
 
 
 def test_all_categories_are_valid():
