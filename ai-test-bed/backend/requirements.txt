@@ -5,5 +5,5 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 httpx==0.28.1
-PyJWT[crypto]==2.13.0
+PyJWT[crypto]==2.15.1
 PyYAML==6.0.2
