@@ -182,7 +182,7 @@ if [[ -n "$CURRENT_REV" ]]; then
   STALE=$(kubectl get jobs -n "$NAMESPACE" --no-headers \
     -o custom-columns=NAME:.metadata.name,STATUS:.status.conditions[-1:].type 2>/dev/null \
     | awk -v rev="$CURRENT_REV" '
-        $1 !~ "-r"rev"$" && ($2 == "Complete" || $2 == "Failed") { print $1 }
+        $1 ~ /-r[0-9]+$/ && $1 !~ ("-r"rev"$") && ($2 == "Complete" || $2 == "Failed") { print $1 }
       ' || true)
   if [[ -n "$STALE" ]]; then
     echo "$STALE" | xargs kubectl delete job -n "$NAMESPACE" --ignore-not-found
