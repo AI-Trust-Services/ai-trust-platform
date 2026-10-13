@@ -382,7 +382,7 @@ class AISystemImport(BaseModel):
     is_migration: bool | None = None
     is_judicial_admin: bool | None = None
     is_gpai: bool | None = None
-    training_compute_flops: float | None = None
+    training_compute_flops: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     is_chatbot: bool | None = None
     generates_synthetic_content: bool | None = None
 
