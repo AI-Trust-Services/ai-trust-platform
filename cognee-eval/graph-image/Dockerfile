@@ -9,7 +9,7 @@
 # The build context must contain graph.tar.gz (exported via kubectl exec,
 # excluding cognee_eval.db) and manifest.json (provenance), both produced by
 # the promotion workflow.
-FROM busybox:1.37.0
+FROM busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
 
 COPY graph.tar.gz /graph.tar.gz
 COPY manifest.json /manifest.json
