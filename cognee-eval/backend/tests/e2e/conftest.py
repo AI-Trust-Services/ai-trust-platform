@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import asyncio
 import os
-from unittest.mock import AsyncMock
+import sys
+import types
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -20,6 +22,39 @@ import httpx
 
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:3001")
 os.environ.setdefault("COGNEE_DATA_PATH", "/tmp/cognee_test")
+
+# Stub out the `cognee` package and its submodules before any app import.
+# cognee_client.py does `import cognee` and
+# `from cognee.modules.search.types.SearchType import SearchType`
+# at module level — these fail in CI where cognee is not installed.
+# graph.py also imports `kuzu` at module level.
+def _stub_cognee_modules() -> None:
+    cognee_stub = types.ModuleType("cognee")
+    cognee_stub.config = MagicMock()
+    cognee_stub.remember = AsyncMock()
+    cognee_stub.recall = AsyncMock(return_value=[])
+    cognee_stub.search = AsyncMock(return_value=[])
+    cognee_stub.datasets = MagicMock(return_value=MagicMock(list_datasets=AsyncMock(return_value=[])))
+
+    search_type_mod = types.ModuleType("cognee.modules.search.types.SearchType")
+    search_type_mod.SearchType = MagicMock()
+
+    for name in [
+        "cognee",
+        "cognee.modules",
+        "cognee.modules.search",
+        "cognee.modules.search.types",
+        "cognee.modules.search.types.SearchType",
+    ]:
+        sys.modules.setdefault(name, types.ModuleType(name))
+    sys.modules["cognee"] = cognee_stub
+    sys.modules["cognee.modules.search.types.SearchType"] = search_type_mod
+
+    # kuzu is imported at module level in graph.py
+    sys.modules.setdefault("kuzu", types.ModuleType("kuzu"))
+
+
+_stub_cognee_modules()
 
 _MOCK_PASSAGES = [
     {
