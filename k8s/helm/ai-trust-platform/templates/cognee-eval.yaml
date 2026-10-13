@@ -50,6 +50,88 @@ spec:
       targetPort: 8000
 ---
 {{/* Cognee eval backend — graph-based grounded Q&A over the EU AI Act. */}}
+{{- if and .Values.cogneeEval.readOnly (not (regexMatch "@sha256:[a-fA-F0-9]{64}$" (.Values.cogneeEval.graphImage | default ""))) }}
+{{- fail "cogneeEval.readOnly=true requires cogneeEval.graphImage pinned by sha256 digest" }}
+{{- end }}
+{{- if .Values.cogneeEval.readOnly }}
+{{/* Read-only production: frozen graph snapshot hydrated into an emptyDir by an
+     init container; COGNEE_READONLY gates off ingest/feedback. No PVC — the pod
+     is stateless and reconstructs the exact pinned graph on every start. */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cognee-eval-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "cognee-eval-backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "cognee-eval-backend") | nindent 8 }}
+    spec:
+      {{- include "ai-trust.imagePullSecrets" $ | nindent 6 }}
+      initContainers:
+        - name: hydrate-graph
+          image: {{ .Values.cogneeEval.graphImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["tar", "xzf", "/graph.tar.gz", "-C", "/app/.cognee_system"]
+          volumeMounts:
+            - name: data
+              mountPath: /app/.cognee_system
+      containers:
+        - name: cognee-eval-backend
+          image: {{ .Values.image.repository }}/cognee-eval-backend:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} }
+          env:
+            - name: COGNEE_READONLY
+              value: "true"
+            - name: ALLOWED_ORIGINS
+              value: {{ .Values.appPublicUrl | quote }}
+            - name: LLM_ENDPOINT
+              value: "http://ai-gateway:8000/v1"
+            - name: LLM_EXTRACTION_ENDPOINT
+              value: "http://ai-gateway:8000/v1"
+            - name: LLM_PROVIDER
+              value: "openai"
+            - name: LLM_MODEL
+              value: "openai/ai-gateway"
+            - name: LLM_API_KEY
+              value: "ai-gateway"
+            - name: LLM_EXTRACTION_PROVIDER
+              value: "openai"
+            - name: LLM_EXTRACTION_MODEL
+              value: "openai/ai-gateway"
+            - name: LLM_EXTRACTION_API_KEY
+              value: "ai-gateway"
+          ports:
+            - containerPort: {{ .Values.cogneeEval.backendPort }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/.cognee_system
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.cogneeEval.backendPort }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.cogneeEval.backendPort }}
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 10
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: {{ .Values.cogneeEval.dataStorageSize }}
+{{- else }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -127,6 +209,7 @@ spec:
         resources:
           requests:
             storage: {{ .Values.cogneeEval.dataStorageSize }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service

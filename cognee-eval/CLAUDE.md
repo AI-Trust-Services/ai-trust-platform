@@ -78,6 +78,7 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 | `COGNEE_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | fastembed in-process embedding model (384-dim) |
 | `COGNEE_LLM_RATE_LIMIT_REQUESTS` | `12` | cognee LLM calls/min cap (keeps the gateway under its token quota) |
 | `COGNEE_DATA_PATH` | `/app/.cognee_system` | Where Cognee stores its databases |
+| `COGNEE_READONLY` | _(unset)_ | When `true`/`1`/`yes`: read-only prod mode — ingest + feedback routers are not mounted (404), and `/health` returns 503 until the first-boot graph consistency check passes |
 | `ALLOWED_ORIGINS` | — | Required — comma-separated CORS origins |
 
 ## Key files
@@ -104,3 +105,49 @@ creds. Embeddings run in-process via fastembed (`BAAI/bge-small-en-v1.5`, 384-di
 - **Rate limiting**: `COGNEE_LLM_RATE_LIMIT_REQUESTS` paces cognee's generation calls under the upstream
   model's sustained token quota; the gateway adds 429/5xx retry-backoff. Upstream throttling is a
   sustained quota, not a per-request wall (short bursts pass; sustained volume throttles).
+
+## Freeze & promote to read-only production
+
+The build/test instance mutates the graph (ingest + the expert feedback loop). **Production serves a
+frozen snapshot of that graph read-only** — it never ingests or mutates. Same `cognee-eval-backend`
+image on both sides; the only differences are config.
+
+**Two modes (Helm `cogneeEval.readOnly`):**
+- `readOnly: false` (default) — build/test. `StatefulSet` + PVC, all routers, full feedback loop.
+- `readOnly: true` — prod. `Deployment` with an `emptyDir` hydrated at startup by an init container
+  from the pinned `cogneeEval.graphImage`; `COGNEE_READONLY=true` so ingest/feedback are unmounted
+  (404). The pod is stateless and reconstructs the exact pinned graph on every start. Eval history
+  (POST /evaluate) still works but is ephemeral (resets on restart) — it writes a Q&A log row, never
+  the graph.
+
+**Why a snapshot (not cognee `push`/CogX):** both sides run the same Cognee, so a verbatim copy of
+`/app/.cognee_system` is byte-identical to what experts approved. `push`/CogX re-materialize via a
+semantic interchange format into a *live writable* remote — the opposite of read-only serving.
+
+**Promotion flow:**
+1. **Export** (operator, with their own kubeconfig — the CI SA lacks `pods/exec` and the PVC is RWO):
+   ```bash
+   kubectl exec -n <test-namespace> cognee-eval-backend-0 -c cognee-eval-backend -- \
+     tar czf - -C /app/.cognee_system --exclude=./cognee_eval.db . > graph.tar.gz
+   tar tzf graph.tar.gz | grep -c cognee_eval.db   # must print 0 (feedback PII excluded)
+   ```
+   Export only when ingestion is idle (synchronous ingest holds the event loop; a mid-ingest snapshot
+   risks a torn Kuzu DB — the first-boot consistency check is the backstop).
+2. **Promote**: attach `graph.tar.gz` to a GitHub Release published as a **pre-release** (not a draft —
+   drafts require `contents:write`; pre-releases are readable with `contents:read`), then run the
+   `Promote Cognee Graph` workflow (`.github/workflows/promote-graph.yml`) with that release tag. It
+   writes a provenance `manifest.json` (source doc hash, approved feedback IDs, approver, timestamp,
+   archive sha256), builds the `cognee-eval/graph-image/Dockerfile` (`FROM busybox` — provides the
+   `tar` the init container runs), pushes `ghcr.io/<owner>/ai-trust-platform/cognee-graph`, and prints
+   the `@sha256` digest to the job summary.
+3. **Pin + deploy**: set `cogneeEval.readOnly: true` and `cogneeEval.graphImage:
+   ghcr.io/<owner>/ai-trust-platform/cognee-graph@sha256:<digest>` (always a digest, never a mutable
+   tag) in the prod override, then deploy.
+
+**First-boot safety:** in read-only mode the lifespan runs `consistency_check()` — a `recall()` whose
+returned node ids must resolve in the on-disk Kuzu graph. If the snapshot is torn/empty, `/health`
+returns 503 and the pod never becomes Ready, so a bad artifact never serves traffic.
+
+> The graph image is a deliberate exception to the "adding a service" checklist: it is **not** in
+> `docker-bake.hcl`, `build-and-load-images.sh`, or `cleanup-images.yml` — it is built only by the
+> promotion workflow and must never be pruned. OCM `ociImage` registration is deferred.
