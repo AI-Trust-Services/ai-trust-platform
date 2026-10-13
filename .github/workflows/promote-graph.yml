@@ -119,6 +119,9 @@ jobs:
           context: cognee-eval/graph-image
           file: cognee-eval/graph-image/Dockerfile
           push: true
+          # Multi-arch so the snapshot runs on amd64 (Gardener nodes) and arm64
+          # (Apple-Silicon kind). busybox provides both; the data layers are arch-agnostic.
+          platforms: linux/amd64,linux/arm64
           tags: ghcr.io/${{ env.OWNER_LC }}/ai-trust-platform/cognee-graph:${{ inputs.graph_tag }}
 
       - name: Report the pinned digest
