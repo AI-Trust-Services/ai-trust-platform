@@ -8,9 +8,9 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.database import init_db
 from app.cognee_client import setup_cognee
-from app.routers import evaluate, feedback, graph, ingest, ui
+from app.database import init_db
+from app.routers import evaluate, feedback, graph, ingest, recall, ui
 
 logger = get_logger(__name__)
 
@@ -85,6 +85,7 @@ app.include_router(ingest.router, prefix="/v1")
 app.include_router(graph.router, prefix="/v1")
 app.include_router(evaluate.router, prefix="/v1")
 app.include_router(feedback.router, prefix="/v1")
+app.include_router(recall.router, prefix="/v1")
 app.include_router(ui.router)
 
 

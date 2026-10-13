@@ -9,8 +9,8 @@ directly. Embeddings run in-process via fastembed (BAAI/bge-small-en-v1.5).
 import os
 from pathlib import Path
 
-import httpx
 import cognee
+import httpx
 from cognee.modules.search.types.SearchType import SearchType
 
 _DATASET = "eu_ai_act_v1"

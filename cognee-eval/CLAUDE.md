@@ -59,6 +59,7 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 | `GET` | `/v1/graph/entities` | List entities, filterable by `?type=Article` |
 | `GET` | `/v1/graph/raw` | Raw nodes + edges from Kuzu |
 | `GET` | `/v1/graph/viz` | Interactive vis-network graph visualization |
+| `POST` | `/v1/recall` | Bare semantic+graph recall — passages only, no answer, no persist |
 | `POST` | `/v1/evaluate` | Ask a question — recall + LLM answer + save |
 | `GET` | `/v1/evaluate` | List past evaluations |
 | `GET` | `/v1/evaluate/{id}` | Get single evaluation |
@@ -93,6 +94,8 @@ All cognee generation (main LLM + graph extraction) runs through the standalone
 Anthropic deployment that owns the OAuth2 token refresh. cognee reaches it at
 `http://ai-gateway:8000/v1`; the gateway holds the `AI_CLIENT_ID/SECRET/AUTH_URL/API_URL/DEPLOYMENT_ID`
 creds. Embeddings run in-process via fastembed (`BAAI/bge-small-en-v1.5`, 384-dim).
+
+A sibling change (implemented separately) adds `POST /v1/messages` to the gateway — an Anthropic-native tool-calling passthrough used by the ai-test-bed agent.
 
 ## Notes
 

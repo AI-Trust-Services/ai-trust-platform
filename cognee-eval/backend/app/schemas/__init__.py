@@ -1,6 +1,13 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# ── Recall ────────────────────────────────────────────────────────────────────
+
+
+class RecallRequest(BaseModel):
+    question: str = Field(min_length=1)
+    k: int = Field(default=5, ge=1, le=50)
 
 
 # ── Evaluate ─────────────────────────────────────────────────────────────────
