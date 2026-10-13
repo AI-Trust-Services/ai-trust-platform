@@ -52,8 +52,8 @@ async def test_import_valid_classified_system_approved(client: httpx.AsyncClient
     assert items["Internal chatbot"]["tier"] == "limited"
 
 
-async def test_import_tier_less_record_lands_as_draft(client: httpx.AsyncClient):
-    """A record without tier always lands as draft/pending regardless of target_status."""
+async def test_import_tier_less_record_rejected_when_targeting_approved(client: httpx.AsyncClient):
+    """A tier-less record with target_status=approved is rejected, not silently downgraded."""
     records = [{"name": "Unknown risk system"}]
     r = await client.post(
         "/v1/intake/batch",
@@ -62,16 +62,15 @@ async def test_import_tier_less_record_lands_as_draft(client: httpx.AsyncClient)
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["imported"] == 1
-    # tier-less row is imported but reported as downgraded
+    assert body["imported"] == 0
     assert len(body["failed"]) == 1
-    assert body["failed"][0]["downgraded"] is True
     assert body["failed"][0]["name"] == "Unknown risk system"
+    assert "tier" in body["failed"][0]["error"]
 
+    # Verify the system was NOT inserted.
     systems = await client.get("/v1/systems", headers=_HEADERS)
-    s = next(x for x in systems.json() if x["name"] == "Unknown risk system")
-    assert s["tier"] == "pending"
-    assert s["workflow_status"] == "draft"
+    names = [s["name"] for s in systems.json()]
+    assert "Unknown risk system" not in names
 
 
 async def test_import_partial_success(client: httpx.AsyncClient):
