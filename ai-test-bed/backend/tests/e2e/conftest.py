@@ -16,7 +16,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import psycopg2
 import pytest
@@ -160,7 +160,7 @@ def truncate_tables():
 @pytest.fixture
 def mock_registry_evaluate():
     """Patch the httpx call to the registry evaluate endpoint with a canned response."""
-    mock_resp = AsyncMock()
+    mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = _STUB_EVALUATE_RESPONSE
 
