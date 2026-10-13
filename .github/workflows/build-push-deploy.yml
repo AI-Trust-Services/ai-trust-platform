@@ -165,6 +165,8 @@ jobs:
           vite_dta_api_base:        ${{ vars.VITE_DTA_API_BASE || '/api/dta/v1' }}
           vite_audit_api_base:      ${{ vars.VITE_AUDIT_API_BASE || '/api/audit/v1' }}
           vite_admin_api_base:      ${{ vars.VITE_ADMIN_API_BASE || '/api/admin/v1' }}
+          vite_indexing_api_base:   ${{ vars.VITE_INDEXING_API_BASE || '/api/indexing/v1' }}
+          vite_testbed_api_base:    ${{ vars.VITE_TESTBED_API_BASE || '/api/ai-test-bed/v1' }}
 
       - name: Package and push Helm chart
         uses: ./.github/actions/package-chart

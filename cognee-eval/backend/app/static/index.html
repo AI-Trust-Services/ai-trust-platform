@@ -11,7 +11,8 @@
 
     /* ── Layout ── */
     header { background: #16213e; padding: 14px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #2a2a4a; }
-    header h1 { font-size: 16px; font-weight: 600; color: #fff; flex: 1; }
+    header h1 { font-size: 16px; font-weight: 600; color: #fff; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    nav { flex-shrink: 0; display: flex; }
     nav button { background: none; border: none; color: #aaa; cursor: pointer; font-size: 13px; padding: 6px 14px; border-radius: 4px; }
     nav button.active { background: #2a2a4a; color: #7da8f7; }
     main { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
@@ -178,11 +179,11 @@
 </main>
 
 <script>
-  const API = '/v1';   // relative — works both direct (8011) and via shell proxy (/api/cognee)
+  const API = '/v1';   // relative — works both direct (8014) and via shell proxy (/api/cognee)
 
   // Detect if we're being served through the shell proxy and adjust API base accordingly.
   // When served at /api/cognee/ui, the backend is at /api/cognee/v1.
-  // When served directly at port 8011, the backend is at /v1.
+  // When served directly at port 8014, the backend is at /v1.
   const API_BASE = window.location.pathname.startsWith('/api/cognee') ? '/api/cognee/v1' : '/v1';
 
   let _currentEvalId = null;

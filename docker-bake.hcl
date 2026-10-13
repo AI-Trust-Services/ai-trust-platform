@@ -13,6 +13,8 @@ variable "VITE_COMPLIANCE_API_BASE"  { default = "/api/compliance/v1" }
 variable "VITE_DTA_API_BASE"         { default = "/api/dta/v1" }
 variable "VITE_AUDIT_API_BASE"       { default = "/api/audit/v1" }
 variable "VITE_ADMIN_API_BASE"       { default = "/api/admin/v1" }
+variable "VITE_INDEXING_API_BASE"    { default = "/api/indexing/v1" }
+variable "VITE_TESTBED_API_BASE"     { default = "/api/ai-test-bed/v1" }
 
 function "tag" {
   params = [name]
@@ -29,6 +31,10 @@ group "default" {
     "compliance-backend",
     "decision-trace-analyzer-backend",
     "policy-checker-worker",
+    "embedding-service",
+    "document-indexing-backend",
+    "document-indexing-worker",
+    "ai-test-bed-backend",
     "audit-backend",
     "audit-flush-worker",
     "admin-backend",
@@ -50,6 +56,7 @@ group "default" {
     "decision-trace-analyzer-frontend",
     "audit-frontend",
     "admin-frontend",
+    "ai-test-bed-frontend",
     "cognee-eval-backend",
     "ai-gateway",
   ]
@@ -127,6 +134,33 @@ target "policy-checker-worker" {
   tags       = [tag("policy-checker-worker")]
   cache-from = ["type=gha,scope=policy-checker-worker"]
   cache-to   = ["type=gha,mode=max,scope=policy-checker-worker"]
+}
+
+target "embedding-service" {
+  context    = "."
+  dockerfile = "embedding-service/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("embedding-service")]
+  cache-from = ["type=gha,scope=embedding-service"]
+  cache-to   = ["type=gha,mode=max,scope=embedding-service"]
+}
+
+target "document-indexing-backend" {
+  context    = "."
+  dockerfile = "document-indexing/backend/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("document-indexing-backend")]
+  cache-from = ["type=gha,scope=document-indexing-backend"]
+  cache-to   = ["type=gha,mode=max,scope=document-indexing-backend"]
+}
+
+target "document-indexing-worker" {
+  context    = "."
+  dockerfile = "document-indexing-worker/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("document-indexing-worker")]
+  cache-from = ["type=gha,scope=document-indexing-worker"]
+  cache-to   = ["type=gha,mode=max,scope=document-indexing-worker"]
 }
 
 target "audit-backend" {
@@ -360,6 +394,30 @@ target "admin-frontend" {
   }
   cache-from = ["type=gha,scope=admin-frontend"]
   cache-to   = ["type=gha,mode=max,scope=admin-frontend"]
+}
+
+target "ai-test-bed-backend" {
+  context    = "."
+  dockerfile = "ai-test-bed/backend/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("ai-test-bed-backend")]
+  cache-from = ["type=gha,scope=ai-test-bed-backend"]
+  cache-to   = ["type=gha,mode=max,scope=ai-test-bed-backend"]
+}
+
+target "ai-test-bed-frontend" {
+  context    = "."
+  dockerfile = "ai-test-bed/frontend/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("ai-test-bed-frontend")]
+  args = {
+    VITE_TESTBED_API_BASE  = VITE_TESTBED_API_BASE
+    VITE_INDEXING_API_BASE = VITE_INDEXING_API_BASE
+    VITE_USERS_API_BASE    = VITE_USERS_API_BASE
+    VITE_REGISTRY_API_BASE = VITE_REGISTRY_API_BASE
+  }
+  cache-from = ["type=gha,scope=ai-test-bed-frontend"]
+  cache-to   = ["type=gha,mode=max,scope=ai-test-bed-frontend"]
 }
 
 target "cognee-eval-backend" {

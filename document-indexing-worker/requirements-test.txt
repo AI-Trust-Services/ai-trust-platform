@@ -1,0 +1,6 @@
+# PyPI deps only — editable libs installed via `make setup`. Docling/torch are
+# intentionally NOT installed here: unit tests cover the pure logic (provenance
+# extraction, embedding batching) without the heavy parse dependency.
+httpx==0.28.1
+pytest==9.0.3
+pytest-asyncio==1.4.0

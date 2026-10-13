@@ -36,6 +36,15 @@ rm -f "$_env_tmp"
 set -u
 set +a
 
+# kind maps MinIO's API to host port 19000 (kind-config.yaml extraPortMappings;
+# 9000 is commonly held by corporate VPN/proxy agents, e.g. Zscaler). The shared
+# .env carries the docker-compose value localhost:9000, so browser presigned URLs
+# would point at a dead port under kind. Rewrite only the compose default — the
+# Gardener env files set MINIO_PUBLIC_ENDPOINT to a real DNS host and are untouched.
+if [[ "${MINIO_PUBLIC_ENDPOINT:-}" == "localhost:9000" ]]; then
+  export MINIO_PUBLIC_ENDPOINT="localhost:19000"
+fi
+
 # Build --from-literal args from the *expanded* environment (post-source),
 # so variable references like APP_PUBLIC_URL=https://${LB_IP}.nip.io work.
 # Only export keys that were defined in the .env file (skip LB_IP itself and
