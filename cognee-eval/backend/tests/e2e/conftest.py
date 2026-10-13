@@ -23,6 +23,7 @@ import httpx
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:3001")
 os.environ.setdefault("COGNEE_DATA_PATH", "/tmp/cognee_test")
 
+
 # Stub out the `cognee` package and its submodules before any app import.
 # cognee_client.py does `import cognee` and
 # `from cognee.modules.search.types.SearchType import SearchType`
@@ -34,7 +35,9 @@ def _stub_cognee_modules() -> None:
     cognee_stub.remember = AsyncMock()
     cognee_stub.recall = AsyncMock(return_value=[])
     cognee_stub.search = AsyncMock(return_value=[])
-    cognee_stub.datasets = MagicMock(return_value=MagicMock(list_datasets=AsyncMock(return_value=[])))
+    cognee_stub.datasets = MagicMock(
+        return_value=MagicMock(list_datasets=AsyncMock(return_value=[]))
+    )
 
     search_type_mod = types.ModuleType("cognee.modules.search.types.SearchType")
     search_type_mod.SearchType = MagicMock()
