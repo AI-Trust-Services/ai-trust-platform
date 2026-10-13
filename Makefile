@@ -100,38 +100,27 @@ stop-forwards:
 # component's `make test-e2e`, then stops the forwards (even on failure).
 # Requires the kind cluster to be running (`make up`).
 test-e2e:
-	kubectl port-forward svc/postgres    5432:5432 -n $(NAMESPACE) > /tmp/ai-trust-pg-fwd.log    2>&1 & echo $$! > /tmp/ai-trust-pg-fwd.pid
-	kubectl port-forward svc/clickhouse  8123:8123 -n $(NAMESPACE) > /tmp/ai-trust-ch-fwd.log    2>&1 & echo $$! > /tmp/ai-trust-ch-fwd.pid
-	sleep 2
-	COMPONENTS=" \
-		admin/backend \
-		ai-system-registry/backend \
-		ai-test-bed/backend \
-		alerts/backend \
-		audit/backend \
-		cognee-eval/backend \
-		compliance/backend \
-		decision-trace-analyzer/backend \
-		document-indexing/backend \
-		monitoring/backend \
-		overview/backend \
-		users/backend \
-	"; \
-	FAILED=""; \
-	for component in $$COMPONENTS; do \
-		echo "==> $$component"; \
-		if (cd $$component && make setup && make test-e2e); then \
-			echo "✓ $$component passed"; \
-		else \
-			echo "✗ $$component FAILED"; \
-			FAILED="$$FAILED $$component"; \
-		fi; \
-	done; \
-	kill $$(cat /tmp/ai-trust-pg-fwd.pid) $$(cat /tmp/ai-trust-ch-fwd.pid) 2>/dev/null || true; \
-	rm -f /tmp/ai-trust-pg-fwd.pid /tmp/ai-trust-ch-fwd.pid; \
-	if [ -n "$$FAILED" ]; then \
-		echo ""; echo "Failed:$$FAILED"; exit 1; \
-	fi
+	@bash -e -c '\
+		cleanup() { kill "$$PG_PID" "$$CH_PID" 2>/dev/null || true; }; \
+		trap cleanup EXIT; \
+		kubectl port-forward svc/postgres   5432:5432 -n $(NAMESPACE) > /tmp/ai-trust-pg-fwd.log 2>&1 & PG_PID=$$!; \
+		kubectl port-forward svc/clickhouse 8123:8123 -n $(NAMESPACE) > /tmp/ai-trust-ch-fwd.log 2>&1 & CH_PID=$$!; \
+		sleep 2; \
+		COMPONENTS="admin/backend ai-system-registry/backend ai-test-bed/backend alerts/backend audit/backend cognee-eval/backend compliance/backend decision-trace-analyzer/backend document-indexing/backend monitoring/backend overview/backend users/backend"; \
+		FAILED=""; \
+		for component in $$COMPONENTS; do \
+			echo "==> $$component"; \
+			if (cd $$component && make setup && make test-e2e); then \
+				echo "✓ $$component passed"; \
+			else \
+				echo "✗ $$component FAILED"; \
+				FAILED="$$FAILED $$component"; \
+			fi; \
+		done; \
+		if [ -n "$$FAILED" ]; then \
+			echo ""; echo "Failed:$$FAILED"; exit 1; \
+		fi \
+	'
 
 # Run the full local test suite: per-service e2e tests then cross-service integration tests.
 # Requires the kind cluster to be running (`make up`).
