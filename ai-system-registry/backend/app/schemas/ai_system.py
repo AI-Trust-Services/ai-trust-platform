@@ -339,7 +339,7 @@ class AISystemImport(BaseModel):
     version: str | None = Field(default=None, max_length=50)
     provider: str | None = Field(default=None, max_length=200)
     org_name: str | None = Field(default=None, max_length=200)
-    org_role: str = "provider"
+    org_role: str = Field(default="provider", max_length=30)
     description: str | None = None
     intended_purpose: str | None = None
     department: str | None = None
@@ -353,7 +353,7 @@ class AISystemImport(BaseModel):
     deployment_country: str | None = Field(default=None, max_length=2)
     eu_output_usage: bool | None = None
     eu_market_placement: bool | None = None
-    lifecycle: str | None = None
+    lifecycle: str | None = Field(default=None, max_length=30)
     business_owners: str | None = None
     technical_owners: str | None = None
     git_repo_url: str | None = Field(default=None, max_length=500)
