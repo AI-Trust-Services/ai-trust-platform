@@ -17,3 +17,4 @@ asyncpg
 pytest==9.0.3
 pytest-asyncio==1.4.0
 psycopg2-binary==2.9.10
+respx==0.21.1
