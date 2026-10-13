@@ -137,19 +137,27 @@ async def import_systems(
     reported.  target_status is a ceiling: a tier-less record always lands as draft.
     """
     if target_status not in ("approved", "draft"):
-        raise HTTPException(status_code=422, detail="target_status must be 'approved' or 'draft'")
+        raise HTTPException(
+            status_code=422, detail="target_status must be 'approved' or 'draft'"
+        )
 
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
 
-    if target_status == "approved" and not await check_permission(current_user, SYSTEMS_APPROVE):
+    if target_status == "approved" and not await check_permission(
+        current_user, SYSTEMS_APPROVE
+    ):
         raise HTTPException(
-            status_code=403, 
-            detail="systems:approve permission required to import as approved"
+            status_code=403,
+            detail="systems:approve permission required to import as approved",
         )
 
     # --- Size cap (mirror systems.py document-upload pattern) ---
     content_length = request.headers.get("content-length")
-    if content_length and content_length.isdigit() and int(content_length) > MAX_IMPORT_SIZE:
+    if (
+        content_length
+        and content_length.isdigit()
+        and int(content_length) > MAX_IMPORT_SIZE
+    ):
         raise HTTPException(status_code=413, detail="Import file exceeds 10 MB limit")
 
     data = await file.read()
@@ -179,11 +187,13 @@ async def import_systems(
             rec = AISystemImport.model_validate(item)
             valid.append((i, rec))
         except ValidationError as e:
-            failed.append(ImportFailure(
-                index=i,
-                name=item.get("name") if isinstance(item, dict) else None,
-                error=str(e),
-            ))
+            failed.append(
+                ImportFailure(
+                    index=i,
+                    name=item.get("name") if isinstance(item, dict) else None,
+                    error=str(e),
+                )
+            )
 
     # --- Insert all valid records in one transaction ---
     rows: list[AISystem] = []
@@ -191,11 +201,13 @@ async def import_systems(
     for i, rec in valid:
         tier = rec.tier or "pending"
         if target_status == "approved" and tier == "pending":
-            failed.append(ImportFailure(
-                index=i,
-                name=rec.name,
-                error="tier is pending; supply a classified tier to import as approved",
-            ))
+            failed.append(
+                ImportFailure(
+                    index=i,
+                    name=rec.name,
+                    error="tier is pending; supply a classified tier to import as approved",
+                )
+            )
             continue
         workflow_status = "approved" if target_status == "approved" else "draft"
         system_id = new_id("SYS")
@@ -238,7 +250,8 @@ async def import_systems(
             emotion_recognition_workplace=rec.emotion_recognition_workplace or False,
             untargeted_facial_scraping=rec.untargeted_facial_scraping or False,
             predictive_policing=rec.predictive_policing or False,
-            biometric_categorisation_sensitive=rec.biometric_categorisation_sensitive or False,
+            biometric_categorisation_sensitive=rec.biometric_categorisation_sensitive
+            or False,
             is_biometric_identification=rec.is_biometric_identification or False,
             is_critical_infrastructure=rec.is_critical_infrastructure or False,
             is_education_related=rec.is_education_related or False,

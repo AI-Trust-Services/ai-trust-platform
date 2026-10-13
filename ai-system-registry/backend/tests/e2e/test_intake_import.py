@@ -13,7 +13,9 @@ _HEADERS = {"x-forwarded-preferred-username": "test-user"}
 def _upload(records: list, target_status: str = "draft"):
     """Build multipart payload matching the endpoint signature."""
     return {
-        "files": {"file": ("systems.json", json.dumps(records).encode(), "application/json")},
+        "files": {
+            "file": ("systems.json", json.dumps(records).encode(), "application/json")
+        },
         "data": {"target_status": target_status},
     }
 
@@ -52,7 +54,9 @@ async def test_import_valid_classified_system_approved(client: httpx.AsyncClient
     assert items["Internal chatbot"]["tier"] == "limited"
 
 
-async def test_import_tier_less_record_rejected_when_targeting_approved(client: httpx.AsyncClient):
+async def test_import_tier_less_record_rejected_when_targeting_approved(
+    client: httpx.AsyncClient,
+):
     """A tier-less record with target_status=approved is rejected, not silently downgraded."""
     records = [{"name": "Unknown risk system"}]
     r = await client.post(
@@ -77,8 +81,11 @@ async def test_import_partial_success(client: httpx.AsyncClient):
     """Valid and invalid records in one batch: valid inserted, invalid reported."""
     records = [
         {"name": "Good system", "tier": "minimal"},
-        {"name": "Bad tier system", "tier": "super-high"},   # invalid tier
-        {"name": "Bad url system", "application_url": "javascript:alert(1)"},  # invalid scheme
+        {"name": "Bad tier system", "tier": "super-high"},  # invalid tier
+        {
+            "name": "Bad url system",
+            "application_url": "javascript:alert(1)",
+        },  # invalid scheme
         {"name": "Another good one", "tier": "limited", "is_chatbot": True},
     ]
     r = await client.post(
@@ -111,7 +118,9 @@ async def test_import_classifier_flags_stored(client: httpx.AsyncClient):
 
 async def test_import_unknown_keys_ignored(client: httpx.AsyncClient):
     """Extra keys from a foreign source do not cause validation failure."""
-    records = [{"name": "Foreign system", "cost_center": "HR-42", "internal_ref": "abc"}]
+    records = [
+        {"name": "Foreign system", "cost_center": "HR-42", "internal_ref": "abc"}
+    ]
     r = await client.post(
         "/v1/intake/batch",
         headers=_HEADERS,

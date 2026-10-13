@@ -327,7 +327,7 @@ class AISystemImport(BaseModel):
     The four JSONB audit/workflow fields (classification_rationale,
     field_confirmations, questionnaire_answers, registration_documents) are never
     imported — always stored as NULL.
-    Currently this schema is a for a bulk upload of testing data. 
+    Currently this schema is a for a bulk upload of testing data.
     ponytail: insert-only, no dedup — duplicates on re-import by design.
     See docs/batch-import-format.md for the upgrade path.
     """
@@ -382,7 +382,9 @@ class AISystemImport(BaseModel):
     is_migration: bool | None = None
     is_judicial_admin: bool | None = None
     is_gpai: bool | None = None
-    training_compute_flops: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    training_compute_flops: float | None = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
     is_chatbot: bool | None = None
     generates_synthetic_content: bool | None = None
 
