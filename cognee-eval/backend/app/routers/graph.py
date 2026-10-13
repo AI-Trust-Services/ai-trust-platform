@@ -17,7 +17,7 @@ _DB_ROOT = os.path.join(
 )
 
 
-def _find_graph_db() -> str | None:
+def find_graph_db() -> str | None:
     """Return the most recently written per-dataset Kuzu graph file.
 
     cognee.remember() persists each dataset's graph as a `<uuid>.pkl` Kuzu
@@ -58,7 +58,7 @@ async def list_entities(
 @router.get("/raw")
 def graph_raw() -> dict:
     """Return all nodes and edges directly from the Kuzu graph database."""
-    db_path = _find_graph_db()
+    db_path = find_graph_db()
     if not db_path:
         return {"nodes": [], "edges": []}
 
