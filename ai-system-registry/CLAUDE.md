@@ -1,6 +1,7 @@
 # ai-system-registry/ (port 8001, `/api/registry/`)
 AI system registration and EU AI Act classification.
 - `POST /api/v1/intake` — entry point for all registrations. Runs the classifier (< 10ms), assigns `SYS-XXXXXXXX`, persists to Postgres. The frontend never sends `tier` — classification is backend-only.
+- `POST /api/v1/intake/batch` — batch import of already-classified systems from a JSON file (multipart, `file` + `target_status`). Requires `systems:write`. Validates all records first, inserts valid ones in one transaction, reports failures. `target_status` (`approved`|`draft`, default `draft`) is a ceiling — tier-less records always land as `draft`/`pending`. Insert-only, no dedup — re-importing the same file creates duplicates by design. Max 1000 records / 10 MB per request. The four JSONB fields (`classification_rationale`, `field_confirmations`, `questionnaire_answers`, `registration_documents`) are never imported — always `NULL`. Response: `{imported: n, failed: [{index, name?, error, downgraded}]}`. Payload format: `docs/batch-import-format.md`.
 - `GET /api/v1/systems` — pagination `?limit=50&offset=0` (max 200).
 - `POST /api/v1/systems/{id}/reclassify` — re-runs classifier, updates `tier`/`basis`/`annex_iii_area`.
 - `classifier.py` — pure Python, no I/O. EU AI Act 4-tier waterfall, returns at first match (highest priority first):
