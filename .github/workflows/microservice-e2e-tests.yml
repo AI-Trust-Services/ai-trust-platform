@@ -6,11 +6,13 @@ name: "Pre-merge check: microservice E2E tests"
 #   - Postgres  — for services whose e2e suite exercises real DB persistence
 #   - ClickHouse — for alerts, audit, and monitoring (event storage)
 #
-# MinIO is NOT needed: admin and compliance mock all MinIO calls in their
-# e2e conftests. ClickHouse tables are created by each conftest with plain
-# MergeTree() — no tiered storage policy, no MinIO dependency.
+# MinIO is NOT needed: admin, compliance, and document-indexing mock all MinIO
+# calls in their e2e conftests. ClickHouse tables are created by each conftest
+# with plain MergeTree() — no tiered storage policy, no MinIO dependency.
 #
-# cognee-eval is excluded: its tests/e2e/ directory is empty.
+# ai-test-bed mocks the registry evaluate call and MinIO — only Postgres is required.
+# cognee-eval uses in-memory SQLite and mocks all cognee calls — no infra required.
+# document-indexing mocks MinIO — only Postgres is required.
 
 on:
   pull_request:
@@ -62,10 +64,13 @@ jobs:
           COMPONENTS=(
             admin/backend
             ai-system-registry/backend
+            ai-test-bed/backend
             alerts/backend
             audit/backend
+            cognee-eval/backend
             compliance/backend
             decision-trace-analyzer/backend
+            document-indexing/backend
             monitoring/backend
             overview/backend
             users/backend
