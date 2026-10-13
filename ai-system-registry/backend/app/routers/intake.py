@@ -161,7 +161,7 @@ async def import_systems(
     # --- Parse ---
     try:
         records = json.loads(data)
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
         raise HTTPException(status_code=422, detail=f"Invalid JSON: {e}") from e
     if not isinstance(records, list):
         raise HTTPException(status_code=422, detail="JSON root must be an array")
