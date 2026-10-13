@@ -319,7 +319,7 @@ class IntakeResponse(BaseModel):
 
 
 class AISystemImport(BaseModel):
-    """One record in a batch-import payload (POST /v1/intake/import).
+    """One record in a batch-import payload (POST /v1/intake/batch).
 
     Carries all data columns of ai_systems — descriptive fields, classification
     result, and classifier flags.  Policy fields (assignees, registration_mode,
@@ -337,8 +337,8 @@ class AISystemImport(BaseModel):
     # --- Descriptive (only name is required) ---
     name: str = Field(..., min_length=1, max_length=200)
     version: str | None = Field(default=None, max_length=50)
-    provider: str | None = None
-    org_name: str | None = None
+    provider: str | None = Field(default=None, max_length=200)
+    org_name: str | None = Field(default=None, max_length=200)
     org_role: str = "provider"
     description: str | None = None
     intended_purpose: str | None = None
@@ -346,8 +346,8 @@ class AISystemImport(BaseModel):
     use_case: str | None = None
     people_affected: str | None = None
     decision_context: str | None = None
-    system_type: str | None = None
-    autonomy_level: str | None = None
+    system_type: str | None = Field(default=None, max_length=30)
+    autonomy_level: str | None = Field(default=None, max_length=50)
     application_url: str | None = Field(default=None, max_length=500)
     provider_country: str | None = Field(default=None, max_length=5)
     deployment_country: str | None = Field(default=None, max_length=2)
@@ -420,6 +420,14 @@ class AISystemImport(BaseModel):
         """Reject non-http(s) schemes — application_url is rendered as <a href> in the UI."""
         if v and urlparse(v).scheme not in ("http", "https"):
             raise ValueError("application_url must use http or https")
+        return v
+
+    @field_validator("git_repo_url")
+    @classmethod
+    def git_repo_url_scheme_allowlist(cls, v: str | None) -> str | None:
+        """Reject unexpected schemes — git_repo_url is rendered as a link in the UI."""
+        if v and urlparse(v).scheme not in ("http", "https", "git", "ssh"):
+            raise ValueError("git_repo_url must use http, https, git, or ssh")
         return v
 
 
