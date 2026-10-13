@@ -7,7 +7,8 @@ name: Promote Cognee Graph
 #   1. Export the graph from the test instance (kubectl exec, excluding cognee_eval.db):
 #        kubectl exec -n <ns> cognee-eval-backend-0 -c cognee-eval-backend -- \
 #          tar czf - -C /app/.cognee_system --exclude=./cognee_eval.db . > graph.tar.gz
-#   2. Attach graph.tar.gz to a DRAFT GitHub Release (workflow_dispatch can't take a file).
+#   2. Attach graph.tar.gz to a GitHub Release published as a **pre-release** (workflow_dispatch can't take a file).
+#      Do NOT use a draft release — drafts require contents:write; pre-releases are readable with contents:read.
 #   3. Run this workflow with that release's tag.
 #   4. Pin the printed cognee-graph@sha256:<digest> in the prod Helm values
 #      (cogneeEval.graphImage) and deploy.
@@ -19,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Tag of the draft release holding graph.tar.gz"
+        description: "Tag of the pre-release holding graph.tar.gz (not a draft — see header)"
         required: true
       graph_tag:
         description: "Image tag for the graph (e.g. eu-ai-act-2026-10-12)"
@@ -49,7 +50,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download graph.tar.gz from the draft release
+      - name: Download graph.tar.gz from the pre-release
         env:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |

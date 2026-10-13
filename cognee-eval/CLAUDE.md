@@ -133,7 +133,8 @@ semantic interchange format into a *live writable* remote — the opposite of re
    ```
    Export only when ingestion is idle (synchronous ingest holds the event loop; a mid-ingest snapshot
    risks a torn Kuzu DB — the first-boot consistency check is the backstop).
-2. **Promote**: attach `graph.tar.gz` to a **draft GitHub Release**, then run the
+2. **Promote**: attach `graph.tar.gz` to a GitHub Release published as a **pre-release** (not a draft —
+   drafts require `contents:write`; pre-releases are readable with `contents:read`), then run the
    `Promote Cognee Graph` workflow (`.github/workflows/promote-graph.yml`) with that release tag. It
    writes a provenance `manifest.json` (source doc hash, approved feedback IDs, approver, timestamp,
    archive sha256), builds the `cognee-eval/graph-image/Dockerfile` (`FROM busybox` — provides the
