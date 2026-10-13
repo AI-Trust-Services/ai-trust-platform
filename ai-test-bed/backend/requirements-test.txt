@@ -9,3 +9,5 @@ PyYAML==6.0.2
 psycopg2-binary==2.9.10
 pytest==9.0.3
 pytest-asyncio==1.4.0
+pydantic-ai-slim[anthropic]==0.8.1
+

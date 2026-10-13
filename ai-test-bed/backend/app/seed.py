@@ -40,6 +40,7 @@ from sqlalchemy import select
 _SAMPLE_DOCS_DIR = Path(__file__).parent / "testbed" / "sample_docs"
 
 _EU_AI_ACT_ID = "__eu_ai_act__"
+_REVIEWED_JUDGMENTS_ID = "__reviewed_judgments__"
 
 _SAMPLE_SYSTEMS: list[dict] = [
     {
@@ -80,6 +81,17 @@ _EU_AI_ACT_SYSTEM: dict = {
     "description": (
         "Sentinel AI system for EU AI Act document corpus. "
         "Upload PDF/text files via the Test Bed UI to populate retrieval context."
+    ),
+    "tier": "pending",
+}
+
+_REVIEWED_JUDGMENTS_SYSTEM: dict = {
+    "id": _REVIEWED_JUDGMENTS_ID,
+    "name": "[Test Bed] Reviewed Expert Judgments",
+    "description": (
+        "Sentinel AI system for the reviewed-judgments knowledge base. "
+        "Upload expert compliance decisions and interpretive guidance via the "
+        "Test Bed UI to populate the reviewed-judgments retrieval source."
     ),
     "tier": "pending",
 }
@@ -164,6 +176,14 @@ async def seed() -> None:
             _EU_AI_ACT_SYSTEM["name"],
             _EU_AI_ACT_SYSTEM["description"],
             _EU_AI_ACT_SYSTEM["tier"],
+        )
+        print("\n-- Reviewed Judgments sentinel")
+        await _ensure_ai_system(
+            session,
+            _REVIEWED_JUDGMENTS_ID,
+            _REVIEWED_JUDGMENTS_SYSTEM["name"],
+            _REVIEWED_JUDGMENTS_SYSTEM["description"],
+            _REVIEWED_JUDGMENTS_SYSTEM["tier"],
         )
         for s in _SAMPLE_SYSTEMS:
             print(f"\n-- {s['id']}")

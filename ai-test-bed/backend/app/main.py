@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.routers import testbed
+from app.routers import agent, testbed
 
 logger = get_logger(__name__)
 
@@ -81,6 +81,7 @@ async def logging_middleware(request: Request, call_next) -> Response:
 
 
 app.include_router(testbed.router, prefix="/v1")
+app.include_router(agent.router, prefix="/v1")
 
 
 @app.get("/health")
