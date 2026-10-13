@@ -378,6 +378,6 @@ export interface PermissionsResponse {
 
 export interface AISystemImportResult {
   imported: number;
-  failed: Array<{ index: number; name?: string; error: string; downgraded: boolean }>;
+  failed: Array<{ index: number; name?: string; error: string }>;
 }
 

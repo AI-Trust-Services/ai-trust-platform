@@ -435,7 +435,6 @@ class ImportFailure(BaseModel):
     index: int
     name: str | None = None
     error: str
-    downgraded: bool = False
 
 
 class ImportResult(BaseModel):

@@ -189,10 +189,16 @@ async def import_systems(
     rows: list[AISystem] = []
     steps: list[SystemWorkflowStep] = []
     for i, rec in valid:
-        system_id = new_id("SYS")
         tier = rec.tier or "pending"
-        downgraded = target_status == "approved" and not rec.tier
-        workflow_status = "approved" if (target_status == "approved" and rec.tier) else "draft"
+        if target_status == "approved" and tier == "pending":
+            failed.append(ImportFailure(
+                index=i,
+                name=rec.name,
+                error="tier is pending; supply a classified tier to import as approved",
+            ))
+            continue
+        workflow_status = "approved" if target_status == "approved" else "draft"
+        system_id = new_id("SYS")
 
         row = AISystem(
             id=system_id,
@@ -261,14 +267,6 @@ async def import_systems(
         )
         rows.append(row)
         steps.append(step)
-
-        if downgraded:
-            failed.append(ImportFailure(
-                index=i,
-                name=rec.name,
-                error="target_status=approved requested but no tier supplied; landed as draft",
-                downgraded=True,
-            ))
 
     async with SessionLocal() as session:
         session.add_all(rows)

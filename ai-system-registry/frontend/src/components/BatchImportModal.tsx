@@ -118,19 +118,16 @@ function ImportReport({ result }: { result: AISystemImportResult }) {
     <div className="flex flex-col gap-3">
       <p className="text-sm font-medium">
         {result.imported} system{result.imported !== 1 ? "s" : ""} imported
-        {result.failed.length > 0 && `, ${result.failed.filter(f => !f.downgraded).length} failed`}
-        {result.failed.filter(f => f.downgraded).length > 0 &&
-          `, ${result.failed.filter(f => f.downgraded).length} downgraded to draft`}
+        {result.failed.length > 0 && `, ${result.failed.length} failed`}
       </p>
       {result.failed.length > 0 && (
         <div className="flex flex-col gap-1">
           {result.failed.map((f) => (
             <div key={f.index} className="rounded border border-[var(--danger-fg)]/30 bg-[var(--danger-fg)]/5 px-3 py-2 text-sm">
               <span className="font-medium text-[var(--danger-fg)]">
-                #{f.index}{f.name ? ` · ${f.name}` : ""}
-                {f.downgraded ? " (downgraded)" : " (invalid)"}
+                #{f.index}{f.name ? ` · ${f.name}` : ""} (invalid)
               </span>
-              {!f.downgraded && <p className="mt-0.5 text-muted-foreground">{f.error}</p>}
+              <p className="mt-0.5 text-muted-foreground">{f.error}</p>
             </div>
           ))}
         </div>
