@@ -218,6 +218,59 @@ async def chat_completions(request: Request) -> JSONResponse:
     )
 
 
+@app.post("/v1/messages")
+async def messages(request: Request) -> JSONResponse:
+    """Native Anthropic Messages passthrough — for PydanticAI AnthropicModel clients.
+
+    Accepts the Anthropic Messages API body verbatim, forwards it straight to
+    the upstream /invoke deployment, and returns the raw Anthropic response.
+    No OpenAI translation is performed; tool-calling blocks pass through unchanged.
+    """
+    content_length = request.headers.get("content-length")
+    if content_length is not None and int(content_length) > _MAX_REQUEST_BYTES:
+        raise HTTPException(status_code=413, detail="Request body too large")
+    raw = await request.body()
+    if len(raw) > _MAX_REQUEST_BYTES:
+        raise HTTPException(status_code=413, detail="Request body too large")
+    body = json.loads(raw)
+
+    invoke_body: dict = {
+        "anthropic_version": _API_VERSION,
+        "max_tokens": body.get("max_tokens", 8192),
+        "messages": body["messages"],
+    }
+    # Pass optional fields only when present — don't inject defaults that
+    # would change the model's behaviour (e.g. absent tool_choice means "auto").
+    if "system" in body:
+        invoke_body["system"] = body["system"]
+    if "tools" in body:
+        invoke_body["tools"] = body["tools"]
+    if "tool_choice" in body:
+        invoke_body["tool_choice"] = body["tool_choice"]
+
+    async with httpx.AsyncClient(timeout=600) as client:
+        try:
+            resp = await _invoke_with_retry(client, invoke_body)
+        except httpx.TimeoutException as e:
+            raise HTTPException(status_code=504, detail=f"Upstream timeout: {e}") from e
+
+    if resp.status_code >= 400:
+        logger.error("Upstream error %s: %s", resp.status_code, resp.text[:500])
+        raise HTTPException(status_code=resp.status_code, detail=resp.text[:500])
+
+    data = resp.json()
+    # Defensively fill in the envelope fields the anthropic SDK validates,
+    # in case the upstream deployment omits them.
+    if "type" not in data:
+        data["type"] = "message"
+    if "role" not in data:
+        data["role"] = "assistant"
+    if "model" not in data:
+        data["model"] = body.get("model", "ai-gateway")
+
+    return JSONResponse(data)
+
+
 # ── models endpoint — cognee/litellm may probe this ─────────────────────────
 @app.get("/v1/models")
 async def list_models() -> dict:
