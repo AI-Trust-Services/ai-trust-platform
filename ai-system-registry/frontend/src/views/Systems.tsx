@@ -220,6 +220,7 @@ export default function Systems() {
         open={importOpen}
         onClose={() => setImportOpen(false)}
         onSuccess={() => { loadSystems(); }}
+        canApprove={mayApprove}
       />
 
       <SystemDetail

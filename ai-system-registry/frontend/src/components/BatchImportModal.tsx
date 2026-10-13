@@ -12,9 +12,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  canApprove: boolean;
 }
 
-export default function BatchImportModal({ open, onClose, onSuccess }: Props) {
+export default function BatchImportModal({ open, onClose, onSuccess, canApprove }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [targetStatus, setTargetStatus] = useState("draft");
   const [result, setResult] = useState<AISystemImportResult | null>(null);
@@ -82,7 +83,7 @@ export default function BatchImportModal({ open, onClose, onSuccess }: Props) {
                 <select id="bi_status" className={SELECT_CLASS} value={targetStatus}
                   onChange={(e) => setTargetStatus(e.target.value)}>
                   <option value="draft">Draft</option>
-                  <option value="approved">Approved</option>
+                  {canApprove && <option value="approved">Approved</option>}
                 </select>
                 <p className="text-xs text-muted-foreground">
                   Records without a tier always land as <em>draft</em> regardless of this setting.

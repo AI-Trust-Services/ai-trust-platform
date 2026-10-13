@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from ai_trust_authorization import require_permission
-from ai_trust_authorization.constants import SYSTEMS_WRITE
+from ai_trust_authorization import check_permission, require_permission
+from ai_trust_authorization.constants import SYSTEMS_APPROVE, SYSTEMS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.audit import log_audit_event
@@ -140,6 +140,12 @@ async def import_systems(
         raise HTTPException(status_code=422, detail="target_status must be 'approved' or 'draft'")
 
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
+
+    if target_status == "approved" and not await check_permission(current_user, SYSTEMS_APPROVE):
+        raise HTTPException(
+            status_code=403, 
+            detail="systems:approve permission required to import as approved"
+        )
 
     # --- Size cap (mirror systems.py document-upload pattern) ---
     content_length = request.headers.get("content-length")
