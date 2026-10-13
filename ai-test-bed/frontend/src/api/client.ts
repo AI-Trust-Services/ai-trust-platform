@@ -12,6 +12,11 @@ import type {
   TestBedSampleDetail,
   UploadResponse,
   VersionInfo,
+  AgentRunRequest,
+  AgentRunResult,
+  AgentRunSummary,
+  AgentFeedbackRequest,
+  AgentFeedbackResponse,
 } from "../types";
 
 // Test Bed backend (ai-test-bed-backend)
@@ -142,4 +147,26 @@ export const api = {
 
   getTestBedRun: (runId: string) =>
     request<TestBedRunResult>(`/testbed/runs/${encodeURIComponent(runId)}`),
+
+  // ---- Agent Test Bed (ai-test-bed-backend) ----
+  runAgent: (body: AgentRunRequest) =>
+    request<AgentRunResult>("/testbed/agent/run", json(body)),
+
+  listAgentRuns: () =>
+    request<AgentRunSummary[]>("/testbed/agent/runs"),
+
+  getAgentRun: (runId: string) =>
+    request<AgentRunResult>(`/testbed/agent/runs/${encodeURIComponent(runId)}`),
+
+  submitAgentFeedback: (body: AgentFeedbackRequest) =>
+    request<AgentFeedbackResponse>("/testbed/agent/feedback", json(body)),
+
+  cogneeIngest: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<{ status: string }>("/testbed/agent/cognee/ingest", {
+      method: "POST",
+      body: form,
+    });
+  },
 };

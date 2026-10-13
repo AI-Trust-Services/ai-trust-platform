@@ -7,6 +7,7 @@ import { usePermissions } from "./hooks/usePermissions";
 import { NoAccess } from "./components/NoAccess";
 import { DocumentIndexing } from "./views/DocumentIndexing";
 import { TestBed } from "./views/TestBed";
+import { AgentTestBed } from "./views/AgentTestBed";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 
 export default function App() {
@@ -60,12 +61,16 @@ export default function App() {
               <TabsList className="mx-6 mt-4 w-fit">
                 <TabsTrigger value="indexing">Document Indexing</TabsTrigger>
                 <TabsTrigger value="testbed">AI Test Bed</TabsTrigger>
+                <TabsTrigger value="agent">Agent</TabsTrigger>
               </TabsList>
               <TabsContent value="indexing" className="flex-1">
                 <DocumentIndexing mayWrite={mayWrite} />
               </TabsContent>
               <TabsContent value="testbed" className="flex-1">
                 <TestBed mayWrite={mayWrite} />
+              </TabsContent>
+              <TabsContent value="agent" className="flex-1">
+                <AgentTestBed mayWrite={mayWrite} />
               </TabsContent>
             </Tabs>
           </div>

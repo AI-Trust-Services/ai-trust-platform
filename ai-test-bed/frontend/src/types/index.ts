@@ -152,3 +152,87 @@ export interface TestBedRunSummary {
   created_at: string;
   created_by: string;
 }
+
+// ---------------------------------------------------------------------------
+// Agent Test Bed
+// ---------------------------------------------------------------------------
+
+export type Backend = "classic" | "graph" | "hierarchical";
+
+export interface AgentSourceBackends {
+  legal: Backend;
+  reviewed_judgments: Backend;
+  system_evidence: Backend;
+}
+
+export interface AgentRunRequest {
+  system_id: string;
+  task?: string;
+  source_backends: AgentSourceBackends;
+  model?: string | null;
+  retrieval_k?: number;
+  retrieval_mode?: RetrieveMode;
+  retrieval_rrf_k?: number;
+}
+
+export interface SourceReference {
+  ref_id: string;
+  quote?: string;
+  resolved: boolean;
+}
+
+export interface AppliedJudgment {
+  ref_id: string;
+  statement: string;
+}
+
+export interface AgentRetrievedPassage {
+  ref_id: string;
+  text: string;
+  source_label: string;
+  backend: string;
+  meta: unknown;
+}
+
+export interface AgentResult {
+  proposed_answer: string;
+  rationale: string;
+  source_references: SourceReference[];
+  applicable_judgments: AppliedJudgment[];
+  missing_facts: string[];
+  review_required: boolean;
+  review_questions: string[];
+}
+
+export interface AgentRunResult {
+  run_id: string;
+  system_id: string;
+  task: string;
+  source_backends: AgentSourceBackends;
+  result: AgentResult;
+  retrieved_passages: AgentRetrievedPassage[];
+  created_at: string;
+  created_by: string;
+}
+
+export interface AgentRunSummary {
+  run_id: string;
+  system_id: string;
+  task: string;
+  source_backends: AgentSourceBackends;
+  review_required: boolean;
+  created_at: string;
+  created_by: string;
+}
+
+export interface AgentFeedbackRequest {
+  run_id: string;
+  conclusion: string;
+  reasoning: string;
+  question?: string;
+}
+
+export interface AgentFeedbackResponse {
+  feedback_id: string;
+  status: string;
+}
