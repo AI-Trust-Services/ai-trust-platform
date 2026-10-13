@@ -105,11 +105,14 @@ async def consistency_check() -> tuple[bool, str]:
     except Exception as e:  # noqa: BLE001
         return False, f"recall failed: {e}"
 
+    # A healthy graph returns at least one result with content. We check for
+    # non-empty text rather than a node_id: recall results don't always expose
+    # an id, but an empty/torn graph returns nothing retrievable at all.
     for r in results:
-        if r.get("node_id"):
-            return True, f"graph answerable (resolved node {r['node_id']})"
+        if (r.get("text") or "").strip():
+            return True, f"graph answerable ({len(results)} result(s))"
 
-    return False, "recall returned no resolvable nodes — graph missing or empty"
+    return False, "recall returned nothing retrievable — graph missing or empty"
 
 
 async def get_graph_stats() -> dict:
