@@ -27,7 +27,7 @@ if not _allowed_origins:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.graph_ready = True
+    app.state.graph_ready = False
     await init_db()
     logger.info("startup.db_ready")
     setup_cognee()
@@ -105,7 +105,7 @@ if not COGNEE_READONLY:
 
 @app.get("/health")
 async def health() -> Response:
-    if COGNEE_READONLY and not getattr(app.state, "graph_ready", True):
+    if COGNEE_READONLY and not getattr(app.state, "graph_ready", False):
         return JSONResponse(
             {"status": "not_ready", "reason": "graph snapshot missing or inconsistent"},
             status_code=503,
