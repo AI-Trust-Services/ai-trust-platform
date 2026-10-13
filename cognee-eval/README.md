@@ -52,18 +52,7 @@ cogneeEval:
   graphImage: ghcr.io/<owner>/ai-trust-platform/cognee-graph@sha256:<digest>
 ```
 
-Deploy (`make upgrade && make rollout`, or the Gardener workflow). Verify:
-
-```bash
-kubectl get deploy cognee-eval-backend -n ai-trust      # Deployment, not StatefulSet
-curl -s .../api/cognee/health                           # {"status":"ok"}
-curl -s .../api/cognee/v1/graph/raw                      # the frozen graph
-curl -s -o /dev/null -w '%{http_code}' -X POST .../api/cognee/v1/ingest   # 404
-```
-
-The init container pulls the image once at startup and extracts it into the
-emptyDir. On a bad/empty snapshot, `/health` returns 503 and the pod stays
-NotReady — a bad graph never serves.
+Deploy with `make upgrade && make rollout`, or via the Gardener workflow.
 
 ---
 
