@@ -106,10 +106,13 @@ test-e2e:
 	COMPONENTS=" \
 		admin/backend \
 		ai-system-registry/backend \
+		ai-test-bed/backend \
 		alerts/backend \
 		audit/backend \
+		cognee-eval/backend \
 		compliance/backend \
 		decision-trace-analyzer/backend \
+		document-indexing/backend \
 		monitoring/backend \
 		overview/backend \
 		users/backend \
