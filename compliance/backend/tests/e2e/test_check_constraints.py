@@ -126,12 +126,10 @@ async def test_invalid_requirement_status_rejected():
 
 @pytest.mark.asyncio
 async def test_invalid_evidence_status_rejected():
-    system = await create_system()
     with pytest.raises(IntegrityError, match="ck_evidence_status"):
         await _insert_raw(
             "evidence",
             id=new_id("EVD"),
-            ai_system_id=system["id"],
             title="Bad Evidence",
             evidence_type="document",
             status="in_review",  # not in the allowed set

@@ -26,3 +26,21 @@ The frontend MFE (document management + AI Test Bed UI) lives in **`ai-test-bed/
 - `DELETE /documents/{id}` (`systems:write`) — **hard delete**: removes the document row (ON DELETE CASCADE drops its versions + chunks) and purges every version's original from MinIO. Nothing of a deleted document is retained. (The `deleted_at` column is retained but now vestigial — hard delete never sets it; the `deleted_at IS NULL` filters stay as always-true no-ops.)
 
 **Env** — `EMBED_MODEL` (`intfloat/multilingual-e5-small`; also `-base` / `BAAI/bge-m3`), `EMBED_USE_FP16`, `INDEXING_BUCKET`, `INDEXING_POLL_INTERVAL`, `EMBEDDING_SERVICE_URL` (backend/worker → `http://embedding-service:8012`), `OWNER_DATABASE_URL` (worker, multi-tenant only — enumerates `tenant_*` schemas for the per-tenant poll; unset → single unscoped pass).
+
+## Testing
+
+```bash
+cd document-indexing/backend
+make setup      # creates .venv, installs requirements-test.txt + libs/persistence + libs/logging + libs/authorization
+make test-e2e   # requires Postgres on localhost:5432
+make test-unit
+```
+
+The e2e suite (`tests/e2e/`) uses `httpx.AsyncClient` + `ASGITransport` against `ai_trust_test` Postgres (auto-created, migrations applied). No real MinIO or embedding service is needed.
+
+**Key conftest design** (`tests/e2e/conftest.py`):
+- MinIO env vars are set at module level before any `app` import (the minio client reads them at import time).
+- `ai_trust_persistence.database` engine is replaced with a `NullPool` engine pointing at `ai_trust_test` so each request gets a fresh connection with no idle-pool conflicts.
+- All `app.minio_client` functions (`ensure_bucket`, `upload_file`, `get_presigned_url`, `delete_file`) are patched with `AsyncMock` for the lifetime of the session via `patch()` context managers in `e2e_setup`.
+- OpenFGA is bypassed by replacing `ai_trust_authorization.openfga_client.check` with an always-true coroutine and overriding `get_current_user` via `app.dependency_overrides`.
+- The `system_id` fixture creates an `AISystem` row directly via SQLAlchemy — `tier` must be set (it is `NOT NULL` with no default).

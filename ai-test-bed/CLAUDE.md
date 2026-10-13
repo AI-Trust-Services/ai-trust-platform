@@ -68,3 +68,21 @@ The MFE hosts two logical UIs with different backends:
 - **Registry AI system list** (system dropdown in DocPanels) → `VITE_REGISTRY_API_BASE` = `/api/registry/v1`.
 
 `HEALTH_URL` is derived from `VITE_TESTBED_API_BASE` (strips `/v1`, appends `/health`). The red banner + auto-retry polls the ai-test-bed backend health.
+
+## Testing
+
+```bash
+cd ai-test-bed/backend
+make setup      # creates .venv, installs requirements-test.txt + libs/persistence + libs/logging + libs/authorization
+make test-e2e   # requires Postgres on localhost:5432
+make test-unit
+```
+
+The e2e suite (`tests/e2e/`) uses `httpx.AsyncClient` + `ASGITransport` against `ai_trust_test` Postgres. No real registry backend or document-indexing service is needed.
+
+**Key conftest design** (`tests/e2e/conftest.py`):
+- The `POST /v1/testbed/run` handler uses a **single `httpx.AsyncClient`** for both the document-indexing retrieve call and the registry classify/evaluate call. The `mock_registry_evaluate` fixture patches `app.routers.testbed.httpx.AsyncClient` with a URL-aware `_mock_post` that dispatches by URL:
+  - URLs containing `/retrieve` → returns status 200 with an empty list (no docs indexed in tests).
+  - All other URLs (the registry classify endpoint) → returns the canned `_STUB_EVALUATE_RESPONSE` dict.
+- `mock_resp.json` must be a `MagicMock` (not `AsyncMock`) because `httpx.Response.json()` is a synchronous method; making it async would return a coroutine that SQLAlchemy cannot serialize into the `test_bed_runs.payload` JSONB column.
+- OpenFGA is bypassed the same way as other Postgres-backed services (always-true `check`, `dependency_overrides` for `get_current_user`).

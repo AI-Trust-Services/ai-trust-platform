@@ -27,8 +27,8 @@ merge → deploy to `ai-trust-main` → live tests → next change. A red step s
 
 ```mermaid
 flowchart LR
-    DEV(["① Local<br/>development: lint · typecheck · unit · integration · E2E"])
-    PR["② PR checks<br/>lint · typecheck · unit"]
+    DEV(["① Local<br/>development: lint · typecheck · unit · e2e · integration · E2E"])
+    PR["② PR checks<br/>lint · typecheck · unit · e2e"]
     DT["③ Deploy PR<br/><b>ai-trust-test</b><br/>PR namespace"]
     LT["④ Live tests on ai-trust-test<br/>integration · E2E"]
     MG{{"⑤ Merge to main"}}

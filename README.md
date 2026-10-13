@@ -81,6 +81,8 @@ Every backend service and worker follows a consistent two-tier test structure:
 | `tests/unit/` | Pure Python — mocked I/O, no DB | None |
 | `tests/e2e/` | Full stack via ASGITransport | Postgres (and ClickHouse where applicable) |
 
+**Every backend must have a `tests/e2e/` suite** — see the [test strategy](docs/tests.md) for the conftest patterns. The CI workflow runs all suites as a PR gate.
+
 All 14 backend/worker components have unit tests:
 
 | Component | Unit test file |
@@ -99,6 +101,23 @@ All 14 backend/worker components have unit tests:
 | `overview/backend` | `tests/unit/` |
 | `policy-checker-worker` | `tests/unit/` |
 | `users/backend` | `tests/unit/` |
+
+All 12 backend components have e2e tests (PR-gated via `microservice-e2e-tests.yml`):
+
+| Component | Infrastructure |
+|---|---|
+| `admin/backend` | Postgres · MinIO mocked |
+| `ai-system-registry/backend` | Postgres · OpenFGA mocked |
+| `ai-test-bed/backend` | Postgres · MinIO + registry evaluate mocked |
+| `alerts/backend` | Postgres · ClickHouse · OpenFGA mocked |
+| `audit/backend` | ClickHouse |
+| `cognee-eval/backend` | SQLite in-memory · all cognee calls mocked |
+| `compliance/backend` | Postgres · MinIO + OpenFGA mocked |
+| `decision-trace-analyzer/backend` | ClickHouse mocked |
+| `document-indexing/backend` | Postgres · MinIO mocked |
+| `monitoring/backend` | Postgres · ClickHouse · OpenFGA mocked |
+| `overview/backend` | Postgres |
+| `users/backend` | Postgres · OpenFGA mocked |
 
 Run tests for any component:
 
@@ -149,7 +168,13 @@ make test-int                    # kind cluster, namespace ai-trust
 
 ### Automated PR checks
 
-Every pull request triggers three workflows:
+Every pull request triggers four workflows:
+
+**`microservice-e2e-tests.yml` — Pre-merge check: microservice E2E tests**
+- Runs `make setup && make test-e2e` for all 12 backend components in sequence
+- Service containers: Postgres and ClickHouse (MinIO and OpenFGA are mocked in each conftest)
+- A failure in one component does not cancel the others; all run and failures are reported together
+- `cognee-eval` uses in-memory SQLite and mocks all cognee calls — no extra infra needed
 
 **`pr-unit-tests.yml` — Pre-merge check: unit tests**
 - Matrix job, one cell per component, all 14 running in parallel
@@ -165,8 +190,6 @@ Every pull request triggers three workflows:
 **`pr-typecheck.yml` — Pre-merge check: typecheck**
 - Runs `npm ci && npm run typecheck` for all 8 TypeScript frontends sequentially
 - A failure in any frontend fails the whole check and lists all failures at the end
-
-E2E tests are not part of the PR workflow — they require infrastructure (Postgres, ClickHouse) not available in the GitHub Actions runner.
 
 ## Support, Feedback, Contributing
 

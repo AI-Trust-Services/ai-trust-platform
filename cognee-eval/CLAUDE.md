@@ -106,6 +106,23 @@ creds. Embeddings run in-process via fastembed (`BAAI/bge-small-en-v1.5`, 384-di
   model's sustained token quota; the gateway adds 429/5xx retry-backoff. Upstream throttling is a
   sustained quota, not a per-request wall (short bursts pass; sustained volume throttles).
 
+## Testing
+
+```bash
+cd cognee-eval/backend
+make setup      # creates .venv, installs requirements-test.txt + libs/logging
+make test-e2e   # no Docker needed — uses in-memory SQLite
+make test-unit
+```
+
+The e2e suite (`tests/e2e/`) uses `httpx.AsyncClient` + `ASGITransport` against an in-memory SQLite DB — no Postgres, Docker, or running AI gateway required.
+
+**Key conftest design** (`tests/e2e/conftest.py`):
+- `cognee` and `kuzu` are imported at module level in `app/cognee_client.py` and `app/routers/graph.py` but are not installed in CI. The conftest stubs them in `sys.modules` at module level (before any `app` import) so collection works without the real packages.
+- `sqlalchemy[asyncio]` and `python-multipart` are listed in `requirements-test.txt` (not pulled from `requirements.txt` which uses Docker-path `-e /app/libs/…`).
+- All `app.cognee_client` functions (`recall`, `answer_question`, `ingest_pdf`, etc.) are replaced with `AsyncMock` in `_patch_cognee()` so tests never touch a real Cognee pipeline.
+- Tables are created via `Base.metadata.create_all` on the in-memory engine; rows are deleted between tests by the `truncate_tables` autouse fixture.
+
 ## Freeze & promote to read-only production
 
 The build/test instance mutates the graph (ingest + the expert feedback loop). **Production serves a
