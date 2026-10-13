@@ -11,7 +11,7 @@ import * as LuigiClient from "@luigi-project/client";
  */
 export function useLuigiInit(onInit: (ctx: unknown) => void) {
   useEffect(() => {
-    const id = LuigiClient.addInitListener((ctx: unknown) => { onInit(ctx); LuigiClient.notifyAppLoaded(); });
+    const id = LuigiClient.addInitListener((ctx: unknown) => { onInit(ctx); LuigiClient.uxManager().hideLoadingIndicator(); });
     // v2's removeInitListener returns a boolean; wrap so the effect cleanup
     // stays void (a returned value would be treated as a Destructor).
     return () => {
