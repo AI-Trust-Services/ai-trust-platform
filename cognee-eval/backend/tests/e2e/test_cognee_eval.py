@@ -14,18 +14,25 @@ import pytest
 
 
 async def test_create_evaluation_returns_201(client: httpx.AsyncClient):
-    r = await client.post("/v1/evaluate", json={"question": "What is a high-risk AI system?"})
+    r = await client.post(
+        "/v1/evaluate", json={"question": "What is a high-risk AI system?"}
+    )
     assert r.status_code == 201
     body = r.json()
     assert body["id"].startswith("EVL-")
     assert body["question"] == "What is a high-risk AI system?"
-    assert body["answer"] == "High-risk AI systems are defined in Article 6 of the EU AI Act."
+    assert (
+        body["answer"]
+        == "High-risk AI systems are defined in Article 6 of the EU AI Act."
+    )
     assert len(body["source_evidence"]) == 2
     assert body["source_evidence"][0]["node_id"] == "node-001"
     assert body["knowledge_gap"] is False
 
 
-async def test_create_evaluation_knowledge_gap_when_no_passages(client: httpx.AsyncClient):
+async def test_create_evaluation_knowledge_gap_when_no_passages(
+    client: httpx.AsyncClient,
+):
     import app.cognee_client as _cc
     from unittest.mock import AsyncMock
 
@@ -61,7 +68,9 @@ async def test_list_evaluations_empty_initially(client: httpx.AsyncClient):
 
 
 async def test_get_evaluation_by_id(client: httpx.AsyncClient):
-    create_resp = await client.post("/v1/evaluate", json={"question": "What is the EU AI Act?"})
+    create_resp = await client.post(
+        "/v1/evaluate", json={"question": "What is the EU AI Act?"}
+    )
     evaluation_id = create_resp.json()["id"]
 
     r = await client.get(f"/v1/evaluate/{evaluation_id}")
@@ -99,7 +108,9 @@ async def test_create_feedback_returns_201(client: httpx.AsyncClient):
     assert body["supporting_node_ids"] == ["node-001"]
 
 
-async def test_create_feedback_marks_evaluation_as_knowledge_gap(client: httpx.AsyncClient):
+async def test_create_feedback_marks_evaluation_as_knowledge_gap(
+    client: httpx.AsyncClient,
+):
     eval_resp = await client.post("/v1/evaluate", json={"question": "Feedback test?"})
     evaluation_id = eval_resp.json()["id"]
     assert eval_resp.json()["knowledge_gap"] is False
@@ -117,7 +128,9 @@ async def test_create_feedback_marks_evaluation_as_knowledge_gap(client: httpx.A
     assert r.json()["knowledge_gap"] is True
 
 
-async def test_create_feedback_unknown_evaluation_returns_404(client: httpx.AsyncClient):
+async def test_create_feedback_unknown_evaluation_returns_404(
+    client: httpx.AsyncClient,
+):
     r = await client.post(
         "/v1/feedback",
         json={
@@ -130,7 +143,9 @@ async def test_create_feedback_unknown_evaluation_returns_404(client: httpx.Asyn
 
 
 async def test_list_feedback(client: httpx.AsyncClient):
-    eval_resp = await client.post("/v1/evaluate", json={"question": "List feedback test?"})
+    eval_resp = await client.post(
+        "/v1/evaluate", json={"question": "List feedback test?"}
+    )
     evaluation_id = eval_resp.json()["id"]
 
     await client.post(
@@ -148,7 +163,9 @@ async def test_list_feedback(client: httpx.AsyncClient):
 
 
 async def test_list_feedback_filter_by_status(client: httpx.AsyncClient):
-    eval_resp = await client.post("/v1/evaluate", json={"question": "Status filter test?"})
+    eval_resp = await client.post(
+        "/v1/evaluate", json={"question": "Status filter test?"}
+    )
     evaluation_id = eval_resp.json()["id"]
     await client.post(
         "/v1/feedback",
@@ -222,7 +239,9 @@ async def test_approve_feedback_returns_202(client: httpx.AsyncClient):
 
 
 async def test_approve_already_approved_returns_409(client: httpx.AsyncClient):
-    eval_resp = await client.post("/v1/evaluate", json={"question": "409 approve test?"})
+    eval_resp = await client.post(
+        "/v1/evaluate", json={"question": "409 approve test?"}
+    )
     evaluation_id = eval_resp.json()["id"]
     fb_resp = await client.post(
         "/v1/feedback",

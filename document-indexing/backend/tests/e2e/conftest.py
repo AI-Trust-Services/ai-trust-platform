@@ -84,7 +84,11 @@ def _pg_reachable() -> bool:
 
 def _ensure_test_db() -> None:
     conn = psycopg2.connect(
-        host=_PG_HOST, port=_PG_PORT, user=_PG_USER, password=_PG_PASSWORD, dbname="postgres"
+        host=_PG_HOST,
+        port=_PG_PORT,
+        user=_PG_USER,
+        password=_PG_PASSWORD,
+        dbname="postgres",
     )
     conn.autocommit = True
     cur = conn.cursor()
@@ -107,7 +111,11 @@ def _run_migrations() -> None:
 
 def _truncate() -> None:
     conn = psycopg2.connect(
-        host=_PG_HOST, port=_PG_PORT, user=_PG_USER, password=_PG_PASSWORD, dbname=_TEST_DB
+        host=_PG_HOST,
+        port=_PG_PORT,
+        user=_PG_USER,
+        password=_PG_PASSWORD,
+        dbname=_TEST_DB,
     )
     conn.autocommit = True
     cur = conn.cursor()

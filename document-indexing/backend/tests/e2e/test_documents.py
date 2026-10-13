@@ -19,7 +19,9 @@ _PDF_BYTES = b"%PDF-1.4 minimal"
 # ── Upload + list documents ───────────────────────────────────────────────────
 
 
-async def test_upload_document_returns_pending(client: httpx.AsyncClient, system_id: str):
+async def test_upload_document_returns_pending(
+    client: httpx.AsyncClient, system_id: str
+):
     r = await client.post(
         f"/v1/systems/{system_id}/documents",
         files={"file": ("spec.pdf", _PDF_BYTES, "application/pdf")},
@@ -32,7 +34,9 @@ async def test_upload_document_returns_pending(client: httpx.AsyncClient, system
     assert body["status"] == "pending"
 
 
-async def test_list_documents_returns_uploaded(client: httpx.AsyncClient, system_id: str):
+async def test_list_documents_returns_uploaded(
+    client: httpx.AsyncClient, system_id: str
+):
     await client.post(
         f"/v1/systems/{system_id}/documents",
         files={"file": ("doc1.pdf", _PDF_BYTES, "application/pdf")},
