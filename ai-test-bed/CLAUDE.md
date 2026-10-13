@@ -59,6 +59,129 @@ Reserved `ai_system_id` for the EU AI Act document corpus. The seed creates the 
 
 Abstract ABC (`add_reviewed_knowledge`, `query`, `export`, `import_items`) defining a swappable knowledge source interface. Phase 1 ships `JsonbKnowledgeBrainStub` (backed by `test_bed_runs` rows with `kind="knowledge_item"` and `sample_id="__knowledge_brain__"`; substring scoring). Module-level singleton in `knowledge_brain_stub.py`. Phase 2 will swap for a Cognee implementation without touching call sites.
 
+## Knowledge-Grounded Task Agent (`app/agent/`)
+
+A PydanticAI agent that takes a task + a registered AI system, receives that system's questionnaire as direct context, retrieves evidence via 3 configurable RAG tools, and returns a structured `TaskResult`.
+
+### Agent endpoints (all under `/v1/testbed/agent`, gated `systems:read`)
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/testbed/agent/run` | Run the agent against a registered AI system |
+| `GET` | `/testbed/agent/runs` | List 50 most recent agent runs (summaries) |
+| `GET` | `/testbed/agent/runs/{run_id}` | Full agent run (result + passages) |
+| `POST` | `/testbed/agent/feedback` | Submit cognee feedback loop for a run |
+| `POST` | `/testbed/agent/cognee/ingest` | Proxy file upload to cognee |
+
+### POST /testbed/agent/run body
+
+```json
+{
+  "system_id": "SYS-XXXX",
+  "task": null,
+  "source_backends": {
+    "legal": "classic",
+    "reviewed_judgments": "classic",
+    "system_evidence": "classic"
+  },
+  "model": null,
+  "retrieval_k": 5,
+  "retrieval_mode": "hybrid",
+  "retrieval_rrf_k": 60
+}
+```
+
+- `task`: omit to use the EU AI Act risk-classification default (loaded from `app/agent/prompts/risk_classification.md`).
+- `source_backends` values: `classic` | `graph` | `hierarchical`. All default to `classic`.
+
+### POST /testbed/agent/run response
+
+```json
+{
+  "run_id": "TBR-XXXXXXXX",
+  "system_id": "SYS-XXXX",
+  "task": "...",
+  "source_backends": {"legal": "classic", ...},
+  "result": {
+    "proposed_answer": "...",
+    "rationale": "...",
+    "source_references": [{"ref_id": "L-abc", "quote": null, "resolved": true}],
+    "applicable_judgments": [{"ref_id": "J-abc", "statement": "..."}],
+    "missing_facts": [],
+    "review_required": false,
+    "review_questions": []
+  },
+  "retrieved_passages": [...],
+  "created_at": "...",
+  "created_by": "..."
+}
+```
+
+`source_references[].resolved` is `true` if the ref_id was found in `retrieved_passages`.
+
+### Three RAG tools and per-source backend config
+
+The agent has three `@agent.tool` functions. Each tool resolves its backend via `source_backends`:
+
+| Tool | Source label | classic system_id | Ref prefix |
+|---|---|---|---|
+| `retrieve_legal_sources` | `legal` | `__eu_ai_act__` | `L-` |
+| `retrieve_reviewed_judgments` | `reviewed_judgments` | `__reviewed_judgments__` | `J-` |
+| `retrieve_system_evidence` | `system_evidence` | run's `system_id` | `S-` |
+
+Backend implementations (`app/agent/retrieval_backends.py`):
+- `classic` → `POST {INDEXING_BACKEND_URL}/v1/retrieve`
+- `graph` → `POST {COGNEE_EVAL_URL}/v1/recall`
+- `hierarchical` → stub (returns `[]`, logs info)
+
+All backends are **graceful**: non-200 and `httpx.RequestError` return `[]` and log `agent.retrieve.failed`.
+
+### Questionnaire as direct context
+
+The router fetches `GET {REGISTRY_BACKEND_URL}/v1/systems/{system_id}` and formats `questionnaire_answers` (business + `technical` nested key) into a `QUESTIONNAIRE` section prepended to the user prompt. 404 from registry → 404 to caller.
+
+### Output validator
+
+`app/agent/task_agent.validate_task_result(retrieved, result)` (also used as `@agent.output_validator`):
+1. `retrieved` empty → `ModelRetry` (agent must call at least one tool first)
+2. Unresolved `ref_id` in `source_references` → `review_required=True` + review question naming them
+3. Non-empty `review_questions` → forces `review_required=True`
+
+### Prompts
+
+- `app/agent/prompts/system.md` — system prompt (loaded at agent construction time)
+- `app/agent/prompts/risk_classification.md` — default task text (EU AI Act risk-tier classification); used when `task` is omitted in the run request
+
+### Feedback → cognee loop
+
+`POST /testbed/agent/feedback {run_id, conclusion, reasoning, question?}`:
+1. `POST {COGNEE_EVAL_URL}/v1/evaluate {question}` (question defaults to run's task if omitted)
+2. `POST {COGNEE_EVAL_URL}/v1/feedback {evaluation_id, conclusion, reasoning, supporting_node_ids}`
+3. `PATCH {COGNEE_EVAL_URL}/v1/feedback/{id}/approve`
+
+Returns `{feedback_id, status: "approved"}`. Returns 503 if cognee unreachable.
+
+### `__reviewed_judgments__` sentinel
+
+Reserved `ai_system_id` for the reviewed-judgments knowledge base. Created by `app/seed.py` (idempotent). Users upload expert compliance decisions via the cognee ingest endpoint. The sentinel is filtered out of all system dropdowns (frontend filter on `id.startsWith("__")`).
+
+### Persistence
+
+Agent runs are stored as `TestBedRun` rows with:
+- `kind="agent_run"`
+- `sample_id=system_id` (the registered system)
+- `role="agent"`
+- `enabled_sources=source_backends`
+- `payload={system_id, task, source_backends, result(dict), retrieved_passages, usage}`
+
+### New env vars
+
+| Var | Default | Description |
+|---|---|---|
+| `AI_GATEWAY_URL` | `http://ai-gateway:8000` | AI gateway base URL; serves `POST /v1/messages` (Claude-compatible) |
+| `AGENT_MODEL` | `claude` | Anthropic model name passed to the gateway |
+| `COGNEE_EVAL_URL` | `http://cognee-eval-backend:8014` | Cognee evaluation service base URL |
+
 ## Frontend (`src/api/client.ts`) — split API bases
 
 The MFE hosts two logical UIs with different backends:
