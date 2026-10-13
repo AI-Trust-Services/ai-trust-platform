@@ -159,13 +159,25 @@ def truncate_tables():
 
 @pytest.fixture
 def mock_registry_evaluate():
-    """Patch the httpx call to the registry evaluate endpoint with a canned response."""
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = _STUB_EVALUATE_RESPONSE
+    """Patch httpx calls made by the testbed router.
 
-    async def _mock_post(*args, **kwargs):
-        return mock_resp
+    The router uses a single AsyncClient for both retrieval (document-indexing)
+    and registry evaluate.  We need to handle both:
+    - /v1/retrieve  → return status 200, empty list (no docs indexed in tests)
+    - /v1/classify/evaluate → return status 200, canned evaluation response
+    """
+    mock_evaluate_resp = MagicMock()
+    mock_evaluate_resp.status_code = 200
+    mock_evaluate_resp.json.return_value = _STUB_EVALUATE_RESPONSE
+
+    mock_retrieve_resp = MagicMock()
+    mock_retrieve_resp.status_code = 200
+    mock_retrieve_resp.json.return_value = []
+
+    async def _mock_post(url, *args, **kwargs):
+        if "/retrieve" in url:
+            return mock_retrieve_resp
+        return mock_evaluate_resp
 
     with patch("app.routers.testbed.httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()
@@ -173,7 +185,7 @@ def mock_registry_evaluate():
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client.post = _mock_post
         mock_client_cls.return_value = mock_client
-        yield mock_resp
+        yield mock_evaluate_resp
 
 
 @pytest_asyncio.fixture

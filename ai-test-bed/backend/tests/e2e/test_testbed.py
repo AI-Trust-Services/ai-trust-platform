@@ -88,7 +88,8 @@ async def test_list_runs_empty_initially(client: httpx.AsyncClient):
 async def test_run_context_assembly_with_no_ai_system(
     client: httpx.AsyncClient, mock_registry_evaluate
 ):
-    # tbs-hiring-screener has no ai_system_id → system_docs toggle is a no-op.
+    # tbs-hiring-screener has an ai_system_id but no docs are indexed in tests,
+    # so retrieve returns [] and source_passages is empty — run still completes cleanly.
     r = await client.post(
         "/v1/testbed/run",
         json={
