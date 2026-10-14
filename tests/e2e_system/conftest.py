@@ -37,7 +37,9 @@ ADMIN_PASS = os.environ.get("APP_ADMIN_PASSWORD", "")
 # Unique per session so parallel runs / reruns never collide on Keycloak usernames.
 SUFFIX = os.getenv("E2E_SUFFIX") or uuid.uuid4().hex[:8]
 TEMP_PASS = "E2eTempPass1!"  # temporary password set at user creation (POST /users forces temporary)
-PERM_PASS = "E2eSystem1!"  # permanent password set via the one-time UPDATE_PASSWORD action
+PERM_PASS = (
+    "E2eSystem1!"  # permanent password set via the one-time UPDATE_PASSWORD action
+)
 
 # Session-level state.
 _created_system_ids: list[str] = []
@@ -106,7 +108,9 @@ async def login(
             f"No Keycloak login form at {r.url} for '{username}'. "
             f"Page start:\n{r.text[:500]}"
         )
-        r = await c.post(form["action"], data={"username": username, "password": password})
+        r = await c.post(
+            form["action"], data={"username": username, "password": password}
+        )
 
         update = _pick_form(_forms(r.text), {"password-new", "password-confirm"})
         if update:
@@ -149,14 +153,18 @@ async def _setup() -> None:
     _sessions["admin"] = admin_cookies
     _usernames["admin"] = ADMIN_USER
 
-    await _provision_user(admin_cookies, "engineer", f"e2e-engineer-{SUFFIX}", "ai_engineer")
+    await _provision_user(
+        admin_cookies, "engineer", f"e2e-engineer-{SUFFIX}", "ai_engineer"
+    )
 
 
 async def _provision_user(
     admin_cookies: dict[str, str], key: str, username: str, role: str
 ) -> None:
     """Create a Keycloak user (idempotent) and assign one role, then capture its OIDC session."""
-    async with httpx.AsyncClient(base_url=APP_URL, cookies=admin_cookies, timeout=30) as a:
+    async with httpx.AsyncClient(
+        base_url=APP_URL, cookies=admin_cookies, timeout=30
+    ) as a:
         r = await a.post(
             "/api/users/v1/users",
             json={
@@ -167,7 +175,9 @@ async def _provision_user(
                 "temporaryPassword": TEMP_PASS,
             },
         )
-        assert r.status_code in (201, 409), f"create user {username}: {r.status_code} {r.text}"
+        assert r.status_code in (201, 409), (
+            f"create user {username}: {r.status_code} {r.text}"
+        )
 
         s = await a.get("/api/users/v1/users", params={"search": username})
         assert s.status_code == 200, s.text
@@ -176,7 +186,9 @@ async def _provision_user(
         assert uid, f"user '{username}' not found after creation"
 
         rr = await a.post(f"/api/users/v1/users/{uid}/roles/{role}")
-        assert rr.status_code in (200, 201, 204), f"assign role {role}: {rr.status_code} {rr.text}"
+        assert rr.status_code in (200, 201, 204), (
+            f"assign role {role}: {rr.status_code} {rr.text}"
+        )
 
     _created_user_ids.append(uid)
     _usernames[key] = username
@@ -187,7 +199,9 @@ async def _cleanup() -> None:
     admin_cookies = _sessions.get("admin")
     if not admin_cookies:
         return
-    async with httpx.AsyncClient(base_url=APP_URL, cookies=admin_cookies, timeout=30) as a:
+    async with httpx.AsyncClient(
+        base_url=APP_URL, cookies=admin_cookies, timeout=30
+    ) as a:
         for sid in _created_system_ids:
             r = await a.delete(f"/api/registry/v1/systems/{sid}")
             if r.status_code not in (200, 204, 404):
@@ -206,7 +220,8 @@ async def _cleanup() -> None:
 
 # Imported here so test files can do `from conftest import BUSINESS_ANSWERS, register_system`
 # rather than knowing about the helpers module.
-from helpers import BUSINESS_ANSWERS, VALID_TIERS, register_manual_system as _reg  # noqa: E402
+from helpers import BUSINESS_ANSWERS, VALID_TIERS
+from helpers import register_manual_system as _reg
 
 
 async def register_system(

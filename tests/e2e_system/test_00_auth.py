@@ -22,12 +22,16 @@ async def test_oidc_login_grants_session(engineer):
 
     # A backend reached through the shell proxy (health is mounted at the backend root → /api/registry/health).
     h = await engineer.get("/api/registry/health")
-    assert h.status_code == 200, f"registry health through proxy failed: {h.status_code} {h.text[:200]}"
+    assert h.status_code == 200, (
+        f"registry health through proxy failed: {h.status_code} {h.text[:200]}"
+    )
 
 
 async def test_unauthenticated_request_is_blocked(app_url):
     """Without a session cookie, a protected API call through :8080 is refused (no header bypass)."""
-    async with httpx.AsyncClient(base_url=app_url, follow_redirects=False, timeout=15) as anon:
+    async with httpx.AsyncClient(
+        base_url=app_url, follow_redirects=False, timeout=15
+    ) as anon:
         r = await anon.get("/api/registry/v1/systems")
     assert r.status_code in (302, 401, 403), (
         f"expected the oauth2-proxy auth gate (302/401/403), got {r.status_code}"

@@ -28,7 +28,15 @@ BUSINESS_ANSWERS: dict[str, str] = {
 
 # Valid EU AI Act tiers — for structural assertions in AI-mode tests.
 VALID_TIERS = frozenset(
-    {"prohibited", "gpai-systemic", "gpai-standard", "high", "limited", "minimal", "pending"}
+    {
+        "prohibited",
+        "gpai-systemic",
+        "gpai-standard",
+        "high",
+        "limited",
+        "minimal",
+        "pending",
+    }
 )
 
 

@@ -12,7 +12,6 @@ import os
 
 from conftest import BUSINESS_ANSWERS, register_system
 
-
 # ---------------------------------------------------------------------------
 # 1a — manual_questionnaire registration
 # ---------------------------------------------------------------------------
@@ -28,16 +27,23 @@ async def test_engineer_registers_system(engineer):
     # Step 1: register — intake always returns tier="pending"
     system = await register_system(engineer, name="E2E Reg 1a")
     assert system["id"].startswith("SYS-"), f"unexpected id format: {system['id']}"
-    assert system["tier"] == "pending", f"fresh intake should be 'pending', got {system['tier']!r}"
+    assert system["tier"] == "pending", (
+        f"fresh intake should be 'pending', got {system['tier']!r}"
+    )
 
     sid = system["id"]
 
     # Step 2: set risk flag + business answers via PUT — triggers classify()
     upd = await engineer.put(
         f"/api/registry/v1/systems/{sid}",
-        json={"is_critical_infrastructure": True, "questionnaire_answers": BUSINESS_ANSWERS},
+        json={
+            "is_critical_infrastructure": True,
+            "questionnaire_answers": BUSINESS_ANSWERS,
+        },
     )
-    assert upd.status_code == 200, f"PUT flags failed: {upd.status_code} {upd.text[:400]}"
+    assert upd.status_code == 200, (
+        f"PUT flags failed: {upd.status_code} {upd.text[:400]}"
+    )
     updated = upd.json()
     assert updated["tier"] == "high", (
         f"is_critical_infrastructure=True must yield tier 'high', got {updated['tier']!r}"
@@ -64,7 +70,9 @@ async def test_ai_assisted_turn(engineer):
     )
     assert r.status_code == 200, f"assist/turn failed: {r.status_code} {r.text[:400]}"
     body = r.json()
-    assert "message" in body, f"missing 'message' in assist/turn response: {body.keys()}"
+    assert "message" in body, (
+        f"missing 'message' in assist/turn response: {body.keys()}"
+    )
     assert "extracted_fields" in body, f"missing 'extracted_fields': {body.keys()}"
     assert "complete" in body, f"missing 'complete': {body.keys()}"
     assert body["message"], "assist/turn returned an empty message"
@@ -72,13 +80,17 @@ async def test_ai_assisted_turn(engineer):
 
 async def test_ai_assisted_extract(engineer):
     """Upload a plain-text document to assist/extract; assert extracted_fields is a dict."""
-    fixture = os.path.join(os.path.dirname(__file__), "fixtures", "sample_system_doc.txt")
-    with open(fixture, "rb") as f:
-        r = await engineer.post(
-            "/api/registry/v1/intake/assist/extract",
-            files={"file": ("sample_system_doc.txt", f, "text/plain")},
-        )
-    assert r.status_code == 200, f"assist/extract failed: {r.status_code} {r.text[:400]}"
+    fixture = os.path.join(
+        os.path.dirname(__file__), "fixtures", "sample_system_doc.txt"
+    )
+    file_bytes = open(fixture, "rb").read()  # noqa: ASYNC230, SIM115
+    r = await engineer.post(
+        "/api/registry/v1/intake/assist/extract",
+        files={"file": ("sample_system_doc.txt", file_bytes, "text/plain")},
+    )
+    assert r.status_code == 200, (
+        f"assist/extract failed: {r.status_code} {r.text[:400]}"
+    )
     body = r.json()
     assert "extracted_fields" in body, f"missing 'extracted_fields': {body.keys()}"
     assert isinstance(body["extracted_fields"], dict), (
