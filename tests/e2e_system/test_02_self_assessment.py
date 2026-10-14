@@ -107,7 +107,9 @@ async def test_question_delegation_and_reclaim(
     assert match["answered_at"] is not None, "answered_at should be set after answer"
 
     # Owner reclaims (un-assigns) the question
-    r = await owner.delete(
+    # httpx <0.28 doesn't support json= on delete(); use request() instead.
+    r = await owner.request(
+        "DELETE",
         f"{base}/question-assign",
         json={"section": "business", "question_key": "use_case"},
     )
