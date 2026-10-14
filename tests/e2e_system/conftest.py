@@ -205,16 +205,22 @@ async def _provision_user(
 
 
 async def _cleanup() -> None:
+    # Systems require SYSTEMS_APPROVE or SYSTEMS_WRITE (draft-only).
+    # platform_administrator has only IAM_MANAGE — use compliance (SYSTEMS_APPROVE) instead.
+    sys_cookies = _sessions.get("compliance") or _sessions.get("engineer")
     admin_cookies = _sessions.get("admin")
     if not admin_cookies:
         return
     async with httpx.AsyncClient(
-        base_url=APP_URL, cookies=admin_cookies, timeout=30
+        base_url=APP_URL, cookies=sys_cookies or admin_cookies, timeout=30
     ) as a:
         for sid in _created_system_ids:
             r = await a.delete(f"/api/registry/v1/systems/{sid}")
             if r.status_code not in (200, 204, 404):
                 print(f"Warning: cleanup of system {sid} -> {r.status_code}: {r.text}")
+    async with httpx.AsyncClient(
+        base_url=APP_URL, cookies=admin_cookies, timeout=30
+    ) as a:
         for uid in _created_user_ids:
             r = await a.delete(f"/api/users/v1/users/{uid}")
             if r.status_code not in (200, 204, 404):
@@ -315,13 +321,41 @@ async def contributor():
 # ---------------------------------------------------------------------------
 
 
+async def set_all_questionnaire_answers(
+    client: httpx.AsyncClient,
+    system_id: str,
+) -> None:
+    """PATCH business questionnaire answers on a draft system.
+
+    intake.py hardcodes registration_mode='ai' and does not store questionnaire_answers,
+    so we must PATCH after registration for any test that drives through to approval.
+    Only the business section can be PATCHed in draft state; the technical section requires
+    technical_pending state — pass with_technical_answers=True to drive_to_pending_review
+    to have it PATCH technical answers before submit-technical.
+    """
+    r = await client.patch(
+        f"/api/registry/v1/systems/{system_id}/questionnaire",
+        json={"section": "business", "answers": BUSINESS_ANSWERS},
+    )
+    assert r.status_code == 200, (
+        f"PATCH business answers failed: {r.status_code} {r.text[:300]}"
+    )
+
+
 async def drive_to_pending_review(
     system_id: str,
     owner_client: httpx.AsyncClient,
     engineer_client: httpx.AsyncClient,
     compliance_username: str,
+    *,
+    with_technical_answers: bool = False,
 ) -> None:
-    """Assign + submit-business + submit-technical, asserting each transition via GET."""
+    """Assign + submit-business + submit-technical, asserting each transition via GET.
+
+    Pass with_technical_answers=True for tests that need approval (the approve gate checks
+    REQUIRED_AI_TECHNICAL keys). Technical PATCH is done in technical_pending state before
+    submit-technical, using engineer_client (the technical section owner).
+    """
     base = f"/api/registry/v1/systems/{system_id}/workflow"
 
     r = await owner_client.post(
@@ -342,6 +376,15 @@ async def drive_to_pending_review(
     )
     sys = (await owner_client.get(f"/api/registry/v1/systems/{system_id}")).json()
     assert sys["workflow_status"] == "technical_pending", sys["workflow_status"]
+
+    if with_technical_answers:
+        r = await engineer_client.patch(
+            f"/api/registry/v1/systems/{system_id}/questionnaire",
+            json={"section": "technical", "answers": AI_TECHNICAL_ANSWERS},
+        )
+        assert r.status_code == 200, (
+            f"PATCH technical answers failed: {r.status_code} {r.text[:300]}"
+        )
 
     r = await engineer_client.post(f"{base}/submit-technical", json={})
     assert r.status_code == 200, (

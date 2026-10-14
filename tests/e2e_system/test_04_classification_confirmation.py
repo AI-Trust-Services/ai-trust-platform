@@ -7,7 +7,11 @@
 
 from __future__ import annotations
 
-from conftest import BUSINESS_ANSWERS, drive_to_pending_review, register_system
+from conftest import (
+    drive_to_pending_review,
+    register_system,
+    set_all_questionnaire_answers,
+)
 
 # ---------------------------------------------------------------------------
 # 4a — approval locks risk classification
@@ -16,9 +20,7 @@ from conftest import BUSINESS_ANSWERS, drive_to_pending_review, register_system
 
 async def test_co_approve_locks_classification(owner, engineer, compliance):
     """Approved system rejects risk-flag edits with 422."""
-    system = await register_system(
-        owner, business_answers=BUSINESS_ANSWERS, name="E2E Confirm 4a"
-    )
+    system = await register_system(owner, name="E2E Confirm 4a")
     sid = system["id"]
 
     # Set tier to "high" via is_critical_infrastructure flag
@@ -29,7 +31,12 @@ async def test_co_approve_locks_classification(owner, engineer, compliance):
     assert r.status_code == 200, f"PUT flags failed: {r.status_code} {r.text[:300]}"
     assert r.json()["tier"] == "high"
 
-    await drive_to_pending_review(sid, owner, engineer, compliance.e2e_username)
+    # Store all required questionnaire answers (approve gate needs both business + technical).
+    await set_all_questionnaire_answers(owner, sid)
+
+    await drive_to_pending_review(
+        sid, owner, engineer, compliance.e2e_username, with_technical_answers=True
+    )
 
     # CO approves
     r = await compliance.post(
@@ -59,12 +66,13 @@ async def test_co_approve_locks_classification(owner, engineer, compliance):
 
 async def test_co_corrects_tier_and_role_on_approval(owner, engineer, compliance):
     """CO can override tier and org_role at approve time; GET confirms the overrides."""
-    system = await register_system(
-        owner, business_answers=BUSINESS_ANSWERS, name="E2E Confirm 4b"
-    )
+    system = await register_system(owner, name="E2E Confirm 4b")
     sid = system["id"]
 
-    await drive_to_pending_review(sid, owner, engineer, compliance.e2e_username)
+    await set_all_questionnaire_answers(owner, sid)
+    await drive_to_pending_review(
+        sid, owner, engineer, compliance.e2e_username, with_technical_answers=True
+    )
 
     # CO approves with explicit tier + org_role overrides
     r = await compliance.post(

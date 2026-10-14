@@ -1,6 +1,6 @@
 """Scenario 3 — Risk Classification.
 
-3a. AI-mode governance chain: owner registers with full questionnaire, drives through all
+3a. AI-mode governance chain: owner registers, PATCH full questionnaire, drives through all
     sections. submit-technical triggers LLM reclassify — assert tier in VALID_TIERS (structural,
     no concrete value). CO approves → workflow_status == "approved".
 3b. Bounce-back (manual_questionnaire): CO sends system back for info → owner edits + submits
@@ -10,11 +10,10 @@
 from __future__ import annotations
 
 from conftest import (
-    AI_TECHNICAL_ANSWERS,
-    BUSINESS_ANSWERS,
     VALID_TIERS,
     drive_to_pending_review,
     register_system,
+    set_all_questionnaire_answers,
 )
 
 # ---------------------------------------------------------------------------
@@ -24,16 +23,16 @@ from conftest import (
 
 async def test_full_governance_chain_ai_preclassification(owner, engineer, compliance):
     """AI-mode: drive full governance chain; tier is whatever the LLM returns (stub or real)."""
-    ai_questionnaire = {**BUSINESS_ANSWERS, "technical": AI_TECHNICAL_ANSWERS}
-    system = await register_system(
-        owner,
-        mode="ai",
-        business_answers=ai_questionnaire,
-        name="E2E Risk 3a",
-    )
+    system = await register_system(owner, mode="ai", name="E2E Risk 3a")
     sid = system["id"]
 
-    await drive_to_pending_review(sid, owner, engineer, compliance.e2e_username)
+    # intake hardcodes registration_mode="ai" and ignores questionnaire_answers;
+    # PATCH both sections in draft state before assigning the workflow.
+    await set_all_questionnaire_answers(owner, sid)
+
+    await drive_to_pending_review(
+        sid, owner, engineer, compliance.e2e_username, with_technical_answers=True
+    )
 
     # After submit-technical in AI mode the tier should have been reclassified by the LLM.
     r = await owner.get(f"/api/registry/v1/systems/{sid}")
@@ -62,15 +61,14 @@ async def test_full_governance_chain_ai_preclassification(owner, engineer, compl
 
 async def test_bounce_back_request_info(owner, engineer, compliance):
     """CO sends system back for revision; owner edits + submits-info; CO approves."""
-    system = await register_system(
-        owner,
-        business_answers=BUSINESS_ANSWERS,
-        name="E2E Risk 3b",
-    )
+    system = await register_system(owner, name="E2E Risk 3b")
     sid = system["id"]
     base = f"/api/registry/v1/systems/{sid}/workflow"
 
-    await drive_to_pending_review(sid, owner, engineer, compliance.e2e_username)
+    await set_all_questionnaire_answers(owner, sid)
+    await drive_to_pending_review(
+        sid, owner, engineer, compliance.e2e_username, with_technical_answers=True
+    )
 
     # CO requests more info on the business section
     r = await compliance.post(
@@ -84,12 +82,13 @@ async def test_bounce_back_request_info(owner, engineer, compliance):
     assert got["workflow_status"] == "info_requested", got["workflow_status"]
     assert got["info_requested_section"] == "business"
 
-    # Owner patches the business section with additional detail
+    # Owner patches the business section with additional detail.
+    # QuestionnaireAnswersPatch requires {"section": ..., "answers": {...}}.
     r = await owner.patch(
         f"/api/registry/v1/systems/{sid}/questionnaire",
         json={
             "section": "business",
-            "use_case": "Updated: E2E test use case — expanded detail",
+            "answers": {"use_case": "Updated: E2E test use case — expanded detail"},
         },
     )
     assert r.status_code == 200, (
