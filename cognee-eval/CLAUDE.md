@@ -19,6 +19,11 @@ the ladybug fork, so despite the `.pkl` extension these are Kuzu DBs, *not* Pyth
 most recently written per-dataset `.pkl` and opens it with `kuzu.Database(path, read_only=True)`; the
 `Node`/`EDGE` tables carry the extracted knowledge graph.
 
+**Single dataset for source + feedback** — `ingest_feedback()` calls `cognee.remember()` with
+`dataset_name=_DATASET` (the same dataset as the source PDF), so every approved feedback correction
+merges into the one Kuzu database / one LanceDB collection. There is no N+1 `.pkl` explosion — the
+snapshot exported for production contains a single coherent graph.
+
 ## Running
 
 The component ships disabled by default — set `cogneeEval.enabled: true` in `values.yaml` (or the
@@ -161,9 +166,10 @@ semantic interchange format into a *live writable* remote — the opposite of re
    ghcr.io/<owner>/ai-trust-platform/cognee-graph@sha256:<digest>` (always a digest, never a mutable
    tag) in the prod override, then deploy.
 
-**First-boot safety:** in read-only mode the lifespan runs `consistency_check()` — a `recall()` whose
-returned node ids must resolve in the on-disk Kuzu graph. If the snapshot is torn/empty, `/health`
-returns 503 and the pod never becomes Ready, so a bad artifact never serves traffic.
+**First-boot safety:** in read-only mode the lifespan runs `consistency_check()` — a `recall()` with
+a fixed probe query; if at least one result returns non-empty text the graph is considered healthy.
+If the snapshot is torn/empty, `/health` returns 503 and the pod never becomes Ready, so a bad
+artifact never serves traffic.
 
 > The graph image is a deliberate exception to the "adding a service" checklist: it is **not** in
 > `docker-bake.hcl`, `build-and-load-images.sh`, or `cleanup-images.yml` — it is built only by the
