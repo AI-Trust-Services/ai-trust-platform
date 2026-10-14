@@ -39,6 +39,18 @@ VALID_TIERS = frozenset(
     }
 )
 
+# Required AI-mode technical answers (stored under questionnaire_answers["technical"]).
+# Keys map to REQUIRED_AI_TECHNICAL in questionnaire_required.py.
+AI_TECHNICAL_ANSWERS: dict[str, str] = {
+    "data_and_inputs": "Structured HR data: CVs, employment records, skill assessments",
+    "decision_domain": "HR screening and candidate ranking for open positions",
+    "automation_and_oversight": "Automated shortlist generated; human reviewer makes all final decisions",
+    "affected_people": "Job applicants and internal candidates",
+    "model_nature": "Supervised ML ranking model trained on historical hire outcomes",
+    "user_interaction": "HR staff view ranked shortlists; candidates receive automated notifications",
+    "prohibited_practices": "No prohibited AI practices; human in the loop for all final decisions",
+}
+
 
 async def register_manual_system(
     client: httpx.AsyncClient,

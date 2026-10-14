@@ -156,6 +156,15 @@ async def _setup() -> None:
     await _provision_user(
         admin_cookies, "engineer", f"e2e-engineer-{SUFFIX}", "ai_engineer"
     )
+    await _provision_user(
+        admin_cookies, "owner", f"e2e-owner-{SUFFIX}", "business_owner"
+    )
+    await _provision_user(
+        admin_cookies, "compliance", f"e2e-compliance-{SUFFIX}", "ai_compliance_officer"
+    )
+    await _provision_user(
+        admin_cookies, "contributor", f"e2e-contributor-{SUFFIX}", "ai_engineer"
+    )
 
 
 async def _provision_user(
@@ -220,7 +229,7 @@ async def _cleanup() -> None:
 
 # Imported here so test files can do `from conftest import BUSINESS_ANSWERS, register_system`
 # rather than knowing about the helpers module.
-from helpers import BUSINESS_ANSWERS, VALID_TIERS
+from helpers import AI_TECHNICAL_ANSWERS, BUSINESS_ANSWERS, VALID_TIERS
 from helpers import register_manual_system as _reg
 
 
@@ -278,3 +287,65 @@ async def engineer():
     c = _authed_client("engineer")
     yield c
     await c.aclose()
+
+
+@pytest_asyncio.fixture
+async def owner():
+    c = _authed_client("owner")
+    yield c
+    await c.aclose()
+
+
+@pytest_asyncio.fixture
+async def compliance():
+    c = _authed_client("compliance")
+    yield c
+    await c.aclose()
+
+
+@pytest_asyncio.fixture
+async def contributor():
+    c = _authed_client("contributor")
+    yield c
+    await c.aclose()
+
+
+# ---------------------------------------------------------------------------
+# Workflow helper (importable from test modules)
+# ---------------------------------------------------------------------------
+
+
+async def drive_to_pending_review(
+    system_id: str,
+    owner_client: httpx.AsyncClient,
+    engineer_client: httpx.AsyncClient,
+    compliance_username: str,
+) -> None:
+    """Assign + submit-business + submit-technical, asserting each transition via GET."""
+    base = f"/api/registry/v1/systems/{system_id}/workflow"
+
+    r = await owner_client.post(
+        f"{base}/assign",
+        json={
+            "business_assignee_username": owner_client.e2e_username,
+            "technical_assignee_username": engineer_client.e2e_username,
+            "compliance_officer_username": compliance_username,
+        },
+    )
+    assert r.status_code == 200, f"assign failed: {r.status_code} {r.text[:300]}"
+    sys = (await owner_client.get(f"/api/registry/v1/systems/{system_id}")).json()
+    assert sys["workflow_status"] == "business_pending", sys["workflow_status"]
+
+    r = await owner_client.post(f"{base}/submit-business", json={})
+    assert r.status_code == 200, (
+        f"submit-business failed: {r.status_code} {r.text[:300]}"
+    )
+    sys = (await owner_client.get(f"/api/registry/v1/systems/{system_id}")).json()
+    assert sys["workflow_status"] == "technical_pending", sys["workflow_status"]
+
+    r = await engineer_client.post(f"{base}/submit-technical", json={})
+    assert r.status_code == 200, (
+        f"submit-technical failed: {r.status_code} {r.text[:300]}"
+    )
+    sys = (await owner_client.get(f"/api/registry/v1/systems/{system_id}")).json()
+    assert sys["workflow_status"] == "pending_review", sys["workflow_status"]
