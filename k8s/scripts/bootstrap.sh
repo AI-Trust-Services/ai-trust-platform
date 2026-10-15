@@ -72,6 +72,21 @@ kubectl create secret generic ai-trust-env \
   --from-literal=INGRESS_MINIO_HOST="${INGRESS_MINIO_HOST}" \
   -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
+# Pull secret for private GHCR images (e.g. the cognee-eval read-only graph
+# snapshot). Only created when GHCR_PULL_TOKEN is set in .env — devs who don't
+# pull private images can leave it blank. Mirrors the Gardener deploy, which
+# creates the same-named secret from the CI GHCR_PULL_TOKEN.
+GHCR_OWNER="${GITHUB_REPOSITORY_OWNER:-ai-trust-services}"
+GHCR_OWNER="$(echo "$GHCR_OWNER" | tr '[:upper:]' '[:lower:]')"
+if [[ -n "${GHCR_PULL_TOKEN:-}" ]]; then
+  echo "==> secret/ghcr-pull-secret (private GHCR image pulls)"
+  kubectl create secret docker-registry ghcr-pull-secret \
+    --docker-server=ghcr.io \
+    --docker-username="$GHCR_OWNER" \
+    --docker-password="$GHCR_PULL_TOKEN" \
+    -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+fi
+
 # Flux's HelmRelease valuesFrom has no cross-namespace support — the secret must exist
 # in the same namespace as the HelmRelease (ocm-system). Only the 5 non-sensitive URL/
 # hostname values needed by the FluxDeployer are stored here; all credentials stay in
@@ -80,8 +95,6 @@ echo "==> secret/ai-trust-flux-values-${NAMESPACE} in ocm-system (Helm chart URL
 kubectl create namespace ocm-system --dry-run=client -o yaml | kubectl apply -f -
 OLLAMA_ENABLED="false"
 [[ "${LLM_PROVIDER:-stub}" == "ollama" ]] && OLLAMA_ENABLED="true"
-GHCR_OWNER="${GITHUB_REPOSITORY_OWNER:-ai-trust-services}"
-GHCR_OWNER="$(echo "$GHCR_OWNER" | tr '[:upper:]' '[:lower:]')"
 
 kubectl create secret generic "ai-trust-flux-values-${NAMESPACE}" \
   --from-literal=APP_PUBLIC_URL="${APP_PUBLIC_URL:-}" \
@@ -164,5 +177,33 @@ roleRef:
   name: keycloak-restarter
   apiGroup: rbac.authorization.k8s.io
 EOF
+
+echo "==> prune completed/failed jobs from prior Helm revisions"
+# Helm only prunes resources from the last *successful* release. When multiple
+# upgrades fail in a row the old per-revision jobs (db-migrate-rN, etc.) pile up
+# and clutter the namespace. We keep any job whose name ends in the CURRENT Helm
+# release revision and delete everything older.
+#
+# The current revision is the highest -rN suffix present in the namespace (the
+# most recently created set). We never delete Running/Pending jobs — those belong
+# to a live upgrade that may still be in flight.
+CURRENT_REV=$(kubectl get jobs -n "$NAMESPACE" --no-headers \
+  -o custom-columns=NAME:.metadata.name 2>/dev/null \
+  | grep -oE '\-r[0-9]+$' | grep -oE '[0-9]+' | sort -n | tail -1 || true)
+
+if [[ -n "$CURRENT_REV" ]]; then
+  STALE=$(kubectl get jobs -n "$NAMESPACE" --no-headers \
+    -o custom-columns=NAME:.metadata.name,STATUS:.status.conditions[-1:].type 2>/dev/null \
+    | awk -v rev="$CURRENT_REV" '
+        $1 ~ /-r[0-9]+$/ && $1 !~ ("-r"rev"$") && ($2 == "Complete" || $2 == "Failed") { print $1 }
+      ' || true)
+  if [[ -n "$STALE" ]]; then
+    echo "$STALE" | xargs kubectl delete job -n "$NAMESPACE" --ignore-not-found
+  else
+    echo "no stale jobs to prune"
+  fi
+else
+  echo "no prior jobs found — skipping prune"
+fi
 
 echo "==> bootstrap complete (namespace: $NAMESPACE)"
