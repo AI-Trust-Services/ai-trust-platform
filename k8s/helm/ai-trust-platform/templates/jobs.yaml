@@ -53,8 +53,12 @@ spec:
         {{- include "ai-trust.waitForHttp" (dict "name" "clickhouse" "port" 8123 "path" "/ping" "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:
         - name: clickhouse-migrate
-          image: {{ .Values.image.repository }}/clickhouse-migrate:{{ .Values.image.tag }}
+          # Reuses the audit-backend image (ships libs/clickhouse incl. migrate.py +
+          # migrations/) via a command override — same pattern as testbed-seed. Avoids a
+          # dedicated one-shot image on the cold-start critical path.
+          image: {{ .Values.image.repository }}/audit-backend:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "/app/libs/clickhouse/migrate.py"]
           envFrom:
             - secretRef: { name: {{ .Values.secretName }} } # CLICKHOUSE_USER/CLICKHOUSE_PASSWORD
           env:

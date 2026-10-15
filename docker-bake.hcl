@@ -41,7 +41,6 @@ group "default" {
     "otel-clickhouse-consumer",
     "openfga-provision",
     "db-migrate",
-    "clickhouse-migrate",
     "keycloak-provision",
     "minio",
     "mc",
@@ -217,15 +216,6 @@ target "db-migrate" {
   tags       = [tag("db-migrate")]
   cache-from = ["type=gha,scope=db-migrate"]
   cache-to   = ["type=gha,mode=max,scope=db-migrate"]
-}
-
-target "clickhouse-migrate" {
-  context    = "./libs/clickhouse"
-  dockerfile = "Dockerfile"
-  platforms  = ["linux/amd64"]
-  tags       = [tag("clickhouse-migrate")]
-  cache-from = ["type=gha,scope=clickhouse-migrate"]
-  cache-to   = ["type=gha,mode=max,scope=clickhouse-migrate"]
 }
 
 target "keycloak-provision" {
