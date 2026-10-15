@@ -123,13 +123,6 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/db-migrate:${IMAGE_TAG}
 
-  - name: clickhouse-migrate
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/clickhouse-migrate:${IMAGE_TAG}
-
   - name: keycloak-provision
     type: ociImage
     version: "${VERSION}"

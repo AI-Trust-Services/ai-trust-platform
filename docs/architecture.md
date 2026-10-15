@@ -191,7 +191,7 @@ flowchart TD
     MinIO["minio :9000\n(healthy)"]
     MinIOInit["minio-init\ncreates clickhouse + evidence-files buckets\nthen exits"]
     CH["clickhouse\n(healthy)"]
-    CHMigrate["clickhouse-migrate\nruns migrate.py\nthen exits"]
+    CHMigrate["clickhouse-migrate\nruns migrate.py (audit-backend image)\nthen exits"]
     CHConsumer["otel-clickhouse-consumer"]
 
     PG --> Migrate
@@ -244,7 +244,7 @@ flowchart TD
 
 `db-migrate` is a one-shot container built from `libs/persistence/Dockerfile`. It owns all Postgres migrations — backends never run migrations, they just start the API server.
 
-`clickhouse-migrate` is a one-shot container built from `libs/clickhouse/Dockerfile`. It owns all ClickHouse schema migrations — consumers never run migrations.
+`clickhouse-migrate` is a one-shot Job that owns all ClickHouse schema migrations — consumers never run migrations. It has no dedicated image: it reuses the `audit-backend` image (which already ships `libs/clickhouse` incl. `migrate.py` + `migrations/`) via a `command` override (`python /app/libs/clickhouse/migrate.py`), the same pattern as `testbed-seed`.
 
 `minio-init` is a one-shot container that creates the `clickhouse` and `evidence-files` buckets in MinIO on first startup. ClickHouse depends on it completing before it starts, ensuring the bucket exists before any data part moves to cold storage.
 
@@ -252,6 +252,6 @@ flowchart TD
 
 **If db-migrate fails:** check logs with `kubectl logs job/db-migrate-r<N> -n ai-trust`. Common causes: postgres not ready (check initContainer status), or a bad migration file. Fix the migration, then `make build && make upgrade`.
 
-**If clickhouse-migrate fails:** check logs with `kubectl logs job/clickhouse-migrate-r<N> -n ai-trust`. Common causes: clickhouse not ready, or a bad SQL file. Fix the migration, then `make build && make upgrade`.
+**If clickhouse-migrate fails:** check logs with `kubectl logs job/clickhouse-migrate-r<N> -n ai-trust`. Common causes: clickhouse not ready, or a bad SQL file. Fix the migration, then `make build && make upgrade`. (The Job runs from the `audit-backend` image, so rebuild that image to pick up migration changes.)
 
 **If minio-init fails:** check logs with `kubectl logs job/minio-init-r<N> -n ai-trust`. Most likely cause: MinIO not ready yet. Run `make upgrade` to retry.

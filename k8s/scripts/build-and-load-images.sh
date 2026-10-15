@@ -63,7 +63,6 @@ build openfga-provision . infra/openfga-provision/Dockerfile
 
 # ── one-shot migration images (own context) ──
 build db-migrate ./libs/persistence ./libs/persistence/Dockerfile
-build clickhouse-migrate ./libs/clickhouse ./libs/clickhouse/Dockerfile
 
 # ── other own-context images ──
 build keycloak-provision ./infra/keycloak ./infra/keycloak/Dockerfile

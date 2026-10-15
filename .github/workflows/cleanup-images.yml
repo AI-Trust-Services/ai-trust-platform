@@ -30,7 +30,6 @@ jobs:
           - otel-clickhouse-consumer
           - openfga-provision
           - db-migrate
-          - clickhouse-migrate
           - keycloak-provision
           - shell
           - otel-rmq-bridge
