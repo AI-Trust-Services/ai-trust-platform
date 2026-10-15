@@ -76,19 +76,19 @@ async def test_create_assessment_404_on_missing_framework(client: httpx.AsyncCli
 
 async def test_create_assessment_rejects_disabled_framework(client: httpx.AsyncClient):
     system = await create_system()
-    await client.patch("/v1/frameworks/FRM-ISO-42001", json={"enabled": False})
+    await client.patch("/v1/frameworks/FRM-EU-AI-ACT", json={"enabled": False})
     r = await client.post(
         "/v1/assessments",
         json={
             "ai_system_id": system["id"],
-            "framework_id": "FRM-ISO-42001",
+            "framework_id": "FRM-EU-AI-ACT",
             "title": "X",
             "type": "compliance",
         },
     )
     assert r.status_code == 422
     # Re-enable for other tests
-    await client.patch("/v1/frameworks/FRM-ISO-42001", json={"enabled": True})
+    await client.patch("/v1/frameworks/FRM-EU-AI-ACT", json={"enabled": True})
 
 
 async def test_create_assessment_rejects_decommissioned_system(
@@ -575,8 +575,8 @@ async def test_generated_requirements_linked_to_obligations(client: httpx.AsyncC
 
 
 async def test_high_tier_requirement_ref_is_requirement_id(client: httpx.AsyncClient):
-    # EU High/Limited requirements use the bare Requirement ID as requirement_ref (no ":"),
-    # unlike the retained sets which use "{article_ref}:{slug}".
+    # EU High/Limited requirements use the bare Requirement ID as requirement_ref
+    # (e.g. "P-RM-01", no ":" separator).
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
@@ -649,16 +649,16 @@ async def test_generate_requirements_creates_for_obligations_without_requirement
     # Manually create an obligation (no requirements), then generate.
     system = await create_system(tier="minimal")
     ass = await create_assessment(client, system["id"])
-    # Manual obligation with a template-backed article_ref but no requirements yet.
-    # GOVERN is a retained NIST cluster (risk_category "All") -> generates regardless of tier.
-    await create_obligation(client, ass["id"], article_ref="GOVERN", title="Manual")
-    # The auto-generated minimal obligations already have requirements; only the manual
-    # GOVERN obligation lacks them -> its 1 requirement is generated.
+    # Manual obligation keyed to the P-REG cluster, which carries a "Risk = All"
+    # requirement (P-REG-02) that generates regardless of tier. A minimal-tier
+    # assessment auto-generates no obligations, so this manual one is the only
+    # obligation lacking requirements -> its 1 "All"-risk requirement is generated.
+    await create_obligation(client, ass["id"], article_ref="P-REG", title="Manual")
     r = await client.post(f"/v1/assessments/{ass['id']}/generate-requirements")
     assert r.status_code == 200
     created = r.json()["created"]
     assert len(created) == 1
-    assert created[0]["requirement_ref"] == "GOVERN:AITP-NIST-GOVERN"
+    assert created[0]["requirement_ref"] == "P-REG-02"
 
 
 async def test_generate_requirements_approved_assessment_returns_409(

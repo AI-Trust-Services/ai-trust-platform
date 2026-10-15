@@ -11,8 +11,8 @@ from ai_trust_persistence.database import Base
 class Framework(Base):
     """A regulatory standard or internal policy that generates obligations.
 
-    Platform-owned catalog (EU AI Act, NIST AI RMF, ISO/IEC 42001, …). Seeded
-    by migration 0007; customers enable/disable but do not create the built-ins.
+    Platform-owned catalog (EU AI Act). Seeded by migration 0003; customers
+    enable/disable but do not create the built-ins.
     """
 
     __tablename__ = "frameworks"
