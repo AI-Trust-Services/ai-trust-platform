@@ -32,16 +32,17 @@ def test_all_applies_to_every_tier():
 
 
 def test_high_risk_matches_high_only():
-    # Both the "High" token and the "High-Risk" variant map to the high tier.
-    assert _tier_allows("High-Risk", "high")
+    # EU AI Act templates use the bare "High" token (the legacy "-Risk" variants
+    # from the old AISEC-* library are no longer recognised).
     assert _tier_allows("High", "high")
-    assert not _tier_allows("High-Risk", "minimal")
+    assert not _tier_allows("High-Risk", "high")
+    assert not _tier_allows("High", "minimal")
     assert not _tier_allows("High", "prohibited")
 
 
 def test_limited_tokens():
     assert _tier_allows("Limited", "limited")
-    assert _tier_allows("Limited-Risk", "limited")
+    assert not _tier_allows("Limited-Risk", "limited")
     assert not _tier_allows("Limited", "high")
 
 
@@ -154,7 +155,7 @@ def test_requirements_have_required_fields():
         assert c["title"]
         assert c["description"]
         assert c["category"]
-        assert c.get("risk") or c.get("risk_category")
+        assert c["risk"]
         assert c["requirement_ref"]
 
 

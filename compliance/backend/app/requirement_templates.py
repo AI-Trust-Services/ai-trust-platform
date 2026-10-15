@@ -14,10 +14,9 @@ source catalogue splits one Requirement ID across several rows, the rows are
 merged into a single requirement and each row's expected evidence is appended to the
 description as an "Expected evidence:" line (there is no separate evidence schema).
 
-The generator uses `requirement_ref = t.get("requirement_ref") or f"{article_ref}:{slug}"`
-and `risk = t.get("risk") or t["risk_category"]` (the latter forms tolerate alternate
-template shapes). Hardcoded for the same reason as obligation_templates.py — the
-regulations are law, not configuration.
+Each template carries an explicit `requirement_ref` and `risk` token. Hardcoded for
+the same reason as obligation_templates.py — the regulations are law, not
+configuration.
 """
 
 from __future__ import annotations
@@ -25,13 +24,12 @@ from __future__ import annotations
 import re
 
 # Which source risk tokens apply to each assessment tier. A control is generated
-# for a tier if its risk/risk_category is "All" or shares any token here. The
-# High/Limited tokens without the "-Risk" suffix come from the AI Act Requirements
-# catalogue; the "-Risk" variants come from the retained AISEC-* library.
+# for a tier if its risk is "All" or shares any token here. The tokens come from
+# the AI Act Requirements catalogue.
 _TIER_RISK_CATEGORIES: dict[str, set[str]] = {
     "prohibited": {"Prohibited"},
-    "high": {"High-Risk", "High"},
-    "limited": {"Limited-Risk", "Limited"},
+    "high": {"High"},
+    "limited": {"Limited"},
     "minimal": set(),  # only "All"-risk controls apply
     "gpai-standard": {"GPAI"},
     "gpai-systemic": {"GPAI", "GPAI-Systemic"},  # systemic is a superset
@@ -892,16 +890,14 @@ def requirements_for(
 ) -> list[dict]:
     """Return requirement templates for an obligation cluster at a tier + org_role.
 
-    Templates are filtered by risk tier (`risk` or `risk_category`) *and* by
-    org_role. Returns an empty list when a cluster has no defined requirements, or
-    none survive the tier/role filter — callers treat this as "no requirements to
-    generate" for that obligation (and, at the cluster level, as "drop this
-    obligation entirely").
+    Templates are filtered by risk tier (`risk`) *and* by org_role. Returns an
+    empty list when a cluster has no defined requirements, or none survive the
+    tier/role filter — callers treat this as "no requirements to generate" for that
+    obligation (and, at the cluster level, as "drop this obligation entirely").
     """
     out: list[dict] = []
     for t in _REQUIREMENT_TEMPLATES.get(cluster_id, []):
-        risk = t.get("risk") or t["risk_category"]
-        if _tier_allows(risk, tier) and _role_allows(t.get("role"), org_role):
+        if _tier_allows(t["risk"], tier) and _role_allows(t.get("role"), org_role):
             # Shallow copy so the per-requirement article can be attached without
             # mutating the module-level template dict.
             out.append(

@@ -575,8 +575,8 @@ async def test_generated_requirements_linked_to_obligations(client: httpx.AsyncC
 
 
 async def test_high_tier_requirement_ref_is_requirement_id(client: httpx.AsyncClient):
-    # EU High/Limited requirements use the bare Requirement ID as requirement_ref (no ":"),
-    # unlike the retained sets which use "{article_ref}:{slug}".
+    # EU High/Limited requirements use the bare Requirement ID as requirement_ref
+    # (e.g. "P-RM-01", no ":" separator).
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
