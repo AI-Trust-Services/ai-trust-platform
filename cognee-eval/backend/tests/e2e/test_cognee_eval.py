@@ -7,7 +7,6 @@ All cognee calls are mocked in conftest.py — no AI gateway or Cognee pipeline 
 from __future__ import annotations
 
 import httpx
-import pytest
 
 
 # ── /v1/evaluate ──────────────────────────────────────────────────────────────
