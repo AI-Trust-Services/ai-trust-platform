@@ -78,3 +78,6 @@ artifacts with no meaning for an external import:
 - **Partial success.** Records are validated independently; valid ones are inserted, invalid ones
   reported. Response: `{ "imported": <n>, "failed": [ { "index": <i>, "errors": [...] } ] }`.
 - **Unknown keys** in a record are ignored.
+- **`ground_truth_risk_tier`** is a recognized-but-ignored key: it carries the expected tier for
+  scoring/evaluation of test scenarios and is intentionally dropped on import (never stored). Leave
+  `tier` absent so the record lands as a `pending` stub and gets classified for real.
