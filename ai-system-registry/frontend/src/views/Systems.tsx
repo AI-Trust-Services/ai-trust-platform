@@ -5,7 +5,6 @@ import { TierBadge, LifecycleBadge, FormattedDate } from "../components/Badges";
 import SystemDetail from "../components/SystemDetail";
 import type { UserMap } from "../components/SystemDetail";
 import RegisterModal from "../components/RegisterModal";
-import BatchImportModal from "../components/BatchImportModal";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import { SELECT_CLASS } from "../utils";
@@ -32,7 +31,6 @@ export default function Systems() {
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const { wizardOpen, setWizardOpen, mayWrite, mayApprove } = useModalControls();
-  const [importOpen, setImportOpen] = useState(false);
   const showToast = useToast();
 
   const loadSystems = useCallback(async () => {
@@ -110,7 +108,6 @@ export default function Systems() {
         </select>
         <div className="flex-1" />
         <Button variant="ghost" onClick={loadSystems}><RefreshCw /> Refresh</Button>
-        {mayWrite && <Button variant="outline" onClick={() => setImportOpen(true)}>Import</Button>}
       </div>
 
       <div className="px-6 py-5">
@@ -214,13 +211,6 @@ export default function Systems() {
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
         onSuccess={() => { loadSystems(); loadModels(); }}
-      />
-
-      <BatchImportModal
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        onSuccess={() => { loadSystems(); }}
-        canApprove={mayApprove}
       />
 
       <SystemDetail

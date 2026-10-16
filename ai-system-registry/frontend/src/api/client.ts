@@ -3,7 +3,7 @@ import type {
   Source, Dataset, MetricCreate, SourceCreate, DatasetCreate,
   DatasetPatch, ModelSystemResponse, AISystemFormData, PermissionsResponse, WorkflowStep,
   UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult,
-  QuestionAssignment, AISystemImportResult,
+  QuestionAssignment,
 } from "../types"
 import type { SectionKey } from "../config/questionnaire";
 
@@ -334,12 +334,5 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
-
-  importSystems: (file: File, targetStatus: string) => {
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("target_status", targetStatus);
-    return request<AISystemImportResult>("/intake/batch", { method: "POST", body: fd });
-  },
 };
 
