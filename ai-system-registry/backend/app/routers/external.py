@@ -17,6 +17,7 @@ service principal (``EXTERNAL_API_SERVICE_PRINCIPAL``) so document-indexing's ow
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from typing import Any, Literal
 
 import httpx
@@ -28,7 +29,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.external_auth import require_external_token
-from app.schemas import AISystemResponse
 
 router = APIRouter(
     prefix="/external",
@@ -69,6 +69,77 @@ class SystemAssessmentResponse(BaseModel):
     justification: Any | None = None
 
 
+class ExternalSystemResponse(BaseModel):
+    """Explicit allowlist of the registration fields exposed on the external
+    read API — **never** the full internal ``AISystemResponse``.
+
+    Published: the descriptive registration fields, the questionnaire answers,
+    the EU AI Act classifier flags + headline ``tier``, and ``git_repo_url`` —
+    i.e. the data an off-platform consumer (the AI Test Bed) needs to read or
+    re-run a classification.
+
+    Deliberately withheld (internal operator state, not part of the data
+    contract): assignee/owner usernames and ``git`` *owners* (PII),
+    ``registration_documents`` (MinIO object keys), ``field_confirmations``
+    (UI state), ``workflow_status`` / ``info_requested_section`` /
+    ``registration_mode`` (governance state), the ``compliance`` score, and the
+    classification *detail* ``basis`` / ``annex_iii_area`` /
+    ``classification_rationale`` (served separately by ``/assessment``). Adding a
+    field to the external contract is a conscious edit here, so new internal
+    columns are never silently published.
+    """
+
+    id: str
+    name: str
+    version: str
+    provider: str
+    org_name: str
+    org_role: str
+    description: str
+    intended_purpose: str
+    department: str | None
+    use_case: str | None
+    people_affected: str | None
+    decision_context: str | None
+    system_type: str
+    autonomy_level: str
+    application_url: str
+    provider_country: str
+    deployment_country: str | None
+    eu_output_usage: bool | None
+    eu_market_placement: bool | None
+    lifecycle: str
+    tier: str
+    # EU AI Act classifier flags (inputs to the deterministic classifier).
+    subliminal_manipulation: bool
+    exploits_vulnerability: bool
+    social_scoring_public: bool
+    real_time_biometric_public: bool
+    emotion_recognition_workplace: bool
+    untargeted_facial_scraping: bool
+    predictive_policing: bool
+    biometric_categorisation_sensitive: bool
+    is_biometric_identification: bool
+    is_critical_infrastructure: bool
+    is_education_related: bool
+    is_employment_related: bool
+    is_credit_scoring: bool
+    is_public_service: bool
+    is_law_enforcement: bool
+    is_migration: bool
+    is_judicial_admin: bool
+    is_gpai: bool
+    training_compute_flops: float
+    is_chatbot: bool
+    generates_synthetic_content: bool
+    questionnaire_answers: dict | None
+    git_repo_url: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 async def _get_system_or_404(system_id: str) -> AISystem:
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
@@ -78,11 +149,11 @@ async def _get_system_or_404(system_id: str) -> AISystem:
         return row
 
 
-@router.get("/systems", response_model=list[AISystemResponse])
+@router.get("/systems", response_model=list[ExternalSystemResponse])
 async def list_systems(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-) -> list[AISystemResponse]:
+) -> list[ExternalSystemResponse]:
     async with SessionLocal() as session:
         result = await session.execute(
             select(AISystem)
@@ -90,12 +161,14 @@ async def list_systems(
             .limit(limit)
             .offset(offset)
         )
-        return [AISystemResponse.model_validate(r) for r in result.scalars().all()]
+        return [
+            ExternalSystemResponse.model_validate(r) for r in result.scalars().all()
+        ]
 
 
-@router.get("/systems/{system_id}", response_model=AISystemResponse)
-async def get_system(system_id: str) -> AISystemResponse:
-    return AISystemResponse.model_validate(await _get_system_or_404(system_id))
+@router.get("/systems/{system_id}", response_model=ExternalSystemResponse)
+async def get_system(system_id: str) -> ExternalSystemResponse:
+    return ExternalSystemResponse.model_validate(await _get_system_or_404(system_id))
 
 
 @router.get("/systems/{system_id}/assessment", response_model=SystemAssessmentResponse)

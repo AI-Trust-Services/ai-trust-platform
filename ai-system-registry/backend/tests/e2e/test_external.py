@@ -62,7 +62,38 @@ async def test_list_and_get_systems(client, monkeypatch):
 
     r = await client.get(f"/v1/external/systems/{sid}", headers=_AUTH)
     assert r.status_code == 200
-    assert r.json()["id"] == sid
+    body = r.json()
+    assert body["id"] == sid
+
+    # The external schema is an allowlist of business/classification data …
+    for published in (
+        "questionnaire_answers",
+        "git_repo_url",
+        "is_gpai",
+        "subliminal_manipulation",
+        "tier",
+    ):
+        assert published in body, f"{published} missing from external response"
+
+    # … but internal operator state must not leak.
+    for leaked in (
+        "field_confirmations",
+        "registration_documents",
+        "classification_rationale",
+        "basis",
+        "annex_iii_area",
+        "assignee_username",
+        "business_assignee_username",
+        "technical_assignee_username",
+        "compliance_officer_username",
+        "business_owners",
+        "technical_owners",
+        "workflow_status",
+        "info_requested_section",
+        "registration_mode",
+        "compliance",
+    ):
+        assert leaked not in body, f"{leaked} leaked on external systems response"
 
     r = await client.get("/v1/external/systems/SYS-NOPE", headers=_AUTH)
     assert r.status_code == 404
