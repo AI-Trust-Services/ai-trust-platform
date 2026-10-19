@@ -8,7 +8,8 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 ### Run the full platform (local Kubernetes via kind)
 ```bash
-make up      # kind create cluster + bootstrap + build&load images + helm install
+make prereqs     # first time only — installs kind, kubectl, helm, python@3.12, node, ruff via Homebrew
+make up          # kind create cluster + bootstrap + build&load images + helm install
 make down    # helm uninstall + kind delete cluster
 ```
 Manifests live in `k8s/helm/ai-trust-platform/`.
@@ -55,7 +56,9 @@ make test-e2e            # requires Postgres: make up or docker run postgres
 make test                # all tests
 ```
 - `tests/unit/` — pure unit tests, no DB
-- `tests/e2e/` — full stack via ASGITransport, requires Postgres only (no running server); auto-creates `ai_trust_test` DB and runs migrations on first run
+- `tests/e2e/` — full stack via ASGITransport; auto-creates `ai_trust_test` DB and runs Postgres migrations. Alerts, audit, and monitoring also require ClickHouse (tables created by the conftest with plain `MergeTree()`, no storage policy). All other external services (MinIO, OpenFGA, etc.) are mocked.
+
+**Every backend must have a `tests/e2e/` suite.** E2E tests run automatically as a PR gate via `.github/workflows/microservice-e2e-tests.yml` (job: `Pre-merge check: microservice E2E tests`). Two exceptions to the Postgres requirement: `cognee-eval` uses in-memory SQLite (its own DB, no `ai_trust_persistence`); `decision-trace-analyzer` mocks ClickHouse. When adding a new backend, add a `conftest.py` following the pattern of an existing service of similar type (Postgres-only → see `overview`; Postgres + MinIO mocked → see `compliance`; ClickHouse-only → see `audit`; SQLite + `sys.modules` stubs for heavy packages not installed in CI → see `cognee-eval`).
 
 Workers (`audit-flush-worker`, `policy-checker-worker`, `consumers/clickhouse-consumer`) follow the same pattern but live without a `backend/` subdirectory — `cd <worker-dir>` instead of `cd <component>/backend`.
 
@@ -66,6 +69,8 @@ span services: registry↔compliance shared `ai_systems` data, the evidence→re
 cascade, RBAC denials across backends, and the admin→users internal HTTP call.
 
 ```bash
+make test-e2e                       # per-service e2e tests (kind cluster, forwards Postgres + ClickHouse only)
+make test                           # test-e2e then test-int (full local suite)
 make test-int                       # kind cluster, namespace ai-trust
 ```
 - The `k8s/` make targets are **kind-only** — the namespace is fixed to `ai-trust` and cannot be
@@ -257,6 +262,7 @@ When you add a new service, update all of these together — nothing enforces pa
 - New `depends_on: condition:` → add the matching `waitForTcp`/`waitForHttp`/`waitForJob` initContainer (helpers in `_helpers.tpl`).
 - New one-shot Job → use the `ai-trust.jobName` helper for `metadata.name` (appends `-r<.Release.Revision>`) so each `helm upgrade` creates a new Job name instead of patching an immutable one. Do **not** add `helm.sh/hook` annotations — plain resources with per-revision names are the established pattern here (see `jobs.yaml`). A Job that reuses an existing image (command-override only) does **not** need a new `docker-bake.hcl` target, `build-and-load-images.sh` entry, or OCM resource — see the `testbed-seed` Job (reuses `ai-test-bed-backend` with `command: ["python", "-m", "app.seed"]`) as the reference pattern.
 - Renamed/moved a mounted file (e.g. `infra/*/init.sh`, `otel-pipeline/**/config`) → update both `docker-compose.yml` `volumes:` **and** `bootstrap.sh` `--from-file`. Nothing enforces this in CI — a rename on one side silently breaks the other.
+- **Data-artifact images are a deliberate exception** → the cognee read-only graph snapshot image (`cognee-eval/graph-image/`, pushed to `ghcr.io/<owner>/ai-trust-platform/cognee-graph`) is built **only** by `.github/workflows/promote-graph.yml` on operator-triggered graph promotion. It is intentionally **not** in `docker-bake.hcl` `group "default"`, `build-and-load-images.sh`, or the `cleanup-images.yml` matrix — adding it would break every normal build (no graph present) and let retention prune a digest-pinned prod artifact. OCM `ociImage` registration is deferred. See [cognee-eval/CLAUDE.md](cognee-eval/CLAUDE.md).
 
 ### Adding a new component
 1. Create `new-component/frontend/` and `new-component/backend/`.
@@ -304,7 +310,7 @@ Rule-based alerting. Rules in Postgres, events in ClickHouse. Includes the `poli
 Trace viewer for GenAI spans, reads ClickHouse only. Details → [decision-trace-analyzer/CLAUDE.md](decision-trace-analyzer/CLAUDE.md).
 
 ### compliance/ (port 8007, `/api/compliance/`)
-Governance chain — assessments, obligations, requirements, evidence for EU AI Act / NIST / ISO. Details → [compliance/CLAUDE.md](compliance/CLAUDE.md).
+Governance chain — assessments, obligations, requirements, evidence for the EU AI Act. Details → [compliance/CLAUDE.md](compliance/CLAUDE.md).
 
 ### audit/ (port 8009, `/api/audit/`)
 Immutable audit trail across all platform actions (Postgres buffer → ClickHouse archive). Includes the `audit-flush-worker`. Details → [audit/CLAUDE.md](audit/CLAUDE.md).

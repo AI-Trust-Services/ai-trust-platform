@@ -1,8 +1,19 @@
+# CPU-only PyTorch. Docling pulls torch transitively (docling-ibm-models /
+# torchvision / accelerate), and the default PyPI wheel bundles the CUDA runtime
+# (nvidia-* + triton, ~4 GB of the image). This worker runs Docling strictly on CPU
+# (ingest.build_converter forces AcceleratorDevice.CPU, OCR off by default), so pin the
+# +cpu build from PyTorch's own index — it carries no CUDA libs. The +cpu local version
+# exists only on this index, which makes the resolver deterministic. Keep these two
+# versions in sync with what the pinned docling release requires.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1+cpu
+torchvision==0.29.1+cpu
+
 sqlalchemy==2.0.36
 asyncpg==0.30.0
 minio==7.2.7
 httpx==0.28.1
-docling>=2.15.0
+docling==2.138.0
 -e /app/libs/tenancy
 -e /app/libs/persistence
 -e /app/libs/logging

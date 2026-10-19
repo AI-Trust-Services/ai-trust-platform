@@ -9,10 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.database import init_db
-from app.cognee_client import setup_cognee
+from app.cognee_client import setup_cognee, consistency_check
 from app.routers import evaluate, feedback, graph, ingest, ui
 
 logger = get_logger(__name__)
+
+COGNEE_READONLY = os.environ.get("COGNEE_READONLY", "").lower() in ("1", "true", "yes")
 
 _raw_origins = os.environ.get("ALLOWED_ORIGINS", "")
 _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
@@ -25,10 +27,18 @@ if not _allowed_origins:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.graph_ready = False
     await init_db()
     logger.info("startup.db_ready")
     setup_cognee()
     logger.info("startup.cognee_configured")
+    if COGNEE_READONLY:
+        ok, detail = await consistency_check()
+        app.state.graph_ready = ok
+        if ok:
+            logger.info("startup.graph_ready", extra={"detail": detail})
+        else:
+            logger.error("startup.graph_inconsistent", extra={"detail": detail})
     yield
 
 
@@ -81,13 +91,23 @@ async def logging_middleware(request: Request, call_next) -> Response:
     return response
 
 
-app.include_router(ingest.router, prefix="/v1")
 app.include_router(graph.router, prefix="/v1")
 app.include_router(evaluate.router, prefix="/v1")
-app.include_router(feedback.router, prefix="/v1")
 app.include_router(ui.router)
+
+# Graph-mutating routes are not mounted in read-only prod: ingest calls
+# cognee.remember() and feedback-approve re-ingests into the graph. Unmounting
+# them means they 404, so the frozen snapshot can never be altered in prod.
+if not COGNEE_READONLY:
+    app.include_router(ingest.router, prefix="/v1")
+    app.include_router(feedback.router, prefix="/v1")
 
 
 @app.get("/health")
 async def health() -> Response:
+    if COGNEE_READONLY and not getattr(app.state, "graph_ready", False):
+        return JSONResponse(
+            {"status": "not_ready", "reason": "graph snapshot missing or inconsistent"},
+            status_code=503,
+        )
     return JSONResponse({"status": "ok"})

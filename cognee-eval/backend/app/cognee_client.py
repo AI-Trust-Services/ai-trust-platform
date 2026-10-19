@@ -87,6 +87,34 @@ async def recall(query: str) -> list[dict]:
     return out
 
 
+_PROBE_QUERY = "What are the obligations for high-risk AI systems?"
+
+
+async def consistency_check() -> tuple[bool, str]:
+    """Verify the graph snapshot is present and answerable before serving.
+
+    Run at startup in read-only prod: a torn or empty snapshot (e.g. a bad
+    artifact) must fail readiness rather than serve wrong answers. Validates
+    through the same federated recall() path the product serves from, so it
+    correctly accounts for the full graph (and any merged content) regardless
+    of the on-disk dataset layout — and avoids opening a second Kuzu handle
+    (which would contend with the live process's exclusive lock).
+    """
+    try:
+        results = await recall(_PROBE_QUERY)
+    except Exception as e:  # noqa: BLE001
+        return False, f"recall failed: {e}"
+
+    # A healthy graph returns at least one result with content. We check for
+    # non-empty text rather than a node_id: recall results don't always expose
+    # an id, but an empty/torn graph returns nothing retrievable at all.
+    for r in results:
+        if (r.get("text") or "").strip():
+            return True, f"graph answerable ({len(results)} result(s))"
+
+    return False, "recall returned nothing retrievable — graph missing or empty"
+
+
 async def get_graph_stats() -> dict:
     """Return a high-level summary of the knowledge graph."""
     results = await cognee.search(
@@ -125,8 +153,10 @@ async def answer_question(question: str, passages: list[dict]) -> str:
             "role": "system",
             "content": (
                 "You are an EU AI Act compliance expert. "
-                "Answer the question using only the provided passages. "
-                "If the passages do not contain enough information, say so."
+                "Answer ONLY using the provided passages. "
+                "If the passages do not contain information relevant to the question, "
+                "respond with exactly: 'The knowledge graph does not contain information about this topic.' "
+                "Do NOT use any external knowledge or training data under any circumstances."
             ),
         },
         {
@@ -144,12 +174,14 @@ async def answer_question(question: str, passages: list[dict]) -> str:
 
 
 async def ingest_feedback(feedback_id: str, text: str, node_ids: list[str]) -> None:
-    """Ingest approved feedback as a tagged node into Cognee's graph.
+    """Merge approved feedback into the main knowledge graph.
 
-    Stored in a separate dataset to keep source text and human
-    interpretation distinguishable.
+    Ingested into the same dataset as the source document so cognify() links
+    the feedback's entities into the existing graph (true enrichment), keeping
+    a single graph/.pkl for read-only snapshots. The [FEEDBACK:id] prefix
+    preserves provenance within the one graph.
     """
     tagged = (
         f"[FEEDBACK:{feedback_id}] {text}\nLinked provisions: {', '.join(node_ids)}"
     )
-    await cognee.remember(tagged, dataset_name=f"feedback_{feedback_id}")
+    await cognee.remember(tagged, dataset_name=_DATASET)

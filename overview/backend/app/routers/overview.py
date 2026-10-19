@@ -12,7 +12,6 @@ from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.requirement import Requirement
 from ai_trust_persistence.models.evidence import Evidence, evidence_requirements
-from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.obligation import Obligation
 
@@ -323,36 +322,6 @@ async def get_compliance_stats(
             )
         ).scalar_one()
 
-        # Framework compliance
-        fw_rows = (
-            await session.execute(
-                select(
-                    Framework.id,
-                    Framework.name,
-                    func.count(Obligation.id).label("total"),
-                    func.sum(
-                        case((Obligation.status == "fulfilled", 1), else_=0)
-                    ).label("fulfilled"),
-                )
-                .outerjoin(Obligation, Obligation.framework_id == Framework.id)
-                .where(Framework.enabled == True)
-                .group_by(Framework.id, Framework.name)
-                .order_by(Framework.name)
-            )
-        ).all()
-        framework_compliance = [
-            {
-                "framework_id": r.id,
-                "framework_name": r.name,
-                "total_obligations": int(r.total or 0),
-                "fulfilled": int(r.fulfilled or 0),
-                "score": round(int(r.fulfilled or 0) / int(r.total) * 100, 1)
-                if r.total
-                else None,
-            }
-            for r in fw_rows
-        ]
-
         # Expiring evidence — approved evidence with validity_until within the window,
         # soonest first. (Powers the "Evidence Expiring Soon" widget.)
         # ai_system_id is resolved via evidence_requirements → Requirement.ai_system_id
@@ -443,7 +412,6 @@ async def get_compliance_stats(
             "expiring_soon": int(expiring_count),
             "missing": int(missing_count),
         },
-        "framework_compliance": framework_compliance,
         "upcoming_deadlines": deadlines,
         "risk_heatmap": risk_heatmap,
     }

@@ -9,4 +9,5 @@ clickhouse-connect==0.8.0
 pytest==9.0.3
 pytest-asyncio==1.4.0
 httpx==0.28.1
+PyJWT[crypto]==2.13.0
 psycopg2-binary==2.9.10

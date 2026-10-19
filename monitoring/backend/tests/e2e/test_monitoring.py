@@ -213,14 +213,13 @@ async def test_stats_empty_db(client: httpx.AsyncClient):
     assert body["high_count"] == 0
     assert body["below_50_compliance"] == 0
     assert body["total_models"] == 0
-    assert body["open_weights_count"] == 0
     assert body["by_tier"] == {}
     assert body["by_lifecycle"] == {}
     assert body["by_type"] == {}
     assert body["by_autonomy"] == {}
     assert body["compliance_by_tier"] == {}
     assert body["by_model_type"] == {}
-    assert body["by_model_provider"] == {}
+    assert body["by_model_validation_status"] == {}
     assert body["compliance_histogram"] == {
         "0–20": 0,
         "20–40": 0,
