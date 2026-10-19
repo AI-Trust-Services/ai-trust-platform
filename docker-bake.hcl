@@ -24,8 +24,7 @@ function "tag" {
 group "default" {
   # MVP scope: GenAI-Observability (monitoring, alerts, dta) + Audit + the OTLP
   # telemetry pipeline (otel-rmq-bridge, otel-clickhouse-consumer) are disabled,
-  # which also drops the ClickHouse + RabbitMQ infra. cognee-eval + ai-gateway
-  # are built-but-never-deployed (cogneeEval.enabled=false), so off too.
+  # which also drops the ClickHouse + RabbitMQ infra.
   # Re-enable a line here AND its Helm `enabled` flag + shell proxy entry.
   # See the "MVP scope" section in the root CLAUDE.md.
   targets = [
@@ -63,8 +62,8 @@ group "default" {
     # "audit-frontend",                   # [MVP-off] Audit
     "admin-frontend",
     "ai-test-bed-frontend",
-    # "cognee-eval-backend",              # [MVP-off] never deployed (cogneeEval.enabled=false)
-    # "ai-gateway",                       # [MVP-off] only used by the cognee-eval stack
+    "cognee-eval-backend",
+    "ai-gateway",
   ]
 }
 

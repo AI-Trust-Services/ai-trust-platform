@@ -254,9 +254,8 @@ The platform ships a trimmed **MVP scope**: **Core governance** (registry,
 compliance, overview, users/IAM, admin, shell + Postgres/Keycloak/OpenFGA/MinIO)
 plus the **AI/RAG test-bed** (document-indexing, embedding-service, ai-test-bed).
 **Disabled** for the MVP: **GenAI-Observability** (monitoring, alerts,
-decision-trace-analyzer), the **Audit** trail, the **OTLP telemetry pipeline**
-(otel-collector, otel-rmq-bridge, otel-clickhouse-consumer), and the
-never-deployed **cognee-eval** / **ai-gateway**. Disabling observability + audit
+decision-trace-analyzer), the **Audit** trail, and the **OTLP telemetry pipeline**
+(otel-collector, otel-rmq-bridge, otel-clickhouse-consumer). Disabling observability + audit
 also drops the **ClickHouse** and **RabbitMQ** StatefulSets — they have no other
 consumers (monitoring/alerts/dta/audit are ClickHouse's only readers; the OTLP
 pipeline is RabbitMQ's only user; the indexing worker polls Postgres, not RabbitMQ).
@@ -271,12 +270,10 @@ the layers below; grep `[MVP-off]` to find every toggle.
 | Build (kind) | `k8s/scripts/build-and-load-images.sh` | `MVP_DISABLED` guard in `build()`; override with `--service <name>` |
 | Deploy (MFE pairs) | `values.yaml` `components[].enabled` + `templates/components.yaml` | `enabled: false` skips rendering. Guard is `ne $c.enabled false` → absent/true still renders (existing components need no flag) |
 | Deploy (infra/workers) | `values.yaml` `clickhouse`/`rabbitmq`/`otel`/`policyChecker`/`auditFlush` `.enabled` | each template wrapped in `{{- if .Values.<x>.enabled }}`; the `clickhouse-migrate` Job (jobs.yaml) is gated on `clickhouse.enabled` because it waits on ClickHouse |
-| Deploy (kind) | `values-kind.yaml` `cogneeEval.enabled` | `false` to match the build (Gardener already inherits `false` from `values.yaml`) |
 | Proxy | `shell/nginx.conf` | the service's `location` blocks commented out — **mandatory**: static `proxy_pass` hostnames resolve at nginx startup, so a missing upstream stops the shell (the entry point) from starting at all. Contrast the `/api/cognee/` block, which uses `resolver` + a variable to defer resolution and tolerate absence |
 | Nav | `shell/public/luigi-config.js` | the nav node object commented out |
 
-**Re-enabling a service:** flip its `enabled` flag(s) in `values.yaml` (and
-`values-kind.yaml` for cognee), un-comment its entries in `docker-bake.hcl`,
+**Re-enabling a service:** flip its `enabled` flag(s) in `values.yaml`, un-comment its entries in `docker-bake.hcl`,
 `build-and-load-images.sh`, `shell/nginx.conf`, and `shell/public/luigi-config.js`.
 Then rebuild the image and `make build && make upgrade && make rollout`.
 

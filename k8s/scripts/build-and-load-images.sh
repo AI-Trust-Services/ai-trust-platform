@@ -38,15 +38,14 @@ images=()
 
 # [MVP-off] Images disabled for the MVP scope — mirrors the commented-out entries
 # in docker-bake.hcl group "default". GenAI-Observability + Audit + the OTLP
-# pipeline + the never-deployed cognee-eval stack. build() skips these unless you
-# ask for one explicitly with --service <name>. See root CLAUDE.md "MVP scope".
+# pipeline. build() skips these unless you ask for one explicitly with
+# --service <name>. See root CLAUDE.md "MVP scope".
 MVP_DISABLED=(
   monitoring-backend monitoring-frontend
   alerts-backend alerts-frontend policy-checker-worker
   decision-trace-analyzer-backend decision-trace-analyzer-frontend
   audit-backend audit-frontend audit-flush-worker
   otel-clickhouse-consumer otel-rmq-bridge clickhouse-migrate
-  cognee-eval-backend ai-gateway
 )
 
 build() {
