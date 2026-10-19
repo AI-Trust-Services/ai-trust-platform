@@ -6,6 +6,12 @@ COPY libs/tenancy /app/libs/tenancy
 COPY libs/persistence /app/libs/persistence
 COPY libs/logging /app/libs/logging
 COPY document-indexing-worker/requirements.txt .
+# CPU-only torch (+torchvision, which easyocr in Docling's PDF pipeline pulls
+# in): the default PyPI torch wheel bundles ~2.5 GB of CUDA/nvidia libraries
+# this CPU-only worker never uses. Install the CPU build from PyTorch's CPU
+# index BEFORE the requirements so Docling's torch-dependent models resolve
+# against it — and torchvision doesn't drag a CUDA torch back in.
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # System libraries OpenCV needs at import time (Docling's PDF pipeline pulls in
