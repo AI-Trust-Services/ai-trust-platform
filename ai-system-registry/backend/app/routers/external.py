@@ -12,6 +12,10 @@ Auth here is the static bearer token (``require_external_token``), NOT the
 platform OpenFGA model. For the retrieval proxy the registry forwards a seeded
 service principal (``EXTERNAL_API_SERVICE_PRINCIPAL``) so document-indexing's own
 ``systems:read`` check passes.
+
+Single-tenant only: the bearer caller carries no tenant OIDC claim, so under
+``TENANCY_MODE=jwt`` the tenant middleware fail-closes this whole surface with
+401 before any route here runs. That is by design — see ai-system-registry/CLAUDE.md.
 """
 
 from __future__ import annotations
