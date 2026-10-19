@@ -22,43 +22,49 @@ function "tag" {
 }
 
 group "default" {
+  # MVP scope: GenAI-Observability (monitoring, alerts, dta) + Audit + the OTLP
+  # telemetry pipeline (otel-rmq-bridge, otel-clickhouse-consumer) are disabled,
+  # which also drops the ClickHouse + RabbitMQ infra. cognee-eval + ai-gateway
+  # are built-but-never-deployed (cogneeEval.enabled=false), so off too.
+  # Re-enable a line here AND its Helm `enabled` flag + shell proxy entry.
+  # See the "MVP scope" section in the root CLAUDE.md.
   targets = [
     "users-backend",
     "ai-system-registry-backend",
-    "monitoring-backend",
+    # "monitoring-backend",               # [MVP-off] GenAI-Observability
     "overview-backend",
-    "alerts-backend",
+    # "alerts-backend",                   # [MVP-off] GenAI-Observability
     "compliance-backend",
-    "decision-trace-analyzer-backend",
-    "policy-checker-worker",
+    # "decision-trace-analyzer-backend",  # [MVP-off] GenAI-Observability
+    # "policy-checker-worker",            # [MVP-off] GenAI-Observability (alerts worker)
     "embedding-service",
     "document-indexing-backend",
     "document-indexing-worker",
     "ai-test-bed-backend",
-    "audit-backend",
-    "audit-flush-worker",
+    # "audit-backend",                    # [MVP-off] Audit
+    # "audit-flush-worker",               # [MVP-off] Audit
     "admin-backend",
-    "otel-clickhouse-consumer",
+    # "otel-clickhouse-consumer",         # [MVP-off] OTLP pipeline (needs RabbitMQ+ClickHouse)
     "openfga-provision",
     "db-migrate",
-    "clickhouse-migrate",
+    # "clickhouse-migrate",               # [MVP-off] ClickHouse schema (no ClickHouse in MVP)
     "keycloak-provision",
     "minio",
     "mc",
     "shell",
-    "otel-rmq-bridge",
+    # "otel-rmq-bridge",                  # [MVP-off] OTLP pipeline (needs RabbitMQ)
     "ai-system-registry-frontend",
-    "monitoring-frontend",
+    # "monitoring-frontend",              # [MVP-off] GenAI-Observability
     "overview-frontend",
-    "alerts-frontend",
+    # "alerts-frontend",                  # [MVP-off] GenAI-Observability
     "compliance-frontend",
     "users-frontend",
-    "decision-trace-analyzer-frontend",
-    "audit-frontend",
+    # "decision-trace-analyzer-frontend", # [MVP-off] GenAI-Observability
+    # "audit-frontend",                   # [MVP-off] Audit
     "admin-frontend",
     "ai-test-bed-frontend",
-    "cognee-eval-backend",
-    "ai-gateway",
+    # "cognee-eval-backend",              # [MVP-off] never deployed (cogneeEval.enabled=false)
+    # "ai-gateway",                       # [MVP-off] only used by the cognee-eval stack
   ]
 }
 
