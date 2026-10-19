@@ -101,7 +101,8 @@
         viewUrl: "/ai-test-bed/",
         navigationContext: "ai-test-bed",
       },
-      {
+      // [MVP-off] GenAI-Observability — services not deployed. See root CLAUDE.md "MVP scope".
+      /* {
         pathSegment: "decision-trace-analyzer",
         label: "Trace Explorer",
         icon: "detail-view",
@@ -121,7 +122,7 @@
         icon: "alert",
         viewUrl: "/alerts/",
         navigationContext: "alerts",
-      },
+      }, */
       {
         pathSegment: "assessments",
         label: "Assessments",
@@ -174,14 +175,15 @@
         navigationContext: "users-roles",
         viewGroup: "users",
       },
-      {
+      // [MVP-off] Audit — service not deployed. See root CLAUDE.md "MVP scope".
+      /* {
         pathSegment: "audit",
         label: "Audit Trail",
         icon: "activity-2",
         viewUrl: "/audit/",
         navigationContext: "audit",
         viewGroup: "audit",
-      },
+      }, */
       {
         pathSegment: "mail-service",
         label: "Mail Service",
