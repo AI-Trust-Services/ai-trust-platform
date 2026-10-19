@@ -164,6 +164,7 @@ components:
     extraEnv:
       OPENFGA_URL: http://openfga:8080
       KEYCLOAK_URL: http://keycloak:8080
+      AUDIT_ENABLED: "false" # [MVP-off] no flush worker to drain the audit buffer
     dependsOnJobs: [db-migrate, openfga-provision]
     dependsOnServices:
       - name: minio
@@ -211,6 +212,7 @@ components:
     rootPath: /api/compliance
     extraEnv:
       OPENFGA_URL: http://openfga:8080
+      AUDIT_ENABLED: "false" # [MVP-off] no flush worker to drain the audit buffer
     dependsOnJobs: [db-migrate, openfga-provision]
     dependsOnServices:
       - name: minio
@@ -259,6 +261,7 @@ components:
     extraEnv:
       OPENFGA_URL: http://openfga:8080
       MINIO_ENDPOINT: minio:9000
+      AUDIT_ENABLED: "false" # [MVP-off] no flush worker to drain the audit buffer
     dependsOnJobs: [db-migrate, minio-init, openfga-provision]
     dependsOnServices: []
     openfgaConfig: true

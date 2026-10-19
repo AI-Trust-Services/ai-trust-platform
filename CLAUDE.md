@@ -271,11 +271,15 @@ the layers below; grep `[MVP-off]` to find every toggle.
 | Deploy (MFE pairs) | `values.yaml` `components[].enabled` + `templates/components.yaml` | `enabled: false` skips rendering. Guard is `ne $c.enabled false` → absent/true still renders (existing components need no flag) |
 | Deploy (infra/workers) | `values.yaml` `clickhouse`/`rabbitmq`/`otel`/`policyChecker`/`auditFlush` `.enabled` | each template wrapped in `{{- if .Values.<x>.enabled }}`; the `clickhouse-migrate` Job (jobs.yaml) is gated on `clickhouse.enabled` because it waits on ClickHouse |
 | Proxy | `shell/nginx.conf` | the service's `location` blocks commented out — **mandatory**: static `proxy_pass` hostnames resolve at nginx startup, so a missing upstream stops the shell (the entry point) from starting at all. Contrast the `/api/cognee/` block, which uses `resolver` + a variable to defer resolution and tolerate absence |
-| Nav | `shell/public/luigi-config.js` | the nav node object commented out |
+| Nav | `shell/public/luigi-config.js` | the nav node object commented out; the shell-bar alerts bell injection block (linked to the removed `/home/alerts` node) is also commented out |
+| Audit writes | `values.yaml` `components[].extraEnv.AUDIT_ENABLED` | `"false"` on the registry/compliance/admin backends makes `log_audit_event` a no-op (`libs/persistence/ai_trust_persistence/audit.py`). Without this the Postgres `audit_events` buffer grows unbounded — the audit-flush-worker that drains it is MVP-off |
 
-**Re-enabling a service:** flip its `enabled` flag(s) in `values.yaml`, un-comment its entries in `docker-bake.hcl`,
-`build-and-load-images.sh`, `shell/nginx.conf`, and `shell/public/luigi-config.js`.
+**Re-enabling a service:** flip its `enabled` flag(s) in `values.yaml`, un-comment its target in `docker-bake.hcl`,
+remove it from the `MVP_DISABLED` array in `build-and-load-images.sh`, and un-comment its entries in
+`shell/nginx.conf` and `shell/public/luigi-config.js`.
 Then rebuild the image and `make build && make upgrade && make rollout`.
+When re-enabling **Audit**, also remove the `AUDIT_ENABLED: "false"` line from the registry, compliance,
+and admin `extraEnv` blocks so those backends resume writing audit events.
 
 **Deliberately left untouched:**
 - `.ocm/component-constructor.yaml` keeps **all** image resources. `ocm transfer`
@@ -283,9 +287,6 @@ Then rebuild the image and `make build && make upgrade && make rollout`.
   them — a listed-but-unbuilt image is a harmless dangling reference, whereas a
   *missing* OCM entry for a *deployed* image ships broken (see "Adding a new
   service"). Keeping the list complete makes re-enabling safe.
-- The shell-bar alerts bell (`luigi-config.js`) still polls `/api/alerts/v1/count`;
-  it's guarded by `alerts:read` and swallows errors, so it fails silently rather
-  than being removed from the shell-bar injection.
 - `tests/integration/` still exercises the disabled backends and will fail against
   an MVP deployment — it is not a PR gate (see "Integration tests" above).
 
