@@ -243,6 +243,50 @@ Static HTML + `luigi-config.js` served by nginx (Luigi core from CDN). Nav nodes
 - If a pod restarts and nginx returns 502, run `kubectl rollout restart deployment/shell -n ai-trust` to clear the stale DNS cache.
 - **Sidebar** — `responsiveNavigation: "Fiori3"`, custom animated hamburger injected via `luigiAfterInit`, `sideNavigation.collapsed: true`. Alerts is `hideFromNav: true` (reached via bell badge). `defaultChildNode: "overview"`. "Sign out" button injected into the shell bar, links to `/oauth2/sign_out`.
 
+## MVP scope — disabling services without removing code
+
+The platform ships a trimmed **MVP scope**: **Core governance** (registry,
+compliance, overview, users/IAM, admin, shell + Postgres/Keycloak/OpenFGA/MinIO)
+plus the **AI/RAG test-bed** (document-indexing, embedding-service, ai-test-bed).
+**Disabled** for the MVP: **GenAI-Observability** (monitoring, alerts,
+decision-trace-analyzer), the **Audit** trail, the **OTLP telemetry pipeline**
+(otel-collector, otel-rmq-bridge, otel-clickhouse-consumer), and the
+never-deployed **cognee-eval** / **ai-gateway**. Disabling observability + audit
+also drops the **ClickHouse** and **RabbitMQ** StatefulSets — they have no other
+consumers (monitoring/alerts/dta/audit are ClickHouse's only readers; the OTLP
+pipeline is RabbitMQ's only user; the indexing worker polls Postgres, not RabbitMQ).
+
+**Nothing is deleted** — every disabled component's source, Dockerfile, template
+and manifest entry stays in the repo. A service is switched off by config across
+the layers below; grep `[MVP-off]` to find every toggle.
+
+| Layer | File | How it's toggled |
+|---|---|---|
+| Build (CI) | `docker-bake.hcl` `group "default"` | image commented out of the build list (the `target` block stays — build it ad-hoc with `docker buildx bake <name>`) |
+| Build (kind) | `k8s/scripts/build-and-load-images.sh` | `MVP_DISABLED` guard in `build()`; override with `--service <name>` |
+| Deploy (MFE pairs) | `values.yaml` `components[].enabled` + `templates/components.yaml` | `enabled: false` skips rendering. Guard is `ne $c.enabled false` → absent/true still renders (existing components need no flag) |
+| Deploy (infra/workers) | `values.yaml` `clickhouse`/`rabbitmq`/`otel`/`policyChecker`/`auditFlush` `.enabled` | each template wrapped in `{{- if .Values.<x>.enabled }}`; the `clickhouse-migrate` Job (jobs.yaml) is gated on `clickhouse.enabled` because it waits on ClickHouse |
+| Deploy (kind) | `values-kind.yaml` `cogneeEval.enabled` | `false` to match the build (Gardener already inherits `false` from `values.yaml`) |
+| Proxy | `shell/nginx.conf` | the service's `location` blocks commented out — **mandatory**: static `proxy_pass` hostnames resolve at nginx startup, so a missing upstream stops the shell (the entry point) from starting at all. Contrast the `/api/cognee/` block, which uses `resolver` + a variable to defer resolution and tolerate absence |
+| Nav | `shell/public/luigi-config.js` | the nav node object commented out |
+
+**Re-enabling a service:** flip its `enabled` flag(s) in `values.yaml` (and
+`values-kind.yaml` for cognee), un-comment its entries in `docker-bake.hcl`,
+`build-and-load-images.sh`, `shell/nginx.conf`, and `shell/public/luigi-config.js`.
+Then rebuild the image and `make build && make upgrade && make rollout`.
+
+**Deliberately left untouched:**
+- `.ocm/component-constructor.yaml` keeps **all** image resources. `ocm transfer`
+  runs without `--copy-resources`, so it references images by URL and never pulls
+  them — a listed-but-unbuilt image is a harmless dangling reference, whereas a
+  *missing* OCM entry for a *deployed* image ships broken (see "Adding a new
+  service"). Keeping the list complete makes re-enabling safe.
+- The shell-bar alerts bell (`luigi-config.js`) still polls `/api/alerts/v1/count`;
+  it's guarded by `alerts:read` and swallows errors, so it fails silently rather
+  than being removed from the shell-bar injection.
+- `tests/integration/` still exercises the disabled backends and will fail against
+  an MVP deployment — it is not a PR gate (see "Integration tests" above).
+
 ## Components
 
 Each component has `frontend/` (nginx, internal) and `backend/` (FastAPI, internal). All traffic routes through `:8080` via the shell proxy. **Per-component detail lives in each component's own `CLAUDE.md`** (linked below) and loads on demand when you work in that directory.
