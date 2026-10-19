@@ -267,6 +267,7 @@ the layers below; grep `[MVP-off]` to find every toggle.
 | Layer | File | How it's toggled |
 |---|---|---|
 | Build (CI) | `docker-bake.hcl` `group "default"` | image commented out of the build list (the `target` block stays — build it ad-hoc with `docker buildx bake <name>`) |
+| OCM (CI) | `.ocm/component-constructor.yaml` | `ociImage` resource commented out — **mandatory**: `ocm add componentversions` resolves the digest of every listed image, so a listed-but-unbuilt image aborts the deploy with `cannot determine digest: ... not found`. Must mirror the bake list exactly |
 | Build (kind) | `k8s/scripts/build-and-load-images.sh` | `MVP_DISABLED` guard in `build()`; override with `--service <name>` |
 | Deploy (MFE pairs) | `values.yaml` `components[].enabled` + `templates/components.yaml` | `enabled: false` skips rendering. Guard is `ne $c.enabled false` → absent/true still renders (existing components need no flag) |
 | Deploy (infra/workers) | `values.yaml` `clickhouse`/`rabbitmq`/`otel`/`policyChecker`/`auditFlush` `.enabled` | each template wrapped in `{{- if .Values.<x>.enabled }}`; the `clickhouse-migrate` Job (jobs.yaml) is gated on `clickhouse.enabled` because it waits on ClickHouse |
@@ -274,19 +275,28 @@ the layers below; grep `[MVP-off]` to find every toggle.
 | Nav | `shell/public/luigi-config.js` | the nav node object commented out; the shell-bar alerts bell injection block (linked to the removed `/home/alerts` node) is also commented out |
 | Audit writes | `values.yaml` `components[].extraEnv.AUDIT_ENABLED` | `"false"` on the registry/compliance/admin backends makes `log_audit_event` a no-op (`libs/persistence/ai_trust_persistence/audit.py`). Without this the Postgres `audit_events` buffer grows unbounded — the audit-flush-worker that drains it is MVP-off |
 
-**Re-enabling a service:** flip its `enabled` flag(s) in `values.yaml`, un-comment its target in `docker-bake.hcl`,
+**Re-enabling a service:** flip its `enabled` flag(s) in `values.yaml`, un-comment its target in `docker-bake.hcl`
+`group "default"`, un-comment its `ociImage` entry in `.ocm/component-constructor.yaml` (must match the bake list —
+an unbuilt-but-listed image breaks `ocm add componentversions`),
 remove it from the `MVP_DISABLED` array in `build-and-load-images.sh`, and un-comment its entries in
 `shell/nginx.conf` and `shell/public/luigi-config.js`.
 Then rebuild the image and `make build && make upgrade && make rollout`.
 When re-enabling **Audit**, also remove the `AUDIT_ENABLED: "false"` line from the registry, compliance,
 and admin `extraEnv` blocks so those backends resume writing audit events.
 
+**OCM descriptor tracks the build list:**
+- `.ocm/component-constructor.yaml` lists only the images that are actually built.
+  Every `[MVP-off]` image is commented out here too, mirroring `docker-bake.hcl`.
+  `ocm transfer` never pulls images (it runs without `--copy-resources`), but the
+  earlier `ocm add componentversions` step **resolves the digest of every listed
+  image** — so a listed-but-unbuilt image is *not* harmless: it aborts the build
+  with `cannot determine digest: oci artifact ... not found`. A *missing* OCM entry
+  for a *deployed* image ships broken (see "Adding a new service"), so the rule is:
+  an image must be in this file **iff** it is in `docker-bake.hcl` `group "default"`.
+  When re-enabling a service, un-comment its entry here in the same step you
+  un-comment it in `docker-bake.hcl`.
+
 **Deliberately left untouched:**
-- `.ocm/component-constructor.yaml` keeps **all** image resources. `ocm transfer`
-  runs without `--copy-resources`, so it references images by URL and never pulls
-  them — a listed-but-unbuilt image is a harmless dangling reference, whereas a
-  *missing* OCM entry for a *deployed* image ships broken (see "Adding a new
-  service"). Keeping the list complete makes re-enabling safe.
 - `tests/integration/` still exercises the disabled backends and will fail against
   an MVP deployment — it is not a PR gate (see "Integration tests" above).
 

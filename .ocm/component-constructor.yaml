@@ -25,12 +25,13 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/ai-system-registry-backend:${IMAGE_TAG}
 
-  - name: monitoring-backend
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/monitoring-backend:${IMAGE_TAG}
+  # [MVP-off] GenAI-Observability — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: monitoring-backend
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/monitoring-backend:${IMAGE_TAG}
 
   - name: overview-backend
     type: ociImage
@@ -39,12 +40,13 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/overview-backend:${IMAGE_TAG}
 
-  - name: alerts-backend
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/alerts-backend:${IMAGE_TAG}
+  # [MVP-off] GenAI-Observability — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: alerts-backend
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/alerts-backend:${IMAGE_TAG}
 
   - name: compliance-backend
     type: ociImage
@@ -53,19 +55,21 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/compliance-backend:${IMAGE_TAG}
 
-  - name: decision-trace-analyzer-backend
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/decision-trace-analyzer-backend:${IMAGE_TAG}
+  # [MVP-off] GenAI-Observability — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: decision-trace-analyzer-backend
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/decision-trace-analyzer-backend:${IMAGE_TAG}
 
-  - name: policy-checker-worker
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/policy-checker-worker:${IMAGE_TAG}
+  # [MVP-off] GenAI-Observability (alerts worker) — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: policy-checker-worker
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/policy-checker-worker:${IMAGE_TAG}
 
   - name: embedding-service
     type: ociImage
@@ -102,12 +106,13 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/ai-test-bed-frontend:${IMAGE_TAG}
 
-  - name: otel-clickhouse-consumer
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/otel-clickhouse-consumer:${IMAGE_TAG}
+  # [MVP-off] OTLP pipeline (needs RabbitMQ+ClickHouse) — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: otel-clickhouse-consumer
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/otel-clickhouse-consumer:${IMAGE_TAG}
 
   - name: openfga-provision
     type: ociImage
@@ -123,12 +128,13 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/db-migrate:${IMAGE_TAG}
 
-  - name: clickhouse-migrate
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/clickhouse-migrate:${IMAGE_TAG}
+  # [MVP-off] ClickHouse schema (no ClickHouse in MVP) — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: clickhouse-migrate
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/clickhouse-migrate:${IMAGE_TAG}
 
   - name: keycloak-provision
     type: ociImage
@@ -158,12 +164,13 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/shell:${IMAGE_TAG}
 
-  - name: otel-rmq-bridge
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/otel-rmq-bridge:${IMAGE_TAG}
+  # [MVP-off] OTLP pipeline (needs RabbitMQ) — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: otel-rmq-bridge
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/otel-rmq-bridge:${IMAGE_TAG}
 
   - name: ai-system-registry-frontend
     type: ociImage
@@ -172,12 +179,13 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/ai-system-registry-frontend:${IMAGE_TAG}
 
-  - name: monitoring-frontend
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/monitoring-frontend:${IMAGE_TAG}
+  # [MVP-off] GenAI-Observability — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: monitoring-frontend
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/monitoring-frontend:${IMAGE_TAG}
 
   - name: overview-frontend
     type: ociImage
@@ -186,12 +194,13 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/overview-frontend:${IMAGE_TAG}
 
-  - name: alerts-frontend
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/alerts-frontend:${IMAGE_TAG}
+  # [MVP-off] GenAI-Observability — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: alerts-frontend
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/alerts-frontend:${IMAGE_TAG}
 
   - name: compliance-frontend
     type: ociImage
@@ -207,33 +216,37 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/users-frontend:${IMAGE_TAG}
 
-  - name: decision-trace-analyzer-frontend
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/decision-trace-analyzer-frontend:${IMAGE_TAG}
+  # [MVP-off] GenAI-Observability — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: decision-trace-analyzer-frontend
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/decision-trace-analyzer-frontend:${IMAGE_TAG}
 
-  - name: audit-backend
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/audit-backend:${IMAGE_TAG}
+  # [MVP-off] Audit — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: audit-backend
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/audit-backend:${IMAGE_TAG}
 
-  - name: audit-frontend
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/audit-frontend:${IMAGE_TAG}
+  # [MVP-off] Audit — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: audit-frontend
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/audit-frontend:${IMAGE_TAG}
 
-  - name: audit-flush-worker
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/audit-flush-worker:${IMAGE_TAG}
+  # [MVP-off] Audit — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
+  # - name: audit-flush-worker
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/audit-flush-worker:${IMAGE_TAG}
 
   - name: admin-backend
     type: ociImage
