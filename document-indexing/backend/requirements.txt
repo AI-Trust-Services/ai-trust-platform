@@ -4,7 +4,7 @@ pydantic==2.10.3
 minio==7.2.7
 python-multipart==0.0.31
 httpx==0.28.1
-PyJWT[crypto]==2.13.0
+PyJWT[crypto]==2.15.1
 PyYAML==6.0.2
 -e /app/libs/tenancy
 -e /app/libs/persistence

@@ -7,9 +7,10 @@
        .Release.Revision, so every deploy renders a NEW Job name. That makes the
        upgrade a create (not a patch of an existing completed Job), which
        sidesteps the Kubernetes Job immutability error (`spec.template: field is
-       immutable`) that broke Flux/Gardener upgrades. Helm prunes the prior
-       revision's Job automatically since it's no longer in the manifest — no
-       ttlSecondsAfterFinished, no CI-side `kubectl delete`. On a fresh install
+       immutable`) that broke Flux/Gardener upgrades. Pruning of prior-revision
+       jobs is handled by bootstrap.sh before each upgrade — Helm only prunes
+       resources from the last *successful* release, so consecutive failures
+       would accumulate stale jobs without the explicit cleanup. On a fresh install
        these apply in the same pass as the infra Deployments; each Job's
        waitForTcp/waitForHttp initContainer blocks until its backing service is
        reachable, so there is no pre-install hook ordering to deadlock on.

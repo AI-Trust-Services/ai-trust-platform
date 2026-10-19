@@ -329,9 +329,18 @@ async def test_attention_includes_high_risk_low_compliance_on_market(
         mc = _model()
         session.add(mc)
         await session.flush()
-        session.add(_sys(tier="high", lifecycle="market", compliance=30.0))
-        # high on market but compliance >= 50 → not in attention
-        session.add(_sys(tier="high", lifecycle="market", compliance=60.0))
+        low_sys = _sys(tier="high", lifecycle="market", compliance=30.0)
+        high_sys = _sys(tier="high", lifecycle="market", compliance=60.0)
+        session.add(low_sys)
+        session.add(high_sys)
+        await session.flush()
+        # Link the model card to the high-compliance system so it doesn't also
+        # appear in attention under the "no model card" rule.
+        await session.execute(
+            pg_insert(AISystemModelCard.__table__)
+            .values(system_id=high_sys.id, model_card_id=mc.id)
+            .on_conflict_do_nothing()
+        )
         await session.commit()
 
     r = await client.get("/v1/stats")
@@ -391,8 +400,7 @@ async def test_attention_excludes_clean_systems(client: httpx.AsyncClient):
 #
 # FK chain: Framework <- Assessment <- Obligation <- Requirement (obligation_id FK).
 # Evidence links to Requirements via evidence_requirements M2M. Obligation.assessment_id is NOT NULL,
-# so every obligation needs a parent assessment. `frameworks` is seeded by
-# migrations and never truncated, so framework_compliance is never empty.
+# so every obligation needs a parent assessment.
 
 
 def _fw(**kwargs) -> Framework:
@@ -443,7 +451,6 @@ async def test_compliance_stats_response_shape(client: httpx.AsyncClient):
     assert {
         "obligation_status",
         "evidence_gap",
-        "framework_compliance",
         "upcoming_deadlines",
         "risk_heatmap",
     } <= body.keys()
@@ -451,8 +458,7 @@ async def test_compliance_stats_response_shape(client: httpx.AsyncClient):
 
 
 async def test_compliance_stats_empty_db(client: httpx.AsyncClient):
-    # No user data — but frameworks are seeded by migrations, so
-    # framework_compliance carries a row per enabled framework (0 obligations each).
+    # No user data -> all compliance aggregates are empty.
     r = await client.get("/v1/compliance-stats")
     assert r.status_code == 200
     body = r.json()
@@ -460,16 +466,6 @@ async def test_compliance_stats_empty_db(client: httpx.AsyncClient):
     assert body["evidence_gap"] == {"expired": 0, "expiring_soon": 0, "missing": 0}
     assert body["upcoming_deadlines"] == []
     assert body["risk_heatmap"] == []
-    for fw in body["framework_compliance"]:
-        assert {
-            "framework_id",
-            "framework_name",
-            "total_obligations",
-            "fulfilled",
-            "score",
-        } <= fw.keys()
-        assert fw["total_obligations"] == 0
-        assert fw["score"] is None  # no obligations -> null score, not 0%
 
 
 async def test_obligation_status_counts(client: httpx.AsyncClient):
@@ -546,7 +542,9 @@ async def test_expired_counts_only_approved(client: httpx.AsyncClient):
         session.add(_sys(id=sys_id))
         await session.flush()
         session.add(_evd(status="approved", validity_until=today - timedelta(days=1)))
-        session.add(_evd(status="pending", validity_until=today - timedelta(days=1)))
+        session.add(
+            _evd(status="awaiting_review", validity_until=today - timedelta(days=1))
+        )
         await session.commit()
 
     r = await client.get("/v1/compliance-stats")
@@ -615,34 +613,6 @@ async def test_missing_count_excludes_obligations_with_approved_evidence(
     r = await client.get("/v1/compliance-stats")
     # in_progress but has approved evidence linked via control -> not counted as missing
     assert r.json()["evidence_gap"]["missing"] == 0
-
-
-async def test_framework_compliance_score(client: httpx.AsyncClient):
-    sys_id = f"SYS-{uuid.uuid4().hex[:8].upper()}"
-    async with SessionLocal() as session:
-        session.add(_sys(id=sys_id))
-        fw = _fw(name="My Framework")
-        session.add(fw)
-        await session.flush()
-        ass = _ass(sys_id, fw.id)
-        session.add(ass)
-        await session.flush()
-        session.add_all(
-            [
-                _obl(ass.id, sys_id, fw.id, status="fulfilled"),
-                _obl(ass.id, sys_id, fw.id, status="fulfilled"),
-                _obl(ass.id, sys_id, fw.id, status="in_progress"),
-            ]
-        )
-        await session.commit()
-
-    r = await client.get("/v1/compliance-stats")
-    entry = next(
-        f for f in r.json()["framework_compliance"] if f["framework_id"] == fw.id
-    )
-    assert entry["total_obligations"] == 3
-    assert entry["fulfilled"] == 2
-    assert entry["score"] == round(2 / 3 * 100, 1)
 
 
 async def test_risk_heatmap_groups_by_tier_and_compliance(client: httpx.AsyncClient):

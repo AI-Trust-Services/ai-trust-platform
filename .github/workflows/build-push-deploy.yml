@@ -41,7 +41,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.gardener_cluster || 'auto' }}-${{ inputs.namespace || 'default' }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read

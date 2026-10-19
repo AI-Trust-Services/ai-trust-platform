@@ -65,23 +65,47 @@ async def _create_complete_system(
     client: httpx.AsyncClient, assignee: str = _ENGINEER
 ) -> str:
     """Register an AI-mode system with every required question answered, so it can be
-    approved once it reaches pending_review (the completeness gate finds no gaps)."""
+    approved once it reaches pending_review (the completeness gate finds no gaps).
+
+    Intake creates a pending stub — department/use_case are set via PUT, and
+    questionnaire answers are written directly to the DB (the PATCH endpoint for the
+    technical section requires technical_pending status, which would conflict with the
+    /workflow/submit step that expects draft status)."""
     r = await client.post(
         "/v1/intake",
-        json={
-            "name": "Workflow System",
-            "assignee_username": assignee,
-            "department": "Engineering",
-            "use_case": "A detailed description of the system, its purpose, and its inputs.",
-            "questionnaire_answers": {
-                **_COMPLETE_BUSINESS_ANSWERS,
-                "technical": _COMPLETE_TECHNICAL_ANSWERS,
-            },
-        },
+        json={"name": "Workflow System"},
         headers=_hdr(assignee),
     )
     assert r.status_code == 201
-    return r.json()["system"]["id"]
+    system_id = r.json()["system"]["id"]
+
+    r = await client.put(
+        f"/v1/systems/{system_id}",
+        json={
+            "department": "Engineering",
+            "use_case": "A detailed description of the system, its purpose, and its inputs.",
+        },
+        headers=_hdr(assignee),
+    )
+    assert r.status_code == 200
+
+    # Write all questionnaire answers directly — keeps the system in draft so
+    # /workflow/submit can still be called.
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.ai_system import AISystem
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    async with AsyncSession(engine) as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one()
+        row.questionnaire_answers = {
+            **_COMPLETE_BUSINESS_ANSWERS,
+            "technical": _COMPLETE_TECHNICAL_ANSWERS,
+        }
+        await session.commit()
+
+    return system_id
 
 
 async def _submit(
@@ -196,6 +220,20 @@ async def test_submit_transitions_to_pending_review(client: httpx.AsyncClient):
 
 async def test_submit_rejected_for_non_assignee(client: httpx.AsyncClient):
     system_id = await _create_system(client, assignee=_ENGINEER)
+
+    # Assignees are no longer stored at intake — set directly in DB to simulate
+    # a system that was assigned (e.g. via /workflow/assign on a draft copy).
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.ai_system import AISystem
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    async with AsyncSession(engine) as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one()
+        row.assignee_username = _ENGINEER
+        await session.commit()
+
     r = await _submit(client, system_id, actor="intruder", assignee=_OFFICER)
     assert r.status_code == 403
 
