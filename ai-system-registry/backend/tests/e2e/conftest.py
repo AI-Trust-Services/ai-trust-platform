@@ -27,6 +27,7 @@ import httpx
 # but the module-level store-ID resolution would still fail without it.
 os.environ.setdefault("OPENFGA_URL", "http://localhost:8080")
 os.environ.setdefault("OPENFGA_STORE_ID", "test-store-id")
+os.environ.setdefault("ENABLE_BATCH_IMPORT", "true")
 
 os.environ.setdefault("USERS_BACKEND_URL", "http://users-backend:8008")
 
