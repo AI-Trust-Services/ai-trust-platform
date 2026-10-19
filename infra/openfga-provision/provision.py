@@ -51,11 +51,13 @@ DEV_USER_ROLES = [
 
 # Non-human service principals seeded in every environment (not gated behind
 # SEED_DEV_USERS). The registry's external read API (/v1/external/*) forwards
-# `svc-external-api` as the downstream username when it calls document-indexing
+# this principal as the downstream username when it calls document-indexing
 # retrieval on behalf of an off-platform caller; `auditor` is the least-privileged
-# read-only role that grants the required systems:read.
+# read-only role that grants the required systems:read. The username is derived
+# from EXTERNAL_API_SERVICE_PRINCIPAL so a configured override is actually seeded
+# (the registry forwards the same env var).
 SERVICE_PRINCIPAL_ROLES = [
-    ("svc-external-api", "auditor"),
+    (os.environ.get("EXTERNAL_API_SERVICE_PRINCIPAL", "svc-external-api"), "auditor"),
 ]
 
 # platform:global split into (type, id) for tuple objects.

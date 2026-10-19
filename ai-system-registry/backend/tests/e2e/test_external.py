@@ -116,3 +116,13 @@ async def test_context_rejects_empty_query(client, monkeypatch):
         f"/v1/external/systems/{sid}/context", headers=_AUTH, json={"query": ""}
     )
     assert r.status_code == 422
+
+
+async def test_context_unknown_system_404(client, monkeypatch):
+    monkeypatch.setenv("EXTERNAL_API_TOKEN", _TOKEN)
+    r = await client.post(
+        "/v1/external/systems/SYS-NOPE/context",
+        headers=_AUTH,
+        json={"query": "risk tier"},
+    )
+    assert r.status_code == 404

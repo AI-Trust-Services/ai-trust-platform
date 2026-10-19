@@ -112,6 +112,7 @@ async def get_system_assessment(system_id: str) -> SystemAssessmentResponse:
 
 @router.post("/systems/{system_id}/context", response_model=None)
 async def search_ai_system_context(system_id: str, body: ContextRequest) -> Any:
+    await _get_system_or_404(system_id)
     payload = {"ai_system_id": system_id, **body.model_dump()}
     headers = {"x-forwarded-preferred-username": _SERVICE_PRINCIPAL}
     cid = correlation_id_var.get("")
