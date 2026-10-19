@@ -1,3 +1,4 @@
+{{- if .Values.auditFlush.enabled }}
 {{/* Background job, no HTTP port - flushes Postgres audit_events to ClickHouse every AUDIT_FLUSH_INTERVAL seconds. */}}
 apiVersion: apps/v1
 kind: Deployment
@@ -34,3 +35,4 @@ spec:
               value: {{ .Values.auditFlush.interval | quote }}
             - name: AUDIT_FLUSH_BATCH_SIZE
               value: {{ .Values.auditFlush.batchSize | quote }}
+{{- end }}

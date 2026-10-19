@@ -37,6 +37,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           envFrom:
             - secretRef: { name: {{ .Values.secretName }} } # DATABASE_URL
+{{- if .Values.clickhouse.enabled }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -61,6 +62,7 @@ spec:
               value: clickhouse
             - name: CLICKHOUSE_PORT
               value: "8123"
+{{- end }}
 ---
 apiVersion: batch/v1
 kind: Job

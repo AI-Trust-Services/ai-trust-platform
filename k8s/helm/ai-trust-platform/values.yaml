@@ -66,10 +66,12 @@ postgres:
   serviceType: ClusterIP
 
 rabbitmq:
+  enabled: false # [MVP-off] only the OTLP telemetry pipeline uses RabbitMQ
   image: rabbitmq:3.13-management-alpine
   serviceType: ClusterIP
 
 clickhouse:
+  enabled: false # [MVP-off] used only by observability (monitoring/alerts/dta) + audit
   image: clickhouse/clickhouse-server:24.5-alpine
   storageSize: 5Gi
   serviceType: ClusterIP
@@ -93,13 +95,16 @@ oauthProxy:
   cookieSecure: false # true on Gardener - Ingress terminates TLS in front of it
 
 otel:
+  enabled: false # [MVP-off] GenAI telemetry pipeline (collector + rmq-bridge + consumer)
   collectorImage: otel/opentelemetry-collector-contrib:0.102.0
   serviceType: ClusterIP # NodePort on kind (values-kind.yaml) for external OTLP ingestion
 
 policyChecker:
+  enabled: false # [MVP-off] alerts evaluation worker
   pollInterval: "10"
 
 auditFlush:
+  enabled: false # [MVP-off] audit Postgres->ClickHouse flush worker
   interval: "5"
   batchSize: "500"
 
@@ -160,6 +165,7 @@ components:
     openfgaConfig: true
 
   - name: monitoring
+    enabled: false # [MVP-off] GenAI-Observability
     backendPort: 8003
     rootPath: /api/monitoring
     extraEnv:
@@ -182,6 +188,7 @@ components:
     openfgaConfig: false
 
   - name: alerts
+    enabled: false # [MVP-off] GenAI-Observability
     backendPort: 8005
     rootPath: /api/alerts
     extraEnv:
@@ -205,6 +212,7 @@ components:
     openfgaConfig: true
 
   - name: decision-trace-analyzer
+    enabled: false # [MVP-off] GenAI-Observability
     backendPort: 8006
     rootPath: /api/dta
     extraEnv:
@@ -227,6 +235,7 @@ components:
     openfgaConfig: true
 
   - name: audit
+    enabled: false # [MVP-off] Audit
     backendPort: 8009
     rootPath: /api/audit
     extraEnv:

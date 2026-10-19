@@ -44,4 +44,4 @@ ollama:
   nodePort: 30434
 
 cogneeEval:
-  enabled: true
+  enabled: false # [MVP-off] graph-eval tooling, not part of the MVP; image also skipped in the build

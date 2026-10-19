@@ -4,6 +4,9 @@
 {{- range $c := .Values.components }}
 {{- $backend := printf "%s-backend" $c.name }}
 {{- $frontend := printf "%s-frontend" $c.name }}
+{{- /* [MVP-off] skip components flagged `enabled: false` in values.yaml. Absent
+       or true renders (the default); only an explicit false is skipped. */}}
+{{- if ne $c.enabled false }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -132,4 +135,5 @@ spec:
     - name: http
       port: 80
       targetPort: 80
+{{- end }}
 {{- end }}
