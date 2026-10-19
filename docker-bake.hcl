@@ -58,7 +58,6 @@ group "default" {
     "admin-frontend",
     "ai-test-bed-frontend",
     "cognee-eval-backend",
-    "ai-gateway",
   ]
 }
 
@@ -427,13 +426,4 @@ target "cognee-eval-backend" {
   tags       = [tag("cognee-eval-backend")]
   cache-from = ["type=gha,scope=cognee-eval-backend"]
   cache-to   = ["type=gha,mode=max,scope=cognee-eval-backend"]
-}
-
-target "ai-gateway" {
-  context    = "."
-  dockerfile = "ai-gateway/Dockerfile"
-  platforms  = ["linux/amd64"]
-  tags       = [tag("ai-gateway")]
-  cache-from = ["type=gha,scope=ai-gateway"]
-  cache-to   = ["type=gha,mode=max,scope=ai-gateway"]
 }

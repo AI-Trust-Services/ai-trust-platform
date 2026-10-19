@@ -117,21 +117,8 @@ indexing:
     storageSize: 10Gi # embedding model + Docling models cached on the HF-cache PVC
     serviceType: ClusterIP
 
-# ── Ollama (optional local LLM for AI-assisted registration) ──
-# Disabled by default: the registry backend defaults to the offline `stub`
-# provider. To use a real model, set enabled: true here AND LLM_PROVIDER=ollama
-# in .env (flows into the ai-trust-env Secret). The model is swappable via
-# LLM_MODEL / LLM_VISION_MODEL in that Secret — the ollama-pull Job reads the
-# same vars, so the puller and the backend always agree.
-ollama:
-  enabled: false
-  image: ollama/ollama:latest
-  storageSize: 20Gi # model blobs live here; qwen2.5:7b + a vision model easily exceed 10Gi
-  serviceType: ClusterIP # NodePort on kind (values-kind.yaml)
-
 # Cognee eval — graph-based grounded Q&A over the EU AI Act.
-# Mirrors the compose `ollama` profile; disabled by default.
-# Requires ollama.enabled: true (or an external LLM endpoint via LLM_ENDPOINT).
+# Disabled by default; uses Thalamus for generation (THALAMUS_* in the Secret).
 cogneeEval:
   enabled: false
   backendPort: 8014

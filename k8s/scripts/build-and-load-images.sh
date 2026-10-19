@@ -128,7 +128,6 @@ build ai-test-bed-frontend . ./ai-test-bed/frontend/Dockerfile \
   --build-arg "VITE_REGISTRY_API_BASE=${VITE_REGISTRY_API_BASE:-/api/registry/v1}"
 
 build cognee-eval-backend . cognee-eval/backend/Dockerfile
-build ai-gateway . ai-gateway/Dockerfile
 
 echo "==> loading ${#images[@]} images into kind cluster '${CLUSTER_NAME}'"
 if [[ ${#images[@]} -eq 0 ]]; then

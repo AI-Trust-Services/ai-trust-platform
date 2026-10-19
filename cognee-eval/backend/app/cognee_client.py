@@ -1,9 +1,9 @@
 """Thin wrapper around the Cognee 1.6.x pipeline for the EU AI Act evaluation.
 
 Configuration is driven entirely by environment variables injected by the Helm deployment.
-All cognee generation (main + extraction) is pointed at the standalone ai-gateway
-service via the LLM_*/LLM_EXTRACTION_* env vars; grounded answers call the same gateway
-directly. Embeddings run in-process via fastembed (BAAI/bge-small-en-v1.5).
+All cognee generation (main + extraction) and embeddings are pointed at Thalamus — an
+OpenAI-compatible inference gateway. fastembed (local ONNX) is the fallback when
+COGNEE_EMBEDDING_PROVIDER=fastembed (default for CI/offline).
 """
 
 import os
@@ -15,30 +15,56 @@ from cognee.modules.search.types.SearchType import SearchType
 
 _DATASET = "eu_ai_act_v1"
 
-_GATEWAY_URL = os.environ.get("LLM_ENDPOINT", "http://ai-gateway:8000/v1")
-_GATEWAY_MODEL = os.environ.get("LLM_MODEL", "ai-gateway")
+_THALAMUS_BASE_URL = os.environ.get("THALAMUS_BASE_URL", "")
+_THALAMUS_MODEL = os.environ.get(
+    "THALAMUS_MODEL", "HuggingFaceTB/SmolLM2-135M-Instruct"
+)
+_THALAMUS_BEARER_TOKEN = os.environ.get("THALAMUS_BEARER_TOKEN", "")
 _EMBEDDING_PROVIDER = os.environ.get("COGNEE_EMBEDDING_PROVIDER", "fastembed")
 _EMBEDDING_MODEL = os.environ.get("COGNEE_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 _EMBEDDING_DIMENSIONS = int(os.environ.get("COGNEE_EMBEDDING_DIMENSIONS", "384"))
 
+# Stub mode (unset/"stub") is used by tests/CI, which mock the whole cognee pipeline.
+# A real gateway URL requires a bearer token — fail fast rather than 401 deep in httpx.
+_STUB_MODE = _THALAMUS_BASE_URL.strip().lower() in ("", "stub")
+if not _STUB_MODE and not _THALAMUS_BEARER_TOKEN:
+    raise RuntimeError(
+        "THALAMUS_BASE_URL is set to a real gateway but THALAMUS_BEARER_TOKEN is empty. "
+        "Set the bearer token in the environment, or use THALAMUS_BASE_URL=stub for CI."
+    )
+
 
 def setup_cognee() -> None:
-    """Configure cognee to use ai-gateway for LLM and fastembed for embeddings."""
+    """Configure cognee to use Thalamus for LLM and optionally for embeddings.
+
+    When COGNEE_EMBEDDING_PROVIDER=openai (the litellm openai-compat provider),
+    embeddings are sent to the same Thalamus gateway as LLM calls, using
+    COGNEE_EMBEDDING_MODEL (e.g. Snowflake/snowflake-arctic-embed-m).
+    When COGNEE_EMBEDDING_PROVIDER=fastembed (default), embeddings run in-process
+    via local ONNX — useful for CI/offline where no gateway is available.
+    """
     cognee.config.set_llm_config(
         {
             "llm_provider": "openai",
-            "llm_model": f"openai/{_GATEWAY_MODEL}",
-            "llm_endpoint": _GATEWAY_URL,
-            "llm_api_key": "ai-gateway",
+            "llm_model": f"openai/{_THALAMUS_MODEL}",
+            "llm_endpoint": _THALAMUS_BASE_URL,
+            "llm_api_key": _THALAMUS_BEARER_TOKEN,
             "llm_extraction_provider": "openai",
-            "llm_extraction_model": f"openai/{_GATEWAY_MODEL}",
-            "llm_extraction_endpoint": _GATEWAY_URL,
-            "llm_extraction_api_key": "ai-gateway",
+            "llm_extraction_model": f"openai/{_THALAMUS_MODEL}",
+            "llm_extraction_endpoint": _THALAMUS_BASE_URL,
+            "llm_extraction_api_key": _THALAMUS_BEARER_TOKEN,
         }
     )
-    cognee.config.set_embedding_provider(_EMBEDDING_PROVIDER)
-    cognee.config.set_embedding_model(_EMBEDDING_MODEL)
-    cognee.config.set_embedding_dimensions(_EMBEDDING_DIMENSIONS)
+    embedding_cfg: dict = {
+        "embedding_provider": _EMBEDDING_PROVIDER,
+        "embedding_model": _EMBEDDING_MODEL,
+        "embedding_dimensions": _EMBEDDING_DIMENSIONS,
+    }
+    if _EMBEDDING_PROVIDER == "openai" and not _STUB_MODE:
+        # Route embeddings through Thalamus (OpenAI-compatible endpoint).
+        embedding_cfg["embedding_endpoint"] = _THALAMUS_BASE_URL
+        embedding_cfg["embedding_api_key"] = _THALAMUS_BEARER_TOKEN
+    cognee.config.set_embedding_config(embedding_cfg)
 
 
 async def ingest_pdf(pdf_path: str) -> dict:
@@ -166,8 +192,9 @@ async def answer_question(question: str, passages: list[dict]) -> str:
     ]
     async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(
-            f"{_GATEWAY_URL.rstrip('/')}/chat/completions",
-            json={"model": _GATEWAY_MODEL, "messages": messages, "max_tokens": 2048},
+            f"{_THALAMUS_BASE_URL.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {_THALAMUS_BEARER_TOKEN}"},
+            json={"model": _THALAMUS_MODEL, "messages": messages, "max_tokens": 2048},
         )
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]

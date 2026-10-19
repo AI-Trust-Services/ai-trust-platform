@@ -5,9 +5,6 @@ NAMESPACE := ai-trust
 RELEASE := ai-trust
 CHART := k8s/helm/ai-trust-platform
 
-# Auto-enable Ollama in Helm when LLM_PROVIDER=ollama is set in .env
-OLLAMA_SET := $(shell grep -s '^LLM_PROVIDER=ollama' .env > /dev/null 2>&1 && echo '--set ollama.enabled=true' || echo '')
-
 .PHONY: up down cluster delete-cluster configure bootstrap build install upgrade rollout reload uninstall reset-jobs status forward-ports stop-forwards prereqs test test-e2e test-int lint
 
 # Install all local development prerequisites via Homebrew.
@@ -57,10 +54,10 @@ install:
 		echo "==> release '$(RELEASE)' already installed, resetting immutable Jobs then upgrading"; \
 		kubectl delete job -n $(NAMESPACE) -l app.kubernetes.io/instance=$(RELEASE) --ignore-not-found; \
 	fi
-	helm upgrade --install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
+	helm upgrade --install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml
 
 upgrade:
-	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml $(OLLAMA_SET)
+	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml
 
 # After `make build && make upgrade`, pods that weren't restarted by Helm (because
 # their rendered template didn't change) still run the old :local image. This target

@@ -327,7 +327,7 @@ All other config lives in `k8s/env/<cluster>/.env` (committed). No per-cluster G
 
 ## Known limitations / gaps (local kind scope)
 
-- Single-node only for kind: `postgres-data`, `clickhouse-data`, `minio-data`, and `ollama-data`
+- Single-node only for kind: `postgres-data`, `clickhouse-data`, and `minio-data`
   are `ReadWriteOnce` PVCs on kind's default local-path-provisioner — fine on a single schedulable
   node (kind's default), but won't work if you add worker nodes to `kind-config.yaml`.
   On Gardener (multi-node), all four are managed as **StatefulSet `volumeClaimTemplates`** so the
