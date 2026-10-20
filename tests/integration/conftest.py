@@ -126,9 +126,9 @@ async def _setup_test_user() -> None:
         assert search_r.status_code == 200, search_r.text
         users_list = search_r.json().get("users", search_r.json())
         user = next((u for u in users_list if u.get("username") == TEST_USER), None)
-        assert (
-            user is not None
-        ), f"Could not find test user '{TEST_USER}' after creation"
+        assert user is not None, (
+            f"Could not find test user '{TEST_USER}' after creation"
+        )
         user_id = user["id"]
         _created_user_ids.append(user_id)
 

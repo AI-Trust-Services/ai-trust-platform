@@ -115,14 +115,14 @@ def test_executive_permissions():
 
 def test_no_role_can_manage_rules():
     for role, perms in ROLE_PERMISSIONS.items():
-        assert (
-            ALERTS_MANAGE_RULES not in perms
-        ), f"Role '{role}' should not have {ALERTS_MANAGE_RULES}"
+        assert ALERTS_MANAGE_RULES not in perms, (
+            f"Role '{role}' should not have {ALERTS_MANAGE_RULES}"
+        )
 
 
 def test_only_admin_can_manage_iam():
     for role, perms in ROLE_PERMISSIONS.items():
         if role != "platform_administrator":
-            assert (
-                IAM_MANAGE not in perms
-            ), f"Role '{role}' should not have {IAM_MANAGE}"
+            assert IAM_MANAGE not in perms, (
+                f"Role '{role}' should not have {IAM_MANAGE}"
+            )

@@ -38,9 +38,9 @@ async def test_full_governance_chain_ai_preclassification(owner, engineer, compl
     r = await owner.get(f"/api/registry/v1/systems/{sid}")
     assert r.status_code == 200
     got = r.json()
-    assert (
-        got["tier"] in VALID_TIERS
-    ), f"unexpected tier after AI reclassify: {got['tier']!r}"
+    assert got["tier"] in VALID_TIERS, (
+        f"unexpected tier after AI reclassify: {got['tier']!r}"
+    )
     assert got["workflow_status"] == "pending_review"
 
     # CO approves
@@ -91,9 +91,9 @@ async def test_bounce_back_request_info(owner, engineer, compliance):
             "answers": {"use_case": "Updated: E2E test use case — expanded detail"},
         },
     )
-    assert (
-        r.status_code == 200
-    ), f"questionnaire PATCH failed: {r.status_code} {r.text[:300]}"
+    assert r.status_code == 200, (
+        f"questionnaire PATCH failed: {r.status_code} {r.text[:300]}"
+    )
 
     # Owner submits the revision
     r = await owner.post(f"{base}/submit-info", json={})

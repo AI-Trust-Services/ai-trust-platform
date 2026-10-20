@@ -78,9 +78,9 @@ async def test_question_delegation_and_reclaim(
             "assignee_username": contributor.e2e_username,
         },
     )
-    assert (
-        r.status_code == 200
-    ), f"question-assign failed: {r.status_code} {r.text[:300]}"
+    assert r.status_code == 200, (
+        f"question-assign failed: {r.status_code} {r.text[:300]}"
+    )
 
     # Verify the assignment is listed and unanswered
     r = await owner.get(f"{base}/question-assignments")
@@ -96,9 +96,9 @@ async def test_question_delegation_and_reclaim(
         f"{base}/question-answer",
         json={"section": "business", "question_key": "use_case"},
     )
-    assert (
-        r.status_code == 200
-    ), f"question-answer failed: {r.status_code} {r.text[:300]}"
+    assert r.status_code == 200, (
+        f"question-answer failed: {r.status_code} {r.text[:300]}"
+    )
 
     r = await owner.get(f"{base}/question-assignments")
     assignments = r.json()
@@ -113,9 +113,9 @@ async def test_question_delegation_and_reclaim(
         f"{base}/question-assign",
         json={"section": "business", "question_key": "use_case"},
     )
-    assert (
-        r.status_code == 200
-    ), f"question-unassign failed: {r.status_code} {r.text[:300]}"
+    assert r.status_code == 200, (
+        f"question-unassign failed: {r.status_code} {r.text[:300]}"
+    )
 
     r = await owner.get(f"{base}/question-assignments")
     assignments = r.json()

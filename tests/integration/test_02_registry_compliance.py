@@ -64,9 +64,9 @@ async def test_assessment_creation_generates_obligations_and_requirements(
     )
     assert obligations.status_code == 200, obligations.text
     obl_list = obligations.json()
-    assert (
-        len(obl_list) > 0
-    ), "No obligations generated for high-tier EU AI Act assessment"
+    assert len(obl_list) > 0, (
+        "No obligations generated for high-tier EU AI Act assessment"
+    )
 
     requirements = await compliance.get(
         "/v1/requirements",
@@ -75,9 +75,9 @@ async def test_assessment_creation_generates_obligations_and_requirements(
     )
     assert requirements.status_code == 200, requirements.text
     req_list = requirements.json()
-    assert (
-        len(req_list) > 0
-    ), "No requirements generated for high-tier EU AI Act assessment"
+    assert len(req_list) > 0, (
+        "No requirements generated for high-tier EU AI Act assessment"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -136,18 +136,18 @@ async def test_evidence_approval_cascades_compliance_score_to_registry(
         f"/v1/requirements/{req_id}", headers=TEST_USER_HEADERS
     )
     assert req_r.status_code == 200, req_r.text
-    assert (
-        req_r.json()["status"] == "fulfilled"
-    ), f"Requirement status: {req_r.json()['status']}"
+    assert req_r.json()["status"] == "fulfilled", (
+        f"Requirement status: {req_r.json()['status']}"
+    )
 
     # Assessment score should be > 0
     ass_r = await compliance.get(
         f"/v1/assessments/{assessment['id']}", headers=TEST_USER_HEADERS
     )
     assert ass_r.status_code == 200, ass_r.text
-    assert (
-        ass_r.json()["score"] > 0
-    ), "Assessment score did not update after evidence approval"
+    assert ass_r.json()["score"] > 0, (
+        "Assessment score did not update after evidence approval"
+    )
 
     # registry ai_systems.compliance averages only *approved* assessments.
     # The assessment here is still 'draft' (business_owner lacks assessments:approve),
@@ -201,12 +201,12 @@ async def test_evidence_rejection_reverts_compliance_score(
     req_r = await compliance.get(
         f"/v1/requirements/{req_id}", headers=TEST_USER_HEADERS
     )
-    assert (
-        req_r.json()["status"] != "fulfilled"
-    ), "Requirement remained fulfilled after evidence rejection"
+    assert req_r.json()["status"] != "fulfilled", (
+        "Requirement remained fulfilled after evidence rejection"
+    )
 
     # Registry compliance score should drop back to 0
     sys_r = await registry.get(f"/v1/systems/{system_id}", headers=TEST_USER_HEADERS)
-    assert (
-        sys_r.json()["compliance"] == 0.0
-    ), "registry ai_systems.compliance was not reverted after evidence rejection"
+    assert sys_r.json()["compliance"] == 0.0, (
+        "registry ai_systems.compliance was not reverted after evidence rejection"
+    )

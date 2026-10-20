@@ -340,9 +340,9 @@ async def set_all_questionnaire_answers(
         f"/api/registry/v1/systems/{system_id}/questionnaire",
         json={"section": "business", "answers": BUSINESS_ANSWERS},
     )
-    assert (
-        r.status_code == 200
-    ), f"PATCH business answers failed: {r.status_code} {r.text[:300]}"
+    assert r.status_code == 200, (
+        f"PATCH business answers failed: {r.status_code} {r.text[:300]}"
+    )
 
 
 async def drive_to_pending_review(
@@ -374,9 +374,9 @@ async def drive_to_pending_review(
     assert sys["workflow_status"] == "business_pending", sys["workflow_status"]
 
     r = await owner_client.post(f"{base}/submit-business", json={})
-    assert (
-        r.status_code == 200
-    ), f"submit-business failed: {r.status_code} {r.text[:300]}"
+    assert r.status_code == 200, (
+        f"submit-business failed: {r.status_code} {r.text[:300]}"
+    )
     sys = (await owner_client.get(f"/api/registry/v1/systems/{system_id}")).json()
     assert sys["workflow_status"] == "technical_pending", sys["workflow_status"]
 
@@ -385,13 +385,13 @@ async def drive_to_pending_review(
             f"/api/registry/v1/systems/{system_id}/questionnaire",
             json={"section": "technical", "answers": AI_TECHNICAL_ANSWERS},
         )
-        assert (
-            r.status_code == 200
-        ), f"PATCH technical answers failed: {r.status_code} {r.text[:300]}"
+        assert r.status_code == 200, (
+            f"PATCH technical answers failed: {r.status_code} {r.text[:300]}"
+        )
 
     r = await engineer_client.post(f"{base}/submit-technical", json={})
-    assert (
-        r.status_code == 200
-    ), f"submit-technical failed: {r.status_code} {r.text[:300]}"
+    assert r.status_code == 200, (
+        f"submit-technical failed: {r.status_code} {r.text[:300]}"
+    )
     sys = (await owner_client.get(f"/api/registry/v1/systems/{system_id}")).json()
     assert sys["workflow_status"] == "pending_review", sys["workflow_status"]

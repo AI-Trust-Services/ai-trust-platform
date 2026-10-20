@@ -255,6 +255,6 @@ def test_all_categories_are_valid():
     # RequirementUpdate validation error (schemas.requirement.VALID_REQUIREMENT_CATEGORIES).
     for cid, templates in _REQUIREMENT_TEMPLATES.items():
         for t in templates:
-            assert (
-                t["category"] in VALID_REQUIREMENT_CATEGORIES
-            ), f"{cid}: {t['category']}"
+            assert t["category"] in VALID_REQUIREMENT_CATEGORIES, (
+                f"{cid}: {t['category']}"
+            )
