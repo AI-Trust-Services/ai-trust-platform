@@ -1,17 +1,10 @@
 from __future__ import annotations
 
-import os
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_trust_persistence.models.audit_event import AuditEvent
-
-# [MVP-off] When the Audit component is disabled there is no flush worker to
-# drain the Postgres audit_events buffer into ClickHouse, so writes would pile
-# up unbounded. AUDIT_ENABLED=false makes log_audit_event a no-op. Default true
-# so normal (full-scope) deployments are unaffected.
-AUDIT_ENABLED = os.environ.get("AUDIT_ENABLED", "true").lower() != "false"
 
 
 def _new_audit_id() -> str:
@@ -29,8 +22,6 @@ def log_audit_event(
     changes: dict | None = None,
     source: str = "ui",
 ) -> None:
-    if not AUDIT_ENABLED:
-        return
     session.add(
         AuditEvent(
             id=_new_audit_id(),

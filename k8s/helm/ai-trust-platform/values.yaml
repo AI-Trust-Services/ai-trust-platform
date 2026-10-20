@@ -71,7 +71,6 @@ rabbitmq:
   serviceType: ClusterIP
 
 clickhouse:
-  enabled: true # used by observability (monitoring/alerts/dta) + audit
   image: clickhouse/clickhouse-server:24.5-alpine
   storageSize: 5Gi
   serviceType: ClusterIP
@@ -104,7 +103,6 @@ policyChecker:
   pollInterval: "10"
 
 auditFlush:
-  enabled: true # audit Postgres->ClickHouse flush worker
   interval: "5"
   batchSize: "500"
 
