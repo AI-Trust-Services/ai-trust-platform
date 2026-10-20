@@ -43,6 +43,10 @@ def setup_cognee() -> None:
     """
     # Thalamus doesn't support the `dimensions` param that litellm may inject; drop it.
     litellm.drop_params = True
+    # Retry individual LLM calls on 429/5xx with Retry-After support — same behaviour
+    # the old ai-gateway provided at the HTTP transport layer.
+    litellm.num_retries = 6
+    litellm.retry_after = 30
     if not _STUB_MODE:
         cognee.config.set_llm_config(
             {
