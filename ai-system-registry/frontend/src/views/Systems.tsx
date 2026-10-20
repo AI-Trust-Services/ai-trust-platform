@@ -253,7 +253,7 @@ export default function Systems() {
                 <TableHead className="normal-case">Risk Classification</TableHead>
                 <TableHead className="normal-case">Organisation Role</TableHead>
                 <TableHead className="normal-case">Registration Date</TableHead>
-                <TableHead className="normal-case text-right">Actions</TableHead>
+                <TableHead className="normal-case">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -281,7 +281,7 @@ export default function Systems() {
                     <TableCell>{s.org_role ? <RoleBadge role={s.org_role} /> : <span className="text-[13px] text-muted-foreground">—</span>}</TableCell>
                     <TableCell className="text-[13px] text-muted-foreground"><FormattedDate iso={s.created_at} /></TableCell>
                     <TableCell>
-                      <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                         <Button variant="outline" size="icon" className="size-8" title="View details" onClick={() => openSystem(s)}>
                           <Eye />
                         </Button>
