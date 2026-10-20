@@ -82,7 +82,7 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 | `THALAMUS_BASE_URL` | _(unset → stub)_ | Thalamus OpenAI-compatible gateway (incl. `/v1`); unset or `stub` → offline/CI. All cognee generation + extraction. |
 | `THALAMUS_MODEL` | `Qwen/Qwen3.8-27B` | Model ID the gateway serves — used for generation and extraction |
 | `THALAMUS_BEARER_TOKEN` | _(empty)_ | Static bearer token sent as `Authorization: Bearer <token>`; required when `THALAMUS_BASE_URL` is a real gateway |
-| `COGNEE_LLM_RATE_LIMIT_REQUESTS` | `60` | Max LLM requests/min passed to `litellm.rpm_limit` — caps cognee's generation calls under the gateway's token quota |
+| `COGNEE_SKIP_CONNECTION_TEST` | `true` (set in code) | Suppresses cognee's first-use LLM/embedding probe — it can fail against OpenAI-compat endpoints even when real calls work. Set in `cognee_client.py` via `os.environ.setdefault`; override with `false` to re-enable. |
 | `COGNEE_DATA_PATH` | `/app/.cognee_system` | Where Cognee stores its databases |
 | `COGNEE_READONLY` | _(unset)_ | When `true`/`1`/`yes`: read-only prod mode — ingest + feedback routers are not mounted (404), and `/health` returns 503 until the first-boot graph consistency check passes |
 | `ALLOWED_ORIGINS` | — | Required — comma-separated CORS origins |

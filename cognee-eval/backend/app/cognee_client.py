@@ -21,6 +21,11 @@ _THALAMUS_MODEL = os.environ.get("THALAMUS_MODEL", "Qwen/Qwen3.8-27B")
 _THALAMUS_BEARER_TOKEN = os.environ.get("THALAMUS_BEARER_TOKEN", "")
 _LLM_RPM_LIMIT = int(os.environ.get("COGNEE_LLM_RATE_LIMIT_REQUESTS", "60"))
 
+# Suppress cognee's first-use LLM/embedding connection probe — it can fail
+# against OpenAI-compat endpoints even when real calls succeed, blocking the
+# first ingest. Retries (litellm.num_retries) cover transient failures instead.
+os.environ.setdefault("COGNEE_SKIP_CONNECTION_TEST", "true")
+
 # Stub mode (unset/"stub") is used by tests/CI, which mock the whole cognee pipeline.
 # A real gateway URL requires a bearer token — fail fast rather than 401 deep in httpx.
 _STUB_MODE = _THALAMUS_BASE_URL.strip().lower() in ("", "stub")
