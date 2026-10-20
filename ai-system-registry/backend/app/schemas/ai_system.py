@@ -123,9 +123,9 @@ class AISystemCreate(BaseModel):
     is_chatbot: bool | None = None
     generates_synthetic_content: bool | None = None
 
-    classification_rationale: list[RationaleItem] | ClassificationRationale | None = (
-        None
-    )
+    classification_rationale: list[
+        RationaleItem
+    ] | ClassificationRationale | None = None
 
     business_owners: str | None = None
     technical_owners: str | None = None

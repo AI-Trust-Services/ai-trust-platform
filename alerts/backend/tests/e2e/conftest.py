@@ -134,7 +134,8 @@ def _ch_client():
 def _ensure_tables() -> None:
     client = _ch_client()
     client.command("CREATE DATABASE IF NOT EXISTS otel")
-    client.command("""
+    client.command(
+        """
         CREATE TABLE IF NOT EXISTS otel.alert_events
         (
             id               String,
@@ -154,7 +155,8 @@ def _ensure_tables() -> None:
         ) ENGINE = MergeTree()
         PARTITION BY toYYYYMM(triggered_at)
         ORDER BY (triggered_at, category, rule_id)
-    """)
+    """
+    )
 
 
 def insert_event(

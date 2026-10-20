@@ -125,9 +125,9 @@ async def _setup_test_user() -> None:
         assert search_r.status_code == 200, search_r.text
         users_list = search_r.json().get("users", search_r.json())
         user = next((u for u in users_list if u.get("username") == TEST_USER), None)
-        assert user is not None, (
-            f"Could not find test user '{TEST_USER}' after creation"
-        )
+        assert (
+            user is not None
+        ), f"Could not find test user '{TEST_USER}' after creation"
         user_id = user["id"]
         _created_user_ids.append(user_id)
 
@@ -136,9 +136,11 @@ async def _setup_test_user() -> None:
             f"/v1/users/{user_id}/roles/business_owner",
             headers=ADMIN_HEADERS,
         )
-        assert role_r.status_code in (200, 201, 204), (
-            f"Failed to assign role: {role_r.text}"
-        )
+        assert role_r.status_code in (
+            200,
+            201,
+            204,
+        ), f"Failed to assign role: {role_r.text}"
 
 
 async def _cleanup_test_data() -> None:
@@ -249,9 +251,10 @@ async def _get_user_id(users_client: httpx.AsyncClient, username: str) -> str:
         },
         headers=ADMIN_HEADERS,
     )
-    assert create_r.status_code in (201, 409), (
-        f"Failed to create user {username}: {create_r.text}"
-    )
+    assert create_r.status_code in (
+        201,
+        409,
+    ), f"Failed to create user {username}: {create_r.text}"
     created_id = create_r.json()["id"]
     _created_user_ids.append(created_id)
     return created_id

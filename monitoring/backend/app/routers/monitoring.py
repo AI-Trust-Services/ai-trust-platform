@@ -22,7 +22,8 @@ async def get_services() -> list[dict]:
     # Step 1: get distinct service names + stats from ClickHouse. Isolation is by
     # per-tenant database (the connection already points at tenant_<org>), so no in-row
     # tenant filter is needed.
-    ch_rows = await ch_query("""
+    ch_rows = await ch_query(
+        """
         SELECT
             service_name,
             count() AS total_spans,
@@ -30,7 +31,8 @@ async def get_services() -> list[dict]:
         FROM gen_ai_spans
         GROUP BY service_name
         ORDER BY total_spans DESC
-    """)
+    """
+    )
 
     if not ch_rows:
         return []

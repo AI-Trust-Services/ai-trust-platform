@@ -38,9 +38,9 @@ async def test_auditor_cannot_write_systems(
         json={"name": "Auditor Attempt", "assignee_username": test_user},
         headers=_headers(test_user),
     )
-    assert r.status_code == 403, (
-        f"auditor should get 403 on POST /v1/intake, got {r.status_code}: {r.text}"
-    )
+    assert (
+        r.status_code == 403
+    ), f"auditor should get 403 on POST /v1/intake, got {r.status_code}: {r.text}"
 
 
 # ---------------------------------------------------------------------------
@@ -68,9 +68,9 @@ async def test_ai_engineer_cannot_approve_evidence(
         headers=TEST_USER_HEADERS,
     )
     req_list = reqs.json()
-    assert req_list, (
-        "No requirements generated for high tier — check obligation templates"
-    )
+    assert (
+        req_list
+    ), "No requirements generated for high tier — check obligation templates"
     req_id = req_list[0]["id"]
 
     ev_r = await compliance.post(
@@ -89,9 +89,9 @@ async def test_ai_engineer_cannot_approve_evidence(
         f"/v1/evidence/{ev_id}/approve",
         headers=_headers(engineer),
     )
-    assert r.status_code == 403, (
-        f"ai_engineer should get 403 on evidence approve, got {r.status_code}: {r.text}"
-    )
+    assert (
+        r.status_code == 403
+    ), f"ai_engineer should get 403 on evidence approve, got {r.status_code}: {r.text}"
 
 
 # ---------------------------------------------------------------------------
@@ -130,9 +130,9 @@ async def test_admin_stats_calls_users_backend(admin: httpx.AsyncClient):
         f"admin→users internal HTTP call may be broken (check USERS_BACKEND_URL)"
     )
     body = r.json()
-    assert body.get("user_count", 0) >= 1, (
-        f"Expected at least 1 user (bootstrap admin), got user_count={body.get('user_count')}"
-    )
-    assert body.get("role_count", 0) >= 1, (
-        f"Expected at least 1 role, got role_count={body.get('role_count')}"
-    )
+    assert (
+        body.get("user_count", 0) >= 1
+    ), f"Expected at least 1 user (bootstrap admin), got user_count={body.get('user_count')}"
+    assert (
+        body.get("role_count", 0) >= 1
+    ), f"Expected at least 1 role, got role_count={body.get('role_count')}"

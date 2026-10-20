@@ -290,11 +290,13 @@ async def approve_model_change(event_id: str) -> dict:
     )
     async with SessionLocal() as session:
         result = await session.execute(
-            text("""
+            text(
+                """
                 UPDATE service_model_baselines
                 SET model_name = :model, last_seen_at = :ts
                 WHERE service_name = :svc
-            """),
+            """
+            ),
             {"model": new_model, "ts": now, "svc": service_name},
         )
         if result.rowcount == 0:

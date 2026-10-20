@@ -74,9 +74,9 @@ async def test_schema_and_role_isolation_no_rls():
             await conn.execute(text(f'SET ROLE "{roleA}"'))
             with pytest.raises(Exception) as ei:
                 await conn.execute(text(f'SELECT id FROM "{schB}".ai_systems'))
-            assert "permission denied for schema" in str(ei.value).lower(), (
-                f"expected schema-level permission denial, got: {ei.value}"
-            )
+            assert (
+                "permission denied for schema" in str(ei.value).lower()
+            ), f"expected schema-level permission denial, got: {ei.value}"
 
         # --- and RLS is indeed OFF on the tenant tables (schema+role is the sole wall) ---
         async with engine.connect() as conn:

@@ -23,8 +23,9 @@ def find_graph_db() -> str | None:
     cognee 1.6.x persists each dataset's graph as a `<uuid>.pkl` or `<uuid>.lbug`
     Kuzu database (ladybug fork) inside its own dataset directory.
     """
-    matches = glob.glob(os.path.join(_DB_ROOT, "*", "*.pkl")) + \
-              glob.glob(os.path.join(_DB_ROOT, "*", "*.lbug"))
+    matches = glob.glob(os.path.join(_DB_ROOT, "*", "*.pkl")) + glob.glob(
+        os.path.join(_DB_ROOT, "*", "*.lbug")
+    )
     return max(matches, key=os.path.getmtime) if matches else None
 
 

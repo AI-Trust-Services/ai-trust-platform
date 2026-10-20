@@ -32,12 +32,14 @@ def upgrade() -> None:
         sa.Column("role", sa.String(100), nullable=True),
     )
 
-    op.execute("""
+    op.execute(
+        """
         INSERT INTO ai_system_model_cards (system_id, model_card_id, role)
         SELECT id, model_id, NULL
         FROM ai_systems
         WHERE model_id IS NOT NULL
-    """)
+    """
+    )
 
     op.drop_constraint("ai_systems_model_id_fkey", "ai_systems", type_="foreignkey")
     op.drop_column("ai_systems", "model_id")
@@ -46,7 +48,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.add_column("ai_systems", sa.Column("model_id", sa.String(20), nullable=True))
 
-    op.execute("""
+    op.execute(
+        """
         UPDATE ai_systems s
         SET model_id = sub.model_card_id
         FROM (
@@ -55,7 +58,8 @@ def downgrade() -> None:
             GROUP BY system_id
         ) sub
         WHERE s.id = sub.system_id
-    """)
+    """
+    )
 
     op.create_foreign_key(
         "ai_systems_model_id_fkey",

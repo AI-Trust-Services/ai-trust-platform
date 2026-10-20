@@ -219,8 +219,13 @@ async def answer_question(question: str, passages: list[dict]) -> str:
     resp.raise_for_status()
     choices = resp.json().get("choices") or []
     if not choices:
-        return "The model did not return an answer (content filtered or empty response)."
-    return choices[0].get("message", {}).get("content") or "The model returned an empty answer."
+        return (
+            "The model did not return an answer (content filtered or empty response)."
+        )
+    return (
+        choices[0].get("message", {}).get("content")
+        or "The model returned an empty answer."
+    )
 
 
 async def ingest_feedback(feedback_id: str, text: str, node_ids: list[str]) -> None:

@@ -52,7 +52,8 @@ def _ch_client():
 
 def _ensure_table() -> None:
     # Create without TTL/storage policy so tests work without MinIO.
-    _ch_client().command("""
+    _ch_client().command(
+        """
         CREATE TABLE IF NOT EXISTS otel.audit_events
         (
             id               String,
@@ -68,7 +69,8 @@ def _ensure_table() -> None:
         ) ENGINE = ReplacingMergeTree()
         PARTITION BY toYYYYMM(created_at)
         ORDER BY (created_at, id)
-    """)
+    """
+    )
 
 
 def _truncate_ch() -> None:
