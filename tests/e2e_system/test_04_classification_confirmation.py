@@ -54,9 +54,9 @@ async def test_co_approve_locks_classification(owner, engineer, compliance):
         f"/api/registry/v1/systems/{sid}",
         json={"is_critical_infrastructure": False},
     )
-    assert r.status_code == 422, (
-        f"Expected 422 when editing risk flag on approved system, got {r.status_code}: {r.text[:300]}"
-    )
+    assert (
+        r.status_code == 422
+    ), f"Expected 422 when editing risk flag on approved system, got {r.status_code}: {r.text[:300]}"
 
 
 # ---------------------------------------------------------------------------
@@ -79,17 +79,17 @@ async def test_co_corrects_tier_and_role_on_approval(owner, engineer, compliance
         f"/api/registry/v1/systems/{sid}/workflow/approve",
         json={"tier": "high", "org_role": "deployer"},
     )
-    assert r.status_code == 200, (
-        f"approve with overrides failed: {r.status_code} {r.text[:300]}"
-    )
+    assert (
+        r.status_code == 200
+    ), f"approve with overrides failed: {r.status_code} {r.text[:300]}"
 
     r = await owner.get(f"/api/registry/v1/systems/{sid}")
     assert r.status_code == 200
     got = r.json()
     assert got["workflow_status"] == "approved"
-    assert got["tier"] == "high", (
-        f"tier should be overridden to 'high', got {got['tier']!r}"
-    )
-    assert got["org_role"] == "deployer", (
-        f"org_role should be 'deployer', got {got['org_role']!r}"
-    )
+    assert (
+        got["tier"] == "high"
+    ), f"tier should be overridden to 'high', got {got['tier']!r}"
+    assert (
+        got["org_role"] == "deployer"
+    ), f"org_role should be 'deployer', got {got['org_role']!r}"

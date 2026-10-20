@@ -16,15 +16,15 @@ async def test_oidc_login_grants_session(engineer):
     # Shell entry page — served by nginx behind oauth2-proxy once the session cookie is valid.
     r = await engineer.get("/")
     assert r.status_code == 200, f"shell / not reachable after login: {r.status_code}"
-    assert "text/html" in r.headers.get("content-type", ""), (
-        f"shell / did not return HTML: {r.headers.get('content-type')!r}"
-    )
+    assert "text/html" in r.headers.get(
+        "content-type", ""
+    ), f"shell / did not return HTML: {r.headers.get('content-type')!r}"
 
     # A backend reached through the shell proxy (health is mounted at the backend root → /api/registry/health).
     h = await engineer.get("/api/registry/health")
-    assert h.status_code == 200, (
-        f"registry health through proxy failed: {h.status_code} {h.text[:200]}"
-    )
+    assert (
+        h.status_code == 200
+    ), f"registry health through proxy failed: {h.status_code} {h.text[:200]}"
 
 
 async def test_unauthenticated_request_is_blocked(app_url):
@@ -33,6 +33,8 @@ async def test_unauthenticated_request_is_blocked(app_url):
         base_url=app_url, follow_redirects=False, timeout=15
     ) as anon:
         r = await anon.get("/api/registry/v1/systems")
-    assert r.status_code in (302, 401, 403), (
-        f"expected the oauth2-proxy auth gate (302/401/403), got {r.status_code}"
-    )
+    assert r.status_code in (
+        302,
+        401,
+        403,
+    ), f"expected the oauth2-proxy auth gate (302/401/403), got {r.status_code}"
