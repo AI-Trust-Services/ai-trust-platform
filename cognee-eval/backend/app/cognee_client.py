@@ -212,7 +212,10 @@ async def answer_question(question: str, passages: list[dict]) -> str:
             json={"model": _THALAMUS_MODEL, "messages": messages, "max_tokens": 2048},
         )
     resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
+    choices = resp.json().get("choices") or []
+    if not choices:
+        return "The model did not return an answer (content filtered or empty response)."
+    return choices[0].get("message", {}).get("content") or "The model returned an empty answer."
 
 
 async def ingest_feedback(feedback_id: str, text: str, node_ids: list[str]) -> None:
