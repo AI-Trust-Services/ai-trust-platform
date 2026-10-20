@@ -49,10 +49,10 @@ def setup_cognee() -> None:
     """
     # Thalamus doesn't support the `dimensions` param that litellm may inject; drop it.
     litellm.drop_params = True
-    # Retry individual LLM calls on 429/5xx with Retry-After support — same behaviour
-    # the old ai-gateway provided at the HTTP transport layer.
+    # Retry individual LLM calls on 429/5xx — same behaviour the old ai-gateway
+    # provided at the HTTP transport layer. litellm honors Retry-After headers
+    # natively and falls back to exponential backoff when the header is absent.
     litellm.num_retries = 6
-    litellm.retry_after = 30
     # Cap requests per minute to stay within the gateway's sustained token quota.
     litellm.rpm_limit = _LLM_RPM_LIMIT
     if not _STUB_MODE:
