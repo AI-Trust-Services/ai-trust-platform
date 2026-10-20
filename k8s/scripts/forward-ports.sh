@@ -29,8 +29,9 @@ _forward() {
 }
 
 _forward ai-system-registry-backend 8001
-_forward monitoring-backend          8003
-_forward alerts-backend              8005
+# [MVP-off] monitoring + alerts are GenAI-observability services, disabled for the MVP.
+# _forward monitoring-backend          8003
+# _forward alerts-backend              8005
 _forward compliance-backend          8007
 _forward users-backend               8008
 _forward audit-backend               8009
@@ -46,8 +47,9 @@ else
 fi
 
 # Wait until every port is actually accepting TCP connections (up to 60s).
-PORTS=(8001 8003 8005 8007 8008 8009 8010)
-SVCS=(ai-system-registry-backend monitoring-backend alerts-backend compliance-backend users-backend audit-backend admin-backend)
+# [MVP-off] 8003 (monitoring) + 8005 (alerts) omitted — disabled for the MVP.
+PORTS=(8001 8007 8008 8009 8010)
+SVCS=(ai-system-registry-backend compliance-backend users-backend audit-backend admin-backend)
 if [[ "$COGNEE_ENABLED" == "true" ]]; then
     PORTS+=(8014)
     SVCS+=(cognee-eval-backend)

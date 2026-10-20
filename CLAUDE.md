@@ -80,8 +80,9 @@ make test-int                       # kind cluster, namespace ai-trust
 - `make test-int` starts the port-forwards, runs pytest, and stops them again **even on failure**.
 - Services are reached via `kubectl port-forward` (`k8s/scripts/forward-ports.sh` / `kill-port-forwards.sh`)
   on their in-cluster ports; every URL is overridable via env var (`REGISTRY_URL`, `COMPLIANCE_URL`, …).
-  The suite covers the 7 backends that expose cross-service contracts — `overview` and `dta` are
-  read-only and out of scope.
+  The suite covers the MVP backends that expose cross-service contracts — `overview` and `dta` are
+  read-only and out of scope, and `monitoring`/`alerts` are `[MVP-off]` (dropped from the port-forward
+  list and the health smoke test; re-add them when GenAI-observability is re-enabled).
 - Auth bypasses oauth2-proxy by setting `X-Forwarded-Preferred-Username` directly, the same pattern the
   per-service e2e tests use. `APP_ADMIN_USERNAME` (default `admin`) selects the platform admin used to
   assign roles.
@@ -299,8 +300,11 @@ Then rebuild the image and `make build && make upgrade && make rollout`.
   un-comment it in `docker-bake.hcl`.
 
 **Deliberately left untouched:**
-- `tests/integration/` still exercises the disabled backends and will fail against
-  an MVP deployment — it is not a PR gate (see "Integration tests" above).
+- `tests/integration/` still exercises the enabled backends against an MVP
+  deployment. The `[MVP-off]` backends (`monitoring`, `alerts`) have been
+  dropped from its port-forward list and health smoke test so the suite runs
+  clean against the MVP; the cross-service contract tests only ever touched
+  enabled backends. It remains **not a PR gate** (see "Integration tests" above).
 
 ## Components
 

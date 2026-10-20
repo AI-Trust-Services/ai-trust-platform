@@ -6,7 +6,7 @@ Cross-service API tests that verify microservice contracts against a live platfo
 
 | File | IDs | Contract |
 |---|---|---|
-| `test_01_health.py` | IT-09 | 7 backends `/health` → 200 (`overview` and `dta` are read-only and out of scope) |
+| `test_01_health.py` | IT-09 | 5 MVP backends `/health` → 200 (`overview`/`dta` are read-only and out of scope; `monitoring`/`alerts` are `[MVP-off]`) |
 | `test_02_registry_compliance.py` | IT-01–IT-04 | Shared `ai_systems` FK integrity; assessment generation; evidence approval cascades `compliance` score back to registry; rejection reverts it |
 | `test_03_rbac.py` | IT-05–IT-08 | `auditor` 403 on registry write; `ai_engineer` 403 on evidence approve; `platform_administrator` 403 on assessments read; admin→users internal HTTP call |
 
@@ -35,7 +35,7 @@ bash k8s/scripts/kill-port-forwards.sh
 
 ```bash
 # From the repo root:
-make forward-ports                 # backgrounds 7 port-forwards, returns prompt
+make forward-ports                 # backgrounds the MVP backend port-forwards, returns prompt
 pytest tests/integration/test_03_rbac.py -v -k "test_auditor"
 make stop-forwards
 ```
@@ -48,12 +48,14 @@ All URLs default to `localhost:<port>` (after port-forwarding). Override via env
 |---|---|
 | `REGISTRY_URL` | `http://localhost:8001` |
 | `COMPLIANCE_URL` | `http://localhost:8007` |
-| `ALERTS_URL` | `http://localhost:8005` |
 | `USERS_URL` | `http://localhost:8008` |
 | `AUDIT_URL` | `http://localhost:8009` |
 | `ADMIN_URL` | `http://localhost:8010` |
-| `MONITORING_URL` | `http://localhost:8003` |
 | `APP_ADMIN_USERNAME` | `admin` |
+
+> `MONITORING_URL` (8003) and `ALERTS_URL` (8005) are `[MVP-off]` — those
+> GenAI-observability backends are not deployed in the MVP, so the suite no
+> longer forwards or health-checks them.
 
 ## CI
 
