@@ -52,6 +52,9 @@ inputs:
   dev_user_password:
     description: "DEV_USER_PASSWORD secret — password for seeded dev users (dev-owner/engineer/compliance)"
     required: true
+  thalamus_bearer_token:
+    description: "THALAMUS_BEARER_TOKEN secret — bearer token for the Thalamus inference gateway"
+    required: true
 
 runs:
   using: composite
@@ -70,6 +73,7 @@ runs:
         SECRET_SMTP_PASSWORD: ${{ inputs.smtp_password }}
         SECRET_USERS_BACKEND_CLIENT_SECRET: ${{ inputs.users_backend_client_secret }}
         SECRET_DEV_USER_PASSWORD: ${{ inputs.dev_user_password }}
+        SECRET_THALAMUS_BEARER_TOKEN: ${{ inputs.thalamus_bearer_token }}
       run: |
         ENV_FILE="k8s/env/${{ inputs.cluster }}/.env"
         if [[ ! -f "$ENV_FILE" ]]; then
@@ -110,6 +114,7 @@ runs:
         SMTP_PASSWORD="$SECRET_SMTP_PASSWORD"
         USERS_BACKEND_CLIENT_SECRET="$SECRET_USERS_BACKEND_CLIENT_SECRET"
         DEV_USER_PASSWORD="$SECRET_DEV_USER_PASSWORD"
+        THALAMUS_BEARER_TOKEN="$SECRET_THALAMUS_BEARER_TOKEN"
 
         while IFS='=' read -r key _; do
           [[ -z "$key" || "$key" == \#* ]] && continue
@@ -177,6 +182,7 @@ runs:
         inject SMTP_PASSWORD               "$SMTP_PASSWORD"
         inject USERS_BACKEND_CLIENT_SECRET "$USERS_BACKEND_CLIENT_SECRET"
         inject DEV_USER_PASSWORD           "$DEV_USER_PASSWORD"
+        inject THALAMUS_BEARER_TOKEN       "$THALAMUS_BEARER_TOKEN"
 
     - name: Bootstrap namespace/secrets/configmaps
       shell: bash

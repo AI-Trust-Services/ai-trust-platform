@@ -1,44 +1,88 @@
 """Thin wrapper around the Cognee 1.6.x pipeline for the EU AI Act evaluation.
 
-Configuration is driven entirely by environment variables injected by the Helm deployment.
-All cognee generation (main + extraction) is pointed at the standalone ai-gateway
-service via the LLM_*/LLM_EXTRACTION_* env vars; grounded answers call the same gateway
-directly. Embeddings run in-process via fastembed (BAAI/bge-small-en-v1.5).
+LLM and embedding provider/model are hardcoded in setup_cognee() — not env-configurable.
+In live mode (THALAMUS_BASE_URL is a real URL) both generation and embeddings go through
+Thalamus (OpenAI-compat). In stub/CI mode (unset or "stub") embeddings fall back to
+in-process fastembed (local ONNX, no network).
 """
 
 import os
 from pathlib import Path
 
 import httpx
+import litellm
 import cognee
 from cognee.modules.search.types.SearchType import SearchType
 
 _DATASET = "eu_ai_act_v1"
 
-_GATEWAY_URL = os.environ.get("LLM_ENDPOINT", "http://ai-gateway:8000/v1")
-_GATEWAY_MODEL = os.environ.get("LLM_MODEL", "ai-gateway")
-_EMBEDDING_PROVIDER = os.environ.get("COGNEE_EMBEDDING_PROVIDER", "fastembed")
-_EMBEDDING_MODEL = os.environ.get("COGNEE_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-_EMBEDDING_DIMENSIONS = int(os.environ.get("COGNEE_EMBEDDING_DIMENSIONS", "384"))
+_THALAMUS_BASE_URL = os.environ.get("THALAMUS_BASE_URL", "")
+_THALAMUS_MODEL = os.environ.get("THALAMUS_MODEL", "Qwen/Qwen3.8-27B")
+_THALAMUS_BEARER_TOKEN = os.environ.get("THALAMUS_BEARER_TOKEN", "")
+_LLM_RPM_LIMIT = int(os.environ.get("COGNEE_LLM_RATE_LIMIT_REQUESTS", "60"))
+
+# Suppress cognee's first-use LLM/embedding connection probe — it can fail
+# against OpenAI-compat endpoints even when real calls succeed, blocking the
+# first ingest. Retries (litellm.num_retries) cover transient failures instead.
+os.environ.setdefault("COGNEE_SKIP_CONNECTION_TEST", "true")
+
+# Stub mode (unset/"stub") is used by tests/CI, which mock the whole cognee pipeline.
+# A real gateway URL requires a bearer token — fail fast rather than 401 deep in httpx.
+_STUB_MODE = _THALAMUS_BASE_URL.strip().lower() in ("", "stub")
+if not _STUB_MODE and not _THALAMUS_BEARER_TOKEN:
+    raise RuntimeError(
+        "THALAMUS_BASE_URL is set to a real gateway but THALAMUS_BEARER_TOKEN is empty. "
+        "Set the bearer token in the environment, or use THALAMUS_BASE_URL=stub for CI."
+    )
 
 
 def setup_cognee() -> None:
-    """Configure cognee to use ai-gateway for LLM and fastembed for embeddings."""
-    cognee.config.set_llm_config(
-        {
-            "llm_provider": "openai",
-            "llm_model": f"openai/{_GATEWAY_MODEL}",
-            "llm_endpoint": _GATEWAY_URL,
-            "llm_api_key": "ai-gateway",
-            "llm_extraction_provider": "openai",
-            "llm_extraction_model": f"openai/{_GATEWAY_MODEL}",
-            "llm_extraction_endpoint": _GATEWAY_URL,
-            "llm_extraction_api_key": "ai-gateway",
+    """Configure cognee to use Thalamus for LLM and embeddings.
+
+    In stub/CI mode (THALAMUS_BASE_URL unset or 'stub') only embeddings are
+    configured (fastembed, local ONNX, no network); the LLM config is left at
+    cognee's default. Ingest and recall will fail in stub mode because graph
+    extraction requires a real LLM — this is expected (stub mode is for tests,
+    which mock the whole cognee_client module).
+
+    In live mode both LLM and embeddings go through Thalamus.
+    """
+    # Thalamus doesn't support the `dimensions` param that litellm may inject; drop it.
+    litellm.drop_params = True
+    # Retry individual LLM calls on 429/5xx — same behaviour the old ai-gateway
+    # provided at the HTTP transport layer. litellm honors Retry-After headers
+    # natively and falls back to exponential backoff when the header is absent.
+    litellm.num_retries = 6
+    # Cap requests per minute to stay within the gateway's sustained token quota.
+    litellm.rpm_limit = _LLM_RPM_LIMIT
+    if not _STUB_MODE:
+        cognee.config.set_llm_config(
+            {
+                "llm_provider": "openai",
+                "llm_model": f"openai/{_THALAMUS_MODEL}",
+                "llm_endpoint": _THALAMUS_BASE_URL,
+                "llm_api_key": _THALAMUS_BEARER_TOKEN,
+                "llm_extraction_provider": "openai",
+                "llm_extraction_model": f"openai/{_THALAMUS_MODEL}",
+                "llm_extraction_endpoint": _THALAMUS_BASE_URL,
+                "llm_extraction_api_key": _THALAMUS_BEARER_TOKEN,
+            }
+        )
+    if _STUB_MODE:
+        embedding_cfg: dict = {
+            "embedding_provider": "fastembed",
+            "embedding_model": "BAAI/bge-small-en-v1.5",
+            "embedding_dimensions": 384,
         }
-    )
-    cognee.config.set_embedding_provider(_EMBEDDING_PROVIDER)
-    cognee.config.set_embedding_model(_EMBEDDING_MODEL)
-    cognee.config.set_embedding_dimensions(_EMBEDDING_DIMENSIONS)
+    else:
+        embedding_cfg = {
+            "embedding_provider": "openai",
+            "embedding_model": "openai/Snowflake/snowflake-arctic-embed-m",
+            "embedding_dimensions": 768,
+            "embedding_endpoint": _THALAMUS_BASE_URL,
+            "embedding_api_key": _THALAMUS_BEARER_TOKEN,
+        }
+    cognee.config.set_embedding_config(embedding_cfg)
 
 
 async def ingest_pdf(pdf_path: str) -> dict:
@@ -144,6 +188,8 @@ async def search_entities(
 
 async def answer_question(question: str, passages: list[dict]) -> str:
     """Generate a grounded answer via the AI gateway."""
+    if _STUB_MODE:
+        return "[Stub mode] Thalamus gateway not configured — set THALAMUS_BASE_URL to a real endpoint to enable grounded answers."
     if not passages:
         return "No relevant passages found in the knowledge graph."
 
@@ -166,11 +212,20 @@ async def answer_question(question: str, passages: list[dict]) -> str:
     ]
     async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(
-            f"{_GATEWAY_URL.rstrip('/')}/chat/completions",
-            json={"model": _GATEWAY_MODEL, "messages": messages, "max_tokens": 2048},
+            f"{_THALAMUS_BASE_URL.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {_THALAMUS_BEARER_TOKEN}"},
+            json={"model": _THALAMUS_MODEL, "messages": messages, "max_tokens": 2048},
         )
     resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
+    choices = resp.json().get("choices") or []
+    if not choices:
+        return (
+            "The model did not return an answer (content filtered or empty response)."
+        )
+    return (
+        choices[0].get("message", {}).get("content")
+        or "The model returned an empty answer."
+    )
 
 
 async def ingest_feedback(feedback_id: str, text: str, node_ids: list[str]) -> None:

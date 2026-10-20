@@ -44,14 +44,10 @@ otel:
   collectorHttpNodePort: 30318
   rmqBridgeNodePort: 30802
 
-ollama:
-  serviceType: NodePort
-  nodePort: 30434
-
 cogneeEval:
   enabled: true
   # Serves the frozen graph snapshot from GHCR (never ingests).
   # After each promote-graph.yml run, update graphImage to the new @sha256 digest.
   # Set readOnly: false only on a dedicated build/test instance for graph curation.
   readOnly: true
-  graphImage: ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph@sha256:50ac32bd11e0bb757b7ea739d2b5c05d5bd415b0af41f63733967fbd448ca57f
+  graphImage: ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph@sha256:09b6a4c90297f9f83caf09e71626df24d40028295b849088473f284b3a857495

@@ -33,6 +33,8 @@ async def test_unauthenticated_request_is_blocked(app_url):
         base_url=app_url, follow_redirects=False, timeout=15
     ) as anon:
         r = await anon.get("/api/registry/v1/systems")
-    assert r.status_code in (302, 401, 403), (
-        f"expected the oauth2-proxy auth gate (302/401/403), got {r.status_code}"
-    )
+    assert r.status_code in (
+        302,
+        401,
+        403,
+    ), f"expected the oauth2-proxy auth gate (302/401/403), got {r.status_code}"

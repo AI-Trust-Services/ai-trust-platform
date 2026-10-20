@@ -42,7 +42,7 @@ spec:
             - --upstream=http://shell:80
             - --http-address=0.0.0.0:4180
             # Raise the upstream response timeout from its 30s default: AI risk
-            # classification (Ollama inference) makes submit-technical take 60-100s,
+            # classification (Thalamus inference) makes submit-technical take 60-100s,
             # and the default 30s makes oauth2-proxy return 502 mid-inference.
             # Matches docker-compose.yml. Complements the Traefik ServersTransport
             # (Traefik->oauth2-proxy hop) and shell nginx proxy_read_timeout.
@@ -72,7 +72,7 @@ metadata:
   {{- if and .Values.ingress.enabled (eq .Values.ingress.className "traefik") }}
   annotations:
     # Tell Traefik to use the llm-timeout ServersTransport (300s forwarding timeout)
-    # for this service. Required because Ollama AI classification takes 84-120s and
+    # for this service. Required because Thalamus AI classification takes 84-120s and
     # Traefik's default respondingTimeout of 60s cuts the connection mid-inference.
     # The value MUST use Traefik's provider-namespace syntax (<ns>-<name>@kubernetescrd),
     # NOT the bare CRD name — with a bare name Traefik cannot resolve the ServersTransport,

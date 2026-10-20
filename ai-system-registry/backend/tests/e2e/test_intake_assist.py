@@ -1,8 +1,8 @@
 """E2E tests for the AI-assisted registration endpoints.
 
-Uses the stub LLM provider (LLM_PROVIDER=stub, the default) so no network is
-required. The stub drives a deterministic TalentMatch recruiting sequence and
-infers is_employment_related=True at completion.
+Uses the stub LLM backend (THALAMUS_BASE_URL unset or "stub", the default) so no
+network is required. The stub drives a deterministic TalentMatch recruiting sequence
+and infers is_employment_related=True at completion.
 
 Owner flow:
   POST /v1/intake/assist/turn    — stateless conversation turn

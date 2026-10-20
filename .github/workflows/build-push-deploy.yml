@@ -199,6 +199,7 @@ jobs:
           smtp_password: ${{ secrets.SMTP_PASSWORD }}
           users_backend_client_secret: ${{ secrets.USERS_BACKEND_CLIENT_SECRET }}
           dev_user_password: ${{ secrets.DEV_USER_PASSWORD }}
+          thalamus_bearer_token: ${{ secrets.THALAMUS_BEARER_TOKEN }}
 
       - name: Resolve integration-tests status on failed deploy
         if: failure() || cancelled()

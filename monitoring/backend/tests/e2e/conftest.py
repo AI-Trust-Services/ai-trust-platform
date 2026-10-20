@@ -132,7 +132,8 @@ def _ch_client():
 def _ensure_tables() -> None:
     client = _ch_client()
     client.command("CREATE DATABASE IF NOT EXISTS otel")
-    client.command("""
+    client.command(
+        """
         CREATE TABLE IF NOT EXISTS otel.gen_ai_spans
         (
             received_at      DateTime        DEFAULT now(),
@@ -160,7 +161,8 @@ def _ensure_tables() -> None:
         ) ENGINE = MergeTree()
         PARTITION BY toYYYYMM(received_at)
         ORDER BY (received_at, service_name, request_model)
-    """)
+    """
+    )
 
 
 def insert_span(
