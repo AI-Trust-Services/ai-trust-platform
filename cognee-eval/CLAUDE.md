@@ -13,11 +13,10 @@ All Cognee data (LanceDB vectors, per-dataset Kuzu graphs, SQLite relational) li
 StatefulSet. Our feedback data lives in `cognee_eval.db` inside the same directory.
 
 **Graph storage layout** — cognee 1.6 persists each dataset's graph as a per-dataset
-`system/databases/<dataset-uuid>/<graph-uuid>.pkl` **Kuzu** database (the shipped `kuzu` package is
-the ladybug fork, so despite the `.pkl` extension these are Kuzu DBs, *not* Python pickles — never
-`pickle.load()` them). There is no single shared `cognee_graph_kuzu` database. `graph.py` globs for the
-most recently written per-dataset `.pkl` and opens it with `kuzu.Database(path, read_only=True)`; the
-`Node`/`EDGE` tables carry the extracted knowledge graph.
+`system/databases/<dataset-uuid>/<graph-uuid>.lbug` **Kuzu** database (the shipped `kuzu` package is
+the ladybug fork — `.lbug` extension, not `.pkl`). There is no single shared `cognee_graph_kuzu`
+database. `graph.py` globs for the most recently written per-dataset `.lbug` and opens it with
+`kuzu.Database(path, read_only=True)`; the `Node`/`EDGE` tables carry the extracted knowledge graph.
 
 **Single dataset for source + feedback** — `ingest_feedback()` calls `cognee.remember()` with
 `dataset_name=_DATASET` (the same dataset as the source PDF), so every approved feedback correction
@@ -82,9 +81,6 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 | `THALAMUS_BASE_URL` | _(unset → stub)_ | Thalamus OpenAI-compatible gateway (incl. `/v1`); unset or `stub` → offline/CI. All cognee generation + extraction. |
 | `THALAMUS_MODEL` | `HuggingFaceTB/SmolLM2-135M-Instruct` | Model ID the gateway serves — used for generation and extraction |
 | `THALAMUS_BEARER_TOKEN` | _(empty)_ | Static bearer token sent as `Authorization: Bearer <token>`; required when `THALAMUS_BASE_URL` is a real gateway |
-| `COGNEE_EMBEDDING_PROVIDER` | `openai` | Embedding provider: `openai` routes through Thalamus (OpenAI-compat); `fastembed` runs in-process ONNX (offline/CI) |
-| `COGNEE_EMBEDDING_MODEL` | `Snowflake/snowflake-arctic-embed-m` | Embedding model — Thalamus models: `Snowflake/snowflake-arctic-embed-m` (768-dim), `nomic-ai/nomic-embed-text-v1.5` (768-dim), `intfloat/e5-large-v2` (1024-dim), `jinaai/jina-embeddings-v5-text-small-retrieval` (1024-dim); fastembed fallback: `BAAI/bge-small-en-v1.5` (384-dim) |
-| `COGNEE_EMBEDDING_DIMENSIONS` | `768` | Must match the chosen model's output dimensionality |
 | `COGNEE_LLM_RATE_LIMIT_REQUESTS` | `12` | cognee LLM calls/min cap (paces generation under the gateway's token quota) |
 | `COGNEE_DATA_PATH` | `/app/.cognee_system` | Where Cognee stores its databases |
 | `COGNEE_READONLY` | _(unset)_ | When `true`/`1`/`yes`: read-only prod mode — ingest + feedback routers are not mounted (404), and `/health` returns 503 until the first-boot graph consistency check passes |
@@ -104,11 +100,10 @@ gateway, configured via `THALAMUS_BASE_URL` / `THALAMUS_MODEL` / `THALAMUS_BEARE
 (see `setup_cognee()`). cognee's litellm keeps its `openai/<model>` routing prefix; the
 endpoint points straight at Thalamus and the bearer token is passed as the litellm
 `api_key` (sent as `Authorization: Bearer <token>`). Embeddings also go through Thalamus
-when `COGNEE_EMBEDDING_PROVIDER=openai` (default) — `COGNEE_EMBEDDING_MODEL` selects the
-model (e.g. `Snowflake/snowflake-arctic-embed-m`, 768-dim). Set
-`COGNEE_EMBEDDING_PROVIDER=fastembed` for offline/CI (local ONNX, `BAAI/bge-small-en-v1.5`,
-384-dim, never hits the network). Set `THALAMUS_BASE_URL=stub` (or leave it unset) for
-offline/CI; the e2e suite mocks the whole cognee pipeline regardless.
+in live mode — the model is selected in code (`Snowflake/snowflake-arctic-embed-m`,
+768-dim), not via env. In stub/CI mode (`THALAMUS_BASE_URL` unset or `stub`) embeddings
+fall back to in-process fastembed (local ONNX, `BAAI/bge-small-en-v1.5`, 384-dim, never
+hits the network); the e2e suite mocks the whole cognee pipeline regardless.
 
 > **Known limitation (fresh ingestion):** the previous `ai-gateway` proxy rewrote
 > model-emitted graph-edge fields (`source`→`source_node_id`, `target`→`target_node_id`,
@@ -122,9 +117,10 @@ offline/CI; the e2e suite mocks the whole cognee pipeline regardless.
 
 - Ingestion is synchronous; the nginx `proxy_read_timeout` is set to 600s for this route
 - No OpenFGA wiring — reviewer identity comes from `X-Forwarded-Preferred-Username` header only
-- **Embeddings**: default is `COGNEE_EMBEDDING_PROVIDER=openai`, which routes through the same
-  Thalamus gateway as LLM calls (OpenAI-compat `/v1/embeddings`). Set provider to `fastembed`
-  for offline/CI (in-process ONNX, `BAAI/bge-small-en-v1.5`, 384-dim, no network required).
+- **Embeddings**: live mode routes through the same Thalamus gateway as LLM calls
+  (OpenAI-compat `/v1/embeddings`, `Snowflake/snowflake-arctic-embed-m`, 768-dim); the model
+  is hardcoded per mode in `setup_cognee()`, not env-configurable. Stub/CI mode uses
+  in-process fastembed (`BAAI/bge-small-en-v1.5`, 384-dim, no network required).
 - **Rate limiting**: `COGNEE_LLM_RATE_LIMIT_REQUESTS` paces cognee's generation calls under the
   gateway's sustained token quota. Note the retry/backoff the old `ai-gateway` added is gone —
   cognee's own client handles transient errors.

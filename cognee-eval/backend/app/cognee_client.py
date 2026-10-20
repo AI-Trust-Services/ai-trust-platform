@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 import httpx
+import litellm
 import cognee
 from cognee.modules.search.types.SearchType import SearchType
 
@@ -20,9 +21,6 @@ _THALAMUS_MODEL = os.environ.get(
     "THALAMUS_MODEL", "HuggingFaceTB/SmolLM2-135M-Instruct"
 )
 _THALAMUS_BEARER_TOKEN = os.environ.get("THALAMUS_BEARER_TOKEN", "")
-_EMBEDDING_PROVIDER = os.environ.get("COGNEE_EMBEDDING_PROVIDER", "fastembed")
-_EMBEDDING_MODEL = os.environ.get("COGNEE_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-_EMBEDDING_DIMENSIONS = int(os.environ.get("COGNEE_EMBEDDING_DIMENSIONS", "384"))
 
 # Stub mode (unset/"stub") is used by tests/CI, which mock the whole cognee pipeline.
 # A real gateway URL requires a bearer token — fail fast rather than 401 deep in httpx.
@@ -35,14 +33,13 @@ if not _STUB_MODE and not _THALAMUS_BEARER_TOKEN:
 
 
 def setup_cognee() -> None:
-    """Configure cognee to use Thalamus for LLM and optionally for embeddings.
+    """Configure cognee to use Thalamus for LLM and embeddings.
 
-    When COGNEE_EMBEDDING_PROVIDER=openai (the litellm openai-compat provider),
-    embeddings are sent to the same Thalamus gateway as LLM calls, using
-    COGNEE_EMBEDDING_MODEL (e.g. Snowflake/snowflake-arctic-embed-m).
-    When COGNEE_EMBEDDING_PROVIDER=fastembed (default), embeddings run in-process
-    via local ONNX — useful for CI/offline where no gateway is available.
+    In stub/CI mode (THALAMUS_BASE_URL unset or 'stub'), falls back to fastembed
+    (local ONNX, no network). In live mode, both LLM and embeddings go through Thalamus.
     """
+    # Thalamus doesn't support the `dimensions` param that litellm may inject; drop it.
+    litellm.drop_params = True
     cognee.config.set_llm_config(
         {
             "llm_provider": "openai",
@@ -55,15 +52,20 @@ def setup_cognee() -> None:
             "llm_extraction_api_key": _THALAMUS_BEARER_TOKEN,
         }
     )
-    embedding_cfg: dict = {
-        "embedding_provider": _EMBEDDING_PROVIDER,
-        "embedding_model": _EMBEDDING_MODEL,
-        "embedding_dimensions": _EMBEDDING_DIMENSIONS,
-    }
-    if _EMBEDDING_PROVIDER == "openai" and not _STUB_MODE:
-        # Route embeddings through Thalamus (OpenAI-compatible endpoint).
-        embedding_cfg["embedding_endpoint"] = _THALAMUS_BASE_URL
-        embedding_cfg["embedding_api_key"] = _THALAMUS_BEARER_TOKEN
+    if _STUB_MODE:
+        embedding_cfg: dict = {
+            "embedding_provider": "fastembed",
+            "embedding_model": "BAAI/bge-small-en-v1.5",
+            "embedding_dimensions": 384,
+        }
+    else:
+        embedding_cfg = {
+            "embedding_provider": "openai",
+            "embedding_model": "openai/Snowflake/snowflake-arctic-embed-m",
+            "embedding_dimensions": 768,
+            "embedding_endpoint": _THALAMUS_BASE_URL,
+            "embedding_api_key": _THALAMUS_BEARER_TOKEN,
+        }
     cognee.config.set_embedding_config(embedding_cfg)
 
 
