@@ -3,12 +3,13 @@ import type {
   Source, Dataset, MetricCreate, SourceCreate, DatasetCreate,
   DatasetPatch, ModelSystemResponse, AISystemFormData, PermissionsResponse, WorkflowStep,
   UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult,
-  QuestionAssignment,
+  QuestionAssignment, AssessmentRow,
 } from "../types"
 import type { SectionKey } from "../config/questionnaire";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
+const COMPLIANCE_API_BASE = import.meta.env.VITE_COMPLIANCE_API_BASE;
 export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 
 async function request<T>(path: string, options: RequestInit = {}, base: string = API_BASE): Promise<T> {
@@ -24,6 +25,11 @@ export const api = {
   getSystems: () => request<AISystem[]>("/systems?limit=200"),
   getSystem: (id: string) => request<AISystem>(`/systems/${id}`),
   deleteSystem: (id: string) => request<null>(`/systems/${id}`, { method: "DELETE" }),
+  // Cross-service read into the compliance backend: one broad fetch of all
+  // assessments (max backend limit), grouped client-side by ai_system_id to
+  // derive the Systems-table assessment state. Uses VITE_COMPLIANCE_API_BASE.
+  getAllAssessments: () =>
+    request<AssessmentRow[]>("/assessments?limit=500", {}, COMPLIANCE_API_BASE),
   updateSystem: (id: string, data: Partial<AISystemFormData>) =>
     request<AISystem>(`/systems/${id}`, {
       method: "PUT",
