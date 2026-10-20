@@ -16,6 +16,20 @@ import { cn } from "@/lib/utils";
 
 const EU_AI_ACT_ID = "FRM-EU-AI-ACT";
 
+// Map the indexing worker's lifecycle to 5 even steps (mirrors the AI Test Bed's
+// n/5 display) so a single document animates 20 → 40 → 60 → 80 → 100%:
+// pending 1/5, parsing 2/5, embedding 3/5, storing 4/5, indexed 5/5. A system's
+// percentage is the average across its current documents.
+const INDEX_STEP: Record<string, number> = { pending: 1, parsing: 2, embedding: 3, storing: 4, indexed: 5 };
+
+function docProgress(status: string, stage: string | null): number {
+  if (status === "indexed") return 1;
+  if (status === "failed") return 0;
+  if (status === "pending") return INDEX_STEP.pending / 5;
+  if (status === "processing") return (INDEX_STEP[stage ?? "parsing"] ?? 2) / 5;
+  return 0;
+}
+
 function goToAssessments(systemId: string) {
   localStorage.setItem("compliance.pendingAssessment", JSON.stringify({ systemId, frameworkId: EU_AI_ACT_ID }));
   LuigiClient.linkManager().navigate("/home/assessments");
@@ -29,7 +43,7 @@ export default function Systems() {
   const [lifecycleFilter, setLifecycleFilter] = useState("");
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [indexing, setIndexing] = useState<Record<string, { indexed: number; total: number }>>({});
+  const [indexing, setIndexing] = useState<Record<string, { pct: number; busy: boolean }>>({});
   const { mayWrite, mayApprove } = useModalControls();
   const showToast = useToast();
 
@@ -70,19 +84,22 @@ export default function Systems() {
       sys.map(async (s) => {
         try {
           const docs = await api.listIndexedDocuments(s.id);
-          return [s.id, { indexed: docs.filter((d) => d.status === "indexed").length, total: docs.length }] as const;
+          if (docs.length === 0) return null;
+          const frac = docs.reduce((a, d) => a + docProgress(d.status, d.stage), 0) / docs.length;
+          const busy = docs.some((d) => d.status === "pending" || d.status === "processing");
+          return [s.id, { pct: Math.round(frac * 100), busy }] as const;
         } catch {
-          return [s.id, { indexed: 0, total: 0 }] as const;
+          return null;
         }
       }),
     );
-    setIndexing(Object.fromEntries(entries));
+    setIndexing(Object.fromEntries(entries.filter((e): e is NonNullable<typeof e> => e !== null)));
   }, []);
 
   useEffect(() => { if (systems.length) loadIndexing(systems); }, [systems, loadIndexing]);
 
   useEffect(() => {
-    const active = Object.values(indexing).some((v) => v.total > 0 && v.indexed < v.total);
+    const active = Object.values(indexing).some((v) => v.busy);
     if (!active) return;
     const t = setInterval(() => loadIndexing(systems), 3000);
     return () => clearInterval(t);
@@ -116,13 +133,6 @@ export default function Systems() {
     const u = userMap[username];
     const full = [u?.firstName, u?.lastName].filter(Boolean).join(" ");
     return full || username;
-  }
-
-  // null → no documents (nothing to index); otherwise 0-100.
-  function indexingPct(systemId: string): number | null {
-    const e = indexing[systemId];
-    if (!e || e.total === 0) return null;
-    return Math.round((e.indexed / e.total) * 100);
   }
 
   return (
@@ -188,11 +198,11 @@ export default function Systems() {
                   </TableCell>
                   <TableCell className="text-[13px]">
                     {(() => {
-                      const pct = indexingPct(s.id);
-                      if (pct === null) return <span className="text-muted-foreground">—</span>;
+                      const e = indexing[s.id];
+                      if (!e) return <span className="text-muted-foreground">—</span>;
                       return (
-                        <span className={cn("font-medium", pct < 100 ? "text-[var(--brand)]" : "text-[var(--success)]")}>
-                          {pct}%
+                        <span className={cn("font-medium", e.busy ? "text-[var(--brand)]" : "text-[var(--success)]")}>
+                          {e.pct}%
                         </span>
                       );
                     })()}
@@ -219,14 +229,14 @@ export default function Systems() {
                         <Eye />
                       </Button>
                       {(() => {
-                        const pct = indexingPct(s.id);
-                        const busy = pct !== null && pct < 100;
+                        const e = indexing[s.id];
+                        const busy = !!e?.busy;
                         return (
                           <Button
                             variant="ghost"
                             size="icon"
                             className="size-8 text-muted-foreground hover:text-[var(--brand)]"
-                            title={busy ? `Documents are still being indexed (${pct}%)` : "Go to Assessments"}
+                            title={busy ? `Documents are still being indexed (${e?.pct ?? 0}%)` : "Go to Assessments"}
                             disabled={busy}
                             onClick={() => goToAssessments(s.id)}
                           >
