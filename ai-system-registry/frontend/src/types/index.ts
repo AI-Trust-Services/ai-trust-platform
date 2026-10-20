@@ -384,6 +384,24 @@ export interface RegisterSystemInput {
   git_repo_url?: string;
 }
 
+// A document tracked by the document-indexing service (one current version).
+export type IndexingStatus = "pending" | "processing" | "indexed" | "failed";
+
+export interface IndexedDocument {
+  id: string;
+  ai_system_id: string;
+  filename: string;
+  mime_type: string | null;
+  version_id: string;
+  version_label: string;
+  status: IndexingStatus;
+  stage: string | null;
+  chunk_count: number;
+  error: string | null;
+  created_at: string;
+  indexed_at: string | null;
+}
+
 export interface PermissionsResponse {
   username: string;
   permissions: string[];

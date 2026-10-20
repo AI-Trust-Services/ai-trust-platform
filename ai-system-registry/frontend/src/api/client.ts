@@ -3,12 +3,13 @@ import type {
   Source, Dataset, MetricCreate, SourceCreate, DatasetCreate,
   DatasetPatch, ModelSystemResponse, AISystemFormData, PermissionsResponse, WorkflowStep,
   UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult,
-  QuestionAssignment, RegisterSystemInput,
+  QuestionAssignment, RegisterSystemInput, IndexedDocument,
 } from "../types"
 import type { SectionKey } from "../config/questionnaire";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
+const INDEXING_API_BASE = import.meta.env.VITE_INDEXING_API_BASE;
 export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 
 async function request<T>(path: string, options: RequestInit = {}, base: string = API_BASE): Promise<T> {
@@ -24,7 +25,7 @@ export const api = {
   getSystems: () => request<AISystem[]>("/systems?limit=200"),
   getSystem: (id: string) => request<AISystem>(`/systems/${id}`),
   deleteSystem: (id: string) => request<null>(`/systems/${id}`, { method: "DELETE" }),
-  updateSystem: (id: string, data: Partial<AISystemFormData>) =>
+  updateSystem: (id: string, data: Partial<AISystemFormData & RegisterSystemInput>) =>
     request<AISystem>(`/systems/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -301,6 +302,71 @@ export const api = {
 
   getDocumentDownloadUrl: (systemId: string, docIndex: number) =>
     request<{ url: string }>(`/systems/${encodeURIComponent(systemId)}/documents/${docIndex}/download-url`),
+
+  // ── Document indexing service (separate backend, VITE_INDEXING_API_BASE) ─────
+  // Upload goes through XMLHttpRequest (not request()/fetch) because we need
+  // upload-progress events and a per-request abort — neither of which fetch
+  // exposes. The worker indexes the document asynchronously after upload.
+  uploadDocumentIndexed: (
+    systemId: string,
+    file: File,
+    opts: { onProgress?: (pct: number) => void; signal?: AbortSignal } = {},
+  ): Promise<{ document_id: string; version_id: string; status: string }> =>
+    new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const fd = new FormData();
+      fd.append("file", file);
+      xhr.open(
+        "POST",
+        `${INDEXING_API_BASE}/systems/${encodeURIComponent(systemId)}/documents`,
+      );
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && opts.onProgress) {
+          opts.onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch {
+            reject(new Error("Invalid response from indexing service"));
+          }
+        } else {
+          let detail = `HTTP ${xhr.status}`;
+          try {
+            detail = JSON.parse(xhr.responseText).detail || detail;
+          } catch {
+            /* keep the status-code message */
+          }
+          reject(new Error(detail));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Network error"));
+      xhr.onabort = () => reject(new DOMException("Aborted", "AbortError"));
+      if (opts.signal) {
+        if (opts.signal.aborted) {
+          xhr.abort();
+          return;
+        }
+        opts.signal.addEventListener("abort", () => xhr.abort());
+      }
+      xhr.send(fd);
+    }),
+
+  listIndexedDocuments: (systemId: string) =>
+    request<IndexedDocument[]>(
+      `/systems/${encodeURIComponent(systemId)}/documents`,
+      {},
+      INDEXING_API_BASE,
+    ),
+
+  deleteIndexedDocument: (documentId: string) =>
+    request<{ deleted: boolean; document_id: string }>(
+      `/documents/${encodeURIComponent(documentId)}`,
+      { method: "DELETE" },
+      INDEXING_API_BASE,
+    ),
 
   getRceSummary: (systemId: string) =>
     request<{
