@@ -13,9 +13,10 @@ All Cognee data (LanceDB vectors, per-dataset Kuzu graphs, SQLite relational) li
 StatefulSet. Our feedback data lives in `cognee_eval.db` inside the same directory.
 
 **Graph storage layout** — cognee 1.6 persists each dataset's graph as a per-dataset
-`system/databases/<dataset-uuid>/<graph-uuid>.lbug` **Kuzu** database (the shipped `kuzu` package is
-the ladybug fork — `.lbug` extension, not `.pkl`). There is no single shared `cognee_graph_kuzu`
-database. `graph.py` globs for the most recently written per-dataset `.lbug` and opens it with
+`system/databases/<dataset-uuid>/<graph-uuid>.(lbug|pkl)` **Kuzu** database (the shipped `kuzu`
+package is the ladybug fork; it writes `.lbug` or `.pkl` depending on the code path — same library
+version `0.19.0`). There is no single shared `cognee_graph_kuzu` database. `graph.py` globs for
+both `*.lbug` and `*.pkl`, picks the most recently written, and opens it with
 `kuzu.Database(path, read_only=True)`; the `Node`/`EDGE` tables carry the extracted knowledge graph.
 
 **Single dataset for source + feedback** — `ingest_feedback()` calls `cognee.remember()` with
@@ -105,14 +106,6 @@ in live mode — the model is selected in code (`Snowflake/snowflake-arctic-embe
 fall back to in-process fastembed (local ONNX, `BAAI/bge-small-en-v1.5`, 384-dim, never
 hits the network); the e2e suite mocks the whole cognee pipeline regardless.
 
-> **Known limitation (fresh ingestion):** the previous `ai-gateway` proxy rewrote
-> model-emitted graph-edge fields (`source`→`source_node_id`, `target`→`target_node_id`,
-> `type`→`relationship_name`) so cognee's `KnowledgeGraph` schema validated. Talking to
-> Thalamus directly drops that remap, so a **fresh ingestion** may produce edges that fail
-> cognee's schema depending on the model's JSON. This does **not** affect production:
-> prod serves a frozen graph snapshot read-only and never re-ingests — only `/evaluate`
-> (grounded Q&A, plain text) hits the LLM, which needs no remap.
-
 ## Notes
 
 - Ingestion is synchronous; the nginx `proxy_read_timeout` is set to 600s for this route
@@ -122,8 +115,7 @@ hits the network); the e2e suite mocks the whole cognee pipeline regardless.
   is hardcoded per mode in `setup_cognee()`, not env-configurable. Stub/CI mode uses
   in-process fastembed (`BAAI/bge-small-en-v1.5`, 384-dim, no network required).
 - **Rate limiting**: `COGNEE_LLM_RATE_LIMIT_REQUESTS` paces cognee's generation calls under the
-  gateway's sustained token quota. Note the retry/backoff the old `ai-gateway` added is gone —
-  cognee's own client handles transient errors.
+  gateway's sustained token quota.
 
 ## Testing
 

@@ -1,9 +1,9 @@
 """Thin wrapper around the Cognee 1.6.x pipeline for the EU AI Act evaluation.
 
-Configuration is driven entirely by environment variables injected by the Helm deployment.
-All cognee generation (main + extraction) and embeddings are pointed at Thalamus — an
-OpenAI-compatible inference gateway. fastembed (local ONNX) is the fallback when
-COGNEE_EMBEDDING_PROVIDER=fastembed (default for CI/offline).
+LLM and embedding provider/model are hardcoded in setup_cognee() — not env-configurable.
+In live mode (THALAMUS_BASE_URL is a real URL) both generation and embeddings go through
+Thalamus (OpenAI-compat). In stub/CI mode (unset or "stub") embeddings fall back to
+in-process fastembed (local ONNX, no network).
 """
 
 import os
