@@ -56,6 +56,13 @@ def _stub_cognee_modules() -> None:
     # kuzu is imported at module level in graph.py
     sys.modules.setdefault("kuzu", types.ModuleType("kuzu"))
 
+    # litellm is imported at module level in cognee_client.py
+    litellm_stub = types.ModuleType("litellm")
+    litellm_stub.drop_params = False
+    litellm_stub.num_retries = 0
+    litellm_stub.rpm_limit = 0
+    sys.modules.setdefault("litellm", litellm_stub)
+
 
 _stub_cognee_modules()
 
