@@ -341,6 +341,7 @@ See `.env.example` for the full list, defaults, and per-service mapping. Notable
 - **alerts** — `ALERT_POLL_INTERVAL` (10 dev, 60+ prod).
 - **admin SMTP** — `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/SSL/STARTTLS` seed the `platform_settings` row on first startup of the admin backend. After that, the DB value wins — changes via the Admin UI persist across redeploys. The registry backend also reads these same vars directly from the environment for its fire-and-forget notifications (it does not read from `platform_settings`).
 - **registry LLM** — `LLM_PROVIDER` (`stub`/`ollama`/`external`), `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_VISION_MODEL`; external provider `AI_CLIENT_ID/SECRET`, `AI_AUTH_URL`, `AI_API_URL`, `AI_RESOURCE_GROUP`, `AI_DEPLOYMENT_ID`, `AI_API_VERSION`; `ASSIST_TURN_CAP` (12), `ASSIST_MAX_TEXT_LENGTH` (15000).
+- **Langfuse tracing** (optional, all backends via `ai-trust-env`) — `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` (blank = tracing disabled; keys are GitHub secrets overridden by CI). A Langfuse project is fixed by its key pair, so per-deployment separation is by the Langfuse `environment`: `LANGFUSE_TRACING_ENVIRONMENT` is **auto-derived from the deploy namespace** (= the GitHub username of whoever deployed) by `k8s/scripts/bootstrap.sh` and the CI deploy — never set it by hand. Sample endpoint: `POST /api/registry/v1/langfuse/test-trace`.
 
 ## otel-pipeline/
 
