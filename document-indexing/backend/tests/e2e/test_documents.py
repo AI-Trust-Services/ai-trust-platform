@@ -10,7 +10,6 @@ All tests require Postgres (auto-skipped if not reachable).
 from __future__ import annotations
 
 import httpx
-import pytest
 
 _HDR = {"x-forwarded-preferred-username": "test-user"}
 _PDF_BYTES = b"%PDF-1.4 minimal"

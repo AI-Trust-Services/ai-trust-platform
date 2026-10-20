@@ -6,6 +6,8 @@ COPY libs/tenancy /app/libs/tenancy
 COPY libs/persistence /app/libs/persistence
 COPY libs/logging /app/libs/logging
 COPY document-indexing-worker/requirements.txt .
+# CPU-only torch/torchvision are pinned in requirements.txt (+cpu via the PyTorch
+# CPU index) — see the note there. No separate install step needed.
 RUN pip install --no-cache-dir -r requirements.txt
 
 # System libraries OpenCV needs at import time (Docling's PDF pipeline pulls in

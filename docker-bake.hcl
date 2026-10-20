@@ -22,23 +22,28 @@ function "tag" {
 }
 
 group "default" {
+  # MVP scope: GenAI-Observability (monitoring, alerts, dta) + Audit + the OTLP
+  # telemetry pipeline (otel-rmq-bridge, otel-clickhouse-consumer) are disabled,
+  # which also drops the ClickHouse + RabbitMQ infra.
+  # Re-enable a line here AND its Helm `enabled` flag + shell proxy entry.
+  # See the "MVP scope" section in the root CLAUDE.md.
   targets = [
     "users-backend",
     "ai-system-registry-backend",
-    "monitoring-backend",
+    # "monitoring-backend",               # [MVP-off] GenAI-Observability
     "overview-backend",
-    "alerts-backend",
+    # "alerts-backend",                   # [MVP-off] GenAI-Observability
     "compliance-backend",
-    "decision-trace-analyzer-backend",
-    "policy-checker-worker",
+    # "decision-trace-analyzer-backend",  # [MVP-off] GenAI-Observability
+    # "policy-checker-worker",            # [MVP-off] GenAI-Observability (alerts worker)
     "embedding-service",
     "document-indexing-backend",
     "document-indexing-worker",
-    "ai-test-bed-backend",
+    # "ai-test-bed-backend",              # [MVP-off] AI test-bed MFE (RAG/document-indexing stays)
     "audit-backend",
     "audit-flush-worker",
     "admin-backend",
-    "otel-clickhouse-consumer",
+    # "otel-clickhouse-consumer",         # [MVP-off] OTLP pipeline (needs RabbitMQ+ClickHouse)
     "openfga-provision",
     "db-migrate",
     "clickhouse-migrate",
@@ -46,17 +51,17 @@ group "default" {
     "minio",
     "mc",
     "shell",
-    "otel-rmq-bridge",
+    # "otel-rmq-bridge",                  # [MVP-off] OTLP pipeline (needs RabbitMQ)
     "ai-system-registry-frontend",
-    "monitoring-frontend",
+    # "monitoring-frontend",              # [MVP-off] GenAI-Observability
     "overview-frontend",
-    "alerts-frontend",
+    # "alerts-frontend",                  # [MVP-off] GenAI-Observability
     "compliance-frontend",
     "users-frontend",
-    "decision-trace-analyzer-frontend",
+    # "decision-trace-analyzer-frontend", # [MVP-off] GenAI-Observability
     "audit-frontend",
     "admin-frontend",
-    "ai-test-bed-frontend",
+    # "ai-test-bed-frontend",             # [MVP-off] AI test-bed MFE (RAG/document-indexing stays)
     "cognee-eval-backend",
     "ai-gateway",
   ]

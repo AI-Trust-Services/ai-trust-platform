@@ -1,0 +1,5 @@
+SmartHR Assistant is an AI-powered system used internally by the HR department at Acme Corp
+to screen job applications and rank candidates based on CV content and skill match scores.
+The system processes personal data including CVs, employment history, and educational records.
+It generates ranked shortlists and automated rejection notices for candidates who fall below
+a configurable score threshold, with a human reviewer making all final hiring decisions.

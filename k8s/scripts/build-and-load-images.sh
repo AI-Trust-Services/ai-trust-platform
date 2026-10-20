@@ -36,10 +36,27 @@ fi
 
 images=()
 
+# [MVP-off] Images disabled for the MVP scope — mirrors the commented-out entries
+# in docker-bake.hcl group "default". GenAI-Observability + Audit + the OTLP
+# pipeline. build() skips these unless you ask for one explicitly with
+# --service <name>. See root CLAUDE.md "MVP scope".
+MVP_DISABLED=(
+  monitoring-backend monitoring-frontend
+  alerts-backend alerts-frontend policy-checker-worker
+  decision-trace-analyzer-backend decision-trace-analyzer-frontend
+  otel-clickhouse-consumer otel-rmq-bridge
+  ai-test-bed-backend ai-test-bed-frontend
+)
+
 build() {
   local name="$1" context="$2" dockerfile="$3"
   shift 3
   [[ -n "$FILTER" && "$name" != "$FILTER" ]] && return 0
+  # [MVP-off] skip disabled images unless explicitly requested via --service
+  if [[ -z "$FILTER" ]] && printf '%s\n' "${MVP_DISABLED[@]}" | grep -qx "$name"; then
+    echo "==> skipping ${name} (MVP-disabled; build with --service ${name} to override)"
+    return 0
+  fi
   local tag="ai-trust/${name}:${TAG}"
   echo "==> building ${tag}  (context=${context} dockerfile=${dockerfile})"
   docker build -t "$tag" -f "$dockerfile" "$@" "$context"

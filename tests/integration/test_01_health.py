@@ -12,21 +12,19 @@ import pytest
 from conftest import (
     REGISTRY_URL,
     COMPLIANCE_URL,
-    ALERTS_URL,
     USERS_URL,
     AUDIT_URL,
     ADMIN_URL,
-    MONITORING_URL,
 )
 
+# [MVP-off] monitoring + alerts are GenAI-observability services, disabled for
+# the MVP — they have no cross-service contract coverage beyond this smoke test.
 _SERVICES = [
     ("registry", REGISTRY_URL),
     ("compliance", COMPLIANCE_URL),
-    ("alerts", ALERTS_URL),
     ("users", USERS_URL),
     ("audit", AUDIT_URL),
     ("admin", ADMIN_URL),
-    ("monitoring", MONITORING_URL),
 ]
 
 
