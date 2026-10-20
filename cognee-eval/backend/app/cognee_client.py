@@ -17,9 +17,7 @@ from cognee.modules.search.types.SearchType import SearchType
 _DATASET = "eu_ai_act_v1"
 
 _THALAMUS_BASE_URL = os.environ.get("THALAMUS_BASE_URL", "")
-_THALAMUS_MODEL = os.environ.get(
-    "THALAMUS_MODEL", "HuggingFaceTB/SmolLM2-135M-Instruct"
-)
+_THALAMUS_MODEL = os.environ.get("THALAMUS_MODEL", "Qwen/Qwen3.8-27B")
 _THALAMUS_BEARER_TOKEN = os.environ.get("THALAMUS_BEARER_TOKEN", "")
 
 # Stub mode (unset/"stub") is used by tests/CI, which mock the whole cognee pipeline.
