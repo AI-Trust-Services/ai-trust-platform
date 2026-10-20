@@ -3,7 +3,7 @@
      has no docker-compose entry). The worker's queue is the DB (document_versions.status),
      so no broker is involved. */}}
 
-{{/* ── embedding-service: loads BAAI/bge-m3 once, shared by backend (query) + worker (index) ── */}}
+{{/* ── embedding-service: loads EMBED_MODEL once, shared by backend (query) + worker (index) ── */}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

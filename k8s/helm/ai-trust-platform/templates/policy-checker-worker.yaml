@@ -1,3 +1,4 @@
+{{- if .Values.policyChecker.enabled }}
 {{/* Background job, no HTTP port - evaluates alert rules every ALERT_POLL_INTERVAL seconds. */}}
 apiVersion: apps/v1
 kind: Deployment
@@ -32,3 +33,4 @@ spec:
               value: "8123"
             - name: ALERT_POLL_INTERVAL
               value: {{ .Values.policyChecker.pollInterval | quote }}
+{{- end }}
