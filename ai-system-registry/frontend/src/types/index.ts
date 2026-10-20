@@ -15,12 +15,9 @@ export interface AISystem {
   org_role: OrgRole;
   provider_country: string;
   deployment_country: string | null;
-  eu_output_usage: boolean | null;
-  eu_market_placement: boolean | null;
   system_type: SystemType;
   autonomy_level: AutonomyLevel;
   lifecycle: LifecycleKey;
-  application_url: string;
   description: string;
   intended_purpose: string;
   department: string | null;
@@ -44,7 +41,6 @@ export interface AISystem {
   questionnaire_answers: Record<string, unknown> | null;
   registration_documents: RegistrationDocument[] | null;
   business_owners: string | null;
-  technical_owners: string | null;
   contributors: string[] | null;
   git_repo_url: string | null;
   planned_rollout_date: string | null;
@@ -342,12 +338,9 @@ export interface AISystemFormData {
   org_role: OrgRole;
   provider_country: string;
   deployment_country: string | null;
-  eu_output_usage: boolean | null;
-  eu_market_placement: boolean | null;
   system_type: SystemType;
   autonomy_level: AutonomyLevel;
   lifecycle: LifecycleKey;
-  application_url: string;
   description: string;
   intended_purpose: string;
   is_gpai: boolean;

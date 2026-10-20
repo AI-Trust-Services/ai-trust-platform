@@ -707,8 +707,7 @@ type EditableFields = {
   name: string;
   description: string;
   intended_purpose: string;
-  business_owners: string;
-  technical_owners: string;
+  contributors: string[];
   git_repo_url: string;
   lifecycle: string;
   org_role: string;
@@ -719,13 +718,15 @@ function extractEditableFields(sys: AISystem | null): EditableFields {
     name: sys?.name ?? "",
     description: sys?.description ?? "",
     intended_purpose: sys?.intended_purpose ?? "",
-    business_owners: sys?.business_owners ?? "",
-    technical_owners: sys?.technical_owners ?? "",
+    contributors: sys?.contributors ?? [],
     git_repo_url: sys?.git_repo_url ?? "",
     lifecycle: sys?.lifecycle ?? "development",
     org_role: sys?.org_role ?? "",
   };
 }
+
+// Only AI engineers and business owners may be added as contributors.
+const CONTRIBUTOR_ROLES = ["ai_engineer", "business_owner"];
 
 export default function SystemDetail({ system: initialSystem, models: _models, open, onClose, onDelete, onUpdate, userMap }: {
   system: AISystem | null;
@@ -745,13 +746,12 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
   const [form, setForm] = useState<EditableFields>(() => extractEditableFields(initialSystem));
   const [formBase, setFormBase] = useState<EditableFields>(() => extractEditableFields(initialSystem));
   const [saving, setSaving] = useState(false);
-  const [allUsers, setAllUsers] = useState<Array<{ username: string; firstName: string; lastName: string }>>([]);
+  const [allUsers, setAllUsers] = useState<Array<{ username: string; firstName: string; lastName: string; role: string }>>([]);
+  const [pendingContributor, setPendingContributor] = useState("");
   const showToast = useToast();
   const { mayWrite, mayApprove, username } = useModalControls();
 
-  const isDirty = (Object.keys(form) as (keyof EditableFields)[]).some(
-    (k) => form[k] !== formBase[k],
-  );
+  const isDirty = JSON.stringify(form) !== JSON.stringify(formBase);
 
   // Reset form and local system when the sheet opens a different system.
   useEffect(() => {
@@ -793,8 +793,7 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
         name: form.name,
         description: form.description,
         intended_purpose: form.intended_purpose,
-        business_owners: form.business_owners || null,
-        technical_owners: form.technical_owners || null,
+        contributors: form.contributors,
         git_repo_url: form.git_repo_url || null,
         lifecycle: form.lifecycle,
         org_role: form.org_role || null,
@@ -827,6 +826,23 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
   const setField = (k: keyof EditableFields) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Resolve a username to a display name via the loaded users or the userMap prop.
+  const resolveName = (u: string | null) => {
+    if (!u) return "—";
+    const found = allUsers.find((x) => x.username === u);
+    const nm = found ?? (userMap && userMap[u] ? userMap[u] : null);
+    const full = nm ? [nm.firstName, nm.lastName].filter(Boolean).join(" ") : "";
+    return full || u;
+  };
+
+  // Contributor-eligible users not already the owner or a contributor.
+  const contributorCandidates = allUsers.filter(
+    (u) =>
+      CONTRIBUTOR_ROLES.includes(u.role) &&
+      u.username !== system?.business_owners &&
+      !form.contributors.includes(u.username),
+  );
 
   return (
     <>
@@ -884,29 +900,65 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
                         />
                         <p className="text-xs text-muted-foreground">Please enter the purpose of the AI system — how and for what it is to be used.</p>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="field_biz_owner">Business Owner</Label>
-                          <select className={SELECT_CLASS} id="field_biz_owner" value={form.business_owners} onChange={setField("business_owners")}>
-                            <option value="">— none —</option>
-                            {allUsers.map((u) => (
-                              <option key={u.username} value={u.username}>
-                                {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username}
-                              </option>
-                            ))}
-                          </select>
+                      <div className="flex flex-col gap-1.5">
+                        <Label>Owner</Label>
+                        <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-[10px] font-bold text-white">
+                            {(system.business_owners || "—").slice(0, 2).toUpperCase()}
+                          </span>
+                          {resolveName(system.business_owners)}
                         </div>
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="field_tech_owner">Technical Owner</Label>
-                          <select className={SELECT_CLASS} id="field_tech_owner" value={form.technical_owners} onChange={setField("technical_owners")}>
-                            <option value="">— none —</option>
-                            {allUsers.map((u) => (
-                              <option key={u.username} value={u.username}>
-                                {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username}
-                              </option>
+                        <p className="text-xs text-muted-foreground">The owner is the user who created this system.</p>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label>Contributors</Label>
+                        {mayWrite && (
+                          <div className="flex gap-2">
+                            <select className={SELECT_CLASS} value={pendingContributor} onChange={(e) => setPendingContributor(e.target.value)}>
+                              <option value="">Add a contributor…</option>
+                              {contributorCandidates.map((u) => (
+                                <option key={u.username} value={u.username}>
+                                  {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username}
+                                </option>
+                              ))}
+                            </select>
+                            <Button
+                              type="button"
+                              disabled={!pendingContributor}
+                              onClick={() => {
+                                setForm((f) => ({
+                                  ...f,
+                                  contributors: f.contributors.includes(pendingContributor)
+                                    ? f.contributors
+                                    : [...f.contributors, pendingContributor],
+                                }));
+                                setPendingContributor("");
+                              }}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        )}
+                        {form.contributors.length === 0 ? (
+                          <span className="text-[13px] text-muted-foreground">No contributors</span>
+                        ) : (
+                          <div className="flex flex-col gap-1.5">
+                            {form.contributors.map((u) => (
+                              <div key={u} className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm">
+                                <span>{resolveName(u)}</span>
+                                {mayWrite && (
+                                  <button
+                                    type="button"
+                                    className="ml-auto text-[13px] font-medium text-[var(--brand)] hover:underline"
+                                    onClick={() => setForm((f) => ({ ...f, contributors: f.contributors.filter((x) => x !== u) }))}
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
                             ))}
-                          </select>
-                        </div>
+                          </div>
+                        )}
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <Label htmlFor="field_git_repo" className="flex items-center gap-1.5">

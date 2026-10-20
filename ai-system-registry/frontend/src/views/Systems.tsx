@@ -29,6 +29,7 @@ export default function Systems() {
   const [lifecycleFilter, setLifecycleFilter] = useState("");
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [indexing, setIndexing] = useState<Record<string, { indexed: number; total: number }>>({});
   const { mayWrite, mayApprove } = useModalControls();
   const showToast = useToast();
 
@@ -60,6 +61,33 @@ export default function Systems() {
 
   useEffect(() => { loadSystems(); loadModels(); }, [loadSystems, loadModels]);
 
+  // Per-system indexing progress (indexed documents / total), read directly from the
+  // document-indexing service. Polls every 3s while any system still has documents
+  // being indexed. ponytail: one status call per listed system; a batch status
+  // endpoint is the upgrade path if the list grows large.
+  const loadIndexing = useCallback(async (sys: AISystem[]) => {
+    const entries = await Promise.all(
+      sys.map(async (s) => {
+        try {
+          const docs = await api.listIndexedDocuments(s.id);
+          return [s.id, { indexed: docs.filter((d) => d.status === "indexed").length, total: docs.length }] as const;
+        } catch {
+          return [s.id, { indexed: 0, total: 0 }] as const;
+        }
+      }),
+    );
+    setIndexing(Object.fromEntries(entries));
+  }, []);
+
+  useEffect(() => { if (systems.length) loadIndexing(systems); }, [systems, loadIndexing]);
+
+  useEffect(() => {
+    const active = Object.values(indexing).some((v) => v.total > 0 && v.indexed < v.total);
+    if (!active) return;
+    const t = setInterval(() => loadIndexing(systems), 3000);
+    return () => clearInterval(t);
+  }, [indexing, systems, loadIndexing]);
+
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
     return systems.filter((sys) => {
@@ -67,8 +95,7 @@ export default function Systems() {
         sys.name.toLowerCase().includes(s) ||
         sys.id.toLowerCase().includes(s) ||
         (sys.intended_purpose || "").toLowerCase().includes(s) ||
-        (sys.business_owners || "").toLowerCase().includes(s) ||
-        (sys.technical_owners || "").toLowerCase().includes(s);
+        (sys.business_owners || "").toLowerCase().includes(s);
       const matchLc = !lifecycleFilter || sys.lifecycle === lifecycleFilter;
       return matchSearch && matchLc;
     });
@@ -89,6 +116,13 @@ export default function Systems() {
     const u = userMap[username];
     const full = [u?.firstName, u?.lastName].filter(Boolean).join(" ");
     return full || username;
+  }
+
+  // null → no documents (nothing to index); otherwise 0-100.
+  function indexingPct(systemId: string): number | null {
+    const e = indexing[systemId];
+    if (!e || e.total === 0) return null;
+    return Math.round((e.indexed / e.total) * 100);
   }
 
   return (
@@ -116,8 +150,9 @@ export default function Systems() {
               <TableRow className="hover:bg-transparent">
                 <TableHead>System</TableHead>
                 <TableHead>Purpose of Use</TableHead>
-                <TableHead>Business Owner</TableHead>
-                <TableHead>Technical Owner</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>Contributors</TableHead>
+                <TableHead>Indexing</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Lifecycle</TableHead>
                 <TableHead>Risk</TableHead>
@@ -128,7 +163,7 @@ export default function Systems() {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
                     {systems.length === 0 ? 'No systems registered yet. Click "Register System" to add one.' : "No systems match the current filters."}
                   </TableCell>
                 </TableRow>
@@ -144,7 +179,24 @@ export default function Systems() {
                     </span>
                   </TableCell>
                   <TableCell className="text-[13px]">{ownerLabel(s.business_owners)}</TableCell>
-                  <TableCell className="text-[13px]">{ownerLabel(s.technical_owners)}</TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">
+                    {s.contributors && s.contributors.length > 0 ? (
+                      <span title={s.contributors.map(ownerLabel).join(", ")}>
+                        {s.contributors.length} contributor{s.contributors.length > 1 ? "s" : ""}
+                      </span>
+                    ) : "—"}
+                  </TableCell>
+                  <TableCell className="text-[13px]">
+                    {(() => {
+                      const pct = indexingPct(s.id);
+                      if (pct === null) return <span className="text-muted-foreground">—</span>;
+                      return (
+                        <span className={cn("font-medium", pct < 100 ? "text-[var(--brand)]" : "text-[var(--success)]")}>
+                          {pct}%
+                        </span>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell>
                     {s.org_role ? (
                       <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs capitalize">{s.org_role}</span>
@@ -166,15 +218,22 @@ export default function Systems() {
                       >
                         <Eye />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-muted-foreground hover:text-[var(--brand)]"
-                        title="Go to Assessments"
-                        onClick={() => goToAssessments(s.id)}
-                      >
-                        <ClipboardList />
-                      </Button>
+                      {(() => {
+                        const pct = indexingPct(s.id);
+                        const busy = pct !== null && pct < 100;
+                        return (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-muted-foreground hover:text-[var(--brand)]"
+                            title={busy ? `Documents are still being indexed (${pct}%)` : "Go to Assessments"}
+                            disabled={busy}
+                            onClick={() => goToAssessments(s.id)}
+                          >
+                            <ClipboardList />
+                          </Button>
+                        );
+                      })()}
                       <Button
                         variant="ghost"
                         size="icon"
