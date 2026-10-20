@@ -251,14 +251,16 @@ Static HTML + `luigi-config.js` served by nginx (Luigi core from CDN). Nav nodes
 ## MVP scope — disabling services without removing code
 
 The platform ships a trimmed **MVP scope**: **Core governance** (registry,
-compliance, overview, users/IAM, admin, shell + Postgres/Keycloak/OpenFGA/MinIO)
-plus the **AI/RAG test-bed** (document-indexing, embedding-service, ai-test-bed).
+compliance, overview, users/IAM, admin, shell + Postgres/Keycloak/OpenFGA/MinIO),
+the **AI/RAG test-bed** (document-indexing, embedding-service, ai-test-bed), and
+the **Audit** trail (audit backend/frontend + audit-flush-worker + ClickHouse).
 **Disabled** for the MVP: **GenAI-Observability** (monitoring, alerts,
-decision-trace-analyzer), the **Audit** trail, and the **OTLP telemetry pipeline**
-(otel-collector, otel-rmq-bridge, otel-clickhouse-consumer). Disabling observability + audit
-also drops the **ClickHouse** and **RabbitMQ** StatefulSets — they have no other
-consumers (monitoring/alerts/dta/audit are ClickHouse's only readers; the OTLP
-pipeline is RabbitMQ's only user; the indexing worker polls Postgres, not RabbitMQ).
+decision-trace-analyzer) and the **OTLP telemetry pipeline**
+(otel-collector, otel-rmq-bridge, otel-clickhouse-consumer). Disabling the OTLP
+pipeline also drops the **RabbitMQ** StatefulSet — it has no other consumer (the
+OTLP pipeline is RabbitMQ's only user; the indexing worker polls Postgres, not
+RabbitMQ). **ClickHouse** stays enabled because Audit reads and writes it
+(monitoring/alerts/dta are its only other readers).
 
 **Nothing is deleted** — every disabled component's source, Dockerfile, template
 and manifest entry stays in the repo. A service is switched off by config across
@@ -273,7 +275,7 @@ the layers below; grep `[MVP-off]` to find every toggle.
 | Deploy (infra/workers) | `values.yaml` `clickhouse`/`rabbitmq`/`otel`/`policyChecker`/`auditFlush` `.enabled` | each template wrapped in `{{- if .Values.<x>.enabled }}`; the `clickhouse-migrate` Job (jobs.yaml) is gated on `clickhouse.enabled` because it waits on ClickHouse |
 | Proxy | `shell/nginx.conf` | the service's `location` blocks commented out — **mandatory**: static `proxy_pass` hostnames resolve at nginx startup, so a missing upstream stops the shell (the entry point) from starting at all. Contrast the `/api/cognee/` block, which uses `resolver` + a variable to defer resolution and tolerate absence |
 | Nav | `shell/public/luigi-config.js` | the nav node object commented out; the shell-bar alerts bell injection block (linked to the removed `/home/alerts` node) is also commented out |
-| Audit writes | `values.yaml` `components[].extraEnv.AUDIT_ENABLED` | `"false"` on the registry/compliance/admin backends makes `log_audit_event` a no-op (`libs/persistence/ai_trust_persistence/audit.py`). Without this the Postgres `audit_events` buffer grows unbounded — the audit-flush-worker that drains it is MVP-off |
+| Audit writes | `values.yaml` `components[].extraEnv.AUDIT_ENABLED` | Setting `"false"` on the registry/compliance/admin backends makes `log_audit_event` a no-op (`libs/persistence/ai_trust_persistence/audit.py`); it defaults to `true`. **Not set in the current MVP** — Audit is enabled, so its flush worker drains the Postgres `audit_events` buffer. This flag only matters if Audit is disabled again without the flush worker |
 
 **Re-enabling a service:** flip its `enabled` flag(s) in `values.yaml`, un-comment its target in `docker-bake.hcl`
 `group "default"`, un-comment its `ociImage` entry in `.ocm/component-constructor.yaml` (must match the bake list —

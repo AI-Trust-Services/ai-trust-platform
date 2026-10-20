@@ -44,8 +44,7 @@ MVP_DISABLED=(
   monitoring-backend monitoring-frontend
   alerts-backend alerts-frontend policy-checker-worker
   decision-trace-analyzer-backend decision-trace-analyzer-frontend
-  audit-backend audit-frontend audit-flush-worker
-  otel-clickhouse-consumer otel-rmq-bridge clickhouse-migrate
+  otel-clickhouse-consumer otel-rmq-bridge
 )
 
 build() {

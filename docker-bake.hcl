@@ -40,13 +40,13 @@ group "default" {
     "document-indexing-backend",
     "document-indexing-worker",
     "ai-test-bed-backend",
-    # "audit-backend",                    # [MVP-off] Audit
-    # "audit-flush-worker",               # [MVP-off] Audit
+    "audit-backend",
+    "audit-flush-worker",
     "admin-backend",
     # "otel-clickhouse-consumer",         # [MVP-off] OTLP pipeline (needs RabbitMQ+ClickHouse)
     "openfga-provision",
     "db-migrate",
-    # "clickhouse-migrate",               # [MVP-off] ClickHouse schema (no ClickHouse in MVP)
+    "clickhouse-migrate",
     "keycloak-provision",
     "minio",
     "mc",
@@ -59,7 +59,7 @@ group "default" {
     "compliance-frontend",
     "users-frontend",
     # "decision-trace-analyzer-frontend", # [MVP-off] GenAI-Observability
-    # "audit-frontend",                   # [MVP-off] Audit
+    "audit-frontend",
     "admin-frontend",
     "ai-test-bed-frontend",
     "cognee-eval-backend",

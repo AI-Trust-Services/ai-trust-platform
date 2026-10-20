@@ -175,15 +175,14 @@
         navigationContext: "users-roles",
         viewGroup: "users",
       },
-      // [MVP-off] Audit — service not deployed. See root CLAUDE.md "MVP scope".
-      /* {
+      {
         pathSegment: "audit",
         label: "Audit Trail",
         icon: "activity-2",
         viewUrl: "/audit/",
         navigationContext: "audit",
         viewGroup: "audit",
-      }, */
+      },
       {
         pathSegment: "mail-service",
         label: "Mail Service",

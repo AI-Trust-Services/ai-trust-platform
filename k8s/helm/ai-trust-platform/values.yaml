@@ -71,7 +71,7 @@ rabbitmq:
   serviceType: ClusterIP
 
 clickhouse:
-  enabled: false # [MVP-off] used only by observability (monitoring/alerts/dta) + audit
+  enabled: true # used by observability (monitoring/alerts/dta) + audit
   image: clickhouse/clickhouse-server:24.5-alpine
   storageSize: 5Gi
   serviceType: ClusterIP
@@ -104,7 +104,7 @@ policyChecker:
   pollInterval: "10"
 
 auditFlush:
-  enabled: false # [MVP-off] audit Postgres->ClickHouse flush worker
+  enabled: true # audit Postgres->ClickHouse flush worker
   interval: "5"
   batchSize: "500"
 
@@ -164,7 +164,6 @@ components:
     extraEnv:
       OPENFGA_URL: http://openfga:8080
       KEYCLOAK_URL: http://keycloak:8080
-      AUDIT_ENABLED: "false" # [MVP-off] no flush worker to drain the audit buffer
     dependsOnJobs: [db-migrate, openfga-provision]
     dependsOnServices:
       - name: minio
@@ -212,7 +211,6 @@ components:
     rootPath: /api/compliance
     extraEnv:
       OPENFGA_URL: http://openfga:8080
-      AUDIT_ENABLED: "false" # [MVP-off] no flush worker to drain the audit buffer
     dependsOnJobs: [db-migrate, openfga-provision]
     dependsOnServices:
       - name: minio
@@ -244,7 +242,6 @@ components:
     openfgaConfig: true
 
   - name: audit
-    enabled: false # [MVP-off] Audit
     backendPort: 8009
     rootPath: /api/audit
     extraEnv:
@@ -261,7 +258,6 @@ components:
     extraEnv:
       OPENFGA_URL: http://openfga:8080
       MINIO_ENDPOINT: minio:9000
-      AUDIT_ENABLED: "false" # [MVP-off] no flush worker to drain the audit buffer
     dependsOnJobs: [db-migrate, minio-init, openfga-provision]
     dependsOnServices: []
     openfgaConfig: true
