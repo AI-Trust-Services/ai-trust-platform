@@ -4,7 +4,6 @@ import LuigiClient from "@luigi-project/client";
 import { TierBadge, LifecycleBadge, FormattedDate } from "../components/Badges";
 import SystemDetail from "../components/SystemDetail";
 import type { UserMap } from "../components/SystemDetail";
-import RegisterModal from "../components/RegisterModal";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import { SELECT_CLASS } from "../utils";
@@ -30,7 +29,7 @@ export default function Systems() {
   const [lifecycleFilter, setLifecycleFilter] = useState("");
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const { wizardOpen, setWizardOpen, mayWrite, mayApprove } = useModalControls();
+  const { mayWrite, mayApprove } = useModalControls();
   const showToast = useToast();
 
   const loadSystems = useCallback(async () => {
@@ -206,12 +205,6 @@ export default function Systems() {
           </Table>
         </Card>
       </div>
-
-      <RegisterModal
-        open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
-        onSuccess={() => { loadSystems(); loadModels(); }}
-      />
 
       <SystemDetail
         open={detailOpen}

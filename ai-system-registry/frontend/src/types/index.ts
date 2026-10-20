@@ -45,7 +45,9 @@ export interface AISystem {
   registration_documents: RegistrationDocument[] | null;
   business_owners: string | null;
   technical_owners: string | null;
+  contributors: string[] | null;
   git_repo_url: string | null;
+  planned_rollout_date: string | null;
   // Two shapes: legacy bare RationaleItem[] (AI-assisted intake) or the extended
   // ClassificationRationale object (questionnaire workflow, CO-only). Discriminate
   // with Array.isArray().
@@ -369,6 +371,17 @@ export interface AISystemFormData {
   is_law_enforcement: boolean;
   is_migration: boolean;
   is_judicial_admin: boolean;
+}
+
+// Payload for the redesigned registration form. The owner is set server-side to
+// the creator, so it is not sent here. contributors is a roster of usernames.
+export interface RegisterSystemInput {
+  name: string;
+  intended_purpose: string;
+  lifecycle?: LifecycleKey;
+  planned_rollout_date?: string | null;
+  contributors?: string[];
+  git_repo_url?: string;
 }
 
 export interface PermissionsResponse {

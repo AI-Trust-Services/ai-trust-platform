@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
-import { useLocation, Outlet } from "react-router";
+import { useLocation, useNavigate, Outlet } from "react-router";
 import { Loader2, Database } from "lucide-react";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { useTheme, useBranding } from "@ai-trust/react-hooks";
@@ -11,8 +11,6 @@ import { cn } from "@/lib/utils";
 type ToastFn = (msg: string, isError?: boolean) => void;
 
 interface ModalControls {
-  wizardOpen: boolean;
-  setWizardOpen: (open: boolean) => void;
   modelCreateOpen: boolean;
   setModelCreateOpen: (open: boolean) => void;
   mayWrite: boolean;
@@ -29,10 +27,10 @@ export const useModalControls = () => useContext(ModalContext)!;
 export default function App() {
   const [backendOk, setBackendOk] = useState<boolean | null>(null);
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null);
-  const [wizardOpen, setWizardOpen] = useState(false);
   const [modelCreateOpen, setModelCreateOpen] = useState(false);
   const healthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const location = useLocation();
+  const navigate = useNavigate();
   const { can, username } = usePermissions();
   const mayWrite = can("systems:write");
   const mayApprove = can("systems:approve");
@@ -68,7 +66,7 @@ export default function App() {
 
   return (
     <ToastContext.Provider value={showToast}>
-      <ModalContext.Provider value={{ wizardOpen, setWizardOpen, modelCreateOpen, setModelCreateOpen, mayWrite, mayApprove, username }}>
+      <ModalContext.Provider value={{ modelCreateOpen, setModelCreateOpen, mayWrite, mayApprove, username }}>
         <div className="flex h-screen flex-col overflow-hidden">
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6 shadow-[var(--shadow-xs)]">
           <div className="flex items-center gap-3">
@@ -81,7 +79,7 @@ export default function App() {
             {activeView === "systems" ? (
               <Button disabled={!mayWrite}
                 title={mayWrite ? undefined : "Requires permission: systems:write"}
-                onClick={() => setWizardOpen(true)}>
+                onClick={() => navigate("/systems/new")}>
                 + Register System
               </Button>
             ) : (

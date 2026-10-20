@@ -3,7 +3,7 @@ import type {
   Source, Dataset, MetricCreate, SourceCreate, DatasetCreate,
   DatasetPatch, ModelSystemResponse, AISystemFormData, PermissionsResponse, WorkflowStep,
   UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult,
-  QuestionAssignment,
+  QuestionAssignment, RegisterSystemInput,
 } from "../types"
 import type { SectionKey } from "../config/questionnaire";
 
@@ -30,7 +30,7 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     }),
-  intake: (data: AISystemFormData) =>
+  intake: (data: RegisterSystemInput) =>
     request<{ system: AISystem; classification: unknown }>("/intake", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
