@@ -33,23 +33,29 @@ if not _STUB_MODE and not _THALAMUS_BEARER_TOKEN:
 def setup_cognee() -> None:
     """Configure cognee to use Thalamus for LLM and embeddings.
 
-    In stub/CI mode (THALAMUS_BASE_URL unset or 'stub'), falls back to fastembed
-    (local ONNX, no network). In live mode, both LLM and embeddings go through Thalamus.
+    In stub/CI mode (THALAMUS_BASE_URL unset or 'stub') only embeddings are
+    configured (fastembed, local ONNX, no network); the LLM config is left at
+    cognee's default. Ingest and recall will fail in stub mode because graph
+    extraction requires a real LLM — this is expected (stub mode is for tests,
+    which mock the whole cognee_client module).
+
+    In live mode both LLM and embeddings go through Thalamus.
     """
     # Thalamus doesn't support the `dimensions` param that litellm may inject; drop it.
     litellm.drop_params = True
-    cognee.config.set_llm_config(
-        {
-            "llm_provider": "openai",
-            "llm_model": f"openai/{_THALAMUS_MODEL}",
-            "llm_endpoint": _THALAMUS_BASE_URL,
-            "llm_api_key": _THALAMUS_BEARER_TOKEN,
-            "llm_extraction_provider": "openai",
-            "llm_extraction_model": f"openai/{_THALAMUS_MODEL}",
-            "llm_extraction_endpoint": _THALAMUS_BASE_URL,
-            "llm_extraction_api_key": _THALAMUS_BEARER_TOKEN,
-        }
-    )
+    if not _STUB_MODE:
+        cognee.config.set_llm_config(
+            {
+                "llm_provider": "openai",
+                "llm_model": f"openai/{_THALAMUS_MODEL}",
+                "llm_endpoint": _THALAMUS_BASE_URL,
+                "llm_api_key": _THALAMUS_BEARER_TOKEN,
+                "llm_extraction_provider": "openai",
+                "llm_extraction_model": f"openai/{_THALAMUS_MODEL}",
+                "llm_extraction_endpoint": _THALAMUS_BASE_URL,
+                "llm_extraction_api_key": _THALAMUS_BEARER_TOKEN,
+            }
+        )
     if _STUB_MODE:
         embedding_cfg: dict = {
             "embedding_provider": "fastembed",
@@ -170,6 +176,8 @@ async def search_entities(
 
 async def answer_question(question: str, passages: list[dict]) -> str:
     """Generate a grounded answer via the AI gateway."""
+    if _STUB_MODE:
+        return "[Stub mode] Thalamus gateway not configured — set THALAMUS_BASE_URL to a real endpoint to enable grounded answers."
     if not passages:
         return "No relevant passages found in the knowledge graph."
 
