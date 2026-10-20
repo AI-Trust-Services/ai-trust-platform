@@ -268,7 +268,7 @@ export default function Systems() {
                 return (
                   <TableRow key={s.id} onClick={() => openSystem(s)} className="cursor-pointer">
                     <TableCell>
-                      <div className="font-medium">{s.name}</div>
+                      <div className="font-medium underline underline-offset-2">{s.name}</div>
                       <div className="text-xs text-muted-foreground">{s.id} · v{s.version}</div>
                     </TableCell>
                     <TableCell>
@@ -282,12 +282,12 @@ export default function Systems() {
                     <TableCell className="text-[13px] text-muted-foreground"><FormattedDate iso={s.created_at} /></TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="size-8" title="View details" onClick={() => openSystem(s)}>
+                        <Button variant="outline" size="icon" className="size-8" title="View details" onClick={() => openSystem(s)}>
                           <Eye />
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="size-8" title="More actions">
+                            <Button variant="outline" size="icon" className="size-8" title="More actions">
                               <MoreVertical />
                             </Button>
                           </DropdownMenuTrigger>
