@@ -80,6 +80,7 @@ export default function App() {
           <div>
             {activeView === "systems" ? (
               <Button disabled={!mayWrite}
+                className="border-transparent bg-[#1147E9] text-white hover:bg-[#0d39c4]"
                 title={mayWrite ? undefined : "Requires permission: systems:write"}
                 onClick={() => setWizardOpen(true)}>
                 + Register System

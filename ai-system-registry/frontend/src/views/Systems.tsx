@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Eye, Trash2, RefreshCw, MoreVertical, Play, ArrowRight, ChevronDown } from "lucide-react";
+import { Eye, Trash2, RefreshCw, MoreVertical, Play, ArrowRight, ChevronDown, Search } from "lucide-react";
 import LuigiClient from "@luigi-project/client";
 import { TierBadge, FormattedDate } from "../components/Badges";
 import SystemDetail from "../components/SystemDetail";
@@ -93,7 +93,9 @@ function RoleBadge({ role }: { role: OrgRole }) {
     role === "provider" ? "bg-[#e8f0fb] text-[#1147E9]"
     : role === "deployer" ? "bg-[#d5f5e3] text-[#1a5c35]"
     : "bg-[#eaecee] text-[#556b82]";
-  return <Badge className={cn("rounded-full font-medium", cls)}>{ORG_ROLE_LABELS[role] ?? role}</Badge>;
+  // Drop the article reference (e.g. "Provider (Art. 3(3))" → "Provider") for the compact table badge.
+  const label = (ORG_ROLE_LABELS[role] ?? role).replace(/\s*\(.*\)\s*$/, "");
+  return <Badge className={cn("rounded-full font-medium", cls)}>{label}</Badge>;
 }
 
 export default function Systems() {
@@ -204,13 +206,18 @@ export default function Systems() {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-6 py-3">
-        <Input
-          type="text"
-          className="w-72"
-          placeholder="Search by system name or owner name"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <div className="relative w-72">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="text"
+            className="w-full pl-9"
+            placeholder="Search by system name or owner name"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        <div className="flex-1" />
 
         <FilterDropdown
           label={filterLabel("All Risk Classifications", riskSel, RISK_OPTIONS)}
@@ -231,7 +238,6 @@ export default function Systems() {
           onToggle={(v) => setOwnerSel((s) => toggle(s, v))}
         />
 
-        <div className="flex-1" />
         <Button variant="ghost" onClick={loadAll} disabled={refreshing}>
           <RefreshCw className={cn(refreshing && "animate-spin")} /> Refresh
         </Button>
@@ -242,12 +248,12 @@ export default function Systems() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead>System Name</TableHead>
-                <TableHead>Owner / Created By</TableHead>
-                <TableHead>Risk Classification</TableHead>
-                <TableHead>Organisation Role</TableHead>
-                <TableHead>Registration Date</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="normal-case">System Name</TableHead>
+                <TableHead className="normal-case">Owner / Created By</TableHead>
+                <TableHead className="normal-case">Risk Classification</TableHead>
+                <TableHead className="normal-case">Organisation Role</TableHead>
+                <TableHead className="normal-case">Registration Date</TableHead>
+                <TableHead className="normal-case text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -262,7 +268,7 @@ export default function Systems() {
                 return (
                   <TableRow key={s.id} onClick={() => openSystem(s)} className="cursor-pointer">
                     <TableCell>
-                      <div className="font-medium hover:underline">{s.name}</div>
+                      <div className="font-medium">{s.name}</div>
                       <div className="text-xs text-muted-foreground">{s.id} · v{s.version}</div>
                     </TableCell>
                     <TableCell>
