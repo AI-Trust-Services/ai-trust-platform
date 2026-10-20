@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { useLocation, Outlet } from "react-router";
-import { Loader2, Database } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { useTheme, useBranding } from "@ai-trust/react-hooks";
 import { usePermissions } from "./hooks/usePermissions";
@@ -72,9 +72,6 @@ export default function App() {
         <div className="flex h-screen flex-col overflow-hidden">
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6 shadow-[var(--shadow-xs)]">
           <div className="flex items-center gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1147E9] to-[#6C1AF4] text-white">
-              <Database className="size-5" />
-            </span>
             <h1 className="text-lg font-semibold">AI System Registry</h1>
           </div>
           <div>
@@ -83,7 +80,7 @@ export default function App() {
                 className="border-transparent bg-[#1147E9] text-white hover:bg-[#0d39c4]"
                 title={mayWrite ? undefined : "Requires permission: systems:write"}
                 onClick={() => setWizardOpen(true)}>
-                + Register System
+                + Register new AI System
               </Button>
             ) : (
               <Button disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
