@@ -49,6 +49,17 @@ DEV_USER_ROLES = [
     ("dev-compliance", "ai_compliance_officer"),
 ]
 
+# Non-human service principals seeded in every environment (not gated behind
+# SEED_DEV_USERS). The registry's external read API (/v1/external/*) forwards
+# this principal as the downstream username when it calls document-indexing
+# retrieval on behalf of an off-platform caller; `auditor` is the least-privileged
+# read-only role that grants the required systems:read. The username is derived
+# from EXTERNAL_API_SERVICE_PRINCIPAL so a configured override is actually seeded
+# (the registry forwards the same env var).
+SERVICE_PRINCIPAL_ROLES = [
+    (os.environ.get("EXTERNAL_API_SERVICE_PRINCIPAL", "svc-external-api"), "auditor"),
+]
+
 # platform:global split into (type, id) for tuple objects.
 PLATFORM_TYPE, PLATFORM_ID = PLATFORM_OBJECT.split(":", 1)
 
@@ -205,6 +216,20 @@ async def ensure_dev_users(client: OpenFgaClient) -> None:
     await _write_tuples_idempotent(client, tuples, label="dev user assignment")
 
 
+async def seed_service_principals(client: OpenFgaClient) -> None:
+    """Seed non-human service principals (every environment, always on).
+
+    Unlike dev users, these are required in prod too — the external-api gateway
+    forwards `svc-external-api` on every downstream call, so the principal must
+    hold its role before the first request.
+    """
+    tuples = [
+        ClientTuple(user=f"user:{username}", relation="member", object=f"role:{role}")
+        for username, role in SERVICE_PRINCIPAL_ROLES
+    ]
+    await _write_tuples_idempotent(client, tuples, label="service principal assignment")
+
+
 async def _write_tuples_idempotent(
     client: OpenFgaClient, tuples: list[ClientTuple], label: str
 ) -> None:
@@ -240,6 +265,7 @@ async def main() -> None:
         await seed_role_tuples(client)
         await seed_admin_users(client)
         await ensure_dev_users(client)
+        await seed_service_principals(client)
 
     write_store_id_file(store_id)
     print("OpenFGA provisioning complete.")
