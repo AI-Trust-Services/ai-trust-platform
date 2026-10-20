@@ -45,6 +45,7 @@ MVP_DISABLED=(
   alerts-backend alerts-frontend policy-checker-worker
   decision-trace-analyzer-backend decision-trace-analyzer-frontend
   otel-clickhouse-consumer otel-rmq-bridge
+  ai-test-bed-backend ai-test-bed-frontend
 )
 
 build() {

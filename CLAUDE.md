@@ -252,9 +252,11 @@ Static HTML + `luigi-config.js` served by nginx (Luigi core from CDN). Nav nodes
 
 The platform ships a trimmed **MVP scope**: **Core governance** (registry,
 compliance, overview, users/IAM, admin, shell + Postgres/Keycloak/OpenFGA/MinIO),
-the **AI/RAG test-bed** (document-indexing, embedding-service, ai-test-bed), and
+the **RAG indexing backend** (document-indexing, embedding-service), and
 the **Audit** trail (audit backend/frontend + audit-flush-worker + ClickHouse).
-**Disabled** for the MVP: **GenAI-Observability** (monitoring, alerts,
+**Disabled** for the MVP: the **AI test-bed** MFE (ai-test-bed backend/frontend +
+its `testbed-seed` Job — the RAG layer it consumed, document-indexing +
+embedding-service, stays enabled), **GenAI-Observability** (monitoring, alerts,
 decision-trace-analyzer) and the **OTLP telemetry pipeline**
 (otel-collector, otel-rmq-bridge, otel-clickhouse-consumer). Disabling the OTLP
 pipeline also drops the **RabbitMQ** StatefulSet — it has no other consumer (the
@@ -273,6 +275,7 @@ the layers below; grep `[MVP-off]` to find every toggle.
 | Build (kind) | `k8s/scripts/build-and-load-images.sh` | `MVP_DISABLED` guard in `build()`; override with `--service <name>` |
 | Deploy (MFE pairs) | `values.yaml` `components[].enabled` + `templates/components.yaml` | `enabled: false` skips rendering. Guard is `ne $c.enabled false` → absent/true still renders (existing components need no flag) |
 | Deploy (infra/workers) | `values.yaml` `clickhouse`/`rabbitmq`/`otel`/`policyChecker`/`auditFlush` `.enabled` | each template wrapped in `{{- if .Values.<x>.enabled }}`; the `clickhouse-migrate` Job (jobs.yaml) is gated on `clickhouse.enabled` because it waits on ClickHouse |
+| Seed Jobs | `templates/jobs.yaml` | a Job that reuses a disabled MFE image must be gated too, else it ImagePullBackOffs. The `testbed-seed` Job is wrapped in a `{{- if $testbedEnabled }}` that scans `components` for `ai-test-bed` with `ne .enabled false` — so flipping the `ai-test-bed` component flag toggles the seed Job with it |
 | Proxy | `shell/nginx.conf` | the service's `location` blocks commented out — **mandatory**: static `proxy_pass` hostnames resolve at nginx startup, so a missing upstream stops the shell (the entry point) from starting at all. Contrast the `/api/cognee/` block, which uses `resolver` + a variable to defer resolution and tolerate absence |
 | Nav | `shell/public/luigi-config.js` | the nav node object commented out; the shell-bar alerts bell injection block (linked to the removed `/home/alerts` node) is also commented out |
 | Audit writes | `values.yaml` `components[].extraEnv.AUDIT_ENABLED` | Setting `"false"` on the registry/compliance/admin backends makes `log_audit_event` a no-op (`libs/persistence/ai_trust_persistence/audit.py`); it defaults to `true`. **Not set in the current MVP** — Audit is enabled, so its flush worker drains the Postgres `audit_events` buffer. This flag only matters if Audit is disabled again without the flush worker |
@@ -378,8 +381,8 @@ Platform administration — SMTP mail config, general platform settings, brandin
 ### document-indexing/ (port 8011, `/api/indexing/`) — k8s-only
 Reusable document indexing + retrieval service (chunk → embed → hybrid dense+FTS retrieval with traceable source refs), served by `document-indexing/backend`, `document-indexing-worker`, and `embedding-service`. **Backend-only** — no frontend MFE in this component; the UI lives in `ai-test-bed/`. **k8s/kind + Gardener only — no docker-compose entry.** Details → [document-indexing/CLAUDE.md](document-indexing/CLAUDE.md).
 
-### ai-test-bed/ (port 8013, `/api/ai-test-bed/`) — k8s-only
-Interactive EU AI Act classification test harness that consumes document-indexing (retrieval over HTTP) and the registry (classification over HTTP). Hosts the document-management UI and the test-bed run UI in a single MFE at `/ai-test-bed/`. **k8s/kind + Gardener only — no docker-compose entry.** Details → [ai-test-bed/CLAUDE.md](ai-test-bed/CLAUDE.md).
+### ai-test-bed/ (port 8013, `/api/ai-test-bed/`) — k8s-only — **[MVP-off]**
+Interactive EU AI Act classification test harness that consumes document-indexing (retrieval over HTTP) and the registry (classification over HTTP). Hosts the document-management UI and the test-bed run UI in a single MFE at `/ai-test-bed/`. **k8s/kind + Gardener only — no docker-compose entry.** **Disabled in the MVP** (backend/frontend images + `testbed-seed` Job toggled off; the RAG layer it consumed stays enabled — grep `[MVP-off]`). Details → [ai-test-bed/CLAUDE.md](ai-test-bed/CLAUDE.md).
 
 ## Environment variables
 

@@ -92,19 +92,20 @@ resources:
       type: ociArtifact
       imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/document-indexing-worker:${IMAGE_TAG}
 
-  - name: ai-test-bed-backend
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/ai-test-bed-backend:${IMAGE_TAG}
-
-  - name: ai-test-bed-frontend
-    type: ociImage
-    version: "${VERSION}"
-    access:
-      type: ociArtifact
-      imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/ai-test-bed-frontend:${IMAGE_TAG}
+  # [MVP-off] AI test-bed MFE — images not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve the digest
+  # - name: ai-test-bed-backend
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/ai-test-bed-backend:${IMAGE_TAG}
+  #
+  # - name: ai-test-bed-frontend
+  #   type: ociImage
+  #   version: "${VERSION}"
+  #   access:
+  #     type: ociArtifact
+  #     imageReference: ghcr.io/${GITHUB_REPOSITORY_OWNER}/ai-trust-platform/ai-test-bed-frontend:${IMAGE_TAG}
 
   # [MVP-off] OTLP pipeline (needs RabbitMQ+ClickHouse) — image not built (see docker-bake.hcl); must stay out of OCM or `ocm add` fails to resolve its digest
   # - name: otel-clickhouse-consumer

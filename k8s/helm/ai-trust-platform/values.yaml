@@ -263,6 +263,7 @@ components:
     openfgaConfig: true
 
   - name: ai-test-bed
+    enabled: false  # [MVP-off] AI test-bed MFE (RAG/document-indexing stays enabled)
     backendPort: 8013
     rootPath: /api/ai-test-bed
     extraEnv:

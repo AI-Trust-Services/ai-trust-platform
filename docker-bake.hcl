@@ -39,7 +39,7 @@ group "default" {
     "embedding-service",
     "document-indexing-backend",
     "document-indexing-worker",
-    "ai-test-bed-backend",
+    # "ai-test-bed-backend",              # [MVP-off] AI test-bed MFE (RAG/document-indexing stays)
     "audit-backend",
     "audit-flush-worker",
     "admin-backend",
@@ -61,7 +61,7 @@ group "default" {
     # "decision-trace-analyzer-frontend", # [MVP-off] GenAI-Observability
     "audit-frontend",
     "admin-frontend",
-    "ai-test-bed-frontend",
+    # "ai-test-bed-frontend",             # [MVP-off] AI test-bed MFE (RAG/document-indexing stays)
     "cognee-eval-backend",
     "ai-gateway",
   ]

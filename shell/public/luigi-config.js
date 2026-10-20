@@ -51,7 +51,8 @@
     "overview": ["systems:read", "systems:write", "assessments:read", "assessments:write", "assessments:approve", "evidence:read", "evidence:write", "evidence:approve", "monitoring:read", "alerts:read", "alerts:handle", "alerts:manage_rules", "audit:read"],
     "ai-system-registry": ["systems:read", "systems:write"],
     "model-catalog": ["systems:read", "systems:write"],
-    "ai-test-bed": ["systems:read", "systems:write"],
+    // [MVP-off] AI test-bed MFE
+    // "ai-test-bed": ["systems:read", "systems:write"],
     // DTA has no dedicated permission — reuse monitoring:read (same audience).
     "decision-trace-analyzer": ["monitoring:read"],
     "monitoring": ["monitoring:read"],
@@ -94,13 +95,14 @@
         viewUrl: base + "/registry/#/models",
         navigationContext: "model-catalog",
       },
-      {
+      // [MVP-off] AI test-bed MFE — backend/frontend not deployed. See root CLAUDE.md "MVP scope".
+      /* {
         pathSegment: "ai-test-bed",
         label: "AI Test Bed",
         icon: "documents",
         viewUrl: "/ai-test-bed/",
         navigationContext: "ai-test-bed",
-      },
+      }, */
       // [MVP-off] GenAI-Observability — services not deployed. See root CLAUDE.md "MVP scope".
       /* {
         pathSegment: "decision-trace-analyzer",
