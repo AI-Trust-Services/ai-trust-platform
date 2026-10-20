@@ -265,6 +265,11 @@ spec:
               ollama pull "${LLM_MODEL:-llama3.2}" &&
               ollama pull "${LLM_VISION_MODEL:-llama3.2-vision}"
 {{- end }}
+{{- /* [MVP-off] testbed-seed reuses the ai-test-bed-backend image; render it only
+       while the ai-test-bed component is enabled, otherwise the Job ImagePullBackOffs. */}}
+{{- $testbedEnabled := false }}
+{{- range $c := .Values.components }}{{- if and (eq $c.name "ai-test-bed") (ne $c.enabled false) }}{{- $testbedEnabled = true }}{{- end }}{{- end }}
+{{- if $testbedEnabled }}
 ---
 # AI Test Bed seed — creates stub AISystem rows for the 3 sample scenarios and
 # the EU AI Act sentinel, then uploads each sample's Markdown system card to the
@@ -296,3 +301,4 @@ spec:
           command: ["python", "-m", "app.seed"]
           envFrom:
             - secretRef: { name: {{ .Values.secretName }} } # DATABASE_URL, APP_ADMIN_USERNAME
+{{- end }}

@@ -27,11 +27,12 @@ import pytest_asyncio
 
 REGISTRY_URL = os.getenv("REGISTRY_URL", "http://localhost:8001")
 COMPLIANCE_URL = os.getenv("COMPLIANCE_URL", "http://localhost:8007")
-ALERTS_URL = os.getenv("ALERTS_URL", "http://localhost:8005")
 USERS_URL = os.getenv("USERS_URL", "http://localhost:8008")
 AUDIT_URL = os.getenv("AUDIT_URL", "http://localhost:8009")
 ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:8010")
-MONITORING_URL = os.getenv("MONITORING_URL", "http://localhost:8003")
+# [MVP-off] monitoring + alerts are GenAI-observability services, disabled for the MVP.
+# ALERTS_URL = os.getenv("ALERTS_URL", "http://localhost:8005")
+# MONITORING_URL = os.getenv("MONITORING_URL", "http://localhost:8003")
 
 ADMIN_USER = os.getenv("APP_ADMIN_USERNAME") or "admin"
 

@@ -1,3 +1,4 @@
+{{- if .Values.otel.enabled }}
 {{/* GenAI observability pipeline: otel-collector -> otel-rmq-bridge -> rabbitmq -> otel-clickhouse-consumer -> clickhouse */}}
 apiVersion: apps/v1
 kind: Deployment
@@ -141,3 +142,4 @@ spec:
               value: "100"
             - name: BATCH_TIMEOUT
               value: "5"
+{{- end }}
