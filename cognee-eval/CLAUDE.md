@@ -82,7 +82,7 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 | `THALAMUS_BASE_URL` | _(unset → stub)_ | Thalamus OpenAI-compatible gateway (incl. `/v1`); unset or `stub` → offline/CI. All cognee generation + extraction. |
 | `THALAMUS_MODEL` | `Qwen/Qwen3.8-27B` | Model ID the gateway serves — used for generation and extraction |
 | `THALAMUS_BEARER_TOKEN` | _(empty)_ | Static bearer token sent as `Authorization: Bearer <token>`; required when `THALAMUS_BASE_URL` is a real gateway |
-| `COGNEE_LLM_RATE_LIMIT_REQUESTS` | `12` | cognee LLM calls/min cap (paces generation under the gateway's token quota) |
+| `COGNEE_LLM_RATE_LIMIT_REQUESTS` | `60` | Max LLM requests/min passed to `litellm.rpm_limit` — caps cognee's generation calls under the gateway's token quota |
 | `COGNEE_DATA_PATH` | `/app/.cognee_system` | Where Cognee stores its databases |
 | `COGNEE_READONLY` | _(unset)_ | When `true`/`1`/`yes`: read-only prod mode — ingest + feedback routers are not mounted (404), and `/health` returns 503 until the first-boot graph consistency check passes |
 | `ALLOWED_ORIGINS` | — | Required — comma-separated CORS origins |
@@ -114,8 +114,7 @@ hits the network); the e2e suite mocks the whole cognee pipeline regardless.
   (OpenAI-compat `/v1/embeddings`, `Snowflake/snowflake-arctic-embed-m`, 768-dim); the model
   is hardcoded per mode in `setup_cognee()`, not env-configurable. Stub/CI mode uses
   in-process fastembed (`BAAI/bge-small-en-v1.5`, 384-dim, no network required).
-- **Rate limiting**: `COGNEE_LLM_RATE_LIMIT_REQUESTS` paces cognee's generation calls under the
-  gateway's sustained token quota.
+- **Rate limiting**: `COGNEE_LLM_RATE_LIMIT_REQUESTS` (default 60) is passed to `litellm.rpm_limit`, capping cognee's per-minute LLM call rate under the gateway's sustained token quota.
 
 ## Testing
 

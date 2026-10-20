@@ -19,6 +19,7 @@ _DATASET = "eu_ai_act_v1"
 _THALAMUS_BASE_URL = os.environ.get("THALAMUS_BASE_URL", "")
 _THALAMUS_MODEL = os.environ.get("THALAMUS_MODEL", "Qwen/Qwen3.8-27B")
 _THALAMUS_BEARER_TOKEN = os.environ.get("THALAMUS_BEARER_TOKEN", "")
+_LLM_RPM_LIMIT = int(os.environ.get("COGNEE_LLM_RATE_LIMIT_REQUESTS", "60"))
 
 # Stub mode (unset/"stub") is used by tests/CI, which mock the whole cognee pipeline.
 # A real gateway URL requires a bearer token — fail fast rather than 401 deep in httpx.
@@ -47,6 +48,8 @@ def setup_cognee() -> None:
     # the old ai-gateway provided at the HTTP transport layer.
     litellm.num_retries = 6
     litellm.retry_after = 30
+    # Cap requests per minute to stay within the gateway's sustained token quota.
+    litellm.rpm_limit = _LLM_RPM_LIMIT
     if not _STUB_MODE:
         cognee.config.set_llm_config(
             {
