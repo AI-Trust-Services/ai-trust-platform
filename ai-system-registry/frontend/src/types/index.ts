@@ -6,6 +6,15 @@ export type AutonomyLevel = "decision_support" | "human_in_the_loop" | "human_on
 export type WorkflowStatus = "draft" | "business_pending" | "technical_pending" | "pending_review" | "info_requested" | "approved" | "rejected";
 export type RegistrationMode = "ai" | "manual_questionnaire" | "full_manual";
 
+// Minimal subset of the compliance AssessmentResponse consumed by the Systems
+// table to derive per-system assessment state (Start / Continue / View).
+export interface AssessmentRow {
+  id: string;
+  ai_system_id: string;
+  status: string;
+}
+export type AssessmentAction = "start" | "continue" | "view";
+
 export interface AISystem {
   id: string;
   name: string;

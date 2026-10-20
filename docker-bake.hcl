@@ -281,8 +281,9 @@ target "ai-system-registry-frontend" {
   platforms  = ["linux/amd64"]
   tags       = [tag("ai-system-registry-frontend")]
   args = {
-    VITE_REGISTRY_API_BASE = VITE_REGISTRY_API_BASE
-    VITE_USERS_API_BASE    = VITE_USERS_API_BASE
+    VITE_REGISTRY_API_BASE   = VITE_REGISTRY_API_BASE
+    VITE_USERS_API_BASE      = VITE_USERS_API_BASE
+    VITE_COMPLIANCE_API_BASE = VITE_COMPLIANCE_API_BASE
   }
   cache-from = ["type=gha,scope=ai-system-registry-frontend"]
   cache-to   = ["type=gha,mode=max,scope=ai-system-registry-frontend"]
