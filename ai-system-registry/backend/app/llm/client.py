@@ -3,7 +3,7 @@
 Thalamus exposes an OpenAI-compatible ``/v1/chat/completions`` endpoint, so the
 client is a thin wrapper over the async ``openai`` SDK. Model switching is
 configuration-only: set ``THALAMUS_MODEL`` / ``THALAMUS_VISION_MODEL`` to the
-model IDs the gateway serves (e.g. ``HuggingFaceTB/SmolLM2-135M-Instruct``).
+model IDs the gateway serves (e.g. ``Qwen/Qwen3.8-27B``).
 
 Stub mode: leave ``THALAMUS_BASE_URL`` unset or set it to ``"stub"`` for
 deterministic offline responses (default everywhere for dev/CI; no network).
@@ -26,7 +26,7 @@ logger = get_logger(__name__)
 
 THALAMUS_BASE_URL = os.environ.get("THALAMUS_BASE_URL", "")
 THALAMUS_BEARER_TOKEN = os.environ.get("THALAMUS_BEARER_TOKEN", "")
-THALAMUS_MODEL = os.environ.get("THALAMUS_MODEL", "HuggingFaceTB/SmolLM2-135M-Instruct")
+THALAMUS_MODEL = os.environ.get("THALAMUS_MODEL", "Qwen/Qwen3.8-27B")
 THALAMUS_VISION_MODEL = os.environ.get("THALAMUS_VISION_MODEL", THALAMUS_MODEL)
 
 # Stub mode is selected by an unset/empty base URL or the literal "stub".
