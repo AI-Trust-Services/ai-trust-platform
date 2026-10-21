@@ -14,8 +14,6 @@ name: Langfuse Classification Benchmark
 #   3. LANGFUSE_HOST / LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY repo secrets must be set
 #      (the push target). The job fails fast if they are missing.
 #
-# Like e2e-system-tests.yml, this needs no kubeconfig or port-forward — it talks to the
-# public URL through oauth2-proxy with a real OIDC session cookie.
 #
 # Usage: add the "langfuse-test" label to an open PR (after "garden-deploy" has deployed it).
 
