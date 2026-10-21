@@ -77,6 +77,10 @@ jobs:
           LANGFUSE_HOST:        ${{ secrets.LANGFUSE_HOST }}
           LANGFUSE_PUBLIC_KEY:  ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY:  ${{ secrets.LANGFUSE_SECRET_KEY }}
+          # Tag the experiment's traces with the deploy namespace, matching how the
+          # platform's own tracing is scoped — so the run is filterable by environment
+          # in Langfuse alongside the live traces from this namespace.
+          LANGFUSE_TRACING_ENVIRONMENT: ${{ steps.vars.outputs.namespace }}
         run: python3 tests/langfuse_benchmark/benchmark.py
 
       - name: Post success comment

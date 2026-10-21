@@ -295,11 +295,18 @@ def main(
             click.echo(f"warn: {failed} classifications failed (counted as a miss)")
 
     # 3. Seed the Langfuse dataset (idempotent via name-as-id) and run the experiment.
+    # get_client() reads LANGFUSE_TRACING_ENVIRONMENT automatically, so the experiment's
+    # traces are tagged with the deploy namespace and are filterable by environment in
+    # Langfuse alongside the platform's own traces from this namespace.
     from langfuse import get_client
 
+    environment = (
+        os.environ.get("LANGFUSE_TRACING_ENVIRONMENT", "").strip() or "default"
+    )
     langfuse = get_client()
     if not langfuse.auth_check():
         raise SystemExit(f"Langfuse auth failed for {os.environ['LANGFUSE_HOST']}.")
+    click.echo(f"Langfuse environment: {environment}")
 
     langfuse.create_dataset(
         name=dataset,

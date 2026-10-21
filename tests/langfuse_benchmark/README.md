@@ -75,6 +75,7 @@ python tests/langfuse_benchmark/benchmark.py --self-check
 | — | `APP_URL` | `http://localhost:8080` | Platform entry point (oauth2-proxy). |
 | — | `BENCH_USERNAME` / `BENCH_PASSWORD` | `dev-engineer` / — | Benchmark login. Needs `systems:write` + `systems:read` — the `ai_engineer` role has both; the platform admin (`iam:manage` only) does **not**. |
 | — | `LANGFUSE_HOST` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | — | Langfuse push target (required). |
+| — | `LANGFUSE_TRACING_ENVIRONMENT` | `default` | Tags the experiment's traces with this environment (the workflow sets it to the deploy namespace), so the run is filterable by environment in Langfuse alongside the platform's own traces. |
 
 > **Note** — batch import is insert-only (no dedup); each run inserts a fresh copy of the
 > scenarios. The Langfuse dataset is keyed by scenario `name`, so dataset items are
