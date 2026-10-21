@@ -96,6 +96,20 @@ make test-int                       # kind cluster, namespace ai-trust
   PR as its own check run. Its result never changes the deployment workflow's status.
 - Details → [tests/integration/README.md](tests/integration/README.md).
 
+### On-demand label workflows (deployed-namespace, OIDC)
+Two workflows run against a PR author's **already-deployed** namespace on `ai-trust-test` (add
+`garden-deploy` first), triggered by a PR label. Both authenticate through oauth2-proxy with a real
+Keycloak OIDC session cookie — no kubeconfig or port-forward (contrast `tests/integration/`). Neither
+is a PR gate.
+- **`e2e-test`** → `.github/workflows/e2e-system-tests.yml` runs `tests/e2e_system/` (black-box OIDC
+  E2E: auth, registration, self-assessment, classification) against the deployed namespace.
+- **`langfuse-test`** → `.github/workflows/langfuse-benchmark.yml` runs
+  `tests/langfuse_benchmark/benchmark.py`: batch-imports the 339 ground-truth scenarios via
+  `POST /api/registry/v1/intake/batch` (needs `ENABLE_BATCH_IMPORT=true`, set in
+  `k8s/env/ai-trust-test/.env`), classifies each through `/classify/evaluate`, and pushes a scored
+  dataset + experiment run to Langfuse (`LANGFUSE_*` repo secrets). Details →
+  [tests/langfuse_benchmark/README.md](tests/langfuse_benchmark/README.md).
+
 ### Pre-push checks
 Run these from the repo root before pushing to avoid CI failures:
 ```bash
