@@ -20,12 +20,12 @@ _DB_ROOT = os.path.join(
 def find_graph_db() -> str | None:
     """Return the most recently written per-dataset Kuzu graph file.
 
-    cognee.remember() persists each dataset's graph as a `<uuid>.pkl` Kuzu
-    database inside its own dataset directory (the shipped `kuzu` package is
-    the ladybug fork, so the `.pkl` is a Kuzu DB, not a Python pickle). There
-    is no single shared `cognee_graph_kuzu` DB on this path.
+    cognee 1.6.x persists each dataset's graph as a `<uuid>.pkl` or `<uuid>.lbug`
+    Kuzu database (ladybug fork) inside its own dataset directory.
     """
-    matches = glob.glob(os.path.join(_DB_ROOT, "*", "*.pkl"))
+    matches = glob.glob(os.path.join(_DB_ROOT, "*", "*.pkl")) + glob.glob(
+        os.path.join(_DB_ROOT, "*", "*.lbug")
+    )
     return max(matches, key=os.path.getmtime) if matches else None
 
 

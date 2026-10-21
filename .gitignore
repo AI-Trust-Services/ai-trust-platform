@@ -177,6 +177,7 @@ cython_debug/
 
 # Python virtualenv
 .venv/
+.venv-*/
 
 # Ruff stuff:
 .ruff_cache/

@@ -184,9 +184,10 @@ async def _provision_user(
                 "temporaryPassword": TEMP_PASS,
             },
         )
-        assert r.status_code in (201, 409), (
-            f"create user {username}: {r.status_code} {r.text}"
-        )
+        assert r.status_code in (
+            201,
+            409,
+        ), f"create user {username}: {r.status_code} {r.text}"
 
         s = await a.get("/api/users/v1/users", params={"search": username})
         assert s.status_code == 200, s.text
@@ -195,9 +196,11 @@ async def _provision_user(
         assert uid, f"user '{username}' not found after creation"
 
         rr = await a.post(f"/api/users/v1/users/{uid}/roles/{role}")
-        assert rr.status_code in (200, 201, 204), (
-            f"assign role {role}: {rr.status_code} {rr.text}"
-        )
+        assert rr.status_code in (
+            200,
+            201,
+            204,
+        ), f"assign role {role}: {rr.status_code} {rr.text}"
 
     _created_user_ids.append(uid)
     _usernames[key] = username

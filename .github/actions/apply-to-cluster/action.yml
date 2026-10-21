@@ -52,6 +52,9 @@ inputs:
   dev_user_password:
     description: "DEV_USER_PASSWORD secret — password for seeded dev users (dev-owner/engineer/compliance)"
     required: true
+  thalamus_bearer_token:
+    description: "THALAMUS_BEARER_TOKEN secret — bearer token for the Thalamus inference gateway"
+    required: true
   langfuse_public_key:
     description: "LANGFUSE_PUBLIC_KEY secret — shared Langfuse project public key (optional; tracing disabled when blank)"
     required: false
@@ -78,6 +81,7 @@ runs:
         SECRET_SMTP_PASSWORD: ${{ inputs.smtp_password }}
         SECRET_USERS_BACKEND_CLIENT_SECRET: ${{ inputs.users_backend_client_secret }}
         SECRET_DEV_USER_PASSWORD: ${{ inputs.dev_user_password }}
+        SECRET_THALAMUS_BEARER_TOKEN: ${{ inputs.thalamus_bearer_token }}
         SECRET_LANGFUSE_PUBLIC_KEY: ${{ inputs.langfuse_public_key }}
         SECRET_LANGFUSE_SECRET_KEY: ${{ inputs.langfuse_secret_key }}
       run: |
@@ -120,6 +124,7 @@ runs:
         SMTP_PASSWORD="$SECRET_SMTP_PASSWORD"
         USERS_BACKEND_CLIENT_SECRET="$SECRET_USERS_BACKEND_CLIENT_SECRET"
         DEV_USER_PASSWORD="$SECRET_DEV_USER_PASSWORD"
+        THALAMUS_BEARER_TOKEN="$SECRET_THALAMUS_BEARER_TOKEN"
         # Langfuse keys are optional (tracing disabled when blank). Export so the
         # GITHUB_ENV loop below picks up the overridden value via printenv.
         export LANGFUSE_PUBLIC_KEY="$SECRET_LANGFUSE_PUBLIC_KEY"
@@ -191,6 +196,7 @@ runs:
         inject SMTP_PASSWORD               "$SMTP_PASSWORD"
         inject USERS_BACKEND_CLIENT_SECRET "$USERS_BACKEND_CLIENT_SECRET"
         inject DEV_USER_PASSWORD           "$DEV_USER_PASSWORD"
+        inject THALAMUS_BEARER_TOKEN       "$THALAMUS_BEARER_TOKEN"
         inject LANGFUSE_PUBLIC_KEY         "$LANGFUSE_PUBLIC_KEY"
         inject LANGFUSE_SECRET_KEY         "$LANGFUSE_SECRET_KEY"
 

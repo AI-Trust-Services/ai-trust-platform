@@ -13,11 +13,11 @@ All Cognee data (LanceDB vectors, per-dataset Kuzu graphs, SQLite relational) li
 StatefulSet. Our feedback data lives in `cognee_eval.db` inside the same directory.
 
 **Graph storage layout** — cognee 1.6 persists each dataset's graph as a per-dataset
-`system/databases/<dataset-uuid>/<graph-uuid>.pkl` **Kuzu** database (the shipped `kuzu` package is
-the ladybug fork, so despite the `.pkl` extension these are Kuzu DBs, *not* Python pickles — never
-`pickle.load()` them). There is no single shared `cognee_graph_kuzu` database. `graph.py` globs for the
-most recently written per-dataset `.pkl` and opens it with `kuzu.Database(path, read_only=True)`; the
-`Node`/`EDGE` tables carry the extracted knowledge graph.
+`system/databases/<dataset-uuid>/<graph-uuid>.(lbug|pkl)` **Kuzu** database (the shipped `kuzu`
+package is the ladybug fork; it writes `.lbug` or `.pkl` depending on the code path — same library
+version `0.19.0`). There is no single shared `cognee_graph_kuzu` database. `graph.py` globs for
+both `*.lbug` and `*.pkl`, picks the most recently written, and opens it with
+`kuzu.Database(path, read_only=True)`; the `Node`/`EDGE` tables carry the extracted knowledge graph.
 
 **Single dataset for source + feedback** — `ingest_feedback()` calls `cognee.remember()` with
 `dataset_name=_DATASET` (the same dataset as the source PDF), so every approved feedback correction
@@ -79,37 +79,42 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 
 | Variable | Default | Description |
 |---|---|---|
-| `LLM_ENDPOINT` / `LLM_EXTRACTION_ENDPOINT` | `http://ai-gateway:8000/v1` | AI gateway — all cognee generation |
-| `COGNEE_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | fastembed in-process embedding model (384-dim) |
-| `COGNEE_LLM_RATE_LIMIT_REQUESTS` | `12` | cognee LLM calls/min cap (keeps the gateway under its token quota) |
+| `THALAMUS_BASE_URL` | _(unset → stub)_ | Thalamus OpenAI-compatible gateway (incl. `/v1`); unset or `stub` → offline/CI. All cognee generation + extraction. |
+| `THALAMUS_MODEL` | `Qwen/Qwen3.8-27B` | Model ID the gateway serves — used for generation and extraction |
+| `THALAMUS_BEARER_TOKEN` | _(empty)_ | Static bearer token sent as `Authorization: Bearer <token>`; required when `THALAMUS_BASE_URL` is a real gateway |
+| `COGNEE_SKIP_CONNECTION_TEST` | `true` (set in code) | Suppresses cognee's first-use LLM/embedding probe — it can fail against OpenAI-compat endpoints even when real calls work. Set in `cognee_client.py` via `os.environ.setdefault`; override with `false` to re-enable. |
 | `COGNEE_DATA_PATH` | `/app/.cognee_system` | Where Cognee stores its databases |
 | `COGNEE_READONLY` | _(unset)_ | When `true`/`1`/`yes`: read-only prod mode — ingest + feedback routers are not mounted (404), and `/health` returns 503 until the first-boot graph consistency check passes |
 | `ALLOWED_ORIGINS` | — | Required — comma-separated CORS origins |
 
 ## Key files
 
-- `app/cognee_client.py` — wrapper around `cognee.remember()` / `cognee.recall()`; `answer_question()` calls the AI gateway
+- `app/cognee_client.py` — wrapper around `cognee.remember()` / `cognee.recall()`; `answer_question()` calls Thalamus directly
 - `app/database.py` — own SQLite engine for feedback data (`cognee_eval.db`)
 - `app/ids.py` — `new_id("EVL")` evaluations, `new_id("EFB")` feedback
 
-## AI Gateway
+## Thalamus inference
 
-All cognee generation (main LLM + graph extraction) runs through the standalone
-`ai-gateway` service (repo-root `ai-gateway/`), an OpenAI-compatible façade over an
-Anthropic deployment that owns the OAuth2 token refresh. cognee reaches it at
-`http://ai-gateway:8000/v1`; the gateway holds the `AI_CLIENT_ID/SECRET/AUTH_URL/API_URL/DEPLOYMENT_ID`
-creds. Embeddings run in-process via fastembed (`BAAI/bge-small-en-v1.5`, 384-dim).
+All cognee generation (main LLM + graph extraction) and embeddings run against
+[Thalamus](https://github.com/cobaltcore-dev/thalamus), an OpenAI-compatible inference
+gateway, configured via `THALAMUS_BASE_URL` / `THALAMUS_MODEL` / `THALAMUS_BEARER_TOKEN`
+(see `setup_cognee()`). cognee's litellm keeps its `openai/<model>` routing prefix; the
+endpoint points straight at Thalamus and the bearer token is passed as the litellm
+`api_key` (sent as `Authorization: Bearer <token>`). Embeddings also go through Thalamus
+in live mode — the model is selected in code (`Snowflake/snowflake-arctic-embed-m`,
+768-dim), not via env. In stub/CI mode (`THALAMUS_BASE_URL` unset or `stub`) embeddings
+fall back to in-process fastembed (local ONNX, `BAAI/bge-small-en-v1.5`, 384-dim, never
+hits the network); the e2e suite mocks the whole cognee pipeline regardless.
 
 ## Notes
 
 - Ingestion is synchronous; the nginx `proxy_read_timeout` is set to 600s for this route
 - No OpenFGA wiring — reviewer identity comes from `X-Forwarded-Preferred-Username` header only
-- **Embeddings**: use fastembed (in-process ONNX), NOT Ollama. Ollama's HTTP embed path is CPU-bound
-  and could not drain a full-document edge-indexing batch within cognee's hardcoded 60s-per-embed
-  timeout — the whole ingest rolled back. fastembed embeds in-process, far faster on CPU.
-- **Rate limiting**: `COGNEE_LLM_RATE_LIMIT_REQUESTS` paces cognee's generation calls under the upstream
-  model's sustained token quota; the gateway adds 429/5xx retry-backoff. Upstream throttling is a
-  sustained quota, not a per-request wall (short bursts pass; sustained volume throttles).
+- **Embeddings**: live mode routes through the same Thalamus gateway as LLM calls
+  (OpenAI-compat `/v1/embeddings`, `Snowflake/snowflake-arctic-embed-m`, 768-dim); the model
+  is hardcoded per mode in `setup_cognee()`, not env-configurable. Stub/CI mode uses
+  in-process fastembed (`BAAI/bge-small-en-v1.5`, 384-dim, no network required).
+- **Rate limiting**: `COGNEE_LLM_RATE_LIMIT_REQUESTS` (default 60) is passed to `litellm.rpm_limit`, capping cognee's per-minute LLM call rate under the gateway's sustained token quota.
 
 ## Testing
 
@@ -120,7 +125,7 @@ make test-e2e   # no Docker needed — uses in-memory SQLite
 make test-unit
 ```
 
-The e2e suite (`tests/e2e/`) uses `httpx.AsyncClient` + `ASGITransport` against an in-memory SQLite DB — no Postgres, Docker, or running AI gateway required.
+The e2e suite (`tests/e2e/`) uses `httpx.AsyncClient` + `ASGITransport` against an in-memory SQLite DB — no Postgres, Docker, or running Thalamus gateway required.
 
 **Key conftest design** (`tests/e2e/conftest.py`):
 - `cognee` and `kuzu` are imported at module level in `app/cognee_client.py` and `app/routers/graph.py` but are not installed in CI. The conftest stubs them in `sys.modules` at module level (before any `app` import) so collection works without the real packages.
