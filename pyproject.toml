@@ -10,4 +10,5 @@ exclude = [
 # F401 unused imports, F811 redefinition, E402 module-level import order,
 # E701 multiple statements on one line, E712 equality comparisons to True/False
 # — these exist in pre-existing code and will be cleaned up incrementally.
-ignore = ["F401", "F811", "E402", "E701", "E712"]
+# B008 FastAPI File(...)/Form(...)/Depends(...) in default args — intentional pattern.
+ignore = ["F401", "F811", "E402", "E701", "E712", "B008"]
