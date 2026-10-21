@@ -39,40 +39,33 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 router = APIRouter(tags=["systems"])
 logger = get_logger(__name__)
 
-_CONTRIBUTOR_ROLES = frozenset({"ai_engineer", "business_owner"})
 _USERS_BACKEND_URL = os.getenv("USERS_BACKEND_URL", "").rstrip("/")
 
 
 async def _assert_valid_contributors(usernames: list[str]) -> None:
-    """Raise 422 if any username is not a registered ai_engineer or business_owner.
+    """Raise 422 if any username is a compliance officer (the only ineligible role).
 
-    Skipped gracefully when USERS_BACKEND_URL is unset (e.g. unit tests without the
-    users service available).
-    # ponytail: one call per eligible role; a batch /users?usernames=… endpoint is
-    # the upgrade path if contributor lists grow large.
+    Skipped gracefully when USERS_BACKEND_URL is unset or the users service is
+    unreachable — the UI already enforces eligibility at selection time.
     """
     if not _USERS_BACKEND_URL or not usernames:
         return
-    allowed: set[str] = set()
     async with httpx.AsyncClient(timeout=3.0) as client:
-        for role in _CONTRIBUTOR_ROLES:
-            try:
-                r = await client.get(
-                    f"{_USERS_BACKEND_URL}/users/by-role",
-                    params={"role": role},
-                )
-                if r.is_success:
-                    allowed.update(u["username"] for u in r.json())
-            except httpx.HTTPError:
-                # Users service unreachable — skip validation rather than block
-                # registration. The UI already enforces eligibility.
-                return
-    invalid = [u for u in usernames if u not in allowed]
-    if invalid:
-        raise HTTPException(
-            422,
-            f"Contributors are not eligible (must be ai_engineer or business_owner): {invalid}",
-        )
+        try:
+            r = await client.get(
+                f"{_USERS_BACKEND_URL}/users/by-role",
+                params={"role": "ai_compliance_officer"},
+            )
+            if r.is_success:
+                blocked = {u["username"] for u in r.json()}
+                ineligible = [u for u in usernames if u in blocked]
+                if ineligible:
+                    raise HTTPException(
+                        422,
+                        f"Compliance officers cannot be added as contributors: {ineligible}",
+                    )
+        except httpx.HTTPError:
+            return  # fails open — users service unreachable
 
 
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
