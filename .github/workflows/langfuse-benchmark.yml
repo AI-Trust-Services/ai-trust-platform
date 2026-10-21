@@ -74,7 +74,11 @@ jobs:
           # ai-trust-test (SEED_DEV_USERS=true) with a permanent password.
           BENCH_USERNAME:       dev-engineer
           BENCH_PASSWORD:       ${{ secrets.DEV_USER_PASSWORD }}
-          LANGFUSE_HOST:        ${{ secrets.LANGFUSE_HOST }}
+          # LANGFUSE_HOST falls back to the shared ai-trust-test Langfuse (the value in
+          # k8s/env/ai-trust-test/.env) when the repo secret is unset — the keys are the
+          # project's, the host is the same cluster-wide rollout. Override via the secret
+          # to point at a different Langfuse.
+          LANGFUSE_HOST:        ${{ secrets.LANGFUSE_HOST || 'https://langfuse.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu' }}
           LANGFUSE_PUBLIC_KEY:  ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY:  ${{ secrets.LANGFUSE_SECRET_KEY }}
           # Tag the experiment's traces with the deploy namespace, matching how the
