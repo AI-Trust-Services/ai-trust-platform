@@ -84,7 +84,7 @@ async def test_import_partial_success(client: httpx.AsyncClient):
         {"name": "Bad tier system", "tier": "super-high"},  # invalid tier
         {
             "name": "Bad url system",
-            "application_url": "javascript:alert(1)",
+            "git_repo_url": "javascript:alert(1)",
         },  # invalid scheme
         {"name": "Another good one", "tier": "limited", "is_chatbot": True},
     ]
@@ -136,8 +136,8 @@ async def test_import_unknown_keys_ignored(client: httpx.AsyncClient):
 
 
 async def test_import_rejects_javascript_url(client: httpx.AsyncClient):
-    """application_url with javascript: scheme is rejected."""
-    records = [{"name": "XSS attempt", "application_url": "javascript:alert(1)"}]
+    """git_repo_url with javascript: scheme is rejected."""
+    records = [{"name": "XSS attempt", "git_repo_url": "javascript:alert(1)"}]
     r = await client.post(
         "/v1/intake/batch",
         headers=_HEADERS,

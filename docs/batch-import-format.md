@@ -30,12 +30,13 @@ optional. Unknown keys are ignored.
 | `decision_context` | string | `null` | Context in which the system makes/supports decisions. |
 | `system_type` | string | `"application"` | Free string (not enum-validated). |
 | `autonomy_level` | string | `"decision_support"` | Free string (not enum-validated). |
-| `application_url` | string (≤500) | `""` | URL of the application. **Only `http`/`https` schemes accepted** (rejected otherwise). |
 | `provider_country` | string (≤5) | `"DE"` | Provider country. |
 | `deployment_country` | string (2) | `null` | ISO 3166-1 alpha-2 deployment country. |
-| `eu_output_usage` | bool | `null` | System output used in the EU. |
-| `eu_market_placement` | bool | `null` | System placed on the EU market. |
 | `lifecycle` | enum | `"development"` | One of `development`, `testing`, `prod_ready`, `market`, `service`, `updated`, `decommissioned`. |
+| `business_owners` | string | `null` | Owner username (set to creator on normal intake). |
+| `contributors` | string[] | `null` | List of contributor usernames (`ai_engineer` or `business_owner` roles). |
+| `git_repo_url` | string (≤500) | `null` | Source repository URL. `http`, `https`, `git`, `ssh` schemes accepted. |
+| `planned_rollout_date` | date (YYYY-MM-DD) | `null` | Planned production rollout date. |
 
 ### Classification result
 

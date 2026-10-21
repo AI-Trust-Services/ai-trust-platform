@@ -345,15 +345,13 @@ class AISystemImport(BaseModel):
     decision_context: str | None = None
     system_type: str | None = Field(default=None, max_length=30)
     autonomy_level: str | None = Field(default=None, max_length=50)
-    application_url: str | None = Field(default=None, max_length=500)
     provider_country: str | None = Field(default=None, max_length=5)
     deployment_country: str | None = Field(default=None, max_length=2)
-    eu_output_usage: bool | None = None
-    eu_market_placement: bool | None = None
     lifecycle: str | None = Field(default=None, max_length=30)
     business_owners: str | None = None
-    technical_owners: str | None = None
+    contributors: list[str] | None = None
     git_repo_url: str | None = Field(default=None, max_length=500)
+    planned_rollout_date: date | None = None
 
     # --- Classification result (tier is authoritative from source; classify() does not run) ---
     tier: str | None = None
@@ -411,14 +409,6 @@ class AISystemImport(BaseModel):
     def lifecycle_valid(cls, v: str | None) -> str | None:
         if v is not None and v not in VALID_LIFECYCLES:
             raise ValueError(f"lifecycle must be one of {sorted(VALID_LIFECYCLES)}")
-        return v
-
-    @field_validator("application_url")
-    @classmethod
-    def url_scheme_allowlist(cls, v: str | None) -> str | None:
-        """Reject non-http(s) schemes — application_url is rendered as <a href> in the UI."""
-        if v and urlparse(v).scheme not in ("http", "https"):
-            raise ValueError("application_url must use http or https")
         return v
 
     @field_validator("git_repo_url")
