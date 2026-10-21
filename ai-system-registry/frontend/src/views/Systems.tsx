@@ -259,6 +259,9 @@ export default function Systems() {
                           if (!confirm(`Delete "${s.name}"?\n\nThis action cannot be undone.`)) return;
                           try {
                             await api.deleteSystem(s.id);
+                            // Separate service, no FK — purge its indexed docs too so
+                            // chunks/MinIO objects aren't orphaned. Best-effort.
+                            void api.deleteIndexedDocumentsForSystem(s.id).catch(() => {});
                             showToast("System deleted");
                             loadSystems();
                           } catch (e) {

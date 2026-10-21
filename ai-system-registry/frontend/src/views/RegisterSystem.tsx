@@ -83,16 +83,24 @@ export default function RegisterSystem() {
     });
   }, []);
 
-  // On unmount: if the user left without registering, abort in-flight uploads and
-  // delete the draft system. When registered, do nothing so uploads keep running
-  // (indexing continues server-side) — registration is never blocked by uploads.
-  // ponytail: a hard tab-close can still orphan a draft; a periodic draft sweep is
+  // On unmount: if the user left without registering, abort in-flight uploads, purge any
+  // documents already indexed for the draft (the indexing service has no FK to the
+  // registry, so deleting the system row alone would orphan them), then delete the draft
+  // system. When registered, do nothing so uploads keep running (indexing continues
+  // server-side) — registration is never blocked by uploads.
+  // ponytail: a hard tab-close can't run this cleanup; a periodic draft sweep is
   // the upgrade path.
   useEffect(() => {
     return () => {
       if (registeredRef.current) return;
       for (const c of abortRef.current.values()) c.abort();
-      if (draftIdRef.current) void api.deleteSystem(draftIdRef.current).catch(() => {});
+      const draftId = draftIdRef.current;
+      if (draftId) {
+        void api
+          .deleteIndexedDocumentsForSystem(draftId)
+          .catch(() => {})
+          .finally(() => void api.deleteSystem(draftId).catch(() => {}));
+      }
     };
   }, []);
 

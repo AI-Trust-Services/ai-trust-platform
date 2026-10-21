@@ -368,6 +368,16 @@ export const api = {
       INDEXING_API_BASE,
     ),
 
+  // Purge every indexed document for a system. Used when a system (e.g. an abandoned
+  // draft registration) is deleted — the registry row and the indexed documents live
+  // in separate services with no FK, so this prevents orphaned docs/chunks/MinIO objects.
+  deleteIndexedDocumentsForSystem: (systemId: string) =>
+    request<{ deleted: boolean; system_id: string; documents_deleted: number }>(
+      `/systems/${encodeURIComponent(systemId)}/documents`,
+      { method: "DELETE" },
+      INDEXING_API_BASE,
+    ),
+
   getRceSummary: (systemId: string) =>
     request<{
       tier: string | null;
