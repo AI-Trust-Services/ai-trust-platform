@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 
+import httpx
 from ai_trust_authorization import check_permission, require_permission
 from ai_trust_authorization.constants import (
     SYSTEMS_APPROVE,
@@ -37,6 +38,41 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 router = APIRouter(tags=["systems"])
 logger = get_logger(__name__)
+
+_CONTRIBUTOR_ROLES = frozenset({"ai_engineer", "business_owner"})
+_USERS_BACKEND_URL = os.getenv("USERS_BACKEND_URL", "").rstrip("/")
+
+
+async def _assert_valid_contributors(usernames: list[str]) -> None:
+    """Raise 422 if any username is not a registered ai_engineer or business_owner.
+
+    Skipped gracefully when USERS_BACKEND_URL is unset (e.g. unit tests without the
+    users service available).
+    # ponytail: one call per eligible role; a batch /users?usernames=… endpoint is
+    # the upgrade path if contributor lists grow large.
+    """
+    if not _USERS_BACKEND_URL or not usernames:
+        return
+    allowed: set[str] = set()
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        for role in _CONTRIBUTOR_ROLES:
+            try:
+                r = await client.get(
+                    f"{_USERS_BACKEND_URL}/users/by-role",
+                    params={"role": role},
+                )
+                if r.is_success:
+                    allowed.update(u["username"] for u in r.json())
+            except httpx.HTTPError:
+                # Users service unreachable — skip validation rather than block
+                # registration. The UI already enforces eligibility.
+                return
+    invalid = [u for u in usernames if u not in allowed]
+    if invalid:
+        raise HTTPException(
+            422,
+            f"Contributors are not eligible (must be ai_engineer or business_owner): {invalid}",
+        )
 
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
 
@@ -154,7 +190,8 @@ async def update_system(
         raise HTTPException(422, f"Invalid lifecycle '{body.lifecycle}'")
     if body.org_role is not None and body.org_role not in VALID_ROLES:
         raise HTTPException(422, f"Invalid org_role '{body.org_role}'")
-
+    if body.contributors is not None:
+        await _assert_valid_contributors(body.contributors)
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
         row = result.scalar_one_or_none()

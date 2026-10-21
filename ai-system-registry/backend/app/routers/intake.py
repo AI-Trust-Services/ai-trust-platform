@@ -15,6 +15,7 @@ from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from app import email_sender
 from app.classifier import ClassificationResult
 from app.ids import new_id
+from app.routers.systems import _assert_valid_contributors
 from app.schemas import AISystemCreate, AISystemResponse, IntakeResponse
 from app.schemas.ai_system import AISystemImport, ImportFailure, ImportResult
 from fastapi import (
@@ -51,6 +52,9 @@ async def intake_system(
     system_id = new_id("SYS")
     step_id = new_id("SWS")
 
+    if body.contributors:
+        await _assert_valid_contributors(body.contributors)
+
     row = AISystem(
         id=system_id,
         name=body.name,
@@ -62,6 +66,7 @@ async def intake_system(
         git_repo_url=body.git_repo_url,
         planned_rollout_date=body.planned_rollout_date,
         deployment_country=body.deployment_country,
+        lifecycle=body.lifecycle,
         tier="pending",
         basis="Pending risk classification",
         annex_iii_area=None,

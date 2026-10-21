@@ -89,6 +89,7 @@ class AISystemCreate(BaseModel):
     # Deployment context captured at registration. deployment_country is ISO
     # 3166-1 alpha-2.
     deployment_country: str | None = Field(default=None, max_length=2)
+    lifecycle: str | None = None
 
     # Optional descriptive fields (populated by the AI-assisted flow; manual owner
     # mode omits them and the intake stays a minimal stub).
@@ -191,7 +192,6 @@ class AISystemUpdate(BaseModel):
     provider_country: str | None = Field(default=None, max_length=5)
     deployment_country: str | None = Field(default=None, max_length=2)
     lifecycle: str | None = None
-    business_owners: str | None = None
     contributors: list[str] | None = None
     git_repo_url: str | None = Field(default=None, max_length=500)
     planned_rollout_date: date | None = None

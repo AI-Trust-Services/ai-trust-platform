@@ -1,12 +1,12 @@
 import { useState, useEffect, Fragment } from "react";
 import LuigiClient from "@luigi-project/client";
-import { Loader2, ChevronDown, ChevronRight, Copy, FileText, Download, Sparkles, ClipboardList, ExternalLink } from "lucide-react";
+import { Loader2, ChevronDown, ChevronRight, Copy, FileText, Download, Sparkles, ClipboardList, ExternalLink, Trash2 } from "lucide-react";
 import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS, TIER_META } from "../utils";
 import { api } from "../api/client";
 import { ORG_ROLE_LABELS } from "../constants/orgRoles";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary } from "../types";
+import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary, IndexedDocument } from "../types";
 import {
   BUSINESS_QUESTIONS,
   AI_TECHNICAL_QUESTIONS,
@@ -748,6 +748,7 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
   const [saving, setSaving] = useState(false);
   const [allUsers, setAllUsers] = useState<Array<{ username: string; firstName: string; lastName: string; role: string }>>([]);
   const [pendingContributor, setPendingContributor] = useState("");
+  const [systemDocs, setSystemDocs] = useState<IndexedDocument[]>([]);
   const showToast = useToast();
   const { mayWrite, mayApprove, username } = useModalControls();
 
@@ -779,6 +780,24 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
     }
     api.getRceSummary(system.id).then(setRceSummary).catch(() => setRceSummary(null));
   }, [system?.id, system?.workflow_status, system?.compliance_officer_username, username]);
+
+  // Load indexed documents for the open system.
+  useEffect(() => {
+    if (!system) { setSystemDocs([]); return; }
+    api.listIndexedDocuments(system.id).then(setSystemDocs).catch(() => setSystemDocs([]));
+  }, [system?.id]);
+
+  // Poll every 3s while any document is still being processed.
+  useEffect(() => {
+    if (!system) return;
+    const active = systemDocs.some((d) => d.status === "pending" || d.status === "processing");
+    if (!active) return;
+    const t = setInterval(
+      () => api.listIndexedDocuments(system.id).then(setSystemDocs).catch(() => {}),
+      3000,
+    );
+    return () => clearInterval(t);
+  }, [system?.id, systemDocs]);
 
   function handleSystemUpdate(updated: AISystem) {
     setSystem(updated);
@@ -1112,6 +1131,58 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
                   {(system.registration_documents?.length ?? 0) > 0 && (
                     <Section title="Supporting Documents">
                       <RegistrationDocuments system={system} />
+                    </Section>
+                  )}
+
+                  {/* Indexed documents — uploaded via the registration form, indexed asynchronously */}
+                  {systemDocs.length > 0 && (
+                    <Section title="Indexed Documents">
+                      <div className="flex flex-col gap-1.5">
+                        {systemDocs.map((doc) => {
+                          const failed = doc.status === "failed";
+                          const active = doc.status === "pending" || doc.status === "processing";
+                          const stageLabel = doc.stage ? ` · ${doc.stage}` : "";
+                          const statusText = failed
+                            ? "Failed"
+                            : active
+                              ? `Indexing${stageLabel}…`
+                              : doc.chunk_count != null
+                                ? `Indexed · ${doc.chunk_count} chunks`
+                                : "Indexed";
+                          return (
+                            <div
+                              key={doc.id}
+                              className={cn(
+                                "flex items-center gap-2 rounded-md border px-3 py-2 text-[13px]",
+                                failed ? "border-[var(--danger-fg)]/30 bg-[var(--danger-fg)]/5" : "border-border",
+                              )}
+                            >
+                              <FileText className={cn("size-4 shrink-0", failed ? "text-[var(--danger-fg)]" : "text-muted-foreground")} />
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate font-medium">{doc.filename}</div>
+                                <div className={cn("text-[11px]", failed ? "text-[var(--danger-fg)]" : "text-muted-foreground")}>
+                                  {statusText}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                title="Delete document"
+                                className="shrink-0 text-muted-foreground hover:text-[var(--danger-fg)]"
+                                onClick={async () => {
+                                  try {
+                                    await api.deleteIndexedDocument(doc.id);
+                                    setSystemDocs((prev) => prev.filter((d) => d.id !== doc.id));
+                                  } catch (e) {
+                                    showToast(`Delete failed: ${(e as Error).message}`, true);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="size-4" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </Section>
                   )}
 

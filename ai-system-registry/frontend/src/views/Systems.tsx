@@ -43,7 +43,7 @@ export default function Systems() {
   const [lifecycleFilter, setLifecycleFilter] = useState("");
   const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [indexing, setIndexing] = useState<Record<string, { pct: number; busy: boolean }>>({});
+  const [indexing, setIndexing] = useState<Record<string, { pct: number; busy: boolean; active: boolean; failed: boolean }>>({});
   const { mayWrite, mayApprove } = useModalControls();
   const showToast = useToast();
 
@@ -86,8 +86,13 @@ export default function Systems() {
           const docs = await api.listIndexedDocuments(s.id);
           if (docs.length === 0) return null;
           const frac = docs.reduce((a, d) => a + docProgress(d.status, d.stage), 0) / docs.length;
-          const busy = docs.some((d) => d.status === "pending" || d.status === "processing");
-          return [s.id, { pct: Math.round(frac * 100), busy }] as const;
+          // Gate assessments until every document is indexed; keep polling only while
+          // real work is in flight; surface failures separately (a failed doc keeps the
+          // gate closed but must not look like a stalled percentage).
+          const busy = docs.some((d) => d.status !== "indexed");
+          const active = docs.some((d) => d.status === "pending" || d.status === "processing");
+          const failed = docs.some((d) => d.status === "failed");
+          return [s.id, { pct: Math.round(frac * 100), busy, active, failed }] as const;
         } catch {
           return null;
         }
@@ -99,7 +104,7 @@ export default function Systems() {
   useEffect(() => { if (systems.length) loadIndexing(systems); }, [systems, loadIndexing]);
 
   useEffect(() => {
-    const active = Object.values(indexing).some((v) => v.busy);
+    const active = Object.values(indexing).some((v) => v.active);
     if (!active) return;
     const t = setInterval(() => loadIndexing(systems), 3000);
     return () => clearInterval(t);
@@ -200,6 +205,13 @@ export default function Systems() {
                     {(() => {
                       const e = indexing[s.id];
                       if (!e) return <span className="text-muted-foreground">—</span>;
+                      if (e.failed) {
+                        return (
+                          <span className="font-medium text-[var(--danger-fg)]" title="One or more documents failed to index">
+                            {e.pct}% · failed
+                          </span>
+                        );
+                      }
                       return (
                         <span className={cn("font-medium", e.busy ? "text-[var(--brand)]" : "text-[var(--success)]")}>
                           {e.pct}%
@@ -231,12 +243,17 @@ export default function Systems() {
                       {(() => {
                         const e = indexing[s.id];
                         const busy = !!e?.busy;
+                        const title = busy
+                          ? e?.failed
+                            ? `Indexing incomplete — a document failed to index (${e?.pct ?? 0}%)`
+                            : `Documents are still being indexed (${e?.pct ?? 0}%)`
+                          : "Go to Assessments";
                         return (
                           <Button
                             variant="ghost"
                             size="icon"
                             className="size-8 text-muted-foreground hover:text-[var(--brand)]"
-                            title={busy ? `Documents are still being indexed (${e?.pct ?? 0}%)` : "Go to Assessments"}
+                            title={title}
                             disabled={busy}
                             onClick={() => goToAssessments(s.id)}
                           >
