@@ -52,7 +52,7 @@ pip install -r tests/langfuse_benchmark/requirements.txt
 # needs ENABLE_BATCH_IMPORT=true on the registry backend:
 #   set it in .env, then: make upgrade && make rollout
 APP_URL=http://localhost:8080 \
-APP_ADMIN_USERNAME=admin APP_ADMIN_PASSWORD=<admin-pass> \
+BENCH_USERNAME=dev-engineer BENCH_PASSWORD=<dev-user-pass> \
 LANGFUSE_HOST=<url> LANGFUSE_PUBLIC_KEY=<pk> LANGFUSE_SECRET_KEY=<sk> \
     python tests/langfuse_benchmark/benchmark.py --limit 20
 ```
@@ -73,7 +73,7 @@ python tests/langfuse_benchmark/benchmark.py --self-check
 | `--data` | — | `scenarios_import.json` | Alternative ground-truth file. |
 | `--self-check` | — | off | Run the offline logic self-test and exit. |
 | — | `APP_URL` | `http://localhost:8080` | Platform entry point (oauth2-proxy). |
-| — | `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` | `admin` / — | Benchmark login (needs `systems:write` + `systems:read`). |
+| — | `BENCH_USERNAME` / `BENCH_PASSWORD` | `dev-engineer` / — | Benchmark login. Needs `systems:write` + `systems:read` — the `ai_engineer` role has both; the platform admin (`iam:manage` only) does **not**. |
 | — | `LANGFUSE_HOST` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | — | Langfuse push target (required). |
 
 > **Note** — batch import is insert-only (no dedup); each run inserts a fresh copy of the

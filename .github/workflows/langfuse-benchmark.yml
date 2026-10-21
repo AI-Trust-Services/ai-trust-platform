@@ -68,8 +68,12 @@ jobs:
       - name: Run classification benchmark
         env:
           APP_URL:              ${{ steps.vars.outputs.app_url }}
-          APP_ADMIN_PASSWORD:   ${{ secrets.APP_ADMIN_PASSWORD }}
-          APP_ADMIN_USERNAME:   ${{ secrets.APP_ADMIN_USERNAME || 'admin' }}
+          # dev-engineer (ai_engineer role) has systems:read + systems:write, which
+          # /intake/batch and /classify/evaluate require. The platform admin only has
+          # iam:manage, so authenticating as admin would 403. dev-engineer is seeded on
+          # ai-trust-test (SEED_DEV_USERS=true) with a permanent password.
+          BENCH_USERNAME:       dev-engineer
+          BENCH_PASSWORD:       ${{ secrets.DEV_USER_PASSWORD }}
           LANGFUSE_HOST:        ${{ secrets.LANGFUSE_HOST }}
           LANGFUSE_PUBLIC_KEY:  ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY:  ${{ secrets.LANGFUSE_SECRET_KEY }}

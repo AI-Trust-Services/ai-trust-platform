@@ -127,9 +127,13 @@ def multiclass_metrics(*, item_results, **kwargs):
         out = r.output or {}
         true_tier = (exp or {}).get("risk_tier")
         pred_tier = out.get("risk_tier")
-        if true_tier and pred_tier:
+        # Keep every ground-truth label. A failed classification (pred None) is a miss,
+        # not a dropped row — otherwise failures would silently inflate the metrics.
+        # The sentinel is outside RISK_TIERS, so it can never match a label and always
+        # scores as a mismatch.
+        if true_tier:
             y_true.append(true_tier)
-            y_pred.append(pred_tier)
+            y_pred.append(pred_tier or "__classification_failed__")
 
     if not y_true:
         return []
@@ -137,7 +141,10 @@ def multiclass_metrics(*, item_results, **kwargs):
     report = classification_report(
         y_true, y_pred, labels=RISK_TIERS, output_dict=True, zero_division=0
     )
-    evals = [Evaluation(name="accuracy", value=round(report["accuracy"], 4))]
+    # Compute accuracy directly: classification_report omits the "accuracy" key when the
+    # predictions contain values outside `labels` (e.g. the failure sentinel).
+    accuracy = sum(t == p for t, p in zip(y_true, y_pred)) / len(y_true)
+    evals = [Evaluation(name="accuracy", value=round(accuracy, 4))]
     for tier in RISK_TIERS:
         stats = report.get(tier, {})
         evals += [
@@ -239,10 +246,13 @@ def main(
         return _self_check()
 
     app_url = os.environ.get("APP_URL", "http://localhost:8080")
-    admin_user = os.environ.get("APP_ADMIN_USERNAME", "admin")
-    admin_pass = os.environ.get("APP_ADMIN_PASSWORD")
-    if not admin_pass:
-        raise SystemExit("APP_ADMIN_PASSWORD must be set.")
+    # The benchmark user needs systems:write (/intake/batch) + systems:read
+    # (/classify/evaluate). The platform admin only has iam:manage, so default to
+    # dev-engineer (ai_engineer role), seeded on dev/test clusters.
+    bench_user = os.environ.get("BENCH_USERNAME", "dev-engineer")
+    bench_pass = os.environ.get("BENCH_PASSWORD")
+    if not bench_pass:
+        raise SystemExit("BENCH_PASSWORD must be set.")
     for var in ("LANGFUSE_HOST", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
         if not os.environ.get(var):
             raise SystemExit(f"{var} must be set (push target for the benchmark).")
@@ -253,8 +263,8 @@ def main(
     if not pairs:
         raise SystemExit("No scenarios with ground truth found.")
 
-    click.echo(f"Logging in as '{admin_user}' at {app_url} ...")
-    cookies = login(app_url, admin_user, admin_pass)
+    click.echo(f"Logging in as '{bench_user}' at {app_url} ...")
+    cookies = login(app_url, bench_user, bench_pass)
 
     with _client(app_url, cookies) as client:
         # 1. Batch import (idempotent by design is NOT guaranteed — insert-only, so run once).
