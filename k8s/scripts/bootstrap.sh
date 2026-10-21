@@ -62,6 +62,21 @@ INGRESS_HOST=$(echo "${APP_PUBLIC_URL:-}" | sed -E 's#^[a-zA-Z]+://##')
 INGRESS_KEYCLOAK_HOST=$(echo "${KEYCLOAK_PUBLIC_URL:-}" | sed -E 's#^[a-zA-Z]+://##')
 INGRESS_MINIO_HOST=$(echo "${MINIO_PUBLIC_URL:-}" | sed -E 's#^[a-zA-Z]+://##')
 
+# Langfuse "environment" = the deploy namespace (the GitHub username of whoever
+# deployed). Every backend sends its traces under this environment, so each
+# deployment's data is isolated within the shared Langfuse project. Sanitize to
+# a valid Langfuse environment name: lowercase a-z0-9-_ , max 40 chars, must not
+# start with "langfuse" (Langfuse reserves that prefix) and no leading/trailing
+# separator. `printf` (not `echo`) avoids a trailing newline turning into a dash.
+LANGFUSE_TRACING_ENVIRONMENT=$(printf '%s' "${NAMESPACE}" \
+  | tr '[:upper:]' '[:lower:]' \
+  | tr -c 'a-z0-9_-' '-' \
+  | sed -E 's/^[_-]+//; s/[_-]+$//' \
+  | cut -c1-40)
+if [[ "$LANGFUSE_TRACING_ENVIRONMENT" == langfuse* ]]; then
+  LANGFUSE_TRACING_ENVIRONMENT=$(printf 'ns-%s' "$LANGFUSE_TRACING_ENVIRONMENT" | cut -c1-40)
+fi
+
 kubectl create secret generic ai-trust-env \
   "${literal_args[@]}" \
   --from-literal=DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/ai_trust" \
@@ -70,6 +85,7 @@ kubectl create secret generic ai-trust-env \
   --from-literal=INGRESS_HOST="${INGRESS_HOST}" \
   --from-literal=INGRESS_KEYCLOAK_HOST="${INGRESS_KEYCLOAK_HOST}" \
   --from-literal=INGRESS_MINIO_HOST="${INGRESS_MINIO_HOST}" \
+  --from-literal=LANGFUSE_TRACING_ENVIRONMENT="${LANGFUSE_TRACING_ENVIRONMENT}" \
   -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 # Pull secret for private GHCR images (e.g. the cognee-eval read-only graph

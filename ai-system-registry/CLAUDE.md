@@ -50,3 +50,6 @@ An owner who registers with only name + description creates a **`pending`-tier**
 **Other registry routes** (`routers/systems.py`):
 - `PATCH /systems/{id}/questionnaire` — merge-patch questionnaire answers (`section` = `business` | `technical`).
 - `POST /systems/{id}/documents` — multipart upload of a `full_manual` supporting doc to MinIO (extension allowlist + `MAX_DOC_SIZE` 20 MB; filename sanitized/capped in `minio_client.object_key`). Metadata appended to `registration_documents` (JSONB). `GET /systems/{id}/documents/{index}/download-url` returns a presigned URL.
+
+**Langfuse tracing** (`app/langfuse_client.py`):
+- `app/langfuse_client.py` — fail-soft wrapper around the `langfuse` SDK (same optional pattern as SMTP). `is_enabled()` is True only when `LANGFUSE_HOST` + `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` are all set; `get_langfuse()` returns a cached client or `None` (never raises). The Langfuse **project is fixed by the key pair**; per-deployment separation is by the Langfuse `environment` (`LANGFUSE_TRACING_ENVIRONMENT`, auto-set to the namespace/username by `k8s/scripts/bootstrap.sh` + CI).
