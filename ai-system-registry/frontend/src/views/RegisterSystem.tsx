@@ -201,15 +201,19 @@ export default function RegisterSystem() {
     accepted.forEach(startUpload);
   }
 
-  function removeUpload(item: UploadItem) {
+  async function removeUpload(item: UploadItem) {
     if (item.status === "uploading") {
       abortRef.current.get(item.localId)?.abort();
       setUploads((prev) => prev.filter((u) => u.localId !== item.localId));
       return;
     }
     if (item.status === "done" && item.documentId) {
-      const docId = item.documentId;
-      api.deleteIndexedDocument(docId).catch((e) => showToast(`Delete failed: ${(e as Error).message}`, true));
+      try {
+        await api.deleteIndexedDocument(item.documentId);
+      } catch (e) {
+        showToast(`Delete failed: ${(e as Error).message}`, true);
+        return;
+      }
     }
     setUploads((prev) => prev.filter((u) => u.localId !== item.localId));
   }
