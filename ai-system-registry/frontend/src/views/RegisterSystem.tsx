@@ -322,7 +322,10 @@ export default function RegisterSystem() {
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-[11px] font-bold text-white">
                     {(owner || "YOU").slice(0, 2).toUpperCase()}
                   </span>
-                  <span className="text-sm font-medium">{owner || "You"} (You)</span>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">{owner || "You"}</span>
+                    <span className="text-[11px] text-muted-foreground">Owner</span>
+                  </div>
                 </div>
                 {contributors.map((username) => (
                   <div key={username} className="flex items-center gap-2.5 rounded-md border border-border px-3 py-2.5">
