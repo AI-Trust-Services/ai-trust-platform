@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import AISystem, Document, DocumentVersion
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import minio_client
 from app.ids import new_id

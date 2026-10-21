@@ -74,6 +74,7 @@ async def _assert_valid_contributors(usernames: list[str]) -> None:
             f"Contributors are not eligible (must be ai_engineer or business_owner): {invalid}",
         )
 
+
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
 
 # Fields backed by NOT NULL columns — an explicit null in an update is a 422, not a 500.

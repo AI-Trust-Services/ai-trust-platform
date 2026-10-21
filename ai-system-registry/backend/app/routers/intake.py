@@ -66,7 +66,7 @@ async def intake_system(
         git_repo_url=body.git_repo_url,
         planned_rollout_date=body.planned_rollout_date,
         deployment_country=body.deployment_country,
-        lifecycle=body.lifecycle,
+        lifecycle=body.lifecycle or "development",
         tier="pending",
         basis="Pending risk classification",
         annex_iii_area=None,
