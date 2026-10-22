@@ -55,6 +55,24 @@ function consumePendingAssessment(): PendingAssessment | null {
   return null;
 }
 
+// Registry MFE sets these to deep-link into Continue/View flows.
+const VIEW_SYSTEM_KEY = "compliance.viewSystem";
+const OPEN_ASSESSMENT_KEY = "compliance.openAssessment";
+type ViewSystem = { systemId?: string; systemName?: string };
+type OpenAssessment = { assessmentId?: string };
+function consumeViewSystem(): ViewSystem | null {
+  const raw = localStorage.getItem(VIEW_SYSTEM_KEY);
+  if (!raw) return null;
+  localStorage.removeItem(VIEW_SYSTEM_KEY);
+  try { return JSON.parse(raw) as ViewSystem; } catch { return null; }
+}
+function consumeOpenAssessment(): OpenAssessment | null {
+  const raw = localStorage.getItem(OPEN_ASSESSMENT_KEY);
+  if (!raw) return null;
+  localStorage.removeItem(OPEN_ASSESSMENT_KEY);
+  try { return JSON.parse(raw) as OpenAssessment; } catch { return null; }
+}
+
 const VALID_TIERS = ["prohibited", "gpai-systemic", "gpai-standard", "high", "limited", "minimal"] as const;
 
 // ── Questionnaire progress indicator ──────────────────────────────────────────
@@ -372,7 +390,8 @@ export default function AssessmentsPage() {
   const [pendingAssessment, setPendingAssessment] = useState<PendingAssessment | null>(consumePendingAssessment);
   const [createOpen, setCreateOpen] = useState(() => pendingAssessment !== null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => consumeViewSystem()?.systemName ?? "");
+  const [pendingOpenAssessmentId, setPendingOpenAssessmentId] = useState<string | null>(() => consumeOpenAssessment()?.assessmentId ?? null);
   const [statusFilter, setStatusFilter] = useState("");
 
   // The registry MFE hands off via a localStorage flag + Luigi navigation. A fresh iframe load
@@ -382,6 +401,10 @@ export default function AssessmentsPage() {
     const id = LuigiClient.addContextUpdateListener(() => {
       const payload = consumePendingAssessment();
       if (payload) { setPendingAssessment(payload); setCreateOpen(true); }
+      const vs = consumeViewSystem();
+      if (vs?.systemName) setSearch(vs.systemName);
+      const oa = consumeOpenAssessment();
+      if (oa?.assessmentId) setPendingOpenAssessmentId(oa.assessmentId);
     });
     return () => { LuigiClient.removeContextUpdateListener(id); };
   }, []);
@@ -435,6 +458,16 @@ export default function AssessmentsPage() {
   }, [showToast]);
 
   useEffect(() => { load(); }, [load]);
+
+  // When the registry navigates here with a specific assessment to view, auto-open
+  // its detail panel once assessments have loaded.
+  useEffect(() => {
+    if (!pendingOpenAssessmentId || assessments.length === 0) return;
+    const a = assessments.find((r) => r.id === pendingOpenAssessmentId);
+    if (a) { openDetail(a); setPendingOpenAssessmentId(null); }
+  // openDetail is stable (no deps change it); assessments is the trigger
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assessments, pendingOpenAssessmentId]);
 
   async function openDetail(a: Assessment) {
     setSelected(a.id);

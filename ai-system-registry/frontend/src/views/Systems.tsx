@@ -39,19 +39,25 @@ function docProgress(status: string, stage: string | null): number {
 }
 
 // Only "start" hands a system off to the compliance create-assessment modal via
-// the localStorage flag the compliance MFE consumes. "continue"/"view" must NOT
-// set the flag (that flag only ever opens the create modal), so they navigate to
-// the plain assessments list.
-function goToAssessments(systemId: string, action: AssessmentAction) {
+// the localStorage flag the compliance MFE consumes. "continue" pre-filters the
+// assessments list to this system; "view" additionally auto-opens the most recent
+// approved assessment's detail panel.
+function goToAssessments(systemId: string, systemName: string, action: AssessmentAction, rows: AssessmentRow[]) {
   if (action === "start") {
     localStorage.setItem("compliance.pendingAssessment", JSON.stringify({ systemId, frameworkId: EU_AI_ACT_ID }));
+  } else {
+    localStorage.setItem("compliance.viewSystem", JSON.stringify({ systemId, systemName }));
+    if (action === "view") {
+      const approved = rows.find((r) => r.status === "approved");
+      if (approved) localStorage.setItem("compliance.openAssessment", JSON.stringify({ assessmentId: approved.id }));
+    }
   }
   LuigiClient.linkManager().navigate("/home/assessments");
 }
 
 const ACTION_LABEL: Record<AssessmentAction, string> = {
   start: "Start assessment",
-  continue: "Continue assessment",
+  continue: "Continue last assessment",
   view: "View assessment",
 };
 
@@ -134,7 +140,7 @@ export default function Systems() {
         api.getAllUsers().catch(() => []),
         api.getModels().catch(() => [] as ModelCard[]),
       ]);
-      setSystems(sys);
+      setSystems(sys.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)));
       setModels(mdls);
       const map: UserMap = {};
       for (const u of allUsers) map[u.username] = { firstName: u.firstName, lastName: u.lastName };
@@ -241,6 +247,7 @@ export default function Systems() {
     if (!deleteTarget) return;
     try {
       await api.deleteSystem(deleteTarget.id);
+      void api.deleteIndexedDocumentsForSystem(deleteTarget.id).catch(() => {});
       showToast("System deleted");
       setDeleteTarget(null);
       loadAll();
@@ -355,7 +362,7 @@ export default function Systems() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => goToAssessments(s.id, action)}>
+                            <DropdownMenuItem onSelect={() => goToAssessments(s.id, s.name, action, assessmentsBySystem[s.id] ?? [])}>
                               {action === "start" ? <Play /> : <ArrowRight />}
                               {ACTION_LABEL[action]}
                             </DropdownMenuItem>

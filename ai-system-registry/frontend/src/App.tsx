@@ -78,7 +78,7 @@ export default function App() {
                 className="border-transparent bg-[#1147E9] text-white hover:bg-[#0d39c4]"
                 title={mayWrite ? undefined : "Requires permission: systems:write"}
                 onClick={() => navigate("/systems/new")}>
-                + Register System
+                + Register new AI System
               </Button>
             ) : (
               <Button disabled={!mayWrite} title={mayWrite ? undefined : noWriteTitle}
