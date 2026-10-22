@@ -259,7 +259,7 @@ export default function Systems() {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-6 py-3">
-        <div className="relative w-72">
+        <div className="relative w-80">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="text"
