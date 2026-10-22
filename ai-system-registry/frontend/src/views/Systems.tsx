@@ -346,7 +346,10 @@ export default function Systems() {
                         const e = indexing[s.id];
                         if (!e) return <span className="text-muted-foreground">—</span>;
                         if (e.failed) return <span className="font-medium text-[var(--danger-fg)]" title="One or more documents failed to index">{e.pct}% · failed</span>;
-                        return <span className={cn("font-medium", e.busy ? "text-[var(--brand)]" : "text-[var(--success)]")}>{e.pct}%</span>;
+                        const indexingTitle = e.busy
+                          ? "Documents are being indexed. You can start the assessment once indexing is complete. Indexed documents are used to pre-fill the compliance questionnaire."
+                          : "All documents indexed. Indexed documents are used to pre-fill the compliance questionnaire.";
+                        return <span className={cn("font-medium", e.busy ? "text-[var(--brand)]" : "text-[var(--success)]")} title={indexingTitle}>{e.pct}%</span>;
                       })()}
                     </TableCell>
                     <TableCell className="text-[13px] text-muted-foreground"><FormattedDate iso={s.created_at} /></TableCell>
