@@ -11,7 +11,7 @@ const TIER_CLASSES: Record<TierKey, string> = {
   high: "bg-[#fde8d0] text-[#8b3a00]",
   "gpai-systemic": "bg-[#f0e8ff] text-[#4108A0]",
   "gpai-standard": "bg-[#f4edff] text-[#6C1AF4]",
-  limited: "bg-[#fff3c4] text-[#7a5900]",
+  limited: "bg-[#e8f0fb] text-[#1147E9]",
   minimal: "bg-[#d5f5e3] text-[#1a5c35]",
   pending: "bg-[#eaecee] text-[#556b82]",
 };
