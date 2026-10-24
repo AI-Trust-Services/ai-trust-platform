@@ -4,6 +4,7 @@ import "./index.css";
 import App from "./App";
 import { RequirePermission } from "./components/RequirePermission";
 import Systems from "./views/Systems";
+import RegisterSystem from "./views/RegisterSystem";
 import ModelListPage from "./views/ModelListPage";
 import ModelPage from "./views/ModelPage";
 
@@ -17,6 +18,10 @@ const router = createHashRouter([
       {
         path: "systems",
         element: <RequirePermission anyOf={SYSTEM_PERMS}><Systems /></RequirePermission>,
+      },
+      {
+        path: "systems/new",
+        element: <RequirePermission anyOf={["systems:write"]}><RegisterSystem /></RequirePermission>,
       },
       {
         path: "models",

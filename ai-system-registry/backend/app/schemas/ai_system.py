@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -87,10 +87,9 @@ class AISystemCreate(BaseModel):
     compliance_officer_username: str | None = Field(default=None, max_length=200)
 
     # Deployment context captured at registration. deployment_country is ISO
-    # 3166-1 alpha-2; the two EU-presence booleans drive the framework recommendation.
+    # 3166-1 alpha-2.
     deployment_country: str | None = Field(default=None, max_length=2)
-    eu_output_usage: bool | None = None
-    eu_market_placement: bool | None = None
+    lifecycle: str | None = None
 
     # Optional descriptive fields (populated by the AI-assisted flow; manual owner
     # mode omits them and the intake stays a minimal stub).
@@ -128,9 +127,12 @@ class AISystemCreate(BaseModel):
         None
     )
 
+    # Owner of the system is its creator (set server-side at intake). contributors is
+    # a roster of usernames designated to support the registration.
     business_owners: str | None = None
-    technical_owners: str | None = None
+    contributors: list[str] | None = None
     git_repo_url: str | None = Field(default=None, max_length=500)
+    planned_rollout_date: date | None = None
 
     registration_mode: Literal["ai", "manual_questionnaire", "full_manual"] = "ai"
     org_role: str = "provider"
@@ -187,15 +189,12 @@ class AISystemUpdate(BaseModel):
     decision_context: str | None = None
     system_type: str | None = None
     autonomy_level: str | None = None
-    application_url: str | None = Field(default=None, max_length=500)
     provider_country: str | None = Field(default=None, max_length=5)
     deployment_country: str | None = Field(default=None, max_length=2)
-    eu_output_usage: bool | None = None
-    eu_market_placement: bool | None = None
     lifecycle: str | None = None
-    business_owners: str | None = None
-    technical_owners: str | None = None
+    contributors: list[str] | None = None
     git_repo_url: str | None = Field(default=None, max_length=500)
+    planned_rollout_date: date | None = None
 
     # Risk flags (editable in draft/rejected)
     subliminal_manipulation: bool | None = None
@@ -257,11 +256,8 @@ class AISystemResponse(BaseModel):
     decision_context: str | None
     system_type: str
     autonomy_level: str
-    application_url: str
     provider_country: str
     deployment_country: str | None
-    eu_output_usage: bool | None
-    eu_market_placement: bool | None
     tier: str
     basis: str
     annex_iii_area: int | None
@@ -302,8 +298,9 @@ class AISystemResponse(BaseModel):
     questionnaire_answers: dict | None
     registration_documents: list[RegistrationDocument] | None = None
     business_owners: str | None = None
-    technical_owners: str | None = None
+    contributors: list[str] | None = None
     git_repo_url: str | None = None
+    planned_rollout_date: date | None = None
 
     model_config = {"from_attributes": True}
 
@@ -348,15 +345,13 @@ class AISystemImport(BaseModel):
     decision_context: str | None = None
     system_type: str | None = Field(default=None, max_length=30)
     autonomy_level: str | None = Field(default=None, max_length=50)
-    application_url: str | None = Field(default=None, max_length=500)
     provider_country: str | None = Field(default=None, max_length=5)
     deployment_country: str | None = Field(default=None, max_length=2)
-    eu_output_usage: bool | None = None
-    eu_market_placement: bool | None = None
     lifecycle: str | None = Field(default=None, max_length=30)
     business_owners: str | None = None
-    technical_owners: str | None = None
+    contributors: list[str] | None = None
     git_repo_url: str | None = Field(default=None, max_length=500)
+    planned_rollout_date: date | None = None
 
     # --- Classification result (tier is authoritative from source; classify() does not run) ---
     tier: str | None = None
@@ -414,14 +409,6 @@ class AISystemImport(BaseModel):
     def lifecycle_valid(cls, v: str | None) -> str | None:
         if v is not None and v not in VALID_LIFECYCLES:
             raise ValueError(f"lifecycle must be one of {sorted(VALID_LIFECYCLES)}")
-        return v
-
-    @field_validator("application_url")
-    @classmethod
-    def url_scheme_allowlist(cls, v: str | None) -> str | None:
-        """Reject non-http(s) schemes — application_url is rendered as <a href> in the UI."""
-        if v and urlparse(v).scheme not in ("http", "https"):
-            raise ValueError("application_url must use http or https")
         return v
 
     @field_validator("git_repo_url")

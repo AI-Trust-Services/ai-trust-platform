@@ -15,6 +15,7 @@ from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from app import email_sender
 from app.classifier import ClassificationResult
 from app.ids import new_id
+from app.routers.systems import _assert_valid_contributors
 from app.schemas import AISystemCreate, AISystemResponse, IntakeResponse
 from app.schemas.ai_system import AISystemImport, ImportFailure, ImportResult
 from fastapi import (
@@ -51,17 +52,21 @@ async def intake_system(
     system_id = new_id("SYS")
     step_id = new_id("SWS")
 
+    if body.contributors:
+        await _assert_valid_contributors(body.contributors)
+
     row = AISystem(
         id=system_id,
         name=body.name,
         description=body.description,
         intended_purpose=body.intended_purpose or "",
-        business_owners=body.business_owners,
-        technical_owners=body.technical_owners,
+        # Owner of the system is its creator; the form pre-fills and locks this.
+        business_owners=current_user,
+        contributors=body.contributors,
         git_repo_url=body.git_repo_url,
+        planned_rollout_date=body.planned_rollout_date,
         deployment_country=body.deployment_country,
-        eu_output_usage=body.eu_output_usage,
-        eu_market_placement=body.eu_market_placement,
+        lifecycle=body.lifecycle or "development",
         tier="pending",
         basis="Pending risk classification",
         annex_iii_area=None,
@@ -236,15 +241,13 @@ if BATCH_IMPORT_ENABLED:
                 decision_context=rec.decision_context,
                 system_type=rec.system_type or "application",
                 autonomy_level=rec.autonomy_level or "decision_support",
-                application_url=rec.application_url or "",
                 provider_country=rec.provider_country or "DE",
                 deployment_country=rec.deployment_country,
-                eu_output_usage=rec.eu_output_usage,
-                eu_market_placement=rec.eu_market_placement,
                 lifecycle=rec.lifecycle or "development",
                 business_owners=rec.business_owners,
-                technical_owners=rec.technical_owners,
+                contributors=rec.contributors,
                 git_repo_url=rec.git_repo_url,
+                planned_rollout_date=rec.planned_rollout_date,
                 tier=tier,
                 basis=rec.basis or "",
                 annex_iii_area=rec.annex_iii_area,

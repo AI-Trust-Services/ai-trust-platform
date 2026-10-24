@@ -1,12 +1,12 @@
 import { useState, useEffect, Fragment } from "react";
 import LuigiClient from "@luigi-project/client";
-import { Loader2, ChevronDown, ChevronRight, Copy, FileText, Download, Sparkles, ClipboardList, ExternalLink } from "lucide-react";
+import { Loader2, ChevronDown, ChevronRight, Copy, FileText, Download, Sparkles, ClipboardList, ExternalLink, Trash2 } from "lucide-react";
 import { TierBadge, LifecycleBadge, ComplianceBar } from "./Badges";
 import { fmtDateTime, LIFECYCLE_LABELS, copyToClipboard, SELECT_CLASS, TIER_META } from "../utils";
 import { api } from "../api/client";
 import { ORG_ROLE_LABELS } from "../constants/orgRoles";
 import { useToast, useModalControls } from "../App";
-import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary } from "../types";
+import type { AISystem, ModelCard, WorkflowStep, ClassificationRationale, UserSummary, IndexedDocument } from "../types";
 import {
   BUSINESS_QUESTIONS,
   AI_TECHNICAL_QUESTIONS,
@@ -707,8 +707,7 @@ type EditableFields = {
   name: string;
   description: string;
   intended_purpose: string;
-  business_owners: string;
-  technical_owners: string;
+  contributors: string[];
   git_repo_url: string;
   lifecycle: string;
   org_role: string;
@@ -719,13 +718,15 @@ function extractEditableFields(sys: AISystem | null): EditableFields {
     name: sys?.name ?? "",
     description: sys?.description ?? "",
     intended_purpose: sys?.intended_purpose ?? "",
-    business_owners: sys?.business_owners ?? "",
-    technical_owners: sys?.technical_owners ?? "",
+    contributors: sys?.contributors ?? [],
     git_repo_url: sys?.git_repo_url ?? "",
     lifecycle: sys?.lifecycle ?? "development",
     org_role: sys?.org_role ?? "",
   };
 }
+
+// Only AI engineers and business owners may be added as contributors.
+const CONTRIBUTOR_ROLES = ["ai_engineer", "business_owner"];
 
 export default function SystemDetail({ system: initialSystem, models: _models, open, onClose, onDelete, onUpdate, userMap }: {
   system: AISystem | null;
@@ -745,13 +746,13 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
   const [form, setForm] = useState<EditableFields>(() => extractEditableFields(initialSystem));
   const [formBase, setFormBase] = useState<EditableFields>(() => extractEditableFields(initialSystem));
   const [saving, setSaving] = useState(false);
-  const [allUsers, setAllUsers] = useState<Array<{ username: string; firstName: string; lastName: string }>>([]);
+  const [allUsers, setAllUsers] = useState<Array<{ username: string; firstName: string; lastName: string; role: string }>>([]);
+  const [pendingContributor, setPendingContributor] = useState("");
+  const [systemDocs, setSystemDocs] = useState<IndexedDocument[]>([]);
   const showToast = useToast();
   const { mayWrite, mayApprove, username } = useModalControls();
 
-  const isDirty = (Object.keys(form) as (keyof EditableFields)[]).some(
-    (k) => form[k] !== formBase[k],
-  );
+  const isDirty = JSON.stringify(form) !== JSON.stringify(formBase);
 
   // Reset form and local system when the sheet opens a different system.
   useEffect(() => {
@@ -780,6 +781,24 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
     api.getRceSummary(system.id).then(setRceSummary).catch(() => setRceSummary(null));
   }, [system?.id, system?.workflow_status, system?.compliance_officer_username, username]);
 
+  // Load indexed documents for the open system.
+  useEffect(() => {
+    if (!system) { setSystemDocs([]); return; }
+    api.listIndexedDocuments(system.id).then(setSystemDocs).catch(() => setSystemDocs([]));
+  }, [system?.id]);
+
+  // Poll every 3s while any document is still being processed.
+  useEffect(() => {
+    if (!system) return;
+    const active = systemDocs.some((d) => d.status === "pending" || d.status === "processing");
+    if (!active) return;
+    const t = setInterval(
+      () => api.listIndexedDocuments(system.id).then(setSystemDocs).catch(() => {}),
+      3000,
+    );
+    return () => clearInterval(t);
+  }, [system?.id, systemDocs]);
+
   function handleSystemUpdate(updated: AISystem) {
     setSystem(updated);
     onUpdate(updated);
@@ -793,8 +812,7 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
         name: form.name,
         description: form.description,
         intended_purpose: form.intended_purpose,
-        business_owners: form.business_owners || null,
-        technical_owners: form.technical_owners || null,
+        contributors: form.contributors,
         git_repo_url: form.git_repo_url || null,
         lifecycle: form.lifecycle,
         org_role: form.org_role || null,
@@ -816,6 +834,9 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
     if (!confirm(`Delete "${system.name}"?\n\nThis action cannot be undone.`)) return;
     try {
       await api.deleteSystem(system.id);
+      // Separate service, no FK — purge its indexed docs too so chunks/MinIO objects
+      // aren't orphaned. Best-effort.
+      void api.deleteIndexedDocumentsForSystem(system.id).catch(() => {});
       onClose();
       showToast("System deleted");
       onDelete();
@@ -827,6 +848,23 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
   const setField = (k: keyof EditableFields) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Resolve a username to a display name via the loaded users or the userMap prop.
+  const resolveName = (u: string | null) => {
+    if (!u) return "—";
+    const found = allUsers.find((x) => x.username === u);
+    const nm = found ?? (userMap && userMap[u] ? userMap[u] : null);
+    const full = nm ? [nm.firstName, nm.lastName].filter(Boolean).join(" ") : "";
+    return full || u;
+  };
+
+  // Contributor-eligible users not already the owner or a contributor.
+  const contributorCandidates = allUsers.filter(
+    (u) =>
+      CONTRIBUTOR_ROLES.includes(u.role) &&
+      u.username !== system?.business_owners &&
+      !form.contributors.includes(u.username),
+  );
 
   return (
     <>
@@ -884,29 +922,65 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
                         />
                         <p className="text-xs text-muted-foreground">Please enter the purpose of the AI system — how and for what it is to be used.</p>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="field_biz_owner">Business Owner</Label>
-                          <select className={SELECT_CLASS} id="field_biz_owner" value={form.business_owners} onChange={setField("business_owners")}>
-                            <option value="">— none —</option>
-                            {allUsers.map((u) => (
-                              <option key={u.username} value={u.username}>
-                                {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username}
-                              </option>
-                            ))}
-                          </select>
+                      <div className="flex flex-col gap-1.5">
+                        <Label>Owner</Label>
+                        <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-[10px] font-bold text-white">
+                            {(system.business_owners || "—").slice(0, 2).toUpperCase()}
+                          </span>
+                          {resolveName(system.business_owners)}
                         </div>
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="field_tech_owner">Technical Owner</Label>
-                          <select className={SELECT_CLASS} id="field_tech_owner" value={form.technical_owners} onChange={setField("technical_owners")}>
-                            <option value="">— none —</option>
-                            {allUsers.map((u) => (
-                              <option key={u.username} value={u.username}>
-                                {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username}
-                              </option>
+                        <p className="text-xs text-muted-foreground">The owner is the user who created this system.</p>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label>Contributors</Label>
+                        {mayWrite && (
+                          <div className="flex gap-2">
+                            <select className={SELECT_CLASS} value={pendingContributor} onChange={(e) => setPendingContributor(e.target.value)}>
+                              <option value="">Add a contributor…</option>
+                              {contributorCandidates.map((u) => (
+                                <option key={u.username} value={u.username}>
+                                  {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.username}
+                                </option>
+                              ))}
+                            </select>
+                            <Button
+                              type="button"
+                              disabled={!pendingContributor}
+                              onClick={() => {
+                                setForm((f) => ({
+                                  ...f,
+                                  contributors: f.contributors.includes(pendingContributor)
+                                    ? f.contributors
+                                    : [...f.contributors, pendingContributor],
+                                }));
+                                setPendingContributor("");
+                              }}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        )}
+                        {form.contributors.length === 0 ? (
+                          <span className="text-[13px] text-muted-foreground">No contributors</span>
+                        ) : (
+                          <div className="flex flex-col gap-1.5">
+                            {form.contributors.map((u) => (
+                              <div key={u} className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm">
+                                <span>{resolveName(u)}</span>
+                                {mayWrite && (
+                                  <button
+                                    type="button"
+                                    className="ml-auto text-[13px] font-medium text-[var(--brand)] hover:underline"
+                                    onClick={() => setForm((f) => ({ ...f, contributors: f.contributors.filter((x) => x !== u) }))}
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
                             ))}
-                          </select>
-                        </div>
+                          </div>
+                        )}
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <Label htmlFor="field_git_repo" className="flex items-center gap-1.5">
@@ -1057,6 +1131,58 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
                   {(system.registration_documents?.length ?? 0) > 0 && (
                     <Section title="Supporting Documents">
                       <RegistrationDocuments system={system} />
+                    </Section>
+                  )}
+
+                  {/* Indexed documents — uploaded via the registration form, indexed asynchronously */}
+                  {systemDocs.length > 0 && (
+                    <Section title="Indexed Documents">
+                      <div className="flex flex-col gap-1.5">
+                        {systemDocs.map((doc) => {
+                          const failed = doc.status === "failed";
+                          const active = doc.status === "pending" || doc.status === "processing";
+                          const stageLabel = doc.stage ? ` · ${doc.stage}` : "";
+                          const statusText = failed
+                            ? "Failed"
+                            : active
+                              ? `Indexing${stageLabel}…`
+                              : doc.chunk_count != null
+                                ? `Indexed · ${doc.chunk_count} chunks`
+                                : "Indexed";
+                          return (
+                            <div
+                              key={doc.id}
+                              className={cn(
+                                "flex items-center gap-2 rounded-md border px-3 py-2 text-[13px]",
+                                failed ? "border-[var(--danger-fg)]/30 bg-[var(--danger-fg)]/5" : "border-border",
+                              )}
+                            >
+                              <FileText className={cn("size-4 shrink-0", failed ? "text-[var(--danger-fg)]" : "text-muted-foreground")} />
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate font-medium">{doc.filename}</div>
+                                <div className={cn("text-[11px]", failed ? "text-[var(--danger-fg)]" : "text-muted-foreground")}>
+                                  {statusText}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                title="Delete document"
+                                className="shrink-0 text-muted-foreground hover:text-[var(--danger-fg)]"
+                                onClick={async () => {
+                                  try {
+                                    await api.deleteIndexedDocument(doc.id);
+                                    setSystemDocs((prev) => prev.filter((d) => d.id !== doc.id));
+                                  } catch (e) {
+                                    showToast(`Delete failed: ${(e as Error).message}`, true);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="size-4" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </Section>
                   )}
 
