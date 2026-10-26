@@ -17,7 +17,9 @@ const CONTRIBUTOR_ROLES = ["ai_engineer", "business_owner"];
 // Mirrors the document-indexing service limits (document-indexing/backend). The
 // form restricts to the three formats named in the ticket; the service also
 // accepts pptx/html/txt but we don't surface those here.
-const MAX_FILES = 10;
+// High ceiling — anti-spam guard only, not surfaced in the UI. Realistically no
+// system has this many docs; the real limit is the per-file size cap below.
+const MAX_FILES = 100;
 const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
 const ALLOWED_EXT = ["pdf", "docx", "md"];
 const ACCEPT = ".pdf,.docx,.md";
@@ -359,7 +361,7 @@ export default function RegisterSystem() {
               <span>Uploading your complete documentation will allow the AI to pre-fill the assessment later. Ensure your documentation is up-to-date.</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Upload a maximum of {MAX_FILES} documents related to your AI system. Maximum file size: 50 MB.
+              Upload documents related to your AI system. Maximum file size: 50 MB.
               Supported formats: pdf, docx, md.
             </p>
 
