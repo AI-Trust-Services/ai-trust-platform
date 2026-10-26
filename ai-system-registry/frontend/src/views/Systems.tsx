@@ -306,7 +306,7 @@ export default function Systems() {
                 <TableHead className="normal-case">Contributors</TableHead>
                 <TableHead className="normal-case">Risk Classification</TableHead>
                 <TableHead className="normal-case">Organisation Role</TableHead>
-                <TableHead className="normal-case">Indexing</TableHead>
+                <TableHead className="normal-case">Processing</TableHead>
                 <TableHead className="normal-case">Registration Date</TableHead>
                 <TableHead className="normal-case">Actions</TableHead>
               </TableRow>
@@ -339,16 +339,16 @@ export default function Systems() {
                         </span>
                       ) : "—"}
                     </TableCell>
-                    <TableCell><TierBadge tier={s.tier} workflowStatus={s.workflow_status} /></TableCell>
+                    <TableCell><TierBadge tier={s.tier} workflowStatus={s.workflow_status} isChatbot={s.is_chatbot} generatesSyntheticContent={s.generates_synthetic_content} /></TableCell>
                     <TableCell>{s.org_role ? <RoleBadge role={s.org_role} /> : <span className="text-[13px] text-muted-foreground">—</span>}</TableCell>
                     <TableCell className="text-[13px]">
                       {(() => {
                         const e = indexing[s.id];
                         if (!e) return <span className="text-muted-foreground">—</span>;
-                        if (e.failed) return <span className="font-medium text-[var(--danger-fg)]" title="One or more documents failed to index">{e.pct}% · failed</span>;
+                        if (e.failed) return <span className="font-medium text-[var(--danger-fg)]" title="One or more documents failed to process">{e.pct}% · failed</span>;
                         const indexingTitle = e.busy
-                          ? "Documents are being indexed. You can start the assessment once indexing is complete. Indexed documents are used to pre-fill the compliance questionnaire."
-                          : "All documents indexed. Indexed documents are used to pre-fill the compliance questionnaire.";
+                          ? "Documents are being processed. You can start the assessment once processing is complete. Processed documents are used to pre-fill the compliance questionnaire."
+                          : "All documents processed. Processed documents are used to pre-fill the compliance questionnaire.";
                         return <span className={cn("font-medium", e.busy ? "text-[var(--brand)]" : "text-[var(--success)]")} title={indexingTitle}>{e.pct}%</span>;
                       })()}
                     </TableCell>

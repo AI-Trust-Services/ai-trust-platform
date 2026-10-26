@@ -280,10 +280,10 @@ export default function RegisterSystem() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="reg_purpose">Intended purpose <span className="text-[var(--danger-fg)]">*</span></Label>
-              <Textarea id="reg_purpose" rows={3} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="What is the AI system used for?" />
+              <Label htmlFor="reg_purpose">System Description <span className="text-[var(--danger-fg)]">*</span></Label>
+              <Textarea id="reg_purpose" rows={3} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Describe the AI system — what it does and how it is used." />
               <p className="text-xs text-muted-foreground">
-                Please enter the purpose of use of the AI system — how and for what it is to be used.
+                Please provide a description of the AI system — what it does and how it is used.
               </p>
             </div>
 

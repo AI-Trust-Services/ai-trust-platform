@@ -876,7 +876,7 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
               <SheetTitle>{system.name}</SheetTitle>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span>{system.id} · v{system.version}</span>
-                <TierBadge tier={system.tier} workflowStatus={system.workflow_status} />
+                <TierBadge tier={system.tier} workflowStatus={system.workflow_status} isChatbot={system.is_chatbot} generatesSyntheticContent={system.generates_synthetic_content} />
                 <LifecycleBadge lc={system.lifecycle} />
                 {system.registration_mode === "ai" && (
                   <span className="rounded-full border border-[var(--brand)]/30 bg-[var(--brand)]/10 px-2 py-0.5 text-[11px] font-medium text-[var(--brand)]">AI-assisted</span>
@@ -1080,7 +1080,7 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
                   {/* Classification — read-only */}
                   <Section title="Classification">
                     <DetailGrid rows={[
-                      ["Risk Classification", <TierBadge key="tier" tier={system.tier} workflowStatus={system.workflow_status} />],
+                      ["Risk Classification", <TierBadge key="tier" tier={system.tier} workflowStatus={system.workflow_status} isChatbot={system.is_chatbot} generatesSyntheticContent={system.generates_synthetic_content} />],
                       ["Organisation Role", <span key="org_role" className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs capitalize">{system.org_role ? (ORG_ROLE_LABELS[system.org_role] ?? system.org_role) : "—"}</span>],
                       ["Classification Basis", <span key="basis" className="text-[13px]">{system.basis}</span>],
                       system.annex_iii_area != null && ["Annex III Area", `Area ${system.annex_iii_area}`],
@@ -1136,7 +1136,7 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
 
                   {/* Indexed documents — uploaded via the registration form, indexed asynchronously */}
                   {systemDocs.length > 0 && (
-                    <Section title="Indexed Documents">
+                    <Section title="Processed Documents">
                       <div className="flex flex-col gap-1.5">
                         {systemDocs.map((doc) => {
                           const failed = doc.status === "failed";
@@ -1145,10 +1145,10 @@ export default function SystemDetail({ system: initialSystem, models: _models, o
                           const statusText = failed
                             ? "Failed"
                             : active
-                              ? `Indexing${stageLabel}…`
+                              ? `Processing${stageLabel}…`
                               : doc.chunk_count != null
-                                ? `Indexed · ${doc.chunk_count} chunks`
-                                : "Indexed";
+                                ? `Processed · ${doc.chunk_count} chunks`
+                                : "Processed";
                           return (
                             <div
                               key={doc.id}
