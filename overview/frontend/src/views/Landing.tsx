@@ -83,35 +83,47 @@ export default function Landing() {
   const displayMySystems = showHeroCurtain ? MOCK_MY_SYSTEMS : mySystems;
   const displayAssessments = showHeroCurtain ? MOCK_ASSESSMENTS : assessments;
 
+  if (showHeroCurtain) {
+    return (
+      <main className="relative min-h-screen overflow-hidden bg-[#f6f7fb]">
+        <div
+          aria-hidden
+          className="pointer-events-none select-none flex w-full max-w-[1600px] flex-col gap-8 px-4 pt-[40vh] blur-[2px]"
+        >
+          <OpenTasksSection
+            state="ready"
+            rows={displayOpenTasks}
+            assessments={displayAssessments}
+          />
+          <MySystemsSection
+            canRegister={canRegister}
+            state="ready"
+            systems={displayMySystems}
+            assessments={displayAssessments}
+          />
+        </div>
+        <HeroEmptyState canRegister={canRegister} />
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#f6f7fb]">
       <div className="flex w-full max-w-[1600px] gap-6 px-4 py-8">
         <div className="flex min-w-0 flex-1 flex-col gap-8">
           <LandingHeader firstName={firstName} />
-          <div className="relative">
-            <div
-              aria-hidden={showHeroCurtain || undefined}
-              className={
-                showHeroCurtain
-                  ? "pointer-events-none select-none flex flex-col gap-8 blur-[2px]"
-                  : "flex flex-col gap-8"
-              }
-            >
-              <GetStartedCard canRegister={canRegister} />
-              <OpenTasksSection
-                state="ready"
-                rows={displayOpenTasks}
-                assessments={displayAssessments}
-              />
-              <MySystemsSection
-                canRegister={canRegister}
-                state="ready"
-                systems={displayMySystems}
-                assessments={displayAssessments}
-              />
-            </div>
-            {showHeroCurtain && <HeroEmptyState canRegister={canRegister} />}
-          </div>
+          <GetStartedCard canRegister={canRegister} />
+          <OpenTasksSection
+            state="ready"
+            rows={displayOpenTasks}
+            assessments={displayAssessments}
+          />
+          <MySystemsSection
+            canRegister={canRegister}
+            state="ready"
+            systems={displayMySystems}
+            assessments={displayAssessments}
+          />
         </div>
         <aside className="hidden w-[320px] shrink-0 flex-col gap-4 lg:flex">
           <ResourcesCard />

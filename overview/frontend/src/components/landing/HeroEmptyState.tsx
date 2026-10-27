@@ -23,23 +23,23 @@ export function HeroEmptyState({ canRegister }: HeroEmptyStateProps) {
 
   return (
     <div
-      className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden rounded-2xl"
+      className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden"
       style={{
         background:
-          "linear-gradient(135deg, rgba(236,230,255,0.78) 0%, rgba(239,232,255,0.75) 40%, rgba(253,240,217,0.78) 100%)",
+          "linear-gradient(135deg, rgba(224,214,255,0.92) 0%, rgba(234,220,255,0.88) 35%, rgba(252,228,190,0.92) 100%)",
         backdropFilter: "blur(2px)",
         WebkitBackdropFilter: "blur(2px)",
       }}
     >
-      <StarField />
-      <div className="pointer-events-auto relative flex max-w-xl flex-col items-center gap-5 px-6 py-12 text-center">
-        <h2 className="text-2xl font-semibold leading-tight text-foreground">
+      <EuStarRing />
+      <div className="pointer-events-auto relative z-10 flex max-w-2xl flex-col items-center gap-6 px-6 py-12 text-center">
+        <h2 className="text-4xl font-semibold leading-[1.15] tracking-tight text-foreground">
           Simplify your{" "}
           <span className="text-[var(--brand)]">AI assessment</span> process,
           <br />
           let us guide you there.
         </h2>
-        <p className="max-w-md text-sm text-muted-foreground">
+        <p className="max-w-lg text-base text-muted-foreground">
           Get started by registering an AI System.
           <br />
           Once registered, complete the EU AI Act risk classification
@@ -48,7 +48,8 @@ export function HeroEmptyState({ canRegister }: HeroEmptyStateProps) {
         {canRegister && (
           <Button
             onClick={handleRegister}
-            className="mt-1 border-transparent bg-[var(--brand)] text-white hover:bg-[color-mix(in_srgb,var(--brand)_88%,black)]"
+            size="lg"
+            className="mt-2 border-transparent bg-[var(--brand)] text-white hover:bg-[color-mix(in_srgb,var(--brand)_88%,black)]"
           >
             <Plus />
             Register new AI System
@@ -59,46 +60,51 @@ export function HeroEmptyState({ canRegister }: HeroEmptyStateProps) {
   );
 }
 
-/** Scattered EU-style stars sprinkled across the whole curtain. */
-function StarField() {
-  const stars = [
-    { x: 6, y: 8, r: 1.6 },
-    { x: 15, y: 20, r: 1.2 },
-    { x: 24, y: 5, r: 1.4 },
-    { x: 32, y: 15, r: 1.0 },
-    { x: 46, y: 7, r: 1.5 },
-    { x: 58, y: 12, r: 1.1 },
-    { x: 70, y: 4, r: 1.6 },
-    { x: 82, y: 10, r: 1.3 },
-    { x: 92, y: 18, r: 1.5 },
-    { x: 4, y: 32, r: 1.3 },
-    { x: 94, y: 36, r: 1.0 },
-    { x: 10, y: 48, r: 1.2 },
-    { x: 90, y: 50, r: 1.4 },
-    { x: 6, y: 62, r: 1.6 },
-    { x: 95, y: 68, r: 1.2 },
-    { x: 14, y: 80, r: 1.1 },
-    { x: 26, y: 92, r: 1.4 },
-    { x: 42, y: 86, r: 1.0 },
-    { x: 58, y: 92, r: 1.3 },
-    { x: 72, y: 85, r: 1.5 },
-    { x: 86, y: 94, r: 1.1 },
-  ];
+/**
+ * 12 EU-style stars arranged on a circle in the top-right of the hero.
+ * Each star is a self-contained SVG so it stays round regardless of the
+ * container aspect ratio.
+ */
+function EuStarRing() {
+  const starSize = 44;
+  // Center the ring in the top-right quadrant of the hero; the ring is large
+  // enough that it bleeds past the top and right edges.
+  const centerX = 88;
+  const centerY = 28;
+  const radiusX = 22;
+  const radiusY = 32;
+  const stars = Array.from({ length: 12 }, (_, i) => {
+    const angle = (i / 12) * 2 * Math.PI - Math.PI / 2;
+    return {
+      left: centerX + Math.cos(angle) * radiusX,
+      top: centerY + Math.sin(angle) * radiusY,
+    };
+  });
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      className="pointer-events-none absolute inset-0 h-full w-full"
-    >
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
       {stars.map((s, i) => (
-        <Star key={i} cx={s.x} cy={s.y} r={s.r} />
+        <div
+          key={i}
+          className="absolute"
+          style={{
+            left: `${s.left}%`,
+            top: `${s.top}%`,
+            width: starSize,
+            height: starSize,
+            transform: "translate(-50%, -50%)",
+          }}
+        >
+          <StarSvg />
+        </div>
       ))}
-    </svg>
+    </div>
   );
 }
 
-function Star({ cx, cy, r }: { cx: number; cy: number; r: number }) {
+function StarSvg() {
+  const r = 48;
+  const cx = 50;
+  const cy = 50;
   const points: string[] = [];
   for (let i = 0; i < 10; i++) {
     const angle = (Math.PI / 5) * i - Math.PI / 2;
@@ -107,5 +113,13 @@ function Star({ cx, cy, r }: { cx: number; cy: number; r: number }) {
       `${cx + Math.cos(angle) * radius},${cy + Math.sin(angle) * radius}`,
     );
   }
-  return <polygon points={points.join(" ")} fill="#c8b8e6" opacity={0.55} />;
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      className="h-full w-full"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <polygon points={points.join(" ")} fill="#b8a4de" opacity={0.75} />
+    </svg>
+  );
 }
