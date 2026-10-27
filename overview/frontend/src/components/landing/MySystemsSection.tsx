@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Box, Eye, MoreVertical, Plus } from "lucide-react";
+import {
+  ArrowRight,
+  Box,
+  ClipboardList,
+  Eye,
+  MoreVertical,
+  Plus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { navigateTo } from "../../hooks/useLuigi";
 import {
@@ -97,7 +104,27 @@ function SystemRowView({ row }: { row: Row }) {
       `${REGISTRY_URL}#/systems/${system.id}`,
     );
   }
-  function openAssessments() {
+  // All assessments for this system — hand off via the same localStorage key
+  // the compliance MFE consumes to pre-filter its list (`viewSystem`).
+  function openSystemAssessments() {
+    localStorage.setItem(
+      "compliance.viewSystem",
+      JSON.stringify({ systemId: system.id, systemName: system.name }),
+    );
+    navigateTo("/home/assessments", COMPLIANCE_URL);
+  }
+  // Jump straight to the latest assessment detail. Only enabled when one
+  // exists; the extra `openAssessment` key tells compliance to open it.
+  function openLatestAssessment() {
+    if (!latestAssessment) return;
+    localStorage.setItem(
+      "compliance.viewSystem",
+      JSON.stringify({ systemId: system.id, systemName: system.name }),
+    );
+    localStorage.setItem(
+      "compliance.openAssessment",
+      JSON.stringify({ assessmentId: latestAssessment.id }),
+    );
     navigateTo("/home/assessments", COMPLIANCE_URL);
   }
 
@@ -109,9 +136,12 @@ function SystemRowView({ row }: { row: Row }) {
         <button
           type="button"
           onClick={openSystem}
-          className="flex flex-col items-start text-left hover:underline"
+          className="flex flex-col items-start text-left"
         >
-          <span className="truncate font-medium text-foreground" title={system.name}>
+          <span
+            className="truncate font-medium text-foreground underline underline-offset-2"
+            title={system.name}
+          >
             {system.name}
           </span>
           <span className="text-xs text-muted-foreground">{system.id}</span>
@@ -129,22 +159,32 @@ function SystemRowView({ row }: { row: Row }) {
         <AvatarStack usernames={team} />
       </td>
       <td className="px-4 py-3">
-        <span className="text-foreground">
-          {formatAssessmentStage(latestAssessment, system.workflow_status)}
-        </span>
+        <AssessmentStageCell
+          assessment={latestAssessment}
+          workflowStatus={system.workflow_status}
+        />
       </td>
       <td className="px-4 py-3 text-right">
-        <div className="inline-flex items-center gap-1">
+        <div
+          className="inline-flex items-center gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
           <Button
-            variant="ghost"
+            variant="outline"
             size="icon"
+            className="size-8"
             onClick={openSystem}
             aria-label={`Open ${system.name}`}
-            title={`Open ${system.name}`}
+            title="View system detail"
           >
             <Eye className="size-4" />
           </Button>
-          <RowMenu onOpenSystem={openSystem} onOpenAssessments={openAssessments} />
+          <RowMenu
+            onOpenSystem={openSystem}
+            onOpenSystemAssessments={openSystemAssessments}
+            onOpenLatestAssessment={openLatestAssessment}
+            hasAssessment={latestAssessment !== null}
+          />
         </div>
       </td>
     </tr>
@@ -181,21 +221,67 @@ function AvatarStack({ usernames }: { usernames: string[] }) {
 
 interface RowMenuProps {
   onOpenSystem: () => void;
-  onOpenAssessments: () => void;
+  onOpenSystemAssessments: () => void;
+  onOpenLatestAssessment: () => void;
+  hasAssessment: boolean;
 }
 
-function RowMenu({ onOpenSystem, onOpenAssessments }: RowMenuProps) {
+// Approximate dropdown height. If less than this much room is available below
+// the trigger, flip the menu to open upwards so the last row's menu isn't
+// clipped by the viewport.
+const MENU_HEIGHT_PX = 150;
+const MENU_WIDTH_PX = 220;
+
+function RowMenu({
+  onOpenSystem,
+  onOpenSystemAssessments,
+  onOpenLatestAssessment,
+  hasAssessment,
+}: RowMenuProps) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  // Position the dropdown as fixed in viewport coords so it can escape the
+  // table's `overflow-hidden` wrapper (needed for the rounded corners).
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    function handleScrollOrResize() {
+      setOpen(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+    };
   }, [open]);
+
+  function toggle() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < MENU_HEIGHT_PX;
+    const top = openUp ? rect.top - MENU_HEIGHT_PX - 4 : rect.bottom + 4;
+    // Right-align the menu to the trigger, clamped to the viewport.
+    const rawLeft = rect.right - MENU_WIDTH_PX;
+    const left = Math.max(8, Math.min(rawLeft, window.innerWidth - MENU_WIDTH_PX - 8));
+    setPos({ top, left });
+    setOpen(true);
+  }
 
   function pick(action: () => void) {
     setOpen(false);
@@ -203,45 +289,73 @@ function RowMenu({ onOpenSystem, onOpenAssessments }: RowMenuProps) {
   }
 
   return (
-    <div ref={ref} className="relative inline-block">
+    <>
       <Button
-        variant="ghost"
+        ref={triggerRef}
+        variant="outline"
         size="icon"
-        onClick={() => setOpen((o) => !o)}
+        className="size-8"
+        onClick={toggle}
         aria-label="More actions"
         aria-haspopup="menu"
         aria-expanded={open}
       >
         <MoreVertical className="size-4" />
       </Button>
-      {open && (
+      {open && pos && (
         <div
+          ref={menuRef}
           role="menu"
-          className="absolute right-0 top-full z-50 mt-1 min-w-[200px] overflow-hidden rounded-md border border-border bg-popover p-1 text-sm shadow-md"
+          className="fixed z-[100] overflow-hidden rounded-md border border-border bg-popover p-1 text-sm shadow-md"
+          style={{ top: pos.top, left: pos.left, width: MENU_WIDTH_PX }}
         >
-          <MenuItem onClick={() => pick(onOpenSystem)}>View system detail</MenuItem>
-          <MenuItem onClick={() => pick(onOpenAssessments)}>View assessments</MenuItem>
+          <MenuItem icon={<Eye className="size-4" />} onClick={() => pick(onOpenSystem)}>
+            View system detail
+          </MenuItem>
+          <MenuItem
+            icon={<ClipboardList className="size-4" />}
+            onClick={() => pick(onOpenSystemAssessments)}
+          >
+            View assessments
+          </MenuItem>
+          <MenuItem
+            icon={<ArrowRight className="size-4" />}
+            onClick={() => pick(onOpenLatestAssessment)}
+            disabled={!hasAssessment}
+            title={!hasAssessment ? "No assessment started yet" : undefined}
+          >
+            Open latest assessment
+          </MenuItem>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
 function MenuItem({
   onClick,
   children,
+  icon,
+  disabled,
+  title,
 }: {
   onClick: () => void;
   children: React.ReactNode;
+  icon?: React.ReactNode;
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
       onClick={onClick}
-      className="block w-full rounded-sm px-2 py-1.5 text-left text-foreground hover:bg-muted"
+      disabled={disabled}
+      title={title}
+      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
     >
-      {children}
+      {icon && <span className="text-muted-foreground">{icon}</span>}
+      <span>{children}</span>
     </button>
   );
 }
@@ -308,28 +422,87 @@ function pickLatestPerSystem(
   return map;
 }
 
-const ASSESSMENT_STATUS_LABELS: Record<string, string> = {
-  questionnaire_pending: "Questionnaire pending",
-  draft: "Draft",
-  in_review: "In review",
-  approved: "Approved",
-  rejected: "Rejected",
+type StageTone = "progress" | "warn" | "success" | "danger";
+
+interface StageInfo {
+  label: string;
+  filled: 0 | 1 | 2 | 3;
+  tone: StageTone;
+}
+
+// Three-step journey mirroring the governance phases:
+//   1. Draft assessment started  (assessment created, not yet in review)
+//   2. Assessment under review   (CO reviewing)
+//   3. Approved                  (CO approved)
+// Systems without an assessment yet surface the registry workflow label with
+// zero filled segments. Rejected / info_requested keep the segment count and
+// signal state via tone (destructive / warn) rather than regressing progress.
+function stageInfo(a: AssessmentSummary | null, workflowStatus: string): StageInfo {
+  if (a) {
+    if (a.status === "approved") return { label: "3. Approved", filled: 3, tone: "success" };
+    if (a.status === "rejected") return { label: "Rejected", filled: 2, tone: "danger" };
+    if (a.status === "in_review")
+      return { label: "2. Assessment under review", filled: 2, tone: "progress" };
+    // Covers draft + questionnaire_pending + any future pre-review status.
+    return { label: "1. Draft assessment started", filled: 1, tone: "progress" };
+  }
+  switch (workflowStatus) {
+    case "approved":
+      return { label: "Ready for assessment", filled: 0, tone: "progress" };
+    case "info_requested":
+      return { label: "Info requested", filled: 0, tone: "warn" };
+    case "rejected":
+      return { label: "Classification rejected", filled: 0, tone: "danger" };
+    case "pending_review":
+      return { label: "Classification under review", filled: 0, tone: "progress" };
+    case "business_pending":
+      return { label: "Awaiting owner", filled: 0, tone: "progress" };
+    case "technical_pending":
+      return { label: "Awaiting engineer", filled: 0, tone: "progress" };
+    case "draft":
+      return { label: "Draft started", filled: 0, tone: "progress" };
+    default:
+      return { label: workflowStatus, filled: 0, tone: "progress" };
+  }
+}
+
+const TONE_CLASSES: Record<StageTone, string> = {
+  progress: "bg-[var(--brand)]",
+  warn: "bg-amber-500",
+  success: "bg-emerald-500",
+  danger: "bg-destructive",
 };
 
-const WORKFLOW_STATUS_LABELS: Record<string, string> = {
-  draft: "Draft started",
-  business_pending: "Awaiting owner",
-  technical_pending: "Awaiting engineer",
-  pending_review: "Under review",
-  info_requested: "Info requested",
-  approved: "Risk classification approved",
-  rejected: "Rejected",
-};
-
-function formatAssessmentStage(
-  a: AssessmentSummary | null,
-  workflowStatus: string,
-): string {
-  if (a) return ASSESSMENT_STATUS_LABELS[a.status] ?? a.status;
-  return WORKFLOW_STATUS_LABELS[workflowStatus] ?? workflowStatus;
+function AssessmentStageCell({
+  assessment,
+  workflowStatus,
+}: {
+  assessment: AssessmentSummary | null;
+  workflowStatus: string;
+}) {
+  const { label, filled, tone } = stageInfo(assessment, workflowStatus);
+  const toneClass = TONE_CLASSES[tone];
+  const pct = Math.round((filled / 3) * 100);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs text-foreground">{label}</span>
+      <div
+        className="flex max-w-[160px] gap-1"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`${label} — stage ${filled} of 3`}
+      >
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className={`h-1 flex-1 rounded-full ${
+              i < filled ? toneClass : "bg-muted"
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
 }
