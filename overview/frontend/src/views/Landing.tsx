@@ -39,7 +39,7 @@ export default function Landing() {
 
   return (
     <main className="min-h-screen bg-[#f6f7fb]">
-      <div className="mx-auto flex w-full max-w-[1280px] gap-6 px-6 py-8">
+      <div className="flex w-full max-w-[1600px] gap-6 px-4 py-8">
         <div className="flex min-w-0 flex-1 flex-col gap-8">
           <LandingHeader firstName={firstName} />
           <GetStartedCard canRegister={canRegister} />

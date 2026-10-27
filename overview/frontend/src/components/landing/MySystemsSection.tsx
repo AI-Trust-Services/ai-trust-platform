@@ -9,7 +9,8 @@ interface MySystemsSectionProps {
 
 export function MySystemsSection({ canRegister }: MySystemsSectionProps) {
   function handleRegister() {
-    navigateTo("/home/ai-system-registry/systems/new", `${REGISTRY_URL}#/systems/new`);
+    // TODO(#315): after PR #319 lands, link to /home/ai-system-registry/systems/new
+    navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
 
   return (
@@ -30,7 +31,10 @@ export function MySystemsSection({ canRegister }: MySystemsSectionProps) {
           </p>
         </div>
         {canRegister && (
-          <Button variant="outline" onClick={handleRegister}>
+          <Button
+            onClick={handleRegister}
+            className="border-transparent bg-[var(--brand)] text-white hover:bg-[color-mix(in_srgb,var(--brand)_88%,black)]"
+          >
             <Plus />
             Register new AI System
           </Button>
