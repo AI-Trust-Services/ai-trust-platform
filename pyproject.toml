@@ -7,6 +7,7 @@ exclude = [
 ]
 
 [tool.ruff.lint]
+# Pre-existing violations suppressed to keep CI green; cleaned up incrementally.
 # F401 unused imports, F811 redefinition, E402 module-level import order,
 # E701 multiple statements on one line, E712 equality comparisons to True/False
 # — these exist in pre-existing code and will be cleaned up incrementally.
