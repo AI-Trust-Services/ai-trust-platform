@@ -112,11 +112,28 @@ function TaskRow({
     );
     navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
+  // Jump the user straight to where they can act on the open task — the
+  // questionnaire modal of the matching assessment in the compliance MFE.
+  // The questionnaire-answering UI lives in compliance (QuestionnaireSection)
+  // on the Assessments page, not in the registry.
   function openQuestions() {
-    // Deep-link into the system detail; it opens with the questionnaire
-    // visible. For an explicit per-question assignment the registry already
-    // scrolls to the pending question via its own navigation state.
-    openSystem();
+    if (!latestAssessment) {
+      // No assessment yet → nothing to answer in compliance; drop the user on
+      // the system detail so they can see what's going on.
+      openSystem();
+      return;
+    }
+    localStorage.setItem(
+      "compliance.viewSystem",
+      JSON.stringify({ systemId: group.system_id, systemName: group.system_name }),
+    );
+    // `questionnaire: true` tells AssessmentsPage to auto-open the
+    // questionnaire modal (not just the read-only detail side-panel).
+    localStorage.setItem(
+      "compliance.openAssessment",
+      JSON.stringify({ assessmentId: latestAssessment.id, questionnaire: true }),
+    );
+    navigateTo("/home/assessments", COMPLIANCE_URL);
   }
   function openAssessment() {
     if (!latestAssessment) {

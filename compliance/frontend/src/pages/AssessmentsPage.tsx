@@ -59,7 +59,7 @@ function consumePendingAssessment(): PendingAssessment | null {
 const VIEW_SYSTEM_KEY = "compliance.viewSystem";
 const OPEN_ASSESSMENT_KEY = "compliance.openAssessment";
 type ViewSystem = { systemId?: string; systemName?: string };
-type OpenAssessment = { assessmentId?: string };
+type OpenAssessment = { assessmentId?: string; questionnaire?: boolean };
 function consumeViewSystem(): ViewSystem | null {
   const raw = localStorage.getItem(VIEW_SYSTEM_KEY);
   if (!raw) return null;
@@ -391,7 +391,10 @@ export default function AssessmentsPage() {
   const [createOpen, setCreateOpen] = useState(() => pendingAssessment !== null);
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState(() => consumeViewSystem()?.systemName ?? "");
-  const [pendingOpenAssessmentId, setPendingOpenAssessmentId] = useState<string | null>(() => consumeOpenAssessment()?.assessmentId ?? null);
+  const [pendingOpenAssessment, setPendingOpenAssessment] = useState<OpenAssessment | null>(() => {
+    const oa = consumeOpenAssessment();
+    return oa?.assessmentId ? oa : null;
+  });
   const [statusFilter, setStatusFilter] = useState("");
 
   // The registry MFE hands off via a localStorage flag + Luigi navigation. A fresh iframe load
@@ -404,7 +407,7 @@ export default function AssessmentsPage() {
       const vs = consumeViewSystem();
       if (vs?.systemName) setSearch(vs.systemName);
       const oa = consumeOpenAssessment();
-      if (oa?.assessmentId) setPendingOpenAssessmentId(oa.assessmentId);
+      if (oa?.assessmentId) setPendingOpenAssessment(oa);
     });
     return () => { LuigiClient.removeContextUpdateListener(id); };
   }, []);
@@ -459,15 +462,21 @@ export default function AssessmentsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // When the registry navigates here with a specific assessment to view, auto-open
-  // its detail panel once assessments have loaded.
+  // When the registry or overview navigates here with a specific assessment to
+  // view, auto-open it once assessments have loaded. `questionnaire: true` jumps
+  // straight to the questionnaire modal (used by the Open Tasks row click);
+  // otherwise the read-only detail side-panel opens.
   useEffect(() => {
-    if (!pendingOpenAssessmentId || assessments.length === 0) return;
-    const a = assessments.find((r) => r.id === pendingOpenAssessmentId);
-    if (a) { openDetail(a); setPendingOpenAssessmentId(null); }
-  // openDetail is stable (no deps change it); assessments is the trigger
+    if (!pendingOpenAssessment?.assessmentId || assessments.length === 0) return;
+    const a = assessments.find((r) => r.id === pendingOpenAssessment.assessmentId);
+    if (a) {
+      if (pendingOpenAssessment.questionnaire) openQuestionnaire(a);
+      else openDetail(a);
+      setPendingOpenAssessment(null);
+    }
+  // openDetail/openQuestionnaire are stable (no deps change them); assessments is the trigger
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assessments, pendingOpenAssessmentId]);
+  }, [assessments, pendingOpenAssessment]);
 
   async function openDetail(a: Assessment) {
     setSelected(a.id);
