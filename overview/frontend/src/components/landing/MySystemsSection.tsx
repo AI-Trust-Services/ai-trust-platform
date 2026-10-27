@@ -30,7 +30,7 @@ export function MySystemsSection({ canRegister }: MySystemsSectionProps) {
           </p>
         </div>
         {canRegister && (
-          <Button onClick={handleRegister}>
+          <Button variant="outline" onClick={handleRegister}>
             <Plus />
             Register new AI System
           </Button>

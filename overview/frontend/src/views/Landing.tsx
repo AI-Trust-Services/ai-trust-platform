@@ -38,20 +38,22 @@ export default function Landing() {
   }, []);
 
   return (
-    <main className="mx-auto flex w-full max-w-[1280px] gap-6 px-6 py-8">
-      <div className="flex min-w-0 flex-1 flex-col gap-8">
-        <LandingHeader firstName={firstName} />
-        <GetStartedCard canRegister={canRegister} />
-        <OpenTasksSection />
-        <MySystemsSection canRegister={canRegister} />
+    <main className="min-h-screen bg-[#f6f7fb]">
+      <div className="mx-auto flex w-full max-w-[1280px] gap-6 px-6 py-8">
+        <div className="flex min-w-0 flex-1 flex-col gap-8">
+          <LandingHeader firstName={firstName} />
+          <GetStartedCard canRegister={canRegister} />
+          <OpenTasksSection />
+          <MySystemsSection canRegister={canRegister} />
+        </div>
+        <aside className="hidden w-[320px] shrink-0 flex-col gap-4 lg:flex">
+          <ResourcesCard />
+          <OrgContactsCard
+            complianceOfficer={complianceOfficer}
+            organizationAdmin={organizationAdmin}
+          />
+        </aside>
       </div>
-      <aside className="hidden w-[320px] shrink-0 flex-col gap-4 lg:flex">
-        <ResourcesCard />
-        <OrgContactsCard
-          complianceOfficer={complianceOfficer}
-          organizationAdmin={organizationAdmin}
-        />
-      </aside>
     </main>
   );
 }

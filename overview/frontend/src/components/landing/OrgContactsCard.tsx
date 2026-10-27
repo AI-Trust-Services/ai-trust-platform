@@ -15,21 +15,19 @@ export function OrgContactsCard({
   return (
     <section className="rounded-2xl border border-border bg-card p-5">
       <h3 className="text-sm font-semibold text-foreground">My Organization</h3>
-      <div className="mt-4 flex flex-col gap-4">
+      <div className="mt-4 flex flex-col gap-3">
         <ContactRow
           role="Compliance Officer"
           description="Your compliance officer is responsible for the…"
           contact={complianceOfficer}
           emptyLabel="No compliance officer assigned"
         />
-        <div className="border-t border-border pt-4">
-          <ContactRow
-            role="Organization admin"
-            description="For all inquiries regarding user rights and administration."
-            contact={organizationAdmin}
-            emptyLabel="No organization admin assigned"
-          />
-        </div>
+        <ContactRow
+          role="Organization admin"
+          description="For all inquiries regarding user rights and administration."
+          contact={organizationAdmin}
+          emptyLabel="No organization admin assigned"
+        />
       </div>
     </section>
   );
@@ -44,7 +42,7 @@ interface ContactRowProps {
 
 function ContactRow({ role, description, contact, emptyLabel }: ContactRowProps) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 rounded-xl bg-muted/60 p-3">
       <div className="flex flex-col gap-0.5">
         <span className="text-xs font-semibold text-foreground">{role}</span>
         <span className="text-xs text-muted-foreground">{description}</span>
