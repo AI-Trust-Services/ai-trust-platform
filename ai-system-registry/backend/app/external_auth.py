@@ -25,8 +25,10 @@ async def require_external_token(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> None:
     # Read at call time (not import) so startup never depends on it and it stays
-    # testable regardless of import order.
-    token = os.environ.get("EXTERNAL_API_TOKEN", "")
+    # testable regardless of import order. Strip whitespace to match what the
+    # admin backend returns to the UI (common on secrets fed via kubectl
+    # --from-literal or copy-pasted from YAML with trailing newlines).
+    token = os.environ.get("EXTERNAL_API_TOKEN", "").strip()
     if not token:
         raise HTTPException(status_code=503, detail="External API is not configured")
     if (

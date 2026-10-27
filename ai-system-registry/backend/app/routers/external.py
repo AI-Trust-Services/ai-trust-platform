@@ -144,13 +144,17 @@ class ExternalSystemResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-async def _get_system_or_404(system_id: str) -> AISystem:
+async def _ensure_system_exists(system_id: str) -> None:
+    """404 if ``system_id`` is unknown. Used by routes that don't need the row
+    itself (only its existence) — e.g. the retrieval proxy. Routes that *do*
+    read columns must open their own session and validate inside it, so the row
+    is not accessed after the session closes (detached-instance trap)."""
     async with SessionLocal() as session:
-        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
-        row = result.scalar_one_or_none()
-        if not row:
+        result = await session.execute(
+            select(AISystem.id).where(AISystem.id == system_id)
+        )
+        if result.scalar_one_or_none() is None:
             raise HTTPException(404, f"System {system_id} not found")
-        return row
 
 
 @router.get("/systems", response_model=list[ExternalSystemResponse])
@@ -172,24 +176,33 @@ async def list_systems(
 
 @router.get("/systems/{system_id}", response_model=ExternalSystemResponse)
 async def get_system(system_id: str) -> ExternalSystemResponse:
-    return ExternalSystemResponse.model_validate(await _get_system_or_404(system_id))
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+        return ExternalSystemResponse.model_validate(row)
 
 
 @router.get("/systems/{system_id}/assessment", response_model=SystemAssessmentResponse)
 async def get_system_assessment(system_id: str) -> SystemAssessmentResponse:
-    row = await _get_system_or_404(system_id)
-    return SystemAssessmentResponse(
-        ai_system_id=system_id,
-        classification=Classification(
-            tier=row.tier, basis=row.basis, annex_iii_area=row.annex_iii_area
-        ),
-        justification=row.classification_rationale,
-    )
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"System {system_id} not found")
+        return SystemAssessmentResponse(
+            ai_system_id=system_id,
+            classification=Classification(
+                tier=row.tier, basis=row.basis, annex_iii_area=row.annex_iii_area
+            ),
+            justification=row.classification_rationale,
+        )
 
 
 @router.post("/systems/{system_id}/context", response_model=None)
 async def search_ai_system_context(system_id: str, body: ContextRequest) -> Any:
-    await _get_system_or_404(system_id)
+    await _ensure_system_exists(system_id)
     payload = {"ai_system_id": system_id, **body.model_dump()}
     headers = {"x-forwarded-preferred-username": _SERVICE_PRINCIPAL}
     cid = correlation_id_var.get("")

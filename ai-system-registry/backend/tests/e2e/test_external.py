@@ -52,6 +52,15 @@ async def test_wrong_token_401(client, monkeypatch):
     assert r.status_code == 401
 
 
+async def test_env_token_whitespace_stripped(client, monkeypatch):
+    # EXTERNAL_API_TOKEN with surrounding whitespace (common from kubectl
+    # --from-literal, copy-paste, or YAML trailing newlines) must still match
+    # the clean token the admin UI shows.
+    monkeypatch.setenv("EXTERNAL_API_TOKEN", f"  {_TOKEN}\n")
+    r = await client.get("/v1/external/systems", headers=_AUTH)
+    assert r.status_code == 200
+
+
 async def test_list_and_get_systems(client, monkeypatch):
     monkeypatch.setenv("EXTERNAL_API_TOKEN", _TOKEN)
     sid = await _create_system(client)
