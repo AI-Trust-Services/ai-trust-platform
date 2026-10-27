@@ -15,7 +15,10 @@ from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from app import email_sender
 from app.classifier import ClassificationResult
 from app.ids import new_id
-from app.routers.systems import _assert_valid_contributors
+from app.routers.systems import (
+    _assert_valid_contributors,
+    _blocked_contributor_usernames,
+)
 from app.schemas import AISystemCreate, AISystemResponse, IntakeResponse
 from app.schemas.ai_system import AISystemImport, ImportFailure, ImportResult
 from fastapi import (
@@ -210,6 +213,10 @@ if BATCH_IMPORT_ENABLED:
                 )
 
         # --- Insert all valid records in one transaction ---
+        # Fetch the contributor denylist once; the single-intake path checks per
+        # request, but a batch of N records must not make N calls (same
+        # separation-of-duties rule, enforced per record as a reported failure).
+        blocked_contributors = await _blocked_contributor_usernames()
         rows: list[AISystem] = []
         steps: list[SystemWorkflowStep] = []
         for i, rec in valid:
@@ -220,6 +227,18 @@ if BATCH_IMPORT_ENABLED:
                         index=i,
                         name=rec.name,
                         error="tier is pending; supply a classified tier to import as approved",
+                    )
+                )
+                continue
+            ineligible = [
+                u for u in (rec.contributors or []) if u in blocked_contributors
+            ]
+            if ineligible:
+                failed.append(
+                    ImportFailure(
+                        index=i,
+                        name=rec.name,
+                        error=f"Compliance officers cannot be added as contributors: {ineligible}",
                     )
                 )
                 continue

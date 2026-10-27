@@ -42,30 +42,42 @@ logger = get_logger(__name__)
 _USERS_BACKEND_URL = os.getenv("USERS_BACKEND_URL", "").rstrip("/")
 
 
-async def _assert_valid_contributors(usernames: list[str]) -> None:
-    """Raise 422 if any username is a compliance officer (the only ineligible role).
+async def _blocked_contributor_usernames() -> set[str]:
+    """Usernames ineligible as contributors — compliance officers (separation of
+    duties: they approve, they don't contribute).
 
-    Skipped gracefully when USERS_BACKEND_URL is unset or the users service is
-    unreachable — the UI already enforces eligibility at selection time.
+    Fail-open: returns an empty set when USERS_BACKEND_URL is unset or the users
+    service is unreachable — the UI already enforces eligibility at selection time.
     """
-    if not _USERS_BACKEND_URL or not usernames:
-        return
+    if not _USERS_BACKEND_URL:
+        return set()
     async with httpx.AsyncClient(timeout=3.0) as client:
         try:
             r = await client.get(
                 f"{_USERS_BACKEND_URL}/users/by-role",
                 params={"role": "ai_compliance_officer"},
             )
-            if r.is_success:
-                blocked = {u["username"] for u in r.json()}
-                ineligible = [u for u in usernames if u in blocked]
-                if ineligible:
-                    raise HTTPException(
-                        422,
-                        f"Compliance officers cannot be added as contributors: {ineligible}",
-                    )
-        except httpx.HTTPError:
-            return  # fails open — users service unreachable
+            if not r.is_success:
+                return set()
+            # json() → ValueError on a non-JSON body (e.g. an LB's HTML error page);
+            # the comprehension → KeyError/TypeError if the shape isn't list[{username}].
+            # All of these mean "can't determine the denylist" → fail open.
+            return {u["username"] for u in r.json()}
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            return set()
+
+
+async def _assert_valid_contributors(usernames: list[str]) -> None:
+    """Raise 422 if any username is a compliance officer (the only ineligible role)."""
+    if not usernames:
+        return
+    blocked = await _blocked_contributor_usernames()
+    ineligible = [u for u in usernames if u in blocked]
+    if ineligible:
+        raise HTTPException(
+            422,
+            f"Compliance officers cannot be added as contributors: {ineligible}",
+        )
 
 
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})

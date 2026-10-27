@@ -365,7 +365,10 @@ export default function Systems() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => goToAssessments(s.id, s.name, action, assessmentsBySystem[s.id] ?? [])}>
+                            <DropdownMenuItem
+                              disabled={indexing[s.id]?.busy}
+                              title={indexing[s.id]?.busy ? "Available once document processing is complete" : undefined}
+                              onSelect={() => goToAssessments(s.id, s.name, action, assessmentsBySystem[s.id] ?? [])}>
                               {action === "start" ? <Play /> : <ArrowRight />}
                               {ACTION_LABEL[action]}
                             </DropdownMenuItem>
