@@ -24,6 +24,10 @@ const router = createHashRouter([
         element: <RequirePermission anyOf={["systems:write"]}><RegisterSystem /></RequirePermission>,
       },
       {
+        path: "systems/:systemId",
+        element: <RequirePermission anyOf={SYSTEM_PERMS}><Systems /></RequirePermission>,
+      },
+      {
         path: "models",
         element: <RequirePermission anyOf={SYSTEM_PERMS}><ModelListPage /></RequirePermission>,
       },

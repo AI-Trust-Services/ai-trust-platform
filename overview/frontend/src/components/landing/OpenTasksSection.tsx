@@ -1,11 +1,10 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { Eye, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { navigateTo } from "../../hooks/useLuigi";
 import {
   COMPLIANCE_URL,
   REGISTRY_URL,
-  api,
   type AssessmentSummary,
   type OpenTaskRow,
 } from "../../api/client";
@@ -27,25 +26,17 @@ interface SystemGroup {
   owner_username: string | null;
 }
 
-export function OpenTasksSection() {
-  const [state, setState] = useState<LoadState>("loading");
-  const [rows, setRows] = useState<OpenTaskRow[]>([]);
-  const [latestBySystem, setLatestBySystem] = useState<
-    Map<string, AssessmentSummary>
-  >(new Map());
+interface OpenTasksSectionProps {
+  state: LoadState;
+  rows: OpenTaskRow[];
+  assessments: AssessmentSummary[];
+}
 
-  useEffect(() => {
-    Promise.all([
-      api.myOpenTasks(),
-      api.allAssessments().catch(() => [] as AssessmentSummary[]),
-    ])
-      .then(([tasks, assessments]) => {
-        setRows(tasks);
-        setLatestBySystem(pickLatestAssessmentPerSystem(assessments));
-        setState("ready");
-      })
-      .catch(() => setState("error"));
-  }, []);
+export function OpenTasksSection({ state, rows, assessments }: OpenTasksSectionProps) {
+  const latestBySystem = useMemo(
+    () => pickLatestAssessmentPerSystem(assessments),
+    [assessments],
+  );
 
   const groups = groupBySystem(rows);
   const totalQuestions = rows.length;
@@ -112,10 +103,14 @@ function TaskRow({
   latestAssessment: AssessmentSummary | null;
 }) {
   function openSystem() {
-    navigateTo(
-      `/home/ai-system-registry/systems/${group.system_id}`,
-      `${REGISTRY_URL}#/systems/${group.system_id}`,
+    // Hand the target system id to the registry MFE via localStorage so Luigi
+    // stays on the top-level /home/ai-system-registry node (deeper routes make
+    // Luigi drop the side-nav).
+    localStorage.setItem(
+      "registry.openSystem",
+      JSON.stringify({ systemId: group.system_id }),
     );
+    navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
   function openQuestions() {
     // Deep-link into the system detail; it opens with the questionnaire

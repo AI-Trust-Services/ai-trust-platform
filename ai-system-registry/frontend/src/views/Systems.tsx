@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useParams, useNavigate } from "react-router";
 import { Eye, Trash2, RefreshCw, MoreVertical, Play, ArrowRight, ChevronDown, Search } from "lucide-react";
 import LuigiClient from "@luigi-project/client";
 import { TierBadge, FormattedDate } from "../components/Badges";
@@ -115,6 +116,8 @@ function RoleBadge({ role }: { role: OrgRole }) {
 }
 
 export default function Systems() {
+  const { systemId } = useParams<{ systemId?: string }>();
+  const navigate = useNavigate();
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [models, setModels] = useState<ModelCard[]>([]);
   const [userMap, setUserMap] = useState<UserMap>({});
@@ -130,6 +133,9 @@ export default function Systems() {
   const [deleteTarget, setDeleteTarget] = useState<AISystem | null>(null);
   const { mayWrite, mayApprove } = useModalControls();
   const showToast = useToast();
+  // Track which systemId we've already auto-opened for so a Sheet close doesn't
+  // immediately re-open on the next render.
+  const autoOpenedRef = useRef<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setRefreshing(true);
@@ -156,6 +162,45 @@ export default function Systems() {
   }, [showToast]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Deep-link entry from Overview MFE. Two paths, same destination:
+  //   1. Route param /systems/:systemId
+  //   2. localStorage handoff `registry.openSystem` set before Luigi-navigating
+  //      here (used so Luigi stays on the top-level /home/ai-system-registry
+  //      node — deeper routes drop the shell side-nav).
+  // Case 2 is also fired via Luigi contextUpdate so the sheet re-opens if the
+  // user is already on the registry page when the handoff is written.
+  const openSystemById = useCallback((id: string) => {
+    if (autoOpenedRef.current === id) return;
+    autoOpenedRef.current = id;
+    api.getSystem(id)
+      .then((fresh) => { setSelectedSystem(fresh); setDetailOpen(true); })
+      .catch((e) => showToast(`Failed to load system: ${(e as Error).message}`, true));
+  }, [showToast]);
+
+  function consumeOpenSystemHandoff(): string | null {
+    const raw = localStorage.getItem("registry.openSystem");
+    if (!raw) return null;
+    localStorage.removeItem("registry.openSystem");
+    try {
+      const parsed = JSON.parse(raw) as { systemId?: string };
+      return parsed.systemId ?? null;
+    } catch { return null; }
+  }
+
+  useEffect(() => {
+    if (systemId) { openSystemById(systemId); return; }
+    const handoffId = consumeOpenSystemHandoff();
+    if (handoffId) openSystemById(handoffId);
+  }, [systemId, openSystemById]);
+
+  useEffect(() => {
+    const id = LuigiClient.addContextUpdateListener(() => {
+      const handoffId = consumeOpenSystemHandoff();
+      if (handoffId) openSystemById(handoffId);
+    });
+    return () => { LuigiClient.removeContextUpdateListener(id); };
+  }, [openSystemById]);
 
   const ownerLabel = useCallback((s: AISystem) => {
     const key = ownerKey(s);
@@ -399,7 +444,12 @@ export default function Systems() {
         system={selectedSystem}
         models={models}
         userMap={userMap}
-        onClose={() => setDetailOpen(false)}
+        onClose={() => {
+          setDetailOpen(false);
+          // Clear the deep-link URL so the user can reopen the same system
+          // later without the sheet jumping back open.
+          if (systemId) navigate("/systems", { replace: true });
+        }}
         onDelete={() => { setDetailOpen(false); loadAll(); }}
         onUpdate={(updated) => {
           setSelectedSystem(updated);

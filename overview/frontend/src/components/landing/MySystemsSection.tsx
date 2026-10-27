@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Box,
@@ -12,7 +12,6 @@ import { navigateTo } from "../../hooks/useLuigi";
 import {
   COMPLIANCE_URL,
   REGISTRY_URL,
-  api,
   type AssessmentSummary,
   type MySystemRow,
 } from "../../api/client";
@@ -24,38 +23,33 @@ import {
   pickLatestAssessmentPerSystem,
 } from "./AssessmentStage";
 
+type LoadState = "loading" | "ready" | "error";
+
 interface MySystemsSectionProps {
   canRegister: boolean;
+  state: LoadState;
+  systems: MySystemRow[];
+  assessments: AssessmentSummary[];
 }
-
-type LoadState = "loading" | "ready" | "error";
 
 interface Row {
   system: MySystemRow;
   latestAssessment: AssessmentSummary | null;
 }
 
-export function MySystemsSection({ canRegister }: MySystemsSectionProps) {
-  const [state, setState] = useState<LoadState>("loading");
-  const [rows, setRows] = useState<Row[]>([]);
-
-  useEffect(() => {
-    Promise.all([
-      api.mySystems(),
-      api.allAssessments().catch(() => [] as AssessmentSummary[]),
-    ])
-      .then(([systems, assessments]) => {
-        const latestByAiSystem = pickLatestAssessmentPerSystem(assessments);
-        setRows(
-          systems.map((s) => ({
-            system: s,
-            latestAssessment: latestByAiSystem.get(s.id) ?? null,
-          })),
-        );
-        setState("ready");
-      })
-      .catch(() => setState("error"));
-  }, []);
+export function MySystemsSection({
+  canRegister,
+  state,
+  systems,
+  assessments,
+}: MySystemsSectionProps) {
+  const rows: Row[] = useMemo(() => {
+    const latestByAiSystem = pickLatestAssessmentPerSystem(assessments);
+    return systems.map((s) => ({
+      system: s,
+      latestAssessment: latestByAiSystem.get(s.id) ?? null,
+    }));
+  }, [systems, assessments]);
 
   return (
     <section className="flex flex-col gap-3">
@@ -103,10 +97,14 @@ function SystemRowView({ row }: { row: Row }) {
   const { system, latestAssessment } = row;
 
   function openSystem() {
-    navigateTo(
-      `/home/ai-system-registry/systems/${system.id}`,
-      `${REGISTRY_URL}#/systems/${system.id}`,
+    // Hand the target system id to the registry MFE via localStorage so Luigi
+    // stays on the top-level /home/ai-system-registry node (deeper routes make
+    // Luigi drop the side-nav).
+    localStorage.setItem(
+      "registry.openSystem",
+      JSON.stringify({ systemId: system.id }),
     );
+    navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
   // All assessments for this system — hand off via the same localStorage key
   // the compliance MFE consumes to pre-filter its list (`viewSystem`).
