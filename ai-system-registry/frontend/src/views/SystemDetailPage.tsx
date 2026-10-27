@@ -5,8 +5,8 @@ import {
   ChevronLeft, MoreVertical, Trash2, Download, Upload,
   CheckCircle2, FileText, RefreshCw, AlertTriangle,
   File, RotateCcw, Eye, X, Plus, Shield, ListChecks, Clock,
-  LayoutGrid, ClipboardList, FolderOpen, Hash, User, CalendarDays,
-  Settings2, TrendingUp,
+  LayoutGrid, ClipboardList, FolderOpen, Hash, Home, CalendarDays,
+  Settings2, TrendingUp, PencilLine, Sparkles, ShieldCheck,
   Users,
 } from "lucide-react";
 import { TierBadge, FormattedDate } from "../components/Badges";
@@ -47,26 +47,6 @@ function userName(username: string | null | undefined, userMap: UserMap): string
   return full || username;
 }
 
-function auditActionLabel(action: string): string {
-  const map: Record<string, string> = {
-    "system.created": "Registered AI system",
-    "system.updated": "Updated AI system",
-    "system.deleted": "Deleted AI system",
-    "system.approved": "Approved AI system",
-    "system.rejected": "Rejected AI system",
-    "assessment.created": "Created assessment",
-    "assessment.submitted": "Submitted assessment",
-    "assessment.approved": "Approved assessment",
-    "assessment.deleted": "Deleted assessment",
-    "assessment.aborted_under_review": "Aborted assessment (under review)",
-    "assessment.historicized": "Historicized assessment",
-    "evidence.approved": "Approved evidence",
-    "evidence.rejected": "Rejected evidence",
-    "evidence.uploaded": "Uploaded evidence",
-  };
-  return map[action] ?? action.split(".").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-}
-
 // ── Progress Steps ────────────────────────────────────────────────────────────
 
 function deriveProgress(assessments: ComplianceAssessment[]) {
@@ -74,10 +54,10 @@ function deriveProgress(assessments: ComplianceAssessment[]) {
   const underReview = assessments.some((a) => ["submitted", "pending_review", "under_review"].includes(a.status));
   const approved = assessments.some((a) => a.status === "approved");
   return [
-    { label: "Register AI system", done: true },
-    { label: "Draft assessment started", done: hasAny, actionable: !hasAny },
-    { label: "Assessment under review", done: underReview || approved, actionable: hasAny && !underReview && !approved },
-    { label: "Risk classification approved", done: approved },
+    { label: "1. Register AI system", done: true },
+    { label: "2. Draft assessment started", done: hasAny, actionable: !hasAny },
+    { label: "3. Assessment under review", done: underReview || approved, actionable: hasAny && !underReview && !approved },
+    { label: "4. Risk classification approved", done: approved },
   ];
 }
 
@@ -165,8 +145,10 @@ function HistoryPanel({ systemId }: { systemId: string }) {
             <div className="mt-[5px] size-1.5 shrink-0 rounded-full bg-muted-foreground/40" />
             <div className="min-w-0">
               <div className="text-[11px] text-muted-foreground">{fmtDateTime(e.created_at)}</div>
-              <div className="text-[12px] font-medium">{auditActionLabel(e.action)}</div>
-              <div className="text-[11px] text-muted-foreground">{e.actor_username}</div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <InitialsAvatar name={e.actor_username} className="size-4 text-[8px]" />
+                <span className="text-[12px] font-medium">{e.actor_username}</span>
+              </div>
             </div>
           </div>
         ))}
@@ -188,7 +170,7 @@ function HistoryPanel({ systemId }: { systemId: string }) {
 
 // ── Roles Dialog ──────────────────────────────────────────────────────────────
 
-type AllUser = { username: string; firstName: string; lastName: string };
+type AllUser = { username: string; firstName: string; lastName: string; role: string };
 
 function RolesDialog({
   open, system, allUsers, onClose, onSaved,
@@ -222,7 +204,8 @@ function RolesDialog({
   const showSuggestions = searchFocused || search.trim().length > 0;
   const suggestions = showSuggestions
     ? allUsers.filter(
-        (u) => !allMembers.includes(u.username) &&
+        (u) => u.role !== "ai_compliance_officer" &&
+          !allMembers.includes(u.username) &&
           (!search.trim() ||
            u.username.toLowerCase().includes(search.toLowerCase()) ||
            `${u.firstName} ${u.lastName}`.toLowerCase().includes(search.toLowerCase())),
@@ -284,11 +267,11 @@ function RolesDialog({
   }
 
   const memberUsers = allMembers
-    .map((un) => allUsers.find((u) => u.username === un) ?? { username: un, firstName: "", lastName: "" });
+    .map((un) => allUsers.find((u) => u.username === un) ?? { username: un, firstName: "", lastName: "", role: "" });
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="size-4" /> Roles for {system.name}
@@ -376,12 +359,19 @@ function RolesDialog({
 
 function assessmentStepLabel(status: string): string {
   switch (status) {
-    case "draft": case "questionnaire_pending": return "1. Draft started";
-    case "submitted": case "pending_review": case "under_review": return "3. Under review";
-    case "approved": return "4. Approved";
+    case "draft": case "questionnaire_pending": return "1. Draft assessment started";
+    case "submitted": case "pending_review": case "under_review": return "3. Assessment under review";
+    case "approved": return "4. Risk classification approved";
     case "inactive": return "Superseded";
     default: return status;
   }
+}
+
+function assessmentStepProgress(status: string): number {
+  if (["draft", "questionnaire_pending"].includes(status)) return 1;
+  if (["submitted", "pending_review", "under_review"].includes(status)) return 3;
+  if (status === "approved") return 4;
+  return 0;
 }
 
 function getFileImpact(assessments: ComplianceAssessment[]): "approved" | "submitted" | "draft" | "none" {
@@ -394,17 +384,18 @@ function getFileImpact(assessments: ComplianceAssessment[]): "approved" | "submi
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 
 function OverviewTab({
-  system, assessments, userMap, onSystemUpdate, onFilesRefresh,
+  system, assessments, userMap, onSystemUpdate, onFilesRefresh, editMode, onEditModeChange,
 }: {
   system: AISystem;
   assessments: ComplianceAssessment[];
   userMap: UserMap;
   onSystemUpdate: (s: AISystem) => void;
   onFilesRefresh: () => void;
+  editMode: boolean;
+  onEditModeChange: (v: boolean) => void;
 }) {
   const showToast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: system.name,
@@ -435,7 +426,7 @@ function OverviewTab({
         git_repo_url: form.git_repo_url || null,
       });
       onSystemUpdate(updated);
-      setEditMode(false);
+      onEditModeChange(false);
       showToast("System details saved");
     } catch (e) {
       showToast(`Save failed: ${(e as Error).message}`, true);
@@ -444,16 +435,19 @@ function OverviewTab({
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
     e.target.value = "";
-    try {
-      await api.uploadDocumentIndexed(system.id, file);
-      showToast("File uploaded successfully");
-      onFilesRefresh();
-    } catch (err) {
-      showToast(`Upload failed: ${(err as Error).message}`, true);
-    }
+    let failed = 0;
+    await Promise.all(files.map((file) =>
+      api.uploadDocumentIndexed(system.id, file).catch(() => { failed++; }),
+    ));
+    showToast(failed === 0
+      ? `${files.length} file${files.length > 1 ? "s" : ""} uploaded`
+      : `${files.length - failed} uploaded, ${failed} failed`,
+      failed > 0,
+    );
+    onFilesRefresh();
   }
 
   const approvedAssessment = assessments.find((a) => a.status === "approved");
@@ -488,7 +482,10 @@ function OverviewTab({
               <div className="flex items-start gap-3">
                 <Upload className="mt-0.5 size-4 shrink-0 text-[var(--brand,#1147E9)]" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium">Upload additional documentation files</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium">Upload additional documentation files</p>
+                    <span className="text-[11px] text-muted-foreground">Optional</span>
+                  </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     PDF, DOCX, or Markdown — used to pre-fill the compliance questionnaire.
                   </p>
@@ -499,7 +496,7 @@ function OverviewTab({
               </div>
             </div>
           </div>
-          <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.docx,.md" onChange={handleFileUpload} />
+          <input ref={fileInputRef} type="file" multiple className="hidden" accept=".pdf,.docx,.md" onChange={handleFileUpload} />
         </Card>
 
         {/* Risk Classification */}
@@ -533,11 +530,6 @@ function OverviewTab({
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <Settings2 className="size-4 text-muted-foreground" /> AI System Details
             </h2>
-            {!editMode && (
-              <Button size="sm" variant="outline" onClick={() => setEditMode(true)}>
-                Edit details
-              </Button>
-            )}
           </div>
           {editMode ? (
             <div className="space-y-4">
@@ -584,7 +576,7 @@ function OverviewTab({
               </div>
               <div className="flex gap-2 pt-1">
                 <Button onClick={saveEdit} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
-                <Button variant="outline" onClick={() => setEditMode(false)}>Cancel</Button>
+                <Button variant="outline" onClick={() => onEditModeChange(false)}>Cancel</Button>
               </div>
             </div>
           ) : (
@@ -598,8 +590,6 @@ function OverviewTab({
                   ? <a href={system.git_repo_url} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">{system.git_repo_url}</a>
                   : "—"],
                 ["Provider", system.provider],
-                ["Department", system.department ?? "—"],
-                ["Use Case", system.use_case ?? "—"],
               ] as [string, React.ReactNode][]).map(([k, v]) => (
                 <>
                   <dt key={`k-${k}`} className="font-medium text-muted-foreground">{k}</dt>
@@ -613,15 +603,15 @@ function OverviewTab({
 
       {/* Right sidebar */}
       <div className="space-y-6">
-        <Card className="p-5">
-          <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold">
-            <TrendingUp className="size-4 text-muted-foreground" /> EU AI Act Progress
+        <div>
+          <h2 className="mb-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <TrendingUp className="size-3.5" /> EU AI Act Progress
           </h2>
           <ProgressSteps steps={steps} />
-        </Card>
-        <Card className="p-5">
+        </div>
+        <div className="border-t border-border pt-5">
           <HistoryPanel systemId={system.id} />
-        </Card>
+        </div>
       </div>
     </div>
   );
@@ -640,10 +630,14 @@ function AssessmentsTab({
   const showToast = useToast();
   const [deleteTarget, setDeleteTarget] = useState<ComplianceAssessment | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const approvedAssessment = assessments.find((a) => a.status === "approved");
-  const activeAssessment = assessments.find((a) =>
-    ["draft", "questionnaire_pending", "submitted", "pending_review", "under_review"].includes(a.status),
+  const draftAssessment = assessments.find((a) =>
+    ["draft", "questionnaire_pending"].includes(a.status),
+  );
+  const reviewAssessment = assessments.find((a) =>
+    ["submitted", "pending_review", "under_review"].includes(a.status),
   );
 
   async function confirmDelete() {
@@ -660,148 +654,245 @@ function AssessmentsTab({
     setDeleting(false);
   }
 
+  async function submitToCompliance(a: ComplianceAssessment) {
+    setSubmitting(true);
+    try {
+      await api.submitAssessment(a.id);
+      showToast("Assessment submitted to compliance officer");
+      onRefresh();
+    } catch (e) {
+      showToast(`Submit failed: ${(e as Error).message}`, true);
+    }
+    setSubmitting(false);
+  }
+
   function goToCompliance() {
     LuigiClient.linkManager().navigate("/home/assessments");
   }
 
-  return (
-    <div className="space-y-5">
-      {/* Summary card */}
-      <Card className="p-5">
-        {assessments.length === 0 ? (
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
-            <div>
-              <p className="text-sm font-medium">No assessment started</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Complete an assessment to receive your EU AI Act risk classification.
-              </p>
-            </div>
-            <Button size="sm" className="ml-auto shrink-0" onClick={() => startRiskClassification(system.id)}>
-              Start assessment
-            </Button>
-          </div>
-        ) : approvedAssessment ? (
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="size-4 shrink-0 text-[var(--success,#16a34a)]" />
-            <div>
-              <p className="text-sm font-medium">Risk classification approved</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Confirmed by {userName(approvedAssessment.confirmed_by, userMap)}
-              </p>
-            </div>
-            <TierBadge
-              tier={system.tier}
-              workflowStatus={system.workflow_status}
-              isChatbot={system.is_chatbot}
-              generatesSyntheticContent={system.generates_synthetic_content}
-            />
-            <Button size="sm" variant="outline" className="ml-auto shrink-0" onClick={goToCompliance}>
-              View results
-            </Button>
-          </div>
-        ) : activeAssessment ? (
-          <div className="flex items-center gap-3">
-            <RefreshCw className="size-4 shrink-0 text-[var(--brand,#1147E9)]" />
-            <p className="text-sm">Assessment in progress — <button className="text-primary underline underline-offset-2" onClick={goToCompliance}>Continue in Compliance</button></p>
-          </div>
-        ) : null}
-      </Card>
+  // Sequential index within non-inactive assessments for display name.
+  const seqIndex = (a: ComplianceAssessment) =>
+    assessments.filter((x) => x.status !== "inactive").indexOf(a) + 1 || assessments.indexOf(a) + 1;
 
-      {/* Table */}
-      <Card className="overflow-x-auto p-0">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="normal-case">Assessment</TableHead>
-              <TableHead className="normal-case">Date</TableHead>
-              <TableHead className="normal-case">Workflow</TableHead>
-              <TableHead className="normal-case">Risk Classification</TableHead>
-              <TableHead className="normal-case">Confirmed by</TableHead>
-              <TableHead className="normal-case">AI Assisted</TableHead>
-              <TableHead className="normal-case">Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {assessments.length === 0 ? (
+  return (
+    <div className="space-y-6">
+      {/* Risk Classification section (Fix 1) */}
+      <div>
+        <h2 className="mb-3 text-base font-semibold">Risk Classification</h2>
+        <Card className="p-5">
+          {assessments.length === 0 ? (
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
+              <div>
+                <p className="text-sm font-medium">No assessment started</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Complete an assessment to receive your EU AI Act risk classification.
+                </p>
+              </div>
+              <Button size="sm" className="ml-auto shrink-0" onClick={() => startRiskClassification(system.id)}>
+                Start assessment
+              </Button>
+            </div>
+          ) : approvedAssessment ? (
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="size-4 shrink-0 text-[var(--success,#16a34a)]" />
+              <div>
+                <p className="text-sm font-medium">Risk classification approved</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Confirmed by {userName(approvedAssessment.confirmed_by, userMap)}
+                </p>
+              </div>
+              <TierBadge
+                tier={system.tier}
+                workflowStatus={system.workflow_status}
+                isChatbot={system.is_chatbot}
+                generatesSyntheticContent={system.generates_synthetic_content}
+              />
+              <Button size="sm" variant="outline" className="ml-auto shrink-0" onClick={goToCompliance}>
+                View results
+              </Button>
+            </div>
+          ) : draftAssessment ? (
+            <div className="flex items-start gap-3">
+              <ClipboardList className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold">
+                  Assessment {seqIndex(draftAssessment)} is ready to be submitted
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Complete the assessment of the AI system to enable your compliance officer to issue a risk classification.
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-medium text-primary underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
+                  disabled={submitting}
+                  onClick={() => submitToCompliance(draftAssessment)}
+                >
+                  {submitting ? "Submitting…" : "Submit to compliance officer"}
+                </button>
+              </div>
+            </div>
+          ) : reviewAssessment ? (
+            <div className="flex items-center gap-3">
+              <RefreshCw className="size-4 shrink-0 text-[var(--brand,#1147E9)]" />
+              <p className="text-sm">
+                Assessment under review —{" "}
+                <button className="text-primary underline underline-offset-2" onClick={goToCompliance}>
+                  Continue in Compliance
+                </button>
+              </p>
+            </div>
+          ) : null}
+        </Card>
+      </div>
+
+      {/* Table (Fix 2 — heading, Fix 3 — column name, Fix 5 — name format, Fix 7 — progress bar, Fix 9 — buttons) */}
+      <div>
+        <h2 className="mb-3 text-base font-semibold">EU AI Act Assessments</h2>
+        <Card className="overflow-x-auto p-0">
+          <Table>
+            <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                  No assessments yet.
-                </TableCell>
+                <TableHead className="normal-case">Assessment</TableHead>
+                <TableHead className="normal-case">Date</TableHead>
+                <TableHead className="normal-case">Workflow</TableHead>
+                <TableHead className="normal-case">Preliminary Risk Classification</TableHead>
+                <TableHead className="normal-case">Confirmed by</TableHead>
+                <TableHead className="normal-case">AI Assisted</TableHead>
+                <TableHead className="normal-case">Action</TableHead>
               </TableRow>
-            ) : assessments.map((a, idx) => {
-              const isDraft = ["draft", "questionnaire_pending"].includes(a.status);
-              const isUnderReview = ["submitted", "pending_review", "under_review"].includes(a.status);
-              const isApproved = a.status === "approved";
-              const isInactive = a.status === "inactive";
-              return (
-                <TableRow key={a.id}>
-                  <TableCell>
-                    <div className="text-sm font-medium">{a.title}</div>
-                    <div className="text-xs text-muted-foreground">#{idx + 1} · {a.framework_id}</div>
-                  </TableCell>
-                  <TableCell className="text-[13px] text-muted-foreground">
-                    <FormattedDate iso={a.created_at} />
-                  </TableCell>
-                  <TableCell>
-                    <span className={cn(
-                      "text-[12px]",
-                      isInactive && "text-muted-foreground",
-                      isApproved && "font-medium text-[var(--success,#16a34a)]",
-                    )}>
-                      {assessmentStepLabel(a.status)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {isApproved ? (
-                      <TierBadge
-                        tier={system.tier}
-                        workflowStatus={system.workflow_status}
-                        isChatbot={system.is_chatbot}
-                        generatesSyntheticContent={system.generates_synthetic_content}
-                      />
-                    ) : <span className="text-muted-foreground">—</span>}
-                  </TableCell>
-                  <TableCell>
-                    {a.confirmed_by ? (
-                      <div className="flex items-center gap-1.5">
-                        <InitialsAvatar name={userName(a.confirmed_by, userMap)} className="size-6 text-[10px]" />
-                        <span className="text-[13px]">{userName(a.confirmed_by, userMap)}</span>
-                      </div>
-                    ) : <span className="text-muted-foreground">—</span>}
-                  </TableCell>
-                  <TableCell className="text-[13px]">
-                    {system.registration_mode === "ai" ? "Yes" : "No"}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      {isDraft && (
-                        <>
-                          <Button size="sm" onClick={goToCompliance}>Continue</Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="size-7 text-destructive"
-                            title="Delete assessment"
-                            onClick={() => setDeleteTarget(a)}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </>
-                      )}
-                      {(isUnderReview || isApproved || isInactive) && (
-                        <Button size="sm" variant="outline" onClick={goToCompliance}>
-                          View results
-                        </Button>
-                      )}
-                    </div>
+            </TableHeader>
+            <TableBody>
+              {assessments.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                    No assessments yet.
                   </TableCell>
                 </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </Card>
+              ) : assessments.map((a) => {
+                const isDraft = ["draft", "questionnaire_pending"].includes(a.status);
+                const isUnderReview = ["submitted", "pending_review", "under_review"].includes(a.status);
+                const isApproved = a.status === "approved";
+                const isInactive = a.status === "inactive";
+                const progress = assessmentStepProgress(a.status);
+                return (
+                  <TableRow key={a.id}>
+                    <TableCell>
+                      <div className="text-sm font-medium">Assessment {seqIndex(a)}</div>
+                      <div className="text-xs text-muted-foreground">{a.framework_id}</div>
+                    </TableCell>
+                    <TableCell className="text-[13px] text-muted-foreground">
+                      <FormattedDate iso={a.created_at} />
+                    </TableCell>
+                    <TableCell>
+                      <span className={cn(
+                        "text-[12px]",
+                        isInactive && "text-muted-foreground",
+                        isApproved && "font-medium text-[var(--success,#16a34a)]",
+                      )}>
+                        {assessmentStepLabel(a.status)}
+                      </span>
+                      {!isInactive && (
+                        <div className="mt-1.5 h-1 w-24 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-[var(--brand,#1147E9)]"
+                            style={{ width: `${(progress / 4) * 100}%` }}
+                          />
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {isApproved ? (
+                        <TierBadge
+                          tier={system.tier}
+                          workflowStatus={system.workflow_status}
+                          isChatbot={system.is_chatbot}
+                          generatesSyntheticContent={system.generates_synthetic_content}
+                        />
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {a.confirmed_by ? (
+                        <div className="flex items-center gap-1.5">
+                          <InitialsAvatar name={userName(a.confirmed_by, userMap)} className="size-6 text-[10px]" />
+                          <span className="text-[13px]">{userName(a.confirmed_by, userMap)}</span>
+                        </div>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell className="text-[13px]">
+                      {system.registration_mode === "ai" ? "Yes" : "No"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        {isDraft && (
+                          <>
+                            <Button
+                              size="sm"
+                              className="gap-1"
+                              onClick={goToCompliance}
+                            >
+                              <PencilLine className="size-3" /> Edit
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-7">
+                                  <MoreVertical className="size-3.5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onSelect={() => submitToCompliance(a)} disabled={submitting}>
+                                  Submit to compliance officer
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={goToCompliance}>
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem variant="destructive" onSelect={() => setDeleteTarget(a)}>
+                                  <Trash2 className="size-3.5" /> Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </>
+                        )}
+                        {(isUnderReview || isApproved || isInactive) && (
+                          <>
+                            <Button size="sm" variant="outline" onClick={goToCompliance}>
+                              View results
+                            </Button>
+                            {!isInactive && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="size-7">
+                                    <MoreVertical className="size-3.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  {isUnderReview && (
+                                    <DropdownMenuItem onSelect={() => submitToCompliance(a)} disabled={submitting}>
+                                      Submit to compliance officer
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem onSelect={goToCompliance}>
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem variant="destructive" onSelect={() => setDeleteTarget(a)}>
+                                    <Trash2 className="size-3.5" /> Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Card>
+      </div>
 
       {/* Delete confirm */}
       <Dialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
@@ -809,7 +900,7 @@ function AssessmentsTab({
           <DialogHeader>
             <DialogTitle>Delete assessment?</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete <strong>{deleteTarget?.title}</strong>? This cannot be undone.
+              Are you sure you want to delete <strong>Assessment {deleteTarget ? seqIndex(deleteTarget) : ""}</strong>? This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -866,17 +957,20 @@ function FilesTab({
     : "This document is used in an active assessment. Proceeding will abort the current classification progress.";
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
     e.target.value = "";
     setUploading(true);
-    try {
-      await api.uploadDocumentIndexed(system.id, file);
-      showToast("File uploaded");
-      onRefresh();
-    } catch (err) {
-      showToast(`Upload failed: ${(err as Error).message}`, true);
-    }
+    let failed = 0;
+    await Promise.all(files.map((file) =>
+      api.uploadDocumentIndexed(system.id, file).catch(() => { failed++; }),
+    ));
+    showToast(failed === 0
+      ? `${files.length} file${files.length > 1 ? "s" : ""} uploaded`
+      : `${files.length - failed} uploaded, ${failed} failed`,
+      failed > 0,
+    );
+    onRefresh();
     setUploading(false);
   }
 
@@ -947,47 +1041,52 @@ function FilesTab({
 
   return (
     <div className="space-y-6">
-      {/* Info cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {[
-          {
-            title: "Required documentation",
-            body: "Ensure you have uploaded technical specifications, data governance policies, and risk management documentation.",
-          },
-          {
-            title: "Pre-fill your assessment",
-            body: "Uploaded documents are processed and used to automatically pre-fill your EU AI Act compliance questionnaire.",
-          },
-          {
-            title: "Keep information accurate",
-            body: "When you replace or delete documents, existing assessments are updated accordingly to reflect current documentation.",
-          },
-        ].map(({ title, body }) => (
-          <Card key={title} className="p-4">
-            <h3 className="mb-1.5 text-sm font-semibold">{title}</h3>
-            <p className="text-xs text-muted-foreground">{body}</p>
+      {/* Fix 1: "Important to know" heading + Fix 2: colored icons + Fix 3: Figma copy */}
+      <div>
+        <h2 className="mb-3 text-base font-semibold">Important to know</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Card className="p-4">
+            <ClipboardList className="mb-2 size-5 text-[var(--brand,#1147E9)]" />
+            <h3 className="mb-1.5 text-sm font-semibold">Required documentation</h3>
+            <p className="text-xs text-muted-foreground">
+              High-risk AI systems need technical documentation, a risk management file and data governance records. Keep them here to stay audit-ready.
+            </p>
           </Card>
-        ))}
+          <Card className="p-4">
+            <Sparkles className="mb-2 size-5 text-[var(--brand,#1147E9)]" />
+            <h3 className="mb-1.5 text-sm font-semibold">Pre-fill your assessment</h3>
+            <p className="text-xs text-muted-foreground">
+              Our AI reads your uploaded files and automatically drafts answers in your compliance assessment — less manual data entry for you.
+            </p>
+          </Card>
+          <Card className="p-4">
+            <ShieldCheck className="mb-2 size-5 text-[var(--success,#16a34a)]" />
+            <h3 className="mb-1.5 text-sm font-semibold">Keep information accurate</h3>
+            <p className="text-xs text-muted-foreground">
+              Pre-filled answers are only as good as your files. Upload the latest versions and review each AI suggestion before you confirm it.
+            </p>
+          </Card>
+        </div>
       </div>
 
-      {/* Files section */}
+      {/* Fix 4: plain "Files" heading + updated subtitle, Fix 5: filled Upload button */}
       <Card className="p-0">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div>
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <FolderOpen className="size-4 text-muted-foreground" /> Files
-            </h2>
-            <p className="text-xs text-muted-foreground">Supporting documents for this AI system</p>
+            <h2 className="text-base font-semibold">Files</h2>
+            <p className="text-xs text-muted-foreground">Upload your AI System's documentation files here.</p>
           </div>
-          <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
             {uploading ? <RefreshCw className="animate-spin size-3.5" /> : <Upload className="size-3.5" />}
             {uploading ? "Uploading…" : "Upload file"}
           </Button>
-          <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.docx,.md" onChange={handleUpload} />
+          <input ref={fileInputRef} type="file" multiple className="hidden" accept=".pdf,.docx,.md" onChange={handleUpload} />
         </div>
 
         <div className="flex">
-          {/* Table wrapper — scrolls horizontally on small viewports without affecting preview panel */}
           <div className={cn("min-w-0 overflow-x-auto", previewFile ? "flex-1" : "w-full")}>
             <Table>
               <TableHeader>
@@ -995,7 +1094,7 @@ function FilesTab({
                   <TableHead className="normal-case">Filename</TableHead>
                   <TableHead className="normal-case">Upload Date</TableHead>
                   <TableHead className="normal-case">Version</TableHead>
-                  <TableHead className="normal-case">Processing Status</TableHead>
+                  <TableHead className="normal-case">Indexed</TableHead>
                   <TableHead className="normal-case">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1009,22 +1108,37 @@ function FilesTab({
                 ) : files.map((doc) => {
                   const isProcessing = doc.status === "pending" || doc.status === "processing";
                   const statusLabel = docStatusLabel(doc);
+                  const ext = doc.filename.split(".").pop()?.toUpperCase() ?? "";
+                  const versionLabel = doc.version_label.startsWith("v") ? doc.version_label : `v${doc.version_label}`;
                   return (
                     <TableRow
                       key={doc.id}
                       className={cn("cursor-pointer", previewFile?.id === doc.id && "bg-accent/50")}
                       onClick={() => setPreviewFile((prev) => prev?.id === doc.id ? null : doc)}
                     >
+                      {/* Fix 7: filename as link, Fix 8: type below */}
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <FileText className="size-4 shrink-0 text-muted-foreground" />
-                          <span className="max-w-[200px] truncate text-sm">{doc.filename}</span>
+                          <div className="min-w-0">
+                            <button
+                              type="button"
+                              className="max-w-[220px] truncate text-sm text-primary underline underline-offset-2 hover:opacity-80 text-left"
+                              onClick={(e) => { e.stopPropagation(); void downloadFile(doc); }}
+                            >
+                              {doc.filename}
+                            </button>
+                            {ext && (
+                              <div className="text-[11px] text-muted-foreground">{ext}</div>
+                            )}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell className="text-[13px] text-muted-foreground">
                         <FormattedDate iso={doc.created_at} />
                       </TableCell>
-                      <TableCell className="text-[13px] text-muted-foreground">{doc.version_label}</TableCell>
+                      {/* Fix 9: version with "v" prefix */}
+                      <TableCell className="text-[13px] text-muted-foreground">{versionLabel}</TableCell>
                       <TableCell>
                         <span className={cn(
                           "flex items-center gap-1.5 text-[12px] font-medium",
@@ -1036,17 +1150,18 @@ function FilesTab({
                           {statusLabel}
                         </span>
                       </TableCell>
+                      {/* Fix 7 (action buttons): outlined icon buttons */}
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
                           <Button
-                            variant="ghost" size="icon" className="size-7"
+                            variant="outline" size="icon" className="size-7"
                             title="Replace"
                             onClick={() => initiateAction(doc, "replace")}
                           >
                             <RotateCcw className="size-3.5" />
                           </Button>
                           <Button
-                            variant="ghost" size="icon" className="size-7"
+                            variant="outline" size="icon" className="size-7"
                             title="Download"
                             onClick={() => downloadFile(doc)}
                           >
@@ -1054,7 +1169,7 @@ function FilesTab({
                           </Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="size-7">
+                              <Button variant="outline" size="icon" className="size-7">
                                 <MoreVertical className="size-3.5" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -1196,6 +1311,15 @@ export default function SystemDetailPage() {
   const showToast = useToast();
   const { mayWrite, mayApprove } = useModalControls();
 
+  // Save current path to sessionStorage so a browser refresh can restore it.
+  // The cleanup runs on normal navigation away (but NOT on page refresh), so
+  // it's only present in sessionStorage if the user actually refreshed.
+  useEffect(() => {
+    if (!id) return;
+    sessionStorage.setItem("lastSystemPath", `/systems/${id}`);
+    return () => sessionStorage.removeItem("lastSystemPath");
+  }, [id]);
+
   const [system, setSystem] = useState<AISystem | null>(null);
   const [loading, setLoading] = useState(true);
   const [assessments, setAssessments] = useState<ComplianceAssessment[]>([]);
@@ -1206,6 +1330,7 @@ export default function SystemDetailPage() {
   const [rolesOpen, setRolesOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   const loadAll = useCallback(async () => {
     if (!id) return;
@@ -1224,7 +1349,7 @@ export default function SystemDetailPage() {
       const allU: AllUser[] = [];
       for (const u of users) {
         map[u.username] = { firstName: u.firstName, lastName: u.lastName };
-        allU.push({ username: u.username, firstName: u.firstName, lastName: u.lastName });
+        allU.push({ username: u.username, firstName: u.firstName, lastName: u.lastName, role: u.role });
       }
       setUserMap(map);
       setAllUsers(allU);
@@ -1309,7 +1434,9 @@ export default function SystemDetailPage() {
           className="mb-3 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           onClick={() => navigate("/systems")}
         >
-          <ChevronLeft className="size-3.5" /> AI Systems Registry
+          <Home className="size-3.5" />
+          <ChevronLeft className="size-3 -mx-0.5" />
+          AI Systems Registry
         </button>
 
         <div className="flex flex-wrap items-start gap-4">
@@ -1325,7 +1452,7 @@ export default function SystemDetailPage() {
             </div>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
               <span className="flex items-center gap-1"><Hash className="size-3" />{system.id}</span>
-              <span className="flex items-center gap-1"><User className="size-3" />Owner: {ownerName}</span>
+              <span>Created by: {ownerName}</span>
               <span className="flex items-center gap-1"><CalendarDays className="size-3" />Updated: {fmtDateTime(system.updated_at)}</span>
             </p>
           </div>
@@ -1348,7 +1475,14 @@ export default function SystemDetailPage() {
               )}
             </button>
 
-            <Button size="sm" variant="outline" onClick={() => startRiskClassification(system.id)}>
+            <Button
+              size="sm" variant="outline"
+              onClick={() => { setActiveTab("overview"); setEditMode(true); }}
+            >
+              Edit details
+            </Button>
+
+            <Button size="sm" onClick={() => startRiskClassification(system.id)}>
               Start new assessment
             </Button>
 
@@ -1411,6 +1545,8 @@ export default function SystemDetailPage() {
               userMap={userMap}
               onSystemUpdate={(updated) => { setSystem(updated); }}
               onFilesRefresh={refreshAssessmentsAndFiles}
+              editMode={editMode}
+              onEditModeChange={setEditMode}
             />
           </TabsContent>
 
