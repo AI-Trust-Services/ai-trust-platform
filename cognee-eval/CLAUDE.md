@@ -171,10 +171,7 @@ semantic interchange format into a *live writable* remote — the opposite of re
    ghcr.io/<owner>/ai-trust-platform/cognee-graph@sha256:<digest>` (always a digest, never a mutable
    tag) in the prod override, then deploy.
 
-**First-boot safety:** in read-only mode the lifespan runs `consistency_check()` — a `recall()` with
-a fixed probe query; if at least one result returns non-empty text the graph is considered healthy.
-If the snapshot is torn/empty, `/health` returns 503 and the pod never becomes Ready, so a bad
-artifact never serves traffic.
+**First-boot safety:** in read-only mode the lifespan runs `consistency_check()` — opens the Kuzu DB directly (read-only) and counts `Node` rows; no LLM or embedding call, so it works in kind/local without network access. If the snapshot is torn/empty, `/health` returns 503 and the pod never becomes Ready, so a bad artifact never serves traffic.
 
 > The graph image is a deliberate exception to the "adding a service" checklist: it is **not** in
 > `docker-bake.hcl`, `build-and-load-images.sh`, or `cleanup-images.yml` — it is built only by the

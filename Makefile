@@ -33,6 +33,16 @@ cluster:
 		kind create cluster --name $(CLUSTER_NAME) --config k8s/kind-config.yaml; \
 	fi
 	kind export kubeconfig --name $(CLUSTER_NAME)
+	@echo "==> patching CoreDNS: static host entry for Thalamus"
+	@echo "    Docker Desktop on macOS routes DNS through an internal gateway (172.18.0.1)"
+	@echo "    that cannot resolve SAP/corporate hostnames. Forwarding to 8.8.8.8 does not"
+	@echo "    help because the gateway blocks it too. A static hosts entry bypasses DNS"
+	@echo "    entirely for this one hostname. Update the IP if Thalamus moves:"
+	@echo "      dig +short api.thalamus.eu-de-1.cloud.sap"
+	kubectl patch configmap coredns -n kube-system --type merge -p \
+		'{"data":{"Corefile":".:53 {\n    errors\n    health {\n       lameduck 5s\n    }\n    ready\n    hosts {\n      10.237.173.193 api.thalamus.eu-de-1.cloud.sap\n      fallthrough\n    }\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    prometheus :9153\n    forward . /etc/resolv.conf {\n       max_concurrent 1000\n    }\n    cache 30 {\n       disable success cluster.local\n       disable denial cluster.local\n    }\n    loop\n    reload\n    loadbalance\n}\n"}}'
+	kubectl rollout restart deployment/coredns -n kube-system
+	kubectl rollout status deployment/coredns -n kube-system --timeout=60s
 
 delete-cluster:
 	kind delete cluster --name $(CLUSTER_NAME)
