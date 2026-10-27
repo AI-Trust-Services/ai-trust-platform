@@ -99,6 +99,7 @@ build monitoring-frontend . ./monitoring/frontend/Dockerfile \
 
 build overview-frontend . ./overview/frontend/Dockerfile \
   --build-arg "VITE_OVERVIEW_API_BASE=${VITE_OVERVIEW_API_BASE}" \
+  --build-arg "VITE_REGISTRY_API_BASE=${VITE_REGISTRY_API_BASE:-/api/registry/v1}" \
   --build-arg "VITE_ALERTS_API_BASE=${VITE_ALERTS_API_BASE}" \
   --build-arg "VITE_ALERTS_URL=${VITE_ALERTS_URL}" \
   --build-arg "VITE_REGISTRY_URL=${VITE_REGISTRY_URL}" \

@@ -311,6 +311,7 @@ target "overview-frontend" {
   tags       = [tag("overview-frontend")]
   args = {
     VITE_OVERVIEW_API_BASE   = VITE_OVERVIEW_API_BASE
+    VITE_REGISTRY_API_BASE   = VITE_REGISTRY_API_BASE
     VITE_ALERTS_API_BASE     = VITE_ALERTS_API_BASE
     VITE_ALERTS_URL          = VITE_ALERTS_URL
     VITE_REGISTRY_URL        = VITE_REGISTRY_URL
