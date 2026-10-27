@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import LuigiClient from "@luigi-project/client";
 import {
-  ChevronLeft, MoreVertical, Trash2, Download, Upload,
+  ChevronLeft, ChevronDown, MoreVertical, Trash2, Download, Upload,
   CheckCircle2, FileText, RefreshCw, AlertTriangle,
   File, RotateCcw, Eye, X, Plus, Shield, ListChecks, Clock,
   LayoutGrid, ClipboardList, FolderOpen, Hash, Home, CalendarDays,
@@ -173,11 +173,12 @@ function HistoryPanel({ systemId }: { systemId: string }) {
 type AllUser = { username: string; firstName: string; lastName: string; role: string };
 
 function RolesDialog({
-  open, system, allUsers, onClose, onSaved,
+  open, system, allUsers, currentUsername, onClose, onSaved,
 }: {
   open: boolean;
   system: AISystem;
   allUsers: AllUser[];
+  currentUsername: string;
   onClose: () => void;
   onSaved: (updated: AISystem) => void;
 }) {
@@ -198,6 +199,8 @@ function RolesDialog({
     }
   }, [open, system]);
 
+  const isCurrentUserOwner = currentUsername === owner;
+
   // Deduplicate so a user can't appear twice even if backend data is inconsistent.
   const allMembers = [...new Set([owner, ...contributors].filter(Boolean))];
 
@@ -212,39 +215,38 @@ function RolesDialog({
       ).slice(0, 6)
     : [];
 
-  function addUser(username: string) {
-    if (!owner) { setOwner(username); }
-    else if (!contributors.includes(username)) { setContributors((c) => [...c, username]); }
+  function addUser(un: string) {
+    if (!owner) { setOwner(un); }
+    else if (!contributors.includes(un)) { setContributors((c) => [...c, un]); }
     setSearch("");
     setSearchFocused(false);
   }
 
-  function setRole(username: string, role: "owner" | "contributor" | "remove") {
+  function addFromSearch() {
+    if (suggestions.length > 0) addUser(suggestions[0].username);
+  }
+
+  function setRole(un: string, role: "owner" | "contributor" | "remove") {
     if (role === "remove") {
-      if (username === owner) setOwner("");
-      else setContributors((c) => c.filter((u) => u !== username));
+      if (un === owner) setOwner("");
+      else setContributors((c) => c.filter((x) => x !== un));
     } else if (role === "owner") {
-      // Move the current owner to contributors (if there is one and it's different).
-      if (owner && owner !== username) {
-        setContributors((c) => [...c.filter((u) => u !== username), owner]);
+      if (owner && owner !== un) {
+        setContributors((c) => [...c.filter((x) => x !== un), owner]);
       } else {
-        setContributors((c) => c.filter((u) => u !== username));
+        setContributors((c) => c.filter((x) => x !== un));
       }
-      setOwner(username);
+      setOwner(un);
     } else {
-      // contributor
-      if (username === owner) {
+      if (un === owner) {
         setOwner("");
-        setContributors((c) => (c.includes(username) ? c : [...c, username]));
+        setContributors((c) => (c.includes(un) ? c : [...c, un]));
       }
     }
   }
 
   async function save() {
-    if (!owner) {
-      setOwnerError(true);
-      return;
-    }
+    if (!owner) { setOwnerError(true); return; }
     setOwnerError(false);
     setSaving(true);
     try {
@@ -276,38 +278,50 @@ function RolesDialog({
           <DialogTitle className="flex items-center gap-2">
             <Users className="size-4" /> Roles for {system.name}
           </DialogTitle>
-          <DialogDescription>Designate an owner and contributors for this AI system.</DialogDescription>
+          <DialogDescription>Designate owners and others to support in the completion of this system's compliance.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="relative">
-            <Input
-              placeholder="Search users to add…"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setOwnerError(false); }}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-            />
-            {suggestions.length > 0 && (
-              <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-card shadow-md">
-                {suggestions.map((u) => (
-                  <button
-                    key={u.username}
-                    type="button"
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => addUser(u.username)}
-                  >
-                    <InitialsAvatar name={memberLabel(u)} className="size-6 text-[10px]" />
-                    <div className="min-w-0 flex-1 text-left">
-                      <div className="font-medium">{memberLabel(u)}</div>
-                      <div className="text-xs text-muted-foreground">{u.username}</div>
-                    </div>
-                    <Plus className="size-3.5 shrink-0 text-muted-foreground" />
-                  </button>
-                ))}
+          {isCurrentUserOwner && (
+            <div className="relative flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  placeholder="Search for user…"
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setOwnerError(false); }}
+                  onFocus={() => setSearchFocused(true)}
+                  onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                />
+                {suggestions.length > 0 && (
+                  <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-card shadow-md">
+                    {suggestions.map((u) => (
+                      <button
+                        key={u.username}
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => addUser(u.username)}
+                      >
+                        <InitialsAvatar name={memberLabel(u)} className="size-6 text-[10px]" />
+                        <div className="min-w-0 flex-1 text-left">
+                          <div className="font-medium">{memberLabel(u)}</div>
+                          <div className="text-xs text-muted-foreground">{u.username}</div>
+                        </div>
+                        <Plus className="size-3.5 shrink-0 text-muted-foreground" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+              <Button
+                type="button"
+                className="shrink-0 bg-[var(--brand,#1147E9)] text-white hover:opacity-90"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={addFromSearch}
+              >
+                Add
+              </Button>
+            </div>
+          )}
           {ownerError && (
             <p className="flex items-center gap-1.5 text-sm text-destructive">
               <AlertTriangle className="size-3.5" /> At least one owner is required.
@@ -315,40 +329,65 @@ function RolesDialog({
           )}
           <div className="max-h-64 space-y-2 overflow-y-auto">
             {memberUsers.map((u) => {
-              const isOwner = u.username === owner;
+              const isMemberOwner = u.username === owner;
+              const isMe = u.username === currentUsername;
               return (
-                <div key={u.username} className="flex items-center gap-3 rounded-md border border-border px-3 py-2">
-                  <InitialsAvatar name={memberLabel(u)} className="size-7 text-[11px]" />
+                <div key={u.username} className="flex items-center gap-3 rounded-lg border border-border px-4 py-3">
+                  <InitialsAvatar name={memberLabel(u)} className="size-9 text-[12px]" />
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium">{memberLabel(u)}</div>
-                    <div className="text-xs text-muted-foreground">{u.username}</div>
+                    <div className="text-sm font-semibold">
+                      {memberLabel(u)}{isMe ? " (You)" : ""}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{isMemberOwner ? "Owner" : "Contributor"}</div>
                   </div>
-                  <select
-                    value={isOwner ? "owner" : "contributor"}
-                    onChange={(e) => setRole(u.username, e.target.value as "owner" | "contributor" | "remove")}
-                    className="rounded border border-border bg-background px-2 py-1 text-sm"
-                  >
-                    <option value="owner">Owner</option>
-                    <option value="contributor">Contributor</option>
-                    <option value="remove">Remove</option>
-                  </select>
+                  {isCurrentUserOwner ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 text-sm font-medium text-[var(--brand,#1147E9)] hover:opacity-80"
+                        >
+                          {isMemberOwner ? "Owner" : "Contributor"}
+                          <ChevronDown className="size-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => setRole(u.username, "owner")}>Owner</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setRole(u.username, "contributor")}>Contributor</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem variant="destructive" onSelect={() => setRole(u.username, "remove")}>Remove</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <span className="text-sm font-medium text-[var(--brand,#1147E9)]">
+                      {isMemberOwner ? "Owner" : "Contributor"}
+                    </span>
+                  )}
                 </div>
               );
             })}
             {memberUsers.length === 0 && (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                No members yet. Click the search field to add someone.
+                No members yet. Use the search above to add someone.
               </p>
             )}
           </div>
         </div>
         <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
-          <Button onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
+          {isCurrentUserOwner ? (
+            <>
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <Button
+                onClick={save}
+                disabled={saving}
+                className="bg-[var(--brand,#1147E9)] text-white hover:opacity-90"
+              >
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" onClick={onClose}>Close</Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1309,7 +1348,7 @@ export default function SystemDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const showToast = useToast();
-  const { mayWrite, mayApprove } = useModalControls();
+  const { mayWrite, mayApprove, username } = useModalControls();
 
   // Save current path to sessionStorage so a browser refresh can restore it.
   // The cleanup runs on normal navigation away (but NOT on page refresh), so
@@ -1397,7 +1436,7 @@ export default function SystemDetailPage() {
   }
 
   function canDelete(): boolean {
-    return mayApprove || (mayWrite && system?.workflow_status === "draft");
+    return mayApprove || (isSystemOwner && mayWrite && system?.workflow_status === "draft");
   }
 
   if (loading) {
@@ -1419,10 +1458,11 @@ export default function SystemDetailPage() {
   }
 
   const ownerName = userName(system.business_owners, userMap);
-  const members = [
+  const isSystemOwner = username === system.business_owners;
+  const members = [...new Set([
     system.business_owners,
     ...(system.contributors ?? []),
-  ].filter((u): u is string => !!u);
+  ].filter((u): u is string => !!u))];
 
   return (
     <div className="min-h-screen bg-background">
@@ -1576,6 +1616,7 @@ export default function SystemDetailPage() {
           open={rolesOpen}
           system={system}
           allUsers={allUsers}
+          currentUsername={username}
           onClose={() => setRolesOpen(false)}
           onSaved={(updated) => { setSystem(updated); }}
         />
