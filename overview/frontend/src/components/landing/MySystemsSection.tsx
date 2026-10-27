@@ -9,8 +9,7 @@ interface MySystemsSectionProps {
 
 export function MySystemsSection({ canRegister }: MySystemsSectionProps) {
   function handleRegister() {
-    // TODO(#315): after PR #319 lands, link to /home/ai-system-registry/systems/new
-    navigateTo("/home/ai-system-registry", REGISTRY_URL);
+    navigateTo("/home/ai-system-registry/systems/new", `${REGISTRY_URL}#/systems/new`);
   }
 
   return (
