@@ -188,19 +188,30 @@ export default function Systems() {
     } catch { return null; }
   }
 
+  // Overview deep-links the "Register new AI System" button via this flag
+  // instead of navigating Luigi to /home/ai-system-registry/systems/new —
+  // deeper Luigi routes drop the shell side-nav.
+  function consumeOpenNewHandoff(): boolean {
+    if (localStorage.getItem("registry.openNew") !== "1") return false;
+    localStorage.removeItem("registry.openNew");
+    return true;
+  }
+
   useEffect(() => {
     if (systemId) { openSystemById(systemId); return; }
+    if (consumeOpenNewHandoff()) { navigate("/systems/new"); return; }
     const handoffId = consumeOpenSystemHandoff();
     if (handoffId) openSystemById(handoffId);
-  }, [systemId, openSystemById]);
+  }, [systemId, openSystemById, navigate]);
 
   useEffect(() => {
     const id = LuigiClient.addContextUpdateListener(() => {
+      if (consumeOpenNewHandoff()) { navigate("/systems/new"); return; }
       const handoffId = consumeOpenSystemHandoff();
       if (handoffId) openSystemById(handoffId);
     });
     return () => { LuigiClient.removeContextUpdateListener(id); };
-  }, [openSystemById]);
+  }, [openSystemById, navigate]);
 
   const ownerLabel = useCallback((s: AISystem) => {
     const key = ownerKey(s);

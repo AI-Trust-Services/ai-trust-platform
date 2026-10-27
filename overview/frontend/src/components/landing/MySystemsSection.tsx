@@ -364,10 +364,11 @@ function MenuItem({
 
 function EmptyState({ canRegister }: { canRegister: boolean }) {
   function handleRegister() {
-    navigateTo(
-      "/home/ai-system-registry/systems/new",
-      `${REGISTRY_URL}#/systems/new`,
-    );
+    // Same localStorage handoff pattern as `registry.openSystem` so Luigi stays
+    // on the top-level /home/ai-system-registry node (deeper routes make Luigi
+    // drop the side-nav).
+    localStorage.setItem("registry.openNew", "1");
+    navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
   return (
     <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-12 text-center">
