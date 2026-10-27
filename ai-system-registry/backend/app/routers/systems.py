@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 
+import httpx
 from ai_trust_authorization import check_permission, require_permission
 from ai_trust_authorization.constants import (
     SYSTEMS_APPROVE,
@@ -37,6 +38,47 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 router = APIRouter(tags=["systems"])
 logger = get_logger(__name__)
+
+_USERS_BACKEND_URL = os.getenv("USERS_BACKEND_URL", "").rstrip("/")
+
+
+async def _blocked_contributor_usernames() -> set[str]:
+    """Usernames ineligible as contributors — compliance officers (separation of
+    duties: they approve, they don't contribute).
+
+    Fail-open: returns an empty set when USERS_BACKEND_URL is unset or the users
+    service is unreachable — the UI already enforces eligibility at selection time.
+    """
+    if not _USERS_BACKEND_URL:
+        return set()
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        try:
+            r = await client.get(
+                f"{_USERS_BACKEND_URL}/users/by-role",
+                params={"role": "ai_compliance_officer"},
+            )
+            if not r.is_success:
+                return set()
+            # json() → ValueError on a non-JSON body (e.g. an LB's HTML error page);
+            # the comprehension → KeyError/TypeError if the shape isn't list[{username}].
+            # All of these mean "can't determine the denylist" → fail open.
+            return {u["username"] for u in r.json()}
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            return set()
+
+
+async def _assert_valid_contributors(usernames: list[str]) -> None:
+    """Raise 422 if any username is a compliance officer (the only ineligible role)."""
+    if not usernames:
+        return
+    blocked = await _blocked_contributor_usernames()
+    ineligible = [u for u in usernames if u in blocked]
+    if ineligible:
+        raise HTTPException(
+            422,
+            f"Compliance officers cannot be added as contributors: {ineligible}",
+        )
+
 
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
 
@@ -154,7 +196,8 @@ async def update_system(
         raise HTTPException(422, f"Invalid lifecycle '{body.lifecycle}'")
     if body.org_role is not None and body.org_role not in VALID_ROLES:
         raise HTTPException(422, f"Invalid org_role '{body.org_role}'")
-
+    if body.contributors is not None:
+        await _assert_valid_contributors(body.contributors)
     async with SessionLocal() as session:
         result = await session.execute(select(AISystem).where(AISystem.id == system_id))
         row = result.scalar_one_or_none()

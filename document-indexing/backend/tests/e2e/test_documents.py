@@ -214,6 +214,32 @@ async def test_delete_nonexistent_document_returns_404(client: httpx.AsyncClient
     assert r.status_code == 404
 
 
+async def test_delete_all_system_documents(client: httpx.AsyncClient, system_id: str):
+    # Upload two documents, then purge the whole system in one call (used to clean up
+    # when a draft registration is abandoned, since the registry has no FK to cascade).
+    for fn in ("a.pdf", "b.md"):
+        up = await client.post(
+            f"/v1/systems/{system_id}/documents",
+            files={"file": (fn, _PDF_BYTES, "application/pdf")},
+            headers=_HDR,
+        )
+        assert up.status_code == 200
+
+    r = await client.delete(f"/v1/systems/{system_id}/documents", headers=_HDR)
+    assert r.status_code == 200
+    assert r.json()["documents_deleted"] == 2
+
+    listing = await client.get(f"/v1/systems/{system_id}/documents", headers=_HDR)
+    assert listing.json() == []
+
+
+async def test_delete_all_system_documents_empty_is_zero(client: httpx.AsyncClient):
+    # Idempotent: unknown / document-less system returns 0, not 404.
+    r = await client.delete("/v1/systems/SYS-nonexistent/documents", headers=_HDR)
+    assert r.status_code == 200
+    assert r.json()["documents_deleted"] == 0
+
+
 # ── Retrieval ─────────────────────────────────────────────────────────────────
 
 
