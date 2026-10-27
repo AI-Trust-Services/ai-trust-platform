@@ -42,12 +42,14 @@ class OpenTaskRow(BaseModel):
     source: str  # "required" | "assigned"
     system_id: str
     system_name: str
+    system_version: str
     section: str  # business | technical
     workflow_status: Optional[str]
     question_key: str
     question_label: str
     assigned_at: datetime
     assigned_by_username: Optional[str] = None
+    owner_username: Optional[str] = None
     assignment_id: Optional[str] = None
 
 
@@ -105,19 +107,27 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
                         source="required",
                         system_id=row.id,
                         system_name=row.name,
+                        system_version=row.version,
                         section=section,
                         workflow_status=row.workflow_status,
                         question_key=key,
                         question_label=QUESTION_LABEL.get(key, key),
                         assigned_at=row.updated_at or row.created_at,
                         assigned_by_username=row.business_owners or None,
+                        owner_username=row.business_owners,
                     )
                 )
 
         # Explicit per-question assignments.
         question_rows = (
             await session.execute(
-                select(QuestionAssignment, AISystem.name, AISystem.workflow_status)
+                select(
+                    QuestionAssignment,
+                    AISystem.name,
+                    AISystem.version,
+                    AISystem.workflow_status,
+                    AISystem.business_owners,
+                )
                 .join(AISystem, AISystem.id == QuestionAssignment.system_id)
                 .where(
                     QuestionAssignment.assignee_username == user,
@@ -126,18 +136,26 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
             )
         ).all()
 
-        for qa, system_name, workflow_status in question_rows:
+        for (
+            qa,
+            system_name,
+            system_version,
+            workflow_status,
+            business_owners,
+        ) in question_rows:
             tasks.append(
                 OpenTaskRow(
                     source="assigned",
                     system_id=qa.system_id,
                     system_name=system_name,
+                    system_version=system_version,
                     section=qa.section,
                     workflow_status=workflow_status,
                     question_key=qa.question_key,
                     question_label=QUESTION_LABEL.get(qa.question_key, qa.question_key),
                     assigned_at=qa.assigned_at,
                     assigned_by_username=qa.assigned_by_username,
+                    owner_username=business_owners,
                     assignment_id=qa.id,
                 )
             )

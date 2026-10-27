@@ -43,12 +43,14 @@ export interface OpenTaskRow {
   source: "required" | "assigned";
   system_id: string;
   system_name: string;
+  system_version: string;
   section: string;
   workflow_status: string | null;
   question_key: string;
   question_label: string;
   assigned_at: string;
   assigned_by_username: string | null;
+  owner_username: string | null;
   assignment_id?: string | null;
 }
 

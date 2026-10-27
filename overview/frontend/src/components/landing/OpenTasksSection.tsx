@@ -2,29 +2,46 @@ import { useEffect, useState } from "react";
 import { Eye, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { navigateTo } from "../../hooks/useLuigi";
-import { REGISTRY_URL, api, type OpenTaskRow } from "../../api/client";
+import {
+  COMPLIANCE_URL,
+  REGISTRY_URL,
+  api,
+  type AssessmentSummary,
+  type OpenTaskRow,
+} from "../../api/client";
 import { InitialsAvatar } from "../InitialsAvatar";
+import {
+  AssessmentStageCell,
+  pickLatestAssessmentPerSystem,
+} from "./AssessmentStage";
 
 type LoadState = "loading" | "ready" | "error";
 
 interface SystemGroup {
   system_id: string;
   system_name: string;
+  system_version: string;
   workflow_status: string | null;
   questions: OpenTaskRow[];
   earliest_assigned_at: string;
-  assigned_by_username: string | null;
+  owner_username: string | null;
 }
 
 export function OpenTasksSection() {
   const [state, setState] = useState<LoadState>("loading");
   const [rows, setRows] = useState<OpenTaskRow[]>([]);
+  const [latestBySystem, setLatestBySystem] = useState<
+    Map<string, AssessmentSummary>
+  >(new Map());
 
   useEffect(() => {
-    api
-      .myOpenTasks()
-      .then((r) => {
-        setRows(r);
+    Promise.all([
+      api.myOpenTasks(),
+      api.allAssessments().catch(() => [] as AssessmentSummary[]),
+    ])
+      .then(([tasks, assessments]) => {
+        setRows(tasks);
+        setLatestBySystem(pickLatestAssessmentPerSystem(assessments));
         setState("ready");
       })
       .catch(() => setState("error"));
@@ -45,7 +62,7 @@ export function OpenTasksSection() {
         </span>
       </div>
       {state === "ready" && groups.length > 0 ? (
-        <TasksTable groups={groups} />
+        <TasksTable groups={groups} latestBySystem={latestBySystem} />
       ) : (
         <EmptyState />
       )}
@@ -53,7 +70,13 @@ export function OpenTasksSection() {
   );
 }
 
-function TasksTable({ groups }: { groups: SystemGroup[] }) {
+function TasksTable({
+  groups,
+  latestBySystem,
+}: {
+  groups: SystemGroup[];
+  latestBySystem: Map<string, AssessmentSummary>;
+}) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
       <table className="w-full text-sm">
@@ -62,14 +85,18 @@ function TasksTable({ groups }: { groups: SystemGroup[] }) {
             <th className="px-4 py-3 text-left">Assigned to you</th>
             <th className="px-4 py-3 text-left">Assign date</th>
             <th className="px-4 py-3 text-left">AI System</th>
-            <th className="px-4 py-3 text-left">Assigned by</th>
-            <th className="px-4 py-3 text-left">Workflow status</th>
+            <th className="px-4 py-3 text-left">Owner</th>
+            <th className="px-4 py-3 text-left">Assessment stage</th>
             <th className="w-16 px-4 py-3 text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
           {groups.map((g) => (
-            <TaskRow key={g.system_id} group={g} />
+            <TaskRow
+              key={g.system_id}
+              group={g}
+              latestAssessment={latestBySystem.get(g.system_id) ?? null}
+            />
           ))}
         </tbody>
       </table>
@@ -77,59 +104,102 @@ function TasksTable({ groups }: { groups: SystemGroup[] }) {
   );
 }
 
-function TaskRow({ group }: { group: SystemGroup }) {
-  function handleOpen() {
+function TaskRow({
+  group,
+  latestAssessment,
+}: {
+  group: SystemGroup;
+  latestAssessment: AssessmentSummary | null;
+}) {
+  function openSystem() {
     navigateTo(
       `/home/ai-system-registry/systems/${group.system_id}`,
       `${REGISTRY_URL}#/systems/${group.system_id}`,
     );
   }
+  function openQuestions() {
+    // Deep-link into the system detail; it opens with the questionnaire
+    // visible. For an explicit per-question assignment the registry already
+    // scrolls to the pending question via its own navigation state.
+    openSystem();
+  }
+  function openAssessment() {
+    if (!latestAssessment) {
+      openSystem();
+      return;
+    }
+    localStorage.setItem(
+      "compliance.viewSystem",
+      JSON.stringify({ systemId: group.system_id, systemName: group.system_name }),
+    );
+    localStorage.setItem(
+      "compliance.openAssessment",
+      JSON.stringify({ assessmentId: latestAssessment.id }),
+    );
+    navigateTo("/home/assessments", COMPLIANCE_URL);
+  }
 
-  const labels = group.questions.map((q) => q.question_label);
-  const full = labels.join(" · ");
-  const shown =
-    labels.length > 3
-      ? `${labels.slice(0, 3).join(" · ")}  + ${labels.length - 3} more`
-      : full;
+  const labels = formatQuestionLabels(group.questions);
+  const full = group.questions
+    .map((q) => `${formatQuestionNumber(q.question_key)} · ${q.question_label}`)
+    .join(" · ");
 
   return (
     <tr className="border-b border-border last:border-b-0">
       <td className="max-w-[320px] px-4 py-3">
-        <div className="truncate text-foreground" title={full}>
-          {shown}
-        </div>
+        <button
+          type="button"
+          onClick={openQuestions}
+          className="block w-full truncate text-left text-foreground underline underline-offset-2"
+          title={full}
+        >
+          {labels}
+        </button>
       </td>
       <td className="px-4 py-3 text-muted-foreground">
         {formatRelativeDate(group.earliest_assigned_at)}
       </td>
       <td className="px-4 py-3">
-        <div className="flex flex-col">
-          <span className="font-medium text-foreground">{group.system_name}</span>
-          <span className="text-xs text-muted-foreground">{group.system_id}</span>
-        </div>
+        <button
+          type="button"
+          onClick={openSystem}
+          className="flex flex-col items-start text-left"
+        >
+          <span
+            className="truncate font-medium text-foreground underline underline-offset-2"
+            title={group.system_name}
+          >
+            {group.system_name}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {group.system_id} · v{group.system_version}
+          </span>
+        </button>
       </td>
       <td className="px-4 py-3">
-        {group.assigned_by_username ? (
+        {group.owner_username ? (
           <div className="flex items-center gap-2">
-            <InitialsAvatar username={group.assigned_by_username} size="sm" />
-            <span className="text-foreground">{group.assigned_by_username}</span>
+            <InitialsAvatar username={group.owner_username} size="sm" />
+            <span className="text-foreground">{group.owner_username}</span>
           </div>
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
       </td>
       <td className="px-4 py-3">
-        <span className="text-foreground">
-          {formatWorkflowStatus(group.workflow_status)}
-        </span>
+        <AssessmentStageCell
+          assessment={latestAssessment}
+          workflowStatus={group.workflow_status}
+        />
       </td>
       <td className="px-4 py-3 text-right">
         <Button
-          variant="ghost"
+          variant="outline"
           size="icon"
-          onClick={handleOpen}
+          className="size-8"
+          onClick={openAssessment}
           aria-label={`Open ${group.system_name}`}
-          title={`Open ${group.system_name}`}
+          title={latestAssessment ? "Open assessment" : "View system detail"}
         >
           <Eye className="size-4" />
         </Button>
@@ -172,22 +242,76 @@ function groupBySystem(rows: OpenTaskRow[]): SystemGroup[] {
       existing.questions.push(row);
       if (row.assigned_at < existing.earliest_assigned_at) {
         existing.earliest_assigned_at = row.assigned_at;
-        existing.assigned_by_username = row.assigned_by_username;
       }
     } else {
       map.set(row.system_id, {
         system_id: row.system_id,
         system_name: row.system_name,
+        system_version: row.system_version,
         workflow_status: row.workflow_status,
         questions: [row],
         earliest_assigned_at: row.assigned_at,
-        assigned_by_username: row.assigned_by_username,
+        owner_username: row.owner_username,
       });
     }
+  }
+  // Sort each group's questions by their Q-number so the preview reads
+  // "Q2, Q4, Q7" in order rather than in assignment order.
+  for (const g of map.values()) {
+    g.questions.sort(
+      (a, b) =>
+        questionIndex(a.question_key) - questionIndex(b.question_key),
+    );
   }
   return Array.from(map.values()).sort((a, b) =>
     b.earliest_assigned_at.localeCompare(a.earliest_assigned_at),
   );
+}
+
+function formatQuestionLabels(questions: OpenTaskRow[]): string {
+  if (questions.length === 1) {
+    const q = questions[0];
+    return `${formatQuestionNumber(q.question_key)} · ${q.question_label}`;
+  }
+  // Multiple questions: show "Q2, Q4, Q7, Q8…" compactly.
+  const nums = questions.map((q) => formatQuestionNumber(q.question_key));
+  return `${nums.join(", ")}…`;
+}
+
+// Ordered question keys mirror the registry questionnaire. Business questions
+// take Q1–Q10, AI-mode technical questions Q11–Q17. Keeping this list local to
+// the overview MFE is a deliberate duplication of the registry's REQUIRED_* —
+// if a key is missing here it just renders as "Q?", which degrades gracefully.
+const QUESTION_ORDER: readonly string[] = [
+  // Business (REQUIRED_BUSINESS in questionnaire_required.py)
+  "submission_type",
+  "use_case_owner",
+  "use_case_type",
+  "department",
+  "technologies",
+  "use_case_status",
+  "use_case",
+  "planned_modifications",
+  "exception_category",
+  "sector_legislation",
+  // Technical AI (REQUIRED_AI_TECHNICAL)
+  "data_and_inputs",
+  "decision_domain",
+  "automation_and_oversight",
+  "affected_people",
+  "model_nature",
+  "user_interaction",
+  "prohibited_practices",
+];
+
+function questionIndex(key: string): number {
+  const i = QUESTION_ORDER.indexOf(key);
+  return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+}
+
+function formatQuestionNumber(key: string): string {
+  const i = QUESTION_ORDER.indexOf(key);
+  return i === -1 ? "Q?" : `Q${i + 1}`;
 }
 
 function formatRelativeDate(iso: string): string {
@@ -201,19 +325,4 @@ function formatRelativeDate(iso: string): string {
   const diffMonths = Math.floor(diffDays / 30);
   if (diffMonths === 1) return "1 month ago";
   return `${diffMonths} months ago`;
-}
-
-const WORKFLOW_STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
-  business_pending: "Awaiting owner",
-  technical_pending: "Awaiting engineer",
-  pending_review: "Awaiting review",
-  info_requested: "Info requested",
-  approved: "Approved",
-  rejected: "Rejected",
-};
-
-function formatWorkflowStatus(status: string | null): string {
-  if (!status) return "—";
-  return WORKFLOW_STATUS_LABELS[status] ?? status;
 }
