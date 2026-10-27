@@ -1,4 +1,4 @@
-"""Per-user Landing Zone endpoints — currently just GET /me/open-tasks."""
+"""Per-user Landing Zone endpoints — GET /me/open-tasks + GET /me/systems."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from sqlalchemy import or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
@@ -143,3 +144,66 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
 
     tasks.sort(key=lambda t: t.assigned_at, reverse=True)
     return tasks
+
+
+class MySystemRow(BaseModel):
+    """One AI system where the user is the Owner or in the Contributors list."""
+
+    id: str
+    name: str
+    tier: str
+    workflow_status: str
+    is_chatbot: bool
+    generates_synthetic_content: bool
+    business_owners: Optional[str] = None
+    contributors: list[str] = []
+    assignee_username: Optional[str] = None
+    business_assignee_username: Optional[str] = None
+    technical_assignee_username: Optional[str] = None
+    compliance_officer_username: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+
+@router.get("/me/systems", response_model=list[MySystemRow])
+async def my_systems(request: Request) -> list[MySystemRow]:
+    """AI systems where the current user is the Owner (business_owners) or in
+    the Contributors list."""
+    user = _current_user(request)
+    async with SessionLocal() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(AISystem)
+                    .where(
+                        or_(
+                            AISystem.business_owners == user,
+                            AISystem.contributors.cast(JSONB).contains([user]),
+                        )
+                    )
+                    .order_by(AISystem.updated_at.desc().nullslast())
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    return [
+        MySystemRow(
+            id=row.id,
+            name=row.name,
+            tier=row.tier,
+            workflow_status=row.workflow_status,
+            is_chatbot=bool(row.is_chatbot),
+            generates_synthetic_content=bool(row.generates_synthetic_content),
+            business_owners=row.business_owners,
+            contributors=list(row.contributors or []),
+            assignee_username=row.assignee_username,
+            business_assignee_username=row.business_assignee_username,
+            technical_assignee_username=row.technical_assignee_username,
+            compliance_officer_username=row.compliance_officer_username,
+            updated_at=row.updated_at,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]

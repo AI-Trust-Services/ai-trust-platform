@@ -87,6 +87,25 @@
         icon: "database",
         viewUrl: "/registry/",
         navigationContext: "ai-system-registry",
+        children: [
+          {
+            pathSegment: "systems",
+            hideFromNav: true,
+            viewUrl: "/registry/",
+            children: [
+              {
+                pathSegment: "new",
+                hideFromNav: true,
+                viewUrl: base + "/registry/#/systems/new",
+              },
+              {
+                pathSegment: ":systemId",
+                hideFromNav: true,
+                viewUrl: base + "/registry/#/systems/:systemId",
+              },
+            ],
+          },
+        ],
       },
       {
         pathSegment: "model-catalog",
