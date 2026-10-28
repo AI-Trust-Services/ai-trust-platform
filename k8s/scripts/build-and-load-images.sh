@@ -94,6 +94,7 @@ build ai-system-registry-frontend . ./ai-system-registry/frontend/Dockerfile \
   --build-arg "VITE_REGISTRY_API_BASE=${VITE_REGISTRY_API_BASE}" \
   --build-arg "VITE_INDEXING_API_BASE=${VITE_INDEXING_API_BASE:-/api/indexing/v1}" \
   --build-arg "VITE_COMPLIANCE_API_BASE=${VITE_COMPLIANCE_API_BASE:-/api/compliance/v1}" \
+  --build-arg "VITE_AUDIT_API_BASE=${VITE_AUDIT_API_BASE:-/api/audit/v1}" \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
 
 build monitoring-frontend . ./monitoring/frontend/Dockerfile \

@@ -15,6 +15,7 @@ interface ModalControls {
   setModelCreateOpen: (open: boolean) => void;
   mayWrite: boolean;
   mayApprove: boolean;
+  mayWriteAssessments: boolean;
   username: string;
 }
 
@@ -34,6 +35,7 @@ export default function App() {
   const { can, username } = usePermissions();
   const mayWrite = can("systems:write");
   const mayApprove = can("systems:approve");
+  const mayWriteAssessments = can("assessments:write");
   const noWriteTitle = "Requires permission: systems:write";
 
   useLuigiInit(() => {
@@ -74,7 +76,7 @@ export default function App() {
 
   return (
     <ToastContext.Provider value={showToast}>
-      <ModalContext.Provider value={{ modelCreateOpen, setModelCreateOpen, mayWrite, mayApprove, username }}>
+      <ModalContext.Provider value={{ modelCreateOpen, setModelCreateOpen, mayWrite, mayApprove, mayWriteAssessments, username }}>
         <div className="flex h-screen flex-col overflow-hidden">
         {!isSystemDetail && (
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6 shadow-[var(--shadow-xs)]">

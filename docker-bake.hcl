@@ -289,6 +289,7 @@ target "ai-system-registry-frontend" {
     VITE_USERS_API_BASE      = VITE_USERS_API_BASE
     VITE_INDEXING_API_BASE   = VITE_INDEXING_API_BASE
     VITE_COMPLIANCE_API_BASE = VITE_COMPLIANCE_API_BASE
+    VITE_AUDIT_API_BASE      = VITE_AUDIT_API_BASE
   }
   cache-from = ["type=gha,scope=ai-system-registry-frontend"]
   cache-to   = ["type=gha,mode=max,scope=ai-system-registry-frontend"]

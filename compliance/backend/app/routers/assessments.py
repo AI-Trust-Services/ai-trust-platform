@@ -787,6 +787,13 @@ async def submit_assessment(assessment_id: str, request: Request) -> AssessmentR
         row = await _load(session, assessment_id)
         if row.status == "approved":
             raise HTTPException(409, "Approved assessments are immutable")
+        # Submit only advances a draft-like assessment to "submitted". Allowing it from
+        # a review state (pending_review/under_review) would reset workflow progress.
+        if row.status not in ("draft", "questionnaire_pending"):
+            raise HTTPException(
+                422,
+                f"Cannot submit an assessment in '{row.status}' status — only draft assessments can be submitted",
+            )
         obligation_count = (
             await session.execute(
                 select(func.count())
@@ -936,9 +943,15 @@ async def historicize_assessment(
             await session.execute(select(AISystem).where(AISystem.id == row.ai_system_id))
         ).scalar_one_or_none()
         if system:
+            # Reset the risk classification so a fresh assessment is required, but
+            # leave org_role intact — it is a NOT NULL registry column and a required
+            # field on AISystemResponse, so nulling it would break the row's validation
+            # and 500 on the next read. Resync the compliance score now that this
+            # approved assessment is inactive, otherwise it goes stale.
             system.tier = "pending"
-            system.org_role = None
             system.workflow_status = "draft"
+            await session.flush()
+            await sync_system_compliance(session, system.id)
         log_audit_event(
             session,
             actor=current_user,

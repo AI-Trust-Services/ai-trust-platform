@@ -40,6 +40,14 @@ function startRiskClassification(systemId: string) {
   LuigiClient.linkManager().navigate("/home/assessments");
 }
 
+// Open the assessments list WITHOUT the create handoff flag. Setting the flag tells
+// Compliance to CREATE a new assessment, which duplicates / 409s when one already
+// exists — so "Continue"/existing-assessment navigation must not set it (mirrors the
+// start-vs-continue split in Systems.tsx).
+function goToAssessmentsList() {
+  LuigiClient.linkManager().navigate("/home/assessments");
+}
+
 function userName(username: string | null | undefined, userMap: UserMap): string {
   if (!username) return "—";
   const u = userMap[username];
@@ -183,6 +191,7 @@ function RolesDialog({
   onSaved: (updated: AISystem) => void;
 }) {
   const showToast = useToast();
+  const { mayWrite } = useModalControls();
   const [owner, setOwner] = useState(system.business_owners ?? "");
   const [contributors, setContributors] = useState<string[]>(system.contributors ?? []);
   const [search, setSearch] = useState("");
@@ -204,6 +213,10 @@ function RolesDialog({
   // Save. Fall back to editable when the system has no owner yet (legacy/null data)
   // so nobody is locked out of assigning the first owner.
   const isCurrentUserOwner = !system.business_owners || currentUsername === system.business_owners;
+
+  // Role edits also require systems:write — a read-only viewer (auditor/executive)
+  // gets a view-only dialog even if they somehow match the owner username.
+  const canEdit = mayWrite && isCurrentUserOwner;
 
   // Deduplicate so a user can't appear twice even if backend data is inconsistent.
   const allMembers = [...new Set([owner, ...contributors].filter(Boolean))];
@@ -282,7 +295,7 @@ function RolesDialog({
           <DialogDescription>Designate owners and others to support in the completion of this system's compliance.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 px-6">
-          {isCurrentUserOwner && (
+          {canEdit && (
             <div className="relative flex gap-2">
               <div className="relative flex-1">
                 <Input
@@ -341,7 +354,7 @@ function RolesDialog({
                     </div>
                     <div className="text-xs text-muted-foreground">{isMemberOwner ? "Owner" : "Contributor"}</div>
                   </div>
-                  {isCurrentUserOwner && !isMemberOwner ? (
+                  {canEdit && !isMemberOwner ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button
@@ -374,7 +387,7 @@ function RolesDialog({
           </div>
         </div>
         <DialogFooter>
-          {isCurrentUserOwner ? (
+          {canEdit ? (
             <>
               <Button variant="outline" onClick={onClose}>Cancel</Button>
               <Button
@@ -434,6 +447,7 @@ function OverviewTab({
   onEditModeChange: (v: boolean) => void;
 }) {
   const showToast = useToast();
+  const { mayWrite, mayWriteAssessments } = useModalControls();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -512,7 +526,10 @@ function OverviewTab({
                     Complete a risk assessment to receive your EU AI Act classification.
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => startRiskClassification(system.id)}>
+                <Button size="sm" variant="outline"
+                  disabled={!mayWriteAssessments}
+                  title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
+                  onClick={() => assessments.length === 0 ? startRiskClassification(system.id) : goToAssessmentsList()}>
                   {assessments.length === 0 ? "Start" : "Continue"}
                 </Button>
               </div>
@@ -529,7 +546,10 @@ function OverviewTab({
                     PDF, DOCX, or Markdown — used to pre-fill the compliance questionnaire.
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                <Button size="sm" variant="outline"
+                  disabled={!mayWrite}
+                  title={mayWrite ? undefined : "Requires permission: systems:write"}
+                  onClick={() => fileInputRef.current?.click()}>
                   <Upload className="size-3.5" /> Upload
                 </Button>
               </div>
@@ -667,6 +687,7 @@ function AssessmentsTab({
   onRefresh: () => void;
 }) {
   const showToast = useToast();
+  const { mayWriteAssessments } = useModalControls();
   const [deleteTarget, setDeleteTarget] = useState<ComplianceAssessment | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -728,7 +749,10 @@ function AssessmentsTab({
                   Complete an assessment to receive your EU AI Act risk classification.
                 </p>
               </div>
-              <Button size="sm" className="ml-auto shrink-0" onClick={() => startRiskClassification(system.id)}>
+              <Button size="sm" className="ml-auto shrink-0"
+                disabled={!mayWriteAssessments}
+                title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
+                onClick={() => startRiskClassification(system.id)}>
                 Start assessment
               </Button>
             </div>
@@ -764,7 +788,8 @@ function AssessmentsTab({
                 <button
                   type="button"
                   className="mt-2 text-xs font-medium text-primary underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
-                  disabled={submitting}
+                  disabled={submitting || !mayWriteAssessments}
+                  title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
                   onClick={() => submitToCompliance(draftAssessment)}
                 >
                   {submitting ? "Submitting…" : "Submit to compliance officer"}
@@ -868,6 +893,8 @@ function AssessmentsTab({
                             <Button
                               size="sm"
                               className="gap-1"
+                              disabled={!mayWriteAssessments}
+                              title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
                               onClick={goToCompliance}
                             >
                               <PencilLine className="size-3" /> Edit
@@ -879,14 +906,14 @@ function AssessmentsTab({
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onSelect={() => submitToCompliance(a)} disabled={submitting}>
+                                <DropdownMenuItem onSelect={() => submitToCompliance(a)} disabled={submitting || !mayWriteAssessments}>
                                   Submit to compliance officer
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={goToCompliance}>
+                                <DropdownMenuItem onSelect={goToCompliance} disabled={!mayWriteAssessments}>
                                   Edit
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem variant="destructive" onSelect={() => setDeleteTarget(a)}>
+                                <DropdownMenuItem variant="destructive" disabled={!mayWriteAssessments} onSelect={() => setDeleteTarget(a)}>
                                   <Trash2 className="size-3.5" /> Delete
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
@@ -898,7 +925,10 @@ function AssessmentsTab({
                             <Button size="sm" variant="outline" onClick={goToCompliance}>
                               View results
                             </Button>
-                            {!isInactive && (
+                            {/* Only under-review assessments get mutation actions. Approved
+                                rows must go through /historicize (never a raw delete), and
+                                inactive rows are terminal — neither exposes Delete/Submit. */}
+                            {isUnderReview && (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="size-7">
@@ -906,16 +936,11 @@ function AssessmentsTab({
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  {isUnderReview && (
-                                    <DropdownMenuItem onSelect={() => submitToCompliance(a)} disabled={submitting}>
-                                      Submit to compliance officer
-                                    </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuItem onSelect={goToCompliance}>
+                                  <DropdownMenuItem onSelect={goToCompliance} disabled={!mayWriteAssessments}>
                                     Edit
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
-                                  <DropdownMenuItem variant="destructive" onSelect={() => setDeleteTarget(a)}>
+                                  <DropdownMenuItem variant="destructive" disabled={!mayWriteAssessments} onSelect={() => setDeleteTarget(a)}>
                                     <Trash2 className="size-3.5" /> Delete
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -1024,7 +1049,16 @@ function FilesTab({
   async function executeAction(file: IndexedDocument, action: FileAction, replacementFile: File | null) {
     setConfirming(true);
     try {
-      // 1. Handle assessment impact first
+      // 1. File operation first — if it fails the assessment state is left untouched.
+      if (action === "replace" && replacementFile) {
+        // Use the version endpoint so history is preserved, then leave the original
+        // document record intact (the service manages version chaining internally).
+        await api.uploadDocumentVersion(file.id, replacementFile);
+      } else {
+        await api.deleteIndexedDocument(file.id);
+      }
+
+      // 2. Update assessment state only after the file operation succeeded.
       if (impact === "approved") {
         const approvedA = assessments.find((a) => a.status === "approved");
         if (approvedA) await api.historicizeAssessment(approvedA.id);
@@ -1035,14 +1069,6 @@ function FilesTab({
         const draftA = assessments.find((a) => ["draft", "questionnaire_pending"].includes(a.status));
         if (draftA) await api.abortAssessment(draftA.id);
       }
-
-      // 2. Upload replacement if replace action
-      if (action === "replace" && replacementFile) {
-        await api.uploadDocumentIndexed(system.id, replacementFile);
-      }
-
-      // 3. Delete the original file
-      await api.deleteIndexedDocument(file.id);
 
       showToast(action === "delete" ? "File deleted" : "File replaced");
       setPendingAction(null);
@@ -1348,7 +1374,7 @@ export default function SystemDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const showToast = useToast();
-  const { mayWrite, mayApprove, username } = useModalControls();
+  const { mayWrite, mayApprove, mayWriteAssessments, username } = useModalControls();
 
   // Save current path to sessionStorage so a browser refresh can restore it.
   // The cleanup runs on normal navigation away (but NOT on page refresh), so
@@ -1517,12 +1543,19 @@ export default function SystemDetailPage() {
 
             <Button
               size="sm" variant="outline"
+              disabled={!mayWrite}
+              title={mayWrite ? undefined : "Requires permission: systems:write"}
               onClick={() => { setActiveTab("overview"); setEditMode(true); }}
             >
               Edit details
             </Button>
 
-            <Button size="sm" onClick={() => startRiskClassification(system.id)}>
+            <Button
+              size="sm"
+              disabled={!mayWriteAssessments}
+              title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
+              onClick={() => startRiskClassification(system.id)}
+            >
               Start new assessment
             </Button>
 
@@ -1533,10 +1566,10 @@ export default function SystemDetailPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => startRiskClassification(system.id)}>
+                <DropdownMenuItem disabled={!mayWriteAssessments} onSelect={() => startRiskClassification(system.id)}>
                   Start assessment
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setRolesOpen(true)}>
+                <DropdownMenuItem disabled={!mayWrite} onSelect={() => setRolesOpen(true)}>
                   Manage roles
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />

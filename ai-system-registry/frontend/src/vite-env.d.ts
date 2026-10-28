@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_USERS_API_BASE: string;
   readonly VITE_INDEXING_API_BASE: string;
   readonly VITE_COMPLIANCE_API_BASE: string;
+  readonly VITE_AUDIT_API_BASE: string;
 }
 
 interface ImportMeta {

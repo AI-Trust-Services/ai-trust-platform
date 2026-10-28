@@ -376,6 +376,19 @@ export const api = {
       INDEXING_API_BASE,
     ),
 
+  // Upload a new VERSION of an existing indexed document (Replace flow). The old
+  // version is retained for history; the new one becomes current and is re-indexed.
+  // Preferred over create-new + delete-old, which would discard the version history.
+  uploadDocumentVersion: (documentId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{ document_id: string; version_id: string; status: string }>(
+      `/documents/${encodeURIComponent(documentId)}/versions`,
+      { method: "POST", body: fd },
+      INDEXING_API_BASE,
+    );
+  },
+
   // Purge every indexed document for a system. Used when a system (e.g. an abandoned
   // draft registration) is deleted — the registry row and the indexed documents live
   // in separate services with no FK, so this prevents orphaned docs/chunks/MinIO objects.
