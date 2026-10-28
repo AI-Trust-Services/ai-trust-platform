@@ -199,7 +199,11 @@ function RolesDialog({
     }
   }, [open, system]);
 
-  const isCurrentUserOwner = currentUsername === owner;
+  // Gate editing on the PERSISTED owner, not the draft `owner` state — otherwise
+  // demoting yourself mid-edit would flip this false and hide all controls before
+  // Save. Fall back to editable when the system has no owner yet (legacy/null data)
+  // so nobody is locked out of assigning the first owner.
+  const isCurrentUserOwner = !system.business_owners || currentUsername === system.business_owners;
 
   // Deduplicate so a user can't appear twice even if backend data is inconsistent.
   const allMembers = [...new Set([owner, ...contributors].filter(Boolean))];
@@ -226,22 +230,19 @@ function RolesDialog({
     if (suggestions.length > 0) addUser(suggestions[0].username);
   }
 
-  function setRole(un: string, role: "owner" | "contributor" | "remove") {
+  // There must always be exactly one owner. Ownership is never cleared directly —
+  // it only transfers by promoting another member (which demotes the old owner).
+  function setRole(un: string, role: "owner" | "remove") {
     if (role === "remove") {
-      if (un === owner) setOwner("");
-      else setContributors((c) => c.filter((x) => x !== un));
-    } else if (role === "owner") {
+      if (un === owner) return; // never orphan the system — can't remove the owner
+      setContributors((c) => c.filter((x) => x !== un));
+    } else {
       if (owner && owner !== un) {
         setContributors((c) => [...c.filter((x) => x !== un), owner]);
       } else {
         setContributors((c) => c.filter((x) => x !== un));
       }
       setOwner(un);
-    } else {
-      if (un === owner) {
-        setOwner("");
-        setContributors((c) => (c.includes(un) ? c : [...c, un]));
-      }
     }
   }
 
@@ -280,7 +281,7 @@ function RolesDialog({
           </DialogTitle>
           <DialogDescription>Designate owners and others to support in the completion of this system's compliance.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 px-6">
           {isCurrentUserOwner && (
             <div className="relative flex gap-2">
               <div className="relative flex-1">
@@ -340,20 +341,19 @@ function RolesDialog({
                     </div>
                     <div className="text-xs text-muted-foreground">{isMemberOwner ? "Owner" : "Contributor"}</div>
                   </div>
-                  {isCurrentUserOwner ? (
+                  {isCurrentUserOwner && !isMemberOwner ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
                           className="flex items-center gap-1 text-sm font-medium text-[var(--brand,#1147E9)] hover:opacity-80"
                         >
-                          {isMemberOwner ? "Owner" : "Contributor"}
+                          Contributor
                           <ChevronDown className="size-3.5" />
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => setRole(u.username, "owner")}>Owner</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setRole(u.username, "contributor")}>Contributor</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setRole(u.username, "owner")}>Make owner</DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem variant="destructive" onSelect={() => setRole(u.username, "remove")}>Remove</DropdownMenuItem>
                       </DropdownMenuContent>
