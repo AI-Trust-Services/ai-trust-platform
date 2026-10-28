@@ -325,6 +325,82 @@ All other config lives in `k8s/env/<cluster>/.env` (committed). No per-cluster G
 5. Add `<cluster-name>` to the `options` list in the `build-push-deploy.yml` `workflow_dispatch` input for `gardener_cluster`, and add the matching `k8s/env/<cluster-name>/.env` entry for `integration-tests.yml`
 6. Trigger `build-push-deploy.yml` with `gardener_cluster=<cluster-name>`
 
+## High Availability and Scaling
+
+### Which workloads scale with `replicaCount`
+
+The `replicaCount` value (default `1`) controls the replica count for all **stateless** workloads:
+
+| Workload | Scales with `replicaCount` |
+|---|---|
+| All component backends (`ai-system-registry`, `compliance`, `users`, `audit`, `admin`, `overview`) | Yes |
+| All component frontends (nginx) | Yes |
+| `oauth2-proxy` | Yes (stateless — cookie-based sessions) |
+| `openfga` | Yes (stateless — Postgres-backed) |
+| `shell` | Yes (nginx reverse proxy) |
+| `document-indexing-backend` | Yes |
+| `embedding-service` | Yes (read-only HuggingFace cache, RWX PVC) |
+| `cognee-eval-backend` (`readOnly: true` Deployment path) | Yes |
+
+The following workloads are **hardcoded at `replicas: 1`** regardless of `replicaCount`:
+
+| Workload | Reason |
+|---|---|
+| `keycloak` | Requires JGroups/Infinispan clustering config for multi-replica; without it, two replicas have independent session caches and cause intermittent auth failures |
+| `audit-flush-worker` | Single-writer: polls Postgres and bulk-inserts to ClickHouse. Multiple replicas cause duplicate inserts |
+| `policy-checker-worker` | Single-writer: evaluates alert rules and writes alert events. Multiple replicas cause duplicate firings |
+| `document-indexing-worker` | Single-writer: polls `document_versions.status`. Multiple replicas race on the same rows |
+| `cognee-eval-backend` (`readOnly: false` StatefulSet path) | Single-writer: graph ingestion is synchronous and mutates shared storage |
+| `postgres`, `clickhouse`, `minio` | Stateful infrastructure — StatefulSets with RWO volumes by design |
+
+### Per-cluster replica configuration
+
+`replicaCount` is delivered via the `.env` → `bootstrap.sh` → `ai-trust-flux-values-<namespace>` Secret → Flux `valuesFrom` pipeline:
+
+| Cluster | File | Value | Effect |
+|---|---|---|---|
+| `ai-trust-main` | `k8s/env/ai-trust-main/.env` | `REPLICA_COUNT=2` | All scalable workloads run 2 replicas for HA |
+| `ai-trust-test` | `k8s/env/ai-trust-test/.env` | `REPLICA_COUNT=1` | Single replica (dev/PR namespaces) |
+| kind (local) | `values-kind.yaml` / chart default | `replicaCount: 1` | Single replica (single-node cluster) |
+
+To override for a specific deploy:
+```bash
+helm upgrade ai-trust k8s/helm/ai-trust-platform -n ai-trust \
+  -f k8s/helm/ai-trust-platform/values-gardener.yaml \
+  --set replicaCount=3
+```
+
+### PodDisruptionBudgets
+
+When `replicaCount > 1`, the chart renders a `PodDisruptionBudget` (`minAvailable: 1`) for every scaled workload. This ensures at least one replica stays available during node maintenance or a rolling `helm upgrade`. PDBs are not rendered when `replicaCount: 1` — a PDB on a single-replica Deployment would block voluntary disruptions indefinitely.
+
+### NodePorts (local kind only)
+
+`values-kind.yaml` overrides infra services to `NodePort` so that `kind-config.yaml` `extraPortMappings` can bind them to localhost. This is a local-dev convenience **only** — never apply `values-kind.yaml` on a real cluster. The base `values.yaml` and `values-gardener.yaml` use `ClusterIP` everywhere, satisfying the "no NodePort" requirement for all non-local deployments.
+
+### RWX storage for `embedding-service`
+
+`embedding-service` uses a standalone `PersistentVolumeClaim` with `accessModes: ReadWriteMany` so multiple replicas on different nodes can share the HuggingFace model cache. The StorageClass defaults to `""` (cluster default) and can be overridden:
+
+```yaml
+# values-gardener.yaml or per-deploy --set
+indexing:
+  embedding:
+    storageClassName: "longhorn-rwx"  # or "nfs-client", etc.
+```
+
+On kind (single node), the default `hostpath` StorageClass with RWX works fine for a single replica. If you scale `embedding-service` beyond 1 on kind you will see a scheduling failure — kind's hostpath provisioner does not support true multi-node RWX.
+
+### Migrating from the previous StatefulSet install
+
+The old `embedding-service` StatefulSet created a PVC named `hf-cache-embedding-service-0`. After upgrading, this PVC is orphaned (StatefulSet PVCs are not deleted by `helm upgrade`). The new Deployment creates a fresh PVC (`embedding-service-hf-cache`) and the ~2 GB model re-downloads on first start. Clean up the orphaned PVC after the rollout completes:
+
+```bash
+kubectl delete pvc hf-cache-embedding-service-0 -n <namespace>
+```
+
+The `initialDelaySeconds: 300` liveness probe on `embedding-service` already accounts for the slow first start.
+
 ## Known limitations / gaps (local kind scope)
 
 - Single-node only for kind: `postgres-data`, `clickhouse-data`, and `minio-data`
@@ -334,5 +410,6 @@ All other config lives in `k8s/env/<cluster>/.env` (committed). No per-cluster G
   CSI driver handles detach/reattach when a pod reschedules to a different node.
 - No resource `requests`/`limits`.
 - No HTTPS / `cookie-secure=true` — same as a local-dev oauth2-proxy config.
-- ReadWriteOnce access mode can not scale the deployment that mounts such volume. Apply ReadWriteMany for scalable application.
-- No horizontal pod autoscalers.
+- No horizontal pod autoscalers (HPA). `replicaCount` is a static setting; dynamic CPU/memory-based autoscaling is out of scope.
+- Keycloak runs as a single replica. Multi-replica Keycloak requires JGroups/Infinispan cluster configuration (out of scope).
+- Single-writer workers (`audit-flush-worker`, `policy-checker-worker`, `document-indexing-worker`) are hardcoded at 1 replica. Horizontal scaling requires distributed locking or a queue-based design (out of scope).

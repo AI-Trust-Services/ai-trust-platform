@@ -82,6 +82,10 @@ spec:
         name: ai-trust-flux-values-${NAMESPACE}
         valuesKey: MC_IMAGE
         targetPath: minio.mcImage
+      - kind: Secret
+        name: ai-trust-flux-values-${NAMESPACE}
+        valuesKey: REPLICA_COUNT
+        targetPath: replicaCount
     values:
       image:
         repository: ghcr.io/ai-trust-services/ai-trust-platform

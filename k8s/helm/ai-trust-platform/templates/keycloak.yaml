@@ -3,6 +3,10 @@ kind: Deployment
 metadata:
   name: keycloak
 spec:
+  # Hardcoded at 1: Keycloak multi-replica requires JGroups/Infinispan cluster
+  # configuration (KC_CACHE=ispn + discovery mechanism). Without it two replicas
+  # have independent session caches and cause intermittent auth failures. Clustering
+  # is out of scope for this issue.
   replicas: 1
   selector:
     matchLabels:

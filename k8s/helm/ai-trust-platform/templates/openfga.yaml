@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: openfga
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       {{- include "ai-trust.labels" (dict "name" "openfga") | nindent 6 }}
