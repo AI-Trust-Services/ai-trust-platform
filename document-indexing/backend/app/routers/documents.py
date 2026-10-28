@@ -2,8 +2,16 @@ from __future__ import annotations
 
 import os
 
-from ai_trust_authorization import check_permission, get_current_user, require_permission
-from ai_trust_authorization.constants import SYSTEMS_APPROVE, SYSTEMS_READ, SYSTEMS_WRITE
+from ai_trust_authorization import (
+    check_permission,
+    get_current_user,
+    require_permission,
+)
+from ai_trust_authorization.constants import (
+    SYSTEMS_APPROVE,
+    SYSTEMS_READ,
+    SYSTEMS_WRITE,
+)
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import AISystem, Document, DocumentVersion

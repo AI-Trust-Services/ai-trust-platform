@@ -2,10 +2,6 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import (
     ASSESSMENTS_APPROVE,
@@ -23,23 +19,27 @@ from ai_trust_persistence.models import (
     Obligation,
     Requirement,
 )
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.cascade import (
     refresh_assessment_score,
     refresh_obligation,
     sync_system_compliance,
 )
-from app.requirement_templates import cluster_articles, requirements_for
 from app.ids import new_id
 from app.obligation_templates import obligations_for
+from app.requirement_templates import cluster_articles, requirements_for
 from app.schemas import (
     AssessmentCreate,
     AssessmentDetailResponse,
     AssessmentResponse,
     AssessmentUpdate,
-    RequirementResponse,
-    GenerateRequirementsResponse,
     GenerateObligationsResponse,
+    GenerateRequirementsResponse,
     ObligationResponse,
+    RequirementResponse,
 )
 
 router = APIRouter(tags=["assessments"])
@@ -880,9 +880,7 @@ async def approve_assessment(
     response_model=dict,
     dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))],
 )
-async def abort_assessment(
-    assessment_id: str, request: Request
-) -> dict:
+async def abort_assessment(assessment_id: str, request: Request) -> dict:
     """Delete an assessment that has not yet been approved.
 
     For assessments already submitted to a CO (status submitted/pending_review/under_review),
@@ -892,12 +890,18 @@ async def abort_assessment(
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
         if row.status == "approved":
-            raise HTTPException(409, "Cannot abort an approved assessment — use /historicize instead")
+            raise HTTPException(
+                409, "Cannot abort an approved assessment — use /historicize instead"
+            )
         under_review = row.status in ("submitted", "pending_review", "under_review")
         system = (
-            await session.execute(select(AISystem).where(AISystem.id == row.ai_system_id))
+            await session.execute(
+                select(AISystem).where(AISystem.id == row.ai_system_id)
+            )
         ).scalar_one_or_none()
-        action = "assessment.aborted_under_review" if under_review else "assessment.aborted"
+        action = (
+            "assessment.aborted_under_review" if under_review else "assessment.aborted"
+        )
         log_audit_event(
             session,
             actor=current_user,
@@ -940,7 +944,9 @@ async def historicize_assessment(
         row.status = "inactive"
         row.updated_at = datetime.now(timezone.utc)
         system = (
-            await session.execute(select(AISystem).where(AISystem.id == row.ai_system_id))
+            await session.execute(
+                select(AISystem).where(AISystem.id == row.ai_system_id)
+            )
         ).scalar_one_or_none()
         if system:
             # Reset the risk classification so a fresh assessment is required, but
