@@ -2,10 +2,6 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import (
     ASSESSMENTS_APPROVE,
@@ -23,23 +19,27 @@ from ai_trust_persistence.models import (
     Obligation,
     Requirement,
 )
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.cascade import (
     refresh_assessment_score,
     refresh_obligation,
     sync_system_compliance,
 )
-from app.requirement_templates import cluster_articles, requirements_for
 from app.ids import new_id
 from app.obligation_templates import obligations_for
+from app.requirement_templates import cluster_articles, requirements_for
 from app.schemas import (
     AssessmentCreate,
     AssessmentDetailResponse,
     AssessmentResponse,
     AssessmentUpdate,
-    RequirementResponse,
-    GenerateRequirementsResponse,
     GenerateObligationsResponse,
+    GenerateRequirementsResponse,
     ObligationResponse,
+    RequirementResponse,
 )
 
 router = APIRouter(tags=["assessments"])
@@ -787,6 +787,13 @@ async def submit_assessment(assessment_id: str, request: Request) -> AssessmentR
         row = await _load(session, assessment_id)
         if row.status == "approved":
             raise HTTPException(409, "Approved assessments are immutable")
+        # Submit only advances a draft-like assessment to "submitted". Allowing it from
+        # a review state (pending_review/under_review) would reset workflow progress.
+        if row.status not in ("draft", "questionnaire_pending"):
+            raise HTTPException(
+                422,
+                f"Cannot submit an assessment in '{row.status}' status — only draft assessments can be submitted",
+            )
         obligation_count = (
             await session.execute(
                 select(func.count())
@@ -837,6 +844,7 @@ async def approve_assessment(
             raise HTTPException(409, "Assessment already approved")
         before_status = row.status
         row.status = "approved"
+        row.confirmed_by = current_user
         row.updated_at = datetime.now(timezone.utc)
         # Also advance the system workflow status so the registry reflects approval.
         sys_row = await session.get(AISystem, row.ai_system_id)
@@ -864,4 +872,103 @@ async def approve_assessment(
         "assessment.approved",
         extra={"assessment_id": assessment_id, "score": row.score},
     )
+    return AssessmentResponse.model_validate(row)
+
+
+@router.post(
+    "/assessments/{assessment_id}/abort",
+    response_model=dict,
+    dependencies=[Depends(require_permission(ASSESSMENTS_WRITE))],
+)
+async def abort_assessment(assessment_id: str, request: Request) -> dict:
+    """Delete an assessment that has not yet been approved.
+
+    For assessments already submitted to a CO (status submitted/pending_review/under_review),
+    an audit event is logged so the CO can see the assessment was aborted while under review.
+    """
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
+    async with SessionLocal() as session:
+        row = await _load(session, assessment_id)
+        if row.status == "approved":
+            raise HTTPException(
+                409, "Cannot abort an approved assessment — use /historicize instead"
+            )
+        under_review = row.status in ("submitted", "pending_review", "under_review")
+        system = (
+            await session.execute(
+                select(AISystem).where(AISystem.id == row.ai_system_id)
+            )
+        ).scalar_one_or_none()
+        action = (
+            "assessment.aborted_under_review" if under_review else "assessment.aborted"
+        )
+        log_audit_event(
+            session,
+            actor=current_user,
+            action=action,
+            resource_type="assessment",
+            resource_id=assessment_id,
+            ai_system_id=row.ai_system_id,
+            ai_system_name=system.name if system else "",
+            changes={"status": {"before": row.status, "after": "deleted"}},
+        )
+        await _delete_generated_requirements(session, assessment_id)
+        await session.delete(row)
+        if system:
+            await sync_system_compliance(session, system.id)
+        await session.commit()
+    logger.info("assessment.aborted", extra={"assessment_id": assessment_id})
+    return {"status": "deleted", "id": assessment_id}
+
+
+@router.post(
+    "/assessments/{assessment_id}/historicize",
+    response_model=AssessmentResponse,
+    dependencies=[Depends(require_permission(ASSESSMENTS_APPROVE))],
+)
+async def historicize_assessment(
+    assessment_id: str, request: Request
+) -> AssessmentResponse:
+    """Mark an approved assessment as inactive and reset the system's risk classification.
+
+    Used when a document is replaced/deleted after a CO has already approved the assessment.
+    The assessment is kept for audit purposes (status = "inactive") but the system tier is
+    reset to "pending" so a new assessment is required.
+    """
+    current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
+    async with SessionLocal() as session:
+        row = await _load(session, assessment_id)
+        if row.status != "approved":
+            raise HTTPException(422, "Only approved assessments can be historicized")
+        before_status = row.status
+        row.status = "inactive"
+        row.updated_at = datetime.now(timezone.utc)
+        system = (
+            await session.execute(
+                select(AISystem).where(AISystem.id == row.ai_system_id)
+            )
+        ).scalar_one_or_none()
+        if system:
+            # Reset the risk classification so a fresh assessment is required, but
+            # leave org_role intact — it is a NOT NULL registry column and a required
+            # field on AISystemResponse, so nulling it would break the row's validation
+            # and 500 on the next read. Resync the compliance score now that this
+            # approved assessment is inactive, otherwise it goes stale.
+            system.tier = "pending"
+            system.workflow_status = "draft"
+            await session.flush()
+            await sync_system_compliance(session, system.id)
+        log_audit_event(
+            session,
+            actor=current_user,
+            action="assessment.historicized",
+            resource_type="assessment",
+            resource_id=assessment_id,
+            ai_system_id=row.ai_system_id,
+            ai_system_name=system.name if system else "",
+            changes={"status": {"before": before_status, "after": "inactive"}},
+        )
+        await session.commit()
+        await session.refresh(row)
+    logger.info("assessment.historicized", extra={"assessment_id": assessment_id})
     return AssessmentResponse.model_validate(row)
