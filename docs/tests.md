@@ -212,14 +212,116 @@ Placeholder scope, to be confirmed:
 
 **Measure, don't gate.** Coverage is reported, not enforced:
 
-- **Tool:** `pytest-cov` (line coverage; branch coverage optional).
+- **Tool:** `pytest-cov` (branch coverage — `--cov-branch` is required for CRAP; see below).
 - **Mode:** report-only. **No threshold**, no `--cov-fail-under`, no PR or `main` gate. A low number
   never fails a build.
 - **Scope:** the in-process levels: unit and per-service E2E (`tests/unit/`, `tests/e2e/`). The live
   platform levels (integration, E2E system) are black-box over HTTP and are not measured for code
   coverage; they are measured by the business and technical scenarios above.
-- **Output:** a terminal summary and an XML/HTML report per backend, available as CI artifacts. No
-  external coverage service for now.
-- **Purpose:** build a baseline and spot untested areas. Targets and any gate are decided later,
-  once baseline data exists. Until then, MVP acceptance is measured by the business scenarios above.
+- **Output:** a terminal summary and a JSON report per backend (`coverage.json`), uploaded as a CI
+  artifact by the CRAP report workflow. No external coverage service for now.
+- **Purpose:** feed the CRAP score calculation (see below) and spot untested areas. Targets and any
+  gate are decided later, once baseline data exists.
+
+---
+
+## CRAP Metric
+
+**CRAP** (Change Risk Anti-Patterns) combines cyclomatic complexity with branch coverage into a single
+risk score per function. It surfaces functions that are both complex *and* poorly tested — the most
+likely source of silent defects in AI-generated code.
+
+### Formula
+
+```
+CRAP(m) = CC(m)² × (1 − coverage(m)/100)³ + CC(m)
+```
+
+| Symbol | Meaning |
+|---|---|
+| `CC(m)` | Cyclomatic Complexity of function `m` (via `radon`) |
+| `coverage(m)` | Branch coverage % of `m` (via `pytest-cov --cov-branch`) |
+
+**Key properties:**
+- A simple function (CC = 1) always scores ≤ 2, regardless of coverage.
+- A complex function (CC = 10) with zero coverage scores **110** — high risk.
+- 100% branch coverage collapses the penalty to zero: `CRAP = CC` (the irreducible floor).
+
+### Risk thresholds
+
+| CRAP score | Risk | Action |
+|---|---|---|
+| ≤ 30 | LOW | No action required |
+| 31–100 | MEDIUM | Flag for review; add tests opportunistically |
+| > 100 | HIGH | Requires test coverage before merging further complexity |
+
+### Tooling
+
+Both tools are installed as dev dependencies in every component's `requirements-test.txt`:
+
+```
+pytest-cov==5.0.0
+radon==6.0.1
+```
+
+### Running locally (per backend)
+
+```bash
+cd <component>/backend        # or cd <worker-dir>
+make setup                    # installs pytest-cov + radon into .venv
+
+# 1. Collect branch coverage
+.venv/bin/pytest tests/unit/ \
+  --cov=app --cov-branch \
+  --cov-report=json:coverage.json \
+  --cov-report=term-missing -q
+
+# 2. Collect cyclomatic complexity
+.venv/bin/python3 -m radon cc app/ --json > complexity.json
+
+# 3. Compute CRAP scores (flagged functions only, threshold 30)
+python3 scripts/crap_score.py \
+  --coverage coverage.json \
+  --complexity complexity.json
+
+# Optional: exit 1 if any function exceeds 100 (high-risk gate)
+python3 scripts/crap_score.py --fail-over 100
+```
+
+The script lives at `scripts/crap_score.py` in the repo root.
+
+### CI integration
+
+The **CRAP Report** workflow (`.github/workflows/crap-report.yml`) runs on every PR:
+
+- Runs for all 18 backend components in parallel.
+- Collects branch coverage + cyclomatic complexity per component.
+- Computes CRAP scores and uploads `crap-report-<component>.txt` as a CI artifact.
+- **Does not gate the PR** — report-only mode, mirroring the coverage policy above.
+
+To view a report: open the PR → **Checks** tab → `CRAP Report` run → **Artifacts**.
+
+### Interpretation guide
+
+A high CRAP score on a function means: *if a defect exists in this function, tests are unlikely to
+catch it*. That is especially relevant in this codebase because much of the application logic is
+AI-generated — complexity combined with low coverage is where silent regressions hide.
+
+Common patterns to watch for:
+
+| Pattern | Typical cause | Fix |
+|---|---|---|
+| CC ≥ 10, coverage = 0% | LLM-generated router or cascade logic, never unit-tested | Add unit tests covering the branching paths |
+| CC ≥ 5, coverage < 30% | Helper function called only through E2E, no unit coverage | Extract and test the logic unit; E2E does not feed CRAP |
+| CC = 1, CRAP = 2 | Trivial function, no action | None |
+
+### Scope and limitations
+
+- **Python backends only.** No frontend test infrastructure exists yet; CRAP measurement for
+  TypeScript would require adding `vitest` + `@vitest/coverage-v8` (tracked separately).
+- **Unit coverage only.** E2E and integration tests run against a live stack over HTTP — they cannot
+  be instrumented for per-function branch coverage. The CRAP score is conservative; actual runtime
+  coverage may be higher.
+- **Branch coverage required.** `--cov-branch` is mandatory. Line coverage alone overstates coverage
+  and underestimates CRAP on functions with multiple conditional branches.
 

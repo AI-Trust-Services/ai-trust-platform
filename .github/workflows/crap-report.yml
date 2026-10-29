@@ -1,0 +1,108 @@
+name: "CRAP Report"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  crap-report:
+    name: "CRAP Report"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compute CRAP scores for all components
+        env:
+          DATABASE_URL: "postgresql+asyncpg://ci:ci@localhost/ci"
+        run: |
+          COMPONENTS=(
+            admin/backend
+            ai-system-registry/backend
+            alerts/backend
+            audit/backend
+            audit-flush-worker
+            compliance/backend
+            consumers/clickhouse-consumer
+            decision-trace-analyzer/backend
+            document-indexing/backend
+            document-indexing-worker
+            embedding-service
+            ai-test-bed/backend
+            libs/authorization
+            monitoring/backend
+            otel-pipeline/rmq-bridge
+            overview/backend
+            policy-checker-worker
+            users/backend
+          )
+          mkdir -p crap-reports
+          FAILED=()
+          for component in "${COMPONENTS[@]}"; do
+            echo "::group::$component"
+            slug="${component//\//-}"
+            report="crap-reports/crap-report-${slug}.txt"
+
+            if ! (cd "$component" && make setup 2>&1); then
+              echo "✗ $component — setup failed, skipping CRAP" | tee "$report"
+              FAILED+=("$component (setup)")
+              echo "::endgroup::"
+              continue
+            fi
+
+            # Detect the source directory (app/ or the worker module root)
+            if [ -d "$component/app" ]; then
+              SRC="app"
+            else
+              SRC="."
+            fi
+
+            (
+              cd "$component"
+              echo "--- Branch coverage ---"
+              .venv/bin/pytest tests/unit/ \
+                --cov="$SRC" --cov-branch \
+                --cov-report=json:coverage.json \
+                --cov-report=term-missing -q 2>&1 || true
+
+              echo ""
+              echo "--- Cyclomatic complexity ---"
+              .venv/bin/python3 -m radon cc "$SRC" --json > complexity.json 2>&1 || true
+
+              echo ""
+              echo "--- CRAP scores (functions scoring > 30) ---"
+              python3 ../../scripts/crap_score.py \
+                --coverage coverage.json \
+                --complexity complexity.json \
+                --threshold 30 2>&1 || true
+            ) | tee "$report"
+
+            echo "✓ $component — report written to $report"
+            echo "::endgroup::"
+          done
+
+          echo ""
+          echo "=== CRAP Report Summary ==="
+          for report in crap-reports/*.txt; do
+            component=$(basename "$report" .txt | sed 's/crap-report-//' | sed 's/-/\//g')
+            high=$(grep -c "HIGH" "$report" 2>/dev/null || echo 0)
+            medium=$(grep -c "MEDIUM" "$report" 2>/dev/null || echo 0)
+            echo "  $component — HIGH: $high  MEDIUM: $medium"
+          done
+
+          if [ ${#FAILED[@]} -gt 0 ]; then
+            echo ""
+            echo "Components that could not be analysed (setup failure):"
+            for f in "${FAILED[@]}"; do echo "  - $f"; done
+          fi
+
+      - name: Upload CRAP reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crap-reports
+          path: crap-reports/
+          retention-days: 30

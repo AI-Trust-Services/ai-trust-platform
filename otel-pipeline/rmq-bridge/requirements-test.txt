@@ -4,3 +4,6 @@ pydantic==2.10.3
 aio-pika==9.4.3
 pytest==9.0.3
 pytest-asyncio==1.4.0
+
+pytest-cov==5.0.0
+radon==6.0.1
