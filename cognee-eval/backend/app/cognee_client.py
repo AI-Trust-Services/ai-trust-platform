@@ -17,7 +17,9 @@ from cognee.modules.search.types.SearchType import SearchType
 _DATASET = "eu_ai_act_v1"
 
 _THALAMUS_BASE_URL = os.environ.get("THALAMUS_BASE_URL", "")
-_THALAMUS_MODEL = os.environ.get("THALAMUS_MODEL", "mistralai/Mistral-Small-4-119B-2603")
+_THALAMUS_MODEL = os.environ.get(
+    "THALAMUS_MODEL", "mistralai/Mistral-Small-4-119B-2603"
+)
 _THALAMUS_BEARER_TOKEN = os.environ.get("THALAMUS_BEARER_TOKEN", "")
 _LLM_RPM_LIMIT = int(os.environ.get("COGNEE_LLM_RATE_LIMIT_REQUESTS", "60"))
 
