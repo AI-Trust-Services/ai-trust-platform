@@ -207,13 +207,13 @@ Legend: ✅ test covered · ⬜ test missing, functionality exists
 
 | Kind | Scenario | State |
 |---|---|---|
-| Smoke | Registry MFE mounts (heading "AI System Registry") + backend healthy | ✅ `tests/smoke-engineer.spec.ts` |
-| Smoke | Compliance MFE mounts (heading "Assessments") + backend healthy | ✅ `tests/smoke-engineer.spec.ts` |
-| Smoke | Audit MFE mounts (heading "Audit Trail") + backend healthy | ✅ `tests/smoke-engineer.spec.ts` |
-| Smoke | Overview MFE mounts (heading "Compliance Overview") + backend healthy | ✅ `tests/smoke-engineer.spec.ts` |
-| Smoke | Admin MFE mounts (heading "Platform Administration") + backend healthy | ✅ `tests/smoke-admin.spec.ts` |
-| Smoke | Users/IAM MFE mounts (heading "Users & Roles") + backend healthy | ✅ `tests/smoke-admin.spec.ts` |
-| Deep | AI Engineer registers a new system end-to-end (form → toast → list row) | ✅ `tests/registry-register.spec.ts` |
+| Smoke | Registry MFE mounts (heading "AI System Registry") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
+| Smoke | Compliance MFE mounts (heading "Assessments") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
+| Smoke | Audit MFE mounts (heading "Audit Trail") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
+| Smoke | Overview MFE mounts (heading "Compliance Overview") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
+| Smoke | Admin MFE mounts (heading "Platform Administration") + backend healthy | ✅ `tests/playwright/tests/smoke-admin.spec.ts` |
+| Smoke | Users/IAM MFE mounts (heading "Users & Roles") + backend healthy | ✅ `tests/playwright/tests/smoke-admin.spec.ts` |
+| Deep | AI Engineer registers a new system end-to-end (form → toast → list row) | ✅ `tests/playwright/tests/registry-register.spec.ts` |
 
 "Mounted" asserts the view's stable heading is visible; "healthy" asserts the red health banner
 ("Backend is unavailable…") is absent. Selectors are user-facing (role/label/text) — the frontends
