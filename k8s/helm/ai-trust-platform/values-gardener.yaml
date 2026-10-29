@@ -2,7 +2,7 @@
 # .github/workflows/deploy-gardener.yml. Applied on top of values.yaml with
 # `helm upgrade --install -f values.yaml -f values-gardener.yaml`.
 #
-# All infra services (postgres, rabbitmq, clickhouse, minio, otel, ollama) default
+# All infra services (postgres, rabbitmq, clickhouse, minio, otel) default
 # to ClusterIP in values.yaml, so no serviceType overrides are needed here.
 # Only oauth2-proxy and keycloak need explicit settings because they also configure
 # cookieSecure and are reached via the Ingress instead of a NodePort.

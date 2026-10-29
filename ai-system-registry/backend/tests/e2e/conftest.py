@@ -27,6 +27,7 @@ import httpx
 # but the module-level store-ID resolution would still fail without it.
 os.environ.setdefault("OPENFGA_URL", "http://localhost:8080")
 os.environ.setdefault("OPENFGA_STORE_ID", "test-store-id")
+os.environ.setdefault("ENABLE_BATCH_IMPORT", "true")
 
 os.environ.setdefault("USERS_BACKEND_URL", "http://users-backend:8008")
 
@@ -38,6 +39,9 @@ _TEST_DB = "ai_trust_test"
 _TEST_DATABASE_URL = (
     f"postgresql+asyncpg://{_PG_USER}:{_PG_PASSWORD}@{_PG_HOST}:{_PG_PORT}/{_TEST_DB}"
 )
+# Set DATABASE_URL at module level so ai_trust_persistence can be imported
+# during test collection (it reads this env var on import, before e2e_setup runs).
+os.environ.setdefault("DATABASE_URL", _TEST_DATABASE_URL)
 _ALEMBIC_INI = Path(__file__).parents[4] / "libs" / "persistence" / "alembic.ini"
 _ALEMBIC_BIN = Path(__file__).parents[2] / ".venv" / "bin" / "alembic"
 

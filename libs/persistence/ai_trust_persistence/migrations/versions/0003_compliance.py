@@ -1,5 +1,5 @@
 """Compliance tables: frameworks, assessments, obligations, controls, evidence,
-control_obligations, evidence_controls, evidence_obligations (+ seed 3 frameworks)
+control_obligations, evidence_controls, evidence_obligations (+ seed EU AI Act framework)
 
 Revision ID: 0003
 Revises: 0002
@@ -32,20 +32,6 @@ _SEED_FRAMEWORKS = [
         "name": "EU AI Act",
         "version": "2024 (in force Aug 2026)",
         "description": "EU Regulation on Artificial Intelligence. Risk-tiered obligations for providers and deployers of AI systems.",
-        "enabled": True,
-    },
-    {
-        "id": "FRM-NIST-AI-RMF",
-        "name": "NIST AI RMF",
-        "version": "1.0 (2023)",
-        "description": "NIST AI Risk Management Framework. Voluntary framework organised around GOVERN, MAP, MEASURE, and MANAGE functions.",
-        "enabled": True,
-    },
-    {
-        "id": "FRM-ISO-42001",
-        "name": "ISO/IEC 42001",
-        "version": "2023",
-        "description": "International standard for AI management systems (AIMS). Requirements for establishing, implementing, and improving an AI management system.",
         "enabled": True,
     },
 ]

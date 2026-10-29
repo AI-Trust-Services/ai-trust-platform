@@ -107,7 +107,8 @@ async def test_summary_endpoint_returns_decision_record(client):
     ]
 
     with patch(
-        "app.routers.traces.get_client", return_value=_make_fake_ch_with_rows(rows)
+        "app.routers.traces.get_client_for_tenant",
+        return_value=_make_fake_ch_with_rows(rows),
     ):
         resp = await client.get("/v1/traces/abc123/summary")
 
@@ -126,7 +127,8 @@ async def test_summary_endpoint_returns_decision_record(client):
 async def test_summary_endpoint_404_when_no_spans(client):
     """No spans for the trace id → 404, not an empty record."""
     with patch(
-        "app.routers.traces.get_client", return_value=_make_fake_ch_with_rows([])
+        "app.routers.traces.get_client_for_tenant",
+        return_value=_make_fake_ch_with_rows([]),
     ):
         resp = await client.get("/v1/traces/unknown-id/summary")
 
@@ -152,7 +154,8 @@ async def test_summary_endpoint_errored_outcome(client):
     ]
 
     with patch(
-        "app.routers.traces.get_client", return_value=_make_fake_ch_with_rows(rows)
+        "app.routers.traces.get_client_for_tenant",
+        return_value=_make_fake_ch_with_rows(rows),
     ):
         resp = await client.get("/v1/traces/err-trace/summary")
 
@@ -166,7 +169,7 @@ async def test_summary_endpoint_503_when_clickhouse_unavailable(client):
     ch = MagicMock()
     ch.query.side_effect = RuntimeError("connection refused")
 
-    with patch("app.routers.traces.get_client", return_value=ch):
+    with patch("app.routers.traces.get_client_for_tenant", return_value=ch):
         resp = await client.get("/v1/traces/any-id/summary")
 
     assert resp.status_code == 503
@@ -179,7 +182,7 @@ async def test_list_traces_503_when_clickhouse_unavailable(client):
     ch = MagicMock()
     ch.query.side_effect = RuntimeError("connection refused")
 
-    with patch("app.routers.traces.get_client", return_value=ch):
+    with patch("app.routers.traces.get_client_for_tenant", return_value=ch):
         resp = await client.get("/v1/traces")
 
     assert resp.status_code == 503

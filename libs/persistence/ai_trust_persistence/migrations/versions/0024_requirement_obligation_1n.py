@@ -43,7 +43,8 @@ def upgrade() -> None:
     # (DISTINCT ON), then join obligations to get assessment_id in one pass.
     conn = op.get_context().connection
     conn.execute(
-        text("""
+        text(
+            """
         UPDATE requirements r
         SET obligation_id = ro.obligation_id,
             assessment_id = o.assessment_id
@@ -54,7 +55,8 @@ def upgrade() -> None:
         ) ro
         JOIN obligations o ON o.id = ro.obligation_id
         WHERE r.id = ro.requirement_id
-    """)
+    """
+        )
     )
     op.drop_table("requirement_obligations")
 

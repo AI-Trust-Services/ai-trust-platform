@@ -8,7 +8,8 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 ### Run the full platform (local Kubernetes via kind)
 ```bash
-make up      # kind create cluster + bootstrap + build&load images + helm install
+make prereqs     # first time only — installs kind, kubectl, helm, python@3.12, node, ruff via Homebrew
+make up          # kind create cluster + bootstrap + build&load images + helm install
 make down    # helm uninstall + kind delete cluster
 ```
 Manifests live in `k8s/helm/ai-trust-platform/`.
@@ -22,7 +23,7 @@ make lint                                    # format Python in-place + ruff lin
 
 > **Why `make rollout`?** All local images share the same `:local` tag and `imagePullPolicy: IfNotPresent`. `helm upgrade` only restarts pods whose rendered template changes, so Deployments whose manifests are unchanged (e.g. frontends, shell) keep running the old image. `make rollout` force-restarts every Deployment in the namespace so the newly-loaded image is picked up.
 
-**Stateful workloads** (`postgres`, `clickhouse`, `minio`, `ollama`) are `kind: StatefulSet` with `volumeClaimTemplates` (not standalone PVCs). This gives each pod a stable PVC identity (`data-postgres-0` etc.) and lets the CSI driver safely detach/reattach the volume when a pod reschedules to a different node — preventing the RWO deadlock that occurs with plain Deployments on multi-node clusters. `updateStrategy: RollingUpdate` with `maxUnavailable: 1` ensures the old pod fully terminates (releasing the volume) before the new pod starts.
+**Stateful workloads** (`postgres`, `clickhouse`, `minio`) are `kind: StatefulSet` with `volumeClaimTemplates` (not standalone PVCs). This gives each pod a stable PVC identity (`data-postgres-0` etc.) and lets the CSI driver safely detach/reattach the volume when a pod reschedules to a different node — preventing the RWO deadlock that occurs with plain Deployments on multi-node clusters. `updateStrategy: RollingUpdate` with `maxUnavailable: 1` ensures the old pod fully terminates (releasing the volume) before the new pod starts.
 
 **OpenFGA store ID** is distributed as a Kubernetes `Secret` (`openfga-store-id`) rather than a PVC. The `openfga-provision` Job writes the store ID to the Secret; all backends mount it read-only at `/config/store_id` via a `secret` volume. This avoids the RWO multi-node attach conflict that a shared PVC would cause when backends land on different nodes.
 
@@ -55,7 +56,9 @@ make test-e2e            # requires Postgres: make up or docker run postgres
 make test                # all tests
 ```
 - `tests/unit/` — pure unit tests, no DB
-- `tests/e2e/` — full stack via ASGITransport, requires Postgres only (no running server); auto-creates `ai_trust_test` DB and runs migrations on first run
+- `tests/e2e/` — full stack via ASGITransport; auto-creates `ai_trust_test` DB and runs Postgres migrations. Alerts, audit, and monitoring also require ClickHouse (tables created by the conftest with plain `MergeTree()`, no storage policy). All other external services (MinIO, OpenFGA, etc.) are mocked.
+
+**Every backend must have a `tests/e2e/` suite.** E2E tests run automatically as a PR gate via `.github/workflows/microservice-e2e-tests.yml` (job: `Pre-merge check: microservice E2E tests`). Two exceptions to the Postgres requirement: `cognee-eval` uses in-memory SQLite (its own DB, no `ai_trust_persistence`); `decision-trace-analyzer` mocks ClickHouse. When adding a new backend, add a `conftest.py` following the pattern of an existing service of similar type (Postgres-only → see `overview`; Postgres + MinIO mocked → see `compliance`; ClickHouse-only → see `audit`; SQLite + `sys.modules` stubs for heavy packages not installed in CI → see `cognee-eval`).
 
 Workers (`audit-flush-worker`, `policy-checker-worker`, `consumers/clickhouse-consumer`) follow the same pattern but live without a `backend/` subdirectory — `cd <worker-dir>` instead of `cd <component>/backend`.
 
@@ -66,6 +69,8 @@ span services: registry↔compliance shared `ai_systems` data, the evidence→re
 cascade, RBAC denials across backends, and the admin→users internal HTTP call.
 
 ```bash
+make test-e2e                       # per-service e2e tests (kind cluster, forwards Postgres + ClickHouse only)
+make test                           # test-e2e then test-int (full local suite)
 make test-int                       # kind cluster, namespace ai-trust
 ```
 - The `k8s/` make targets are **kind-only** — the namespace is fixed to `ai-trust` and cannot be
@@ -75,8 +80,9 @@ make test-int                       # kind cluster, namespace ai-trust
 - `make test-int` starts the port-forwards, runs pytest, and stops them again **even on failure**.
 - Services are reached via `kubectl port-forward` (`k8s/scripts/forward-ports.sh` / `kill-port-forwards.sh`)
   on their in-cluster ports; every URL is overridable via env var (`REGISTRY_URL`, `COMPLIANCE_URL`, …).
-  The suite covers the 7 backends that expose cross-service contracts — `overview` and `dta` are
-  read-only and out of scope.
+  The suite covers the MVP backends that expose cross-service contracts — `overview` and `dta` are
+  read-only and out of scope, and `monitoring`/`alerts` are `[MVP-off]` (dropped from the port-forward
+  list and the health smoke test; re-add them when GenAI-observability is re-enabled).
 - Auth bypasses oauth2-proxy by setting `X-Forwarded-Preferred-Username` directly, the same pattern the
   per-service e2e tests use. `APP_ADMIN_USERNAME` (default `admin`) selects the platform admin used to
   assign roles.
@@ -89,6 +95,20 @@ make test-int                       # kind cluster, namespace ai-trust
   deliberately has no `pull_request:` trigger, because every job in such a workflow gets pinned to the
   PR as its own check run. Its result never changes the deployment workflow's status.
 - Details → [tests/integration/README.md](tests/integration/README.md).
+
+### On-demand label workflows (deployed-namespace, OIDC)
+Two workflows run against a PR author's **already-deployed** namespace on `ai-trust-test` (add
+`garden-deploy` first), triggered by a PR label. Both authenticate through oauth2-proxy with a real
+Keycloak OIDC session cookie — no kubeconfig or port-forward (contrast `tests/integration/`). Neither
+is a PR gate.
+- **`e2e-test`** → `.github/workflows/e2e-system-tests.yml` runs `tests/e2e_system/` (black-box OIDC
+  E2E: auth, registration, self-assessment, classification) against the deployed namespace.
+- **`langfuse-test`** → `.github/workflows/langfuse-benchmark.yml` runs
+  `tests/langfuse_benchmark/benchmark.py`: batch-imports the 339 ground-truth scenarios via
+  `POST /api/registry/v1/intake/batch` (needs `ENABLE_BATCH_IMPORT=true`, set in
+  `k8s/env/ai-trust-test/.env`), classifies each through `/classify/evaluate`, and pushes a scored
+  dataset + experiment run to Langfuse (`LANGFUSE_*` repo secrets). Details →
+  [tests/langfuse_benchmark/README.md](tests/langfuse_benchmark/README.md).
 
 ### Pre-push checks
 Run these from the repo root before pushing to avoid CI failures:
@@ -244,6 +264,63 @@ Static HTML + `luigi-config.js` served by nginx (Luigi core from CDN). Nav nodes
 - If a pod restarts and nginx returns 502, run `kubectl rollout restart deployment/shell -n ai-trust` to clear the stale DNS cache.
 - **Sidebar** — `responsiveNavigation: "Fiori3"`, custom animated hamburger injected via `luigiAfterInit`, `sideNavigation.collapsed: true`. Alerts is `hideFromNav: true` (reached via bell badge). `defaultChildNode: "overview"`. "Sign out" button injected into the shell bar, links to `/oauth2/sign_out`.
 
+## MVP scope — disabling services without removing code
+
+The platform ships a trimmed **MVP scope**: **Core governance** (registry,
+compliance, overview, users/IAM, admin, shell + Postgres/Keycloak/OpenFGA/MinIO),
+the **RAG indexing backend** (document-indexing, embedding-service), and
+the **Audit** trail (audit backend/frontend + audit-flush-worker + ClickHouse).
+**Disabled** for the MVP: the **AI test-bed** MFE (ai-test-bed backend/frontend +
+its `testbed-seed` Job — the RAG layer it consumed, document-indexing +
+embedding-service, stays enabled), **GenAI-Observability** (monitoring, alerts,
+decision-trace-analyzer) and the **OTLP telemetry pipeline**
+(otel-collector, otel-rmq-bridge, otel-clickhouse-consumer). Disabling the OTLP
+pipeline also drops the **RabbitMQ** StatefulSet — it has no other consumer (the
+OTLP pipeline is RabbitMQ's only user; the indexing worker polls Postgres, not
+RabbitMQ). **ClickHouse** stays enabled because Audit reads and writes it
+(monitoring/alerts/dta are its only other readers).
+
+**Nothing is deleted** — every disabled component's source, Dockerfile, template
+and manifest entry stays in the repo. A service is switched off by config across
+the layers below; grep `[MVP-off]` to find every toggle.
+
+| Layer | File | How it's toggled |
+|---|---|---|
+| Build (CI) | `docker-bake.hcl` `group "default"` | image commented out of the build list (the `target` block stays — build it ad-hoc with `docker buildx bake <name>`) |
+| OCM (CI) | `.ocm/component-constructor.yaml` | `ociImage` resource commented out — **mandatory**: `ocm add componentversions` resolves the digest of every listed image, so a listed-but-unbuilt image aborts the deploy with `cannot determine digest: ... not found`. Must mirror the bake list exactly |
+| Build (kind) | `k8s/scripts/build-and-load-images.sh` | `MVP_DISABLED` guard in `build()`; override with `--service <name>` |
+| Deploy (MFE pairs) | `values.yaml` `components[].enabled` + `templates/components.yaml` | `enabled: false` skips rendering. Guard is `ne $c.enabled false` → absent/true still renders (existing components need no flag) |
+| Deploy (infra/workers) | `values.yaml` `rabbitmq`/`otel`/`policyChecker` `.enabled` | each template wrapped in `{{- if .Values.<x>.enabled }}`. **ClickHouse and the audit-flush-worker are never gated** — Audit is always-on, so ClickHouse, the `clickhouse-migrate` Job (jobs.yaml), and `audit-flush-worker` render unconditionally |
+| Seed Jobs | `templates/jobs.yaml` | a Job that reuses a disabled MFE image must be gated too, else it ImagePullBackOffs. The `testbed-seed` Job is wrapped in a `{{- if $testbedEnabled }}` that scans `components` for `ai-test-bed` with `ne .enabled false` — so flipping the `ai-test-bed` component flag toggles the seed Job with it |
+| Proxy | `shell/nginx.conf` | the service's `location` blocks commented out — **mandatory**: static `proxy_pass` hostnames resolve at nginx startup, so a missing upstream stops the shell (the entry point) from starting at all. Contrast the `/api/cognee/` block, which uses `resolver` + a variable to defer resolution and tolerate absence |
+| Nav | `shell/public/luigi-config.js` | the nav node object commented out; the shell-bar alerts bell injection block (linked to the removed `/home/alerts` node) is also commented out |
+
+**Re-enabling a service:** flip its `enabled` flag(s) in `values.yaml`, un-comment its target in `docker-bake.hcl`
+`group "default"`, un-comment its `ociImage` entry in `.ocm/component-constructor.yaml` (must match the bake list —
+an unbuilt-but-listed image breaks `ocm add componentversions`),
+remove it from the `MVP_DISABLED` array in `build-and-load-images.sh`, and un-comment its entries in
+`shell/nginx.conf` and `shell/public/luigi-config.js`.
+Then rebuild the image and `make build && make upgrade && make rollout`.
+
+**OCM descriptor tracks the build list:**
+- `.ocm/component-constructor.yaml` lists only the images that are actually built.
+  Every `[MVP-off]` image is commented out here too, mirroring `docker-bake.hcl`.
+  `ocm transfer` never pulls images (it runs without `--copy-resources`), but the
+  earlier `ocm add componentversions` step **resolves the digest of every listed
+  image** — so a listed-but-unbuilt image is *not* harmless: it aborts the build
+  with `cannot determine digest: oci artifact ... not found`. A *missing* OCM entry
+  for a *deployed* image ships broken (see "Adding a new service"), so the rule is:
+  an image must be in this file **iff** it is in `docker-bake.hcl` `group "default"`.
+  When re-enabling a service, un-comment its entry here in the same step you
+  un-comment it in `docker-bake.hcl`.
+
+**Deliberately left untouched:**
+- `tests/integration/` still exercises the enabled backends against an MVP
+  deployment. The `[MVP-off]` backends (`monitoring`, `alerts`) have been
+  dropped from its port-forward list and health smoke test so the suite runs
+  clean against the MVP; the cross-service contract tests only ever touched
+  enabled backends. It remains **not a PR gate** (see "Integration tests" above).
+
 ## Components
 
 Each component has `frontend/` (nginx, internal) and `backend/` (FastAPI, internal). All traffic routes through `:8080` via the shell proxy. **Per-component detail lives in each component's own `CLAUDE.md`** (linked below) and loads on demand when you work in that directory.
@@ -308,7 +385,7 @@ Rule-based alerting. Rules in Postgres, events in ClickHouse. Includes the `poli
 Trace viewer for GenAI spans, reads ClickHouse only. Details → [decision-trace-analyzer/CLAUDE.md](decision-trace-analyzer/CLAUDE.md).
 
 ### compliance/ (port 8007, `/api/compliance/`)
-Governance chain — assessments, obligations, requirements, evidence for EU AI Act / NIST / ISO. Details → [compliance/CLAUDE.md](compliance/CLAUDE.md).
+Governance chain — assessments, obligations, requirements, evidence for the EU AI Act. Details → [compliance/CLAUDE.md](compliance/CLAUDE.md).
 
 ### audit/ (port 8009, `/api/audit/`)
 Immutable audit trail across all platform actions (Postgres buffer → ClickHouse archive). Includes the `audit-flush-worker`. Details → [audit/CLAUDE.md](audit/CLAUDE.md).
@@ -322,8 +399,8 @@ Platform administration — SMTP mail config, general platform settings, brandin
 ### document-indexing/ (port 8011, `/api/indexing/`) — k8s-only
 Reusable document indexing + retrieval service (chunk → embed → hybrid dense+FTS retrieval with traceable source refs), served by `document-indexing/backend`, `document-indexing-worker`, and `embedding-service`. **Backend-only** — no frontend MFE in this component; the UI lives in `ai-test-bed/`. **k8s/kind + Gardener only — no docker-compose entry.** Details → [document-indexing/CLAUDE.md](document-indexing/CLAUDE.md).
 
-### ai-test-bed/ (port 8013, `/api/ai-test-bed/`) — k8s-only
-Interactive EU AI Act classification test harness that consumes document-indexing (retrieval over HTTP) and the registry (classification over HTTP). Hosts the document-management UI and the test-bed run UI in a single MFE at `/ai-test-bed/`. **k8s/kind + Gardener only — no docker-compose entry.** Details → [ai-test-bed/CLAUDE.md](ai-test-bed/CLAUDE.md).
+### ai-test-bed/ (port 8013, `/api/ai-test-bed/`) — k8s-only — **[MVP-off]**
+Interactive EU AI Act classification test harness that consumes document-indexing (retrieval over HTTP) and the registry (classification over HTTP). Hosts the document-management UI and the test-bed run UI in a single MFE at `/ai-test-bed/`. **k8s/kind + Gardener only — no docker-compose entry.** **Disabled in the MVP** (backend/frontend images + `testbed-seed` Job toggled off; the RAG layer it consumed stays enabled — grep `[MVP-off]`). Details → [ai-test-bed/CLAUDE.md](ai-test-bed/CLAUDE.md).
 
 ## Environment variables
 
@@ -339,7 +416,8 @@ See `.env.example` for the full list, defaults, and per-service mapping. Notable
 - **alerts** — `ALERT_POLL_INTERVAL` (10 dev, 60+ prod).
 - **external read API** — `EXTERNAL_API_TOKEN` (required to enable `/api/registry/v1/external/*`; the static bearer token the off-platform consumer presents as `Authorization: Bearer <token>`; unset → those endpoints return 503), `EXTERNAL_API_SERVICE_PRINCIPAL` (default `svc-external-api`); the registry reuses `INDEXING_BACKEND_URL` for the context-retrieval proxy. Both the registry (validates) and the admin backend (surfaces the token read-only in Settings) read these. **Single-tenant only** — in `jwt` tenancy mode the tenant middleware 401s the bearer path (see the external read API note above).
 - **admin SMTP** — `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/SSL/STARTTLS` seed the `platform_settings` row on first startup of the admin backend. After that, the DB value wins — changes via the Admin UI persist across redeploys. The registry backend also reads these same vars directly from the environment for its fire-and-forget notifications (it does not read from `platform_settings`).
-- **registry LLM** — `LLM_PROVIDER` (`stub`/`ollama`/`external`), `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_VISION_MODEL`; external provider `AI_CLIENT_ID/SECRET`, `AI_AUTH_URL`, `AI_API_URL`, `AI_RESOURCE_GROUP`, `AI_DEPLOYMENT_ID`, `AI_API_VERSION`; `ASSIST_TURN_CAP` (12), `ASSIST_MAX_TEXT_LENGTH` (15000).
+- **registry LLM (Thalamus)** — `THALAMUS_BASE_URL` (unset or `"stub"` = offline deterministic stub for dev/CI; set to the gateway URL incl. `/v1` for real inference, e.g. `https://api.thalamus.eu-de-1.cloud.sap/v1`), `THALAMUS_BEARER_TOKEN` (static token sent as `Authorization: Bearer`; required when a real URL is set — backend fails fast if empty), `THALAMUS_MODEL`, `THALAMUS_VISION_MODEL` (defaults to `THALAMUS_MODEL`); `ASSIST_TURN_CAP` (12), `ASSIST_MAX_TEXT_LENGTH` (15000). Thalamus is OpenAI-compatible and is the **single inference backend** for both the registry and cognee-eval; switching models is a config-only change to `THALAMUS_MODEL` (no code change).
+- **Langfuse tracing** (optional, all backends via `ai-trust-env`) — `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` (blank = tracing disabled; keys are GitHub secrets overridden by CI). A Langfuse project is fixed by its key pair, so per-deployment separation is by the Langfuse `environment`: `LANGFUSE_TRACING_ENVIRONMENT` is **auto-derived from the deploy namespace** (= the GitHub username of whoever deployed) by `k8s/scripts/bootstrap.sh` and the CI deploy — never set it by hand.
 
 ## otel-pipeline/
 

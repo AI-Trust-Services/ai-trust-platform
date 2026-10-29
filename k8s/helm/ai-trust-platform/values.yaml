@@ -66,6 +66,7 @@ postgres:
   serviceType: ClusterIP
 
 rabbitmq:
+  enabled: false # [MVP-off] only the OTLP telemetry pipeline uses RabbitMQ
   image: rabbitmq:3.13-management-alpine
   serviceType: ClusterIP
 
@@ -93,10 +94,12 @@ oauthProxy:
   cookieSecure: false # true on Gardener - Ingress terminates TLS in front of it
 
 otel:
+  enabled: false # [MVP-off] GenAI telemetry pipeline (collector + rmq-bridge + consumer)
   collectorImage: otel/opentelemetry-collector-contrib:0.102.0
   serviceType: ClusterIP # NodePort on kind (values-kind.yaml) for external OTLP ingestion
 
 policyChecker:
+  enabled: false # [MVP-off] alerts evaluation worker
   pollInterval: "10"
 
 auditFlush:
@@ -117,23 +120,10 @@ indexing:
     storageSize: 10Gi # embedding model + Docling models cached on the HF-cache PVC
     serviceType: ClusterIP
 
-# ── Ollama (optional local LLM for AI-assisted registration) ──
-# Disabled by default: the registry backend defaults to the offline `stub`
-# provider. To use a real model, set enabled: true here AND LLM_PROVIDER=ollama
-# in .env (flows into the ai-trust-env Secret). The model is swappable via
-# LLM_MODEL / LLM_VISION_MODEL in that Secret — the ollama-pull Job reads the
-# same vars, so the puller and the backend always agree.
-ollama:
-  enabled: false
-  image: ollama/ollama:latest
-  storageSize: 20Gi # model blobs live here; qwen2.5:7b + a vision model easily exceed 10Gi
-  serviceType: ClusterIP # NodePort on kind (values-kind.yaml)
-
 # Cognee eval — graph-based grounded Q&A over the EU AI Act.
-# Mirrors the compose `ollama` profile; disabled by default.
-# Requires ollama.enabled: true (or an external LLM endpoint via LLM_ENDPOINT).
+# Enabled by default with the digest-pinned read-only graph below; uses Thalamus for generation (THALAMUS_* in the Secret).
 cogneeEval:
-  enabled: false
+  enabled: true
   backendPort: 8014
   dataStorageSize: 5Gi # cognee graph + vector + SQLite data
   # Read-only production mode. When true the workload is a Deployment whose
@@ -141,8 +131,8 @@ cogneeEval:
   # init container, COGNEE_READONLY=true gates off the ingest/feedback routers,
   # and no graph mutation is possible. Build/test leaves this false (StatefulSet
   # + PVC, full feedback loop). See cognee-eval/CLAUDE.md.
-  readOnly: false
-  graphImage: "" # prod only — pin by DIGEST: ghcr.io/<owner>/ai-trust-platform/cognee-graph@sha256:...
+  readOnly: true
+  graphImage: "ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph@sha256:54e89ad8e5887b007c70f15671a532e2ce6b9b8568782e57ac7c775ab84280f8"
 
 # ── the 7 near-identical backend+frontend MFE pairs ──
 # dependsOnJobs: Job names that must Complete before this backend starts
@@ -167,6 +157,7 @@ components:
     openfgaConfig: true
 
   - name: monitoring
+    enabled: false # [MVP-off] GenAI-Observability
     backendPort: 8003
     rootPath: /api/monitoring
     extraEnv:
@@ -189,6 +180,7 @@ components:
     openfgaConfig: false
 
   - name: alerts
+    enabled: false # [MVP-off] GenAI-Observability
     backendPort: 8005
     rootPath: /api/alerts
     extraEnv:
@@ -212,6 +204,7 @@ components:
     openfgaConfig: true
 
   - name: decision-trace-analyzer
+    enabled: false # [MVP-off] GenAI-Observability
     backendPort: 8006
     rootPath: /api/dta
     extraEnv:
@@ -255,6 +248,7 @@ components:
     openfgaConfig: true
 
   - name: ai-test-bed
+    enabled: false  # [MVP-off] AI test-bed MFE (RAG/document-indexing stays enabled)
     backendPort: 8013
     rootPath: /api/ai-test-bed
     extraEnv:

@@ -41,7 +41,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.gardener_cluster || 'auto' }}-${{ inputs.namespace || 'default' }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -199,6 +199,9 @@ jobs:
           smtp_password: ${{ secrets.SMTP_PASSWORD }}
           users_backend_client_secret: ${{ secrets.USERS_BACKEND_CLIENT_SECRET }}
           dev_user_password: ${{ secrets.DEV_USER_PASSWORD }}
+          thalamus_bearer_token: ${{ secrets.THALAMUS_BEARER_TOKEN }}
+          langfuse_public_key: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          langfuse_secret_key: ${{ secrets.LANGFUSE_SECRET_KEY }}
 
       - name: Resolve integration-tests status on failed deploy
         if: failure() || cancelled()

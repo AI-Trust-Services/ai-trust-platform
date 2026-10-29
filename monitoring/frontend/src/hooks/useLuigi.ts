@@ -3,7 +3,7 @@ import LuigiClient from "@luigi-project/client";
 
 export function useLuigiInit(onInit: (ctx: unknown) => void) {
   useEffect(() => {
-    const id = LuigiClient.addInitListener((ctx) => onInit(ctx));
+    const id = LuigiClient.addInitListener((ctx) => { onInit(ctx); LuigiClient.uxManager().hideLoadingIndicator(); });
     return () => { LuigiClient.removeInitListener(id); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 }

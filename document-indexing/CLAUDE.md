@@ -6,7 +6,7 @@ Reusable document indexing + retrieval for an AI system: uploaded documents are 
 Three cooperating workloads (sibling top-level dirs, like the other workers):
 - **`document-indexing/backend`** (FastAPI, port 8011) — upload, status, retrieval API.
 - **`document-indexing-worker`** — DB-polling indexer (no HTTP port; pattern mirrors `audit-flush-worker`). Claims `document_versions` rows in status `pending` (`FOR UPDATE SKIP LOCKED`), parses with Docling, embeds via the embedding service, writes chunks, sets `indexed`/`failed`. The `status` column is the queue and the single source of truth for progress. On startup it requeues any row stuck in `processing` (left behind by a crashed pod — the claim commits `processing` before the long parse/embed/store, so without this reset it would never be retried); safe for the single replica that runs today, a multi-replica setup would need a heartbeat/lease instead. Multi-tenant (`TENANCY_MODE=jwt`): mirrors `policy-checker-worker` — `OWNER_DATABASE_URL` enumerates the `tenant_*` schemas and each poll runs once per tenant with `tenant_id_var` set, so Postgres queries route to that tenant's schema and `minio_client` resolves that tenant's bucket; unset → a single unscoped pass (single-tenant / local dev).
-- **`embedding-service`** (FastAPI, port 8012) — loads the `EMBED_MODEL` once and serves `POST /embed` to both the worker (index time, `kind=passage`) and the backend (query time, `kind=query`), so vectors are identical. A small model registry selects the backend + E5 input prefixes: default `intfloat/multilingual-e5-small` (384-dim, `sentence-transformers`, needs `query:`/`passage:` prefixes — applied server-side by `kind`), also `intfloat/multilingual-e5-base` (768-dim) and `BAAI/bge-m3` (1024-dim, `FlagEmbedding`, no prefix). Helm `StatefulSet` with an HF-cache PVC (analogue of `ollama.yaml`).
+- **`embedding-service`** (FastAPI, port 8012) — loads the `EMBED_MODEL` once and serves `POST /embed` to both the worker (index time, `kind=passage`) and the backend (query time, `kind=query`), so vectors are identical. A small model registry selects the backend + E5 input prefixes: default `intfloat/multilingual-e5-small` (384-dim, `sentence-transformers`, needs `query:`/`passage:` prefixes — applied server-side by `kind`), also `intfloat/multilingual-e5-base` (768-dim) and `BAAI/bge-m3` (1024-dim, `FlagEmbedding`, no prefix). Helm `StatefulSet` with an HF-cache PVC.
 
 The frontend MFE (document management + AI Test Bed UI) lives in **`ai-test-bed/frontend`** — that MFE makes API calls to this backend for all document operations.
 
@@ -25,4 +25,22 @@ The frontend MFE (document management + AI Test Bed UI) lives in **`ai-test-bed/
 - `POST /retrieve` `{ai_system_id, query, k, mode?, rrf_k?}` (`systems:read`) — ranked passages (`rank`) + source refs. `mode` ∈ `hybrid` (default; dense + FTS fused with RRF), `dense`, `fts`; `rrf_k` (default 60) tunes the fusion constant (hybrid only). Single-channel modes order by that channel's own score and skip the other channel. Each passage also carries optional per-channel diagnostics (`dense_rank`/`dense_score`, `fts_rank`/`fts_score`, `rrf_score`) surfaced by the AI Test Bed advanced panel; non-UI consumers ignore them.
 - `DELETE /documents/{id}` (`systems:write`) — **hard delete**: removes the document row (ON DELETE CASCADE drops its versions + chunks) and purges every version's original from MinIO. Nothing of a deleted document is retained. (The `deleted_at` column is retained but now vestigial — hard delete never sets it; the `deleted_at IS NULL` filters stay as always-true no-ops.)
 
-**Env** — `EMBED_MODEL` (`intfloat/multilingual-e5-small`; also `-base` / `BAAI/bge-m3`), `EMBED_USE_FP16`, `INDEXING_BUCKET`, `INDEXING_POLL_INTERVAL`, `EMBEDDING_SERVICE_URL` (backend/worker → `http://embedding-service:8012`), `OWNER_DATABASE_URL` (worker, multi-tenant only — enumerates `tenant_*` schemas for the per-tenant poll; unset → single unscoped pass).
+**Env** — `EMBED_MODEL` (`intfloat/multilingual-e5-small`; also `-base`), `INDEXING_BUCKET`, `INDEXING_POLL_INTERVAL`, `EMBEDDING_SERVICE_URL` (backend/worker → `http://embedding-service:8012`), `OWNER_DATABASE_URL` (worker, multi-tenant only — enumerates `tenant_*` schemas for the per-tenant poll; unset → single unscoped pass).
+
+## Testing
+
+```bash
+cd document-indexing/backend
+make setup      # creates .venv, installs requirements-test.txt + libs/persistence + libs/logging + libs/authorization
+make test-e2e   # requires Postgres on localhost:5432
+make test-unit
+```
+
+The e2e suite (`tests/e2e/`) uses `httpx.AsyncClient` + `ASGITransport` against `ai_trust_test` Postgres (auto-created, migrations applied). No real MinIO or embedding service is needed.
+
+**Key conftest design** (`tests/e2e/conftest.py`):
+- MinIO env vars are set at module level before any `app` import (the minio client reads them at import time).
+- `ai_trust_persistence.database` engine is replaced with a `NullPool` engine pointing at `ai_trust_test` so each request gets a fresh connection with no idle-pool conflicts.
+- All `app.minio_client` functions (`ensure_bucket`, `upload_file`, `get_presigned_url`, `delete_file`) are patched with `AsyncMock` for the lifetime of the session via `patch()` context managers in `e2e_setup`.
+- OpenFGA is bypassed by replacing `ai_trust_authorization.openfga_client.check` with an always-true coroutine and overriding `get_current_user` via `app.dependency_overrides`.
+- The `system_id` fixture creates an `AISystem` row directly via SQLAlchemy — `tier` must be set (it is `NOT NULL` with no default).

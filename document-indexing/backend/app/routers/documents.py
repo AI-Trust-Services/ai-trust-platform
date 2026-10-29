@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import AISystem, Document, DocumentVersion
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import minio_client
 from app.ids import new_id
@@ -391,6 +390,29 @@ async def delete_document(document_id: str) -> dict:
     return {"deleted": True, "document_id": document_id}
 
 
+@router.delete(
+    "/systems/{system_id}/documents",
+    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
+)
+async def delete_system_documents(system_id: str) -> dict:
+    """Hard-delete every document for an AI system (cascade drops versions + chunks,
+    MinIO originals purged). The registry's ``ai_systems`` row and these documents live
+    in separate services with no FK, so deleting a system there cannot cascade here —
+    the registry/UI calls this to avoid orphaning documents when a system (e.g. an
+    abandoned draft registration) is removed. Idempotent: an unknown or document-less
+    system returns a zero count, never 404."""
+    async with SessionLocal() as session:
+        keys, count = await _purge_system_documents(session, system_id)
+        await session.commit()
+    for key in keys:
+        await minio_client.delete_file(key)
+    logger.info(
+        "system.documents_deleted",
+        extra={"system_id": system_id, "count": count},
+    )
+    return {"deleted": True, "system_id": system_id, "documents_deleted": count}
+
+
 async def _purge_document(session: AsyncSession, document_id: str) -> list[str]:
     """Delete the document row (cascading to its versions + chunks) and return the
     MinIO keys of every version so the caller can purge the originals. Raises 404 if
@@ -413,3 +435,35 @@ async def _purge_document(session: AsyncSession, document_id: str) -> list[str]:
     )
     await session.delete(doc)  # ON DELETE CASCADE removes versions + chunks
     return keys
+
+
+async def _purge_system_documents(
+    session: AsyncSession, system_id: str
+) -> tuple[list[str], int]:
+    """Delete every document for a system (each cascading to its versions + chunks) and
+    return (all version MinIO keys, document count). Empty/unknown system → ([], 0)."""
+    docs = list(
+        (
+            await session.execute(
+                select(Document).where(Document.ai_system_id == system_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not docs:
+        return [], 0
+    keys = list(
+        (
+            await session.execute(
+                select(DocumentVersion.minio_key).where(
+                    DocumentVersion.document_id.in_([d.id for d in docs])
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for doc in docs:
+        await session.delete(doc)  # ON DELETE CASCADE removes versions + chunks
+    return keys, len(docs)

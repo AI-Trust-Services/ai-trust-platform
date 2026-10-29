@@ -4,7 +4,7 @@ Dispatches on file extension: PDF (pypdf), DOCX (python-docx), PPTX (python-pptx
 TXT/MD (decode), images (Pillow → resize longest side ≤1568px → base64 for vision).
 Text is truncated to ~15 000 chars. Returns a ParsedDoc carrying either extracted
 text or a base64 image payload, plus an ``is_image`` flag so the router picks
-LLM_MODEL vs LLM_VISION_MODEL.
+THALAMUS_MODEL vs THALAMUS_VISION_MODEL.
 """
 
 from __future__ import annotations

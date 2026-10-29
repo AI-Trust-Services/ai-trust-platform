@@ -1,14 +1,15 @@
+PYTHON := $(shell command -v python3.12 || command -v python3)
 .PHONY: setup test test-unit test-e2e
 
 # requirements.txt has `-e /app/libs/...` lines that only resolve inside the
 # Docker image. For local dev we grep those out and install the local libs
 # editable from the relative repo path instead.
 setup:
-	python3.12 -m venv .venv
+	$(PYTHON) -m venv .venv
 	grep -v '^-e /app/libs/' requirements.txt > .requirements.local.txt
 	.venv/bin/pip install -r .requirements.local.txt
 	.venv/bin/pip install -r requirements-test.txt
-	.venv/bin/pip install -e ../../libs/clickhouse -e ../../libs/logging
+	.venv/bin/pip install -e ../../libs/clickhouse -e ../../libs/logging -e ../../libs/authorization -e ../../libs/tenancy
 	rm -f .requirements.local.txt
 
 test:

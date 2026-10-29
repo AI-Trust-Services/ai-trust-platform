@@ -1,4 +1,4 @@
-# PyPI deps only. FlagEmbedding/torch are NOT installed here — the unit test hits
+# PyPI deps only. sentence-transformers/torch are NOT installed here — the unit test hits
 # /health without triggering model load (no lifespan), so the heavy model stays out
 # of the test lane.
 fastapi==0.115.6

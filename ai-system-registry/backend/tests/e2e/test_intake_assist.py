@@ -1,8 +1,8 @@
 """E2E tests for the AI-assisted registration endpoints.
 
-Uses the stub LLM provider (LLM_PROVIDER=stub, the default) so no network is
-required. The stub drives a deterministic TalentMatch recruiting sequence and
-infers is_employment_related=True at completion.
+Uses the stub LLM backend (THALAMUS_BASE_URL unset or "stub", the default) so no
+network is required. The stub drives a deterministic TalentMatch recruiting sequence
+and infers is_employment_related=True at completion.
 
 Owner flow:
   POST /v1/intake/assist/turn    — stateless conversation turn
@@ -380,11 +380,18 @@ async def test_full_owner_flow_registers_high_risk_system(
         "assignee_username": _ENGINEER,
         "classification_rationale": inferred_flags,
     }
-    for flag in inferred_flags:
-        intake_payload[flag["flag"]] = flag["value"]
 
     r = await client.post("/v1/intake", json=intake_payload, headers=_HEADERS)
     assert r.status_code == 201
-    body = r.json()
-    assert body["system"]["tier"] == "high"
-    assert body["classification"]["tier"] == "high"
+    system_id = r.json()["system"]["id"]
+
+    # Intake always creates a pending stub — set the inferred flags via PUT,
+    # which runs classify() and updates the tier in the same call.
+    flag_updates = {flag["flag"]: flag["value"] for flag in inferred_flags}
+    r = await client.put(
+        f"/v1/systems/{system_id}",
+        json=flag_updates,
+        headers=_HEADERS,
+    )
+    assert r.status_code == 200
+    assert r.json()["tier"] == "high"

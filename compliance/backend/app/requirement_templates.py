@@ -6,25 +6,17 @@ from this flat dict, further filtered by the assessment's risk tier *and* the AI
 system's `org_role` (provider vs deployer). Requirements define *how* an obligation is
 met (see Requirement model).
 
-Two template shapes coexist:
+**EU AI Act High/Limited** templates (translated from the authoritative AI Act
+Requirements catalogue): one template per Requirement ID, carrying an explicit
+`requirement_ref` (the Requirement ID, e.g. "P-RM-01"), a `role`
+("provider"/"deployer") and a `risk` token ("High"/"Limited"/"All"). Where the
+source catalogue splits one Requirement ID across several rows, the rows are
+merged into a single requirement and each row's expected evidence is appended to the
+description as an "Expected evidence:" line (there is no separate evidence schema).
 
-- **EU AI Act High/Limited** (translated from the authoritative AI Act Requirements
-  catalogue): one template per Requirement ID, carrying an explicit
-  `requirement_ref` (the Requirement ID, e.g. "P-RM-01"), a `role`
-  ("provider"/"deployer") and a `risk` token ("High"/"Limited"/"All"). Where the
-  source catalogue splits one Requirement ID across several rows, the rows are
-  merged into a single requirement and each row's expected evidence is appended to the
-  description as an "Expected evidence:" line (there is no separate evidence schema).
-
-- **Retained sets** (NIST, ISO): carry a `slug` (AITP-* source id) from which the
-  generator derives `requirement_ref = f"{article_ref}:{slug}"`, plus `risk_category`
-  (always "All") and `category`. These sets have no `role` (they apply to any
-  org_role).
-
-The generator uses `requirement_ref = t.get("requirement_ref") or f"{article_ref}:{slug}"`
-and `risk = t.get("risk") or t["risk_category"]`, so both shapes flow through the
-same filter. Hardcoded for the same reason as obligation_templates.py — the
-regulations are law, not configuration.
+Each template carries an explicit `requirement_ref` and `risk` token. Hardcoded for
+the same reason as obligation_templates.py — the regulations are law, not
+configuration.
 """
 
 from __future__ import annotations
@@ -32,13 +24,12 @@ from __future__ import annotations
 import re
 
 # Which source risk tokens apply to each assessment tier. A control is generated
-# for a tier if its risk/risk_category is "All" or shares any token here. The
-# High/Limited tokens without the "-Risk" suffix come from the AI Act Requirements
-# catalogue; the "-Risk" variants come from the retained AISEC-* library.
+# for a tier if its risk is "All" or shares any token here. The tokens come from
+# the AI Act Requirements catalogue.
 _TIER_RISK_CATEGORIES: dict[str, set[str]] = {
     "prohibited": {"Prohibited"},
-    "high": {"High-Risk", "High"},
-    "limited": {"Limited-Risk", "Limited"},
+    "high": {"High"},
+    "limited": {"Limited"},
     "minimal": set(),  # only "All"-risk controls apply
     "gpai-standard": {"GPAI"},
     "gpai-systemic": {"GPAI", "GPAI-Systemic"},  # systemic is a superset
@@ -48,8 +39,7 @@ _TIER_RISK_CATEGORIES: dict[str, set[str]] = {
 # Per-requirement AI Act article reference, keyed by requirement_ref (= Requirement ID).
 # Derived once from the AI Act Requirements catalogue: the "AI Act Article / Legal
 # Source" column, recitals dropped, "Article(s)" -> "Art.". Attached to each requirement
-# by requirements_for() and aggregated per cluster by cluster_articles(). Retained sets
-# (GPAI/NIST/ISO) have no entry here -> their requirements carry no article.
+# by requirements_for() and aggregated per cluster by cluster_articles().
 _REQUIREMENT_ARTICLES: dict[str, str] = {
     "P-RM-01": "Art. 9 (1)(2)",
     "P-RM-02": "Art. 9 (2)(a), (b)",
@@ -869,115 +859,6 @@ _REQUIREMENT_TEMPLATES: dict[str, list[dict]] = {
             "description": "Disclose that text intended for publication to inform the public on matters of public interest has been artificially generated or manipulated where the organization deploys an AI system that generates or manipulates such text.\n\nExpected evidence: document — design or technical documentation with appropriate disclosure of artificial generation.",
         },
     ],
-    # =====================================================================
-    # Retained sets (unchanged) — keyed by cluster_id (= article_ref).
-    # These carry a `slug` (requirement_ref = "{article_ref}:{slug}") and
-    # `risk_category` ("All"); they have no `role`, so they apply to any
-    # org_role and any tier. NIST/ISO only — the EU AI Act contributes no
-    # retained sets (its obligations/controls come solely from the AI Act
-    # Requirements catalogue, which covers only High/Limited risk).
-    # =====================================================================
-    # --- NIST AI RMF (tier-independent) ----------------------------------
-    "GOVERN": [
-        {
-            "slug": "AITP-NIST-GOVERN",
-            "category": "general",
-            "risk_category": "All",
-            "title": "AI governance structures",
-            "description": "Establish policies, processes and accountability structures cultivating a culture of AI risk management.",
-        },
-    ],
-    "MAP": [
-        {
-            "slug": "AITP-NIST-MAP",
-            "category": "general",
-            "risk_category": "All",
-            "title": "Context and risk categorisation",
-            "description": "Establish context to frame risks and categorise the AI system's capabilities and impacts.",
-        },
-    ],
-    "MEASURE": [
-        {
-            "slug": "AITP-NIST-MEASURE",
-            "category": "monitoring",
-            "risk_category": "All",
-            "title": "Risk measurement tooling",
-            "description": "Apply quantitative and qualitative tools to analyse, benchmark and monitor AI risk and impacts.",
-        },
-    ],
-    "MANAGE": [
-        {
-            "slug": "AITP-NIST-MANAGE",
-            "category": "general",
-            "risk_category": "All",
-            "title": "Risk response prioritisation",
-            "description": "Allocate resources to respond to mapped and measured risks on a regular, governance-defined basis.",
-        },
-    ],
-    "MAP 1": [
-        {
-            "slug": "AITP-NIST-MAP1",
-            "category": "documentation",
-            "risk_category": "All",
-            "title": "System provenance record",
-            "description": "Document the AI system's intended purpose, context of use and known limitations.",
-        },
-    ],
-    "MANAGE 4": [
-        {
-            "slug": "AITP-NIST-MANAGE4",
-            "category": "incident_response",
-            "risk_category": "All",
-            "title": "AI incident response",
-            "description": "Document and monitor mechanisms to sustain deployed AI value and respond to incidents.",
-        },
-    ],
-    # --- ISO/IEC 42001 (tier-independent) --------------------------------
-    "Clause 4": [
-        {
-            "slug": "AITP-ISO-C4",
-            "category": "general",
-            "risk_category": "All",
-            "title": "Organisational context analysis",
-            "description": "Determine external and internal issues and interested-party needs relevant to the AI management system.",
-        },
-    ],
-    "Clause 5": [
-        {
-            "slug": "AITP-ISO-C5",
-            "category": "general",
-            "risk_category": "All",
-            "title": "Leadership and AI policy",
-            "description": "Top management establishes an AI policy, assigns roles and demonstrates commitment to the AIMS.",
-        },
-    ],
-    "Clause 6": [
-        {
-            "slug": "AITP-ISO-C6",
-            "category": "general",
-            "risk_category": "All",
-            "title": "Risk and opportunity planning",
-            "description": "Plan actions addressing risks and opportunities and set AI management system objectives.",
-        },
-    ],
-    "Clause 8": [
-        {
-            "slug": "AITP-ISO-C8",
-            "category": "general",
-            "risk_category": "All",
-            "title": "Operational controls",
-            "description": "Plan, implement and control the processes needed to meet AI management system requirements.",
-        },
-    ],
-    "Clause 9": [
-        {
-            "slug": "AITP-ISO-C9",
-            "category": "monitoring",
-            "risk_category": "All",
-            "title": "Performance evaluation",
-            "description": "Monitor, measure, analyse and evaluate the AIMS including internal audits and management review.",
-        },
-    ],
 }
 
 
@@ -997,9 +878,9 @@ def _tier_allows(risk_category: str, tier: str) -> bool:
 def _role_allows(role: str | None, org_role: str) -> bool:
     """True if a requirement's role applies to the AI system's org_role.
 
-    Retained sets carry no `role` (None) and apply to any org_role. EU CSV
-    templates carry an explicit "provider"/"deployer" role and match only that
-    org_role — there is no fallback (importer/distributor match nothing).
+    EU AI Act templates carry an explicit "provider"/"deployer" role and match only
+    that org_role — there is no fallback (importer/distributor match nothing). A
+    template without a `role` (None) applies to any org_role.
     """
     return role is None or role == org_role
 
@@ -1009,16 +890,14 @@ def requirements_for(
 ) -> list[dict]:
     """Return requirement templates for an obligation cluster at a tier + org_role.
 
-    Templates are filtered by risk tier (`risk` or `risk_category`) *and* by
-    org_role. Returns an empty list when a cluster has no defined requirements, or
-    none survive the tier/role filter — callers treat this as "no requirements to
-    generate" for that obligation (and, at the cluster level, as "drop this
-    obligation entirely").
+    Templates are filtered by risk tier (`risk`) *and* by org_role. Returns an
+    empty list when a cluster has no defined requirements, or none survive the
+    tier/role filter — callers treat this as "no requirements to generate" for that
+    obligation (and, at the cluster level, as "drop this obligation entirely").
     """
     out: list[dict] = []
     for t in _REQUIREMENT_TEMPLATES.get(cluster_id, []):
-        risk = t.get("risk") or t["risk_category"]
-        if _tier_allows(risk, tier) and _role_allows(t.get("role"), org_role):
+        if _tier_allows(t["risk"], tier) and _role_allows(t.get("role"), org_role):
             # Shallow copy so the per-requirement article can be attached without
             # mutating the module-level template dict.
             out.append(
@@ -1041,8 +920,8 @@ def cluster_articles(
     tier/role filter, reduces each to its top-level article number (e.g.
     "Art. 9 (2)(a)" -> "Art. 9"), and returns the distinct set sorted by article
     number, joined with ", " (e.g. "Art. 9, Art. 11, Art. 72"). Empty when no
-    requirement carries an article (retained sets) — callers fall back to the cluster's
-    own display article.
+    requirement survives the tier/role filter (e.g. a provider cluster queried for a
+    deployer) — callers fall back to the cluster's own display article.
     """
     tops: set[str] = set()
     for t in requirements_for(cluster_id, tier, org_role):

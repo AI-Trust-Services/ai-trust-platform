@@ -1,0 +1,81 @@
+name: E2E System Tests
+
+# Triggered by adding the "e2e-test" label to a PR.
+# Runs tests/e2e_system/ against the PR author's already-deployed namespace on ai-trust-test.
+#
+# Prerequisites:
+#   1. Namespace must already be deployed (add "garden-deploy" label first).
+#   2. Namespace must be initialised once via:
+#        bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-username>
+#
+# Unlike tests/integration/, this suite needs no kubeconfig or port-forward — it talks to the
+# public URL through oauth2-proxy with a real OIDC session cookie.
+#
+# Usage: add the "e2e-test" label to an open PR (after "garden-deploy" has deployed it).
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: e2e-system-${{ github.event.pull_request.user.login }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-system:
+    name: E2E System Tests
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'e2e-test'
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_SHA:    ${{ github.event.pull_request.head.sha }}
+      GH_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Check out PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.PR_SHA }}
+
+      - name: Compute APP_URL
+        id: vars
+        run: |
+          NAMESPACE="${{ github.event.pull_request.user.login }}"
+          NAMESPACE="${NAMESPACE,,}"
+          APP_URL="https://${NAMESPACE}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          echo "namespace=${NAMESPACE}" >> "$GITHUB_OUTPUT"
+          echo "app_url=${APP_URL}"     >> "$GITHUB_OUTPUT"
+          echo "==> namespace=${NAMESPACE}, app_url=${APP_URL}"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install -r tests/e2e_system/requirements.txt
+
+      - name: Run E2E system tests
+        env:
+          APP_URL:            ${{ steps.vars.outputs.app_url }}
+          APP_ADMIN_PASSWORD: ${{ secrets.APP_ADMIN_PASSWORD }}
+          APP_ADMIN_USERNAME: ${{ secrets.APP_ADMIN_USERNAME || 'admin' }}
+        run: python3 -m pytest tests/e2e_system/ -v
+
+      - name: Post success comment
+        if: success()
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "✅ E2E system tests passed against namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\` (\`${PR_SHA::12}\`)."
+
+      - name: Post failure comment
+        if: failure()
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "❌ E2E system tests failed against namespace \`${{ steps.vars.outputs.namespace }}\` — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"

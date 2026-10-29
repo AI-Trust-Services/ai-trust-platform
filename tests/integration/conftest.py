@@ -27,11 +27,12 @@ import pytest_asyncio
 
 REGISTRY_URL = os.getenv("REGISTRY_URL", "http://localhost:8001")
 COMPLIANCE_URL = os.getenv("COMPLIANCE_URL", "http://localhost:8007")
-ALERTS_URL = os.getenv("ALERTS_URL", "http://localhost:8005")
 USERS_URL = os.getenv("USERS_URL", "http://localhost:8008")
 AUDIT_URL = os.getenv("AUDIT_URL", "http://localhost:8009")
 ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:8010")
-MONITORING_URL = os.getenv("MONITORING_URL", "http://localhost:8003")
+# [MVP-off] monitoring + alerts are GenAI-observability services, disabled for the MVP.
+# ALERTS_URL = os.getenv("ALERTS_URL", "http://localhost:8005")
+# MONITORING_URL = os.getenv("MONITORING_URL", "http://localhost:8003")
 
 ADMIN_USER = os.getenv("APP_ADMIN_USERNAME") or "admin"
 
@@ -136,9 +137,11 @@ async def _setup_test_user() -> None:
             f"/v1/users/{user_id}/roles/business_owner",
             headers=ADMIN_HEADERS,
         )
-        assert role_r.status_code in (200, 201, 204), (
-            f"Failed to assign role: {role_r.text}"
-        )
+        assert role_r.status_code in (
+            200,
+            201,
+            204,
+        ), f"Failed to assign role: {role_r.text}"
 
 
 async def _cleanup_test_data() -> None:
@@ -249,9 +252,10 @@ async def _get_user_id(users_client: httpx.AsyncClient, username: str) -> str:
         },
         headers=ADMIN_HEADERS,
     )
-    assert create_r.status_code in (201, 409), (
-        f"Failed to create user {username}: {create_r.text}"
-    )
+    assert create_r.status_code in (
+        201,
+        409,
+    ), f"Failed to create user {username}: {create_r.text}"
     created_id = create_r.json()["id"]
     _created_user_ids.append(created_id)
     return created_id

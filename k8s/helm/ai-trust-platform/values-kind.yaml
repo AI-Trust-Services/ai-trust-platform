@@ -6,6 +6,11 @@
 # DO NOT apply this overlay on a real cluster (Gardener or otherwise) — NodePort
 # exposes these ports on every node's IP, bypassing the Ingress entirely.
 
+# Pull secret for the private GHCR cognee-graph image (read-only prod test).
+# Created by bootstrap.sh from GHCR_PULL_TOKEN in .env (same name as Gardener).
+imagePullSecrets:
+  - name: ghcr-pull-secret
+
 postgres:
   serviceType: NodePort
   nodePort: 30432
@@ -39,9 +44,10 @@ otel:
   collectorHttpNodePort: 30318
   rmqBridgeNodePort: 30802
 
-ollama:
-  serviceType: NodePort
-  nodePort: 30434
-
 cogneeEval:
   enabled: true
+  # Serves the frozen graph snapshot from GHCR (never ingests).
+  # After each promote-graph.yml run, update graphImage to the new @sha256 digest.
+  # Set readOnly: false only on a dedicated build/test instance for graph curation.
+  readOnly: true
+  graphImage: ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph@sha256:54e89ad8e5887b007c70f15671a532e2ce6b9b8568782e57ac7c775ab84280f8

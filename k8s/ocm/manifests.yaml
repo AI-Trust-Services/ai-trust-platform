@@ -76,10 +76,6 @@ spec:
         targetPath: image.tag
       - kind: Secret
         name: ai-trust-flux-values-${NAMESPACE}
-        valuesKey: OLLAMA_ENABLED
-        targetPath: ollama.enabled
-      - kind: Secret
-        name: ai-trust-flux-values-${NAMESPACE}
         valuesKey: MINIO_IMAGE
         targetPath: minio.image
       - kind: Secret

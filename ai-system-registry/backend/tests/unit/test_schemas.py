@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
 from app.schemas import AISystemCreate, AISystemUpdate
-
+from pydantic import ValidationError
 
 # --- AISystemCreate ---
 
@@ -85,11 +84,40 @@ def test_update_version_max_length():
         AISystemUpdate(version="x" * 51)
 
 
-def test_update_application_url_max_length():
+def test_update_git_repo_url_max_length():
     with pytest.raises(ValidationError):
-        AISystemUpdate(application_url="http://" + "x" * 500)
+        AISystemUpdate(git_repo_url="https://" + "x" * 500)
 
 
 def test_update_provider_country_max_length():
     with pytest.raises(ValidationError):
         AISystemUpdate(provider_country="TOOLONG")
+
+
+# --- New registration fields (contributors, planned_rollout_date) ---
+
+
+def test_create_contributors_and_rollout_date():
+    from datetime import date
+
+    s = AISystemCreate(
+        name="Test",
+        contributors=["alice", "bob"],
+        planned_rollout_date=date(2027, 1, 1),
+    )
+    assert s.contributors == ["alice", "bob"]
+    assert s.planned_rollout_date == date(2027, 1, 1)
+
+
+def test_create_contributors_default_none():
+    s = AISystemCreate(name="Test")
+    assert s.contributors is None
+    assert s.planned_rollout_date is None
+
+
+def test_update_contributors_and_rollout_date():
+    from datetime import date
+
+    u = AISystemUpdate(contributors=["carol"], planned_rollout_date=date(2027, 6, 1))
+    assert u.contributors == ["carol"]
+    assert u.planned_rollout_date == date(2027, 6, 1)
