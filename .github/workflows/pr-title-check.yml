@@ -14,7 +14,7 @@ concurrency:
 jobs:
   check-title:
     name: Validate · PR Title
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Validate Conventional Commit title
         env:
