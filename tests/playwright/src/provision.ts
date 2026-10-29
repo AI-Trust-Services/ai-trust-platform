@@ -3,8 +3,9 @@ import { TEMP_PASS } from "./personas";
 import type { CreatedUser } from "./run";
 
 /**
- * Create a Keycloak user (idempotent) and assign one role, using an admin-authenticated
- * APIRequestContext. Mirrors tests/e2e_system/conftest.py::_provision_user.
+ * Create a fresh Keycloak user and assign one role, using an admin-authenticated
+ * APIRequestContext. A username collision (409) is rejected, not adopted — see below.
+ * Mirrors tests/e2e_system/conftest.py::_provision_user.
  */
 export async function provisionUser(
   api: APIRequestContext,
@@ -20,7 +21,17 @@ export async function provisionUser(
       temporaryPassword: TEMP_PASS,
     },
   });
-  if (![201, 409].includes(create.status())) {
+  // A 409 means the username already exists — a leftover from a previous run (its password is no
+  // longer TEMP_PASS, so login would fail) or a real account. Adopting it would let teardown delete
+  // a user this run did not create, so reject it: the run uses a random suffix, so a collision
+  // signals orphaned state to clean up (or a stale, hand-set E2E_SUFFIX).
+  if (create.status() === 409) {
+    throw new Error(
+      `create user ${username}: already exists (409). Leftover state from a prior run — ` +
+        `delete it, or run without a fixed E2E_SUFFIX so each run gets a unique username.`,
+    );
+  }
+  if (create.status() !== 201) {
     throw new Error(`create user ${username}: ${create.status()} ${await create.text()}`);
   }
 

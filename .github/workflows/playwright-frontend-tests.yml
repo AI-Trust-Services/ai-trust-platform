@@ -40,6 +40,19 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
+      # The job injects APP_ADMIN_PASSWORD (platform-admin) into PR-head test code, so gate it on
+      # repo write access — same check as the deployment workflow (pr-deployment-test.yml). Adding
+      # the label already requires triage/write, but this also blocks a label added before a
+      # malicious push lands, and fails loudly rather than relying on the label alone.
+      - name: Check authorization (org members only)
+        run: |
+          PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" \
+            --jq '.permission' 2>/dev/null || echo "none")
+          if [[ "$PERMISSION" != "admin" && "$PERMISSION" != "write" && "$PERMISSION" != "maintain" ]]; then
+            echo "::error::${{ github.actor }} lacks write access — refusing to run privileged tests on PR-head code."
+            exit 1
+          fi
+
       - name: Check out PR head
         uses: actions/checkout@v5
         with:
