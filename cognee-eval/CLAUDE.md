@@ -26,7 +26,7 @@ snapshot exported for production contains a single coherent graph.
 
 ## Running
 
-The component ships disabled by default — set `cogneeEval.enabled: true` in `values.yaml` (or the
+The component ships enabled by default in read-only mode with the promoted graph snapshot — set `cogneeEval.enabled: false` in `values.yaml` (or the
 cluster's override) before deploying. On kind:
 
 ```bash
@@ -140,12 +140,12 @@ frozen snapshot of that graph read-only** — it never ingests or mutates. Same 
 image on both sides; the only differences are config.
 
 **Two modes (Helm `cogneeEval.readOnly`):**
-- `readOnly: false` (default) — build/test. `StatefulSet` + PVC, all routers, full feedback loop.
-- `readOnly: true` — prod. `Deployment` with an `emptyDir` hydrated at startup by an init container
+- `readOnly: true` (default) — prod. `Deployment` with an `emptyDir` hydrated at startup by an init container
   from the pinned `cogneeEval.graphImage`; `COGNEE_READONLY=true` so ingest/feedback are unmounted
   (404). The pod is stateless and reconstructs the exact pinned graph on every start. Eval history
   (POST /evaluate) still works but is ephemeral (resets on restart) — it writes a Q&A log row, never
   the graph.
+- `readOnly: false` — build/test. `StatefulSet` + PVC, all routers, full feedback loop.
 
 **Why a snapshot (not cognee `push`/CogX):** both sides run the same Cognee, so a verbatim copy of
 `/app/.cognee_system` is byte-identical to what experts approved. `push`/CogX re-materialize via a

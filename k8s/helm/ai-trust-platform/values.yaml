@@ -121,7 +121,7 @@ indexing:
     serviceType: ClusterIP
 
 # Cognee eval — graph-based grounded Q&A over the EU AI Act.
-# Disabled by default; uses Thalamus for generation (THALAMUS_* in the Secret).
+# Enabled by default with the digest-pinned read-only graph below; uses Thalamus for generation (THALAMUS_* in the Secret).
 cogneeEval:
   enabled: true
   backendPort: 8014
