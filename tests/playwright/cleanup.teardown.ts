@@ -22,11 +22,16 @@ teardown("delete provisioned users and created systems", async ({ baseURL }) => 
     const eng = await request.newContext({ baseURL: base, storageState: ENGINEER.storageState });
     try {
       const resp = await eng.get("/api/registry/v1/systems", { params: { limit: 200 } });
-      if (resp.ok()) {
-        const systems: Array<{ id: string; name?: string }> = await resp.json();
-        for (const s of systems) {
-          if (s.name?.includes(run.suffix)) {
-            await eng.delete(`/api/registry/v1/systems/${s.id}`);
+      if (!resp.ok()) {
+        throw new Error(`list systems for cleanup: ${resp.status()} ${await resp.text()}`);
+      }
+      const systems: Array<{ id: string; name?: string }> = await resp.json();
+      for (const s of systems) {
+        if (s.name?.includes(run.suffix)) {
+          const del = await eng.delete(`/api/registry/v1/systems/${s.id}`);
+          // 404 is fine — already gone.
+          if (![200, 202, 204, 404].includes(del.status())) {
+            throw new Error(`delete system ${s.id}: ${del.status()} ${await del.text()}`);
           }
         }
       }
@@ -40,7 +45,10 @@ teardown("delete provisioned users and created systems", async ({ baseURL }) => 
     const adm = await request.newContext({ baseURL: base, storageState: ADMIN.storageState });
     try {
       for (const u of run.users) {
-        await adm.delete(`/api/users/v1/users/${u.id}`);
+        const del = await adm.delete(`/api/users/v1/users/${u.id}`);
+        if (![200, 202, 204, 404].includes(del.status())) {
+          throw new Error(`delete user ${u.id}: ${del.status()} ${await del.text()}`);
+        }
       }
     } finally {
       await adm.dispose();

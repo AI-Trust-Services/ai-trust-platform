@@ -22,9 +22,12 @@ permissions:
   contents: read
   pull-requests: write
 
+# Do NOT cancel in progress: a run provisions Keycloak users + registry systems in a shared
+# namespace and removes them in a Playwright teardown project. Cancelling mid-run would kill the
+# process before teardown, and the replacement run (new random suffix) cannot find the orphans.
 concurrency:
   group: playwright-${{ github.event.pull_request.user.login }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   playwright:

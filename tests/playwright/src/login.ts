@@ -22,7 +22,11 @@ export async function loginAndSaveState(
   storageStatePath: string,
   newPassword?: string,
 ): Promise<void> {
-  const context = await browser.newContext({ baseURL, ignoreHTTPSErrors: true });
+  // Certificate validation stays ON by default: Gardener namespaces ship real cert-manager certs
+  // and local kind is plain http, so neither needs it disabled — and this flow submits the admin
+  // password. Set PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true only for a genuinely self-signed local target.
+  const ignoreHTTPSErrors = process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS === "true";
+  const context = await browser.newContext({ baseURL, ignoreHTTPSErrors });
   const page = await context.newPage();
 
   // A single submit selector that works for both the login and update-password Keycloak forms.
