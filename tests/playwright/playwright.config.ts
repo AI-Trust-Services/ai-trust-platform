@@ -22,7 +22,9 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
-    ignoreHTTPSErrors: true,
+    // Verify TLS by default (Gardener ships real certs; kind is http). Opt out only for a genuinely
+    // self-signed local target — same switch as src/login.ts's manual context.
+    ignoreHTTPSErrors: process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS === "true",
   },
   projects: [
     { name: "setup", testMatch: /auth\.setup\.ts/ },
