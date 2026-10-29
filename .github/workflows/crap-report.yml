@@ -41,6 +41,15 @@ jobs:
           )
           mkdir -p crap-reports
           FAILED=()
+
+          # Start Job Summary
+          {
+            echo "# CRAP Report"
+            echo ""
+            echo "| Component | HIGH :red_circle: | MEDIUM :yellow_circle: | LOW :green_circle: | Status |"
+            echo "|-----------|------------------:|----------------------:|-------------------:|--------|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
           for component in "${COMPONENTS[@]}"; do
             echo "::group::$component"
             slug="${component//\//-}"
@@ -49,6 +58,7 @@ jobs:
             if ! (cd "$component" && make setup 2>&1); then
               echo "✗ $component — setup failed, skipping CRAP" | tee "$report"
               FAILED+=("$component (setup)")
+              echo "| \`$component\` | — | — | — | ✗ setup failed |" >> "$GITHUB_STEP_SUMMARY"
               echo "::endgroup::"
               continue
             fi
@@ -80,20 +90,66 @@ jobs:
                 --threshold 30 2>&1 || true
             ) | tee "$report"
 
+            high=$(grep -c "HIGH" "$report" 2>/dev/null || echo 0)
+            medium=$(grep -c "MEDIUM" "$report" 2>/dev/null || echo 0)
+            low=$(grep -c "LOW" "$report" 2>/dev/null || echo 0)
+
+            if [ "$high" -gt 0 ]; then
+              status=":red_circle: needs attention"
+            elif [ "$medium" -gt 0 ]; then
+              status=":yellow_circle: review suggested"
+            else
+              status=":white_check_mark: ok"
+            fi
+
+            echo "| \`$component\` | $high | $medium | $low | $status |" >> "$GITHUB_STEP_SUMMARY"
             echo "✓ $component — report written to $report"
             echo "::endgroup::"
           done
 
-          echo ""
-          echo "=== CRAP Report Summary ==="
+          # Detail section: list all flagged functions grouped by component
+          {
+            echo ""
+            echo "## Flagged Functions"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          any_flagged=0
           for report in crap-reports/*.txt; do
-            component=$(basename "$report" .txt | sed 's/crap-report-//' | sed 's/-/\//g')
-            high=$(grep -c "HIGH" "$report" 2>/dev/null || echo 0)
-            medium=$(grep -c "MEDIUM" "$report" 2>/dev/null || echo 0)
-            echo "  $component — HIGH: $high  MEDIUM: $medium"
+            slug=$(basename "$report" .txt | sed 's/^crap-report-//')
+            component="${slug//-//}"
+            flagged_lines=$(grep -E "HIGH|MEDIUM" "$report" 2>/dev/null || true)
+            if [ -n "$flagged_lines" ]; then
+              any_flagged=1
+              {
+                echo "<details>"
+                echo "<summary><code>$component</code></summary>"
+                echo ""
+                echo '```'
+                cat "$report"
+                echo '```'
+                echo ""
+                echo "</details>"
+                echo ""
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
           done
 
+          if [ "$any_flagged" -eq 0 ]; then
+            echo "_No functions scored above threshold in any analysed component._" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Setup failures section
           if [ ${#FAILED[@]} -gt 0 ]; then
+            {
+              echo ""
+              echo "## Setup Failures"
+              echo ""
+              echo "The following components could not be analysed (dependency install failed):"
+              echo ""
+              for f in "${FAILED[@]}"; do echo "- \`$f\`"; done
+            } >> "$GITHUB_STEP_SUMMARY"
+
             echo ""
             echo "Components that could not be analysed (setup failure):"
             for f in "${FAILED[@]}"; do echo "  - $f"; done

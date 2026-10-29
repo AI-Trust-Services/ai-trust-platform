@@ -41,11 +41,13 @@ def load_complexity(path: str) -> list[dict]:
     rows = []
     for file_path, items in data.items():
         for item in items:
-            rows.append({
-                "file": file_path,
-                "name": item.get("name", "<unknown>"),
-                "cc": item.get("complexity", 1),
-            })
+            rows.append(
+                {
+                    "file": file_path,
+                    "name": item.get("name", "<unknown>"),
+                    "cc": item.get("complexity", 1),
+                }
+            )
     return rows
 
 
@@ -62,22 +64,39 @@ def risk_label(score: float) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Compute CRAP scores from coverage + complexity JSON")
+    parser = argparse.ArgumentParser(
+        description="Compute CRAP scores from coverage + complexity JSON"
+    )
     parser.add_argument("--coverage", default="coverage.json")
     parser.add_argument("--complexity", default="complexity.json")
-    parser.add_argument("--threshold", type=float, default=30,
-                        help="Score above which a function is flagged (default: 30)")
-    parser.add_argument("--fail-over", type=float, default=None,
-                        help="Exit 1 if any function exceeds this score (default: disabled)")
-    parser.add_argument("--json", action="store_true", dest="output_json",
-                        help="Output results as JSON instead of a table")
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=30,
+        help="Score above which a function is flagged (default: 30)",
+    )
+    parser.add_argument(
+        "--fail-over",
+        type=float,
+        default=None,
+        help="Exit 1 if any function exceeds this score (default: disabled)",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="output_json",
+        help="Output results as JSON instead of a table",
+    )
     args = parser.parse_args()
 
     try:
         cov_map = load_coverage(args.coverage)
     except FileNotFoundError:
         print(f"ERROR: coverage file not found: {args.coverage}", file=sys.stderr)
-        print("Run: pytest tests/unit/ --cov=app --cov-branch --cov-report=json:coverage.json", file=sys.stderr)
+        print(
+            "Run: pytest tests/unit/ --cov=app --cov-branch --cov-report=json:coverage.json",
+            file=sys.stderr,
+        )
         return 1
 
     try:
@@ -91,14 +110,16 @@ def main() -> int:
     for row in cc_rows:
         cov_pct = cov_map.get((row["file"], row["name"]), 0.0)
         score = crap(row["cc"], cov_pct)
-        results.append({
-            "file": row["file"],
-            "function": row["name"],
-            "cc": row["cc"],
-            "coverage": round(cov_pct, 1),
-            "crap": round(score, 1),
-            "risk": risk_label(score),
-        })
+        results.append(
+            {
+                "file": row["file"],
+                "function": row["name"],
+                "cc": row["cc"],
+                "coverage": round(cov_pct, 1),
+                "crap": round(score, 1),
+                "risk": risk_label(score),
+            }
+        )
 
     results.sort(key=lambda r: r["crap"], reverse=True)
 
@@ -112,7 +133,9 @@ def main() -> int:
         low = sum(1 for r in results if r["risk"] == "LOW")
 
         print(f"\nCRAP Score Report  (threshold: {args.threshold})")
-        print(f"Functions analysed: {total}  |  HIGH: {high}  MEDIUM: {medium}  LOW: {low}")
+        print(
+            f"Functions analysed: {total}  |  HIGH: {high}  MEDIUM: {medium}  LOW: {low}"
+        )
         print()
 
         if flagged:
@@ -121,16 +144,24 @@ def main() -> int:
             print("-" * len(header))
             for r in flagged:
                 marker = "!!" if r["risk"] == "HIGH" else " !"
-                print(f"{r['crap']:>8.1f}  {r['cc']:>4}  {r['coverage']:>5.1f}%  {r['risk']:>6}  {marker} {r['function']}  [{r['file']}]")
+                print(
+                    f"{r['crap']:>8.1f}  {r['cc']:>4}  {r['coverage']:>5.1f}%  {r['risk']:>6}  {marker} {r['function']}  [{r['file']}]"
+                )
         else:
             print(f"All {total} functions score <= {args.threshold}. No action needed.")
 
     if args.fail_over is not None:
         over = [r for r in results if r["crap"] > args.fail_over]
         if over:
-            print(f"\n{len(over)} function(s) exceed --fail-over={args.fail_over}:", file=sys.stderr)
+            print(
+                f"\n{len(over)} function(s) exceed --fail-over={args.fail_over}:",
+                file=sys.stderr,
+            )
             for r in over:
-                print(f"  {r['crap']:.1f}  {r['function']}  [{r['file']}]", file=sys.stderr)
+                print(
+                    f"  {r['crap']:.1f}  {r['function']}  [{r['file']}]",
+                    file=sys.stderr,
+                )
             return 1
 
     return 0
