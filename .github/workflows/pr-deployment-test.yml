@@ -68,10 +68,10 @@ jobs:
             --repo "${{ github.repository }}" \
             --body "🚀 Test deployment started — deploying \`feature:${PR_SHA::12}\` to namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\`."
 
-      # Seeds the status that integration-tests.yml finalises once this deployment
-      # succeeds. Done here as a STEP rather than as a job in integration-tests.yml
-      # because every job in a pull_request-triggered workflow gets pinned to the PR
-      # as its own check — a step adds none.
+      # Seeds the statuses that integration-tests.yml and e2e-system-tests.yml finalise
+      # once this deployment succeeds. Done here as STEPS rather than as jobs because
+      # every job in a pull_request-triggered workflow gets pinned to the PR as its own
+      # check run — a step adds none.
       - name: Seed pending integration-tests status
         run: |
           gh api \
@@ -80,6 +80,16 @@ jobs:
             -f state=pending \
             -f context=integration-tests \
             -f description="Waiting for deployment to finish..." \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Seed pending e2e-system-tests status
+        run: |
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${PR_SHA} \
+            -f state=pending \
+            -f context=e2e-system-tests \
+            -f description="Waiting for integration tests to finish..." \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Build and push images
@@ -171,8 +181,8 @@ jobs:
             --repo "${{ github.repository }}" \
             --body "❌ Test deployment failed: \`feature:${PR_SHA::12}\` — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
 
-      # integration-tests.yml only runs on a SUCCESSFUL deployment, so without this
-      # the seeded status above would hang pending forever when the deploy fails.
+      # integration-tests.yml and e2e-system-tests.yml only run on a SUCCESSFUL deployment,
+      # so without this the seeded statuses above would hang pending forever on deploy failure.
       - name: Resolve integration-tests status on failed deploy
         if: failure() || cancelled()
         run: |
@@ -181,5 +191,16 @@ jobs:
             repos/${{ github.repository }}/statuses/${PR_SHA} \
             -f state=error \
             -f context=integration-tests \
+            -f description="Skipped — deployment did not succeed." \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Resolve e2e-system-tests status on failed deploy
+        if: failure() || cancelled()
+        run: |
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${PR_SHA} \
+            -f state=error \
+            -f context=e2e-system-tests \
             -f description="Skipped — deployment did not succeed." \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

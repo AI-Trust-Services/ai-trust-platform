@@ -1,55 +1,194 @@
 name: E2E System Tests
 
-# Triggered by adding the "e2e-test" label to a PR.
-# Runs tests/e2e_system/ against the PR author's already-deployed namespace on ai-trust-test.
+# Two ways in:
+#   1. workflow_run — automatic, after a successful Integration Tests run (the main path)
+#        PR   — "PR Deployment Test" (garden-deploy label) → Integration Tests → this workflow
+#        main — "Deployment Workflow" (push to main)       → Integration Tests → this workflow
+#   2. pull_request [labeled] — on-demand, by adding the "e2e-test" label to an open PR.
+#      Requires the namespace to already be deployed (add "garden-deploy" label first).
+#   3. workflow_dispatch — optional manual run against a live namespace, no redeploy.
 #
-# Prerequisites:
+# Running after Integration Tests (not after the deployment directly) ensures the two
+# test suites never run concurrently against the same live namespace.
+#
+# How the PR reporting works (the `e2e-system-tests` commit status):
+#   Results are published to ONE commit status context, `e2e-system-tests`, keyed by
+#   name and overwritten in place — the PR shows a single entry that transitions:
+#
+#     garden-deploy added     → pr-deployment-test.yml seeds it PENDING
+#     integration tests done  → this workflow overwrites it with success/failure
+#
+#   A commit status is used (not a check run) for the same reason as integration-tests:
+#   workflow_run runs are attached to the DEFAULT BRANCH, so their native checks never
+#   appear on the PR at all.
+#
+# Prerequisites (label-triggered path):
 #   1. Namespace must already be deployed (add "garden-deploy" label first).
 #   2. Namespace must be initialised once via:
 #        bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-username>
 #
-# Unlike tests/integration/, this suite needs no kubeconfig or port-forward — it talks to the
-# public URL through oauth2-proxy with a real OIDC session cookie.
+# Unlike tests/integration/, this suite needs no kubeconfig or port-forward — it talks to
+# the public URL through oauth2-proxy with a real OIDC session cookie.
 #
-# Usage: add the "e2e-test" label to an open PR (after "garden-deploy" has deployed it).
+# EDITING THIS FILE: workflow_run does not just attach its runs to the default branch,
+# it also RUNS THE DEFAULT BRANCH'S COPY of this file. Changes here do nothing until
+# merged to main — a branch cannot test them. Validate shell logic locally and merge
+# before expecting any behaviour change.
 
 on:
+  workflow_run:
+    workflows:
+      - "Integration Tests"
+    types:
+      - completed
   pull_request:
     types: [labeled]
+  workflow_dispatch:
+    inputs:
+      gardener_cluster:
+        description: "Cluster to test against"
+        required: false
+        default: ai-trust-test
+        type: choice
+        options:
+          - ai-trust-test
+          - ai-trust-main
+      namespace:
+        description: "Namespace to test (blank = ai-trust on ai-trust-main, else your username)"
+        required: false
+        type: string
 
 permissions:
   contents: read
   pull-requests: write
+  statuses: write
+  actions: read  # required to read artifacts from a different run (deployment-context)
 
 concurrency:
-  group: e2e-system-${{ github.event.pull_request.user.login }}
-  cancel-in-progress: true
+  # One run per namespace at a time — the workflow_run path derives the namespace from
+  # the integration-tests run; the label path uses the PR author's login.
+  group: e2e-system-${{ github.event.workflow_run.actor.login || github.event.pull_request.user.login || github.actor }}
+  cancel-in-progress: false
 
 jobs:
   e2e-system:
     name: E2E System Tests
     runs-on: ubuntu-latest
-    if: github.event.label.name == 'e2e-test'
-    env:
-      PR_NUMBER: ${{ github.event.pull_request.number }}
-      PR_SHA:    ${{ github.event.pull_request.head.sha }}
-      GH_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
+    # workflow_run fires on completion regardless of outcome — only run after a
+    # successful Integration Tests run.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.label.name == 'e2e-test') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
-      - name: Check out PR head
+      # The workflow_run path needs deployment-context when triggered from the
+      # Deployment Workflow chain (to resolve the cluster/namespace). Integration Tests
+      # downloads it itself and we cannot inherit it, so we re-download from the same
+      # deployment workflow run that triggered Integration Tests, if available.
+      - name: Download deployment context (Deployment Workflow chain only)
+        if: >-
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.name == 'Integration Tests'
+        uses: actions/download-artifact@v4
+        continue-on-error: true  # artifact absent on PR chain — handled in Derive step
+        with:
+          name: deployment-context
+          path: /tmp/deployment-context
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive cluster, namespace, head_sha, and app_url
+        id: vars
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            cluster="${{ inputs.gardener_cluster }}"
+            cluster="${cluster:-ai-trust-test}"
+            namespace="${{ inputs.namespace }}"
+            if [[ -z "${namespace}" ]]; then
+              if [[ "${cluster}" == "ai-trust-main" ]]; then
+                namespace="ai-trust"
+              else
+                namespace="${GITHUB_ACTOR,,}"
+              fi
+            fi
+            head_sha="${GITHUB_SHA}"
+
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # Label-triggered manual run — namespace is the PR author's login.
+            namespace="${{ github.event.pull_request.user.login }}"
+            cluster="ai-trust-test"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+
+          else
+            # workflow_run — triggered after Integration Tests.
+            # Integration Tests itself was triggered by either:
+            #   a) "PR Deployment Test"   → namespace = PR author login (no artifact)
+            #   b) "Deployment Workflow"  → namespace in deployment-context artifact
+            # We can distinguish by whether the artifact directory is populated.
+            if [[ -f /tmp/deployment-context/cluster ]]; then
+              cluster=$(cat /tmp/deployment-context/cluster | tr -d '[:space:]')
+              namespace=$(cat /tmp/deployment-context/namespace | tr -d '[:space:]')
+              head_sha=$(cat /tmp/deployment-context/head_sha | tr -d '[:space:]')
+            else
+              # PR chain: namespace is the actor who triggered the Integration Tests run
+              # (which equals the PR author who triggered the original deployment).
+              PR_AUTHOR="${{ github.event.workflow_run.pull_requests[0].user.login }}"
+              ACTOR="${{ github.event.workflow_run.actor.login }}"
+              namespace="${PR_AUTHOR:-${ACTOR}}"
+              cluster="ai-trust-test"
+              head_sha="${{ github.event.workflow_run.head_sha }}"
+            fi
+          fi
+
+          namespace="${namespace,,}"
+
+          if [[ "${cluster}" == "ai-trust-main" ]]; then
+            app_url="https://ai-trust.ai-trust-main.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          else
+            app_url="https://${namespace}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          fi
+
+          echo "cluster=${cluster}"     >> "$GITHUB_OUTPUT"
+          echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${head_sha}"   >> "$GITHUB_OUTPUT"
+          echo "app_url=${app_url}"     >> "$GITHUB_OUTPUT"
+          echo "==> cluster=${cluster}, namespace=${namespace}, app_url=${app_url}, head_sha=${head_sha}"
+
+      - name: Check out head
         uses: actions/checkout@v5
         with:
-          ref: ${{ env.PR_SHA }}
+          ref: ${{ steps.vars.outputs.head_sha }}
 
-      - name: Compute APP_URL
-        id: vars
+      - name: Summary
         run: |
-          NAMESPACE="${{ github.event.pull_request.user.login }}"
-          NAMESPACE="${NAMESPACE,,}"
-          APP_URL="https://${NAMESPACE}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
-          echo "namespace=${NAMESPACE}" >> "$GITHUB_OUTPUT"
-          echo "app_url=${APP_URL}"     >> "$GITHUB_OUTPUT"
-          echo "==> namespace=${NAMESPACE}, app_url=${APP_URL}"
+          echo "### E2E System Test variables" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| cluster | ${{ steps.vars.outputs.cluster }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| namespace | ${{ steps.vars.outputs.namespace }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| app_url | ${{ steps.vars.outputs.app_url }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| head_sha | ${{ steps.vars.outputs.head_sha }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| triggered_by | ${{ github.event_name }} |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set pending commit status
+        # Not set for label-triggered runs — the status was already seeded PENDING by
+        # pr-deployment-test.yml and this run is overwriting it on completion only.
+        # For workflow_run and workflow_dispatch we set it here so the PR/commit shows
+        # progress while the tests run.
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.vars.outputs.head_sha }}
+        run: |
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${HEAD_SHA} \
+            -f state=pending \
+            -f context=e2e-system-tests \
+            -f description="Running against ${{ steps.vars.outputs.cluster }}/${{ steps.vars.outputs.namespace }}..." \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -66,15 +205,43 @@ jobs:
           APP_ADMIN_USERNAME: ${{ secrets.APP_ADMIN_USERNAME || 'admin' }}
         run: python3 -m pytest tests/e2e_system/ -v
 
-      - name: Post success comment
-        if: success()
+      - name: Report final commit status
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.vars.outputs.head_sha }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          case "${JOB_STATUS}" in
+            success)   state=success; desc="All E2E system tests passed on the live deployment." ;;
+            cancelled) state=error;   desc="E2E system tests cancelled." ;;
+            *)         state=failure; desc="E2E system tests failed — see the run log." ;;
+          esac
+
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${HEAD_SHA} \
+            -f state="${state}" \
+            -f context=e2e-system-tests \
+            -f description="${desc}" \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Post PR comment on success
+        if: success() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
             --body "✅ E2E system tests passed against namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\` (\`${PR_SHA::12}\`)."
 
-      - name: Post failure comment
-        if: failure()
+      - name: Post PR comment on failure
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
