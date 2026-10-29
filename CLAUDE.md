@@ -97,12 +97,19 @@ make test-int                       # kind cluster, namespace ai-trust
 - Details → [tests/integration/README.md](tests/integration/README.md).
 
 ### On-demand label workflows (deployed-namespace, OIDC)
-Two workflows run against a PR author's **already-deployed** namespace on `ai-trust-test` (add
-`garden-deploy` first), triggered by a PR label. Both authenticate through oauth2-proxy with a real
-Keycloak OIDC session cookie — no kubeconfig or port-forward (contrast `tests/integration/`). Neither
+Three workflows run against a PR author's **already-deployed** namespace on `ai-trust-test` (add
+`garden-deploy` first), triggered by a PR label. All authenticate through oauth2-proxy with a real
+Keycloak OIDC session — no kubeconfig or port-forward (contrast `tests/integration/`). None
 is a PR gate.
 - **`e2e-test`** → `.github/workflows/e2e-system-tests.yml` runs `tests/e2e_system/` (black-box OIDC
   E2E: auth, registration, self-assessment, classification) against the deployed namespace.
+- **`playwright-test`** → `.github/workflows/playwright-frontend-tests.yml` runs `tests/playwright/`
+  (`@playwright/test`, TypeScript): a real browser logs in via OIDC, smoke-tests that each MVP MFE
+  mounts + its backend is healthy, and registers an AI system end-to-end. A `setup` project
+  provisions personas and captures one `storageState` each; a `teardown` project cleans up. The HTML
+  report + `test-results/` (traces, failure screenshots, videos) are uploaded as CI artifacts.
+  Details → [tests/playwright/README.md](tests/playwright/README.md) and the Frontend tests section
+  of [docs/tests.md](docs/tests.md).
 - **`langfuse-test`** → `.github/workflows/langfuse-benchmark.yml` runs
   `tests/langfuse_benchmark/benchmark.py`: batch-imports the 339 ground-truth scenarios via
   `POST /api/registry/v1/intake/batch` (needs `ENABLE_BATCH_IMPORT=true`, set in
