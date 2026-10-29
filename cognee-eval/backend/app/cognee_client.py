@@ -150,6 +150,9 @@ def consistency_check() -> tuple[bool, str]:
     matches = glob.glob(_os.path.join(db_root, "*", "*.pkl")) + glob.glob(
         _os.path.join(db_root, "*", "*.lbug")
     )
+    legacy = _os.path.join(db_root, "cognee_graph_kuzu")
+    if _os.path.isfile(legacy):
+        matches.append(legacy)
     if not matches:
         return False, "no Kuzu graph file found under COGNEE_DATA_PATH"
 
