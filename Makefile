@@ -36,10 +36,9 @@ cluster:
 	fi
 	kind export kubeconfig --name $(CLUSTER_NAME)
 	@echo "==> patching CoreDNS: static host entry for Thalamus"
-	@echo "    Docker Desktop on macOS routes DNS through an internal gateway (172.18.0.1)"
-	@echo "    that cannot resolve SAP/corporate hostnames. Forwarding to 8.8.8.8 does not"
-	@echo "    help because the gateway blocks it too. A static hosts entry bypasses DNS"
-	@echo "    entirely for this one hostname."
+	@echo "    Docker Desktop on macOS routes DNS through an internal gateway that cannot"
+	@echo "    resolve external hostnames. A static hosts entry bypasses DNS entirely for"
+	@echo "    this one hostname."
 	@[ -n "$(THALAMUS_IP)" ] || { echo "ERROR: cannot resolve $(THALAMUS_HOST)"; exit 1; }
 	@echo "    Resolved $(THALAMUS_HOST) => $(THALAMUS_IP)"
 	kubectl patch configmap coredns -n kube-system --type merge -p \
