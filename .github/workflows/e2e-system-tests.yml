@@ -1,48 +1,54 @@
 name: E2E System Tests
 
 # Two ways in:
-#   1. workflow_run — automatic, after a successful Integration Tests run (the main path)
-#        PR   — "PR Deployment Test" (garden-deploy label) → Integration Tests → this workflow
-#        main — "Deployment Workflow" (push to main)       → Integration Tests → this workflow
-#   2. pull_request [labeled] — on-demand, by adding the "e2e-test" label to an open PR.
-#      Requires the namespace to already be deployed (add "garden-deploy" label first).
-#   3. workflow_dispatch — optional manual run against a live namespace, no redeploy.
+#   1. workflow_run — automatic, after a successful deployment (the main path)
+#        PR   — "PR Deployment Test" (garden-deploy label) → ai-trust-test / <pr-author>
+#        main — "Deployment Workflow" (push to main)       → ai-trust-main  / ai-trust
+#   2. workflow_dispatch — optional manual run / re-run against a live namespace,
+#      no redeploy. Both inputs are defaulted, so it is one click.
 #
-# Running after Integration Tests (not after the deployment directly) ensures the two
-# test suites never run concurrently against the same live namespace.
+# Runs in parallel with Integration Tests — both trigger directly on a successful
+# deployment, so neither namespace is shared between sequential suites.
 #
 # How the PR reporting works (the `e2e-system-tests` commit status):
-#   Results are published to ONE commit status context, `e2e-system-tests`, keyed by
-#   name and overwritten in place — the PR shows a single entry that transitions:
+#   Results are published to ONE commit status context, `e2e-system-tests`, which
+#   is keyed by name and overwritten in place, so the PR shows a single entry that
+#   transitions rather than a pile of separate results:
 #
-#     garden-deploy added     → pr-deployment-test.yml seeds it PENDING
-#     integration tests done  → this workflow overwrites it with success/failure
+#     garden-deploy added  → pr-deployment-test.yml seeds it PENDING
+#     deployment finishes  → this workflow overwrites it with success/failure
 #
-#   A commit status is used (not a check run) for the same reason as integration-tests:
-#   workflow_run runs are attached to the DEFAULT BRANCH, so their native checks never
-#   appear on the PR at all.
+#   A commit status is used rather than a check run because workflow_run runs are
+#   attached to the DEFAULT BRANCH, not the PR head, so their native checks never
+#   appear on the PR at all. Same pattern as the `deploy-test` status in
+#   pr-deployment-test.yml.
 #
-# Prerequisites (label-triggered path):
-#   1. Namespace must already be deployed (add "garden-deploy" label first).
-#   2. Namespace must be initialised once via:
-#        bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-username>
+# Deliberately NO `pull_request:` trigger here. Every job in a pull_request-triggered
+# workflow is pinned to the PR as its own check run, and `pull_request: [labeled]`
+# fires for EVERY label (GitHub has no label-name filter in `on:`) — which left a
+# permanently "Skipped" check plus a redundant seed-job check on the PR. The seeding
+# is therefore a STEP inside pr-deployment-test.yml's existing job (steps create no
+# check runs), and manual runs use workflow_dispatch.
 #
-# Unlike tests/integration/, this suite needs no kubeconfig or port-forward — it talks to
-# the public URL through oauth2-proxy with a real OIDC session cookie.
+# Unlike tests/integration/, this suite needs no kubeconfig or port-forward — it talks
+# to the public URL through oauth2-proxy with a real OIDC session cookie.
 #
-# EDITING THIS FILE: workflow_run does not just attach its runs to the default branch,
-# it also RUNS THE DEFAULT BRANCH'S COPY of this file. Changes here do nothing until
-# merged to main — a branch cannot test them. Validate shell logic locally and merge
-# before expecting any behaviour change.
-
+# EDITING THIS FILE: workflow_run does not just attach its runs to the default
+# branch, it also RUNS THE DEFAULT BRANCH'S COPY of this file. Changes here
+# therefore do nothing until they are merged to main — a branch cannot test them,
+# and a run triggered from a PR will silently execute main's version instead.
+# Validate the shell logic locally (it is plain bash; the runner is bash 5) and
+# merge before expecting any behaviour change. The same applies to workflow_dispatch:
+# the "Run workflow" button only appears once the trigger exists on main.
 on:
   workflow_run:
     workflows:
-      - "Integration Tests"
+      - "PR Deployment Test"
+      - "Deployment Workflow"
     types:
       - completed
-  pull_request:
-    types: [labeled]
+  # Optional on-demand run: re-test an already-deployed namespace without
+  # redeploying. Both inputs have defaults, so "Run workflow" works with no edits.
   workflow_dispatch:
     inputs:
       gardener_cluster:
@@ -60,45 +66,30 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
   statuses: write
-  actions: read  # required to read artifacts from a different run (deployment-context)
-
-concurrency:
-  # One run per namespace at a time — the workflow_run path derives the namespace from
-  # the integration-tests run; the label path uses the PR author's login.
-  group: e2e-system-${{ github.event.workflow_run.actor.login || github.event.pull_request.user.login || github.actor }}
-  cancel-in-progress: false
+  actions: read  # required to download artifacts from a different run (deployment-context)
 
 jobs:
   e2e-system:
     name: E2E System Tests
     runs-on: ubuntu-latest
-    # workflow_run fires on completion regardless of outcome — only run after a
-    # successful Integration Tests run.
+    # workflow_run fires on completion regardless of outcome — only test a
+    # deployment that actually succeeded.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' && github.event.label.name == 'e2e-test') ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
-      # The workflow_run path needs deployment-context when triggered from the
-      # Deployment Workflow chain (to resolve the cluster/namespace). Integration Tests
-      # downloads it itself and we cannot inherit it, so we re-download from the same
-      # deployment workflow run that triggered Integration Tests, if available.
-      - name: Download deployment context (Deployment Workflow chain only)
-        if: >-
-          github.event_name == 'workflow_run' &&
-          github.event.workflow_run.name == 'Integration Tests'
+      - name: Download deployment context (Deployment Workflow only)
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deployment Workflow'
         uses: actions/download-artifact@v4
-        continue-on-error: true  # artifact absent on PR chain — handled in Derive step
         with:
           name: deployment-context
           path: /tmp/deployment-context
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Derive cluster, namespace, head_sha, and app_url
+      - name: Derive cluster and namespace
         id: vars
         shell: bash
         run: |
@@ -114,26 +105,17 @@ jobs:
               fi
             fi
             head_sha="${GITHUB_SHA}"
-
-          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            # Label-triggered manual run — namespace is the PR author's login.
-            namespace="${{ github.event.pull_request.user.login }}"
-            cluster="ai-trust-test"
-            head_sha="${{ github.event.pull_request.head.sha }}"
-
           else
-            # workflow_run — triggered after Integration Tests.
-            # Integration Tests itself was triggered by either:
-            #   a) "PR Deployment Test"   → namespace = PR author login (no artifact)
-            #   b) "Deployment Workflow"  → namespace in deployment-context artifact
-            # We can distinguish by whether the artifact directory is populated.
-            if [[ -f /tmp/deployment-context/cluster ]]; then
-              cluster=$(cat /tmp/deployment-context/cluster | tr -d '[:space:]')
-              namespace=$(cat /tmp/deployment-context/namespace | tr -d '[:space:]')
-              head_sha=$(cat /tmp/deployment-context/head_sha | tr -d '[:space:]')
+            WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+            if [[ "${WORKFLOW_NAME}" == "Deployment Workflow" ]]; then
+              # Read cluster/namespace/head_sha from the artifact uploaded by build-push-deploy.yml.
+              # head_sha identifies the deployed commit — use it for checkout and commit status,
+              # not workflow_run.head_sha which points to the workflow file's commit.
+              cluster=$(cat /tmp/deployment-context/cluster 2>/dev/null | tr -d '[:space:]' || echo "ai-trust-main")
+              namespace=$(cat /tmp/deployment-context/namespace 2>/dev/null | tr -d '[:space:]' || echo "ai-trust")
+              head_sha=$(cat /tmp/deployment-context/head_sha 2>/dev/null | tr -d '[:space:]' || echo "${{ github.event.workflow_run.head_sha }}")
             else
-              # PR chain: namespace is the actor who triggered the Integration Tests run
-              # (which equals the PR author who triggered the original deployment).
+              # PR Deployment Test — namespace is the PR author's login.
               PR_AUTHOR="${{ github.event.workflow_run.pull_requests[0].user.login }}"
               ACTOR="${{ github.event.workflow_run.actor.login }}"
               namespace="${PR_AUTHOR:-${ACTOR}}"
@@ -141,7 +123,6 @@ jobs:
               head_sha="${{ github.event.workflow_run.head_sha }}"
             fi
           fi
-
           namespace="${namespace,,}"
 
           if [[ "${cluster}" == "ai-trust-main" ]]; then
@@ -156,14 +137,14 @@ jobs:
           echo "app_url=${app_url}"     >> "$GITHUB_OUTPUT"
           echo "==> cluster=${cluster}, namespace=${namespace}, app_url=${app_url}, head_sha=${head_sha}"
 
-      - name: Check out head
-        uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           ref: ${{ steps.vars.outputs.head_sha }}
 
       - name: Summary
         run: |
-          echo "### E2E System Test variables" >> "$GITHUB_STEP_SUMMARY"
+          echo "### E2E system test variables" >> "$GITHUB_STEP_SUMMARY"
           echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
           echo "| cluster | ${{ steps.vars.outputs.cluster }} |" >> "$GITHUB_STEP_SUMMARY"
@@ -172,12 +153,10 @@ jobs:
           echo "| head_sha | ${{ steps.vars.outputs.head_sha }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| triggered_by | ${{ github.event_name }} |" >> "$GITHUB_STEP_SUMMARY"
 
+      # Publishes an "e2e-system-tests" status onto the triggering commit so the
+      # result is visible on the PR (and on the main commit) instead of only in
+      # the Actions tab.
       - name: Set pending commit status
-        # Not set for label-triggered runs — the status was already seeded PENDING by
-        # pr-deployment-test.yml and this run is overwriting it on completion only.
-        # For workflow_run and workflow_dispatch we set it here so the PR/commit shows
-        # progress while the tests run.
-        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_SHA: ${{ steps.vars.outputs.head_sha }}
@@ -225,24 +204,3 @@ jobs:
             -f context=e2e-system-tests \
             -f description="${desc}" \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-      - name: Post PR comment on success
-        if: success() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          gh pr comment "${PR_NUMBER}" \
-            --repo "${{ github.repository }}" \
-            --body "✅ E2E system tests passed against namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\` (\`${PR_SHA::12}\`)."
-
-      - name: Post PR comment on failure
-        if: failure() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          gh pr comment "${PR_NUMBER}" \
-            --repo "${{ github.repository }}" \
-            --body "❌ E2E system tests failed against namespace \`${{ steps.vars.outputs.namespace }}\` — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
