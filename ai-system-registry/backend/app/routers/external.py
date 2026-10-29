@@ -107,11 +107,8 @@ class ExternalSystemResponse(BaseModel):
     decision_context: str | None
     system_type: str
     autonomy_level: str
-    application_url: str
     provider_country: str
     deployment_country: str | None
-    eu_output_usage: bool | None
-    eu_market_placement: bool | None
     lifecycle: str
     tier: str
     # EU AI Act classifier flags (inputs to the deterministic classifier).
