@@ -80,7 +80,7 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 | Variable | Default | Description |
 |---|---|---|
 | `THALAMUS_BASE_URL` | _(unset → stub)_ | Thalamus OpenAI-compatible gateway (incl. `/v1`); unset or `stub` → offline/CI. All cognee generation + extraction. |
-| `THALAMUS_MODEL` | `Qwen/Qwen3.8-27B` | Model ID the gateway serves — used for generation and extraction |
+| `THALAMUS_MODEL` | `mistralai/Mistral-Small-4-119B-2603` | Model ID the gateway serves — used for generation and extraction |
 | `THALAMUS_BEARER_TOKEN` | _(empty)_ | Static bearer token sent as `Authorization: Bearer <token>`; required when `THALAMUS_BASE_URL` is a real gateway |
 | `COGNEE_SKIP_CONNECTION_TEST` | `true` (set in code) | Suppresses cognee's first-use LLM/embedding probe — it can fail against OpenAI-compat endpoints even when real calls work. Set in `cognee_client.py` via `os.environ.setdefault`; override with `false` to re-enable. |
 | `COGNEE_DATA_PATH` | `/app/.cognee_system` | Where Cognee stores its databases |
