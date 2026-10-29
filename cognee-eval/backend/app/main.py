@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     setup_cognee()
     logger.info("startup.cognee_configured")
     if COGNEE_READONLY:
-        ok, detail = await consistency_check()
+        ok, detail = consistency_check()
         app.state.graph_ready = ok
         if ok:
             logger.info("startup.graph_ready", extra={"detail": detail})

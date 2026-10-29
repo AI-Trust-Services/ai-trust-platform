@@ -1,4 +1,6 @@
 CLUSTER_NAME := ai-trust
+THALAMUS_HOST := api.thalamus.eu-de-1.cloud.sap
+THALAMUS_IP   := $(shell dig +short $(THALAMUS_HOST) 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$$' | tail -1)
 # Fixed for the local kind cluster. These targets are kind-only — a remote Gardener
 # namespace is never passed in here (CI calls scripts/ directly with its own namespace).
 NAMESPACE := ai-trust
@@ -33,6 +35,16 @@ cluster:
 		kind create cluster --name $(CLUSTER_NAME) --config k8s/kind-config.yaml; \
 	fi
 	kind export kubeconfig --name $(CLUSTER_NAME)
+	@echo "==> patching CoreDNS: static host entry for Thalamus"
+	@echo "    Docker Desktop on macOS routes DNS through an internal gateway that cannot"
+	@echo "    resolve external hostnames. A static hosts entry bypasses DNS entirely for"
+	@echo "    this one hostname."
+	@[ -n "$(THALAMUS_IP)" ] || { echo "ERROR: cannot resolve $(THALAMUS_HOST)"; exit 1; }
+	@echo "    Resolved $(THALAMUS_HOST) => $(THALAMUS_IP)"
+	kubectl patch configmap coredns -n kube-system --type merge -p \
+		'{"data":{"Corefile":".:53 {\n    errors\n    health {\n       lameduck 5s\n    }\n    ready\n    hosts {\n      $(THALAMUS_IP) $(THALAMUS_HOST)\n      fallthrough\n    }\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    prometheus :9153\n    forward . /etc/resolv.conf {\n       max_concurrent 1000\n    }\n    cache 30 {\n       disable success cluster.local\n       disable denial cluster.local\n    }\n    loop\n    reload\n    loadbalance\n}\n"}}'
+	kubectl rollout restart deployment/coredns -n kube-system
+	kubectl rollout status deployment/coredns -n kube-system --timeout=60s
 
 delete-cluster:
 	kind delete cluster --name $(CLUSTER_NAME)

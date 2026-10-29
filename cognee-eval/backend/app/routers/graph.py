@@ -18,14 +18,18 @@ _DB_ROOT = os.path.join(
 
 
 def find_graph_db() -> str | None:
-    """Return the most recently written per-dataset Kuzu graph file.
+    """Return the most recently written Kuzu graph file.
 
     cognee 1.6.x persists each dataset's graph as a `<uuid>.pkl` or `<uuid>.lbug`
     Kuzu database (ladybug fork) inside its own dataset directory.
+    Older snapshots use a flat `cognee_graph_kuzu` file directly in databases/.
     """
     matches = glob.glob(os.path.join(_DB_ROOT, "*", "*.pkl")) + glob.glob(
         os.path.join(_DB_ROOT, "*", "*.lbug")
     )
+    legacy = os.path.join(_DB_ROOT, "cognee_graph_kuzu")
+    if os.path.isfile(legacy):
+        matches.append(legacy)
     return max(matches, key=os.path.getmtime) if matches else None
 
 

@@ -121,9 +121,9 @@ indexing:
     serviceType: ClusterIP
 
 # Cognee eval — graph-based grounded Q&A over the EU AI Act.
-# Disabled by default; uses Thalamus for generation (THALAMUS_* in the Secret).
+# Enabled by default with the digest-pinned read-only graph below; uses Thalamus for generation (THALAMUS_* in the Secret).
 cogneeEval:
-  enabled: false
+  enabled: true
   backendPort: 8014
   dataStorageSize: 5Gi # cognee graph + vector + SQLite data
   # Read-only production mode. When true the workload is a Deployment whose
@@ -131,8 +131,8 @@ cogneeEval:
   # init container, COGNEE_READONLY=true gates off the ingest/feedback routers,
   # and no graph mutation is possible. Build/test leaves this false (StatefulSet
   # + PVC, full feedback loop). See cognee-eval/CLAUDE.md.
-  readOnly: false
-  graphImage: "" # prod only — pin by DIGEST: ghcr.io/<owner>/ai-trust-platform/cognee-graph@sha256:...
+  readOnly: true
+  graphImage: "ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph@sha256:54e89ad8e5887b007c70f15671a532e2ce6b9b8568782e57ac7c775ab84280f8"
 
 # ── the 7 near-identical backend+frontend MFE pairs ──
 # dependsOnJobs: Job names that must Complete before this backend starts

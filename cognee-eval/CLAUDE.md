@@ -26,7 +26,7 @@ snapshot exported for production contains a single coherent graph.
 
 ## Running
 
-The component ships disabled by default — set `cogneeEval.enabled: true` in `values.yaml` (or the
+The component ships enabled by default in read-only mode with the promoted graph snapshot — set `cogneeEval.enabled: false` in `values.yaml` (or the
 cluster's override) before deploying. On kind:
 
 ```bash
@@ -80,7 +80,7 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 | Variable | Default | Description |
 |---|---|---|
 | `THALAMUS_BASE_URL` | _(unset → stub)_ | Thalamus OpenAI-compatible gateway (incl. `/v1`); unset or `stub` → offline/CI. All cognee generation + extraction. |
-| `THALAMUS_MODEL` | `Qwen/Qwen3.8-27B` | Model ID the gateway serves — used for generation and extraction |
+| `THALAMUS_MODEL` | `mistralai/Mistral-Small-4-119B-2603` | Model ID the gateway serves — used for generation and extraction |
 | `THALAMUS_BEARER_TOKEN` | _(empty)_ | Static bearer token sent as `Authorization: Bearer <token>`; required when `THALAMUS_BASE_URL` is a real gateway |
 | `COGNEE_SKIP_CONNECTION_TEST` | `true` (set in code) | Suppresses cognee's first-use LLM/embedding probe — it can fail against OpenAI-compat endpoints even when real calls work. Set in `cognee_client.py` via `os.environ.setdefault`; override with `false` to re-enable. |
 | `COGNEE_DATA_PATH` | `/app/.cognee_system` | Where Cognee stores its databases |
@@ -140,12 +140,12 @@ frozen snapshot of that graph read-only** — it never ingests or mutates. Same 
 image on both sides; the only differences are config.
 
 **Two modes (Helm `cogneeEval.readOnly`):**
-- `readOnly: false` (default) — build/test. `StatefulSet` + PVC, all routers, full feedback loop.
-- `readOnly: true` — prod. `Deployment` with an `emptyDir` hydrated at startup by an init container
+- `readOnly: true` (default) — prod. `Deployment` with an `emptyDir` hydrated at startup by an init container
   from the pinned `cogneeEval.graphImage`; `COGNEE_READONLY=true` so ingest/feedback are unmounted
   (404). The pod is stateless and reconstructs the exact pinned graph on every start. Eval history
   (POST /evaluate) still works but is ephemeral (resets on restart) — it writes a Q&A log row, never
   the graph.
+- `readOnly: false` — build/test. `StatefulSet` + PVC, all routers, full feedback loop.
 
 **Why a snapshot (not cognee `push`/CogX):** both sides run the same Cognee, so a verbatim copy of
 `/app/.cognee_system` is byte-identical to what experts approved. `push`/CogX re-materialize via a
@@ -171,10 +171,7 @@ semantic interchange format into a *live writable* remote — the opposite of re
    ghcr.io/<owner>/ai-trust-platform/cognee-graph@sha256:<digest>` (always a digest, never a mutable
    tag) in the prod override, then deploy.
 
-**First-boot safety:** in read-only mode the lifespan runs `consistency_check()` — a `recall()` with
-a fixed probe query; if at least one result returns non-empty text the graph is considered healthy.
-If the snapshot is torn/empty, `/health` returns 503 and the pod never becomes Ready, so a bad
-artifact never serves traffic.
+**First-boot safety:** in read-only mode the lifespan runs `consistency_check()` — opens the Kuzu DB directly (read-only) and counts `Node` rows; no LLM or embedding call, so it works in kind/local without network access. If the snapshot is torn/empty, `/health` returns 503 and the pod never becomes Ready, so a bad artifact never serves traffic.
 
 > The graph image is a deliberate exception to the "adding a service" checklist: it is **not** in
 > `docker-bake.hcl`, `build-and-load-images.sh`, or `cleanup-images.yml` — it is built only by the
