@@ -13,11 +13,15 @@ ai-trust-platform always runs with `cogneeEval.readOnly: true`, pulling a frozen
 Export from the running ai-test-lab `cognee-eval-backend` container when ingest is idle (never restart it — that wipes the graph):
 
 ```bash
-docker exec ai-trust-platform-cognee-eval-backend-1 \
-  tar czf - -C /app/.cognee_system --exclude=./cognee_eval.db . > /tmp/graph.tar.gz
+docker exec cognee \
+  tar czf - -C /cognee-storage --exclude=./data . > /tmp/graph.tar.gz
 
 tar tzf /tmp/graph.tar.gz | grep -c cognee_eval.db   # must be 0
 ```
+
+> **Container name**: the ai-test-lab cognee container is `cognee` (from `cognee/cognee:1.6.5`).
+> Data lives at `/cognee-storage/system` (graph + vectors) and `/cognee-storage/data` (raw text chunks — excluded from the snapshot, not needed for read-only serving).
+> The `tar: file changed as we read it` warning from LanceDB WAL files is harmless — the archive is valid.
 
 > **Do not export from ai-trust-platform** — the platform's pod runs read-only with an emptyDir hydrated from GHCR. Exporting from it would snapshot the hydrated copy, not the curated source.
 >

@@ -129,12 +129,15 @@ async def recall(query: str, top_k: int = 10) -> list[dict]:
     layout (flat cognee_graph_kuzu + shared LanceDB collections) that pre-dates
     per-dataset registry entries. We bypass the registry and query LanceDB
     directly so the frozen snapshot works read-only without re-ingestion.
+
+    In live mode the query is embedded via Thalamus (Snowflake/snowflake-arctic-embed-m,
+    768-dim) — the same model used during ingest in ai-test-lab. In stub/CI mode
+    fastembed (BAAI/bge-small-en-v1.5, 384-dim) is used as a local fallback.
     """
     import os as _os
     import json as _json
 
     import lancedb
-    from fastembed import TextEmbedding
 
     db_path = _os.path.join(
         _os.environ.get("COGNEE_DATA_PATH", "/app/.cognee_system"),
@@ -142,13 +145,24 @@ async def recall(query: str, top_k: int = 10) -> list[dict]:
         "databases",
         "cognee.lancedb",
     )
-    # Embed the query with the same model used during ingest (384-dim bge-small).
-    embedder = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
-    query_vec = list(embedder.embed([query]))[0].tolist()
+
+    if _STUB_MODE:
+        from fastembed import TextEmbedding
+        embedder = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+        query_vec = list(embedder.embed([query]))[0].tolist()
+    else:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{_THALAMUS_BASE_URL.rstrip('/')}/embeddings",
+                headers={"Authorization": f"Bearer {_THALAMUS_BEARER_TOKEN}"},
+                json={"model": "Snowflake/snowflake-arctic-embed-m", "input": [query]},
+            )
+        resp.raise_for_status()
+        query_vec = resp.json()["data"][0]["embedding"]
 
     db = lancedb.connect(db_path)
     table = db.open_table("DocumentChunk_text")
-    results = table.search(query_vec).limit(top_k).to_list()
+    results = table.search(query_vec, vector_column_name="vector").limit(top_k).to_list()
 
     out = []
     for row in results:
