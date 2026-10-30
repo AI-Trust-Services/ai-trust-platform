@@ -11,7 +11,7 @@
 | E2E System | System / end-to-end (API level), domain | MVP business requirements: full happy-path persona flows driven black-box through the whole deployed platform; no browser or login. See [E2E system scenarios](#e2e-system-scenarios) | ✅ |
 | Deployment test | Deployment verification | Helm/OCM rollout healthy, K8s liveness & readiness probes.| ✅ |
 | AI output evaluation | ML evaluation | Accuracy of AI-assisted classification against a labelled dataset. See [AI output evaluation](#ai-output-evaluation) | ✅ |
-| Frontend tests | Component / visual regression | React component behaviour and visual states; proposed tool: Playwright (Apache 2.0). See [Frontend tests](#frontend-tests) | ✅ |
+| Frontend tests | Component / visual regression | React component behaviour and visual states, driven black-box through a real browser; tool: Playwright (Apache 2.0). See [Frontend tests](#frontend-tests) | ✅ |
 | Performance / load | Performance | Throughput, latency, and race-condition checks under load | TBD |
 
 **Test Coverage: measure, don't gate.** `pytest-cov` runs in report-only mode with no threshold; it never
@@ -182,10 +182,61 @@ Monitoring follows Approval in the lifecycle and is outside MVP scope; no E2E sy
 
 ## Frontend tests
 
-**Proposed tool: [Playwright](https://playwright.dev/)** — Apache 2.0 licensed, runs on standard
-GitHub-hosted runners without additional infrastructure, and covers both component-level interaction
-and visual regression via screenshot comparison. It replaces the need for a separate Storybook +
-Chromatic stack.
+**Tool: [Playwright](https://playwright.dev/)** (`@playwright/test`, TypeScript) — Apache 2.0
+licensed, runs on standard GitHub-hosted runners without additional infrastructure. The suite lives
+in [`tests/playwright/`](../tests/playwright/) and drives a **real browser** black-box against a
+**live** platform through the single entry point (oauth2-proxy on `APP_URL`), authenticating with a
+**real Keycloak OIDC login** — the browser-level counterpart of `tests/e2e_system/`.
+
+**How it runs.** Locally against kind (`APP_URL=http://localhost:8080`) or any deployed namespace;
+in CI via the **`playwright-test`** PR label
+([`.github/workflows/playwright-frontend-tests.yml`](../.github/workflows/playwright-frontend-tests.yml)),
+which runs against the PR author's already-deployed `ai-trust-test` namespace (deploy it first with
+`garden-deploy`). The HTML report and `test-results/` (traces, **failure screenshots**, videos) are
+uploaded as CI artifacts. **Not a PR gate** (same model as the `e2e-test` / `langfuse-test` labels).
+
+**Auth & personas.** A Playwright `setup` project provisions personas via the users API and captures
+one `storageState` per persona (reused by every spec); a `teardown` project deletes the created
+users and systems even on failure. Two personas cover all six MVP MFEs because the shell nav is
+permission-gated: `engineer` (`ai_engineer`) sees registry/compliance/audit/overview and can register
+systems; `admin` (`platform_administrator`, `iam:manage`) sees admin and users/IAM.
+
+### Initial scenarios (MVP baseline)
+
+Legend: ✅ test covered · ⬜ test missing, functionality exists
+
+| Kind | Scenario | State |
+|---|---|---|
+| Smoke | Registry MFE mounts (heading "AI System Registry") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
+| Smoke | Compliance MFE mounts (heading "Assessments") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
+| Smoke | Audit MFE mounts (heading "Audit Trail") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
+| Smoke | Overview MFE mounts (heading "Compliance Overview") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
+| Smoke | Admin MFE mounts (heading "Platform Administration") + backend healthy | ✅ `tests/playwright/tests/smoke-admin.spec.ts` |
+| Smoke | Users/IAM MFE mounts (heading "Users & Roles") + backend healthy | ✅ `tests/playwright/tests/smoke-admin.spec.ts` |
+| Deep | AI Engineer registers a new system end-to-end (form → toast → list row) | ✅ `tests/playwright/tests/registry-register.spec.ts` |
+
+"Mounted" asserts the view's stable heading is visible; "healthy" asserts the red health banner
+("Backend is unavailable…") is absent. Selectors are user-facing (role/label/text) — the frontends
+expose no `data-testid`.
+
+### Conventions
+
+- **User-facing selectors only** — `getByRole` / `getByLabel` / `getByText`, never CSS classes or
+  XPath; web-first auto-waiting assertions (`await expect(...)`), never fixed sleeps.
+- **Deterministic data** — the registry deep flow uses name + description only (no document upload,
+  no AI mode), so it never depends on the Thalamus/LLM backend.
+- **Isolation** — each run uses a unique suffix (`E2E_SUFFIX`) and cleans up after itself; the suite
+  does not share state with the Python suites.
+- **No duplication of lower layers** — browser tests assert UI behaviour; API contracts and RBAC
+  denials stay in `tests/e2e_system/` and `tests/integration/`.
+
+### Future path (out of MVP scope)
+
+- **Visual regression** via `toHaveScreenshot()` pixel baselines — deferred: baselines are
+  environment-sensitive (fonts/rendering) and a common cross-runner flake source. Revisit once the
+  interaction baseline is stable and a canonical rendering environment is pinned.
+- Additional browsers (firefox/webkit), the deep self-assessment / classification flows, and the
+  MVP-off MFEs (ai-test-bed, monitoring, alerts, dta).
 
 ---
 

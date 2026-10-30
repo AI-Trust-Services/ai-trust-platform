@@ -1,0 +1,16 @@
+{
+  "name": "ai-trust-playwright",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright browser tests for the AI Trust Platform MVP frontends.",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}

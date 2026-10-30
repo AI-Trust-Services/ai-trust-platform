@@ -1,0 +1,115 @@
+name: Playwright Frontend Tests
+
+# Triggered by adding the "playwright-test" label to a PR.
+# Runs tests/playwright/ (browser E2E) against the PR author's already-deployed namespace on
+# ai-trust-test.
+#
+# Prerequisites:
+#   1. Namespace must already be deployed (add "garden-deploy" label first).
+#   2. Namespace must be initialised once via:
+#        bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-username>
+#
+# Like tests/e2e_system/, this suite needs no kubeconfig or port-forward — it drives a real browser
+# through oauth2-proxy with a real Keycloak OIDC login.
+#
+# Usage: add the "playwright-test" label to an open PR (after "garden-deploy" has deployed it).
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Do NOT cancel in progress: a run provisions Keycloak users + registry systems in a shared
+# namespace and removes them in a Playwright teardown project. Cancelling mid-run would kill the
+# process before teardown, and the replacement run (new random suffix) cannot find the orphans.
+concurrency:
+  group: playwright-${{ github.event.pull_request.user.login }}
+  cancel-in-progress: false
+
+jobs:
+  playwright:
+    name: Playwright Frontend Tests
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'playwright-test'
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_SHA: ${{ github.event.pull_request.head.sha }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      # The job injects APP_ADMIN_PASSWORD (platform-admin) into PR-head test code, so gate it on
+      # repo write access — same check as the deployment workflow (pr-deployment-test.yml). Adding
+      # the label already requires triage/write, but this also blocks a label added before a
+      # malicious push lands, and fails loudly rather than relying on the label alone.
+      - name: Check authorization (org members only)
+        run: |
+          PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" \
+            --jq '.permission' 2>/dev/null || echo "none")
+          if [[ "$PERMISSION" != "admin" && "$PERMISSION" != "write" && "$PERMISSION" != "maintain" ]]; then
+            echo "::error::${{ github.actor }} lacks write access — refusing to run privileged tests on PR-head code."
+            exit 1
+          fi
+
+      - name: Check out PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.PR_SHA }}
+
+      - name: Compute APP_URL
+        id: vars
+        run: |
+          NAMESPACE="${{ github.event.pull_request.user.login }}"
+          NAMESPACE="${NAMESPACE,,}"
+          APP_URL="https://${NAMESPACE}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          echo "namespace=${NAMESPACE}" >> "$GITHUB_OUTPUT"
+          echo "app_url=${APP_URL}"     >> "$GITHUB_OUTPUT"
+          echo "==> namespace=${NAMESPACE}, app_url=${APP_URL}"
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        working-directory: tests/playwright
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: tests/playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        working-directory: tests/playwright
+        env:
+          APP_URL: ${{ steps.vars.outputs.app_url }}
+          APP_ADMIN_PASSWORD: ${{ secrets.APP_ADMIN_PASSWORD }}
+          APP_ADMIN_USERNAME: ${{ secrets.APP_ADMIN_USERNAME || 'admin' }}
+        run: npx playwright test
+
+      - name: Upload Playwright report + results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ steps.vars.outputs.namespace }}
+          path: |
+            tests/playwright/playwright-report/
+            tests/playwright/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Post success comment
+        if: success()
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "✅ Playwright frontend tests passed against namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\` (\`${PR_SHA::12}\`)."
+
+      - name: Post failure comment
+        if: failure()
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "❌ Playwright frontend tests failed against namespace \`${{ steps.vars.outputs.namespace }}\` — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) (report + screenshots in the run artifacts)."
