@@ -79,7 +79,7 @@ jobs:
     steps:
       - name: Download deployment context (Deployment Workflow only)
         if: github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deployment Workflow'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v7
         with:
           name: deployment-context
           path: /tmp/deployment-context
