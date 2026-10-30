@@ -133,9 +133,9 @@ async def recall(query: str, top_k: int = 10) -> list[dict]:
     per-dataset registry entries. We bypass the registry and query LanceDB
     directly so the frozen snapshot works read-only without re-ingestion.
 
-    In live mode the query is embedded via Thalamus (Snowflake/snowflake-arctic-embed-m,
-    768-dim) — the same model used during ingest in ai-test-lab. In stub/CI mode
-    fastembed (BAAI/bge-small-en-v1.5, 384-dim) is used as a local fallback.
+    The query is embedded via Thalamus (THALAMUS_EMBEDDING_MODEL, default
+    Snowflake/snowflake-arctic-embed-m, 768-dim) — the same model used during
+    ingest in ai-test-lab. Not available in stub mode (recall is mocked in tests).
     """
     import os as _os
     import json as _json
@@ -150,19 +150,17 @@ async def recall(query: str, top_k: int = 10) -> list[dict]:
     )
 
     if _STUB_MODE:
-        from fastembed import TextEmbedding
-
-        embedder = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
-        query_vec = list(embedder.embed([query]))[0].tolist()
-    else:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                f"{_THALAMUS_BASE_URL.rstrip('/')}/embeddings",
-                headers={"Authorization": f"Bearer {_THALAMUS_BEARER_TOKEN}"},
-                json={"model": _THALAMUS_EMBEDDING_MODEL, "input": [query]},
-            )
-        resp.raise_for_status()
-        query_vec = resp.json()["data"][0]["embedding"]
+        raise RuntimeError(
+            "recall() is not available in stub mode — configure THALAMUS_BASE_URL."
+        )
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{_THALAMUS_BASE_URL.rstrip('/')}/embeddings",
+            headers={"Authorization": f"Bearer {_THALAMUS_BEARER_TOKEN}"},
+            json={"model": _THALAMUS_EMBEDDING_MODEL, "input": [query]},
+        )
+    resp.raise_for_status()
+    query_vec = resp.json()["data"][0]["embedding"]
 
     db = lancedb.connect(db_path)
     table = db.open_table("DocumentChunk_text")
