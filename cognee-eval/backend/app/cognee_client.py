@@ -151,6 +151,7 @@ async def recall(query: str, top_k: int = 10) -> list[dict]:
 
     if _STUB_MODE:
         from fastembed import TextEmbedding
+
         embedder = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
         query_vec = list(embedder.embed([query]))[0].tolist()
     else:
@@ -165,7 +166,9 @@ async def recall(query: str, top_k: int = 10) -> list[dict]:
 
     db = lancedb.connect(db_path)
     table = db.open_table("DocumentChunk_text")
-    results = table.search(query_vec, vector_column_name="vector").limit(top_k).to_list()
+    results = (
+        table.search(query_vec, vector_column_name="vector").limit(top_k).to_list()
+    )
 
     out = []
     for row in results:
