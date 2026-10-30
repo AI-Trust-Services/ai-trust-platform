@@ -1,0 +1,93 @@
+{{/* PodDisruptionBudgets for all horizontally-scalable workloads.
+     Only rendered when replicaCount > 1 — a PDB with minAvailable: 1 on a single-replica
+     Deployment blocks voluntary disruptions (node drain, helm upgrade) indefinitely since
+     there is no spare replica to evict. On ai-trust-main (replicaCount: 2) this ensures
+     at least one replica stays available during node maintenance or a rolling upgrade. */}}
+{{- if gt (int .Values.replicaCount) 1 }}
+{{- range $c := .Values.components }}
+{{- if ne $c.enabled false }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ printf "%s-backend" $c.name }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" (printf "%s-backend" $c.name)) | nindent 6 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ printf "%s-frontend" $c.name }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" (printf "%s-frontend" $c.name)) | nindent 6 }}
+{{- end }}
+{{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: oauth2-proxy
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "oauth2-proxy") | nindent 6 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: openfga
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "openfga") | nindent 6 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: shell
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "shell") | nindent 6 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: document-indexing-backend
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "document-indexing-backend") | nindent 6 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: embedding-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "embedding-service") | nindent 6 }}
+{{- if and .Values.cogneeEval.enabled .Values.cogneeEval.readOnly }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cognee-eval-backend
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "cognee-eval-backend") | nindent 6 }}
+{{- end }}
+{{- end }}

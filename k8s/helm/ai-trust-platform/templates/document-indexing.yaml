@@ -4,17 +4,31 @@
      so no broker is involved. */}}
 
 {{/* ── embedding-service: loads EMBED_MODEL once, shared by backend (query) + worker (index) ── */}}
+{{/* Converted from StatefulSet to Deployment with a standalone RWX PVC so the service can
+     run multiple replicas across nodes. The HuggingFace model cache (~2 GB) is shared via
+     the PVC; concurrent reads are safe (files are immutable once downloaded). If upgrading
+     from a prior StatefulSet install, delete the orphaned PVC after the upgrade:
+       kubectl delete pvc hf-cache-embedding-service-0 -n <namespace>
+     The model will re-download on first start (initialDelaySeconds: 300 accounts for this). */}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: embedding-service-hf-cache
+spec:
+  accessModes: ["ReadWriteMany"]
+  {{- if .Values.indexing.embedding.storageClassName }}
+  storageClassName: {{ .Values.indexing.embedding.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.indexing.embedding.storageSize }}
+---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: embedding-service
 spec:
-  serviceName: embedding-service
-  replicas: 1
-  updateStrategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       {{- include "ai-trust.labels" (dict "name" "embedding-service") | nindent 6 }}
@@ -51,14 +65,10 @@ spec:
               port: {{ .Values.indexing.embedding.port }}
             initialDelaySeconds: 300
             periodSeconds: 30
-  volumeClaimTemplates:
-    - metadata:
-        name: hf-cache
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: {{ .Values.indexing.embedding.storageSize }}
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: embedding-service-hf-cache
 ---
 apiVersion: v1
 kind: Service
@@ -79,7 +89,7 @@ kind: Deployment
 metadata:
   name: document-indexing-backend
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       {{- include "ai-trust.labels" (dict "name" "document-indexing-backend") | nindent 6 }}
@@ -156,6 +166,9 @@ kind: Deployment
 metadata:
   name: document-indexing-worker
 spec:
+  # Single-writer by design: the worker polls document_versions.status and processes
+  # one document at a time. Multiple replicas would race on the same rows causing
+  # duplicate processing. Distributed locking is out of scope for this issue.
   replicas: 1
   selector:
     matchLabels:

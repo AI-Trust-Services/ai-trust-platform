@@ -12,6 +12,12 @@
 #                       sets TLS + public hostnames. ClusterIP is already the
 #                       default here so no serviceType overrides are needed.
 
+# Number of replicas for horizontally-scalable workloads (component backends/frontends,
+# oauth2-proxy, openfga, shell, document-indexing-backend, embedding-service, cognee-eval
+# readOnly path). Set to 2 on ai-trust-main for HA; keep at 1 on ai-trust-test and kind.
+# Keycloak and single-writer workers are hardcoded at 1 regardless (see their templates).
+replicaCount: 1
+
 image:
   repository: ai-trust # images are tagged ai-trust/<service>:<tag>, see k8s/scripts/build-and-load-images.sh
   tag: local
@@ -118,6 +124,10 @@ indexing:
   embedding:
     port: 8012
     storageSize: 10Gi # embedding model + Docling models cached on the HF-cache PVC
+    # StorageClass for the embedding-service PVC. Default "" uses the cluster's default
+    # StorageClass (must support ReadWriteMany on multi-node clusters). Override in
+    # values-kind.yaml / values-gardener.yaml if your cluster needs a specific RWX class.
+    storageClassName: ""
     serviceType: ClusterIP
 
 # Cognee eval — graph-based grounded Q&A over the EU AI Act.

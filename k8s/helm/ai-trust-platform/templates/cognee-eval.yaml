@@ -12,7 +12,7 @@ kind: Deployment
 metadata:
   name: cognee-eval-backend
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       {{- include "ai-trust.labels" (dict "name" "cognee-eval-backend") | nindent 6 }}
@@ -74,6 +74,9 @@ metadata:
   name: cognee-eval-backend
 spec:
   serviceName: cognee-eval-backend
+  # Single-writer dev/build mode: graph ingestion is synchronous and mutates the graph
+  # store directly. Multiple replicas would corrupt the graph. Use readOnly=true
+  # (Deployment + emptyDir) for the production HA path.
   replicas: 1
   updateStrategy:
     type: RollingUpdate

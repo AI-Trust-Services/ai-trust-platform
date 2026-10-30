@@ -4,6 +4,9 @@ kind: Deployment
 metadata:
   name: audit-flush-worker
 spec:
+  # Single-writer by design: reads from the Postgres audit_events buffer and bulk-inserts
+  # into ClickHouse on a timer. Multiple replicas would cause duplicate ClickHouse inserts.
+  # Distributed locking is out of scope for this issue.
   replicas: 1
   selector:
     matchLabels:

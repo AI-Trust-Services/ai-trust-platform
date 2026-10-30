@@ -5,6 +5,9 @@ kind: Deployment
 metadata:
   name: policy-checker-worker
 spec:
+  # Single-writer by design: polls alert rules and writes alert events to ClickHouse.
+  # Multiple replicas would cause duplicate alert firings. Distributed locking is out
+  # of scope for this issue.
   replicas: 1
   selector:
     matchLabels:
