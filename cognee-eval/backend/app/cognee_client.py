@@ -120,16 +120,49 @@ async def get_ingest_status() -> dict:
         return {"dataset": _DATASET, "ingested": False, "error": str(e)}
 
 
-async def recall(query: str) -> list[dict]:
-    """Semantic + graph retrieval via cognee.recall()."""
-    results = await cognee.recall(query_text=query)
+async def recall(query: str, top_k: int = 10) -> list[dict]:
+    """Semantic retrieval via direct LanceDB vector search.
+
+    cognee.recall() requires datasets registered via the dataset_database
+    registry, which is only populated after a fresh cognify run in the same
+    process. The graph snapshot exported from ai-test-lab uses an older storage
+    layout (flat cognee_graph_kuzu + shared LanceDB collections) that pre-dates
+    per-dataset registry entries. We bypass the registry and query LanceDB
+    directly so the frozen snapshot works read-only without re-ingestion.
+    """
+    import os as _os
+    import json as _json
+
+    import lancedb
+    from fastembed import TextEmbedding
+
+    db_path = _os.path.join(
+        _os.environ.get("COGNEE_DATA_PATH", "/app/.cognee_system"),
+        "system",
+        "databases",
+        "cognee.lancedb",
+    )
+    # Embed the query with the same model used during ingest (384-dim bge-small).
+    embedder = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+    query_vec = list(embedder.embed([query]))[0].tolist()
+
+    db = lancedb.connect(db_path)
+    table = db.open_table("DocumentChunk_text")
+    results = table.search(query_vec).limit(top_k).to_list()
+
     out = []
-    for r in results or []:
-        # RecallResponse entries are discriminated unions — extract text-like fields
-        text = getattr(r, "answer", None) or getattr(r, "text", None) or str(r)
-        node_id = str(getattr(r, "id", getattr(r, "node_id", "")))
-        score = getattr(r, "score", None)
-        out.append({"text": text, "node_id": node_id, "score": score})
+    for row in results:
+        payload = row.get("payload", {})
+        if isinstance(payload, str):
+            try:
+                payload = _json.loads(payload)
+            except Exception:  # noqa: BLE001
+                payload = {}
+        text = payload.get("text", "") or row.get("text", "")
+        node_id = row.get("id", "")
+        score = row.get("_distance", None)
+        if text:
+            out.append({"text": text, "node_id": node_id, "score": score})
     return out
 
 
@@ -158,7 +191,7 @@ def consistency_check() -> tuple[bool, str]:
     if not matches:
         return False, "no Kuzu graph file found under COGNEE_DATA_PATH"
 
-    db_path = max(matches, key=_os.path.getmtime)
+    db_path = max(matches, key=_os.path.getsize)
     try:
         db = kuzu.Database(db_path, read_only=True)
         conn = kuzu.Connection(db)

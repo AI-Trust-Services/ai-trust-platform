@@ -132,7 +132,7 @@ cogneeEval:
   # and no graph mutation is possible. Build/test leaves this false (StatefulSet
   # + PVC, full feedback loop). See cognee-eval/CLAUDE.md.
   readOnly: true
-  graphImage: "ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph@sha256:54e89ad8e5887b007c70f15671a532e2ce6b9b8568782e57ac7c775ab84280f8"
+  graphImage: "ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph@sha256:cb3807f44396e0f44e8e8d988f57a7bb97c3b0503bc22d8bd4085437d554dc4b"
 
 # ── the 7 near-identical backend+frontend MFE pairs ──
 # dependsOnJobs: Job names that must Complete before this backend starts
