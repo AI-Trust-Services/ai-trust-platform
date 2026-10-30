@@ -51,7 +51,7 @@ permissions:
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       owner: ${{ steps.vars.outputs.owner }}
       tag: ${{ steps.vars.outputs.tag }}
@@ -83,7 +83,7 @@ jobs:
           echo "namespace=${NS}" >> "$GITHUB_OUTPUT"
 
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.inputs.outputs.ref }}
 
@@ -118,7 +118,7 @@ jobs:
           echo "${{ steps.sha.outputs.head_sha }}"  > /tmp/deployment-context/head_sha
 
       - name: Upload deployment context artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v8
         with:
           name: deployment-context
           retention-days: 1
@@ -127,14 +127,14 @@ jobs:
   main-deployment:
     name: main-deployment
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: ${{ needs.prepare.outputs.cluster == 'ai-trust-main' && 'main' || '' }}
     env:
       HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.ref }}
 
