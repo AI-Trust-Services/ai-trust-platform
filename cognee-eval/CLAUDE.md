@@ -82,6 +82,7 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 | `THALAMUS_BASE_URL` | _(unset → stub)_ | Thalamus OpenAI-compatible gateway (incl. `/v1`); unset or `stub` → offline/CI. All cognee generation + extraction. |
 | `THALAMUS_MODEL` | `mistralai/Mistral-Small-4-119B-2603` | Model ID the gateway serves — used for generation and extraction |
 | `THALAMUS_BEARER_TOKEN` | _(empty)_ | Static bearer token sent as `Authorization: Bearer <token>`; required when `THALAMUS_BASE_URL` is a real gateway |
+| `THALAMUS_EMBEDDING_MODEL` | `Snowflake/snowflake-arctic-embed-m` | Embedding model used for recall query vectorisation — must match the model used during ingest in ai-test-lab |
 | `COGNEE_SKIP_CONNECTION_TEST` | `true` (set in code) | Suppresses cognee's first-use LLM/embedding probe — it can fail against OpenAI-compat endpoints even when real calls work. Set in `cognee_client.py` via `os.environ.setdefault`; override with `false` to re-enable. |
 | `COGNEE_DATA_PATH` | `/app/.cognee_system` | Where Cognee stores its databases |
 | `COGNEE_READONLY` | _(unset)_ | When `true`/`1`/`yes`: read-only prod mode — ingest + feedback routers are not mounted (404), and `/health` returns 503 until the first-boot graph consistency check passes |
@@ -102,7 +103,7 @@ gateway, configured via `THALAMUS_BASE_URL` / `THALAMUS_MODEL` / `THALAMUS_BEARE
 endpoint points straight at Thalamus and the bearer token is passed as the litellm
 `api_key` (sent as `Authorization: Bearer <token>`). Embeddings also go through Thalamus
 in live mode — the model is selected in code (`Snowflake/snowflake-arctic-embed-m`,
-768-dim), not via env. In stub/CI mode (`THALAMUS_BASE_URL` unset or `stub`) embeddings
+768-dim), configurable via `THALAMUS_EMBEDDING_MODEL` (defaults to `Snowflake/snowflake-arctic-embed-m`). In stub/CI mode (`THALAMUS_BASE_URL` unset or `stub`) embeddings
 fall back to in-process fastembed (local ONNX, `BAAI/bge-small-en-v1.5`, 384-dim, never
 hits the network); the e2e suite mocks the whole cognee pipeline regardless.
 

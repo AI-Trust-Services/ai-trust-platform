@@ -21,6 +21,9 @@ _THALAMUS_MODEL = os.environ.get(
     "THALAMUS_MODEL", "mistralai/Mistral-Small-4-119B-2603"
 )
 _THALAMUS_BEARER_TOKEN = os.environ.get("THALAMUS_BEARER_TOKEN", "")
+_THALAMUS_EMBEDDING_MODEL = os.environ.get(
+    "THALAMUS_EMBEDDING_MODEL", "Snowflake/snowflake-arctic-embed-m"
+)
 _LLM_RPM_LIMIT = int(os.environ.get("COGNEE_LLM_RATE_LIMIT_REQUESTS", "60"))
 
 # Suppress cognee's first-use LLM/embedding connection probe — it can fail
@@ -155,7 +158,7 @@ async def recall(query: str, top_k: int = 10) -> list[dict]:
             resp = await client.post(
                 f"{_THALAMUS_BASE_URL.rstrip('/')}/embeddings",
                 headers={"Authorization": f"Bearer {_THALAMUS_BEARER_TOKEN}"},
-                json={"model": "Snowflake/snowflake-arctic-embed-m", "input": [query]},
+                json={"model": _THALAMUS_EMBEDDING_MODEL, "input": [query]},
             )
         resp.raise_for_status()
         query_vec = resp.json()["data"][0]["embedding"]
