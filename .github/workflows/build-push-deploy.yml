@@ -118,7 +118,7 @@ jobs:
           echo "${{ steps.sha.outputs.head_sha }}"  > /tmp/deployment-context/head_sha
 
       - name: Upload deployment context artifact
-        uses: actions/upload-artifact@v8
+        uses: actions/upload-artifact@v7
         with:
           name: deployment-context
           retention-days: 1
