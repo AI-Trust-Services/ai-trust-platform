@@ -1,2 +1,5 @@
 pytest>=8.0
 -e .
+
+pytest-cov==5.0.0
+radon==6.0.1
