@@ -69,7 +69,7 @@ permissions:
 jobs:
   integration-tests:
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # workflow_run fires on completion regardless of outcome — only test a
     # deployment that actually succeeded.
     if: >-
@@ -79,7 +79,7 @@ jobs:
     steps:
       - name: Download deployment context (Deployment Workflow only)
         if: github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deployment Workflow'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: deployment-context
           path: /tmp/deployment-context
@@ -128,7 +128,7 @@ jobs:
           echo "==> cluster=${cluster}, namespace=${namespace}, head_sha=${head_sha}"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.vars.outputs.head_sha }}
 
@@ -189,7 +189,7 @@ jobs:
         run: echo "KUBECONFIG=$GITHUB_WORKSPACE/kubeconfig.yaml" >> "$GITHUB_ENV"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 

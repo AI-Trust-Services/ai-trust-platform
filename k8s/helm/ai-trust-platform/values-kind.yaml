@@ -50,4 +50,4 @@ cogneeEval:
   # After each promote-graph.yml run, update graphImage to the new @sha256 digest.
   # Set readOnly: false only on a dedicated build/test instance for graph curation.
   readOnly: true
-  graphImage: ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph@sha256:09b6a4c90297f9f83caf09e71626df24d40028295b849088473f284b3a857495
+  graphImage: ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph@sha256:3b76d89972135d39c15a23492003dded854942f2d59926c1384e46fc7e4c380b

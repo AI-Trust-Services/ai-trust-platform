@@ -1,22 +1,31 @@
 # cognee-eval — freeze & promote a knowledge graph to read-only prod
 
-Curate a graph in the build instance, then ship a frozen copy to prod (read-only, never ingests).
+Graph ingestion **always happens in ai-test-lab** (Docker Compose, separate repo).
+ai-trust-platform always runs with `cogneeEval.readOnly: true`, pulling a frozen snapshot from GHCR.
 
-- **Build mode** (`readOnly: false`): StatefulSet + PVC, full ingest + feedback loop.
+- **ai-test-lab** (`readOnly: false` equivalent): Docker Compose, full ingest + feedback loop, owns the live graph.
 - **Read-only mode** (`readOnly: true`): Deployment + emptyDir hydrated from a digest-pinned GHCR image; ingest/feedback routes return 404.
 
 ---
 
-## Phase 1 — Export
+## Phase 1 — Export from ai-test-lab
 
-Run on the build instance when ingest is idle:
+Export from the running ai-test-lab `cognee-eval-backend` container when ingest is idle (never restart it — that wipes the graph):
 
 ```bash
-kubectl exec -n ai-trust cognee-eval-backend-0 -c cognee-eval-backend -- \
-  tar czf - -C /app/.cognee_system --exclude=./cognee_eval.db . > /tmp/graph.tar.gz
+docker exec cognee \
+  tar czf - -C /cognee-storage --exclude=./data . > /tmp/graph.tar.gz
 
 tar tzf /tmp/graph.tar.gz | grep -c cognee_eval.db   # must be 0
 ```
+
+> **Container name**: the ai-test-lab cognee container is `cognee` (from `cognee/cognee:1.6.5`).
+> Data lives at `/cognee-storage/system` (graph + vectors) and `/cognee-storage/data` (raw text chunks — excluded from the snapshot, not needed for read-only serving).
+> The `tar: file changed as we read it` warning from LanceDB WAL files is harmless — the archive is valid.
+
+> **Do not export from ai-trust-platform** — the platform's pod runs read-only with an emptyDir hydrated from GHCR. Exporting from it would snapshot the hydrated copy, not the curated source.
+>
+> **Do not restart the ai-test-lab container** — cognee recreates empty per-dataset stub files on startup, overwriting the real graph data.
 
 ## Phase 2 — Promote to GHCR
 

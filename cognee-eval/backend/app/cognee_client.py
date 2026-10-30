@@ -17,8 +17,13 @@ from cognee.modules.search.types.SearchType import SearchType
 _DATASET = "eu_ai_act_v1"
 
 _THALAMUS_BASE_URL = os.environ.get("THALAMUS_BASE_URL", "")
-_THALAMUS_MODEL = os.environ.get("THALAMUS_MODEL", "Qwen/Qwen3.8-27B")
+_THALAMUS_MODEL = os.environ.get(
+    "THALAMUS_MODEL", "mistralai/Mistral-Small-4-119B-2603"
+)
 _THALAMUS_BEARER_TOKEN = os.environ.get("THALAMUS_BEARER_TOKEN", "")
+_THALAMUS_EMBEDDING_MODEL = os.environ.get(
+    "THALAMUS_EMBEDDING_MODEL", "Snowflake/snowflake-arctic-embed-m"
+)
 _LLM_RPM_LIMIT = int(os.environ.get("COGNEE_LLM_RATE_LIMIT_REQUESTS", "60"))
 
 # Suppress cognee's first-use LLM/embedding connection probe — it can fail
@@ -118,45 +123,106 @@ async def get_ingest_status() -> dict:
         return {"dataset": _DATASET, "ingested": False, "error": str(e)}
 
 
-async def recall(query: str) -> list[dict]:
-    """Semantic + graph retrieval via cognee.recall()."""
-    results = await cognee.recall(query_text=query)
+async def recall(query: str, top_k: int = 10) -> list[dict]:
+    """Semantic retrieval via direct LanceDB vector search.
+
+    cognee.recall() requires datasets registered via the dataset_database
+    registry, which is only populated after a fresh cognify run in the same
+    process. The graph snapshot exported from ai-test-lab uses an older storage
+    layout (flat cognee_graph_kuzu + shared LanceDB collections) that pre-dates
+    per-dataset registry entries. We bypass the registry and query LanceDB
+    directly so the frozen snapshot works read-only without re-ingestion.
+
+    The query is embedded via Thalamus (THALAMUS_EMBEDDING_MODEL, default
+    Snowflake/snowflake-arctic-embed-m, 768-dim) — the same model used during
+    ingest in ai-test-lab. Not available in stub mode (recall is mocked in tests).
+    """
+    import os as _os
+    import json as _json
+
+    import lancedb
+
+    db_path = _os.path.join(
+        _os.environ.get("COGNEE_DATA_PATH", "/app/.cognee_system"),
+        "system",
+        "databases",
+        "cognee.lancedb",
+    )
+
+    if _STUB_MODE:
+        raise RuntimeError(
+            "recall() is not available in stub mode — configure THALAMUS_BASE_URL."
+        )
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{_THALAMUS_BASE_URL.rstrip('/')}/embeddings",
+            headers={"Authorization": f"Bearer {_THALAMUS_BEARER_TOKEN}"},
+            json={"model": _THALAMUS_EMBEDDING_MODEL, "input": [query]},
+        )
+    resp.raise_for_status()
+    query_vec = resp.json()["data"][0]["embedding"]
+
+    db = lancedb.connect(db_path)
+    table = db.open_table("DocumentChunk_text")
+    results = (
+        table.search(query_vec, vector_column_name="vector").limit(top_k).to_list()
+    )
+
     out = []
-    for r in results or []:
-        # RecallResponse entries are discriminated unions — extract text-like fields
-        text = getattr(r, "answer", None) or getattr(r, "text", None) or str(r)
-        node_id = str(getattr(r, "id", getattr(r, "node_id", "")))
-        score = getattr(r, "score", None)
-        out.append({"text": text, "node_id": node_id, "score": score})
+    for row in results:
+        payload = row.get("payload", {})
+        if isinstance(payload, str):
+            try:
+                payload = _json.loads(payload)
+            except Exception:  # noqa: BLE001
+                payload = {}
+        text = payload.get("text", "") or row.get("text", "")
+        node_id = row.get("id", "")
+        score = row.get("_distance", None)
+        if text:
+            out.append({"text": text, "node_id": node_id, "score": score})
     return out
 
 
-_PROBE_QUERY = "What are the obligations for high-risk AI systems?"
+def consistency_check() -> tuple[bool, str]:
+    """Verify the graph snapshot is present and non-empty before serving.
 
-
-async def consistency_check() -> tuple[bool, str]:
-    """Verify the graph snapshot is present and answerable before serving.
-
-    Run at startup in read-only prod: a torn or empty snapshot (e.g. a bad
-    artifact) must fail readiness rather than serve wrong answers. Validates
-    through the same federated recall() path the product serves from, so it
-    correctly accounts for the full graph (and any merged content) regardless
-    of the on-disk dataset layout — and avoids opening a second Kuzu handle
-    (which would contend with the live process's exclusive lock).
+    Opens the Kuzu DB directly (read-only) and counts Node rows — no LLM or
+    embedding call needed, so this works in kind/local without network access.
     """
+    import glob
+    import os as _os
+
+    import kuzu
+
+    db_root = _os.path.join(
+        _os.environ.get("COGNEE_DATA_PATH", "/app/.cognee_system"),
+        "system",
+        "databases",
+    )
+    matches = glob.glob(_os.path.join(db_root, "*", "*.pkl")) + glob.glob(
+        _os.path.join(db_root, "*", "*.lbug")
+    )
+    legacy = _os.path.join(db_root, "cognee_graph_kuzu")
+    if _os.path.isfile(legacy):
+        matches.append(legacy)
+    if not matches:
+        return False, "no Kuzu graph file found under COGNEE_DATA_PATH"
+
+    db_path = max(matches, key=_os.path.getsize)
     try:
-        results = await recall(_PROBE_QUERY)
+        db = kuzu.Database(db_path, read_only=True)
+        conn = kuzu.Connection(db)
+        r = conn.execute("MATCH (n:Node) RETURN count(n)")
+        count = r.get_next()[0] if r.has_next() else 0
+        conn.close()
+        db.close()
     except Exception as e:  # noqa: BLE001
-        return False, f"recall failed: {e}"
+        return False, f"kuzu open failed: {e}"
 
-    # A healthy graph returns at least one result with content. We check for
-    # non-empty text rather than a node_id: recall results don't always expose
-    # an id, but an empty/torn graph returns nothing retrievable at all.
-    for r in results:
-        if (r.get("text") or "").strip():
-            return True, f"graph answerable ({len(results)} result(s))"
-
-    return False, "recall returned nothing retrievable — graph missing or empty"
+    if count == 0:
+        return False, "graph is empty (0 nodes)"
+    return True, f"graph ok ({count} nodes)"
 
 
 async def get_graph_stats() -> dict:
