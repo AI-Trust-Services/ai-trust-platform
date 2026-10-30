@@ -18,15 +18,21 @@ _DB_ROOT = os.path.join(
 
 
 def find_graph_db() -> str | None:
-    """Return the most recently written per-dataset Kuzu graph file.
+    """Return the largest Kuzu graph file found under the databases root.
 
-    cognee.remember() persists each dataset's graph as a `<uuid>.pkl` Kuzu
-    database inside its own dataset directory (the shipped `kuzu` package is
-    the ladybug fork, so the `.pkl` is a Kuzu DB, not a Python pickle). There
-    is no single shared `cognee_graph_kuzu` DB on this path.
+    cognee 1.6.x persists each dataset's graph as a `<uuid>.pkl` or `<uuid>.lbug`
+    Kuzu database (ladybug fork) inside its own dataset directory.
+    Older snapshots use a flat `cognee_graph_kuzu` file directly in databases/.
+    Selects by file size (largest) so empty 4 KB stub databases from a previous
+    cognee version never shadow a real multi-MB snapshot.
     """
-    matches = glob.glob(os.path.join(_DB_ROOT, "*", "*.pkl"))
-    return max(matches, key=os.path.getmtime) if matches else None
+    matches = glob.glob(os.path.join(_DB_ROOT, "*", "*.pkl")) + glob.glob(
+        os.path.join(_DB_ROOT, "*", "*.lbug")
+    )
+    legacy = os.path.join(_DB_ROOT, "cognee_graph_kuzu")
+    if os.path.isfile(legacy):
+        matches.append(legacy)
+    return max(matches, key=os.path.getsize) if matches else None
 
 
 @router.get("/stats")

@@ -395,11 +395,13 @@ async def eval_model_diverged(rule: AlertRule, ch) -> list[EvalResult]:
             if baseline_row is None:
                 # First time seeing this system — store baseline, no alert
                 await session.execute(
-                    text("""
+                    text(
+                        """
                         INSERT INTO service_model_baselines (service_name, model_name, last_seen_at)
                         VALUES (:svc, :model, :ts)
                         ON CONFLICT (service_name) DO NOTHING
-                    """),
+                    """
+                    ),
                     {"svc": system_id, "model": current_model, "ts": now},
                 )
                 results.append(

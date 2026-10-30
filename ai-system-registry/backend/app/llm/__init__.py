@@ -1,9 +1,8 @@
 """LLM abstraction layer for AI-assisted registration.
 
 Public surface:
-  - ``chat`` — provider-dispatched LLM call with a uniform return shape.
+  - ``chat`` — Thalamus inference call with a uniform return shape.
   - ``parse_json_response`` / ``LLMParseError`` — JSON parsing with repair retry.
-  - ``LLMResponseError`` — raised when the external provider returns an unexpected shape.
   - ``PromptTemplateError`` — raised when a prompt template is missing or a required variable is unset.
   - prompt builders — owner: ``build_turn_messages``, ``build_doc_extract_messages``,
     ``build_infer_flags_messages``; engineer: ``build_engineer_turn_messages``,
@@ -12,7 +11,7 @@ Public surface:
     builders render templates by id via ``app.llm.templates``.
 """
 
-from app.llm.client import LLM_MODEL, LLM_VISION_MODEL, LLMResponseError, chat
+from app.llm.client import THALAMUS_MODEL, THALAMUS_VISION_MODEL, chat
 from app.llm.parsing import LLMParseError, parse_json_response
 from app.llm.templates import PromptTemplateError, render_template
 from app.llm.prompts import (
@@ -34,11 +33,10 @@ from app.llm.prompts import (
 
 __all__ = [
     "chat",
-    "LLM_MODEL",
-    "LLM_VISION_MODEL",
+    "THALAMUS_MODEL",
+    "THALAMUS_VISION_MODEL",
     "parse_json_response",
     "LLMParseError",
-    "LLMResponseError",
     "PromptTemplateError",
     "render_template",
     "build_turn_messages",

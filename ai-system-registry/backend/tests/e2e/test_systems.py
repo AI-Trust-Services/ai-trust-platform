@@ -7,7 +7,6 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -68,6 +67,35 @@ async def test_intake_registers_system_and_returns_classification(
     # and tier is determined when flags are set or /reclassify is called explicitly.
     assert body["classification"]["tier"] == "pending"
     assert body["system"]["workflow_status"] == "draft"
+
+
+async def test_intake_persists_registration_fields_and_owner(
+    client: httpx.AsyncClient,
+):
+    # Owner is the creator (the x-forwarded-preferred-username header), not a body field;
+    # contributors / git_repo_url / planned_rollout_date round-trip verbatim.
+    r = await client.post(
+        "/v1/intake",
+        json={
+            "name": "Owner Test System",
+            "intended_purpose": "Testing",
+            "contributors": ["alice", "bob"],
+            "git_repo_url": "https://github.com/org/repo",
+            "planned_rollout_date": "2027-01-15",
+        },
+        headers=_HEADERS,
+    )
+    assert r.status_code == 201
+    sys = r.json()["system"]
+    assert sys["business_owners"] == _ASSIGNEE  # owner = creator
+    assert sys["contributors"] == ["alice", "bob"]
+    assert sys["git_repo_url"] == "https://github.com/org/repo"
+    assert sys["planned_rollout_date"] == "2027-01-15"
+    # Dropped fields are gone from the response.
+    assert "application_url" not in sys
+    assert "technical_owners" not in sys
+    assert "eu_output_usage" not in sys
+    assert "eu_market_placement" not in sys
 
 
 async def test_update_flag_classifies_prohibited_system(client: httpx.AsyncClient):
@@ -405,7 +433,7 @@ async def test_reclassify_tier_change_logs_changes(client: httpx.AsyncClient):
                     select(AuditEvent)
                     .where(AuditEvent.action == "system.reclassified")
                     .where(AuditEvent.resource_id == system_id)
-                    .order_by(AuditEvent.created_at.desc())
+                    .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
                 )
             )
             .scalars()
@@ -443,7 +471,7 @@ async def test_reclassify_no_tier_change_omits_changes(client: httpx.AsyncClient
                     select(AuditEvent)
                     .where(AuditEvent.action == "system.reclassified")
                     .where(AuditEvent.resource_id == system_id)
-                    .order_by(AuditEvent.created_at.desc())
+                    .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
                 )
             )
             .scalars()

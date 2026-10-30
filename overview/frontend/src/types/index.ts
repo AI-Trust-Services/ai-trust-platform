@@ -43,7 +43,7 @@ export type DataKey =
   | "by_tier" | "by_lifecycle" | "by_type"
   | "compliance_by_tier" | "compliance_histogram"
   | "by_model_type" | "by_model_validation_status"
-  | "obligation_status" | "evidence_gap" | "framework_compliance"
+  | "obligation_status" | "evidence_gap"
   | "upcoming_deadlines" | "active_alerts";
 
 export interface DashboardCard {
@@ -76,14 +76,6 @@ export interface EvidenceGap {
   expired: number;
   expiring_soon: number;
   missing: number;
-}
-
-export interface FrameworkScore {
-  framework_id: string;
-  framework_name: string;
-  total_obligations: number;
-  fulfilled: number;
-  score: number | null;
 }
 
 export interface RiskHeatCell {
@@ -122,7 +114,6 @@ export interface AlertEvent {
 export interface ComplianceStats {
   obligation_status: ObligationStatusCounts;
   evidence_gap: EvidenceGap;
-  framework_compliance: FrameworkScore[];
   upcoming_deadlines: Deadline[];
   risk_heatmap: RiskHeatCell[];
 }

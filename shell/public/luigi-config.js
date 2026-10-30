@@ -51,7 +51,8 @@
     "overview": ["systems:read", "systems:write", "assessments:read", "assessments:write", "assessments:approve", "evidence:read", "evidence:write", "evidence:approve", "monitoring:read", "alerts:read", "alerts:handle", "alerts:manage_rules", "audit:read"],
     "ai-system-registry": ["systems:read", "systems:write"],
     "model-catalog": ["systems:read", "systems:write"],
-    "ai-test-bed": ["systems:read", "systems:write"],
+    // [MVP-off] AI test-bed MFE
+    // "ai-test-bed": ["systems:read", "systems:write"],
     // DTA has no dedicated permission — reuse monitoring:read (same audience).
     "decision-trace-analyzer": ["monitoring:read"],
     "monitoring": ["monitoring:read"],
@@ -94,14 +95,16 @@
         viewUrl: base + "/registry/#/models",
         navigationContext: "model-catalog",
       },
-      {
+      // [MVP-off] AI test-bed MFE — backend/frontend not deployed. See root CLAUDE.md "MVP scope".
+      /* {
         pathSegment: "ai-test-bed",
         label: "AI Test Bed",
         icon: "documents",
         viewUrl: "/ai-test-bed/",
         navigationContext: "ai-test-bed",
-      },
-      {
+      }, */
+      // [MVP-off] GenAI-Observability — services not deployed. See root CLAUDE.md "MVP scope".
+      /* {
         pathSegment: "decision-trace-analyzer",
         label: "Trace Explorer",
         icon: "detail-view",
@@ -121,7 +124,7 @@
         icon: "alert",
         viewUrl: "/alerts/",
         navigationContext: "alerts",
-      },
+      }, */
       {
         pathSegment: "assessments",
         label: "Assessments",
@@ -998,7 +1001,9 @@
           const rawRole = (currentUser.roles || [])[0] || "";
           const roleLabel = rawRole.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
-          // ── Alerts bell ──
+          // ── Alerts bell ── [MVP-off] Alerts is disabled; the bell linked to the
+          // removed /home/alerts node. Re-enable together with the Alerts service.
+          /* [MVP-off]
           const bell = document.createElement("button");
           bell.id = "luigi-alerts-bell";
           bell.style.cssText = `
@@ -1037,6 +1042,7 @@
           }
           fetchAlertCount();
           setInterval(fetchAlertCount, 30000);
+          */
 
           // ── User account chip ──
           const wrapper = document.createElement("div");
@@ -1163,7 +1169,7 @@
             const sunSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`;
             darkToggle.innerHTML = dark ? sunSvg : moonSvg;
             darkToggle.style.color = dark ? '#94a3b8' : '#374151';
-            bell.style.color = dark ? '#94a3b8' : '#374151';
+            // bell.style.color = dark ? '#94a3b8' : '#374151'; // [MVP-off] Alerts bell disabled
             trigger.style.color = dark ? '#e2e8f0' : '#374151';
           }
 
@@ -1185,7 +1191,7 @@
           wrapper.appendChild(trigger);
           wrapper.appendChild(dropdown);
           shellbar.prepend(wrapper);
-          shellbar.prepend(bell);
+          // shellbar.prepend(bell); // [MVP-off] Alerts bell disabled
           shellbar.prepend(darkToggle);
         }
       }, 200);

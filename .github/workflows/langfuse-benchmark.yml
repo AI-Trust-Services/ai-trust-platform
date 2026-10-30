@@ -1,0 +1,100 @@
+name: Langfuse Classification Benchmark
+
+# Triggered by adding the "langfuse-test" label to a PR.
+# Imports the ground-truth scenarios into the PR author's deployed namespace, classifies
+# every one through the platform, and pushes a scored dataset + experiment run to Langfuse.
+# See tests/langfuse_benchmark/README.md.
+#
+# Prerequisites:
+#   1. Namespace must already be deployed (add "garden-deploy" label first). The deployed
+#      namespace must have ENABLE_BATCH_IMPORT=true — wired into k8s/env/ai-trust-test/.env,
+#      so any ai-trust-test deployment already satisfies this.
+#   2. Namespace must be initialised once via:
+#        bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-username>
+#   3. LANGFUSE_HOST / LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY repo secrets must be set
+#      (the push target). The job fails fast if they are missing.
+#
+#
+# Usage: add the "langfuse-test" label to an open PR (after "garden-deploy" has deployed it).
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: langfuse-benchmark-${{ github.event.pull_request.user.login }}
+  cancel-in-progress: true
+
+jobs:
+  langfuse-benchmark:
+    name: Langfuse Classification Benchmark
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'langfuse-test'
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_SHA:    ${{ github.event.pull_request.head.sha }}
+      GH_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Check out PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.PR_SHA }}
+
+      - name: Compute APP_URL
+        id: vars
+        run: |
+          NAMESPACE="${{ github.event.pull_request.user.login }}"
+          NAMESPACE="${NAMESPACE,,}"
+          APP_URL="https://${NAMESPACE}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          echo "namespace=${NAMESPACE}" >> "$GITHUB_OUTPUT"
+          echo "app_url=${APP_URL}"     >> "$GITHUB_OUTPUT"
+          echo "==> namespace=${NAMESPACE}, app_url=${APP_URL}"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install benchmark dependencies
+        run: pip install -r tests/langfuse_benchmark/requirements.txt
+
+      - name: Run classification benchmark
+        env:
+          APP_URL:              ${{ steps.vars.outputs.app_url }}
+          # dev-engineer (ai_engineer role) has systems:read + systems:write, which
+          # /intake/batch and /classify/evaluate require. The platform admin only has
+          # iam:manage, so authenticating as admin would 403. dev-engineer is seeded on
+          # ai-trust-test (SEED_DEV_USERS=true) with a permanent password.
+          BENCH_USERNAME:       dev-engineer
+          BENCH_PASSWORD:       ${{ secrets.DEV_USER_PASSWORD }}
+          # LANGFUSE_HOST falls back to the shared ai-trust-test Langfuse (the value in
+          # k8s/env/ai-trust-test/.env) when the repo secret is unset — the keys are the
+          # project's, the host is the same cluster-wide rollout. Override via the secret
+          # to point at a different Langfuse.
+          LANGFUSE_HOST:        ${{ secrets.LANGFUSE_HOST || 'https://langfuse.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu' }}
+          LANGFUSE_PUBLIC_KEY:  ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY:  ${{ secrets.LANGFUSE_SECRET_KEY }}
+          # Tag the experiment's traces with the deploy namespace, matching how the
+          # platform's own tracing is scoped — so the run is filterable by environment
+          # in Langfuse alongside the live traces from this namespace.
+          LANGFUSE_TRACING_ENVIRONMENT: ${{ steps.vars.outputs.namespace }}
+        run: python3 tests/langfuse_benchmark/benchmark.py
+
+      - name: Post success comment
+        if: success()
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "📊 Langfuse classification benchmark ran against namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\` (\`${PR_SHA::12}\`). View the \`ai-trust-scenarios\` dataset + run in Langfuse."
+
+      - name: Post failure comment
+        if: failure()
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "❌ Langfuse classification benchmark failed against namespace \`${{ steps.vars.outputs.namespace }}\` — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"

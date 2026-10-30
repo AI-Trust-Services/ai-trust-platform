@@ -11,7 +11,7 @@ const TIER_CLASSES: Record<TierKey, string> = {
   high: "bg-[#fde8d0] text-[#8b3a00]",
   "gpai-systemic": "bg-[#f0e8ff] text-[#4108A0]",
   "gpai-standard": "bg-[#f4edff] text-[#6C1AF4]",
-  limited: "bg-[#fff3c4] text-[#7a5900]",
+  limited: "bg-[#e8f0fb] text-[#1147E9]",
   minimal: "bg-[#d5f5e3] text-[#1a5c35]",
   pending: "bg-[#eaecee] text-[#556b82]",
 };
@@ -26,13 +26,35 @@ const LIFECYCLE_CLASSES: Record<LifecycleKey, string> = {
   decommissioned: "bg-[#eeeeee] text-[#666666]",
 };
 
-export function TierBadge({ tier, workflowStatus }: { tier: TierKey; workflowStatus?: string }) {
+export function TierBadge({
+  tier,
+  workflowStatus,
+  isChatbot,
+  generatesSyntheticContent,
+}: {
+  tier: TierKey;
+  workflowStatus?: string;
+  isChatbot?: boolean;
+  generatesSyntheticContent?: boolean;
+}) {
   const effectiveTier = workflowStatus === "draft" ? "pending" : tier;
   const meta = TIER_META[effectiveTier] || { label: tier };
+  // EU AI Act: Art. 50 transparency stacks on top of a high-risk classification —
+  // the only tier pair that co-applies. The classifier waterfall only records the
+  // high tier, so derive the companion flag from the row's Art. 50 triggers.
+  const alsoTransparency =
+    effectiveTier === "high" && (isChatbot || generatesSyntheticContent);
   return (
-    <Badge className={cn("rounded-full font-medium", TIER_CLASSES[effectiveTier] ?? TIER_CLASSES.minimal)}>
-      {meta.label}
-    </Badge>
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <Badge className={cn("rounded-full font-medium", TIER_CLASSES[effectiveTier] ?? TIER_CLASSES.minimal)}>
+        {meta.label}
+      </Badge>
+      {alsoTransparency && (
+        <Badge className={cn("rounded-full font-medium", TIER_CLASSES.limited)}>
+          {TIER_META.limited.label}
+        </Badge>
+      )}
+    </span>
   );
 }
 

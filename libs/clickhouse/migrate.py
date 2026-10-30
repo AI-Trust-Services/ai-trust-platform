@@ -24,14 +24,16 @@ def _retarget(sql: str) -> str:
     return sql.replace("otel.", f"{_TARGET_DB}.") if _TARGET_DB != "otel" else sql
 
 
-CREATE_MIGRATIONS_TABLE = _retarget("""
+CREATE_MIGRATIONS_TABLE = _retarget(
+    """
 CREATE TABLE IF NOT EXISTS otel.schema_migrations
 (
     version    String,
     applied_at DateTime DEFAULT now()
 ) ENGINE = MergeTree()
 ORDER BY version;
-""")
+"""
+)
 
 
 def get_applied(client) -> set[str]:

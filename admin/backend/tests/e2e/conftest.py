@@ -140,21 +140,25 @@ def _reset_platform_settings() -> None:
     )
     # Delete and re-insert a clean platform_settings row
     cur.execute("DELETE FROM platform_settings")
-    cur.execute("""
+    cur.execute(
+        """
         INSERT INTO platform_settings (id, platform_name, support_email, smtp_ssl, smtp_starttls)
         VALUES (1, 'AI Trust Platform', NULL, false, false)
-    """)
+    """
+    )
     # Clear branding table (key-value store)
     cur.execute("DELETE FROM branding")
     # Also truncate audit_events if it exists (for audit logging tests)
-    cur.execute("""
+    cur.execute(
+        """
         DO $$
         BEGIN
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'audit_events') THEN
                 TRUNCATE audit_events RESTART IDENTITY CASCADE;
             END IF;
         END $$;
-    """)
+    """
+    )
     cur.close()
     conn.close()
 

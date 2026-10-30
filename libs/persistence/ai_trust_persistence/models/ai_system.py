@@ -1,10 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime
-
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,16 +38,10 @@ class AISystem(Base):
     decision_context: Mapped[str | None] = mapped_column(Text, nullable=True)
     system_type: Mapped[str] = mapped_column(String(30), default="application")
     autonomy_level: Mapped[str] = mapped_column(String(50), default="decision_support")
-    application_url: Mapped[str] = mapped_column(String(500), default="")
     provider_country: Mapped[str] = mapped_column(String(5), default="DE")
     # Country the AI system is deployed in (ISO 3166-1 alpha-2), captured at
     # registration. Drives (future) country-specific questions in the intake form.
     deployment_country: Mapped[str | None] = mapped_column(String(2), nullable=True)
-    # Two universal EU-presence questions asked for every deployment country.
-    # When both are False, EU AI Act classification is likely not applicable and the
-    # framework picker recommends an alternative instead.
-    eu_output_usage: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    eu_market_placement: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     tier: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     basis: Mapped[str] = mapped_column(Text, default="")
@@ -110,9 +113,14 @@ class AISystem(Base):
         String(30), nullable=True
     )
     questionnaire_answers: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    # Owner of the system = its creator (set at intake). Contributors is a roster of
+    # usernames (ai_engineer / business_owner) designated to support the registration.
     business_owners: Mapped[str | None] = mapped_column(Text, nullable=True)
-    technical_owners: Mapped[str | None] = mapped_column(Text, nullable=True)
+    contributors: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
     git_repo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Estimated roll-out date captured at registration (optional).
+    planned_rollout_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
     # Full-manual supporting docs: a JSON array of {filename, minio_key, uploaded_at}.
     registration_documents: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
 

@@ -36,10 +36,27 @@ fi
 
 images=()
 
+# [MVP-off] Images disabled for the MVP scope — mirrors the commented-out entries
+# in docker-bake.hcl group "default". GenAI-Observability + Audit + the OTLP
+# pipeline. build() skips these unless you ask for one explicitly with
+# --service <name>. See root CLAUDE.md "MVP scope".
+MVP_DISABLED=(
+  monitoring-backend monitoring-frontend
+  alerts-backend alerts-frontend policy-checker-worker
+  decision-trace-analyzer-backend decision-trace-analyzer-frontend
+  otel-clickhouse-consumer otel-rmq-bridge
+  ai-test-bed-backend ai-test-bed-frontend
+)
+
 build() {
   local name="$1" context="$2" dockerfile="$3"
   shift 3
   [[ -n "$FILTER" && "$name" != "$FILTER" ]] && return 0
+  # [MVP-off] skip disabled images unless explicitly requested via --service
+  if [[ -z "$FILTER" ]] && printf '%s\n' "${MVP_DISABLED[@]}" | grep -qx "$name"; then
+    echo "==> skipping ${name} (MVP-disabled; build with --service ${name} to override)"
+    return 0
+  fi
   local tag="ai-trust/${name}:${TAG}"
   echo "==> building ${tag}  (context=${context} dockerfile=${dockerfile})"
   docker build -t "$tag" -f "$dockerfile" "$@" "$context"
@@ -75,6 +92,9 @@ build otel-rmq-bridge ./otel-pipeline/rmq-bridge ./otel-pipeline/rmq-bridge/Dock
 # ── frontends (Vite build args baked in) ──
 build ai-system-registry-frontend . ./ai-system-registry/frontend/Dockerfile \
   --build-arg "VITE_REGISTRY_API_BASE=${VITE_REGISTRY_API_BASE}" \
+  --build-arg "VITE_INDEXING_API_BASE=${VITE_INDEXING_API_BASE:-/api/indexing/v1}" \
+  --build-arg "VITE_COMPLIANCE_API_BASE=${VITE_COMPLIANCE_API_BASE:-/api/compliance/v1}" \
+  --build-arg "VITE_AUDIT_API_BASE=${VITE_AUDIT_API_BASE:-/api/audit/v1}" \
   --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
 
 build monitoring-frontend . ./monitoring/frontend/Dockerfile \
@@ -128,7 +148,6 @@ build ai-test-bed-frontend . ./ai-test-bed/frontend/Dockerfile \
   --build-arg "VITE_REGISTRY_API_BASE=${VITE_REGISTRY_API_BASE:-/api/registry/v1}"
 
 build cognee-eval-backend . cognee-eval/backend/Dockerfile
-build ai-gateway . ai-gateway/Dockerfile
 
 echo "==> loading ${#images[@]} images into kind cluster '${CLUSTER_NAME}'"
 if [[ ${#images[@]} -eq 0 ]]; then

@@ -3,12 +3,16 @@ import type {
   Source, Dataset, MetricCreate, SourceCreate, DatasetCreate,
   DatasetPatch, ModelSystemResponse, AISystemFormData, PermissionsResponse, WorkflowStep,
   UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult,
-  QuestionAssignment,
+  QuestionAssignment, RegisterSystemInput, IndexedDocument, AssessmentRow,
+  ComplianceAssessment, AuditEventListResponse,
 } from "../types"
 import type { SectionKey } from "../config/questionnaire";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
+const INDEXING_API_BASE = import.meta.env.VITE_INDEXING_API_BASE;
+const COMPLIANCE_API_BASE = import.meta.env.VITE_COMPLIANCE_API_BASE;
+const AUDIT_API_BASE = import.meta.env.VITE_AUDIT_API_BASE;
 export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 
 async function request<T>(path: string, options: RequestInit = {}, base: string = API_BASE): Promise<T> {
@@ -24,13 +28,18 @@ export const api = {
   getSystems: () => request<AISystem[]>("/systems?limit=200"),
   getSystem: (id: string) => request<AISystem>(`/systems/${id}`),
   deleteSystem: (id: string) => request<null>(`/systems/${id}`, { method: "DELETE" }),
-  updateSystem: (id: string, data: Partial<AISystemFormData>) =>
+  // Cross-service read into the compliance backend: one broad fetch of all
+  // assessments (max backend limit), grouped client-side by ai_system_id to
+  // derive the Systems-table assessment state. Uses VITE_COMPLIANCE_API_BASE.
+  getAllAssessments: () =>
+    request<AssessmentRow[]>("/assessments?limit=500", {}, COMPLIANCE_API_BASE),
+  updateSystem: (id: string, data: Partial<AISystemFormData & RegisterSystemInput>) =>
     request<AISystem>(`/systems/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     }),
-  intake: (data: AISystemFormData) =>
+  intake: (data: RegisterSystemInput) =>
     request<{ system: AISystem; classification: unknown }>("/intake", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -302,6 +311,94 @@ export const api = {
   getDocumentDownloadUrl: (systemId: string, docIndex: number) =>
     request<{ url: string }>(`/systems/${encodeURIComponent(systemId)}/documents/${docIndex}/download-url`),
 
+  // ── Document indexing service (separate backend, VITE_INDEXING_API_BASE) ─────
+  // Upload goes through XMLHttpRequest (not request()/fetch) because we need
+  // upload-progress events and a per-request abort — neither of which fetch
+  // exposes. The worker indexes the document asynchronously after upload.
+  uploadDocumentIndexed: (
+    systemId: string,
+    file: File,
+    opts: { onProgress?: (pct: number) => void; signal?: AbortSignal } = {},
+  ): Promise<{ document_id: string; version_id: string; status: string }> =>
+    new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const fd = new FormData();
+      fd.append("file", file);
+      xhr.open(
+        "POST",
+        `${INDEXING_API_BASE}/systems/${encodeURIComponent(systemId)}/documents`,
+      );
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && opts.onProgress) {
+          opts.onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch {
+            reject(new Error("Invalid response from indexing service"));
+          }
+        } else {
+          let detail = `HTTP ${xhr.status}`;
+          try {
+            detail = JSON.parse(xhr.responseText).detail || detail;
+          } catch {
+            /* keep the status-code message */
+          }
+          reject(new Error(detail));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Network error"));
+      xhr.onabort = () => reject(new DOMException("Aborted", "AbortError"));
+      if (opts.signal) {
+        if (opts.signal.aborted) {
+          xhr.abort();
+          return;
+        }
+        opts.signal.addEventListener("abort", () => xhr.abort());
+      }
+      xhr.send(fd);
+    }),
+
+  listIndexedDocuments: (systemId: string) =>
+    request<IndexedDocument[]>(
+      `/systems/${encodeURIComponent(systemId)}/documents`,
+      {},
+      INDEXING_API_BASE,
+    ),
+
+  deleteIndexedDocument: (documentId: string) =>
+    request<{ deleted: boolean; document_id: string }>(
+      `/documents/${encodeURIComponent(documentId)}`,
+      { method: "DELETE" },
+      INDEXING_API_BASE,
+    ),
+
+  // Upload a new VERSION of an existing indexed document (Replace flow). The old
+  // version is retained for history; the new one becomes current and is re-indexed.
+  // Preferred over create-new + delete-old, which would discard the version history.
+  uploadDocumentVersion: (documentId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{ document_id: string; version_id: string; status: string }>(
+      `/documents/${encodeURIComponent(documentId)}/versions`,
+      { method: "POST", body: fd },
+      INDEXING_API_BASE,
+    );
+  },
+
+  // Purge every indexed document for a system. Used when a system (e.g. an abandoned
+  // draft registration) is deleted — the registry row and the indexed documents live
+  // in separate services with no FK, so this prevents orphaned docs/chunks/MinIO objects.
+  deleteIndexedDocumentsForSystem: (systemId: string) =>
+    request<{ deleted: boolean; system_id: string; documents_deleted: number }>(
+      `/systems/${encodeURIComponent(systemId)}/documents`,
+      { method: "DELETE" },
+      INDEXING_API_BASE,
+    ),
+
   getRceSummary: (systemId: string) =>
     request<{
       tier: string | null;
@@ -334,5 +431,38 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+
+  // ── Compliance assessments (detail page) ──────────────────────────────────
+  getAssessmentsForSystem: (systemId: string) =>
+    request<ComplianceAssessment[]>(
+      `/assessments?ai_system_id=${encodeURIComponent(systemId)}&limit=100`,
+      {},
+      COMPLIANCE_API_BASE,
+    ),
+
+  submitAssessment: (assessmentId: string) =>
+    request<ComplianceAssessment>(`/assessments/${encodeURIComponent(assessmentId)}/submit`, { method: "POST" }, COMPLIANCE_API_BASE),
+
+  deleteAssessment: (assessmentId: string) =>
+    request<null>(`/assessments/${encodeURIComponent(assessmentId)}`, { method: "DELETE" }, COMPLIANCE_API_BASE),
+
+  abortAssessment: (assessmentId: string) =>
+    request<null>(`/assessments/${encodeURIComponent(assessmentId)}/abort`, { method: "POST" }, COMPLIANCE_API_BASE),
+
+  historicizeAssessment: (assessmentId: string) =>
+    request<null>(`/assessments/${encodeURIComponent(assessmentId)}/historicize`, { method: "POST" }, COMPLIANCE_API_BASE),
+
+  // Presigned download URL from the indexing service (MinIO).
+  getDocumentDownloadUrlIndexed: (documentId: string) =>
+    request<{ url: string }>(`/documents/${encodeURIComponent(documentId)}/download-url`, {}, INDEXING_API_BASE),
+};
+
+export const auditApi = {
+  listEvents: (systemId: string, limit = 5, offset = 0) =>
+    request<AuditEventListResponse>(
+      `/events?ai_system_id=${encodeURIComponent(systemId)}&limit=${limit}&offset=${offset}&sort=desc`,
+      {},
+      AUDIT_API_BASE,
+    ),
 };
 

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -86,10 +87,9 @@ class AISystemCreate(BaseModel):
     compliance_officer_username: str | None = Field(default=None, max_length=200)
 
     # Deployment context captured at registration. deployment_country is ISO
-    # 3166-1 alpha-2; the two EU-presence booleans drive the framework recommendation.
+    # 3166-1 alpha-2.
     deployment_country: str | None = Field(default=None, max_length=2)
-    eu_output_usage: bool | None = None
-    eu_market_placement: bool | None = None
+    lifecycle: str | None = None
 
     # Optional descriptive fields (populated by the AI-assisted flow; manual owner
     # mode omits them and the intake stays a minimal stub).
@@ -127,9 +127,12 @@ class AISystemCreate(BaseModel):
         None
     )
 
+    # Owner of the system is its creator (set server-side at intake). contributors is
+    # a roster of usernames designated to support the registration.
     business_owners: str | None = None
-    technical_owners: str | None = None
+    contributors: list[str] | None = None
     git_repo_url: str | None = Field(default=None, max_length=500)
+    planned_rollout_date: date | None = None
 
     registration_mode: Literal["ai", "manual_questionnaire", "full_manual"] = "ai"
     org_role: str = "provider"
@@ -186,15 +189,16 @@ class AISystemUpdate(BaseModel):
     decision_context: str | None = None
     system_type: str | None = None
     autonomy_level: str | None = None
-    application_url: str | None = Field(default=None, max_length=500)
     provider_country: str | None = Field(default=None, max_length=5)
     deployment_country: str | None = Field(default=None, max_length=2)
-    eu_output_usage: bool | None = None
-    eu_market_placement: bool | None = None
     lifecycle: str | None = None
+    # Owner transfer: the roles dialog promotes a member to owner. business_owners
+    # is a nullable Text column, so it is not in _REQUIRED_FIELDS — but the UI always
+    # sends a real username (it refuses to save an empty owner).
     business_owners: str | None = None
-    technical_owners: str | None = None
+    contributors: list[str] | None = None
     git_repo_url: str | None = Field(default=None, max_length=500)
+    planned_rollout_date: date | None = None
 
     # Risk flags (editable in draft/rejected)
     subliminal_manipulation: bool | None = None
@@ -256,11 +260,8 @@ class AISystemResponse(BaseModel):
     decision_context: str | None
     system_type: str
     autonomy_level: str
-    application_url: str
     provider_country: str
     deployment_country: str | None
-    eu_output_usage: bool | None
-    eu_market_placement: bool | None
     tier: str
     basis: str
     annex_iii_area: int | None
@@ -301,8 +302,9 @@ class AISystemResponse(BaseModel):
     questionnaire_answers: dict | None
     registration_documents: list[RegistrationDocument] | None = None
     business_owners: str | None = None
-    technical_owners: str | None = None
+    contributors: list[str] | None = None
     git_repo_url: str | None = None
+    planned_rollout_date: date | None = None
 
     model_config = {"from_attributes": True}
 
@@ -310,6 +312,127 @@ class AISystemResponse(BaseModel):
 class IntakeResponse(BaseModel):
     system: AISystemResponse
     classification: ClassificationResult
+
+
+# ---------------------------------------------------------------------------
+# Batch import
+# ---------------------------------------------------------------------------
+
+
+class AISystemImport(BaseModel):
+    """One record in a batch-import payload (POST /v1/intake/batch).
+
+    Carries all data columns of ai_systems — descriptive fields, classification
+    result, and classifier flags.  Policy fields (assignees, registration_mode,
+    workflow_status) are NOT accepted here; they are set at import time.
+    The four JSONB audit/workflow fields (classification_rationale,
+    field_confirmations, questionnaire_answers, registration_documents) are never
+    imported — always stored as NULL.
+    Currently this schema is a for a bulk upload of testing data.
+    ponytail: insert-only, no dedup — duplicates on re-import by design.
+    See docs/batch-import-format.md for the upgrade path.
+    """
+
+    model_config = {"extra": "ignore"}
+
+    # --- Descriptive (only name is required) ---
+    name: str = Field(..., min_length=1, max_length=200)
+    version: str | None = Field(default=None, max_length=50)
+    provider: str | None = Field(default=None, max_length=200)
+    org_name: str | None = Field(default=None, max_length=200)
+    org_role: str = Field(default="provider", max_length=30)
+    description: str | None = None
+    intended_purpose: str | None = None
+    department: str | None = None
+    use_case: str | None = None
+    people_affected: str | None = None
+    decision_context: str | None = None
+    system_type: str | None = Field(default=None, max_length=30)
+    autonomy_level: str | None = Field(default=None, max_length=50)
+    provider_country: str | None = Field(default=None, max_length=5)
+    deployment_country: str | None = Field(default=None, max_length=2)
+    lifecycle: str | None = Field(default=None, max_length=30)
+    business_owners: str | None = None
+    contributors: list[str] | None = None
+    git_repo_url: str | None = Field(default=None, max_length=500)
+    planned_rollout_date: date | None = None
+
+    # --- Classification result (tier is authoritative from source; classify() does not run) ---
+    tier: str | None = None
+    basis: str | None = None
+    annex_iii_area: int | None = Field(default=None, ge=1, le=8)
+
+    # --- Classifier flags (evidential only) ---
+    subliminal_manipulation: bool | None = None
+    exploits_vulnerability: bool | None = None
+    social_scoring_public: bool | None = None
+    real_time_biometric_public: bool | None = None
+    emotion_recognition_workplace: bool | None = None
+    untargeted_facial_scraping: bool | None = None
+    predictive_policing: bool | None = None
+    biometric_categorisation_sensitive: bool | None = None
+    is_biometric_identification: bool | None = None
+    is_critical_infrastructure: bool | None = None
+    is_education_related: bool | None = None
+    is_employment_related: bool | None = None
+    is_credit_scoring: bool | None = None
+    is_public_service: bool | None = None
+    is_law_enforcement: bool | None = None
+    is_migration: bool | None = None
+    is_judicial_admin: bool | None = None
+    is_gpai: bool | None = None
+    training_compute_flops: float | None = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    is_chatbot: bool | None = None
+    generates_synthetic_content: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_not_whitespace(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("name must not be blank")
+        return v
+
+    @field_validator("org_role")
+    @classmethod
+    def org_role_valid(cls, v: str) -> str:
+        if v not in VALID_ROLES:
+            raise ValueError(f"org_role must be one of {sorted(VALID_ROLES)}")
+        return v
+
+    @field_validator("tier")
+    @classmethod
+    def tier_valid(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_TIERS:
+            raise ValueError(f"tier must be one of {sorted(VALID_TIERS)}")
+        return v
+
+    @field_validator("lifecycle")
+    @classmethod
+    def lifecycle_valid(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_LIFECYCLES:
+            raise ValueError(f"lifecycle must be one of {sorted(VALID_LIFECYCLES)}")
+        return v
+
+    @field_validator("git_repo_url")
+    @classmethod
+    def git_repo_url_scheme_allowlist(cls, v: str | None) -> str | None:
+        """Reject unexpected schemes — git_repo_url is rendered as a link in the UI."""
+        if v and urlparse(v).scheme not in ("http", "https", "git", "ssh"):
+            raise ValueError("git_repo_url must use http, https, git, or ssh")
+        return v
+
+
+class ImportFailure(BaseModel):
+    index: int
+    name: str | None = None
+    error: str
+
+
+class ImportResult(BaseModel):
+    imported: int
+    failed: list[ImportFailure]
 
 
 class FieldConfirmationPatch(BaseModel):

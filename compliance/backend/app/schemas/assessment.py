@@ -25,6 +25,9 @@ VALID_ASSESSMENT_STATUSES = frozenset(
         "submitted",
         "under_review",
         "approved",
+        "inactive",
+        "questionnaire_pending",
+        "pending_review",
     }
 )
 
@@ -80,6 +83,7 @@ class AssessmentResponse(BaseModel):
     status: str
     score: float | None
     notes: str
+    confirmed_by: str | None = None
     created_at: datetime
     updated_at: datetime
 

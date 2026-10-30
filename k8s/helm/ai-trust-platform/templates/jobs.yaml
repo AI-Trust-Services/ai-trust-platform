@@ -237,34 +237,11 @@ spec:
           emptyDir: {}
         - name: secret-yaml
           emptyDir: {}
-{{- if .Values.ollama.enabled }}
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: {{ include "ai-trust.jobName" (dict "base" "ollama-pull" "rev" .Release.Revision) }}
-spec:
-  backoffLimit: 6
-  template:
-    spec:
-      restartPolicy: OnFailure
-      initContainers:
-        {{- include "ai-trust.waitForHttp" (dict "name" "ollama" "port" 11434 "path" "/" "image" .Values.waitImages.busybox) | nindent 8 }}
-      containers:
-        - name: ollama-pull
-          image: {{ .Values.ollama.image }}
-          envFrom:
-            - secretRef: { name: {{ .Values.secretName }} } # LLM_MODEL / LLM_VISION_MODEL
-          env:
-            - name: OLLAMA_HOST
-              value: http://ollama:11434
-          command:
-            - /bin/sh
-            - -c
-            - |
-              ollama pull "${LLM_MODEL:-llama3.2}" &&
-              ollama pull "${LLM_VISION_MODEL:-llama3.2-vision}"
-{{- end }}
+{{- /* [MVP-off] testbed-seed reuses the ai-test-bed-backend image; render it only
+       while the ai-test-bed component is enabled, otherwise the Job ImagePullBackOffs. */}}
+{{- $testbedEnabled := false }}
+{{- range $c := .Values.components }}{{- if and (eq $c.name "ai-test-bed") (ne $c.enabled false) }}{{- $testbedEnabled = true }}{{- end }}{{- end }}
+{{- if $testbedEnabled }}
 ---
 # AI Test Bed seed — creates stub AISystem rows for the 3 sample scenarios and
 # the EU AI Act sentinel, then uploads each sample's Markdown system card to the
@@ -296,3 +273,4 @@ spec:
           command: ["python", "-m", "app.seed"]
           envFrom:
             - secretRef: { name: {{ .Values.secretName }} } # DATABASE_URL, APP_ADMIN_USERNAME
+{{- end }}

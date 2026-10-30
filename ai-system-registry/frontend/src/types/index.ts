@@ -6,6 +6,15 @@ export type AutonomyLevel = "decision_support" | "human_in_the_loop" | "human_on
 export type WorkflowStatus = "draft" | "business_pending" | "technical_pending" | "pending_review" | "info_requested" | "approved" | "rejected";
 export type RegistrationMode = "ai" | "manual_questionnaire" | "full_manual";
 
+// Minimal subset of the compliance AssessmentResponse consumed by the Systems
+// table to derive per-system assessment state (Start / Continue / View).
+export interface AssessmentRow {
+  id: string;
+  ai_system_id: string;
+  status: string;
+}
+export type AssessmentAction = "start" | "continue" | "view";
+
 export interface AISystem {
   id: string;
   name: string;
@@ -15,12 +24,9 @@ export interface AISystem {
   org_role: OrgRole;
   provider_country: string;
   deployment_country: string | null;
-  eu_output_usage: boolean | null;
-  eu_market_placement: boolean | null;
   system_type: SystemType;
   autonomy_level: AutonomyLevel;
   lifecycle: LifecycleKey;
-  application_url: string;
   description: string;
   intended_purpose: string;
   department: string | null;
@@ -44,8 +50,9 @@ export interface AISystem {
   questionnaire_answers: Record<string, unknown> | null;
   registration_documents: RegistrationDocument[] | null;
   business_owners: string | null;
-  technical_owners: string | null;
+  contributors: string[] | null;
   git_repo_url: string | null;
+  planned_rollout_date: string | null;
   // Two shapes: legacy bare RationaleItem[] (AI-assisted intake) or the extended
   // ClassificationRationale object (questionnaire workflow, CO-only). Discriminate
   // with Array.isArray().
@@ -340,12 +347,9 @@ export interface AISystemFormData {
   org_role: OrgRole;
   provider_country: string;
   deployment_country: string | null;
-  eu_output_usage: boolean | null;
-  eu_market_placement: boolean | null;
   system_type: SystemType;
   autonomy_level: AutonomyLevel;
   lifecycle: LifecycleKey;
-  application_url: string;
   description: string;
   intended_purpose: string;
   is_gpai: boolean;
@@ -371,8 +375,69 @@ export interface AISystemFormData {
   is_judicial_admin: boolean;
 }
 
+// Payload for the redesigned registration form. The owner is set server-side to
+// the creator, so it is not sent here. contributors is a roster of usernames.
+export interface RegisterSystemInput {
+  name: string;
+  intended_purpose: string;
+  lifecycle?: LifecycleKey;
+  planned_rollout_date?: string | null;
+  contributors?: string[];
+  git_repo_url?: string | null;
+  business_owners?: string | null;
+}
+
+// A document tracked by the document-indexing service (one current version).
+export type IndexingStatus = "pending" | "processing" | "indexed" | "failed";
+
+export interface IndexedDocument {
+  id: string;
+  ai_system_id: string;
+  filename: string;
+  mime_type: string | null;
+  version_id: string;
+  version_label: string;
+  status: IndexingStatus;
+  stage: string | null;
+  chunk_count: number;
+  error: string | null;
+  created_at: string;
+  indexed_at: string | null;
+}
+
 export interface PermissionsResponse {
   username: string;
   permissions: string[];
+}
+
+export interface ComplianceAssessment {
+  id: string;
+  ai_system_id: string;
+  framework_id: string;
+  title: string;
+  type: string;
+  status: string;
+  score: number | null;
+  notes: string;
+  confirmed_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuditEvent {
+  id: string;
+  created_at: string;
+  actor_username: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  ai_system_id: string;
+  ai_system_name: string;
+  source: string;
+}
+
+export interface AuditEventListResponse {
+  total: number;
+  items: AuditEvent[];
 }
 
