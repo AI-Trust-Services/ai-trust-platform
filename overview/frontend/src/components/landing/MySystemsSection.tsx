@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Box,
-  ClipboardList,
   Eye,
   MoreVertical,
   Plus,
@@ -118,15 +117,6 @@ function SystemRowView({
     sessionStorage.setItem("lastSystemPath", `/systems/${system.id}`);
     navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
-  // All assessments for this system — hand off via the same localStorage key
-  // the compliance MFE consumes to pre-filter its list (`viewSystem`).
-  function openSystemAssessments() {
-    localStorage.setItem(
-      "compliance.viewSystem",
-      JSON.stringify({ systemId: system.id, systemName: system.name }),
-    );
-    navigateTo("/home/assessments", COMPLIANCE_URL);
-  }
   // Jump straight to the latest assessment detail. Only enabled when one
   // exists; the extra `openAssessment` key tells compliance to open it.
   function openLatestAssessment() {
@@ -194,8 +184,6 @@ function SystemRowView({
             <Eye className="size-4" />
           </Button>
           <RowMenu
-            onOpenSystem={openSystem}
-            onOpenSystemAssessments={openSystemAssessments}
             onOpenLatestAssessment={openLatestAssessment}
             hasAssessment={latestAssessment !== null}
           />
@@ -252,8 +240,6 @@ function AvatarStack({
 }
 
 interface RowMenuProps {
-  onOpenSystem: () => void;
-  onOpenSystemAssessments: () => void;
   onOpenLatestAssessment: () => void;
   hasAssessment: boolean;
 }
@@ -261,12 +247,10 @@ interface RowMenuProps {
 // Approximate dropdown height. If less than this much room is available below
 // the trigger, flip the menu to open upwards so the last row's menu isn't
 // clipped by the viewport.
-const MENU_HEIGHT_PX = 150;
+const MENU_HEIGHT_PX = 60;
 const MENU_WIDTH_PX = 220;
 
 function RowMenu({
-  onOpenSystem,
-  onOpenSystemAssessments,
   onOpenLatestAssessment,
   hasAssessment,
 }: RowMenuProps) {
@@ -341,15 +325,6 @@ function RowMenu({
           className="fixed z-[100] overflow-hidden rounded-md border border-border bg-popover p-1 text-sm shadow-md"
           style={{ top: pos.top, left: pos.left, width: MENU_WIDTH_PX }}
         >
-          <MenuItem icon={<Eye className="size-4" />} onClick={() => pick(onOpenSystem)}>
-            View system detail
-          </MenuItem>
-          <MenuItem
-            icon={<ClipboardList className="size-4" />}
-            onClick={() => pick(onOpenSystemAssessments)}
-          >
-            View assessments
-          </MenuItem>
           <MenuItem
             icon={<ArrowRight className="size-4" />}
             onClick={() => pick(onOpenLatestAssessment)}

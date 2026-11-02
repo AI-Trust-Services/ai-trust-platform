@@ -62,49 +62,38 @@ export function HeroEmptyState({ canRegister }: HeroEmptyStateProps) {
 
 /**
  * 12 EU-style stars arranged on a circle in the top-right of the hero.
- * Each star is a self-contained SVG so it stays round regardless of the
- * container aspect ratio.
+ * SVG with square viewBox + `preserveAspectRatio="xMinYMin meet"` keeps the
+ * ring geometrically circular regardless of the hero container's aspect ratio;
+ * the SVG itself is sized to roughly half the hero so the ring sits in the
+ * top-right quadrant with its edge stars bleeding past the corner.
  */
 function EuStarRing() {
-  const starSize = 44;
-  // Center the ring in the top-right quadrant of the hero; the ring is large
-  // enough that it bleeds past the top and right edges.
-  const centerX = 88;
-  const centerY = 28;
-  const radiusX = 22;
-  const radiusY = 32;
+  const cx = 270;
+  const cy = 135;
+  const ringRadius = 130;
+  const starRadius = 20;
   const stars = Array.from({ length: 12 }, (_, i) => {
     const angle = (i / 12) * 2 * Math.PI - Math.PI / 2;
     return {
-      left: centerX + Math.cos(angle) * radiusX,
-      top: centerY + Math.sin(angle) * radiusY,
+      cx: cx + Math.cos(angle) * ringRadius,
+      cy: cy + Math.sin(angle) * ringRadius,
     };
   });
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 400 400"
+      className="pointer-events-none absolute right-0 top-0 h-[95%] w-[55%]"
+      preserveAspectRatio="xMaxYMin meet"
+    >
       {stars.map((s, i) => (
-        <div
-          key={i}
-          className="absolute"
-          style={{
-            left: `${s.left}%`,
-            top: `${s.top}%`,
-            width: starSize,
-            height: starSize,
-            transform: "translate(-50%, -50%)",
-          }}
-        >
-          <StarSvg />
-        </div>
+        <Star key={i} cx={s.cx} cy={s.cy} r={starRadius} />
       ))}
-    </div>
+    </svg>
   );
 }
 
-function StarSvg() {
-  const r = 48;
-  const cx = 50;
-  const cy = 50;
+function Star({ cx, cy, r }: { cx: number; cy: number; r: number }) {
   const points: string[] = [];
   for (let i = 0; i < 10; i++) {
     const angle = (Math.PI / 5) * i - Math.PI / 2;
@@ -113,13 +102,5 @@ function StarSvg() {
       `${cx + Math.cos(angle) * radius},${cy + Math.sin(angle) * radius}`,
     );
   }
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      className="h-full w-full"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      <polygon points={points.join(" ")} fill="#b8a4de" opacity={0.75} />
-    </svg>
-  );
+  return <polygon points={points.join(" ")} fill="#b8a4de" opacity={0.75} />;
 }

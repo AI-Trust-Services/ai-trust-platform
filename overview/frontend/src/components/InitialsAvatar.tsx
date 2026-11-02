@@ -22,7 +22,6 @@ export function InitialsAvatar({
   size = "md",
 }: InitialsAvatarProps) {
   const initials = resolveInitials({ firstName, lastName, username });
-  const bg = pickColor(username || `${firstName}${lastName}` || "?");
   return (
     <span
       className={cn(
@@ -30,7 +29,7 @@ export function InitialsAvatar({
         size === "sm" ? "size-6 text-[10px]" : "size-9 text-xs",
         className,
       )}
-      style={{ background: bg }}
+      style={{ background: "var(--brand)" }}
       aria-hidden="true"
     >
       {initials}
@@ -50,23 +49,4 @@ function resolveInitials({
   }
   const u = (username || "").trim();
   return u.slice(0, 2).toUpperCase() || "?";
-}
-
-const PALETTE = [
-  "#1147E9",
-  "#6C1AF4",
-  "#0E7490",
-  "#B45309",
-  "#15803D",
-  "#9333EA",
-  "#DB2777",
-  "#059669",
-];
-
-function pickColor(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash * 31 + seed.charCodeAt(i)) | 0;
-  }
-  return PALETTE[Math.abs(hash) % PALETTE.length];
 }

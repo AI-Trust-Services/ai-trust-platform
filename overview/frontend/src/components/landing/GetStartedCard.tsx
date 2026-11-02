@@ -50,12 +50,16 @@ export function GetStartedCard({ canRegister }: GetStartedCardProps) {
   );
 }
 
-/** 12-star EU ring motif. 12 five-pointed stars arranged on a circle. */
+/**
+ * 12-star EU ring motif, pinned to the top-right corner of the card.
+ * `preserveAspectRatio="xMaxYMin meet"` keeps the ring anchored to the
+ * top-right as the card width grows, instead of drifting to the centre.
+ */
 function EuStarRing() {
-  const cx = 160;
-  const cy = 80;
+  const cx = 170;
+  const cy = 65;
   const ringRadius = 55;
-  const starRadius = 6;
+  const starRadius = 7;
   const stars = Array.from({ length: 12 }, (_, i) => {
     const angle = (i / 12) * 2 * Math.PI - Math.PI / 2;
     return {
@@ -66,9 +70,9 @@ function EuStarRing() {
   return (
     <svg
       aria-hidden="true"
-      viewBox="0 0 320 160"
-      className="pointer-events-none absolute right-0 top-0 h-full w-[45%]"
-      preserveAspectRatio="xMidYMid meet"
+      viewBox="0 0 220 160"
+      className="pointer-events-none absolute right-0 top-0 h-full w-[55%]"
+      preserveAspectRatio="xMaxYMin meet"
     >
       {stars.map((s, i) => (
         <Star key={i} cx={s.cx} cy={s.cy} r={starRadius} />

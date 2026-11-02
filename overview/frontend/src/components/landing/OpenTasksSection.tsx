@@ -265,10 +265,6 @@ function TaskRow({
 }
 
 function EmptyState() {
-  function handleViewSystems() {
-    navigateTo("/home/ai-system-registry", REGISTRY_URL);
-  }
-
   return (
     <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-12 text-center">
       <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -283,9 +279,6 @@ function EmptyState() {
           When a colleague assigns you a question, it&apos;ll appear here.
         </p>
       </div>
-      <Button variant="outline" onClick={handleViewSystems}>
-        View all AI Systems
-      </Button>
     </div>
   );
 }

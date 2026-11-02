@@ -17,19 +17,4 @@ export const EU_AI_ACT_RESOURCES: ResourceLink[] = [
     href: "https://eur-lex.europa.eu/eli/reg/2024/1689/oj",
     icon: FileText,
   },
-  {
-    label: "Prohibited practices (Article 5)",
-    href: "https://artificialintelligenceact.eu/article/5/",
-    icon: FileText,
-  },
-  {
-    label: "High-risk requirements (Annex III)",
-    href: "https://artificialintelligenceact.eu/annex/3/",
-    icon: FileText,
-  },
-  {
-    label: "Transparency obligations (Article 50)",
-    href: "https://artificialintelligenceact.eu/article/50/",
-    icon: FileText,
-  },
 ];
