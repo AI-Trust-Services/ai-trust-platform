@@ -8,7 +8,6 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from sqlalchemy import or_, select
-from sqlalchemy.dialects.postgresql import JSONB
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
@@ -165,7 +164,7 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
 
 
 class MySystemRow(BaseModel):
-    """One AI system where the user is the Owner or in the Contributors list."""
+    """One AI system where the user is the Owner (business_owners)."""
 
     id: str
     name: str
@@ -185,20 +184,14 @@ class MySystemRow(BaseModel):
 
 @router.get("/me/systems", response_model=list[MySystemRow])
 async def my_systems(request: Request) -> list[MySystemRow]:
-    """AI systems where the current user is the Owner (business_owners) or in
-    the Contributors list."""
+    """AI systems where the current user is the Owner (business_owners)."""
     user = _current_user(request)
     async with SessionLocal() as session:
         rows = (
             (
                 await session.execute(
                     select(AISystem)
-                    .where(
-                        or_(
-                            AISystem.business_owners == user,
-                            AISystem.contributors.cast(JSONB).contains([user]),
-                        )
-                    )
+                    .where(AISystem.business_owners == user)
                     .order_by(AISystem.updated_at.desc().nullslast())
                 )
             )

@@ -14,6 +14,7 @@ import {
   REGISTRY_URL,
   type AssessmentSummary,
   type MySystemRow,
+  type UserSummary,
 } from "../../api/client";
 import { InitialsAvatar } from "../InitialsAvatar";
 import { TierBadge } from "../TierBadge";
@@ -30,6 +31,7 @@ interface MySystemsSectionProps {
   state: LoadState;
   systems: MySystemRow[];
   assessments: AssessmentSummary[];
+  userMap: Map<string, UserSummary>;
 }
 
 interface Row {
@@ -42,6 +44,7 @@ export function MySystemsSection({
   state,
   systems,
   assessments,
+  userMap,
 }: MySystemsSectionProps) {
   const rows: Row[] = useMemo(() => {
     const latestByAiSystem = pickLatestAssessmentPerSystem(assessments);
@@ -62,7 +65,7 @@ export function MySystemsSection({
         </span>
       </div>
       {state === "ready" && rows.length > 0 ? (
-        <SystemsTable rows={rows} />
+        <SystemsTable rows={rows} userMap={userMap} />
       ) : (
         <EmptyState canRegister={canRegister} />
       )}
@@ -70,7 +73,13 @@ export function MySystemsSection({
   );
 }
 
-function SystemsTable({ rows }: { rows: Row[] }) {
+function SystemsTable({
+  rows,
+  userMap,
+}: {
+  rows: Row[];
+  userMap: Map<string, UserSummary>;
+}) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
       <table className="w-full text-sm">
@@ -85,7 +94,7 @@ function SystemsTable({ rows }: { rows: Row[] }) {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <SystemRowView key={row.system.id} row={row} />
+            <SystemRowView key={row.system.id} row={row} userMap={userMap} />
           ))}
         </tbody>
       </table>
@@ -93,7 +102,13 @@ function SystemsTable({ rows }: { rows: Row[] }) {
   );
 }
 
-function SystemRowView({ row }: { row: Row }) {
+function SystemRowView({
+  row,
+  userMap,
+}: {
+  row: Row;
+  userMap: Map<string, UserSummary>;
+}) {
   const { system, latestAssessment } = row;
 
   function openSystem() {
@@ -158,7 +173,7 @@ function SystemRowView({ row }: { row: Row }) {
         />
       </td>
       <td className="px-4 py-3">
-        <AvatarStack usernames={team} />
+        <AvatarStack usernames={team} userMap={userMap} />
       </td>
       <td className="px-4 py-3">
         <AssessmentStageCell
@@ -193,22 +208,40 @@ function SystemRowView({ row }: { row: Row }) {
   );
 }
 
-function AvatarStack({ usernames }: { usernames: string[] }) {
+function AvatarStack({
+  usernames,
+  userMap,
+}: {
+  usernames: string[];
+  userMap: Map<string, UserSummary>;
+}) {
   if (usernames.length === 0) return <span className="text-muted-foreground">—</span>;
   const shown = usernames.slice(0, 4);
   const extra = usernames.length - shown.length;
   return (
     <div className="flex items-center">
-      {shown.map((u, i) => (
-        <span
-          key={u}
-          className={i === 0 ? "" : "-ml-2"}
-          style={{ zIndex: shown.length - i }}
-          title={u}
-        >
-          <InitialsAvatar username={u} size="sm" className="ring-2 ring-card" />
-        </span>
-      ))}
+      {shown.map((u, i) => {
+        const info = userMap.get(u);
+        const fullName = info
+          ? `${info.firstName} ${info.lastName}`.trim() || u
+          : u;
+        return (
+          <span
+            key={u}
+            className={i === 0 ? "" : "-ml-2"}
+            style={{ zIndex: shown.length - i }}
+            title={fullName}
+          >
+            <InitialsAvatar
+              username={u}
+              firstName={info?.firstName}
+              lastName={info?.lastName}
+              size="sm"
+              className="ring-2 ring-card"
+            />
+          </span>
+        );
+      })}
       {extra > 0 && (
         <span
           className="-ml-2 flex size-6 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground ring-2 ring-card"

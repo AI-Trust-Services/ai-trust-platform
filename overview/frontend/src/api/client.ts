@@ -80,6 +80,21 @@ export interface AssessmentSummary {
   updated_at: string | null;
 }
 
+export interface UserSummary {
+  username: string;
+  firstName: string;
+  lastName: string;
+}
+
+const USER_ROLES = [
+  "platform_administrator",
+  "ai_engineer",
+  "ai_compliance_officer",
+  "business_owner",
+  "auditor",
+  "executive",
+];
+
 export const api = {
   myPermissions: () =>
     request<{ permissions: string[] }>("/me/permissions", USERS_API_BASE),
@@ -90,4 +105,20 @@ export const api = {
   mySystems: () => request<MySystemRow[]>("/me/systems", REGISTRY_API_BASE),
   allAssessments: () =>
     request<AssessmentSummary[]>("/assessments?limit=500", COMPLIANCE_API_BASE),
+  allUsers: async (): Promise<UserSummary[]> => {
+    const lists = await Promise.all(
+      USER_ROLES.map((role) =>
+        request<UserSummary[]>(
+          `/users/by-role?role=${encodeURIComponent(role)}`,
+          USERS_API_BASE,
+        ).catch(() => [] as UserSummary[]),
+      ),
+    );
+    const seen = new Set<string>();
+    return lists.flat().filter((u) => {
+      if (seen.has(u.username)) return false;
+      seen.add(u.username);
+      return true;
+    });
+  },
 };

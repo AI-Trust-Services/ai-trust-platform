@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   api,
   type AssessmentSummary,
   type MySystemRow,
   type OpenTaskRow,
   type OrganizationContact,
+  type UserSummary,
 } from "../api/client";
 import { usePermissions } from "../hooks/usePermissions";
 import { LandingHeader } from "../components/landing/Header";
@@ -35,6 +36,7 @@ export default function Landing() {
   const [openTasks, setOpenTasks] = useState<OpenTaskRow[]>([]);
   const [mySystems, setMySystems] = useState<MySystemRow[]>([]);
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
+  const [users, setUsers] = useState<UserSummary[]>([]);
 
   useEffect(() => {
     api
@@ -63,15 +65,23 @@ export default function Landing() {
       api.myOpenTasks(),
       api.mySystems(),
       api.allAssessments().catch(() => [] as AssessmentSummary[]),
+      api.allUsers().catch(() => [] as UserSummary[]),
     ])
-      .then(([tasks, systems, allAssessments]) => {
+      .then(([tasks, systems, allAssessments, allUsers]) => {
         setOpenTasks(tasks);
         setMySystems(systems);
         setAssessments(allAssessments);
+        setUsers(allUsers);
         setState("ready");
       })
       .catch(() => setState("error"));
   }, []);
+
+  const userMap = useMemo(() => {
+    const m = new Map<string, UserSummary>();
+    for (const u of users) m.set(u.username, u);
+    return m;
+  }, [users]);
 
   const showHeroCurtain =
     state === "ready" && openTasks.length === 0 && mySystems.length === 0;
@@ -100,6 +110,7 @@ export default function Landing() {
             state="ready"
             systems={displayMySystems}
             assessments={displayAssessments}
+            userMap={userMap}
           />
         </div>
         <HeroEmptyState canRegister={canRegister} />
@@ -123,6 +134,7 @@ export default function Landing() {
             state="ready"
             systems={displayMySystems}
             assessments={displayAssessments}
+            userMap={userMap}
           />
         </div>
         <aside className="hidden w-[320px] shrink-0 flex-col gap-4 lg:flex">
