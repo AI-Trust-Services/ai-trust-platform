@@ -34,6 +34,8 @@ from ai_trust_persistence.models.model_card_feature_store_group import (
     ModelCardFeatureStoreGroup,
 )
 from ai_trust_persistence.models.obligation import Obligation
+from ai_trust_persistence.models.question_comment import QuestionComment
+from ai_trust_persistence.models.question_state import QuestionState
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from ai_trust_persistence.models.test_bed import TestBedRun
 
@@ -64,6 +66,8 @@ __all__ = [
     "PlatformSettings",
     "SystemWorkflowStep",
     "QuestionAssignment",
+    "QuestionComment",
+    "QuestionState",
     "TestBedRun",
     "evidence_requirements",
 ]

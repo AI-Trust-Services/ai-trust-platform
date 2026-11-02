@@ -1,0 +1,152 @@
+"""Pydantic schemas for the single-page EU AI Act assessment endpoints.
+
+Backs the redesigned per-question assessment flow (issues #346/#314): the start
+page (classification + confidence counts + decisive questions), the per-question
+view (answer/confidence/source/comments/assignment), and finalize/submit. Kept
+separate from ``schemas/workflow.py`` (the section-sequenced chain being retired).
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from pydantic import BaseModel, field_validator
+
+from app.questionnaire_required import VALID_QUESTION_KEYS
+
+CONFIDENCE_LEVELS = frozenset({"high", "medium", "low"})
+
+
+def _validate_question_key(v: str) -> str:
+    if v not in VALID_QUESTION_KEYS:
+        raise ValueError(f"Unknown question_key '{v}'")
+    return v
+
+
+# ── Per-question state ─────────────────────────────────────────────────────
+
+
+class QuestionStateResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    question_key: str
+    answer: str | None = None
+    answer_source: str = "ai_prefilled"
+    confidence: str | None = None
+    confirmed: bool = False
+    assignee_username: str | None = None
+    comment_count: int = 0
+    # Derived: this question is flagged for the owner's attention
+    # (low confidence OR left unanswered by the AI).
+    needs_attention: bool = False
+
+
+class AnswerRequest(BaseModel):
+    """Autosave a single question's answer value."""
+
+    answer: str
+
+    @field_validator("answer")
+    @classmethod
+    def _strip(cls, v: str) -> str:
+        return v
+
+
+class ConfirmResponse(BaseModel):
+    """Returned by confirm/unconfirm so the client can update the sidebar."""
+
+    question_key: str
+    confirmed: bool
+
+
+# ── Comments ───────────────────────────────────────────────────────────────
+
+
+class CommentCreate(BaseModel):
+    body: str
+
+    @field_validator("body")
+    @classmethod
+    def _non_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Comment body must not be empty")
+        return v.strip()
+
+
+class CommentResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: str
+    question_key: str
+    author_username: str
+    body: str
+    created_at: datetime
+
+
+# ── Assignment ─────────────────────────────────────────────────────────────
+
+
+class AssignRequest(BaseModel):
+    assignee_username: str
+
+    @field_validator("assignee_username")
+    @classmethod
+    def _non_empty(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("assignee_username must not be empty")
+        return v
+
+
+# ── Start-page / classification view model ──────────────────────────────────
+
+
+class ConfidenceCounts(BaseModel):
+    high: int = 0
+    medium: int = 0
+    low: int = 0
+
+
+class DecisiveQuestion(BaseModel):
+    """One answer that materially drove the current classification (#346)."""
+
+    section: str
+    question_key: str
+    question_label: str
+    answer: str | None = None
+
+
+class SourceDocumentRef(BaseModel):
+    """A source document that informed the classification (assessment-level)."""
+
+    name: str
+    page: int | None = None
+
+
+class AssessmentStateResponse(BaseModel):
+    """Full view model for the start page + left sidebar (#346) in one read."""
+
+    system_id: str
+    system_name: str
+    registration_mode: str
+    workflow_status: str
+
+    # Preliminary (AI-generated, not final) classification.
+    tier: str
+    basis: str | None = None
+    org_role: str | None = None
+    reasoning: str | None = None
+
+    confidence_counts: ConfidenceCounts
+    attention_count: int
+    decisive_questions: list[DecisiveQuestion] = []
+    source_documents: list[SourceDocumentRef] = []
+
+    questions: list[QuestionStateResponse] = []
+    # Whether a prefill pass has already run (so the client knows to show results
+    # vs. trigger /open).
+    prefilled: bool = False
+
+
+class SubmitRequest(BaseModel):
+    note: str | None = None
