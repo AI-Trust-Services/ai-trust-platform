@@ -98,6 +98,23 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
             .all()
         )
 
+        # Keys currently delegated to a per-question assignee. The
+        # questionnaire disables these for the section-assignee, so they must
+        # not surface as required owner-tasks (would duplicate the delegate's
+        # assigned task and point to a locked question).
+        delegation_rows = (
+            await session.execute(
+                select(
+                    QuestionAssignment.system_id,
+                    QuestionAssignment.section,
+                    QuestionAssignment.question_key,
+                ).where(QuestionAssignment.answered_at.is_(None))
+            )
+        ).all()
+        delegated_keys: dict[tuple[str, str], set[str]] = {}
+        for sys_id, sec, key in delegation_rows:
+            delegated_keys.setdefault((sys_id, sec), set()).add(key)
+
         for row in system_rows:
             section = _active_section(row.workflow_status, row.info_requested_section)
             if section == "business" and row.business_assignee_username == user:
@@ -106,6 +123,8 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
                 missing_keys = missing_technical_keys(row)
             else:
                 continue
+            delegated = delegated_keys.get((row.id, section), set())
+            missing_keys = [k for k in missing_keys if k not in delegated]
 
             for key in missing_keys:
                 tasks.append(
