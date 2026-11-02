@@ -12,6 +12,7 @@ from sqlalchemy import or_, select
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
+from ai_trust_persistence.models.assessment import Assessment
 from ai_trust_persistence.models.question_assignment import QuestionAssignment
 from app.questionnaire_required import (
     QUESTION_LABEL,
@@ -38,11 +39,11 @@ class OpenTaskRow(BaseModel):
         `assigned_by_username` are set.
     """
 
-    source: str  # "required" | "assigned"
+    source: str  # "required" | "assigned" | "review"
     system_id: str
     system_name: str
     system_version: str
-    section: str  # business | technical
+    section: str  # business | technical | review
     workflow_status: Optional[str]
     question_key: str
     question_label: str
@@ -156,6 +157,53 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
                     assigned_by_username=qa.assigned_by_username,
                     owner_username=business_owners,
                     assignment_id=qa.id,
+                )
+            )
+
+        # Compliance assessments awaiting review by the current user when
+        # assigned as the system's compliance officer. The CO is otherwise
+        # invisible to Open Tasks since they are not a section-assignee and
+        # cannot be a per-question delegate (separation of duties).
+        review_rows = (
+            await session.execute(
+                select(
+                    Assessment,
+                    AISystem.name,
+                    AISystem.version,
+                    AISystem.workflow_status,
+                    AISystem.business_owners,
+                )
+                .join(AISystem, AISystem.id == Assessment.ai_system_id)
+                .where(
+                    AISystem.compliance_officer_username == user,
+                    Assessment.status.in_(
+                        ["submitted", "under_review", "pending_review"]
+                    ),
+                )
+            )
+        ).all()
+
+        for (
+            assessment,
+            system_name,
+            system_version,
+            workflow_status,
+            business_owners,
+        ) in review_rows:
+            tasks.append(
+                OpenTaskRow(
+                    source="review",
+                    system_id=assessment.ai_system_id,
+                    system_name=system_name,
+                    system_version=system_version,
+                    section="review",
+                    workflow_status=workflow_status,
+                    question_key="assessment_review",
+                    question_label=f"Review assessment: {assessment.title}",
+                    assigned_at=assessment.updated_at or assessment.created_at,
+                    assigned_by_username=business_owners,
+                    owner_username=business_owners,
+                    assignment_id=assessment.id,
                 )
             )
 

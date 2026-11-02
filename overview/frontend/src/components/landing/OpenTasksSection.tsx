@@ -24,6 +24,11 @@ interface SystemGroup {
   questions: OpenTaskRow[];
   earliest_assigned_at: string;
   owner_username: string | null;
+  // When all questions in the group are CO-review tasks, display + jump
+  // behaviour change: no Q-numbers, click lands on the assessment detail
+  // panel (not the questionnaire modal).
+  is_review: boolean;
+  review_assessment_id: string | null;
 }
 
 interface OpenTasksSectionProps {
@@ -109,11 +114,24 @@ function TaskRow({
     sessionStorage.setItem("lastSystemPath", `/systems/${group.system_id}`);
     navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
-  // Jump the user straight to where they can act on the open task — the
-  // questionnaire modal of the matching assessment in the compliance MFE.
-  // The questionnaire-answering UI lives in compliance (QuestionnaireSection)
-  // on the Assessments page, not in the registry.
+  // Jump the user straight to where they can act on the open task.
+  //   - CO review task → compliance assessment detail (approval view)
+  //   - section-assignee task → compliance questionnaire modal (answering view)
+  // Both targets live in the compliance MFE; the registry questionnaire is
+  // wrapped by compliance's QuestionnaireSection, not the registry UI.
   function openQuestions() {
+    if (group.is_review && group.review_assessment_id) {
+      localStorage.setItem(
+        "compliance.viewSystem",
+        JSON.stringify({ systemId: group.system_id, systemName: group.system_name }),
+      );
+      localStorage.setItem(
+        "compliance.openAssessment",
+        JSON.stringify({ assessmentId: group.review_assessment_id }),
+      );
+      navigateTo("/home/assessments", COMPLIANCE_URL);
+      return;
+    }
     if (!latestAssessment) {
       // No assessment yet → nothing to answer in compliance; drop the user on
       // the system detail so they can see what's going on.
@@ -133,6 +151,18 @@ function TaskRow({
     navigateTo("/home/assessments", COMPLIANCE_URL);
   }
   function openAssessment() {
+    if (group.is_review && group.review_assessment_id) {
+      localStorage.setItem(
+        "compliance.viewSystem",
+        JSON.stringify({ systemId: group.system_id, systemName: group.system_name }),
+      );
+      localStorage.setItem(
+        "compliance.openAssessment",
+        JSON.stringify({ assessmentId: group.review_assessment_id }),
+      );
+      navigateTo("/home/assessments", COMPLIANCE_URL);
+      return;
+    }
     if (!latestAssessment) {
       openSystem();
       return;
@@ -148,10 +178,12 @@ function TaskRow({
     navigateTo("/home/assessments", COMPLIANCE_URL);
   }
 
-  const labels = formatQuestionLabels(group.questions);
-  const full = group.questions
-    .map((q) => `${formatQuestionNumber(q.question_key)} · ${q.question_label}`)
-    .join(" · ");
+  const labels = formatTaskLabel(group);
+  const full = group.is_review
+    ? labels
+    : group.questions
+        .map((q) => `${formatQuestionNumber(q.question_key)} · ${q.question_label}`)
+        .join(" · ");
 
   return (
     <tr className="border-b border-border last:border-b-0">
@@ -208,7 +240,13 @@ function TaskRow({
           className="size-8"
           onClick={openAssessment}
           aria-label={`Open ${group.system_name}`}
-          title={latestAssessment ? "Open assessment" : "View system detail"}
+          title={
+            group.is_review
+              ? "Open assessment for review"
+              : latestAssessment
+                ? "Open assessment"
+                : "View system detail"
+          }
         >
           <Eye className="size-4" />
         </Button>
@@ -245,15 +283,22 @@ function EmptyState() {
 
 function groupBySystem(rows: OpenTaskRow[]): SystemGroup[] {
   const map = new Map<string, SystemGroup>();
+  // CO-review tasks get their own group per assessment so a CO who is also an
+  // assignee on the same system still sees separate rows for each role.
+  const keyFor = (row: OpenTaskRow) =>
+    row.source === "review"
+      ? `${row.system_id}:review:${row.assignment_id}`
+      : row.system_id;
   for (const row of rows) {
-    const existing = map.get(row.system_id);
+    const key = keyFor(row);
+    const existing = map.get(key);
     if (existing) {
       existing.questions.push(row);
       if (row.assigned_at < existing.earliest_assigned_at) {
         existing.earliest_assigned_at = row.assigned_at;
       }
     } else {
-      map.set(row.system_id, {
+      map.set(key, {
         system_id: row.system_id,
         system_name: row.system_name,
         system_version: row.system_version,
@@ -261,12 +306,17 @@ function groupBySystem(rows: OpenTaskRow[]): SystemGroup[] {
         questions: [row],
         earliest_assigned_at: row.assigned_at,
         owner_username: row.owner_username,
+        is_review: row.source === "review",
+        review_assessment_id:
+          row.source === "review" ? row.assignment_id ?? null : null,
       });
     }
   }
   // Sort each group's questions by their Q-number so the preview reads
-  // "Q2, Q4, Q7" in order rather than in assignment order.
+  // "Q2, Q4, Q7" in order rather than in assignment order. Review groups
+  // have no Q-numbers so skip the sort.
   for (const g of map.values()) {
+    if (g.is_review) continue;
     g.questions.sort(
       (a, b) =>
         questionIndex(a.question_key) - questionIndex(b.question_key),
@@ -275,6 +325,14 @@ function groupBySystem(rows: OpenTaskRow[]): SystemGroup[] {
   return Array.from(map.values()).sort((a, b) =>
     b.earliest_assigned_at.localeCompare(a.earliest_assigned_at),
   );
+}
+
+function formatTaskLabel(group: SystemGroup): string {
+  if (group.is_review) {
+    // Backend sends "Review assessment: {title}" — use it verbatim.
+    return group.questions[0]?.question_label ?? "Review assessment";
+  }
+  return formatQuestionLabels(group.questions);
 }
 
 function formatQuestionLabels(questions: OpenTaskRow[]): string {
