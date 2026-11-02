@@ -7,6 +7,7 @@ import Systems from "./views/Systems";
 import RegisterSystem from "./views/RegisterSystem";
 import ModelListPage from "./views/ModelListPage";
 import ModelPage from "./views/ModelPage";
+import SystemDetailPage from "./views/SystemDetailPage";
 
 const SYSTEM_PERMS = ["systems:read", "systems:write"];
 
@@ -24,8 +25,8 @@ const router = createHashRouter([
         element: <RequirePermission anyOf={["systems:write"]}><RegisterSystem /></RequirePermission>,
       },
       {
-        path: "systems/:systemId",
-        element: <RequirePermission anyOf={SYSTEM_PERMS}><Systems /></RequirePermission>,
+        path: "systems/:id",
+        element: <RequirePermission anyOf={SYSTEM_PERMS}><SystemDetailPage /></RequirePermission>,
       },
       {
         path: "models",
@@ -44,4 +45,5 @@ const router = createHashRouter([
 createRoot(document.getElementById("root")!).render(
   <RouterProvider router={router} />
 );
+
 

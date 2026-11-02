@@ -12,7 +12,16 @@ from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_tenancy import install_tenant_middleware
 from ai_trust_persistence import SessionLocal
 from app import minio_client
-from app.routers import classify, intake, intake_assist, systems, model_cards, workflow, me
+from app.routers import (
+    classify,
+    external,
+    intake,
+    intake_assist,
+    me,
+    model_cards,
+    systems,
+    workflow,
+)
 
 logger = get_logger(__name__)
 
@@ -98,6 +107,7 @@ app.include_router(model_cards.router, prefix="/v1")
 app.include_router(workflow.router, prefix="/v1")
 app.include_router(classify.router, prefix="/v1")
 app.include_router(me.router, prefix="/v1")
+app.include_router(external.router, prefix="/v1")
 
 
 @app.get("/health")

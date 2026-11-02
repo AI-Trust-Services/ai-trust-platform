@@ -192,6 +192,10 @@ class AISystemUpdate(BaseModel):
     provider_country: str | None = Field(default=None, max_length=5)
     deployment_country: str | None = Field(default=None, max_length=2)
     lifecycle: str | None = None
+    # Owner transfer: the roles dialog promotes a member to owner. business_owners
+    # is a nullable Text column, so it is not in _REQUIRED_FIELDS — but the UI always
+    # sends a real username (it refuses to save an empty owner).
+    business_owners: str | None = None
     contributors: list[str] | None = None
     git_repo_url: str | None = Field(default=None, max_length=500)
     planned_rollout_date: date | None = None

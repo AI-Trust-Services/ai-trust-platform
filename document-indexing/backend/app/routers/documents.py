@@ -2,8 +2,16 @@ from __future__ import annotations
 
 import os
 
-from ai_trust_authorization import require_permission
-from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
+from ai_trust_authorization import (
+    check_permission,
+    get_current_user,
+    require_permission,
+)
+from ai_trust_authorization.constants import (
+    SYSTEMS_APPROVE,
+    SYSTEMS_READ,
+    SYSTEMS_WRITE,
+)
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import AISystem, Document, DocumentVersion
@@ -392,15 +400,26 @@ async def delete_document(document_id: str) -> dict:
 
 @router.delete(
     "/systems/{system_id}/documents",
-    dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
 )
-async def delete_system_documents(system_id: str) -> dict:
+async def delete_system_documents(
+    system_id: str, user: str = Depends(get_current_user)
+) -> dict:
     """Hard-delete every document for an AI system (cascade drops versions + chunks,
     MinIO originals purged). The registry's ``ai_systems`` row and these documents live
     in separate services with no FK, so deleting a system there cannot cascade here —
     the registry/UI calls this to avoid orphaning documents when a system (e.g. an
     abandoned draft registration) is removed. Idempotent: an unknown or document-less
-    system returns a zero count, never 404."""
+    system returns a zero count, never 404.
+
+    Authorized for anyone who may delete the system itself — ``systems:write`` (owners)
+    or ``systems:approve`` (compliance officers, who lack ``systems:write``). Checked
+    inline rather than via a single ``require_permission`` so the CO-initiated cleanup
+    does not 403 and silently orphan documents."""
+    if not (
+        await check_permission(user, SYSTEMS_WRITE)
+        or await check_permission(user, SYSTEMS_APPROVE)
+    ):
+        raise HTTPException(403, "Permission denied")
     async with SessionLocal() as session:
         keys, count = await _purge_system_documents(session, system_id)
         await session.commit()

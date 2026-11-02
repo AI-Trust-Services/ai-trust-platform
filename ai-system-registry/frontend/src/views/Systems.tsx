@@ -1,15 +1,13 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router";
 import { Eye, Trash2, RefreshCw, MoreVertical, Play, ArrowRight, ChevronDown, Search } from "lucide-react";
 import LuigiClient from "@luigi-project/client";
 import { TierBadge, FormattedDate } from "../components/Badges";
-import SystemDetail from "../components/SystemDetail";
-import type { UserMap } from "../components/SystemDetail";
 import InitialsAvatar from "../components/InitialsAvatar";
 import { api } from "../api/client";
 import { useToast, useModalControls } from "../App";
 import { ORG_ROLE_LABELS } from "../constants/orgRoles";
-import type { AISystem, ModelCard, AssessmentRow, AssessmentAction, OrgRole } from "../types";
+import type { AISystem, AssessmentRow, AssessmentAction, OrgRole } from "../types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -116,39 +114,30 @@ function RoleBadge({ role }: { role: OrgRole }) {
 }
 
 export default function Systems() {
-  const { systemId } = useParams<{ systemId?: string }>();
   const navigate = useNavigate();
   const [systems, setSystems] = useState<AISystem[]>([]);
-  const [models, setModels] = useState<ModelCard[]>([]);
-  const [userMap, setUserMap] = useState<UserMap>({});
+  const [userMap, setUserMap] = useState<Record<string, { firstName: string; lastName: string }>>({});
   const [assessmentsBySystem, setAssessmentsBySystem] = useState<Record<string, AssessmentRow[]>>({});
   const [search, setSearch] = useState("");
   const [riskSel, setRiskSel] = useState<Set<string>>(new Set());
   const [roleSel, setRoleSel] = useState<Set<string>>(new Set());
   const [ownerSel, setOwnerSel] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedSystem, setSelectedSystem] = useState<AISystem | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
   const [indexing, setIndexing] = useState<Record<string, { pct: number; busy: boolean; active: boolean; failed: boolean }>>({});
   const [deleteTarget, setDeleteTarget] = useState<AISystem | null>(null);
   const { mayWrite, mayApprove } = useModalControls();
   const showToast = useToast();
-  // Track which systemId we've already auto-opened for so a Sheet close doesn't
-  // immediately re-open on the next render.
-  const autoOpenedRef = useRef<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [sys, assessments, allUsers, mdls] = await Promise.all([
+      const [sys, assessments, allUsers] = await Promise.all([
         api.getSystems(),
         api.getAllAssessments().catch(() => [] as AssessmentRow[]),
         api.getAllUsers().catch(() => []),
-        api.getModels().catch(() => [] as ModelCard[]),
       ]);
       setSystems(sys.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)));
-      setModels(mdls);
-      const map: UserMap = {};
+      const map: Record<string, { firstName: string; lastName: string }> = {};
       for (const u of allUsers) map[u.username] = { firstName: u.firstName, lastName: u.lastName };
       setUserMap(map);
       const byId: Record<string, AssessmentRow[]> = {};
@@ -162,56 +151,6 @@ export default function Systems() {
   }, [showToast]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
-
-  // Deep-link entry from Overview MFE. Two paths, same destination:
-  //   1. Route param /systems/:systemId
-  //   2. localStorage handoff `registry.openSystem` set before Luigi-navigating
-  //      here (used so Luigi stays on the top-level /home/ai-system-registry
-  //      node — deeper routes drop the shell side-nav).
-  // Case 2 is also fired via Luigi contextUpdate so the sheet re-opens if the
-  // user is already on the registry page when the handoff is written.
-  const openSystemById = useCallback((id: string) => {
-    if (autoOpenedRef.current === id) return;
-    autoOpenedRef.current = id;
-    api.getSystem(id)
-      .then((fresh) => { setSelectedSystem(fresh); setDetailOpen(true); })
-      .catch((e) => showToast(`Failed to load system: ${(e as Error).message}`, true));
-  }, [showToast]);
-
-  function consumeOpenSystemHandoff(): string | null {
-    const raw = localStorage.getItem("registry.openSystem");
-    if (!raw) return null;
-    localStorage.removeItem("registry.openSystem");
-    try {
-      const parsed = JSON.parse(raw) as { systemId?: string };
-      return parsed.systemId ?? null;
-    } catch { return null; }
-  }
-
-  // Overview deep-links the "Register new AI System" button via this flag
-  // instead of navigating Luigi to /home/ai-system-registry/systems/new —
-  // deeper Luigi routes drop the shell side-nav.
-  function consumeOpenNewHandoff(): boolean {
-    if (localStorage.getItem("registry.openNew") !== "1") return false;
-    localStorage.removeItem("registry.openNew");
-    return true;
-  }
-
-  useEffect(() => {
-    if (systemId) { openSystemById(systemId); return; }
-    if (consumeOpenNewHandoff()) { navigate("/systems/new"); return; }
-    const handoffId = consumeOpenSystemHandoff();
-    if (handoffId) openSystemById(handoffId);
-  }, [systemId, openSystemById, navigate]);
-
-  useEffect(() => {
-    const id = LuigiClient.addContextUpdateListener(() => {
-      if (consumeOpenNewHandoff()) { navigate("/systems/new"); return; }
-      const handoffId = consumeOpenSystemHandoff();
-      if (handoffId) openSystemById(handoffId);
-    });
-    return () => { LuigiClient.removeContextUpdateListener(id); };
-  }, [openSystemById, navigate]);
 
   const ownerLabel = useCallback((s: AISystem) => {
     const key = ownerKey(s);
@@ -283,16 +222,6 @@ export default function Systems() {
     if (rows.length === 0) return "start";
     if (rows.some((r) => r.status === "approved")) return "view";
     return "continue";
-  }
-
-  async function openSystem(s: AISystem) {
-    try {
-      const fresh = await api.getSystem(s.id);
-      setSelectedSystem(fresh);
-      setDetailOpen(true);
-    } catch (e) {
-      showToast(`Failed to load system: ${(e as Error).message}`, true);
-    }
   }
 
   function canDelete(s: AISystem): boolean {
@@ -377,7 +306,7 @@ export default function Systems() {
               ) : filtered.map((s) => {
                 const action = assessmentAction(s.id);
                 return (
-                  <TableRow key={s.id} onClick={() => openSystem(s)} className="cursor-pointer">
+                  <TableRow key={s.id} onClick={() => navigate(`/systems/${s.id}`)} className="cursor-pointer">
                     <TableCell>
                       <div className="font-medium underline underline-offset-2">{s.name}</div>
                       <div className="text-xs text-muted-foreground">{s.id} · v{s.version}</div>
@@ -411,7 +340,7 @@ export default function Systems() {
                     <TableCell className="text-[13px] text-muted-foreground"><FormattedDate iso={s.created_at} /></TableCell>
                     <TableCell>
                       <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                        <Button variant="outline" size="icon" className="size-8" title="View details" onClick={() => openSystem(s)}>
+                        <Button variant="outline" size="icon" className="size-8" title="View details" onClick={() => navigate(`/systems/${s.id}`)}>
                           <Eye />
                         </Button>
                         <DropdownMenu>
@@ -449,24 +378,6 @@ export default function Systems() {
       </div>
 
 
-
-      <SystemDetail
-        open={detailOpen}
-        system={selectedSystem}
-        models={models}
-        userMap={userMap}
-        onClose={() => {
-          setDetailOpen(false);
-          // Clear the deep-link URL so the user can reopen the same system
-          // later without the sheet jumping back open.
-          if (systemId) navigate("/systems", { replace: true });
-        }}
-        onDelete={() => { setDetailOpen(false); loadAll(); }}
-        onUpdate={(updated) => {
-          setSelectedSystem(updated);
-          loadAll();
-        }}
-      />
 
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <DialogContent className="max-w-md">

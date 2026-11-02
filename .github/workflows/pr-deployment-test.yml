@@ -28,7 +28,7 @@ concurrency:
 jobs:
   deploy-test:
     name: namespace-deployment-test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event.label.name == 'garden-deploy'
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -50,7 +50,7 @@ jobs:
       # Checks out the PR head SHA so composite actions (./.github/actions/*)
       # resolve correctly. build-images reuses this checkout — no second clone.
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.PR_SHA }}
 
