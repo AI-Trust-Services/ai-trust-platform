@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_tenancy import install_tenant_middleware
-from app.routers import branding, smtp, settings, stats
+from app.routers import branding, smtp, settings, stats, external_api
 from app.startup import seed_settings_from_env
 
 logger = get_logger(__name__)
@@ -84,6 +84,7 @@ app.include_router(branding.router)
 app.include_router(smtp.router)
 app.include_router(settings.router)
 app.include_router(stats.router)
+app.include_router(external_api.router)
 
 
 @app.get("/health")
