@@ -4,6 +4,7 @@ import type {
   DatasetPatch, ModelSystemResponse, AISystemFormData, PermissionsResponse, WorkflowStep,
   UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult,
   QuestionAssignment, RegisterSystemInput, IndexedDocument, AssessmentRow,
+  ComplianceAssessment, AuditEventListResponse,
 } from "../types"
 import type { SectionKey } from "../config/questionnaire";
 
@@ -11,6 +12,7 @@ const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
 const INDEXING_API_BASE = import.meta.env.VITE_INDEXING_API_BASE;
 const COMPLIANCE_API_BASE = import.meta.env.VITE_COMPLIANCE_API_BASE;
+const AUDIT_API_BASE = import.meta.env.VITE_AUDIT_API_BASE;
 export const HEALTH_URL = API_BASE.replace("/v1", "") + "/health";
 
 async function request<T>(path: string, options: RequestInit = {}, base: string = API_BASE): Promise<T> {
@@ -374,6 +376,19 @@ export const api = {
       INDEXING_API_BASE,
     ),
 
+  // Upload a new VERSION of an existing indexed document (Replace flow). The old
+  // version is retained for history; the new one becomes current and is re-indexed.
+  // Preferred over create-new + delete-old, which would discard the version history.
+  uploadDocumentVersion: (documentId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{ document_id: string; version_id: string; status: string }>(
+      `/documents/${encodeURIComponent(documentId)}/versions`,
+      { method: "POST", body: fd },
+      INDEXING_API_BASE,
+    );
+  },
+
   // Purge every indexed document for a system. Used when a system (e.g. an abandoned
   // draft registration) is deleted — the registry row and the indexed documents live
   // in separate services with no FK, so this prevents orphaned docs/chunks/MinIO objects.
@@ -416,5 +431,38 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+
+  // ── Compliance assessments (detail page) ──────────────────────────────────
+  getAssessmentsForSystem: (systemId: string) =>
+    request<ComplianceAssessment[]>(
+      `/assessments?ai_system_id=${encodeURIComponent(systemId)}&limit=100`,
+      {},
+      COMPLIANCE_API_BASE,
+    ),
+
+  submitAssessment: (assessmentId: string) =>
+    request<ComplianceAssessment>(`/assessments/${encodeURIComponent(assessmentId)}/submit`, { method: "POST" }, COMPLIANCE_API_BASE),
+
+  deleteAssessment: (assessmentId: string) =>
+    request<null>(`/assessments/${encodeURIComponent(assessmentId)}`, { method: "DELETE" }, COMPLIANCE_API_BASE),
+
+  abortAssessment: (assessmentId: string) =>
+    request<null>(`/assessments/${encodeURIComponent(assessmentId)}/abort`, { method: "POST" }, COMPLIANCE_API_BASE),
+
+  historicizeAssessment: (assessmentId: string) =>
+    request<null>(`/assessments/${encodeURIComponent(assessmentId)}/historicize`, { method: "POST" }, COMPLIANCE_API_BASE),
+
+  // Presigned download URL from the indexing service (MinIO).
+  getDocumentDownloadUrlIndexed: (documentId: string) =>
+    request<{ url: string }>(`/documents/${encodeURIComponent(documentId)}/download-url`, {}, INDEXING_API_BASE),
+};
+
+export const auditApi = {
+  listEvents: (systemId: string, limit = 5, offset = 0) =>
+    request<AuditEventListResponse>(
+      `/events?ai_system_id=${encodeURIComponent(systemId)}&limit=${limit}&offset=${offset}&sort=desc`,
+      {},
+      AUDIT_API_BASE,
+    ),
 };
 

@@ -383,7 +383,8 @@ export interface RegisterSystemInput {
   lifecycle?: LifecycleKey;
   planned_rollout_date?: string | null;
   contributors?: string[];
-  git_repo_url?: string;
+  git_repo_url?: string | null;
+  business_owners?: string | null;
 }
 
 // A document tracked by the document-indexing service (one current version).
@@ -407,5 +408,36 @@ export interface IndexedDocument {
 export interface PermissionsResponse {
   username: string;
   permissions: string[];
+}
+
+export interface ComplianceAssessment {
+  id: string;
+  ai_system_id: string;
+  framework_id: string;
+  title: string;
+  type: string;
+  status: string;
+  score: number | null;
+  notes: string;
+  confirmed_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuditEvent {
+  id: string;
+  created_at: string;
+  actor_username: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  ai_system_id: string;
+  ai_system_name: string;
+  source: string;
+}
+
+export interface AuditEventListResponse {
+  total: number;
+  items: AuditEvent[];
 }
 
