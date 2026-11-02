@@ -144,9 +144,18 @@ function TaskRow({
     );
     // `questionnaire: true` tells AssessmentsPage to auto-open the
     // questionnaire modal (not just the read-only detail side-panel).
+    // `fromDelegate: true` when any task in the group is a per-question
+    // delegation bypasses the technical-pending gate that otherwise rejects
+    // anyone other than the technical section assignee — delegates are
+    // allowed to answer their specific question.
+    const fromDelegate = group.questions.some((q) => q.source === "assigned");
     localStorage.setItem(
       "compliance.openAssessment",
-      JSON.stringify({ assessmentId: latestAssessment.id, questionnaire: true }),
+      JSON.stringify({
+        assessmentId: latestAssessment.id,
+        questionnaire: true,
+        fromDelegate,
+      }),
     );
     navigateTo("/home/assessments", COMPLIANCE_URL);
   }

@@ -59,7 +59,15 @@ function consumePendingAssessment(): PendingAssessment | null {
 const VIEW_SYSTEM_KEY = "compliance.viewSystem";
 const OPEN_ASSESSMENT_KEY = "compliance.openAssessment";
 type ViewSystem = { systemId?: string; systemName?: string };
-type OpenAssessment = { assessmentId?: string; questionnaire?: boolean };
+type OpenAssessment = {
+  assessmentId?: string;
+  questionnaire?: boolean;
+  // Set by the overview Open Tasks handoff when the clicking user is a
+  // per-question delegate (not the section assignee). Bypasses the
+  // technical-pending gate in openQuestionnaire so the delegate can land
+  // in the modal and answer their specific question.
+  fromDelegate?: boolean;
+};
 function consumeViewSystem(): ViewSystem | null {
   const raw = localStorage.getItem(VIEW_SYSTEM_KEY);
   if (!raw) return null;
@@ -470,7 +478,8 @@ export default function AssessmentsPage() {
     if (!pendingOpenAssessment?.assessmentId || assessments.length === 0) return;
     const a = assessments.find((r) => r.id === pendingOpenAssessment.assessmentId);
     if (a) {
-      if (pendingOpenAssessment.questionnaire) openQuestionnaire(a);
+      if (pendingOpenAssessment.questionnaire)
+        openQuestionnaire(a, { fromDelegate: pendingOpenAssessment.fromDelegate });
       else openDetail(a);
       setPendingOpenAssessment(null);
     }
@@ -518,7 +527,7 @@ export default function AssessmentsPage() {
     setRceSummary(null);
   }
 
-  async function openQuestionnaire(a: Assessment) {
+  async function openQuestionnaire(a: Assessment, opts?: { fromDelegate?: boolean }) {
     setQClassification(false);
     setQInfoFlow(false);
     setQDialogOpen(false);
@@ -543,8 +552,17 @@ export default function AssessmentsPage() {
       const isTechnicalPending = freshSys.workflow_status === "technical_pending";
       const techAssignee = freshSys.technical_assignee_username;
 
-      // If technical section is pending and belongs to someone else, don't open
-      if (isTechnicalPending && techAssignee && techAssignee !== username) {
+      // If technical section is pending and belongs to someone else, don't
+      // open — unless the caller is a per-question delegate (overview Open
+      // Tasks sets fromDelegate=true for those), in which case the modal
+      // must open so they can answer their specific question. The
+      // QuestionnaireSection itself disables non-delegated fields.
+      if (
+        !opts?.fromDelegate &&
+        isTechnicalPending &&
+        techAssignee &&
+        techAssignee !== username
+      ) {
         showToast(`Technical section is assigned to ${techAssignee} — waiting for them to complete it.`);
         return;
       }
