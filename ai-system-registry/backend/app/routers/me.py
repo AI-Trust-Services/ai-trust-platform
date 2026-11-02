@@ -124,7 +124,11 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
                     )
                 )
 
-        # Explicit per-question assignments.
+        # Explicit per-question assignments. We filter on `answered_at IS NULL`
+        # in SQL but still need the row's workflow state to decide whether the
+        # section is actually editable — a lingering open assignment on a
+        # section the workflow has already moved past is unactionable and
+        # must not surface as a task.
         question_rows = (
             await session.execute(
                 select(
@@ -133,6 +137,7 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
                     AISystem.version,
                     AISystem.workflow_status,
                     AISystem.business_owners,
+                    AISystem.info_requested_section,
                 )
                 .join(AISystem, AISystem.id == QuestionAssignment.system_id)
                 .where(
@@ -148,7 +153,15 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
             system_version,
             workflow_status,
             business_owners,
+            info_requested_section,
         ) in question_rows:
+            # Suppress tasks for sections that are not currently editable:
+            # only the active section (business_pending → business,
+            # technical_pending → technical, info_requested → the bounced
+            # section) can be answered. Any other workflow state locks the
+            # whole questionnaire.
+            if _active_section(workflow_status, info_requested_section) != qa.section:
+                continue
             tasks.append(
                 OpenTaskRow(
                     source="assigned",
