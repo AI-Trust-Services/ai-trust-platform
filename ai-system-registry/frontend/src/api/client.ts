@@ -5,6 +5,7 @@ import type {
   UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult,
   QuestionAssignment, RegisterSystemInput, IndexedDocument, AssessmentRow,
   ComplianceAssessment, AuditEventListResponse,
+  AssessmentState, QuestionState, QuestionComment,
 } from "../types"
 import type { SectionKey } from "../config/questionnaire";
 
@@ -112,6 +113,65 @@ export const api = {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ answers, section }),
+    }),
+
+  // ── Single-page assessment (#346 / #314) ─────────────────────────────────────
+  // All routes under /systems/{id}/assessment. openAssessment triggers the one-time
+  // AI prefill + classification (idempotent); the rest are per-question actions.
+  openAssessment: (systemId: string) =>
+    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/open`, {
+      method: "POST",
+    }),
+  getAssessmentState: (systemId: string) =>
+    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/state`),
+  saveAnswer: (systemId: string, questionKey: string, answer: string) =>
+    request<QuestionState>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/answer`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answer }) },
+    ),
+  confirmQuestion: (systemId: string, questionKey: string) =>
+    request<{ question_key: string; confirmed: boolean }>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/confirm`,
+      { method: "POST" },
+    ),
+  unconfirmQuestion: (systemId: string, questionKey: string) =>
+    request<{ question_key: string; confirmed: boolean }>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/unconfirm`,
+      { method: "POST" },
+    ),
+  listComments: (systemId: string, questionKey: string) =>
+    request<QuestionComment[]>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/comments`,
+    ),
+  addComment: (systemId: string, questionKey: string, body: string) =>
+    request<QuestionComment>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/comments`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body }) },
+    ),
+  deleteComment: (systemId: string, questionKey: string, commentId: string) =>
+    request<null>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/comments/${encodeURIComponent(commentId)}`,
+      { method: "DELETE" },
+    ),
+  assignQuestion: (systemId: string, questionKey: string, assigneeUsername: string) =>
+    request<QuestionState>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/assign`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assignee_username: assigneeUsername }) },
+    ),
+  unassignQuestion: (systemId: string, questionKey: string) =>
+    request<null>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/assign`,
+      { method: "DELETE" },
+    ),
+  finalizeAssessment: (systemId: string) =>
+    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/finalize`, {
+      method: "POST",
+    }),
+  submitAssessmentToCO: (systemId: string, note?: string) =>
+    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note ?? null }),
     }),
 
   // ── Model Cards ────────────────────────────────────────────────────────────
