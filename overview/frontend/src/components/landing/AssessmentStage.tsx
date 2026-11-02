@@ -24,9 +24,14 @@ export function stageInfo(
     if (a.status === "returned")
       return { label: "3. Returned to owner", filled: 3, tone: "warn" };
     // Backend currently also emits the legacy "submitted" status after the
-    // owner clicks Submit; treat it as "Under Review" for display until the
-    // backend is aligned to the terminology doc.
-    if (a.status === "under_review" || a.status === "submitted")
+    // owner clicks Submit, and `pending_review` after the classification
+    // advance step. All three mean "waiting for CO" — treat them as Under
+    // Review for display until the backend is aligned to the terminology doc.
+    if (
+      a.status === "under_review" ||
+      a.status === "submitted" ||
+      a.status === "pending_review"
+    )
       return { label: "2. Under Review", filled: 2, tone: "progress" };
     return { label: "1. Draft", filled: 1, tone: "progress" };
   }
