@@ -1,0 +1,760 @@
+"""Single-page EU AI Act assessment endpoints (issues #346 / #314).
+
+The owner-facing assessment flow: open (AI prefill + classification), read the
+full state (start page + sidebar), per-question autosave / confirm / comment /
+assign, finalize, and submit to the compliance officer. Replaces the
+section-sequenced questionnaire modal flow.
+
+All routes are per-system and `ai`-registration-mode oriented. Each route owns
+its transaction (``async with SessionLocal()``), per the repo convention.
+"""
+
+from __future__ import annotations
+
+import os
+from datetime import datetime, timezone
+
+import httpx
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from sqlalchemy import select
+
+from ai_trust_authorization import require_permission
+from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
+from ai_trust_logging import correlation_id_var, get_logger
+from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.models.ai_system import AISystem
+from ai_trust_persistence.models.question_comment import QuestionComment
+from ai_trust_persistence.models.question_state import QuestionState
+from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
+
+from app import email_sender
+from app.assessment_catalogue import (
+    ASSESSMENT_QUESTION_KEYS,
+    decisive_question_keys,
+    question_catalogue,
+    section_of,
+)
+from app.classifier import classify_ai_questionnaire
+from app.ids import new_id
+from app.llm import (
+    LLMParseError,
+    build_assessment_prefill_messages,
+    chat,
+    parse_json_response,
+)
+from app.questionnaire_required import QUESTION_LABEL
+from app.schemas.assessment import (
+    AnswerRequest,
+    AssessmentStateResponse,
+    AssignRequest,
+    CommentCreate,
+    CommentResponse,
+    ConfidenceCounts,
+    ConfirmResponse,
+    DecisiveQuestion,
+    QuestionStateResponse,
+    SourceDocumentRef,
+    SubmitRequest,
+    _validate_question_key,
+)
+
+router = APIRouter(tags=["assessment"])
+logger = get_logger(__name__)
+
+_AI_UNAVAILABLE = "AI classification is unavailable. Please try again shortly."
+
+_INDEXING_URL = os.environ.get(
+    "INDEXING_BACKEND_URL", "http://document-indexing-backend:8011"
+)
+_SERVICE_PRINCIPAL = os.environ.get(
+    "EXTERNAL_API_SERVICE_PRINCIPAL", "svc-external-api"
+)
+
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+
+def _current_user(request: Request) -> str:
+    return request.headers.get("x-forwarded-preferred-username", "unknown")
+
+
+async def _get_system(session, system_id: str) -> AISystem:
+    result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+    row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, f"System {system_id} not found")
+    return row
+
+
+def _system_owner(row: AISystem) -> str | None:
+    """The owner username (creator). Stored as a plain string in business_owners."""
+    owner = row.business_owners
+    if isinstance(owner, str):
+        return owner.strip() or None
+    return None
+
+
+def _answer_store(row: AISystem) -> dict:
+    """The full questionnaire_answers dict (never None)."""
+    return dict(row.questionnaire_answers or {})
+
+
+def _read_answer(answers: dict, question_key: str) -> str | None:
+    """Read a question's answer. Business keys live at the top level; technical
+    (AI-mode free-text) keys live nested under ``technical``."""
+    if section_of(question_key) == "technical":
+        tech = answers.get("technical") or {}
+        v = tech.get(question_key)
+    else:
+        v = answers.get(question_key)
+    if v is None:
+        return None
+    return str(v)
+
+
+def _write_answer(answers: dict, question_key: str, value: str) -> dict:
+    """Return a new answers dict with the question's answer set (section-aware)."""
+    out = dict(answers)
+    if section_of(question_key) == "technical":
+        tech = dict(out.get("technical") or {})
+        tech[question_key] = value
+        out["technical"] = tech
+    else:
+        out[question_key] = value
+    return out
+
+
+async def _states_by_key(session, system_id: str) -> dict[str, QuestionState]:
+    result = await session.execute(
+        select(QuestionState).where(QuestionState.system_id == system_id)
+    )
+    return {s.question_key: s for s in result.scalars().all()}
+
+
+async def _comment_counts(session, system_id: str) -> dict[str, int]:
+    result = await session.execute(
+        select(QuestionComment).where(
+            QuestionComment.system_id == system_id,
+            QuestionComment.deleted_at.is_(None),
+        )
+    )
+    counts: dict[str, int] = {}
+    for c in result.scalars().all():
+        counts[c.question_key] = counts.get(c.question_key, 0) + 1
+    return counts
+
+
+def _needs_attention(state: QuestionState | None, answer: str | None) -> bool:
+    """Low confidence OR the AI left it unanswered (#346 'requires attention')."""
+    if state is not None and state.confidence == "low":
+        return True
+    return answer is None or (isinstance(answer, str) and not answer.strip())
+
+
+def _may_edit(row: AISystem, state: QuestionState | None, user: str) -> bool:
+    """Owner may edit any question; an assignee may edit theirs; a question with
+    no assignee defaults to the owner."""
+    if user == _system_owner(row):
+        return True
+    if state is not None and state.assignee_username:
+        return user == state.assignee_username
+    return False
+
+
+async def _retrieve_context(
+    system_id: str,
+) -> tuple[str, list[SourceDocumentRef]]:
+    """Fetch top document passages for prefill. Returns (context_block, sources).
+
+    Fails soft: if indexing is unreachable or returns nothing, returns an empty
+    block and an empty source list (prefill then proposes low-confidence /
+    empty answers)."""
+    payload = {"ai_system_id": system_id, "query": "EU AI Act classification", "k": 12}
+    headers = {"x-forwarded-preferred-username": _SERVICE_PRINCIPAL}
+    cid = correlation_id_var.get("")
+    if cid:
+        headers["x-correlation-id"] = cid
+    url = f"{_INDEXING_URL}/v1/retrieve"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+        if resp.status_code >= 400:
+            logger.warning(
+                "assessment.retrieve_failed", extra={"status": resp.status_code}
+            )
+            return "", []
+        data = resp.json()
+    except (httpx.TimeoutException, httpx.RequestError, ValueError) as exc:
+        logger.warning("assessment.retrieve_unreachable", extra={"error": str(exc)})
+        return "", []
+
+    results = data.get("results") or data.get("passages") or []
+    passages: list[str] = []
+    sources: dict[tuple[str, int | None], SourceDocumentRef] = {}
+    for r in results:
+        passage = r.get("passage") or ""
+        src = r.get("source") or {}
+        name = src.get("filename") or "document"
+        page = src.get("page")
+        if passage:
+            loc = f" (p. {page})" if page is not None else ""
+            passages.append(f"[{name}{loc}] {passage}")
+        key = (name, page)
+        if key not in sources:
+            sources[key] = SourceDocumentRef(name=name, page=page)
+    return "\n\n".join(passages), list(sources.values())
+
+
+# ── open / prefill ─────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/systems/{system_id}/assessment/open",
+    response_model=AssessmentStateResponse,
+)
+async def open_assessment(
+    system_id: str,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    """Lazily prefill + classify on first open; return cached state thereafter.
+
+    One batched LLM call proposes an answer + confidence per question from the
+    system's indexed documents, then the deterministic classifier derives the
+    tier. Seeds ``question_states`` and persists answers. Idempotent: once
+    ``question_states`` rows exist, this is a plain read."""
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        existing = await _states_by_key(session, system_id)
+        if existing:
+            return await _build_state(session, row)
+
+        # ── prefill pass (one batched LLM call) ──
+        context_block, _sources = await _retrieve_context(system_id)
+        messages = build_assessment_prefill_messages(
+            question_catalogue(), retrieved_context=context_block
+        )
+        try:
+            result = await chat(messages, json_mode=True, task="assessment_prefill")
+            parsed = await parse_json_response(
+                result["text"], task="assessment_prefill"
+            )
+        except (LLMParseError, Exception) as exc:  # noqa: BLE001
+            logger.error("assessment.prefill_failed", extra={"error": str(exc)})
+            raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
+
+        prefilled = {a.get("question_key"): a for a in (parsed.get("answers") or [])}
+        answers = _answer_store(row)
+        for q_key in ASSESSMENT_QUESTION_KEYS:
+            proposal = prefilled.get(q_key) or {}
+            ans = (proposal.get("answer") or "").strip()
+            conf = proposal.get("confidence")
+            if conf not in ("high", "medium", "low"):
+                conf = "low"
+            if ans:
+                answers = _write_answer(answers, q_key, ans)
+            session.add(
+                QuestionState(
+                    id=new_id("QST"),
+                    system_id=system_id,
+                    question_key=q_key,
+                    answer_source="ai_prefilled",
+                    ai_original_answer=ans or None,
+                    confidence=conf,
+                )
+            )
+        row.questionnaire_answers = answers
+
+        # ── classification (tier) — deterministic over the LLM-inferred flags ──
+        try:
+            classification, rationale = await classify_ai_questionnaire(row)
+        except (LLMParseError, Exception) as exc:  # noqa: BLE001
+            logger.error("assessment.classify_failed", extra={"error": str(exc)})
+            raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
+        row.tier = classification.tier
+        row.basis = classification.basis
+        row.annex_iii_area = classification.annex_iii_area
+        row.classification_rationale = rationale
+        if rationale.get("org_role"):
+            row.org_role = rationale["org_role"]
+
+        await session.commit()
+        logger.info(
+            "assessment.opened",
+            extra={"system_id": system_id, "tier": row.tier},
+        )
+        row = await _get_system(session, system_id)
+        return await _build_state(session, row)
+
+
+async def _build_state(session, row: AISystem) -> AssessmentStateResponse:
+    states = await _states_by_key(session, row.id)
+    counts = await _comment_counts(session, row.id)
+    answers = _answer_store(row)
+
+    conf = ConfidenceCounts()
+    attention = 0
+    questions: list[QuestionStateResponse] = []
+    for q_key in ASSESSMENT_QUESTION_KEYS:
+        st = states.get(q_key)
+        ans = _read_answer(answers, q_key)
+        if st is not None and st.confidence == "high":
+            conf.high += 1
+        elif st is not None and st.confidence == "medium":
+            conf.medium += 1
+        elif st is not None and st.confidence == "low":
+            conf.low += 1
+        needs = _needs_attention(st, ans)
+        if needs:
+            attention += 1
+        questions.append(
+            QuestionStateResponse(
+                question_key=q_key,
+                answer=ans,
+                answer_source=st.answer_source if st else "ai_prefilled",
+                confidence=st.confidence if st else None,
+                confirmed=bool(st and st.confirmed_at),
+                assignee_username=st.assignee_username if st else None,
+                comment_count=counts.get(q_key, 0),
+                needs_attention=needs,
+            )
+        )
+
+    rationale = row.classification_rationale or {}
+    fired = [
+        f.get("flag")
+        for f in (rationale.get("flags") or [])
+        if isinstance(f, dict) and f.get("value")
+    ]
+    decisive = []
+    for q_key in decisive_question_keys([f for f in fired if f]):
+        decisive.append(
+            DecisiveQuestion(
+                section=section_of(q_key),
+                question_key=q_key,
+                question_label=QUESTION_LABEL.get(q_key, q_key),
+                answer=_read_answer(answers, q_key),
+            )
+        )
+
+    # Source documents that informed the classification (assessment-level).
+    _ctx, sources = ("", [])
+    docs = row.registration_documents or []
+    source_docs = [SourceDocumentRef(name=d.get("name", "document")) for d in docs]
+
+    return AssessmentStateResponse(
+        system_id=row.id,
+        system_name=row.name,
+        registration_mode=row.registration_mode,
+        workflow_status=row.workflow_status,
+        tier=row.tier,
+        basis=row.basis,
+        org_role=row.org_role,
+        reasoning=rationale.get("reasoning"),
+        confidence_counts=conf,
+        attention_count=attention,
+        decisive_questions=decisive,
+        source_documents=source_docs or sources,
+        questions=questions,
+        prefilled=bool(states),
+    )
+
+
+@router.get(
+    "/systems/{system_id}/assessment/state",
+    response_model=AssessmentStateResponse,
+)
+async def get_assessment_state(
+    system_id: str,
+    _: str = Depends(require_permission(SYSTEMS_READ)),
+):
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        return await _build_state(session, row)
+
+
+# ── per-question: answer / confirm ───────────────────────────────────────────
+
+
+async def _load_state(session, system_id: str, question_key: str) -> QuestionState:
+    result = await session.execute(
+        select(QuestionState).where(
+            QuestionState.system_id == system_id,
+            QuestionState.question_key == question_key,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+@router.post(
+    "/systems/{system_id}/assessment/questions/{question_key}/answer",
+    response_model=QuestionStateResponse,
+)
+async def save_answer(
+    system_id: str,
+    question_key: str,
+    body: AnswerRequest,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    _validate_question_key(question_key)
+    user = _current_user(request)
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        state = await _load_state(session, system_id, question_key)
+        if not _may_edit(row, state, user):
+            raise HTTPException(403, "You are not assigned to this question")
+
+        answers = _write_answer(_answer_store(row), question_key, body.answer)
+        row.questionnaire_answers = answers
+
+        if state is None:
+            state = QuestionState(
+                id=new_id("QST"),
+                system_id=system_id,
+                question_key=question_key,
+                answer_source="manual",
+                ai_original_answer=None,
+            )
+            session.add(state)
+        else:
+            # A change away from the AI-proposed value flips the source to manual
+            # and reverts any prior confirmation (re-edit ⇒ Incomplete).
+            if body.answer.strip() != (state.ai_original_answer or "").strip():
+                state.answer_source = "manual"
+                state.confirmed_at = None
+            else:
+                state.answer_source = "ai_prefilled"
+        await session.commit()
+        count = (await _comment_counts(session, system_id)).get(question_key, 0)
+        return QuestionStateResponse(
+            question_key=question_key,
+            answer=body.answer,
+            answer_source=state.answer_source,
+            confidence=state.confidence,
+            confirmed=bool(state.confirmed_at),
+            assignee_username=state.assignee_username,
+            comment_count=count,
+            needs_attention=_needs_attention(state, body.answer),
+        )
+
+
+@router.post(
+    "/systems/{system_id}/assessment/questions/{question_key}/confirm",
+    response_model=ConfirmResponse,
+)
+async def confirm_question(
+    system_id: str,
+    question_key: str,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    """Mark a question confirmed. If the answer was changed from the AI pre-fill,
+    a comment recorded since that change is mandatory (else 422)."""
+    _validate_question_key(question_key)
+    user = _current_user(request)
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        state = await _load_state(session, system_id, question_key)
+        if state is None:
+            raise HTTPException(404, "Question has no state; open the assessment first")
+        if not _may_edit(row, state, user):
+            raise HTTPException(403, "You are not assigned to this question")
+
+        answers = _answer_store(row)
+        current = (_read_answer(answers, question_key) or "").strip()
+        changed = (
+            state.answer_source == "manual"
+            and current != (state.ai_original_answer or "").strip()
+        )
+        if changed:
+            # Require at least one (non-deleted) comment on this question.
+            result = await session.execute(
+                select(QuestionComment).where(
+                    QuestionComment.system_id == system_id,
+                    QuestionComment.question_key == question_key,
+                    QuestionComment.deleted_at.is_(None),
+                )
+            )
+            if not result.scalars().first():
+                raise HTTPException(
+                    422,
+                    "A comment is required when changing an AI pre-filled answer",
+                )
+
+        state.confirmed_at = datetime.now(timezone.utc)
+        await session.commit()
+        return ConfirmResponse(question_key=question_key, confirmed=True)
+
+
+@router.post(
+    "/systems/{system_id}/assessment/questions/{question_key}/unconfirm",
+    response_model=ConfirmResponse,
+)
+async def unconfirm_question(
+    system_id: str,
+    question_key: str,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    _validate_question_key(question_key)
+    user = _current_user(request)
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        state = await _load_state(session, system_id, question_key)
+        if state is None:
+            raise HTTPException(404, "Question has no state")
+        if not _may_edit(row, state, user):
+            raise HTTPException(403, "You are not assigned to this question")
+        state.confirmed_at = None
+        await session.commit()
+        return ConfirmResponse(question_key=question_key, confirmed=False)
+
+
+# ── comments ─────────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/systems/{system_id}/assessment/questions/{question_key}/comments",
+    response_model=list[CommentResponse],
+)
+async def list_comments(
+    system_id: str,
+    question_key: str,
+    _: str = Depends(require_permission(SYSTEMS_READ)),
+):
+    _validate_question_key(question_key)
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(QuestionComment)
+            .where(
+                QuestionComment.system_id == system_id,
+                QuestionComment.question_key == question_key,
+                QuestionComment.deleted_at.is_(None),
+            )
+            .order_by(QuestionComment.created_at)
+        )
+        return [CommentResponse.model_validate(c) for c in result.scalars().all()]
+
+
+@router.post(
+    "/systems/{system_id}/assessment/questions/{question_key}/comments",
+    response_model=CommentResponse,
+)
+async def add_comment(
+    system_id: str,
+    question_key: str,
+    body: CommentCreate,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    _validate_question_key(question_key)
+    user = _current_user(request)
+    async with SessionLocal() as session:
+        await _get_system(session, system_id)
+        comment = QuestionComment(
+            id=new_id("QCM"),
+            system_id=system_id,
+            question_key=question_key,
+            author_username=user,
+            body=body.body,
+        )
+        session.add(comment)
+        await session.commit()
+        await session.refresh(comment)
+        return CommentResponse.model_validate(comment)
+
+
+@router.delete(
+    "/systems/{system_id}/assessment/questions/{question_key}/comments/{comment_id}",
+    response_model=None,
+    status_code=204,
+)
+async def delete_comment(
+    system_id: str,
+    question_key: str,
+    comment_id: str,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    """Soft-delete a comment. Authors may delete their own; the system owner may
+    delete any."""
+    user = _current_user(request)
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        result = await session.execute(
+            select(QuestionComment).where(
+                QuestionComment.id == comment_id,
+                QuestionComment.system_id == system_id,
+            )
+        )
+        comment = result.scalar_one_or_none()
+        if not comment or comment.deleted_at is not None:
+            raise HTTPException(404, "Comment not found")
+        if user != comment.author_username and user != _system_owner(row):
+            raise HTTPException(403, "You may only delete your own comments")
+        comment.deleted_at = datetime.now(timezone.utc)
+        await session.commit()
+
+
+# ── assignment ───────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/systems/{system_id}/assessment/questions/{question_key}/assign",
+    response_model=QuestionStateResponse,
+)
+async def assign_question(
+    system_id: str,
+    question_key: str,
+    body: AssignRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    _validate_question_key(question_key)
+    user = _current_user(request)
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        state = await _load_state(session, system_id, question_key)
+        # Owner may reassign any; a current assignee may reassign their own.
+        if not _may_edit(row, state, user):
+            raise HTTPException(403, "Only the owner or current assignee may reassign")
+
+        if state is None:
+            state = QuestionState(
+                id=new_id("QST"),
+                system_id=system_id,
+                question_key=question_key,
+            )
+            session.add(state)
+        state.assignee_username = body.assignee_username
+        state.assigned_by_username = user
+        state.assigned_at = datetime.now(timezone.utc)
+        system_name = row.name
+        await session.commit()
+        count = (await _comment_counts(session, system_id)).get(question_key, 0)
+        answers = _answer_store(row)
+
+    label = QUESTION_LABEL.get(question_key, question_key)
+    background_tasks.add_task(
+        email_sender.notify_question_assigned,
+        assignee_username=body.assignee_username,
+        system_name=system_name,
+        system_id=system_id,
+        question_label=label,
+        assigned_by=user,
+    )
+    return QuestionStateResponse(
+        question_key=question_key,
+        answer=_read_answer(answers, question_key),
+        answer_source=state.answer_source,
+        confidence=state.confidence,
+        confirmed=bool(state.confirmed_at),
+        assignee_username=state.assignee_username,
+        comment_count=count,
+        needs_attention=_needs_attention(state, _read_answer(answers, question_key)),
+    )
+
+
+@router.delete(
+    "/systems/{system_id}/assessment/questions/{question_key}/assign",
+    response_model=None,
+    status_code=204,
+)
+async def unassign_question(
+    system_id: str,
+    question_key: str,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    _validate_question_key(question_key)
+    user = _current_user(request)
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        state = await _load_state(session, system_id, question_key)
+        if not _may_edit(row, state, user):
+            raise HTTPException(403, "Only the owner or current assignee may unassign")
+        if state is not None:
+            state.assignee_username = None
+            state.assigned_by_username = None
+            state.assigned_at = None
+            await session.commit()
+
+
+# ── finalize / submit ────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/systems/{system_id}/assessment/finalize",
+    response_model=AssessmentStateResponse,
+)
+async def finalize_assessment(
+    system_id: str,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    """Gate: every question must be confirmed. Does not yet submit to the CO —
+    the owner then reviews the submit screen and calls /submit."""
+    user = _current_user(request)
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        if user != _system_owner(row):
+            raise HTTPException(403, "Only the owner may finalize the assessment")
+        states = await _states_by_key(session, system_id)
+        unconfirmed = [
+            q
+            for q in ASSESSMENT_QUESTION_KEYS
+            if not (states.get(q) and states[q].confirmed_at)
+        ]
+        if unconfirmed:
+            raise HTTPException(
+                422,
+                f"{len(unconfirmed)} question(s) still require confirmation",
+            )
+        return await _build_state(session, row)
+
+
+@router.post(
+    "/systems/{system_id}/assessment/submit",
+    response_model=AssessmentStateResponse,
+)
+async def submit_assessment(
+    system_id: str,
+    body: SubmitRequest,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    """Owner submits to the compliance officer: all questions must be confirmed;
+    transitions the system to pending_review and records a workflow step."""
+    user = _current_user(request)
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        if user != _system_owner(row):
+            raise HTTPException(403, "Only the owner may submit the assessment")
+        states = await _states_by_key(session, system_id)
+        unconfirmed = [
+            q
+            for q in ASSESSMENT_QUESTION_KEYS
+            if not (states.get(q) and states[q].confirmed_at)
+        ]
+        if unconfirmed:
+            raise HTTPException(
+                422,
+                f"Cannot submit: {len(unconfirmed)} question(s) not confirmed",
+            )
+        row.workflow_status = "pending_review"
+        row.assignee_username = row.compliance_officer_username
+        session.add(
+            SystemWorkflowStep(
+                id=new_id("SWS"),
+                system_id=system_id,
+                step="assessment_submitted",
+                actor_username=user,
+                assignee_username=row.compliance_officer_username,
+                note=body.note,
+            )
+        )
+        await session.commit()
+        row = await _get_system(session, system_id)
+        return await _build_state(session, row)
