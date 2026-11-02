@@ -133,7 +133,7 @@ jobs:
           namespace="${namespace,,}"
 
           if [[ "${cluster}" == "ai-trust-main" ]]; then
-            app_url="https://ai-trust.ai-trust-main.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+            app_url="https://ai-trust-main.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
           else
             app_url="https://${namespace}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
           fi
