@@ -554,3 +554,24 @@ def build_classify_questionnaire_messages(
         + json.dumps(technical_answers, indent=2, ensure_ascii=False)
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def build_assessment_prefill_messages(
+    question_catalogue: list[tuple[str, str]],
+    retrieved_context: str = "",
+) -> list[dict]:
+    """Messages for the single-page assessment prefill pass.
+
+    ``question_catalogue`` is an ordered list of ``(question_key, label)`` pairs;
+    the model proposes an answer + confidence band ("high"/"medium"/"low") per
+    key from ``retrieved_context`` (document passages). One batched call — no
+    per-question fan-out. Returns a JSON object ``{"answers": [...]}``.
+    """
+    catalogue = "\n".join(f"{key} — {label}" for key, label in question_catalogue)
+    context_block = retrieved_context or "(no document context available)"
+    system = render_template(
+        "assessment_prefill",
+        question_catalogue=catalogue,
+        retrieved_context=context_block,
+    )
+    return [{"role": "system", "content": system}]
