@@ -8,51 +8,35 @@ export interface StageInfo {
   tone: StageTone;
 }
 
-// Four-step journey mirroring the governance assessment statuses from the
-// product terminology doc (section 5.1): draft → under_review → returned →
-// approved. "Returned to owner" is not a regression: the CO sent it back for
-// rework, so it stays on step 3 with a warn tone. Systems without an
-// assessment yet surface the registry workflow label with zero filled
-// segments.
+// Four-step journey mirroring the SystemDetailPage "EU AI Act Progress" stepper.
+// Stage N maps to N filled progress segments:
+//   1. Register AI system          — system exists, no compliance assessment yet
+//   2. Draft assessment started    — compliance assessment created but not submitted
+//   3. Assessment under review     — submitted to the CO (progress tone), or
+//                                    returned by the CO for rework (warn tone)
+//   4. Risk classification approved — CO approved
+// Legacy registry workflow statuses (classification rejected etc.) still get a
+// danger-toned fallback so terminal failures remain visible.
 export function stageInfo(
   a: AssessmentSummary | null,
   workflowStatus: string | null,
 ): StageInfo {
   if (a) {
     if (a.status === "approved")
-      return { label: "4. Approved", filled: 4, tone: "success" };
+      return { label: "4. Risk classification approved", filled: 4, tone: "success" };
     if (a.status === "returned")
-      return { label: "3. Returned to owner", filled: 3, tone: "warn" };
-    // Backend currently also emits the legacy "submitted" status after the
-    // owner clicks Submit, and `pending_review` after the classification
-    // advance step. All three mean "waiting for CO" — treat them as Under
-    // Review for display until the backend is aligned to the terminology doc.
+      return { label: "3. Assessment under review", filled: 3, tone: "warn" };
     if (
       a.status === "under_review" ||
       a.status === "submitted" ||
       a.status === "pending_review"
     )
-      return { label: "2. Under Review", filled: 2, tone: "progress" };
-    return { label: "1. Draft", filled: 1, tone: "progress" };
+      return { label: "3. Assessment under review", filled: 3, tone: "progress" };
+    return { label: "2. Draft assessment started", filled: 2, tone: "progress" };
   }
-  switch (workflowStatus) {
-    case "approved":
-      return { label: "Ready for assessment", filled: 0, tone: "progress" };
-    case "info_requested":
-      return { label: "Info requested", filled: 0, tone: "warn" };
-    case "rejected":
-      return { label: "Classification rejected", filled: 0, tone: "danger" };
-    case "pending_review":
-      return { label: "Classification under review", filled: 0, tone: "progress" };
-    case "business_pending":
-      return { label: "Awaiting owner", filled: 0, tone: "progress" };
-    case "technical_pending":
-      return { label: "Awaiting engineer", filled: 0, tone: "progress" };
-    case "draft":
-      return { label: "Draft started", filled: 0, tone: "progress" };
-    default:
-      return { label: workflowStatus ?? "—", filled: 0, tone: "progress" };
-  }
+  if (workflowStatus === "rejected")
+    return { label: "Classification rejected", filled: 1, tone: "danger" };
+  return { label: "1. Register AI system", filled: 1, tone: "progress" };
 }
 
 const TONE_CLASSES: Record<StageTone, string> = {

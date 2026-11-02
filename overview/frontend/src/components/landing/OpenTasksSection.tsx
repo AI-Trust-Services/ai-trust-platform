@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Eye, Inbox } from "lucide-react";
+import { Eye, Inbox, Play, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { navigateTo } from "../../hooks/useLuigi";
 import {
@@ -7,12 +7,14 @@ import {
   REGISTRY_URL,
   type AssessmentSummary,
   type OpenTaskRow,
+  type UserSummary,
 } from "../../api/client";
 import { InitialsAvatar } from "../InitialsAvatar";
 import {
   AssessmentStageCell,
   pickLatestAssessmentPerSystem,
 } from "./AssessmentStage";
+import type { OwnerTaskRow } from "./ownerTasks";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -34,10 +36,18 @@ interface SystemGroup {
 interface OpenTasksSectionProps {
   state: LoadState;
   rows: OpenTaskRow[];
+  ownerTasks: OwnerTaskRow[];
   assessments: AssessmentSummary[];
+  userMap: Map<string, UserSummary>;
 }
 
-export function OpenTasksSection({ state, rows, assessments }: OpenTasksSectionProps) {
+export function OpenTasksSection({
+  state,
+  rows,
+  ownerTasks,
+  assessments,
+  userMap,
+}: OpenTasksSectionProps) {
   const latestBySystem = useMemo(
     () => pickLatestAssessmentPerSystem(assessments),
     [assessments],
@@ -45,20 +55,27 @@ export function OpenTasksSection({ state, rows, assessments }: OpenTasksSectionP
 
   const groups = groupBySystem(rows);
   const totalQuestions = rows.length;
-  const totalSystems = groups.length;
+  const totalOwnerTasks = ownerTasks.length;
+  const totalSystems = groups.length + totalOwnerTasks;
+  const hasAnything = totalQuestions > 0 || totalOwnerTasks > 0;
 
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between">
         <h2 className="text-sm font-semibold text-foreground">Open Tasks</h2>
         <span className="text-xs text-muted-foreground">
-          {state === "ready" && totalQuestions > 0
-            ? `${totalSystems} ${totalSystems === 1 ? "assessment" : "assessments"} in progress · ${totalQuestions} ${totalQuestions === 1 ? "question" : "questions"} assigned to you`
-            : "No questions assigned to you"}
+          {state === "ready" && hasAnything
+            ? formatSummary(totalSystems, totalQuestions)
+            : "No open tasks"}
         </span>
       </div>
-      {state === "ready" && groups.length > 0 ? (
-        <TasksTable groups={groups} latestBySystem={latestBySystem} />
+      {state === "ready" && hasAnything ? (
+        <TasksTable
+          groups={groups}
+          ownerTasks={ownerTasks}
+          latestBySystem={latestBySystem}
+          userMap={userMap}
+        />
       ) : (
         <EmptyState />
       )}
@@ -66,12 +83,23 @@ export function OpenTasksSection({ state, rows, assessments }: OpenTasksSectionP
   );
 }
 
+function formatSummary(totalSystems: number, totalQuestions: number): string {
+  const systemsPart = `${totalSystems} ${totalSystems === 1 ? "assessment" : "assessments"} in progress`;
+  if (totalQuestions === 0) return systemsPart;
+  const questionsPart = `${totalQuestions} ${totalQuestions === 1 ? "question" : "questions"} assigned to you`;
+  return `${systemsPart} · ${questionsPart}`;
+}
+
 function TasksTable({
   groups,
+  ownerTasks,
   latestBySystem,
+  userMap,
 }: {
   groups: SystemGroup[];
+  ownerTasks: OwnerTaskRow[];
   latestBySystem: Map<string, AssessmentSummary>;
+  userMap: Map<string, UserSummary>;
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -87,6 +115,9 @@ function TasksTable({
           </tr>
         </thead>
         <tbody>
+          {ownerTasks.map((t) => (
+            <OwnerRow key={`owner:${t.system_id}`} task={t} userMap={userMap} />
+          ))}
           {groups.map((g) => (
             <TaskRow
               key={g.system_id}
@@ -97,6 +128,121 @@ function TasksTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+function OwnerRow({
+  task,
+  userMap,
+}: {
+  task: OwnerTaskRow;
+  userMap: Map<string, UserSummary>;
+}) {
+  function openSystem() {
+    sessionStorage.setItem("lastSystemPath", `/systems/${task.system_id}`);
+    navigateTo("/home/ai-system-registry", REGISTRY_URL);
+  }
+  // "Start" opens the compliance Create-Assessment modal, pre-filled with the
+  // owned system. "Continue" deep-links into the latest assessment detail.
+  function handlePrimary() {
+    if (task.kind === "start") {
+      localStorage.setItem(
+        "compliance.pendingAssessment",
+        JSON.stringify({ systemId: task.system_id }),
+      );
+      navigateTo("/home/assessments", COMPLIANCE_URL);
+      return;
+    }
+    localStorage.setItem(
+      "compliance.viewSystem",
+      JSON.stringify({ systemId: task.system_id, systemName: task.system_name }),
+    );
+    if (task.latest_assessment) {
+      localStorage.setItem(
+        "compliance.openAssessment",
+        JSON.stringify({ assessmentId: task.latest_assessment.id }),
+      );
+    }
+    navigateTo("/home/assessments", COMPLIANCE_URL);
+  }
+
+  const label =
+    task.kind === "start"
+      ? "Start EU AI Act Assessment"
+      : "Continue EU AI Act Assessment";
+  const Icon = task.kind === "start" ? Play : ArrowRight;
+  const ownerInfo = task.owner_username ? userMap.get(task.owner_username) : undefined;
+
+  return (
+    <tr className="border-b border-border last:border-b-0">
+      <td className="max-w-[320px] px-4 py-3">
+        <button
+          type="button"
+          onClick={handlePrimary}
+          className="inline-flex items-center gap-2 text-left font-medium text-foreground underline underline-offset-2"
+          title={label}
+        >
+          <Icon className="size-3.5 text-muted-foreground" />
+          {label}
+        </button>
+      </td>
+      <td className="px-4 py-3 text-muted-foreground">
+        {formatRelativeDate(task.assigned_at)}
+      </td>
+      <td className="px-4 py-3">
+        <button
+          type="button"
+          onClick={openSystem}
+          className="flex flex-col items-start text-left"
+        >
+          <span
+            className="truncate font-medium text-foreground underline underline-offset-2"
+            title={task.system_name}
+          >
+            {task.system_name}
+          </span>
+          <span className="text-xs text-muted-foreground">{task.system_id}</span>
+        </button>
+      </td>
+      <td className="px-4 py-3">
+        {task.owner_username ? (
+          <div className="flex items-center gap-2">
+            <InitialsAvatar
+              username={task.owner_username}
+              firstName={ownerInfo?.firstName}
+              lastName={ownerInfo?.lastName}
+              size="sm"
+            />
+            <span className="text-foreground">
+              {ownerInfo
+                ? `${ownerInfo.firstName} ${ownerInfo.lastName}`.trim() ||
+                  task.owner_username
+                : task.owner_username}
+            </span>
+          </div>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        <AssessmentStageCell
+          assessment={task.latest_assessment}
+          workflowStatus={task.workflow_status}
+        />
+      </td>
+      <td className="px-4 py-3 text-right">
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-8"
+          onClick={handlePrimary}
+          aria-label={label}
+          title={label}
+        >
+          <Eye className="size-4" />
+        </Button>
+      </td>
+    </tr>
   );
 }
 

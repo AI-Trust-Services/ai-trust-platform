@@ -16,6 +16,10 @@ import { MySystemsSection } from "../components/landing/MySystemsSection";
 import { ResourcesCard } from "../components/landing/ResourcesCard";
 import { OrgContactsCard } from "../components/landing/OrgContactsCard";
 import {
+  deriveOwnerTasks,
+  filterContributorTasksForOwner,
+} from "../components/landing/ownerTasks";
+import {
   MOCK_ASSESSMENTS,
   MOCK_MY_SYSTEMS,
   MOCK_OPEN_TASKS,
@@ -93,6 +97,18 @@ export default function Landing() {
   const displayMySystems = showHeroCurtain ? MOCK_MY_SYSTEMS : mySystems;
   const displayAssessments = showHeroCurtain ? MOCK_ASSESSMENTS : assessments;
 
+  // Owner-level tasks replace contributor rows for systems the user owns —
+  // owners drive the whole process (Start / Continue EU AI Act Assessment)
+  // rather than self-assigning individual questions.
+  const ownerTasks = useMemo(
+    () => deriveOwnerTasks(displayMySystems, displayAssessments),
+    [displayMySystems, displayAssessments],
+  );
+  const contributorTasks = useMemo(() => {
+    const ownedIds = new Set(displayMySystems.map((s) => s.id));
+    return filterContributorTasksForOwner(displayOpenTasks, ownedIds);
+  }, [displayOpenTasks, displayMySystems]);
+
   if (showHeroCurtain) {
     return (
       <main className="relative min-h-screen overflow-hidden bg-[#f6f7fb]">
@@ -102,8 +118,10 @@ export default function Landing() {
         >
           <OpenTasksSection
             state="ready"
-            rows={displayOpenTasks}
+            rows={contributorTasks}
+            ownerTasks={ownerTasks}
             assessments={displayAssessments}
+            userMap={userMap}
           />
           <MySystemsSection
             canRegister={canRegister}
@@ -126,8 +144,10 @@ export default function Landing() {
           <GetStartedCard canRegister={canRegister} />
           <OpenTasksSection
             state="ready"
-            rows={displayOpenTasks}
+            rows={contributorTasks}
+            ownerTasks={ownerTasks}
             assessments={displayAssessments}
+            userMap={userMap}
           />
           <MySystemsSection
             canRegister={canRegister}
