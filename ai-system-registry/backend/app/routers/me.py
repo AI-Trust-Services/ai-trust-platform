@@ -5,10 +5,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 
+from ai_trust_authorization import require_permission
+from ai_trust_authorization.constants import SYSTEMS_READ
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
@@ -68,7 +70,11 @@ def _active_section(status: str, info_requested_section: str | None) -> str | No
     return None
 
 
-@router.get("/me/open-tasks", response_model=list[OpenTaskRow])
+@router.get(
+    "/me/open-tasks",
+    response_model=list[OpenTaskRow],
+    dependencies=[Depends(require_permission(SYSTEMS_READ))],
+)
 async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
     """Required + explicitly-assigned questions open for the current user."""
     user = _current_user(request)
@@ -230,7 +236,11 @@ class MySystemRow(BaseModel):
     created_at: Optional[datetime] = None
 
 
-@router.get("/me/systems", response_model=list[MySystemRow])
+@router.get(
+    "/me/systems",
+    response_model=list[MySystemRow],
+    dependencies=[Depends(require_permission(SYSTEMS_READ))],
+)
 async def my_systems(request: Request) -> list[MySystemRow]:
     """AI systems where the current user is the Owner (business_owners)."""
     user = _current_user(request)
