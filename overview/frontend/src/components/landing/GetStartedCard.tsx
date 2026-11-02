@@ -19,18 +19,18 @@ export function GetStartedCard({ canRegister }: GetStartedCardProps) {
     <section className="flex flex-col gap-3">
       <h2 className="text-sm font-semibold text-foreground">Get started</h2>
       <div
-        className="relative flex min-h-[220px] flex-col justify-end overflow-hidden rounded-2xl border border-border p-6"
+        className="relative flex min-h-[180px] flex-col justify-center overflow-hidden rounded-2xl border border-border px-8 py-7"
         style={{
           background:
             "linear-gradient(135deg, #ece6ff 0%, #efe8ff 40%, #fdf0d9 100%)",
         }}
       >
         <EuStarRing />
-        <div className="relative flex flex-col gap-1.5">
-          <h3 className="text-base font-semibold text-foreground">
+        <div className="relative flex flex-col gap-2">
+          <h3 className="text-xl font-semibold text-foreground">
             Register an AI System
           </h3>
-          <p className="max-w-sm text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Once registered, complete the EU AI Act risk classification assessment.
           </p>
           {canRegister && (
@@ -50,32 +50,39 @@ export function GetStartedCard({ canRegister }: GetStartedCardProps) {
   );
 }
 
-/**
- * 12-star EU ring motif, pinned to the top-right corner of the card.
- * `preserveAspectRatio="xMaxYMin meet"` keeps the ring anchored to the
- * top-right as the card width grows, instead of drifting to the centre.
- */
+// ─── EU star ring — tune the look here ──────────────────────────────────────
+// Edit any of these constants to change the ring. SVG uses `xMaxYMin meet` so
+// the viewBox is pinned to the top-right of the card; `cx`/`cy` move the ring
+// inside that pinned box.
+const RING_CX = 170;          // horizontal center of the ring (viewBox units)
+const RING_CY = 55;           // vertical center of the ring (viewBox units)
+const RING_RADIUS = 60;       // distance from center to each star
+const STAR_RADIUS = 8;        // outer radius of each star
+const STAR_COLOR = "#c8b4e8"; // star fill — close to card background, slightly darker
+const STAR_OPACITY = 0.45;    // 0 = invisible, 1 = fully opaque
+const SVG_W_PERCENT = 55;     // SVG container width as % of card
+const SVG_VIEWBOX_W = 220;    // viewBox width in SVG units
+const SVG_VIEWBOX_H = 160;    // viewBox height in SVG units
+// ───────────────────────────────────────────────────────────────────────────
+
 function EuStarRing() {
-  const cx = 170;
-  const cy = 65;
-  const ringRadius = 55;
-  const starRadius = 7;
   const stars = Array.from({ length: 12 }, (_, i) => {
     const angle = (i / 12) * 2 * Math.PI - Math.PI / 2;
     return {
-      cx: cx + Math.cos(angle) * ringRadius,
-      cy: cy + Math.sin(angle) * ringRadius,
+      cx: RING_CX + Math.cos(angle) * RING_RADIUS,
+      cy: RING_CY + Math.sin(angle) * RING_RADIUS,
     };
   });
   return (
     <svg
       aria-hidden="true"
-      viewBox="0 0 220 160"
-      className="pointer-events-none absolute right-0 top-0 h-full w-[55%]"
+      viewBox={`0 0 ${SVG_VIEWBOX_W} ${SVG_VIEWBOX_H}`}
+      className="pointer-events-none absolute right-0 top-0 h-full"
+      style={{ width: `${SVG_W_PERCENT}%` }}
       preserveAspectRatio="xMaxYMin meet"
     >
       {stars.map((s, i) => (
-        <Star key={i} cx={s.cx} cy={s.cy} r={starRadius} />
+        <Star key={i} cx={s.cx} cy={s.cy} r={STAR_RADIUS} />
       ))}
     </svg>
   );
@@ -88,5 +95,5 @@ function Star({ cx, cy, r }: { cx: number; cy: number; r: number }) {
     const radius = i % 2 === 0 ? r : r / 2.4;
     points.push(`${cx + Math.cos(angle) * radius},${cy + Math.sin(angle) * radius}`);
   }
-  return <polygon points={points.join(" ")} fill="#c8b8e6" opacity={0.7} />;
+  return <polygon points={points.join(" ")} fill={STAR_COLOR} opacity={STAR_OPACITY} />;
 }
