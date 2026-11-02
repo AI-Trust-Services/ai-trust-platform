@@ -4,27 +4,31 @@ type StageTone = "progress" | "warn" | "success" | "danger";
 
 export interface StageInfo {
   label: string;
-  filled: 0 | 1 | 2 | 3;
+  filled: 0 | 1 | 2 | 3 | 4;
   tone: StageTone;
 }
 
-// Three-step journey mirroring the governance phases:
-//   1. Draft assessment started  (assessment created, not yet in review)
-//   2. Assessment under review   (CO reviewing)
-//   3. Approved                  (CO approved)
-// Systems without an assessment yet surface the registry workflow label with
-// zero filled segments. Rejected / info_requested keep the segment count and
-// signal state via tone (destructive / warn) rather than regressing progress.
+// Four-step journey mirroring the governance assessment statuses from the
+// product terminology doc (section 5.1): draft → under_review → returned →
+// approved. "Returned to owner" is not a regression: the CO sent it back for
+// rework, so it stays on step 3 with a warn tone. Systems without an
+// assessment yet surface the registry workflow label with zero filled
+// segments.
 export function stageInfo(
   a: AssessmentSummary | null,
   workflowStatus: string | null,
 ): StageInfo {
   if (a) {
-    if (a.status === "approved") return { label: "3. Approved", filled: 3, tone: "success" };
-    if (a.status === "rejected") return { label: "Rejected", filled: 2, tone: "danger" };
-    if (a.status === "in_review")
-      return { label: "2. Assessment under review", filled: 2, tone: "progress" };
-    return { label: "1. Draft assessment started", filled: 1, tone: "progress" };
+    if (a.status === "approved")
+      return { label: "4. Approved", filled: 4, tone: "success" };
+    if (a.status === "returned")
+      return { label: "3. Returned to owner", filled: 3, tone: "warn" };
+    // Backend currently also emits the legacy "submitted" status after the
+    // owner clicks Submit; treat it as "Under Review" for display until the
+    // backend is aligned to the terminology doc.
+    if (a.status === "under_review" || a.status === "submitted")
+      return { label: "2. Under Review", filled: 2, tone: "progress" };
+    return { label: "1. Draft", filled: 1, tone: "progress" };
   }
   switch (workflowStatus) {
     case "approved":
@@ -62,19 +66,19 @@ export function AssessmentStageCell({
 }) {
   const { label, filled, tone } = stageInfo(assessment, workflowStatus);
   const toneClass = TONE_CLASSES[tone];
-  const pct = Math.round((filled / 3) * 100);
+  const pct = Math.round((filled / 4) * 100);
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-xs text-foreground">{label}</span>
       <div
-        className="flex max-w-[160px] gap-1"
+        className="flex max-w-[180px] gap-1"
         role="progressbar"
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={`${label} — stage ${filled} of 3`}
+        aria-label={`${label} — stage ${filled} of 4`}
       >
-        {[0, 1, 2].map((i) => (
+        {[0, 1, 2, 3].map((i) => (
           <div
             key={i}
             className={`h-1 flex-1 rounded-full ${
