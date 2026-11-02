@@ -116,11 +116,18 @@ jobs:
               head_sha=$(cat /tmp/deployment-context/head_sha 2>/dev/null | tr -d '[:space:]' || echo "${{ github.event.workflow_run.head_sha }}")
             else
               # PR Deployment Test — namespace is the PR author's login.
+              # Use pull_requests[0].head.sha (the actual PR head commit) rather
+              # than workflow_run.head_sha (the merge commit the workflow ran on).
+              # pr-deployment-test.yml seeds the status on pull_request.head.sha,
+              # so we must publish to the same SHA or the seeded status stays pending.
               PR_AUTHOR="${{ github.event.workflow_run.pull_requests[0].user.login }}"
               ACTOR="${{ github.event.workflow_run.actor.login }}"
               namespace="${PR_AUTHOR:-${ACTOR}}"
               cluster="ai-trust-test"
-              head_sha="${{ github.event.workflow_run.head_sha }}"
+              head_sha="${{ github.event.workflow_run.pull_requests[0].head.sha }}"
+              # Fall back to workflow_run.head_sha only if there is no pull_request
+              # attached (e.g. a manual re-run of the deployment workflow).
+              head_sha="${head_sha:-${{ github.event.workflow_run.head_sha }}}"
             fi
           fi
           namespace="${namespace,,}"
