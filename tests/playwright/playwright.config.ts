@@ -19,7 +19,10 @@ export default defineConfig({
   reporter: [["html", { open: "never" }], ["list"]],
   use: {
     baseURL: process.env.APP_URL ?? "http://localhost:8080",
-    trace: "on-first-retry",
+    // Traces are disabled: on a setup/admin-spec retry the trace would capture the admin OIDC
+    // login (including password fill) and the privileged session, which the workflow then uploads
+    // as a run artifact — not a secret-redaction boundary.
+    trace: "off",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     // Verify TLS by default (Gardener ships real certs; kind is http). Opt out only for a genuinely

@@ -9,6 +9,9 @@ import { readRun } from "./src/run";
  *   - systems (by name suffix) are deleted as `engineer` — it has systems:write and draft-delete
  *     is allowed; the admin (iam:manage only) cannot delete systems.
  *   - users are deleted as `admin`.
+ *
+ * Both cleanup phases always run: errors from the systems phase are collected and the user phase
+ * runs regardless, so a transient registry failure does not leave Keycloak accounts behind.
  */
 teardown("delete provisioned users and created systems", async ({ baseURL }) => {
   teardown.setTimeout(120_000);
@@ -16,6 +19,8 @@ teardown("delete provisioned users and created systems", async ({ baseURL }) => 
 
   const run = readRun();
   if (!run) return; // setup never ran — nothing to clean up.
+
+  const errors: Error[] = [];
 
   // Systems created during the run carry the suffix in their name.
   if (existsSync(ENGINEER.storageState)) {
@@ -35,12 +40,14 @@ teardown("delete provisioned users and created systems", async ({ baseURL }) => 
           }
         }
       }
+    } catch (err) {
+      errors.push(err instanceof Error ? err : new Error(String(err)));
     } finally {
       await eng.dispose();
     }
   }
 
-  // Users we provisioned.
+  // Users we provisioned — always runs even if systems cleanup above threw.
   if (run.users.length > 0 && existsSync(ADMIN.storageState)) {
     const adm = await request.newContext({ baseURL: base, storageState: ADMIN.storageState });
     try {
@@ -50,8 +57,14 @@ teardown("delete provisioned users and created systems", async ({ baseURL }) => 
           throw new Error(`delete user ${u.id}: ${del.status()} ${await del.text()}`);
         }
       }
+    } catch (err) {
+      errors.push(err instanceof Error ? err : new Error(String(err)));
     } finally {
       await adm.dispose();
     }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(errors.map((e) => e.message).join("; "));
   }
 });
