@@ -71,14 +71,17 @@ export default function App() {
   }, []);
 
   const activeView = location.pathname.startsWith("/models") ? "models" : "systems";
-  // Don't show the shell header when viewing a single system — the detail page has its own header.
+  // Don't show the shell header when viewing a single system or the full-height
+  // assessment app — those render their own header.
   const isSystemDetail = /^\/systems\/(?!new$)[^/]+$/.test(location.pathname);
+  const isAssessment = /^\/systems\/[^/]+\/assessment(\/|$)/.test(location.pathname);
+  const hideHeader = isSystemDetail || isAssessment;
 
   return (
     <ToastContext.Provider value={showToast}>
       <ModalContext.Provider value={{ modelCreateOpen, setModelCreateOpen, mayWrite, mayApprove, mayWriteAssessments, username }}>
         <div className="flex h-screen flex-col overflow-hidden">
-        {!isSystemDetail && (
+        {!hideHeader && (
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6 shadow-[var(--shadow-xs)]">
           <div className="flex items-center gap-3">
             <h1 className="text-lg font-semibold">AI System Registry</h1>
