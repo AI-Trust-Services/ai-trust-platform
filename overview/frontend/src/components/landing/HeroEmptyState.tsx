@@ -15,10 +15,9 @@ interface HeroEmptyStateProps {
  */
 export function HeroEmptyState({ canRegister }: HeroEmptyStateProps) {
   function handleRegister() {
-    // Same localStorage handoff pattern as `registry.openSystem` so Luigi stays
-    // on the top-level /home/ai-system-registry node (deeper routes make Luigi
-    // drop the side-nav).
-    localStorage.setItem("registry.openNew", "1");
+    // Same sessionStorage trampoline the registry MFE reads on Luigi init.
+    // Keeps the side-nav visible because Luigi stays on the top-level node.
+    sessionStorage.setItem("lastSystemPath", "/systems/new");
     navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
 

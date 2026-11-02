@@ -112,13 +112,10 @@ function SystemRowView({
   const { system, latestAssessment } = row;
 
   function openSystem() {
-    // Hand the target system id to the registry MFE via localStorage so Luigi
-    // stays on the top-level /home/ai-system-registry node (deeper routes make
-    // Luigi drop the side-nav).
-    localStorage.setItem(
-      "registry.openSystem",
-      JSON.stringify({ systemId: system.id }),
-    );
+    // Hand off via sessionStorage.lastSystemPath — the registry MFE reads this
+    // on Luigi init and navigates internally. Keeps the side-nav visible
+    // because Luigi stays on the top-level /home/ai-system-registry node.
+    sessionStorage.setItem("lastSystemPath", `/systems/${system.id}`);
     navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
   // All assessments for this system — hand off via the same localStorage key
@@ -397,10 +394,9 @@ function MenuItem({
 
 function EmptyState({ canRegister }: { canRegister: boolean }) {
   function handleRegister() {
-    // Same localStorage handoff pattern as `registry.openSystem` so Luigi stays
-    // on the top-level /home/ai-system-registry node (deeper routes make Luigi
-    // drop the side-nav).
-    localStorage.setItem("registry.openNew", "1");
+    // Same sessionStorage trampoline the registry MFE reads on Luigi init.
+    // Keeps the side-nav visible because Luigi stays on the top-level node.
+    sessionStorage.setItem("lastSystemPath", "/systems/new");
     navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
   return (

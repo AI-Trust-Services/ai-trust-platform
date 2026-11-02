@@ -103,13 +103,10 @@ function TaskRow({
   latestAssessment: AssessmentSummary | null;
 }) {
   function openSystem() {
-    // Hand the target system id to the registry MFE via localStorage so Luigi
-    // stays on the top-level /home/ai-system-registry node (deeper routes make
-    // Luigi drop the side-nav).
-    localStorage.setItem(
-      "registry.openSystem",
-      JSON.stringify({ systemId: group.system_id }),
-    );
+    // Hand off via sessionStorage.lastSystemPath — the registry MFE reads this
+    // on Luigi init and navigates internally. Keeps the side-nav visible
+    // because Luigi stays on the top-level /home/ai-system-registry node.
+    sessionStorage.setItem("lastSystemPath", `/systems/${group.system_id}`);
     navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
   // Jump the user straight to where they can act on the open task — the
