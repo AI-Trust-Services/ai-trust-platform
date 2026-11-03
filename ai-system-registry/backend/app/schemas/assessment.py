@@ -173,3 +173,39 @@ class AssessmentStateResponse(BaseModel):
 
 class SubmitRequest(BaseModel):
     note: str | None = None
+
+
+# ── Compliance Officer end view (#348) ───────────────────────────────────────
+
+# Tiers the CO may issue, and the only allowed companion.
+ISSUABLE_TIERS = frozenset({"minimal", "limited", "high", "prohibited"})
+
+
+class IssueRequest(BaseModel):
+    """CO issues the final, binding risk classification."""
+
+    tier: str
+    # The only allowed combo is high + transparency; true only valid with tier='high'.
+    transparency: bool = False
+    note: str | None = None
+    confirmed: bool = False
+
+    @field_validator("tier")
+    @classmethod
+    def _valid_tier(cls, v: str) -> str:
+        if v not in ISSUABLE_TIERS:
+            raise ValueError(f"Tier '{v}' is not issuable by the compliance officer")
+        return v
+
+
+class RejectRequest(BaseModel):
+    """CO returns the assessment to the owner — note is mandatory."""
+
+    note: str
+
+    @field_validator("note")
+    @classmethod
+    def _non_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("A comment is required when returning the assessment")
+        return v.strip()

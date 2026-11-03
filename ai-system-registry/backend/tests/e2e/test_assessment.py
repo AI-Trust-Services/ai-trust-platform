@@ -435,3 +435,121 @@ async def test_can_edit_false_for_contributor_on_unassigned(
     assert st.status_code == 200, st.text
     # A plain contributor is assigned nothing → can_edit false everywhere.
     assert all(not q["can_edit"] for q in st.json()["questions"])
+
+
+# ── iteration 3 (#348): CO issue / reject ────────────────────────────────────
+
+_CO = "officer1"
+
+
+async def _submit_as_owner(client: httpx.AsyncClient) -> str:
+    """Create, prefill, owner-confirm all, and submit — leaving the system in
+    pending_review (locked, ready for the CO)."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    await _confirm_all_as_owner(client, system_id, state)
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/submit",
+        json={"note": "done"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    return system_id
+
+
+@pytest.mark.asyncio
+async def test_co_issue_sets_approved_and_immutable(client: httpx.AsyncClient):
+    system_id = await _submit_as_owner(client)
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "high", "transparency": True, "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["tier"] == "high"
+    assert body["workflow_status"] == "approved"
+    assert body["editable"] is False
+    # Immutable: the owner can no longer edit.
+    qkey = body["questions"][0]["question_key"]
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "post-issue edit"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 409, r.text
+
+
+@pytest.mark.asyncio
+async def test_co_issue_requires_confirmation_checkbox(client: httpx.AsyncClient):
+    system_id = await _submit_as_owner(client)
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "high", "confirmed": False},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 422, r.text
+
+
+@pytest.mark.asyncio
+async def test_co_transparency_only_with_high(client: httpx.AsyncClient):
+    system_id = await _submit_as_owner(client)
+    # transparency + a non-high tier is rejected (the combo rule).
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "minimal", "transparency": True, "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 422, r.text
+
+
+@pytest.mark.asyncio
+async def test_co_issue_rejects_unissuable_tier(client: httpx.AsyncClient):
+    system_id = await _submit_as_owner(client)
+    # gpai-* tiers are not issuable by the CO (schema validation → 422).
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "gpai-systemic", "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 422, r.text
+
+
+@pytest.mark.asyncio
+async def test_co_reject_returns_to_owner_editable_again(client: httpx.AsyncClient):
+    system_id = await _submit_as_owner(client)
+    # Reject requires a note.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/reject",
+        json={"note": ""},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 422, r.text
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/reject",
+        json={"note": "Please add evidence for question 3."},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["workflow_status"] == "returned"
+    # Owner sees it as 'under_review' (label mapping) and can edit again.
+    assert body["status_label"] == "under_review"
+    assert body["editable"] is True
+    st = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    assert st.json()["editable"] is True
+
+
+@pytest.mark.asyncio
+async def test_co_cannot_issue_before_submit(client: httpx.AsyncClient):
+    system_id = await _create_system(client)
+    await _open(client, system_id)
+    # Not yet submitted (not pending_review) → 409.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "high", "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 409, r.text

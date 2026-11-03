@@ -19,7 +19,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import select
 
 from ai_trust_authorization import require_permission
-from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
+from ai_trust_authorization.constants import (
+    SYSTEMS_APPROVE,
+    SYSTEMS_READ,
+    SYSTEMS_WRITE,
+)
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
@@ -57,6 +61,8 @@ from app.schemas.assessment import (
     QuestionStateResponse,
     SourceDocumentRef,
     SubmitRequest,
+    IssueRequest,
+    RejectRequest,
     _validate_question_key,
 )
 
@@ -323,7 +329,7 @@ async def open_assessment(
             return await _build_state(session, row, _current_user(request))
 
         # ── prefill pass (one batched LLM call) ──
-        context_block, _sources = await _retrieve_context(system_id)
+        context_block, sources = await _retrieve_context(system_id)
         messages = build_assessment_prefill_messages(
             question_catalogue(), retrieved_context=context_block
         )
@@ -370,6 +376,9 @@ async def open_assessment(
         row.classification_rationale = rationale
         if rationale.get("org_role"):
             row.org_role = rationale["org_role"]
+        # Persist the source passages (filename + page) that informed the prefill,
+        # so the start page / confidence modal / CO panel can cite them with pages.
+        row.assessment_sources = [s.model_dump() for s in sources]
 
         # Ensure a compliance Assessment record exists so the governance tables
         # (owner's Assessments tab, /home/assessments) reflect this assessment.
@@ -443,9 +452,16 @@ async def _build_state(
         )
 
     # Source documents that informed the classification (assessment-level).
-    _ctx, sources = ("", [])
-    docs = row.registration_documents or []
-    source_docs = [SourceDocumentRef(name=d.get("name", "document")) for d in docs]
+    # Prefer the persisted retrieval sources (they carry page numbers); fall back
+    # to the registration document names when no prefill sources were captured.
+    if row.assessment_sources:
+        source_docs = [
+            SourceDocumentRef(name=s.get("name", "document"), page=s.get("page"))
+            for s in row.assessment_sources
+        ]
+    else:
+        docs = row.registration_documents or []
+        source_docs = [SourceDocumentRef(name=d.get("name", "document")) for d in docs]
 
     # Candidate assignees: the owner + the system's registered contributors.
     contributor_refs: list[ContributorRef] = []
@@ -469,7 +485,7 @@ async def _build_state(
         confidence_counts=conf,
         attention_count=attention,
         decisive_questions=decisive,
-        source_documents=source_docs or sources,
+        source_documents=source_docs,
         questions=questions,
         contributors=contributor_refs,
         prefilled=bool(states),
@@ -889,3 +905,154 @@ async def submit_assessment(
         await session.commit()
         row = await _get_system(session, system_id)
         return await _build_state(session, row, user)
+
+
+# ── compliance officer: issue / reject (#348) ────────────────────────────────
+
+
+def _notify_recipients(row: AISystem) -> list[str]:
+    """Owner + registered contributors — the people notified of a CO decision."""
+    out: list[str] = []
+    for uname in [_system_owner(row), *(row.contributors or [])]:
+        if uname and uname not in out:
+            out.append(uname)
+    return out
+
+
+@router.post(
+    "/systems/{system_id}/assessment/issue",
+    response_model=AssessmentStateResponse,
+)
+async def issue_classification(
+    system_id: str,
+    body: IssueRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    _: str = Depends(require_permission(SYSTEMS_APPROVE)),
+):
+    """CO issues the final, binding risk classification. Only from pending_review;
+    the result is immutable. The only allowed tier combo is high + transparency."""
+    user = _current_user(request)
+    # Enforce the combo rule: transparency may only accompany 'high'.
+    if body.transparency and body.tier != "high":
+        raise HTTPException(
+            422, "Transparency obligations may only be issued alongside 'high' risk"
+        )
+    if not body.confirmed:
+        raise HTTPException(422, "The confirmation checkbox must be ticked to issue")
+
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        if row.workflow_status != "pending_review":
+            raise HTTPException(
+                409,
+                f"Cannot issue from status '{row.workflow_status}' — "
+                "the assessment must be submitted (locked) first",
+            )
+        if row.compliance_officer_username and user != row.compliance_officer_username:
+            raise HTTPException(
+                403, "Only the assigned compliance officer may issue the classification"
+            )
+
+        row.tier = body.tier
+        row.co_issued_transparency = bool(body.transparency)
+        row.basis = f"Risk classification issued by compliance officer {user}."
+        row.workflow_status = "approved"
+        row.assignee_username = None
+        assessment = await _current_assessment(session, system_id)
+        if assessment is not None:
+            assessment.status = "approved"
+            assessment.confirmed_by = user
+        session.add(
+            SystemWorkflowStep(
+                id=new_id("SWS"),
+                system_id=system_id,
+                step="classification_issued",
+                actor_username=user,
+                note=body.note,
+            )
+        )
+        recipients = _notify_recipients(row)
+        system_name = row.name
+        await session.commit()
+        row = await _get_system(session, system_id)
+        state = await _build_state(session, row, user)
+
+    for uname in recipients:
+        background_tasks.add_task(
+            email_sender.notify,
+            to_username=uname,
+            subject=f"[{{platform_name}}] Risk classification issued for '{system_name}'",
+            body=(
+                f"Hi,\n\nThe compliance officer has issued the final EU AI Act risk "
+                f"classification for '{system_name}' ({system_id}). The assessment is now "
+                f"final.\n\n{{platform_name}}: {{registry_url}}"
+            ),
+        )
+    logger.info(
+        "assessment.classification_issued",
+        extra={"system_id": system_id, "tier": body.tier, "by": user},
+    )
+    return state
+
+
+@router.post(
+    "/systems/{system_id}/assessment/reject",
+    response_model=AssessmentStateResponse,
+)
+async def reject_assessment(
+    system_id: str,
+    body: RejectRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    _: str = Depends(require_permission(SYSTEMS_APPROVE)),
+):
+    """CO returns the assessment to the owner with a mandatory comment. Backend
+    records 'returned' (the owner sees it as 'under review'); the owner may
+    re-open, edit, and resubmit."""
+    user = _current_user(request)
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        if row.workflow_status != "pending_review":
+            raise HTTPException(
+                409, f"Cannot return from status '{row.workflow_status}'"
+            )
+        if row.compliance_officer_username and user != row.compliance_officer_username:
+            raise HTTPException(
+                403, "Only the assigned compliance officer may return the assessment"
+            )
+
+        owner = _system_owner(row)
+        row.workflow_status = "returned"
+        row.assignee_username = owner
+        assessment = await _current_assessment(session, system_id)
+        if assessment is not None:
+            assessment.status = "returned"
+        session.add(
+            SystemWorkflowStep(
+                id=new_id("SWS"),
+                system_id=system_id,
+                step="assessment_returned",
+                actor_username=user,
+                assignee_username=owner,
+                note=body.note,
+            )
+        )
+        system_name = row.name
+        await session.commit()
+        row = await _get_system(session, system_id)
+        state = await _build_state(session, row, user)
+
+    if owner:
+        background_tasks.add_task(
+            email_sender.notify,
+            to_username=owner,
+            subject=f"[{{platform_name}}] Assessment for '{system_name}' returned for revision",
+            body=(
+                f"Hi,\n\nThe compliance officer has returned the assessment for "
+                f"'{system_name}' ({system_id}) with comments:\n\n{body.note}\n\n"
+                f"Please review, update, and resubmit.\n\n{{platform_name}}: {{registry_url}}"
+            ),
+        )
+    logger.info("assessment.returned", extra={"system_id": system_id, "by": user})
+    return state
