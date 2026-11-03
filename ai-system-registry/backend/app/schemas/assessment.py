@@ -157,6 +157,9 @@ class AssessmentStateResponse(BaseModel):
     basis: str | None = None
     org_role: str | None = None
     reasoning: str | None = None
+    # EU AI Act Art.50 transparency companion to a high-risk tier — true when the
+    # inferred flags imply it OR the CO explicitly issued it (co_issued_transparency).
+    transparency: bool = False
 
     confidence_counts: ConfidenceCounts
     attention_count: int

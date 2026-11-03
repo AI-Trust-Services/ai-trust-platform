@@ -482,6 +482,12 @@ async def _build_state(
         basis=row.basis,
         org_role=row.org_role,
         reasoning=rationale.get("reasoning"),
+        transparency=row.tier == "high"
+        and bool(
+            row.co_issued_transparency
+            or row.is_chatbot
+            or row.generates_synthetic_content
+        ),
         confidence_counts=conf,
         attention_count=attention,
         decisive_questions=decisive,

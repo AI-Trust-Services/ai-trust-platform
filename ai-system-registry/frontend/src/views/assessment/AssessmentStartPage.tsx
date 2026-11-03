@@ -2,6 +2,7 @@ import { useNavigate, useParams } from "react-router";
 import { ArrowRight } from "lucide-react";
 import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
+import { usePermissions } from "../../hooks/usePermissions";
 import { TIER_META } from "../../utils";
 
 const CLASSIFICATION_TABS = [
@@ -25,10 +26,14 @@ export default function AssessmentStartPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { state } = useAssessment();
+  const { can } = usePermissions();
   const counts = state.confidence_counts;
   const total = counts.high + counts.medium + counts.low || 1;
   const active = activeTab(state.tier);
   const tierLabel = TIER_META[state.tier]?.label ?? state.tier;
+  // CO entry: when the assessment is locked (submitted) and the viewer can
+  // approve, offer the "Issue a Risk Classification" end view.
+  const canIssue = !state.editable && can("systems:approve");
 
   return (
     <div className="mx-auto max-w-4xl px-8 py-8">
@@ -129,6 +134,14 @@ export default function AssessmentStartPage() {
         >
           Continue to first question
         </button>
+        {canIssue && (
+          <button
+            onClick={() => navigate(`/systems/${id}/assessment/issue`)}
+            className="rounded-md border border-[#1147E9] px-5 py-2.5 text-sm font-semibold text-[#1147E9] hover:bg-[#eef3ff]"
+          >
+            Issue a Risk Classification
+          </button>
+        )}
         <span className="text-sm text-muted-foreground">You may review the assessment in any order.</span>
       </div>
     </div>

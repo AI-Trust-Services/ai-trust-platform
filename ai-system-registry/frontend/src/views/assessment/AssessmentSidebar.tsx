@@ -54,7 +54,7 @@ export function AssessmentSidebar({
         </Link>
         <p className="mt-2 text-xs text-muted-foreground">Preliminary risk classification:</p>
         <div className="mt-1">
-          <TierBadge tier={state.tier} />
+          <TierBadge tier={state.tier} transparency={state.transparency} />
         </div>
         {state.org_role && (
           <p className="mt-2 text-xs text-muted-foreground">

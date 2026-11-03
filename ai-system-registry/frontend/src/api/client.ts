@@ -173,6 +173,22 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ note: note ?? null }),
     }),
+  // Compliance Officer end view (#348).
+  issueClassification: (
+    systemId: string,
+    data: { tier: string; transparency: boolean; note?: string; confirmed: boolean },
+  ) =>
+    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/issue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+  rejectAssessment: (systemId: string, note: string) =>
+    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    }),
 
   // ── Model Cards ────────────────────────────────────────────────────────────
   getModels: () => request<ModelCard[]>("/model-cards?limit=200"),

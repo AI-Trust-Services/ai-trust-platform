@@ -12,6 +12,7 @@ import AssessmentApp from "./views/assessment/AssessmentApp";
 import AssessmentStartPage from "./views/assessment/AssessmentStartPage";
 import QuestionView from "./views/assessment/QuestionView";
 import AssessmentSubmitPage from "./views/assessment/AssessmentSubmitPage";
+import CoIssueView from "./views/assessment/CoIssueView";
 
 const SYSTEM_PERMS = ["systems:read", "systems:write"];
 
@@ -39,6 +40,7 @@ const router = createHashRouter([
           { index: true, element: <AssessmentStartPage /> },
           { path: "q/:questionKey", element: <QuestionView /> },
           { path: "submit", element: <AssessmentSubmitPage /> },
+          { path: "issue", element: <CoIssueView /> },
         ],
       },
       {

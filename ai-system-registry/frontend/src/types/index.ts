@@ -152,6 +152,7 @@ export interface AssessmentState {
   basis: string | null;
   org_role: OrgRole | null;
   reasoning: string | null;
+  transparency: boolean;
   confidence_counts: ConfidenceCounts;
   attention_count: number;
   decisive_questions: DecisiveQuestion[];
