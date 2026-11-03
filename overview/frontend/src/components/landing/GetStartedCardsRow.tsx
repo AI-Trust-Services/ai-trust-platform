@@ -1,4 +1,4 @@
-import { Plus, ArrowRight, Database } from "lucide-react";
+import { Plus, ArrowRight, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { navigateTo } from "../../hooks/useLuigi";
 import { REGISTRY_URL } from "../../api/client";
@@ -29,8 +29,8 @@ export function GetStartedCardsRow({ canRegister }: GetStartedCardsRowProps) {
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-sm font-semibold text-foreground">Get started</h2>
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="relative flex min-h-[180px] flex-col justify-center overflow-hidden rounded-2xl border border-border bg-card px-7 py-6">
+      <div className="grid max-w-[620px] gap-4 md:grid-cols-2">
+        <div className="relative flex min-h-[240px] flex-col justify-center overflow-hidden rounded-2xl border border-border bg-card px-7 py-6">
           <EuStarRing />
           <div className="relative flex flex-col gap-2">
             <h3 className="text-xl font-semibold text-foreground">
@@ -54,7 +54,7 @@ export function GetStartedCardsRow({ canRegister }: GetStartedCardsRowProps) {
           </div>
         </div>
         <div
-          className="relative flex min-h-[180px] flex-col justify-center overflow-hidden rounded-2xl border border-border px-7 py-6"
+          className="relative flex min-h-[240px] flex-col justify-center overflow-hidden rounded-2xl border border-border px-7 py-6"
           style={{
             background:
               "linear-gradient(135deg, #d8d0ff 0%, #c7bbfc 55%, #f1dfb8 100%)",
@@ -142,7 +142,7 @@ function Star({ cx, cy, r }: { cx: number; cy: number; r: number }) {
 // registry, large and faint in the top-right corner.
 function RegistryGlyph() {
   return (
-    <Database
+    <Layers
       aria-hidden="true"
       className="pointer-events-none absolute right-5 top-5 size-28 text-white/40"
       strokeWidth={1.25}
