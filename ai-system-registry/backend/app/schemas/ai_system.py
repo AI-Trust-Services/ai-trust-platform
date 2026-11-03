@@ -51,7 +51,7 @@ class RationaleItem(BaseModel):
 
     flag: str
     value: bool | float
-    rationale: str
+    rationale: str | None = None
     confidence: float = Field(ge=0.0, le=1.0)
 
 
