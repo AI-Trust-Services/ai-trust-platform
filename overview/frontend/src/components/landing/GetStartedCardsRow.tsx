@@ -29,7 +29,7 @@ export function GetStartedCardsRow({ canRegister }: GetStartedCardsRowProps) {
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-sm font-semibold text-foreground">Get started</h2>
-      <div className="grid max-w-[620px] gap-4 md:grid-cols-2">
+      <div className="grid max-w-[820px] gap-4 md:grid-cols-2">
         <div className="relative flex min-h-[240px] flex-col justify-center overflow-hidden rounded-2xl border border-border bg-card px-7 py-6">
           <EuStarRing />
           <div className="relative flex flex-col gap-2">
