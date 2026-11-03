@@ -1543,7 +1543,7 @@ export default function SystemDetailPage() {
               size="sm"
               disabled={!mayWriteAssessments}
               title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-              onClick={() => navigate(`/systems//assessment`)}
+              onClick={() => navigate(`/systems/${system.id}/assessment`)}
             >
               Start new assessment
             </Button>
@@ -1555,7 +1555,7 @@ export default function SystemDetailPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem disabled={!mayWriteAssessments} onSelect={() => navigate(`/systems//assessment`)}>
+                <DropdownMenuItem disabled={!mayWriteAssessments} onSelect={() => navigate(`/systems/${system.id}/assessment`)}>
                   Start assessment
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={!mayWrite} onSelect={() => setRolesOpen(true)}>
