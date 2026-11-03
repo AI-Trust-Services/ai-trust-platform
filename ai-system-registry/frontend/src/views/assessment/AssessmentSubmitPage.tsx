@@ -18,11 +18,12 @@ export default function AssessmentSubmitPage() {
   const [error, setError] = useState<string | null>(null);
 
   const stillAssigned = state.questions.filter(
-    (q) => q.assignee_username && !q.confirmed,
+    (q) => q.assignee_username && !q.owner_confirmed,
   ).length;
   const unconfirmed = ORDERED_QUESTION_KEYS.filter(
-    (k) => !state.questions.find((q) => q.question_key === k)?.confirmed,
+    (k) => !state.questions.find((q) => q.question_key === k)?.owner_confirmed,
   ).length;
+  const lastQuestionKey = ORDERED_QUESTION_KEYS[ORDERED_QUESTION_KEYS.length - 1];
 
   const submit = async () => {
     if (!id) return;
@@ -41,7 +42,7 @@ export default function AssessmentSubmitPage() {
   return (
     <div className="mx-auto max-w-3xl px-8 py-8">
       <p className="text-sm text-muted-foreground">EU AI Act Compliance</p>
-      <h1 className="mt-1 text-3xl font-bold">Submit to compliance officer</h1>
+      <h1 className="mt-1 text-3xl font-bold">Submit to Compliance Officer</h1>
 
       {stillAssigned > 0 && (
         <div className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] p-4 text-sm text-[var(--danger-fg)]">
@@ -77,7 +78,7 @@ export default function AssessmentSubmitPage() {
 
       <div className="mt-6 flex items-center justify-between">
         <button
-          onClick={() => navigate(`/systems/${id}/assessment`)}
+          onClick={() => navigate(`/systems/${id}/assessment/q/${lastQuestionKey}`)}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="size-4" /> Previous

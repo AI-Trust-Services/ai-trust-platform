@@ -111,9 +111,11 @@ export interface QuestionState {
   answer_source: AnswerSource;
   confidence: ConfidenceLevel | null;
   confirmed: boolean;
+  owner_confirmed: boolean;
   assignee_username: string | null;
   comment_count: number;
   needs_attention: boolean;
+  can_edit: boolean;
 }
 
 export interface ConfidenceCounts {
@@ -139,6 +141,8 @@ export interface AssessmentState {
   system_name: string;
   registration_mode: string;
   workflow_status: string;
+  status_label: string;
+  editable: boolean;
   tier: TierKey;
   basis: string | null;
   org_role: OrgRole | null;

@@ -29,11 +29,13 @@ export function AssessmentSidebar({
   activeQuestionKey,
   onFinalize,
   finalizeEnabled,
+  locked = false,
 }: {
   state: AssessmentState;
   activeQuestionKey?: string;
   onFinalize: () => void;
   finalizeEnabled: boolean;
+  locked?: boolean;
 }) {
   const { id } = useParams();
   const stateByKey = useMemo(
@@ -69,7 +71,8 @@ export function AssessmentSidebar({
       <nav className="flex-1 px-2 py-3">
         {ASSESSMENT_SECTIONS.map((section) => {
           const total = section.questionKeys.length;
-          const complete = section.questionKeys.filter((k) => stateByKey[k]?.confirmed).length;
+          // Completion is OWNER-confirmed (the submit gate), not any confirmation.
+          const complete = section.questionKeys.filter((k) => stateByKey[k]?.owner_confirmed).length;
           return (
             <div key={section.key} className="mb-4">
               <div className="flex items-center justify-between px-3 py-1">
@@ -81,7 +84,15 @@ export function AssessmentSidebar({
               <ul>
                 {section.questionKeys.map((key) => {
                   const q = stateByKey[key];
-                  const confirmed = q?.confirmed;
+                  const ownerConfirmed = q?.owner_confirmed;
+                  // Confirmed by a contributor but not yet by the owner — progress,
+                  // but still needs the owner's confirmation before submit.
+                  const contributorOnly = q?.confirmed && !ownerConfirmed;
+                  const statusText = ownerConfirmed
+                    ? "Complete"
+                    : contributorOnly
+                      ? "Confirmed by contributor"
+                      : "Incomplete";
                   return (
                     <li key={key}>
                       <Link
@@ -91,15 +102,29 @@ export function AssessmentSidebar({
                           activeQuestionKey === key && "bg-accent",
                         )}
                       >
-                        {confirmed ? (
+                        {ownerConfirmed ? (
                           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#1a5c35]" />
                         ) : (
-                          <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                          <Circle
+                            className={cn(
+                              "mt-0.5 size-4 shrink-0",
+                              contributorOnly ? "text-[#b57e00]" : "text-muted-foreground",
+                            )}
+                          />
                         )}
                         <span className="flex flex-col">
                           <span>{QUESTION_LABELS[key] ?? key}</span>
-                          <span className={cn("text-xs", confirmed ? "text-[#1a5c35]" : "text-muted-foreground")}>
-                            {confirmed ? "Complete" : "Incomplete"}
+                          <span
+                            className={cn(
+                              "text-xs",
+                              ownerConfirmed
+                                ? "text-[#1a5c35]"
+                                : contributorOnly
+                                  ? "text-[#b57e00]"
+                                  : "text-muted-foreground",
+                            )}
+                          >
+                            {statusText}
                           </span>
                         </span>
                       </Link>
@@ -113,16 +138,22 @@ export function AssessmentSidebar({
       </nav>
 
       <div className="border-t border-border p-4">
-        <button
-          onClick={onFinalize}
-          disabled={!finalizeEnabled}
-          className={cn(
-            "w-full rounded-md px-4 py-2 text-sm font-semibold text-white",
-            finalizeEnabled ? "bg-[#1147E9] hover:bg-[#0d39c4]" : "cursor-not-allowed bg-[#9db4f5]",
-          )}
-        >
-          Finalize Assessment
-        </button>
+        {locked ? (
+          <p className="rounded-md bg-[var(--muted)]/60 px-3 py-2 text-center text-xs font-medium text-muted-foreground">
+            Submitted — awaiting Compliance Officer review
+          </p>
+        ) : (
+          <button
+            onClick={onFinalize}
+            disabled={!finalizeEnabled}
+            className={cn(
+              "w-full rounded-md px-4 py-2 text-sm font-semibold text-white",
+              finalizeEnabled ? "bg-[#1147E9] hover:bg-[#0d39c4]" : "cursor-not-allowed bg-[#9db4f5]",
+            )}
+          >
+            Finalize Assessment
+          </button>
+        )}
       </div>
     </aside>
   );

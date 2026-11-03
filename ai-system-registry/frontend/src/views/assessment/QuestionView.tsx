@@ -82,8 +82,12 @@ export default function QuestionView() {
 
   const changedFromAi = qState?.answer_source === "manual";
   const hasComment = comments.length > 0;
-  // The CONFIRM gate: if the answer was changed from the AI pre-fill, a comment is mandatory.
-  const confirmDisabled = busy || (changedFromAi && !hasComment);
+  // Read-only: the whole assessment is locked, or this question isn't the
+  // current user's to edit. Drives input disabling + hides edit affordances.
+  const canEdit = state.editable && (qState?.can_edit ?? false);
+  // The CONFIRM gate: must be editable, and if the answer was changed from the
+  // AI pre-fill, a comment is mandatory.
+  const confirmDisabled = busy || !canEdit || (changedFromAi && !hasComment);
 
   useEffect(() => {
     setAnswer(qState?.answer ?? "");
@@ -187,6 +191,7 @@ export default function QuestionView() {
                   type="radio"
                   name={questionKey}
                   checked={answer === opt}
+                  disabled={!canEdit}
                   onChange={() => {
                     setAnswer(opt);
                     saveAnswer(opt);
@@ -197,8 +202,9 @@ export default function QuestionView() {
             ))
           ) : (
             <textarea
-              className="min-h-24 w-full rounded-md border border-border p-3 text-sm"
+              className="min-h-24 w-full rounded-md border border-border p-3 text-sm disabled:bg-[var(--muted)]/40"
               value={answer}
+              disabled={!canEdit}
               onChange={(e) => setAnswer(e.target.value)}
               onBlur={() => answer !== (qState?.answer ?? "") && saveAnswer(answer)}
               placeholder="Enter your answer"
@@ -209,7 +215,7 @@ export default function QuestionView() {
           </p>
         </div>
 
-        {changedFromAi && !hasComment && (
+        {changedFromAi && !hasComment && canEdit && (
           <p className="mt-3 text-xs font-medium text-[#8b3a00]">
             You changed the AI answer — add a comment explaining the change before confirming.
           </p>
@@ -219,15 +225,16 @@ export default function QuestionView() {
           <p className="text-sm font-medium">Leave a comment</p>
           <textarea
             id="comment-field"
-            className="mt-2 min-h-20 w-full rounded-md border border-border p-3 text-sm"
+            className="mt-2 min-h-20 w-full rounded-md border border-border p-3 text-sm disabled:bg-[var(--muted)]/40"
             placeholder="Enter your text here"
             value={commentDraft}
+            disabled={!canEdit}
             onChange={(e) => setCommentDraft(e.target.value)}
           />
           <div className="mt-2">
             <button
               onClick={postComment}
-              disabled={!commentDraft.trim()}
+              disabled={!canEdit || !commentDraft.trim()}
               className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
             >
               Comment

@@ -62,8 +62,12 @@ export default function AssessmentApp() {
 
   const markSaved = useCallback(() => setSavedAt(Date.now()), []);
 
+  // The submit gate is OWNER-confirmed on every question (backend-authoritative).
   const allConfirmed =
-    !!state && ORDERED_QUESTION_KEYS.every((k) => state.questions.find((q) => q.question_key === k)?.confirmed);
+    !!state &&
+    ORDERED_QUESTION_KEYS.every(
+      (k) => state.questions.find((q) => q.question_key === k)?.owner_confirmed,
+    );
 
   const onFinalize = async () => {
     if (!id) return;
@@ -109,6 +113,7 @@ export default function AssessmentApp() {
             activeQuestionKey={activeQuestionKey}
             onFinalize={onFinalize}
             finalizeEnabled={allConfirmed}
+            locked={!state.editable}
           />
           <main className="min-w-0 flex-1 overflow-y-auto bg-[var(--muted)]/30">
             <Outlet />
