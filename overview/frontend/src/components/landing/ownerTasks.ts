@@ -15,10 +15,21 @@ export interface OwnerTaskRow {
   latest_assessment: AssessmentSummary | null;
 }
 
+// Assessment states where the ball is on the compliance officer's court. While
+// in these states the owner has nothing to drive — the CO alone must act — so
+// the owner sees no Open Task for this system. The CO's own "Review" task
+// (source="review") is the single task for these states.
+const AWAITING_CO_STATUSES: ReadonlySet<string> = new Set([
+  "submitted",
+  "under_review",
+  "pending_review",
+]);
+
 // Owner tasks are system-level: an owner drives the process forward and does
 // not self-assign individual questions. One row per owned system that has an
 // unfinished EU AI Act journey (no assessment yet, or an assessment that has
-// not been approved). Approved systems emit nothing.
+// not been approved and is not currently awaiting CO review). Approved systems
+// emit nothing.
 export function deriveOwnerTasks(
   mySystems: MySystemRow[],
   assessments: AssessmentSummary[],
@@ -34,6 +45,7 @@ export function deriveOwnerTasks(
   for (const s of mySystems) {
     const latest = latestByAiSystem.get(s.id) ?? null;
     if (latest?.status === "approved") continue;
+    if (latest && AWAITING_CO_STATUSES.has(latest.status)) continue;
     const kind: "start" | "continue" = latest === null ? "start" : "continue";
     const assigned_at =
       (latest?.updated_at ?? latest?.created_at) ||

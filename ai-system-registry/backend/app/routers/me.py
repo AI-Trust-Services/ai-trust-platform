@@ -201,7 +201,10 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
         # Compliance assessments awaiting review by the current user when
         # assigned as the system's compliance officer. The CO is otherwise
         # invisible to Open Tasks since they are not a section-assignee and
-        # cannot be a per-question delegate (separation of duties).
+        # cannot be a per-question delegate (separation of duties). One row
+        # per assessment — a system can legitimately have several assessments
+        # (e.g. an approved one plus a newer pending_review), and the overview
+        # groups by assessment so each shows the right stage.
         review_rows = (
             await session.execute(
                 select(

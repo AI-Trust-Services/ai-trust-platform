@@ -52,6 +52,11 @@ export function OpenTasksSection({
     () => pickLatestAssessmentPerSystem(assessments),
     [assessments],
   );
+  const assessmentsById = useMemo(() => {
+    const m = new Map<string, AssessmentSummary>();
+    for (const a of assessments) m.set(a.id, a);
+    return m;
+  }, [assessments]);
 
   const groups = groupBySystem(rows);
   const totalQuestions = rows.length;
@@ -74,6 +79,7 @@ export function OpenTasksSection({
           groups={groups}
           ownerTasks={ownerTasks}
           latestBySystem={latestBySystem}
+          assessmentsById={assessmentsById}
           userMap={userMap}
         />
       ) : (
@@ -94,13 +100,24 @@ function TasksTable({
   groups,
   ownerTasks,
   latestBySystem,
+  assessmentsById,
   userMap,
 }: {
   groups: SystemGroup[];
   ownerTasks: OwnerTaskRow[];
   latestBySystem: Map<string, AssessmentSummary>;
+  assessmentsById: Map<string, AssessmentSummary>;
   userMap: Map<string, UserSummary>;
 }) {
+  // For review groups the stage must reflect *the* assessment the CO is being
+  // asked to review — not the system's latest assessment, which may already be
+  // approved on a different row.
+  const assessmentForGroup = (g: SystemGroup): AssessmentSummary | null => {
+    if (g.is_review && g.review_assessment_id) {
+      return assessmentsById.get(g.review_assessment_id) ?? null;
+    }
+    return latestBySystem.get(g.system_id) ?? null;
+  };
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
       <table className="w-full text-sm">
@@ -120,9 +137,9 @@ function TasksTable({
           ))}
           {groups.map((g) => (
             <TaskRow
-              key={g.system_id}
+              key={g.is_review ? `${g.system_id}:review:${g.review_assessment_id}` : g.system_id}
               group={g}
-              latestAssessment={latestBySystem.get(g.system_id) ?? null}
+              latestAssessment={assessmentForGroup(g)}
             />
           ))}
         </tbody>
@@ -477,8 +494,10 @@ function groupBySystem(rows: OpenTaskRow[]): SystemGroup[] {
 
 function formatTaskLabel(group: SystemGroup): string {
   if (group.is_review) {
-    // Backend sends "Review assessment: {title}" — use it verbatim.
-    return group.questions[0]?.question_label ?? "Review assessment";
+    // Short, action-oriented label matching the Title Case used by the owner
+    // rows ("Start / Continue EU AI Act Assessment"). The AI System column
+    // already names the system, so we don't repeat the assessment title here.
+    return "Start Review";
   }
   return formatQuestionLabels(group.questions);
 }
