@@ -17,4 +17,19 @@ export const EU_AI_ACT_RESOURCES: ResourceLink[] = [
     href: "https://eur-lex.europa.eu/eli/reg/2024/1689/oj",
     icon: FileText,
   },
+  {
+    label: "Prohibited practices (Article 5)",
+    href: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32024R1689#art_5",
+    icon: FileText,
+  },
+  {
+    label: "High-risk requirements (Annex III)",
+    href: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32024R1689#anx_III",
+    icon: FileText,
+  },
+  {
+    label: "Transparency obligations (Article 50)",
+    href: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32024R1689#art_50",
+    icon: FileText,
+  },
 ];
