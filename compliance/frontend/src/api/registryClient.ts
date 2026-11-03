@@ -1,6 +1,3 @@
-import type { AISystem, WorkflowStep, QuestionAssignment, ClassificationRationale } from "../types";
-import type { SectionKey } from "../config/questionnaire";
-
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
 
@@ -17,64 +14,29 @@ function json(body: unknown): RequestInit {
   return { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
 }
 
+// The section-based questionnaire/classification/CO-review endpoints were retired
+// with the single-page assessment redesign. What remains here are the two
+// flow-agnostic workflow utilities the compliance MFE still uses — recording
+// assignees/intended-purpose at assessment creation (`assignWorkflow`) and
+// resetting a system's workflow state when an in-progress assessment is deleted
+// (`resetWorkflow`) — plus user lookups for the create modal.
 export const registryClient = {
-  getSystem: (id: string) => request<AISystem>(`/systems/${id}`),
+  assignWorkflow: (
+    systemId: string,
+    body: {
+      business_assignee_username: string;
+      technical_assignee_username?: string;
+      compliance_officer_username?: string;
+      intended_purpose?: string;
+      note?: string;
+    },
+  ) =>
+    request<unknown>(`/systems/${systemId}/workflow/assign`, { method: "POST", ...json(body) }),
 
-  getSystems: () => request<AISystem[]>("/systems?limit=200"),
-
-  updateSystem: (id: string, data: Record<string, unknown>) =>
-    request<AISystem>(`/systems/${id}`, { method: "PUT", ...json(data) }),
-
-  patchQuestionnaireAnswers: (systemId: string, answers: Record<string, string>, section: SectionKey = "business") =>
-    request<AISystem>(`/systems/${encodeURIComponent(systemId)}/questionnaire`, {
-      method: "PATCH",
-      ...json({ answers, section }),
+  resetWorkflow: (systemId: string) =>
+    request<{ status: string }>(`/systems/${encodeURIComponent(systemId)}/workflow/reset`, {
+      method: "POST",
     }),
-
-  assignWorkflow: (systemId: string, body: { business_assignee_username: string; technical_assignee_username?: string; compliance_officer_username?: string; intended_purpose?: string; note?: string }) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/assign`, { method: "POST", ...json(body) }),
-
-  submitBusinessSection: (systemId: string, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-business`, { method: "POST", ...json({ note: note ?? null }) }),
-
-  submitTechnicalSection: (systemId: string, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-technical`, { method: "POST", ...json({ note: note ?? null }) }),
-
-  submitInfo: (systemId: string, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-info`, { method: "POST", ...json({ note: note ?? null }) }),
-
-  getWorkflow: (systemId: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow`),
-
-  getQuestionAssignments: (systemId: string) =>
-    request<QuestionAssignment[]>(`/systems/${encodeURIComponent(systemId)}/workflow/question-assignments`),
-
-  questionAssign: (systemId: string, body: { section: string; question_key: string; assignee_username: string; note?: string }) =>
-    request<QuestionAssignment[]>(`/systems/${encodeURIComponent(systemId)}/workflow/question-assign`, { method: "POST", ...json(body) }),
-
-  questionUnassign: (systemId: string, body: { section: string; question_key: string }) =>
-    request<QuestionAssignment[]>(`/systems/${encodeURIComponent(systemId)}/workflow/question-assign`, { method: "DELETE", ...json(body) }),
-
-  questionAnswer: (systemId: string, body: { section: string; question_key: string }) =>
-    request<QuestionAssignment[]>(`/systems/${encodeURIComponent(systemId)}/workflow/question-answer`, { method: "POST", ...json(body) }),
-
-  subAssign: (systemId: string, section: SectionKey, subAssigneeUsername: string, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/sub-assign`, { method: "POST", ...json({ section, sub_assignee_username: subAssigneeUsername, note: note ?? null }) }),
-
-  subComplete: (systemId: string, section: SectionKey, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/sub-complete`, { method: "POST", ...json({ section, note: note ?? null }) }),
-
-  subReclaim: (systemId: string, section: SectionKey, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/sub-reclaim`, { method: "POST", ...json({ section, note: note ?? null }) }),
-
-  questionnaireExtract: (systemId: string, section: SectionKey, file: File) => {
-    const fd = new FormData();
-    fd.append("file", file);
-    return request<{ extracted_fields: Record<string, string>; notes: string }>(`/intake/assist/questionnaire/${encodeURIComponent(systemId)}/extract?section=${section}`, { method: "POST", body: fd });
-  },
-
-  getUsersByRole: (role: string) =>
-    request<Array<{ username: string; firstName: string; lastName: string }>>(`/users/by-role?role=${encodeURIComponent(role)}`, {}, USERS_API_BASE),
 
   getAllUsers: async (): Promise<Array<{ username: string; firstName: string; lastName: string; role: string }>> => {
     const ROLES = [
@@ -99,33 +61,4 @@ export const registryClient = {
       return true;
     });
   },
-
-  getRceSummary: (systemId: string) =>
-    request<{
-      tier: string | null;
-      org_role: string | null;
-      registration_mode: string | null;
-      classification_rationale: ClassificationRationale | null;
-      obligations: Array<{ title: string; article_ref: string; description: string }>;
-    }>(`/systems/${encodeURIComponent(systemId)}/workflow/rce-summary`),
-
-  approveSystem: (systemId: string, note?: string, tier?: string, orgRole?: string) =>
-    request<unknown>(`/systems/${encodeURIComponent(systemId)}/workflow/approve`, {
-      method: "POST", ...json({ note: note ?? null, tier: tier ?? null, org_role: orgRole ?? null }),
-    }),
-
-  rejectSystem: (systemId: string, note: string, assigneeUsername: string, sendTo: "business" | "technical" = "business") =>
-    request<unknown>(`/systems/${encodeURIComponent(systemId)}/workflow/reject`, {
-      method: "POST", ...json({ note, assignee_username: assigneeUsername, send_to: sendTo }),
-    }),
-
-  requestInfo: (systemId: string, section: "business" | "technical", note: string) =>
-    request<unknown>(`/systems/${encodeURIComponent(systemId)}/workflow/request-info`, {
-      method: "POST", ...json({ section, note }),
-    }),
-
-  resetWorkflow: (systemId: string) =>
-    request<{ status: string }>(`/systems/${encodeURIComponent(systemId)}/workflow/reset`, {
-      method: "POST",
-    }),
 };
