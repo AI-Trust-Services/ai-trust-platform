@@ -1,4 +1,4 @@
-import { Plus, ArrowRight } from "lucide-react";
+import { Plus, ArrowRight, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { navigateTo } from "../../hooks/useLuigi";
 import { REGISTRY_URL } from "../../api/client";
@@ -30,13 +30,7 @@ export function GetStartedCardsRow({ canRegister }: GetStartedCardsRowProps) {
     <section className="flex flex-col gap-3">
       <h2 className="text-sm font-semibold text-foreground">Get started</h2>
       <div className="grid gap-4 md:grid-cols-2">
-        <div
-          className="relative flex min-h-[180px] flex-col justify-center overflow-hidden rounded-2xl border border-border px-7 py-6"
-          style={{
-            background:
-              "linear-gradient(135deg, #ece6ff 0%, #efe8ff 40%, #fdf0d9 100%)",
-          }}
-        >
+        <div className="relative flex min-h-[180px] flex-col justify-center overflow-hidden rounded-2xl border border-border bg-card px-7 py-6">
           <EuStarRing />
           <div className="relative flex flex-col gap-2">
             <h3 className="text-xl font-semibold text-foreground">
@@ -66,7 +60,7 @@ export function GetStartedCardsRow({ canRegister }: GetStartedCardsRowProps) {
               "linear-gradient(135deg, #d8d0ff 0%, #c7bbfc 55%, #f1dfb8 100%)",
           }}
         >
-          <StackedCardsIllustration />
+          <RegistryGlyph />
           <div className="relative flex flex-col gap-2">
             <h3 className="text-xl font-semibold text-foreground">
               View all AI Systems
@@ -142,45 +136,16 @@ function Star({ cx, cy, r }: { cx: number; cy: number; r: number }) {
   );
 }
 
-// ─── Decorative stacked-cards shape (right card) ────────────────────────────
-// Three offset rounded rectangles to echo the "browse all systems" idea
-// without pulling in another illustration asset.
-function StackedCardsIllustration() {
+// ─── Registry glyph (right card) ────────────────────────────────────────────
+// The AI System Registry's nav icon is the "database" glyph (shell
+// luigi-config.js). Echo it here so the card reads as the shortcut into the
+// registry, large and faint in the top-right corner.
+function RegistryGlyph() {
   return (
-    <svg
+    <Database
       aria-hidden="true"
-      viewBox="0 0 220 160"
-      className="pointer-events-none absolute right-0 top-0 h-full"
-      style={{ width: "55%" }}
-      preserveAspectRatio="xMaxYMin meet"
-    >
-      <rect
-        x="100"
-        y="22"
-        width="110"
-        height="30"
-        rx="8"
-        fill="#ffffff"
-        opacity="0.35"
-      />
-      <rect
-        x="90"
-        y="58"
-        width="120"
-        height="30"
-        rx="8"
-        fill="#ffffff"
-        opacity="0.45"
-      />
-      <rect
-        x="80"
-        y="94"
-        width="130"
-        height="30"
-        rx="8"
-        fill="#ffffff"
-        opacity="0.55"
-      />
-    </svg>
+      className="pointer-events-none absolute right-5 top-5 size-28 text-white/40"
+      strokeWidth={1.25}
+    />
   );
 }

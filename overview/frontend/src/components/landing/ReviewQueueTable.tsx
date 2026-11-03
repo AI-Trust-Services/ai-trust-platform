@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, Eye, Inbox } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   COMPLIANCE_URL,
   type OpenTaskRow,
@@ -103,10 +104,10 @@ export function ReviewQueueTable({ rows, userMap }: ReviewQueueTableProps) {
       {sortedRows.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-border bg-muted/40 text-left text-xs font-medium text-muted-foreground">
+              <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
                 <th className="px-4 py-3">AI System</th>
                 <th className="px-4 py-3">
                   <SortButton
@@ -145,13 +146,16 @@ export function ReviewQueueTable({ rows, userMap }: ReviewQueueTableProps) {
                   key={`${row.system_id}:${row.assignment_id}`}
                   className="border-b border-border last:border-b-0 hover:bg-muted/30"
                 >
-                  <td className="px-4 py-3">
+                  <td className="max-w-[260px] px-4 py-3">
                     <button
                       type="button"
                       onClick={() => openAssessment(row)}
-                      className="flex flex-col gap-0.5 text-left"
+                      className="flex flex-col items-start text-left"
                     >
-                      <span className="font-medium text-foreground underline-offset-2 hover:underline">
+                      <span
+                        className="truncate font-medium text-foreground underline underline-offset-2"
+                        title={row.system_name}
+                      >
                         {row.system_name}
                       </span>
                       <span className="text-xs text-muted-foreground">
@@ -186,15 +190,16 @@ export function ReviewQueueTable({ rows, userMap }: ReviewQueueTableProps) {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-8"
                       onClick={() => openAssessment(row)}
-                      className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                       aria-label={`Review assessment for ${row.system_name}`}
                       title="Review assessment"
                     >
                       <Eye className="size-4" />
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -248,6 +253,7 @@ function OwnerCell({
         firstName={u?.firstName}
         lastName={u?.lastName}
         username={username}
+        size="sm"
       />
       <span className="text-sm text-foreground">{full}</span>
     </div>
