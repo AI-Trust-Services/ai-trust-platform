@@ -41,6 +41,7 @@ _INDEXING_URL = os.environ.get(
 _QUESTIONNAIRE_BUCKET = "registration-docs"
 _RAG_QUERY = "AI system description purpose capabilities deployment risks"
 _RAG_K = 10
+_QUESTIONNAIRE_MAX_TOKENS = int(os.environ.get("QUESTIONNAIRE_MAX_TOKENS", "24000"))
 
 
 def _system_evidence(row: AISystem) -> str:
@@ -221,7 +222,7 @@ async def run_pipeline(
         messages,
         task="questionnaire_answer",
         json_mode=True,
-        max_tokens=8192,
+        max_tokens=_QUESTIONNAIRE_MAX_TOKENS,
     )
 
     result = await parse_json_response(
