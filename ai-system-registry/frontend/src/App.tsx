@@ -22,6 +22,24 @@ interface ModalControls {
 const ToastContext = createContext<ToastFn | null>(null);
 export const useToast = () => useContext(ToastContext)!;
 
+/**
+ * True only when the shell's top window was reloaded (browser refresh), as
+ * opposed to a Luigi side-nav click that merely swaps the iframe src. The
+ * registry runs same-origin with the shell, so the top window's navigation
+ * timing is readable; a cross-origin/unsupported read falls back to "not a
+ * reload" → land on the systems list.
+ */
+function isShellReload(): boolean {
+  try {
+    const nav = window.top?.performance?.getEntriesByType?.(
+      "navigation",
+    )?.[0] as PerformanceNavigationTiming | undefined;
+    return nav?.type === "reload";
+  } catch {
+    return false;
+  }
+}
+
 export const ModalContext = createContext<ModalControls | null>(null);
 export const useModalControls = () => useContext(ModalContext)!;
 
@@ -39,10 +57,23 @@ export default function App() {
   const noWriteTitle = "Requires permission: systems:write";
 
   useLuigiInit(() => {
-    const savedPath = sessionStorage.getItem("lastSystemPath");
-    if (savedPath) {
+    // Cross-MFE deep link (e.g. opening a system from the Overview landing).
+    // Always honoured, then consumed so it fires exactly once.
+    const handoff = sessionStorage.getItem("lastSystemPath");
+    if (handoff) {
       sessionStorage.removeItem("lastSystemPath");
-      navigate(savedPath, { replace: true });
+      navigate(handoff, { replace: true });
+      return;
+    }
+    // Browser-refresh restore. Luigi reloads the iframe to /registry/ (the
+    // systems list) on BOTH a real page refresh and a side-nav click, and both
+    // fire this init — but only a refresh reloads the shell top window; a
+    // nav-click is an in-app Luigi navigation that leaves the top window alone.
+    // Restore the last-open detail page only on a genuine refresh, so clicking
+    // "AI System Registry" in the nav lands on the list, not the old detail.
+    const restorePath = sessionStorage.getItem("registryRestorePath");
+    if (restorePath && isShellReload()) {
+      navigate(restorePath, { replace: true });
     }
   });
   useTheme();
