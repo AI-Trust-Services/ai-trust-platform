@@ -70,7 +70,7 @@ export function HeroEmptyState({ canRegister }: HeroEmptyStateProps) {
 function EuStarRing() {
   const cx = 270;
   const cy = 135;
-  const ringRadius = 130;
+  const ringRadius = 150;
   const starRadius = 20;
   const stars = Array.from({ length: 12 }, (_, i) => {
     const angle = (i / 12) * 2 * Math.PI - Math.PI / 2;
