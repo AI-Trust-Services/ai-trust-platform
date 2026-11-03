@@ -38,10 +38,14 @@ class QuestionState(Base):
     )
     question_key: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    # null ⇒ Incomplete; set ⇒ Complete (owner/assignee confirmed the question).
+    # null ⇒ Incomplete; set ⇒ Complete. `confirmed_by` records WHO confirmed:
+    # a question is "owner-confirmed" (the submit gate) only when confirmed_by is
+    # the system owner. A contributor confirming their assigned question sets
+    # confirmed_by to the contributor — progress, but not sufficient to submit.
     confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    confirmed_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # "ai_prefilled" until the owner/contributor changes the value → "manual".
     answer_source: Mapped[str] = mapped_column(String(20), default="ai_prefilled")

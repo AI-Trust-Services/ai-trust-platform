@@ -33,12 +33,18 @@ class QuestionStateResponse(BaseModel):
     answer: str | None = None
     answer_source: str = "ai_prefilled"
     confidence: str | None = None
+    # confirmed = any confirmation (owner or contributor); owner_confirmed = the
+    # stronger state that the submit gate requires.
     confirmed: bool = False
+    owner_confirmed: bool = False
     assignee_username: str | None = None
     comment_count: int = 0
     # Derived: this question is flagged for the owner's attention
     # (low confidence OR left unanswered by the AI).
     needs_attention: bool = False
+    # Whether the requesting user may edit THIS question right now (only meaningful
+    # when the assessment-level `editable` is true).
+    can_edit: bool = True
 
 
 class AnswerRequest(BaseModel):
@@ -130,6 +136,13 @@ class AssessmentStateResponse(BaseModel):
     system_name: str
     registration_mode: str
     workflow_status: str
+    # Owner-facing lifecycle label derived from the status (e.g. "locked" when the
+    # assessment is pending_review/submitted, "under_review" when returned).
+    status_label: str = ""
+    # Assessment-level read-only gate: false when locked (submitted/pending_review),
+    # approved, or the viewer may not edit at all. When false the whole app is
+    # read-only; when true, per-question `can_edit` applies.
+    editable: bool = True
 
     # Preliminary (AI-generated, not final) classification.
     tier: str

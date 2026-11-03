@@ -23,6 +23,7 @@ from ai_trust_authorization.constants import SYSTEMS_READ, SYSTEMS_WRITE
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
+from ai_trust_persistence.models.assessment import Assessment
 from ai_trust_persistence.models.question_comment import QuestionComment
 from ai_trust_persistence.models.question_state import QuestionState
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
@@ -161,6 +162,62 @@ def _may_edit(row: AISystem, state: QuestionState | None, user: str) -> bool:
     return False
 
 
+# Statuses in which the whole assessment is read-only (locked to the owner): the
+# owner has submitted (pending_review) or the CO has approved. `pending_review`
+# IS the "locked" state — there is no separate `locked` value.
+_LOCKED_STATUSES = frozenset({"pending_review", "approved"})
+
+
+def _is_editable(row: AISystem) -> bool:
+    """Assessment-level gate: false once submitted/locked or approved."""
+    return row.workflow_status not in _LOCKED_STATUSES
+
+
+def _status_label(row: AISystem) -> str:
+    """Owner-facing lifecycle label derived from workflow_status."""
+    ws = row.workflow_status
+    if ws in ("pending_review",):
+        return "locked"
+    if ws == "returned":
+        # Backend records 'returned'; the owner sees it as 'under_review' (#348).
+        return "under_review"
+    if ws == "approved":
+        return "approved"
+    return ws
+
+
+def _is_owner_confirmed(row: AISystem, state: QuestionState | None) -> bool:
+    """A question counts toward the submit gate only when the SYSTEM OWNER
+    confirmed it — a contributor's confirmation is progress, not sufficient."""
+    if state is None or state.confirmed_at is None:
+        return False
+    return state.confirmed_by == _system_owner(row)
+
+
+def _owner_unconfirmed(row: AISystem, states: dict[str, QuestionState]) -> list[str]:
+    """Question keys NOT yet owner-confirmed — the finalize/submit gate."""
+    return [
+        q
+        for q in ASSESSMENT_QUESTION_KEYS
+        if not _is_owner_confirmed(row, states.get(q))
+    ]
+
+
+async def _current_assessment(session, system_id: str) -> Assessment | None:
+    """The most-recent non-inactive compliance Assessment for this system — the
+    row the owner's Assessments tab treats as current."""
+    result = await session.execute(
+        select(Assessment)
+        .where(
+            Assessment.ai_system_id == system_id,
+            Assessment.status != "inactive",
+        )
+        .order_by(Assessment.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def _retrieve_context(
     system_id: str,
 ) -> tuple[str, list[SourceDocumentRef]]:
@@ -227,7 +284,7 @@ async def open_assessment(
         row = await _get_system(session, system_id)
         existing = await _states_by_key(session, system_id)
         if existing:
-            return await _build_state(session, row)
+            return await _build_state(session, row, _current_user(request))
 
         # ── prefill pass (one batched LLM call) ──
         context_block, _sources = await _retrieve_context(system_id)
@@ -284,13 +341,16 @@ async def open_assessment(
             extra={"system_id": system_id, "tier": row.tier},
         )
         row = await _get_system(session, system_id)
-        return await _build_state(session, row)
+        return await _build_state(session, row, _current_user(request))
 
 
-async def _build_state(session, row: AISystem) -> AssessmentStateResponse:
+async def _build_state(
+    session, row: AISystem, user: str | None = None
+) -> AssessmentStateResponse:
     states = await _states_by_key(session, row.id)
     counts = await _comment_counts(session, row.id)
     answers = _answer_store(row)
+    editable = _is_editable(row)
 
     conf = ConfidenceCounts()
     attention = 0
@@ -307,6 +367,9 @@ async def _build_state(session, row: AISystem) -> AssessmentStateResponse:
         needs = _needs_attention(st, ans)
         if needs:
             attention += 1
+        # Per-question edit right for the requesting user — only meaningful while
+        # the assessment is editable (not locked/approved).
+        can_edit = editable and (user is not None and _may_edit(row, st, user))
         questions.append(
             QuestionStateResponse(
                 question_key=q_key,
@@ -314,9 +377,11 @@ async def _build_state(session, row: AISystem) -> AssessmentStateResponse:
                 answer_source=st.answer_source if st else "ai_prefilled",
                 confidence=st.confidence if st else None,
                 confirmed=bool(st and st.confirmed_at),
+                owner_confirmed=_is_owner_confirmed(row, st),
                 assignee_username=st.assignee_username if st else None,
                 comment_count=counts.get(q_key, 0),
                 needs_attention=needs,
+                can_edit=can_edit,
             )
         )
 
@@ -347,6 +412,8 @@ async def _build_state(session, row: AISystem) -> AssessmentStateResponse:
         system_name=row.name,
         registration_mode=row.registration_mode,
         workflow_status=row.workflow_status,
+        status_label=_status_label(row),
+        editable=editable,
         tier=row.tier,
         basis=row.basis,
         org_role=row.org_role,
@@ -366,11 +433,12 @@ async def _build_state(session, row: AISystem) -> AssessmentStateResponse:
 )
 async def get_assessment_state(
     system_id: str,
+    request: Request,
     _: str = Depends(require_permission(SYSTEMS_READ)),
 ):
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
-        return await _build_state(session, row)
+        return await _build_state(session, row, _current_user(request))
 
 
 # ── per-question: answer / confirm ───────────────────────────────────────────
@@ -401,6 +469,8 @@ async def save_answer(
     user = _current_user(request)
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
+        if not _is_editable(row):
+            raise HTTPException(409, "Assessment is locked and cannot be edited")
         state = await _load_state(session, system_id, question_key)
         if not _may_edit(row, state, user):
             raise HTTPException(403, "You are not assigned to this question")
@@ -455,6 +525,8 @@ async def confirm_question(
     user = _current_user(request)
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
+        if not _is_editable(row):
+            raise HTTPException(409, "Assessment is locked and cannot be edited")
         state = await _load_state(session, system_id, question_key)
         if state is None:
             raise HTTPException(404, "Question has no state; open the assessment first")
@@ -483,6 +555,7 @@ async def confirm_question(
                 )
 
         state.confirmed_at = datetime.now(timezone.utc)
+        state.confirmed_by = user
         await session.commit()
         return ConfirmResponse(question_key=question_key, confirmed=True)
 
@@ -501,12 +574,15 @@ async def unconfirm_question(
     user = _current_user(request)
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
+        if not _is_editable(row):
+            raise HTTPException(409, "Assessment is locked and cannot be edited")
         state = await _load_state(session, system_id, question_key)
         if state is None:
             raise HTTPException(404, "Question has no state")
         if not _may_edit(row, state, user):
             raise HTTPException(403, "You are not assigned to this question")
         state.confirmed_at = None
+        state.confirmed_by = None
         await session.commit()
         return ConfirmResponse(question_key=question_key, confirmed=False)
 
@@ -551,7 +627,9 @@ async def add_comment(
     _validate_question_key(question_key)
     user = _current_user(request)
     async with SessionLocal() as session:
-        await _get_system(session, system_id)
+        row = await _get_system(session, system_id)
+        if not _is_editable(row):
+            raise HTTPException(409, "Assessment is locked and cannot be edited")
         comment = QuestionComment(
             id=new_id("QCM"),
             system_id=system_id,
@@ -616,6 +694,8 @@ async def assign_question(
     user = _current_user(request)
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
+        if not _is_editable(row):
+            raise HTTPException(409, "Assessment is locked and cannot be edited")
         state = await _load_state(session, system_id, question_key)
         # Owner may reassign any; a current assignee may reassign their own.
         if not _may_edit(row, state, user):
@@ -694,7 +774,7 @@ async def finalize_assessment(
     request: Request,
     _: str = Depends(require_permission(SYSTEMS_WRITE)),
 ):
-    """Gate: every question must be confirmed. Does not yet submit to the CO —
+    """Gate: every question must be OWNER-confirmed. Does not yet submit to the CO —
     the owner then reviews the submit screen and calls /submit."""
     user = _current_user(request)
     async with SessionLocal() as session:
@@ -702,17 +782,13 @@ async def finalize_assessment(
         if user != _system_owner(row):
             raise HTTPException(403, "Only the owner may finalize the assessment")
         states = await _states_by_key(session, system_id)
-        unconfirmed = [
-            q
-            for q in ASSESSMENT_QUESTION_KEYS
-            if not (states.get(q) and states[q].confirmed_at)
-        ]
+        unconfirmed = _owner_unconfirmed(row, states)
         if unconfirmed:
             raise HTTPException(
                 422,
-                f"{len(unconfirmed)} question(s) still require confirmation",
+                f"{len(unconfirmed)} question(s) still require your confirmation",
             )
-        return await _build_state(session, row)
+        return await _build_state(session, row, user)
 
 
 @router.post(
@@ -725,26 +801,32 @@ async def submit_assessment(
     request: Request,
     _: str = Depends(require_permission(SYSTEMS_WRITE)),
 ):
-    """Owner submits to the compliance officer: all questions must be confirmed;
-    transitions the system to pending_review and records a workflow step."""
+    """Owner submits to the compliance officer: every question must be
+    OWNER-confirmed. Atomically locks the assessment — sets both the registry
+    workflow_status and the compliance Assessment.status to pending_review (shared
+    DB, one transaction) so the owner's Assessments tab reflects it — and records
+    the submission step."""
     user = _current_user(request)
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
         if user != _system_owner(row):
             raise HTTPException(403, "Only the owner may submit the assessment")
+        if not _is_editable(row):
+            raise HTTPException(409, "Assessment is already locked")
         states = await _states_by_key(session, system_id)
-        unconfirmed = [
-            q
-            for q in ASSESSMENT_QUESTION_KEYS
-            if not (states.get(q) and states[q].confirmed_at)
-        ]
+        unconfirmed = _owner_unconfirmed(row, states)
         if unconfirmed:
             raise HTTPException(
                 422,
-                f"Cannot submit: {len(unconfirmed)} question(s) not confirmed",
+                f"Cannot submit: {len(unconfirmed)} question(s) not owner-confirmed",
             )
         row.workflow_status = "pending_review"
         row.assignee_username = row.compliance_officer_username
+        # Atomic cross-service write (shared DB) — advance the compliance
+        # Assessment row the owner's tab reads, mirroring advance-from-classification.
+        assessment = await _current_assessment(session, system_id)
+        if assessment is not None:
+            assessment.status = "pending_review"
         session.add(
             SystemWorkflowStep(
                 id=new_id("SWS"),
@@ -757,4 +839,4 @@ async def submit_assessment(
         )
         await session.commit()
         row = await _get_system(session, system_id)
-        return await _build_state(session, row)
+        return await _build_state(session, row, user)

@@ -288,3 +288,150 @@ async def test_reedit_confirmed_question_reverts_to_incomplete(
     )
     assert r.status_code == 200, r.text
     assert r.json()["confirmed"] is False
+
+
+# ── iteration 2 (#347): owner-confirm, locked read-only, compliance sync ─────
+
+
+async def _confirm_all_as_owner(client: httpx.AsyncClient, system_id: str, state: dict):
+    for q in state["questions"]:
+        r = await client.post(
+            f"/v1/systems/{system_id}/assessment/questions/{q['question_key']}/confirm",
+            headers=_hdr(_OWNER),
+        )
+        assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_contributor_confirm_does_not_satisfy_submit_gate(
+    client: httpx.AsyncClient,
+):
+    """A contributor confirming their assigned question is progress only — the
+    owner must personally confirm every question before finalize/submit."""
+    system_id = await _create_system(client, owner=_OWNER)
+    state = await _open(client, system_id)
+    qkey = state["questions"][0]["question_key"]
+    # Owner assigns q0 to the contributor; owner confirms everything else.
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/assign",
+        json={"assignee_username": _CONTRIB},
+        headers=_hdr(_OWNER),
+    )
+    for q in state["questions"][1:]:
+        await client.post(
+            f"/v1/systems/{system_id}/assessment/questions/{q['question_key']}/confirm",
+            headers=_hdr(_OWNER),
+        )
+    # Contributor confirms their assigned q0.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
+        headers=_hdr(_CONTRIB),
+    )
+    assert r.status_code == 200, r.text
+    # q0 is 'confirmed' but NOT owner_confirmed → finalize blocked.
+    st = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    q0 = next(q for q in st.json()["questions"] if q["question_key"] == qkey)
+    assert q0["confirmed"] is True
+    assert q0["owner_confirmed"] is False
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/finalize", headers=_hdr(_OWNER)
+    )
+    assert r.status_code == 422, r.text
+    # Owner personally confirms q0 → finalize passes.
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
+        headers=_hdr(_OWNER),
+    )
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/finalize", headers=_hdr(_OWNER)
+    )
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_locked_assessment_is_read_only(client: httpx.AsyncClient):
+    """After submit the assessment is locked: editable=false and edits 409."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    assert state["editable"] is True
+    await _confirm_all_as_owner(client, system_id, state)
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/submit",
+        json={"note": "done"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    locked = r.json()
+    assert locked["editable"] is False
+    assert locked["status_label"] == "locked"
+    # Any edit now 409s.
+    qkey = state["questions"][0]["question_key"]
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "post-lock edit"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 409, r.text
+    # state read still works and reports editable=false + per-question can_edit=false.
+    st = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    assert st.json()["editable"] is False
+    assert all(not q["can_edit"] for q in st.json()["questions"])
+
+
+@pytest.mark.asyncio
+async def test_submit_advances_compliance_assessment_status(
+    client: httpx.AsyncClient,
+):
+    """/submit atomically advances the compliance Assessment row (owner's tab)."""
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.assessment import Assessment
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+
+    # Seed a current compliance Assessment row in questionnaire_pending.
+    async with AsyncSession(engine) as s:
+        s.add(
+            Assessment(
+                id="ASS-TEST0001",
+                ai_system_id=system_id,
+                framework_id="FRM-EU-AI-ACT",
+                title="EU AI Act Assessment",
+                status="questionnaire_pending",
+            )
+        )
+        await s.commit()
+
+    await _confirm_all_as_owner(client, system_id, state)
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/submit",
+        json={"note": "done"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+
+    async with AsyncSession(engine) as s:
+        row = (
+            await s.execute(select(Assessment).where(Assessment.id == "ASS-TEST0001"))
+        ).scalar_one()
+        assert row.status == "pending_review"
+
+
+@pytest.mark.asyncio
+async def test_can_edit_false_for_contributor_on_unassigned(
+    client: httpx.AsyncClient,
+):
+    system_id = await _create_system(client, owner=_OWNER)
+    await _open(client, system_id)
+    st = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_CONTRIB)
+    )
+    assert st.status_code == 200, st.text
+    # A plain contributor is assigned nothing → can_edit false everywhere.
+    assert all(not q["can_edit"] for q in st.json()["questions"])
