@@ -245,7 +245,14 @@ async def _retrieve_context(
         logger.warning("assessment.retrieve_unreachable", extra={"error": str(exc)})
         return "", []
 
-    results = data.get("results") or data.get("passages") or []
+    # /v1/retrieve returns a bare JSON array of passages (response_model=
+    # list[RetrievedPassage]). Tolerate an object wrapper too, defensively.
+    if isinstance(data, dict):
+        results = data.get("results") or data.get("passages") or []
+    elif isinstance(data, list):
+        results = data
+    else:
+        results = []
     passages: list[str] = []
     sources: dict[tuple[str, int | None], SourceDocumentRef] = {}
     for r in results:
