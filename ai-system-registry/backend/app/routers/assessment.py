@@ -64,6 +64,12 @@ logger = get_logger(__name__)
 
 _AI_UNAVAILABLE = "AI classification is unavailable. Please try again shortly."
 
+# The single-page assessment flow is EU-AI-Act-specific (classifier, question
+# catalogue, and prompts are all EU AI Act). The compliance Assessment record it
+# creates is therefore always under this framework (seeded by persistence
+# migration 0003). Named here rather than inlined as a magic string.
+_EU_AI_ACT_FRAMEWORK_ID = "FRM-EU-AI-ACT"
+
 _INDEXING_URL = os.environ.get(
     "INDEXING_BACKEND_URL", "http://document-indexing-backend:8011"
 )
@@ -341,6 +347,22 @@ async def open_assessment(
         row.classification_rationale = rationale
         if rationale.get("org_role"):
             row.org_role = rationale["org_role"]
+
+        # Ensure a compliance Assessment record exists so the governance tables
+        # (owner's Assessments tab, /home/assessments) reflect this assessment.
+        # Same shared DB → create it in the same transaction. Starts in
+        # questionnaire_pending; /submit advances it to pending_review.
+        existing_assessment = await _current_assessment(session, system_id)
+        if existing_assessment is None:
+            session.add(
+                Assessment(
+                    id=new_id("ASS"),
+                    ai_system_id=system_id,
+                    framework_id=_EU_AI_ACT_FRAMEWORK_ID,
+                    title=f"EU AI Act Assessment — {row.name}",
+                    status="questionnaire_pending",
+                )
+            )
 
         await session.commit()
         logger.info(
