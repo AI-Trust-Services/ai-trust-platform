@@ -26,10 +26,14 @@ router = APIRouter(tags=["questionnaire"])
 class QuestionnaireRunRequest(BaseModel):
     questionnaire_id: str = Field(
         default="ai-questionnaire",
+        pattern=r"^[A-Za-z0-9_-]+$",
+        max_length=100,
         description="ID of the questionnaire file in context/prompts/<id>.json",
     )
     prompt_id: str = Field(
         default="questionnaire_answer",
+        pattern=r"^[A-Za-z0-9_-]+$",
+        max_length=100,
         description="ID of the system prompt file in context/prompts/<id>.md",
     )
 

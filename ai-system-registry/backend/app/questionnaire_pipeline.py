@@ -25,6 +25,7 @@ import httpx
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 
 from app.llm.client import chat
@@ -42,6 +43,52 @@ _QUESTIONNAIRE_BUCKET = "registration-docs"
 _RAG_QUERY = "AI system description purpose capabilities deployment risks"
 _RAG_K = 10
 _QUESTIONNAIRE_MAX_TOKENS = int(os.environ.get("QUESTIONNAIRE_MAX_TOKENS", "24000"))
+
+
+# ---------------------------------------------------------------------------
+# Response validation models
+# ---------------------------------------------------------------------------
+
+
+class _AnswerItem(BaseModel):
+    model_config = {"extra": "allow"}
+    value: str
+    answerStrength: str | None = None
+    reason: str | None = None
+
+
+class _Reference(BaseModel):
+    model_config = {"extra": "allow"}
+    sourceType: str
+    source: str
+
+
+class _QuestionResult(BaseModel):
+    model_config = {"extra": "allow"}
+    questionId: str
+    question: str
+    questionType: str
+    answer: list[_AnswerItem]
+    explanation: str
+    references: list[_Reference]
+
+
+class _QuestionnaireOutput(BaseModel):
+    model_config = {"extra": "allow"}
+    results: list[_QuestionResult]
+
+
+def _validate_llm_output(raw: dict) -> dict:
+    """Validate the LLM output against the expected response contract.
+
+    Raises ``LLMParseError`` if the structure does not match so the caller
+    maps it to a 502 rather than persisting a malformed result.
+    """
+    try:
+        _QuestionnaireOutput.model_validate(raw)
+    except ValidationError as exc:
+        raise LLMParseError(f"LLM output failed schema validation: {exc}") from exc
+    return raw
 
 
 def _system_evidence(row: AISystem) -> str:
@@ -73,7 +120,7 @@ def _system_evidence(row: AISystem) -> str:
 
     lines = ["Registration Data — AI System Inventory\n"]
     for key, value in fields.items():
-        if value is not None and value != "" and value is not False:
+        if value is not None and value != "":
             lines.append(f"  {key}: {value}")
     return "\n".join(lines)
 
@@ -130,8 +177,9 @@ def _build_user_message(
         parts.append("")
         parts.append("Documents:")
         for i, chunk in enumerate(rag_chunks, 1):
-            source = chunk.get("source", chunk.get("document_name", f"Document {i}"))
-            content = chunk.get("content", chunk.get("text", ""))
+            source_ref = chunk.get("source") or {}
+            source = source_ref.get("filename", f"Document {i}")
+            content = chunk.get("passage", "")
             parts.append(f"\n[Document {i}] Source: {source}\n{content}")
 
     return "\n".join(parts)
@@ -144,7 +192,7 @@ async def _upload_result(
     timestamp: datetime,
 ) -> str:
     """Upload the result JSON to MinIO. Returns the object key."""
-    iso = timestamp.strftime("%Y-%m-%dT%H-%M-%SZ")
+    iso = timestamp.strftime("%Y-%m-%dT%H-%M-%S-%fZ")
     key = f"questionnaire-results/{system_id}/{questionnaire_id}/{iso}.json"
     data = json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")
 
@@ -226,13 +274,12 @@ async def run_pipeline(
     )
 
     result = await parse_json_response(
-        llm_response["text"], task="questionnaire_answer"
+        llm_response["text"],
+        task="questionnaire_answer",
+        max_tokens=_QUESTIONNAIRE_MAX_TOKENS,
     )
 
-    if "results" not in result:
-        raise LLMParseError(
-            "LLM response for 'questionnaire_answer' missing required 'results' key"
-        )
+    _validate_llm_output(result)
 
     # 5. Persist to MinIO.
     timestamp = datetime.now(timezone.utc)
