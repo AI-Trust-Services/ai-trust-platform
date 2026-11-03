@@ -19,6 +19,41 @@ router = APIRouter(tags=["overview"])
 logger = get_logger(__name__)
 
 
+@router.get("/recent-systems")
+async def get_recent_systems(limit: int = Query(default=5, ge=1, le=20)) -> list[dict]:
+    """Most recently registered AI systems across the organisation.
+
+    Powers the Compliance Officer landing's "Recent AI Systems" row — enough
+    columns to render the badge stack (tier + Art. 50 flags) + card subtitle,
+    nothing more.
+    """
+    async with SessionLocal() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(AISystem)
+                    .order_by(AISystem.created_at.desc().nullslast())
+                    .limit(limit)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    return [
+        {
+            "id": r.id,
+            "name": r.name,
+            "version": r.version,
+            "tier": r.tier,
+            "workflow_status": r.workflow_status,
+            "is_chatbot": bool(r.is_chatbot),
+            "generates_synthetic_content": bool(r.generates_synthetic_content),
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+
 @router.get("/stats")
 async def get_overview_stats() -> dict:
     async with SessionLocal() as session:

@@ -1376,13 +1376,16 @@ export default function SystemDetailPage() {
   const showToast = useToast();
   const { mayWrite, mayApprove, mayWriteAssessments, username } = useModalControls();
 
-  // Save current path to sessionStorage so a browser refresh can restore it.
-  // The cleanup runs on normal navigation away (but NOT on page refresh), so
-  // it's only present in sessionStorage if the user actually refreshed.
+  // Save current path under a refresh-restore key so a browser refresh can
+  // restore it. The cleanup runs on normal in-app navigation away (but NOT on
+  // page refresh), so it only lingers in sessionStorage after a real refresh.
+  // A separate key from the cross-MFE `lastSystemPath` handoff: the registry
+  // init only honours this one on a genuine shell reload, so a nav-menu click
+  // doesn't bounce back to this detail page.
   useEffect(() => {
     if (!id) return;
-    sessionStorage.setItem("lastSystemPath", `/systems/${id}`);
-    return () => sessionStorage.removeItem("lastSystemPath");
+    sessionStorage.setItem("registryRestorePath", `/systems/${id}`);
+    return () => sessionStorage.removeItem("registryRestorePath");
   }, [id]);
 
   const [system, setSystem] = useState<AISystem | null>(null);

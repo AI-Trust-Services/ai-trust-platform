@@ -17,6 +17,7 @@ from app.routers import (
     external,
     intake,
     intake_assist,
+    me,
     model_cards,
     systems,
     workflow,
@@ -105,6 +106,7 @@ app.include_router(systems.router, prefix="/v1")
 app.include_router(model_cards.router, prefix="/v1")
 app.include_router(workflow.router, prefix="/v1")
 app.include_router(classify.router, prefix="/v1")
+app.include_router(me.router, prefix="/v1")
 app.include_router(external.router, prefix="/v1")
 
 
