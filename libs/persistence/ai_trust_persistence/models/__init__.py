@@ -3,7 +3,6 @@ from ai_trust_persistence.models.branding import Branding
 from ai_trust_persistence.models.platform_settings import PlatformSettings
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.alert_rule import AlertRule
-from ai_trust_persistence.models.question_assignment import QuestionAssignment
 from ai_trust_persistence.models.assessment import Assessment
 from ai_trust_persistence.models.audit_event import AuditEvent
 from ai_trust_persistence.models.requirement import Requirement
@@ -65,7 +64,6 @@ __all__ = [
     "EvidenceVersion",
     "PlatformSettings",
     "SystemWorkflowStep",
-    "QuestionAssignment",
     "QuestionComment",
     "QuestionState",
     "TestBedRun",
