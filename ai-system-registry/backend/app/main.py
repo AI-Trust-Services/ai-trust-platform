@@ -18,6 +18,7 @@ from app.routers import (
     intake,
     intake_assist,
     model_cards,
+    questionnaire,
     systems,
     workflow,
 )
@@ -106,6 +107,7 @@ app.include_router(model_cards.router, prefix="/v1")
 app.include_router(workflow.router, prefix="/v1")
 app.include_router(classify.router, prefix="/v1")
 app.include_router(external.router, prefix="/v1")
+app.include_router(questionnaire.router, prefix="/v1")
 
 
 @app.get("/health")

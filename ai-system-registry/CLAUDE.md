@@ -28,7 +28,36 @@ AI system registration and EU AI Act classification.
 - **Externalized prompts** — prompt *wording* lives outside the code in repo-root `context/prompts/*.md` (one `.md` per model-call system prompt, named by a stable template id; see `context/prompts/README.md`). `app/llm/templates.py` resolves that dir (walks up to find `context/prompts`, or `PROMPTS_DIR` env override; baked into the image at `/app/context/prompts` via the Dockerfile) and exposes `render_template(id, **vars)`. Each `build_*` in `app/llm/prompts.py` renders its template and fills runtime vars (`target_schema`/`flag_schema`/`flag_names`); the JSON auto-repair call in `app/llm/parsing.py` renders `json_repair_system`/`json_repair_user` (var `malformed_response`). The field/flag data and message assembly stay in Python. A missing template or missing required variable raises `PromptTemplateError` with an actionable message; every render logs `prompt.rendered` with `template_id`+`template_path` for revision traceability (git provides the diff). **To change prompt wording, edit the `.md` — no code change.**
 - All four assist routes gated `require_permission(SYSTEMS_WRITE)`.
 
-**Side-effect-free evaluation** (`routers/classify.py`):
+**Questionnaire answer pipeline** (`app/questionnaire_pipeline.py`, `routers/questionnaire.py`):
+- `POST /v1/systems/{id}/questionnaire-run` (`systems:write`) — triggers the AI-powered questionnaire answer pipeline for a given AI system. Synchronous: waits for the LLM and returns the result.
+- **Body:** `{questionnaire_id?: string, prompt_id?: string}` — both default to the files from issue #329: `questionnaire_id="ai-questionnaire"` → `context/prompts/ai-questionnaire.json`; `prompt_id="questionnaire_answer"` → `context/prompts/questionnaire_answer.md`. Pass alternative ids to use different questionnaire/prompt pairs; a 404 is returned if either file does not exist.
+- **Pipeline steps:** (1) reads the `AISystem` row from Postgres (404 if not found); (2) serialises registration data as "Registration Data" evidence; (3) optionally retrieves RAG document chunks from `document-indexing /v1/retrieve` — **best-effort**, pipeline continues with registration data only if unavailable or system has no indexed documents; (4) assembles system prompt + user message (questionnaire config + evidence); (5) calls Thalamus LLM via `app/llm/client.py` (`task="questionnaire_answer"`, `json_mode=True`, `max_tokens=8192`); (6) parses and validates the `{"results": [...]}` response shape — 502 if the LLM returns unparseable JSON after the auto-repair retry; (7) uploads the result JSON to MinIO and returns a presigned URL.
+- **Storage:** MinIO `registration-docs` bucket, key layout `questionnaire-results/{system_id}/{questionnaire_id}/{iso_timestamp}.json` (e.g. `questionnaire-results/SYS-AB12CD34/ai-questionnaire/2026-11-03T14-22-01Z.json`). Each run writes a **new file** — old runs are never overwritten, giving a full version history. Use `list_objects(prefix="questionnaire-results/{system_id}/{questionnaire_id}/")` to enumerate all runs; sort by timestamp suffix for latest.
+- **Response:** `{run_key: str, presigned_url: str, result: {"results": [...]}}` — `presigned_url` is valid for 24 hours; `result` is the full parsed LLM output per the `questionnaire_answer` prompt output schema (one result object per question: `questionId`, `question`, `questionType`, `answer[]`, `explanation`, `references[]`).
+- **Stub mode:** `app/llm/stub.py` handles `task="questionnaire_answer"` returning one `Scope_1 / NOT_ENOUGH_INFORMATION` result — sufficient for e2e tests with no real LLM.
+
+**Manual trigger on a live k8s instance** (developer with cluster access):
+```bash
+# 1. Forward the registry backend port
+kubectl port-forward svc/ai-system-registry-backend 8001:8001 -n ai-trust
+
+# 2. Trigger with defaults (ai-questionnaire + questionnaire_answer prompt)
+curl -X POST http://localhost:8001/v1/systems/SYS-XXXXXXXX/questionnaire-run \
+  -H "x-forwarded-preferred-username: your-username" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# 3. Override questionnaire/prompt ids
+curl -X POST http://localhost:8001/v1/systems/SYS-XXXXXXXX/questionnaire-run \
+  -H "x-forwarded-preferred-username: your-username" \
+  -H "Content-Type: application/json" \
+  -d '{"questionnaire_id": "ai-questionnaire", "prompt_id": "questionnaire_answer"}'
+
+# 4. Download the result via the presigned URL in the response
+curl "<presigned_url from response>"
+```
+
+
 - `POST /v1/classify/evaluate` (`systems:read`) — runs the full LLM inference + deterministic classifier without writing to the database. Used by the document-indexing AI Test Bed to score sample fixtures. Body: `{answers: {business: {…}, technical: {…}}, enabled_sources?, injected_context?, prompt_override?, model?, role?}`. Returns `{tier, basis, obligations, confidence, rationale}`. Malformed LLM JSON → 502.
 - `classifier.py` exposes `classify_from_questionnaire_answers(business_answers, technical_answers, injected_context="", prompt_override=None, model=None, role=None) → (ClassificationResult, rationale_dict)` — the reusable async core; `classify_ai_questionnaire(row)` is now a thin wrapper around it.
 - **`role`** (`"engineer"` | `"compliance_officer"`) adds role-specific framing to the classification system prompt via the `{role_framing}` placeholder in `classify_questionnaire.md`. Engineers get flag-evidence/confidence emphasis; compliance officers get obligations/org_role/legal-exposure emphasis. When `prompt_override` is set it replaces the entire system message, so role framing does not apply. The framing text lives in `_ROLE_FRAMING` in `app/llm/prompts.py`.

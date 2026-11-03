@@ -1,0 +1,1668 @@
+{
+  "schemaVersion": "1.0",
+  "questionnaireId": "ai-questionnaire",
+  "version": "1.0.0",
+  "title": "AI System Questionnaire",
+  "defaultLanguage": "en",
+  "questions": [
+    {
+      "id": "Scope_1",
+      "question": "Is your system an AI system within the meaning of the AI Act?",
+      "category": "Scope",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Scope_2",
+      "question": "Is the AI System or its output used exclusively for one or more of the following matters?",
+      "category": "Scope",
+      "type": "MULTISELECT",
+      "allowedAnswers": [
+        {
+          "value": "Defense",
+          "code": "a",
+          "label": "Military, defense or national security purposes"
+        },
+        {
+          "value": "Research",
+          "code": "b",
+          "label": "Scientific research and development"
+        }
+      ]
+    },
+    {
+      "id": "Scope_3",
+      "question": "Is the AI System used by a public authority of a third country OR an international organisation for international cooperation or law enforcement?",
+      "category": "Scope",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Scope_4",
+      "question": "Is the AI system used in research, testing or development activity and has not been placed on the market or put into service?",
+      "category": "Scope",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Scope_5",
+      "question": "Does a natural person use the system exclusively in the course of a personal, non-professional activity?",
+      "category": "Scope",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Scope_6",
+      "question": "Is the system made available under a free and open-source licence?",
+      "category": "Scope",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Scope_7",
+      "question": "Is the AI System's output used in the EU?",
+      "category": "Scope",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Scope_8",
+      "question": "Will the AI system be placed on the market or put into service in the EU?",
+      "category": "Scope",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Description_1",
+      "question": "System type and components: What kind of AI or automated decision-making is involved (e.g. large language model, classical ML classifier, computer vision model, rules engine, scoring algorithm, or a combination)? What are the specific models or components used, including names, versions, and providers where applicable?",
+      "category": "Description",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Description_2",
+      "question": "System position: Is the AI the product itself, a component embedded in a wider product, or an API consumed by third parties?",
+      "category": "Description",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Description_3",
+      "question": "Architecture: What are the main components and their boundaries? Which parts are AI-driven and which are deterministic? What are the key runtime dependencies?",
+      "category": "Description",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Description_4",
+      "question": "Data flows: What types of data does the system take as input, where does it come from, and does it include sensitive or regulated categories? Does the output directly trigger a downstream action, or does it require human approval before anything happens?",
+      "category": "Description",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Description_5",
+      "question": "Affected population: Who or what does the system’s output affect: the end user, a third party, or a downstream automated system?",
+      "category": "Description",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Description_6",
+      "question": "Oversight and auditability: Is a human in, on, or in command of the loop? Are inputs, outputs, and decisions logged, and if so, for how long and retrievable by whom?",
+      "category": "Description",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Description_7",
+      "question": "Update cadence: How often are models or decision logic updated or retrained, and who controls that process?",
+      "category": "Description",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Description_8",
+      "question": "Failure behaviour: What does the system do when it cannot produce a reliable output or encounters an error?",
+      "category": "Description",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Description_9",
+      "question": "What is the current development stage (e.g. proof of concept, pilot, beta, production)?",
+      "category": "Description",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Description_10",
+      "question": "What is the planned rollout timeline and target regions or user groups?",
+      "category": "Description",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Description_11",
+      "question": "Has any deployment already occurred, and if so, at what scale?",
+      "category": "Description",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Purpose_1",
+      "question": "What is the AI system intended to be used for and what use cases does this AI system have specifically within the organisation?",
+      "category": "Purpose",
+      "type": "DESCRIPTIVE",
+      "descriptionGuidance": "If there are multiple purposes, please list them all clearly and specifically. A risk classification and role assessment must occur for every intended purpose."
+    },
+    {
+      "id": "Purpose_2",
+      "question": "Which use cases are specifically excluded from usage?",
+      "category": "Purpose",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Purpose_3",
+      "question": "What specific output is created by the system?",
+      "category": "Purpose",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Purpose_4",
+      "question": "Who is user of the AI system?",
+      "category": "Purpose",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Purpose_5",
+      "question": "How often is the AI system to be used?",
+      "category": "Purpose",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Purpose_6",
+      "question": "What consequences can wrong, distorted, or delayed usage of the AI system have?",
+      "category": "Purpose",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Purpose_7",
+      "question": "Does the system make a final decision with legal or similarly significant effect?",
+      "category": "Purpose",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Purpose_8",
+      "question": "Can a person effectively check, override, or stop the output of the AI system?",
+      "category": "Purpose",
+      "type": "DESCRIPTIVE"
+    },
+    {
+      "id": "Prohibited_1",
+      "question": "Does the AI system use biometric categorisation systems that categorise individual persons based on their biometric data to deduce or infer their race, political opinions, trade union membership, religious or philosophical beliefs, sex life or sexual orientation?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Prohibited_2",
+      "question": "Does this AI system merely label or filter a lawfully obtained biometric data set?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_1",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_3",
+      "question": "Is the processing of the biometric data set done exclusively within the legally defined area of law enforcement?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_1",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_4",
+      "question": "Does the system use subliminal, intentionally manipulative, or deceptive techniques?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Prohibited_5",
+      "question": "Do these affect the ability to make an informed decision and lead to a decision that wouldn't have been made otherwise?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_4",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_6",
+      "question": "Does the behavioral bias cause significant harm or is it sufficiently likely?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_4",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_7",
+      "question": "Could the use of the AI system exploit a vulnerability of a person or a particular group of persons  due to age, disability, or particular social or economic situations with the aim or effect of manipulating their behaviour in a way that causes or is reasonably likely to cause significant harm?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Prohibited_8",
+      "question": "Does the AI system evaluate or classify any person over a certain period of time based on their social behaviour or personal characteristics (known, inferred or predicted), and does this result in either or both of (a) detrimental or unfavourable treatment of any person in social contexts unrelated to the contexts in which the data was originally generated or collected; or (b) detrimental or unfavourable treatment that is unjustified or disproportionate to the person's social behaviour or its gravity?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Prohibited_9",
+      "question": "Does the AI system use 'real-time' remote biometric identification systems in public spaces for law enforcement purposes?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Prohibited_10",
+      "question": "Is there a specifically documented legal exception purpose?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_9",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_11",
+      "question": "Are the target person or target group, spatial and temporal boundaries, as well as the severity, likelihood, and extent of the damage documented?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_9",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_12",
+      "question": "Was a fundamental rights impact assessment carried out?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_9",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_13",
+      "question": "Is the required prior approval from a judicial or independent administrative authority in place, or is a legally regulated urgent exception documented?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_9",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_14",
+      "question": "Does the AI system conduct risk assessments of persons to assess or predict a person's risk of committing a criminal offence solely on the basis of a person's profile or an assessment of a person's personality traits and characteristics?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Prohibited_15",
+      "question": "Does the system only support a human assessment that is already based on objective and verifiable facts directly related to criminal activity?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_14",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_16",
+      "question": "Does the AI system create or expand facial recognition databases by untargeted scraping of facial images from the internet or CCTV footage?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Prohibited_17",
+      "question": "Does the AI system analyse or infer emotions of a person in the areas of workplace or education institutions and is not intended for medical or safety reasons?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Prohibited_18",
+      "question": "Does the AI system generate or manipulate realistic intimate or explicit representations of identifiable natural persons in pictures, videos, audio or simuliar content  without the required consent?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+    },
+    {
+      "id": "Prohibited_19",
+      "question": "Is the AI system used for the creation/manipulation of material or representations in the sense of the EU law provision in guideline 2011/93/EU?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "descriptionGuidance": "Guideline 2011/93/EU is direclty related to the topic of child abusement."
+    },
+    {
+      "id": "High_Risk_1",
+      "question": "Is the AI system a product or used as a safety component in one or more of the following areas (a-t) covered by the relevant directives or regulations? You can indicate more than one area if appropriate for the AI system.",
+      "category": "High-risk",
+      "type": "MULTISELECT",
+      "allowedAnswers": [
+        {
+          "value": "MACHINERY",
+          "code": "a",
+          "label": "Machinery",
+          "group": "Annex I Section A",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of machinery within the scope of this question."
+        },
+        {
+          "value": "SAFETY_OF_TOYS",
+          "code": "b",
+          "label": "Safety of toys",
+          "group": "Annex I Section A",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of toy safety within the scope of this question."
+        },
+        {
+          "value": "RECREATIONAL_CRAFT_AND_PERSONAL_WATERCRAFT",
+          "code": "c",
+          "label": "Recreational craft and personal watercraft",
+          "group": "Annex I Section A",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of recreational craft or personal watercraft within the scope of this question."
+        },
+        {
+          "value": "LIFTS_AND_SAFETY_COMPONENTS",
+          "code": "d",
+          "label": "Lifts and safety components for lifts",
+          "group": "Annex I Section A",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of lifts or safety components for lifts within the scope of this question."
+        },
+        {
+          "value": "EXPLOSIVE_ATMOSPHERES",
+          "code": "e",
+          "label": "Equipment and protective systems intended for use in potentially explosive atmospheres",
+          "group": "Annex I Section A",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of equipment or protective systems intended for use in potentially explosive atmospheres within the scope of this question."
+        },
+        {
+          "value": "RADIO_EQUIPMENT",
+          "code": "f",
+          "label": "Radio equipment",
+          "group": "Annex I Section A",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of radio equipment within the scope of this question."
+        },
+        {
+          "value": "PRESSURE_EQUIPMENT",
+          "code": "g",
+          "label": "Pressure equipment",
+          "group": "Annex I Section A",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of pressure equipment within the scope of this question."
+        },
+        {
+          "value": "CABLEWAY_INSTALLATIONS",
+          "code": "h",
+          "label": "Cableway installations",
+          "group": "Annex I Section A",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of cableway installations within the scope of this question."
+        },
+        {
+          "value": "PERSONAL_PROTECTIVE_EQUIPMENT",
+          "code": "i",
+          "label": "Personal protective equipment",
+          "group": "Annex I Section A",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of personal protective equipment within the scope of this question."
+        },
+        {
+          "value": "BURNING_GASEOUS_FUELS",
+          "code": "j",
+          "label": "Burning gaseous fuels",
+          "group": "Annex I Section A",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of appliances burning gaseous fuels within the scope of this question."
+        },
+        {
+          "value": "MEDICAL_DEVICES",
+          "code": "k",
+          "label": "Medical devices",
+          "group": "Annex I Section A",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a medical device or is used as a safety component of a medical device within the scope of this question."
+        },
+        {
+          "value": "IN_VITRO_DIAGNOSTIC_MEDICAL_DEVICES",
+          "code": "l",
+          "label": "In vitro diagnostic medical devices",
+          "group": "Annex I Section A",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is an in vitro diagnostic medical device or is used as a safety component of such a device within the scope of this question."
+        },
+        {
+          "value": "CIVIL_AVIATION_SECURITY",
+          "code": "m",
+          "label": "Civil aviation security",
+          "group": "Annex I Section B",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of civil aviation security within the scope of this question."
+        },
+        {
+          "value": "TWO_OR_THREE_WHEEL_VEHICLES_AND_QUADRICYCLES",
+          "code": "n",
+          "label": "Two- or three-wheel vehicles and quadricycles",
+          "group": "Annex I Section B",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of two- or three-wheel vehicles or quadricycles within the scope of this question."
+        },
+        {
+          "value": "AGRICULTURAL_AND_FORESTRY_VEHICLES",
+          "code": "o",
+          "label": "Agricultural and forestry vehicles",
+          "group": "Annex I Section B",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of agricultural or forestry vehicles within the scope of this question."
+        },
+        {
+          "value": "MARINE_EQUIPMENT",
+          "code": "p",
+          "label": "Marine equipment",
+          "group": "Annex I Section B",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of marine equipment within the scope of this question."
+        },
+        {
+          "value": "RAIL_SYSTEMS",
+          "code": "q",
+          "label": "Rail systems",
+          "group": "Annex I Section B",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of rail systems within the scope of this question."
+        },
+        {
+          "value": "MOTOR_VEHICLE_APPROVAL_AND_MARKET_SURVEILLANCE",
+          "code": "r",
+          "label": "Approval and market surveillance of motor vehicles and their trailers, and of systems, components and separate technical units intended for such vehicles",
+          "group": "Annex I Section B",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of approval or market surveillance of motor vehicles, trailers, systems, components or separate technical units within the scope of this question."
+        },
+        {
+          "value": "MOTOR_VEHICLE_TYPE_APPROVAL_REQUIREMENTS",
+          "code": "s",
+          "label": "Type-approval requirements for motor vehicles and their trailers, and systems, components and separate technical units",
+          "group": "Annex I Section B",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of type-approval requirements for motor vehicles, trailers, systems, components or separate technical units within the scope of this question."
+        },
+        {
+          "value": "CIVIL_AVIATION_AND_EASA",
+          "code": "t",
+          "label": "Common rules in the field of civil aviation / establishing a European Union Aviation Safety Agency (EASA)",
+          "group": "Annex I Section B",
+          "optionSemantics": "Select when the documented purpose or use of the AI system establishes that it is a product or is used as a safety component in the area of common civil aviation rules or the European Union Aviation Safety Agency framework within the scope of this question."
+        },
+        {
+          "value": "NOT_APPLICABLE",
+          "code": "not_applicable",
+          "label": "None of the listed areas apply"
+        }
+      ]
+    },
+    {
+      "id": "High_Risk_2",
+      "question": "Will the AI system be active in any of the following areas (a-h)? You can indicate more than one area if appropriate for the AI system.",
+      "category": "High-risk",
+      "type": "MULTISELECT",
+      "allowedAnswers": [
+        {
+          "value": "BIOMETRICS",
+          "code": "a",
+          "label": "Biometrics",
+          "optionSemantics": "Select when the documented purpose or use of the AI system concerns biometrics within the scope of this question."
+        },
+        {
+          "value": "CRITICAL_INFRASTRUCTURE",
+          "code": "b",
+          "label": "Critical infrastructure",
+          "optionSemantics": "Select when the documented purpose or use of the AI system concerns critical infrastructure within the scope of this question."
+        },
+        {
+          "value": "EDUCATION_AND_VOCATIONAL_TRAINING",
+          "code": "c",
+          "label": "Educational and vocational training",
+          "optionSemantics": "Select when the documented purpose or use of the AI system concerns educational or vocational training within the scope of this question."
+        },
+        {
+          "value": "EMPLOYMENT_AND_WORKER_MANAGEMENT",
+          "code": "d",
+          "label": "Employment, workers management and access to self-employment",
+          "optionSemantics": "Select when the documented purpose or use of the AI system concerns employment, worker management, or access to self-employment within the scope of this question."
+        },
+        {
+          "value": "ESSENTIAL_PRIVATE_AND_PUBLIC_SERVICES",
+          "code": "e",
+          "label": "Access to and enjoyment of essential private services and essential public services and benefits",
+          "optionSemantics": "Select when the documented purpose or use of the AI system concerns access to or enjoyment of essential private services, essential public services, or benefits within the scope of this question."
+        },
+        {
+          "value": "LAW_ENFORCEMENT",
+          "code": "f",
+          "label": "Law enforcement",
+          "optionSemantics": "Select when the documented purpose or use of the AI system concerns law enforcement within the scope of this question."
+        },
+        {
+          "value": "MIGRATION_ASYLUM_AND_BORDER_CONTROL",
+          "code": "g",
+          "label": "Migration, asylum and border control management",
+          "optionSemantics": "Select when the documented purpose or use of the AI system concerns migration, asylum, or border control management within the scope of this question."
+        },
+        {
+          "value": "JUSTICE_AND_DEMOCRATIC_PROCESSES",
+          "code": "h",
+          "label": "Administration of justice and democratic processes",
+          "optionSemantics": "Select when the documented purpose or use of the AI system concerns the administration of justice or democratic processes within the scope of this question."
+        },
+        {
+          "value": "NOT_APPLICABLE",
+          "code": "not_applicable",
+          "label": "None of the listed areas apply"
+        }
+      ]
+    },
+    {
+      "id": "High_Risk_3",
+      "question": "Does the AI system use remote biometric identification for any purpose other than to confirm that a particular person is the person he or she claims to be?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "BIOMETRICS"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_4",
+      "question": "Will the AI system be used for biometric categorization according to sensitive or protected characteristics or traits, or to infer such characteristics or traits?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "BIOMETRICS"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_5",
+      "question": "Will the AI system be used for emotion recognition?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "BIOMETRICS"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_6",
+      "question": "Will the AI system be used as a safety component in the management and operation of critical digital infrastructure, such as water, gas, heating, electricity, or road traffic?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "CRITICAL_INFRASTRUCTURE"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_7",
+      "question": "Is the AI system intended to be used to determine access, admission, or to assign individuals to educational and vocational training institutions or programs?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "EDUCATION_AND_VOCATIONAL_TRAINING"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_8",
+      "question": "Is the AI system intended to be used for evaluating learning outcomes, including when those outcomes are used to guide the learning process of persons in educational and vocational training institutions or programs?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "EDUCATION_AND_VOCATIONAL_TRAINING"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_9",
+      "question": "Is the AI system intended to be used for the purpose of assessing the appropriate educational level for an individual and significantly influencing the level of education and vocational training that the individual will receive or will be able to access?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "EDUCATION_AND_VOCATIONAL_TRAINING"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_10",
+      "question": "Is the AI system intended to be used to monitor and detect prohibited student behavior during tests in educational and vocational training institutions?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "EDUCATION_AND_VOCATIONAL_TRAINING"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_11",
+      "question": "Is the AI system intended to be used to place targeted job advertisements?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "EMPLOYMENT_AND_WORKER_MANAGEMENT"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_12",
+      "question": "Is the AI system intended to be used for recruitment and selection of persons, to analyse, rank, filter job applications, or to evaluate candidates?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "EMPLOYMENT_AND_WORKER_MANAGEMENT"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_13",
+      "question": "Will the AI system be used to make decisions about hiring, working conditions, promotion, or contract termination?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "EMPLOYMENT_AND_WORKER_MANAGEMENT"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_14",
+      "question": "Will the AI system be used to assign tasks based on individual behavior or personal characteristics?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "EMPLOYMENT_AND_WORKER_MANAGEMENT"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_15",
+      "question": "Will the AI system be used to monitor and evaluate the performance and behavior of persons in such relationships?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "EMPLOYMENT_AND_WORKER_MANAGEMENT"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_16",
+      "question": "Is the AI system intended to be used by or on behalf of public authorities to evaluate the eligibility of natural persons for public assistance benefits and services, including healthcare services, as well as to grant, reduce, revoke, or reclaim such benefits and services?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "ESSENTIAL_PRIVATE_AND_PUBLIC_SERVICES"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_17",
+      "question": "Is the AI system intended to be used for assessing the creditworthiness of persons or determining their credit score?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "ESSENTIAL_PRIVATE_AND_PUBLIC_SERVICES"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_18",
+      "question": "Is the AI system intended to evaluate and classify emergency calls from people, or to be used to dispatch or prioritize emergency first responders, including police, firefighters, and medical aid, as well as emergency healthcare patient triage systems?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "ESSENTIAL_PRIVATE_AND_PUBLIC_SERVICES"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_19",
+      "question": "Will the AI system be used for risk assessment and pricing for individuals in life and health insurance?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "ESSENTIAL_PRIVATE_AND_PUBLIC_SERVICES"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_20",
+      "question": "Is the AI system intended to be used by or on behalf of law enforcement authorities or by Union institutions, agencies, offices or bodies in support of law enforcement authorities or on their behalf to assess the risk of a person becoming the victim of a criminal offence?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "LAW_ENFORCEMENT"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_21",
+      "question": "Is the AI system intended to be used by or on behalf of law enforcement authorities, or by Union agencies, offices, or bodies in support of law enforcement authorities to evaluate the reliability of evidence during the investigation or prosecution of criminal offences?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "LAW_ENFORCEMENT"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_22",
+      "question": "Is the AI system intended to be used by law enforcement authorities or on their behalf or by Union institutions, agencies, offices or bodies in support of law enforcement authorities for assessing the risk of a person offending or re-offending?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "LAW_ENFORCEMENT"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_23",
+      "question": "Is the AI system intended to be used by or on behalf of law enforcement authorities or by Union institutions, agencies, offices or bodies in support of law enforcement authorities for profiling of persons?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "LAW_ENFORCEMENT"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_24",
+      "question": "Is the AI system intended to be used by or on behalf of law enforcement authorities or by Union institutions, bodies, offices or agencies for crime analytics?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "LAW_ENFORCEMENT"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_25",
+      "question": "Is the AI system intended to be used by competent public authorities or by Union institutions, bodies, offices or agencies to assess a person's risk, including security, irregular migration or health risks?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "MIGRATION_ASYLUM_AND_BORDER_CONTROL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_26",
+      "question": "Is the AI system intended to be used by or on behalf of competent public authorities or by Union agencies, offices or bodies to assess a risk posed by a person who intends to enter or has entered the territory of a Member State?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "MIGRATION_ASYLUM_AND_BORDER_CONTROL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_27",
+      "question": "Is the AI system intended to be used by or on behalf of competent public authorities or by Union agencies, offices or bodies to assist competent public authorities in examining and assessing the reliability of evidence related to applications?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "MIGRATION_ASYLUM_AND_BORDER_CONTROL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_28",
+      "question": "Is the AI system intended to be used by or on behalf of competent public authorities, including Union agencies, offices or bodies, in the context of migration, asylum and border control management, for the purpose of detection, recognition or identification of natural persons?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "MIGRATION_ASYLUM_AND_BORDER_CONTROL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_29",
+      "question": "Is the AI system intended to be used by a judicial authority or on their behalf to assist a judicial authority in researching and interpreting facts, the law and in applying the law to a concrete set of facts or used in a similar way in alternative dispute resolution?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "answerSemantics": {
+        "YES": "The condition applies when the documented intended use falls within the activity described in the question. This does not include AI systems the output of which natural persons are not directly exposed to, such as tools used to organise, optimise or structure political campaigns from an administrative or logistical point of view."
+      },
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "JUSTICE_AND_DEMOCRATIC_PROCESSES"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_30",
+      "question": "Is the AI system intended to be used to influence the outcome of an election or referendum, or the voting behaviour of individuals in the exercise of their right to vote in an election or referendum?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "answerSemantics": {
+        "YES": "The condition applies when the documented intended use falls within the activity described in the question. This does not include AI systems the output of which natural persons are not directly exposed to, such as tools used to organise, optimise or structure political campaigns from an administrative or logistical point of view."
+      },
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_2",
+            "operator": "CONTAINS",
+            "value": "JUSTICE_AND_DEMOCRATIC_PROCESSES"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_31",
+      "question": "Is the AI system used for profiling of natural persons?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "any": [
+          {
+            "questionId": "High_Risk_3",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_4",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_5",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_6",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_7",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_8",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_9",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_10",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_11",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_12",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_13",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_14",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_15",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_16",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_17",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_18",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_19",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_20",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_21",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_22",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_23",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_24",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_25",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_26",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_27",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_28",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_29",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          },
+          {
+            "questionId": "High_Risk_30",
+            "operator": "IN",
+            "values": ["YES", "PARTIALLY"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_32",
+      "question": "Does the use of the AI system pose a significant risk to the health, safety, or fundamental rights of natural persons?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_31",
+            "operator": "EQUALS",
+            "value": "NO"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_33",
+      "question": "Is the AI system intended to perform a narrowly defined procedural task?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_31",
+            "operator": "EQUALS",
+            "value": "NO"
+          },
+          {
+            "questionId": "High_Risk_32",
+            "operator": "EQUALS",
+            "value": "NO"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_34",
+      "question": "Is the AI system intended only to improve the result of a previously completed human activity?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_31",
+            "operator": "EQUALS",
+            "value": "NO"
+          },
+          {
+            "questionId": "High_Risk_32",
+            "operator": "EQUALS",
+            "value": "NO"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_35",
+      "question": "Is the AI system intended to detect decision-making patterns or deviations from prior decision-making patterns without replacing or influencing a previously completed human assessment and without affecting proper human review?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_31",
+            "operator": "EQUALS",
+            "value": "NO"
+          },
+          {
+            "questionId": "High_Risk_32",
+            "operator": "EQUALS",
+            "value": "NO"
+          }
+        ]
+      }
+    },
+    {
+      "id": "High_Risk_36",
+      "question": "Is the AI system intended to perform a preparatory task for an assessment relevant to the use cases listed in Annex III?",
+      "category": "High-risk",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "High_Risk_31",
+            "operator": "EQUALS",
+            "value": "NO"
+          },
+          {
+            "questionId": "High_Risk_32",
+            "operator": "EQUALS",
+            "value": "NO"
+          }
+        ]
+      }
+    },
+    {
+      "id": "Role_1",
+      "question": "Are you a natural or legal person present or established in the European Union who has been appointed by the provider of the AI system or GPAI model by a written mandate to carry out the obligations of the provider?",
+      "category": "Role",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "NOT_APPLICABLE"
+      ]
+    },
+    {
+      "id": "Role_2",
+      "question": "Are you a natural or legal person present or established in the European Union placing on the market an AI system bearing the name or trademark of a natural or legal person established outside the European Union?",
+      "category": "Role",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "NOT_APPLICABLE"
+      ]
+    },
+    {
+      "id": "Role_3",
+      "question": "Are you a natural or legal person who uses the AI system under your own responsibility?",
+      "category": "Role",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "NOT_APPLICABLE"
+      ]
+    },
+    {
+      "id": "Role_4",
+      "question": "Are you developing the AI system or GPAI model, or have you had it developed, in order to put it into service or place it on the market under your own name or trademark?",
+      "category": "Role",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "NOT_APPLICABLE"
+      ]
+    },
+    {
+      "id": "Role_5",
+      "question": "Have you put, or are you planning to put, your name or trademark on a high-risk AI system that has already been placed on the market or put into service?",
+      "category": "Role",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "NOT_APPLICABLE"
+      ]
+    },
+    {
+      "id": "Role_6",
+      "question": "Have you made, or are you planning to make, a substantial modification to an AI system that has already been placed on the market or put into service?",
+      "category": "Role",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "NOT_APPLICABLE"
+      ]
+    },
+    {
+      "id": "Role_7",
+      "question": "Have you made, or are you planning to make, a modification to the intended purpose of the AI system?",
+      "category": "Role",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "NOT_APPLICABLE"
+      ]
+    },
+        {
+      "id": "Transparency_1",
+      "question": "Is the AI system intended to interact with natural persons?",
+      "category": "Transparency",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ]
+    },
+    {
+      "id": "Transparency_2",
+      "question": "Does the AI system generate or manipulate synthetic audio, image, video, or text content?",
+      "category": "Transparency",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ]
+    },
+    {
+      "id": "Transparency_3",
+      "question": "Does the AI system generate or manipulate audio or visual content, including images or video, that would falsely appear to be authentic or truthful (deepfake)?",
+      "category": "Transparency",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ]
+    },
+    {
+      "id": "Transparency_4",
+      "question": "Are you using an AI system that generates or manipulates text which is published with the purpose of informing the public on matters of public interest?",
+      "category": "Transparency",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ]
+    },
+    {
+      "id": "Transparency_5",
+      "question": "Has the text undergone human review or editorial control, and does a natural or legal person take editorial responsibility for its publication?",
+      "category": "Transparency",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Transparency_4",
+            "operator": "IN",
+            "values": [
+              "YES",
+              "PARTIALLY"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "Transparency_6",
+      "question": "Are you using an emotion recognition system or a biometric categorisation system?",
+      "category": "Transparency",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ]
+    },
+    {
+      "id": "Transparency_7",
+      "question": "Does the AI system make decisions about individuals, or does it assist with such decisions?",
+      "category": "Transparency",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ]
+    }
+  ]
+}

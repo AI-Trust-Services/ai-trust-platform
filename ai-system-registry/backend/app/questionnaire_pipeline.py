@@ -1,0 +1,256 @@
+"""AI-powered questionnaire answer pipeline.
+
+Reads AI system registration data and optional RAG documents, calls the LLM
+using the configured system prompt and questionnaire, and persists the result
+as a versioned JSON file in MinIO.
+
+Storage key layout:
+    questionnaire-results/{system_id}/{questionnaire_id}/{iso_timestamp}.json
+
+Each pipeline run appends a new file — old runs are never overwritten, giving a
+full version history keyed by when the run was triggered (typically after a
+system data update).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import io
+import json
+import os
+from datetime import datetime, timezone
+from typing import Any
+
+import httpx
+from ai_trust_logging import correlation_id_var, get_logger
+from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.models.ai_system import AISystem
+from sqlalchemy import select
+
+from app.llm.client import chat
+from app.llm.parsing import LLMParseError, parse_json_response
+from app.llm.templates import load_questionnaire, load_template
+from app import minio_client
+
+logger = get_logger(__name__)
+
+_INDEXING_URL = os.environ.get(
+    "INDEXING_BACKEND_URL", "http://document-indexing-backend:8011"
+).rstrip("/")
+
+_QUESTIONNAIRE_BUCKET = "registration-docs"
+_RAG_QUERY = "AI system description purpose capabilities deployment risks"
+_RAG_K = 10
+
+
+def _system_evidence(row: AISystem) -> str:
+    """Serialise the AI system row as a structured evidence block for the LLM."""
+    fields = {
+        "name": row.name,
+        "version": row.version,
+        "provider": row.provider,
+        "org_name": row.org_name,
+        "org_role": row.org_role,
+        "description": row.description,
+        "intended_purpose": row.intended_purpose,
+        "department": row.department,
+        "use_case": row.use_case,
+        "people_affected": row.people_affected,
+        "decision_context": row.decision_context,
+        "system_type": row.system_type,
+        "autonomy_level": row.autonomy_level,
+        "lifecycle": row.lifecycle,
+        "deployment_country": row.deployment_country,
+        "is_gpai": row.is_gpai,
+        "is_chatbot": row.is_chatbot,
+        "generates_synthetic_content": row.generates_synthetic_content,
+        "tier": row.tier,
+    }
+    # Include questionnaire answers if already collected via the workflow.
+    if row.questionnaire_answers:
+        fields["questionnaire_answers"] = row.questionnaire_answers
+
+    lines = ["Registration Data — AI System Inventory\n"]
+    for key, value in fields.items():
+        if value is not None and value != "" and value is not False:
+            lines.append(f"  {key}: {value}")
+    return "\n".join(lines)
+
+
+async def _retrieve_rag_documents(system_id: str, username: str) -> list[dict]:
+    """Retrieve RAG document chunks for the system. Returns empty list on any failure."""
+    payload = {
+        "ai_system_id": system_id,
+        "query": _RAG_QUERY,
+        "k": _RAG_K,
+        "mode": "hybrid",
+    }
+    headers = {"x-forwarded-preferred-username": username}
+    cid = correlation_id_var.get("")
+    if cid:
+        headers["x-correlation-id"] = cid
+
+    url = f"{_INDEXING_URL}/v1/retrieve"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+        if resp.status_code >= 400:
+            logger.warning(
+                "questionnaire_pipeline.rag_unavailable",
+                extra={"system_id": system_id, "status": resp.status_code},
+            )
+            return []
+        data = resp.json()
+        return data.get("results", data) if isinstance(data, dict) else data
+    except Exception as exc:
+        logger.warning(
+            "questionnaire_pipeline.rag_failed",
+            extra={"system_id": system_id, "error": str(exc)},
+        )
+        return []
+
+
+def _build_user_message(
+    questionnaire: dict,
+    registration_evidence: str,
+    rag_chunks: list[dict],
+) -> str:
+    """Assemble the user message: questionnaire config + all evidence."""
+    parts = [
+        "Questionnaire Configuration:",
+        json.dumps(questionnaire, indent=2),
+        "",
+        "Provided Evidence:",
+        "",
+        registration_evidence,
+    ]
+
+    if rag_chunks:
+        parts.append("")
+        parts.append("Documents:")
+        for i, chunk in enumerate(rag_chunks, 1):
+            source = chunk.get("source", chunk.get("document_name", f"Document {i}"))
+            content = chunk.get("content", chunk.get("text", ""))
+            parts.append(f"\n[Document {i}] Source: {source}\n{content}")
+
+    return "\n".join(parts)
+
+
+async def _upload_result(
+    system_id: str,
+    questionnaire_id: str,
+    result: dict,
+    timestamp: datetime,
+) -> str:
+    """Upload the result JSON to MinIO. Returns the object key."""
+    iso = timestamp.strftime("%Y-%m-%dT%H-%M-%SZ")
+    key = f"questionnaire-results/{system_id}/{questionnaire_id}/{iso}.json"
+    data = json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")
+
+    await minio_client.ensure_bucket()
+
+    from app.minio_client import _get_client  # reuse existing singleton
+
+    def _put() -> None:
+        _get_client().put_object(
+            _QUESTIONNAIRE_BUCKET,
+            key,
+            io.BytesIO(data),
+            length=len(data),
+            content_type="application/json",
+        )
+
+    await asyncio.to_thread(_put)
+    logger.info(
+        "questionnaire_pipeline.result_stored",
+        extra={"system_id": system_id, "key": key, "size": len(data)},
+    )
+    return key
+
+
+async def run_pipeline(
+    system_id: str,
+    questionnaire_id: str,
+    prompt_id: str,
+    username: str,
+) -> dict[str, Any]:
+    """Run the questionnaire answer pipeline for a given AI system.
+
+    Returns ``{run_key, presigned_url, result}`` where ``result`` is the full
+    parsed LLM output ``{"results": [...]}``.
+
+    Raises:
+        KeyError: system not found (caller maps to 404).
+        PromptTemplateError: questionnaire or prompt file not found (caller maps to 404).
+        LLMParseError: LLM returned unparseable JSON after repair retry (caller maps to 502).
+    """
+    # 1. Load system row.
+    async with SessionLocal() as session:
+        row = (
+            await session.execute(select(AISystem).where(AISystem.id == system_id))
+        ).scalar_one_or_none()
+    if row is None:
+        raise KeyError(f"AI system '{system_id}' not found")
+
+    # 2. Load questionnaire config and system prompt (raises PromptTemplateError if missing).
+    questionnaire = load_questionnaire(questionnaire_id)
+    system_prompt = load_template(prompt_id)
+
+    # 3. Build evidence — registration data (always) + RAG documents (best-effort).
+    registration_evidence = _system_evidence(row)
+    rag_chunks = await _retrieve_rag_documents(system_id, username)
+    if rag_chunks:
+        logger.info(
+            "questionnaire_pipeline.rag_retrieved",
+            extra={"system_id": system_id, "chunks": len(rag_chunks)},
+        )
+    else:
+        logger.info(
+            "questionnaire_pipeline.rag_skipped",
+            extra={"system_id": system_id},
+        )
+
+    # 4. Assemble messages and call LLM.
+    user_message = _build_user_message(questionnaire, registration_evidence, rag_chunks)
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message},
+    ]
+
+    llm_response = await chat(
+        messages,
+        task="questionnaire_answer",
+        json_mode=True,
+        max_tokens=8192,
+    )
+
+    result = await parse_json_response(
+        llm_response["text"], task="questionnaire_answer"
+    )
+
+    if "results" not in result:
+        raise LLMParseError(
+            "LLM response for 'questionnaire_answer' missing required 'results' key"
+        )
+
+    # 5. Persist to MinIO.
+    timestamp = datetime.now(timezone.utc)
+    run_key = await _upload_result(system_id, questionnaire_id, result, timestamp)
+    presigned_url = await minio_client.get_presigned_url(run_key, expires_hours=24)
+
+    logger.info(
+        "questionnaire_pipeline.completed",
+        extra={
+            "system_id": system_id,
+            "questionnaire_id": questionnaire_id,
+            "prompt_id": prompt_id,
+            "questions_answered": len(result.get("results", [])),
+            "run_key": run_key,
+        },
+    )
+
+    return {
+        "run_key": run_key,
+        "presigned_url": presigned_url,
+        "result": result,
+    }
