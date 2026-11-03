@@ -290,6 +290,8 @@ class AISystemResponse(BaseModel):
     training_compute_flops: float
     is_chatbot: bool
     generates_synthetic_content: bool
+    # CO-issued Art.50 transparency companion to a high-risk tier (#348).
+    co_issued_transparency: bool = False
     created_at: datetime
     updated_at: datetime
     workflow_status: str
