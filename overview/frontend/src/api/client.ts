@@ -52,6 +52,22 @@ export interface OpenTaskRow {
   assigned_by_username: string | null;
   owner_username: string | null;
   assignment_id?: string | null;
+  // Only populated when source === "review" (CO landing: Ready for review).
+  tier?: string | null;
+  is_chatbot?: boolean | null;
+  generates_synthetic_content?: boolean | null;
+  planned_rollout_date?: string | null;
+}
+
+export interface RecentSystemRow {
+  id: string;
+  name: string;
+  version: string;
+  tier: string;
+  workflow_status: string;
+  is_chatbot: boolean;
+  generates_synthetic_content: boolean;
+  created_at: string | null;
 }
 
 export interface MySystemRow {
@@ -103,6 +119,8 @@ export const api = {
     request<OrganizationContactsResponse>("/me/organization-contacts", USERS_API_BASE),
   myOpenTasks: () => request<OpenTaskRow[]>("/me/open-tasks", REGISTRY_API_BASE),
   mySystems: () => request<MySystemRow[]>("/me/systems", REGISTRY_API_BASE),
+  recentSystems: (limit = 5) =>
+    request<RecentSystemRow[]>(`/recent-systems?limit=${limit}`, API_BASE),
   allAssessments: () =>
     request<AssessmentSummary[]>("/assessments?limit=500", COMPLIANCE_API_BASE),
   allUsers: async (): Promise<UserSummary[]> => {
