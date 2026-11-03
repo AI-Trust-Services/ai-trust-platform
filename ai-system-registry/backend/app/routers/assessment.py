@@ -225,6 +225,24 @@ async def _current_assessment(session, system_id: str) -> Assessment | None:
     return result.scalar_one_or_none()
 
 
+async def _ensure_assessment(session, row: AISystem) -> None:
+    """Create a compliance Assessment row (questionnaire_pending) for this system
+    if none exists. Idempotent; caller owns the transaction. Keeps the governance
+    tables (owner's Assessments tab, /home/assessments) in sync with the
+    single-page flow, and self-heals systems prefilled before this existed."""
+    if await _current_assessment(session, row.id) is not None:
+        return
+    session.add(
+        Assessment(
+            id=new_id("ASS"),
+            ai_system_id=row.id,
+            framework_id=_EU_AI_ACT_FRAMEWORK_ID,
+            title=f"EU AI Act Assessment — {row.name}",
+            status="questionnaire_pending",
+        )
+    )
+
+
 async def _retrieve_context(
     system_id: str,
 ) -> tuple[str, list[SourceDocumentRef]]:
@@ -298,6 +316,10 @@ async def open_assessment(
         row = await _get_system(session, system_id)
         existing = await _states_by_key(session, system_id)
         if existing:
+            # Self-heal: ensure the compliance Assessment row exists even for
+            # systems prefilled before that creation was added (idempotent).
+            await _ensure_assessment(session, row)
+            await session.commit()
             return await _build_state(session, row, _current_user(request))
 
         # ── prefill pass (one batched LLM call) ──
@@ -351,19 +373,7 @@ async def open_assessment(
 
         # Ensure a compliance Assessment record exists so the governance tables
         # (owner's Assessments tab, /home/assessments) reflect this assessment.
-        # Same shared DB → create it in the same transaction. Starts in
-        # questionnaire_pending; /submit advances it to pending_review.
-        existing_assessment = await _current_assessment(session, system_id)
-        if existing_assessment is None:
-            session.add(
-                Assessment(
-                    id=new_id("ASS"),
-                    ai_system_id=system_id,
-                    framework_id=_EU_AI_ACT_FRAMEWORK_ID,
-                    title=f"EU AI Act Assessment — {row.name}",
-                    status="questionnaire_pending",
-                )
-            )
+        await _ensure_assessment(session, row)
 
         await session.commit()
         logger.info(
