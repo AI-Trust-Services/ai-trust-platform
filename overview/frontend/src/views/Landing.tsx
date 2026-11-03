@@ -24,6 +24,9 @@ import {
   MOCK_MY_SYSTEMS,
   MOCK_OPEN_TASKS,
 } from "../components/landing/mockLandingData";
+import ComplianceLanding, {
+  COMPLIANCE_OFFICER_ROLE,
+} from "./ComplianceLanding";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -31,6 +34,7 @@ export default function Landing() {
   const { can } = usePermissions();
   const canRegister = can("systems:write");
   const [firstName, setFirstName] = useState<string | null>(null);
+  const [roles, setRoles] = useState<string[] | null>(null);
   const [complianceOfficer, setComplianceOfficer] =
     useState<OrganizationContact | null>(null);
   const [organizationAdmin, setOrganizationAdmin] =
@@ -45,8 +49,14 @@ export default function Landing() {
   useEffect(() => {
     api
       .me()
-      .then((me) => setFirstName(me.firstName || null))
-      .catch(() => setFirstName(null));
+      .then((me) => {
+        setFirstName(me.firstName || null);
+        setRoles(me.roles ?? []);
+      })
+      .catch(() => {
+        setFirstName(null);
+        setRoles([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -62,9 +72,14 @@ export default function Landing() {
       });
   }, []);
 
+  const isComplianceOfficer = roles?.includes(COMPLIANCE_OFFICER_ROLE) ?? null;
+
   // Pull the open-tasks + my-systems + assessments data up to Landing so we can
-  // decide whether to render the two tables or the Hero curtain over mock data.
+  // decide whether to render the two tables or the Hero curtain over mock
+  // data. Compliance Officers have their own view that fetches a different
+  // slice, so we skip this once we know the role.
   useEffect(() => {
+    if (isComplianceOfficer !== false) return;
     Promise.all([
       api.myOpenTasks(),
       api.mySystems(),
@@ -79,7 +94,7 @@ export default function Landing() {
         setState("ready");
       })
       .catch(() => setState("error"));
-  }, []);
+  }, [isComplianceOfficer]);
 
   const userMap = useMemo(() => {
     const m = new Map<string, UserSummary>();
@@ -108,6 +123,23 @@ export default function Landing() {
     const ownedIds = new Set(displayMySystems.map((s) => s.id));
     return filterContributorTasksForOwner(displayOpenTasks, ownedIds);
   }, [displayOpenTasks, displayMySystems]);
+
+  // Branch on role once we know it. Rendering nothing while loading avoids
+  // flashing the owner view at a CO (or vice versa) on slow networks. The
+  // branch is placed AFTER all hooks so hook order stays stable across renders.
+  if (isComplianceOfficer === null) {
+    return <main className="min-h-screen bg-[#f6f7fb]" />;
+  }
+  if (isComplianceOfficer) {
+    return (
+      <ComplianceLanding
+        firstName={firstName}
+        canRegister={canRegister}
+        complianceOfficer={complianceOfficer}
+        organizationAdmin={organizationAdmin}
+      />
+    );
+  }
 
   if (showHeroCurtain) {
     return (
