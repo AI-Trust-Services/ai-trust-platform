@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, Eye, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  COMPLIANCE_URL,
+  REGISTRY_URL,
   type OpenTaskRow,
   type UserSummary,
 } from "../../api/client";
@@ -85,17 +85,12 @@ export function ReviewQueueTable({ rows, userMap }: ReviewQueueTableProps) {
     }
   }
 
-  function openAssessment(row: OpenTaskRow) {
-    if (!row.assignment_id) return;
-    localStorage.setItem(
-      "compliance.viewSystem",
-      JSON.stringify({ systemId: row.system_id, systemName: row.system_name }),
-    );
-    localStorage.setItem(
-      "compliance.openAssessment",
-      JSON.stringify({ assessmentId: row.assignment_id }),
-    );
-    navigateTo("/home/assessments", COMPLIANCE_URL);
+  function openSystem(row: OpenTaskRow) {
+    // Hand off via sessionStorage.lastSystemPath — the registry MFE reads this
+    // on Luigi init and navigates to the system detail view internally. Keeps
+    // the side-nav visible because Luigi stays on the top-level node.
+    sessionStorage.setItem("lastSystemPath", `/systems/${row.system_id}`);
+    navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
 
   return (
@@ -134,7 +129,7 @@ export function ReviewQueueTable({ rows, userMap }: ReviewQueueTableProps) {
                     dir={sortDir}
                     onClick={() => toggleSort("risk")}
                   >
-                    Risk classification
+                    Preliminary risk classification
                   </SortButton>
                 </th>
                 <th className="w-16 px-4 py-3 text-right">Actions</th>
@@ -149,7 +144,7 @@ export function ReviewQueueTable({ rows, userMap }: ReviewQueueTableProps) {
                   <td className="max-w-[260px] px-4 py-3">
                     <button
                       type="button"
-                      onClick={() => openAssessment(row)}
+                      onClick={() => openSystem(row)}
                       className="flex flex-col items-start text-left"
                     >
                       <span
@@ -194,9 +189,9 @@ export function ReviewQueueTable({ rows, userMap }: ReviewQueueTableProps) {
                       variant="outline"
                       size="icon"
                       className="size-8"
-                      onClick={() => openAssessment(row)}
-                      aria-label={`Review assessment for ${row.system_name}`}
-                      title="Review assessment"
+                      onClick={() => openSystem(row)}
+                      aria-label={`View system detail for ${row.system_name}`}
+                      title="View system detail"
                     >
                       <Eye className="size-4" />
                     </Button>
