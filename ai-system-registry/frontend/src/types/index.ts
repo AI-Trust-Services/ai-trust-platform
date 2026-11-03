@@ -136,6 +136,11 @@ export interface SourceDocumentRef {
   page: number | null;
 }
 
+export interface ContributorRef {
+  username: string;
+  display_name: string | null;
+}
+
 export interface AssessmentState {
   system_id: string;
   system_name: string;
@@ -152,6 +157,7 @@ export interface AssessmentState {
   decisive_questions: DecisiveQuestion[];
   source_documents: SourceDocumentRef[];
   questions: QuestionState[];
+  contributors: ContributorRef[];
   prefilled: boolean;
 }
 

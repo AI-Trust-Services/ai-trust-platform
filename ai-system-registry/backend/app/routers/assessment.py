@@ -51,6 +51,7 @@ from app.schemas.assessment import (
     CommentCreate,
     CommentResponse,
     ConfidenceCounts,
+    ContributorRef,
     ConfirmResponse,
     DecisiveQuestion,
     QuestionStateResponse,
@@ -436,6 +437,14 @@ async def _build_state(
     docs = row.registration_documents or []
     source_docs = [SourceDocumentRef(name=d.get("name", "document")) for d in docs]
 
+    # Candidate assignees: the owner + the system's registered contributors.
+    contributor_refs: list[ContributorRef] = []
+    seen: set[str] = set()
+    for uname in [_system_owner(row), *(row.contributors or [])]:
+        if uname and uname not in seen:
+            seen.add(uname)
+            contributor_refs.append(ContributorRef(username=uname))
+
     return AssessmentStateResponse(
         system_id=row.id,
         system_name=row.name,
@@ -452,6 +461,7 @@ async def _build_state(
         decisive_questions=decisive,
         source_documents=source_docs or sources,
         questions=questions,
+        contributors=contributor_refs,
         prefilled=bool(states),
     )
 

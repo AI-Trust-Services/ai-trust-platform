@@ -43,6 +43,19 @@ export default function App() {
     if (savedPath) {
       sessionStorage.removeItem("lastSystemPath");
       navigate(savedPath, { replace: true });
+      return;
+    }
+    // Cross-MFE handoff: compliance redirects an owner into the single-page
+    // assessment app via this localStorage flag (replaces the old questionnaire modal).
+    const handoff = localStorage.getItem("registry.openAssessment");
+    if (handoff) {
+      localStorage.removeItem("registry.openAssessment");
+      try {
+        const { systemId } = JSON.parse(handoff);
+        if (systemId) navigate(`/systems/${systemId}/assessment`, { replace: true });
+      } catch {
+        /* ignore malformed handoff */
+      }
     }
   });
   useTheme();

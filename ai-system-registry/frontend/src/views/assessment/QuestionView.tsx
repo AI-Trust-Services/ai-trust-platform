@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ChevronLeft, MoreVertical, SignalHigh, SignalMedium, SignalLow } from "lucide-react";
+import { ChevronLeft, MoreVertical, Users, SignalHigh, SignalMedium, SignalLow } from "lucide-react";
 import type { ConfidenceLevel, QuestionComment, QuestionState } from "../../types";
 import { api } from "../../api/client";
+import { usePermissions } from "../../hooks/usePermissions";
 import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS, ASSESSMENT_SECTIONS } from "./AssessmentSidebar";
 import {
@@ -75,6 +76,8 @@ export default function QuestionView() {
   const [confModalOpen, setConfModalOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [userMap, setUserMap] = useState<Record<string, { firstName: string; lastName: string }>>({});
+  const { username: currentUser } = usePermissions();
 
   const idx = questionKey ? ORDERED_QUESTION_KEYS.indexOf(questionKey) : -1;
   const prevKey = idx > 0 ? ORDERED_QUESTION_KEYS[idx - 1] : null;
@@ -97,6 +100,41 @@ export default function QuestionView() {
     if (!id || !questionKey) return;
     api.listComments(id, questionKey).then(setComments).catch(() => setComments([]));
   }, [id, questionKey]);
+
+  // Resolve contributor usernames → display names for the assignee dropdown.
+  useEffect(() => {
+    api
+      .getAllUsers()
+      .then((users) => {
+        const m: Record<string, { firstName: string; lastName: string }> = {};
+        for (const u of users) m[u.username] = { firstName: u.firstName, lastName: u.lastName };
+        setUserMap(m);
+      })
+      .catch(() => setUserMap({}));
+  }, []);
+
+  const displayName = (uname: string): string => {
+    const u = userMap[uname];
+    const full = u ? [u.firstName, u.lastName].filter(Boolean).join(" ") : "";
+    return full || uname;
+  };
+
+  const assignTo = async (assignee: string | null) => {
+    if (!id || !questionKey) return;
+    try {
+      if (assignee) await api.assignQuestion(id, questionKey, assignee);
+      else await api.unassignQuestion(id, questionKey);
+      markSaved();
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Assignment failed");
+    }
+  };
+
+  // Owner or current assignee may (re)assign this question.
+  const mayAssign =
+    canEdit || (!!qState?.assignee_username && qState.assignee_username === currentUser);
+  const assignedToMe = qState?.assignee_username === currentUser && !!currentUser;
 
   const saveAnswer = async (value: string) => {
     if (!id || !questionKey) return;
@@ -152,19 +190,49 @@ export default function QuestionView() {
         <div className="flex items-start justify-between">
           <p className="text-xs text-muted-foreground">{sectionLabel(questionKey)}</p>
           <div className="flex items-center gap-2">
-            {qState?.assignee_username && (
-              <span className="rounded-full bg-[#eaecee] px-2.5 py-0.5 text-xs text-[#556b82]">
-                {qState.assignee_username}
+            {assignedToMe && (
+              <span className="rounded-full bg-[#e8f0fb] px-2.5 py-0.5 text-xs font-medium text-[#1147E9]">
+                Assigned to you
               </span>
             )}
+            {qState?.assignee_username && !assignedToMe && (
+              <span className="rounded-full bg-[#eaecee] px-2.5 py-0.5 text-xs text-[#556b82]">
+                {displayName(qState.assignee_username)}
+              </span>
+            )}
+            {/* Assign-to-colleague — people icon → assignee dropdown */}
             <DropdownMenu>
-              <DropdownMenuTrigger aria-label="Question actions">
+              <DropdownMenuTrigger aria-label="Assign to colleague" disabled={!mayAssign}>
+                <Users
+                  className={cn(
+                    "size-4",
+                    mayAssign ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/40",
+                  )}
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-56">
+                {state.contributors.map((c) => (
+                  <DropdownMenuItem
+                    key={c.username}
+                    onClick={() => assignTo(c.username)}
+                    className={cn(qState?.assignee_username === c.username && "font-semibold")}
+                  >
+                    <span className="flex flex-col">
+                      <span>{displayName(c.username)}</span>
+                      <span className="text-xs text-muted-foreground">{c.username}</span>
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuItem onClick={() => assignTo(null)}>Set unassigned</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Three-dot menu — comment actions only (not assignment) */}
+            <DropdownMenu>
+              <DropdownMenuTrigger aria-label="Comment actions">
                 <MoreVertical className="size-4 text-muted-foreground" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => document.getElementById("comment-field")?.focus()}
-                >
+                <DropdownMenuItem onClick={() => document.getElementById("comment-field")?.focus()}>
                   Leave a comment
                 </DropdownMenuItem>
               </DropdownMenuContent>

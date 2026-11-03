@@ -509,43 +509,14 @@ export default function AssessmentsPage() {
     setRceSummary(null);
   }
 
-  async function openQuestionnaire(a: Assessment) {
-    setQClassification(false);
-    setQInfoFlow(false);
-    setQDialogOpen(false);
-    const sysData = systemsById[a.ai_system_id];
-    if (!sysData) { showToast("System not found", true); return; }
-    try {
-      const freshSys = await registryClient.getSystem(sysData.id);
-      setSelectedSystem(freshSys);
-      setQAssessmentId(a.id);
-
-      // CO requested more info: reopen exactly the section the CO flagged
-      // (info_requested_section), so business/technical contributors get their own
-      // question set. Resubmit goes back to the CO via submit-info (QuestionnaireSection).
-      if (freshSys.workflow_status === "info_requested") {
-        setQInfoFlow(true);
-        setQSection(freshSys.info_requested_section === "technical" ? "technical" : "business");
-        setQClassification(false);
-        setQDialogOpen(true);
-        return;
-      }
-
-      const isTechnicalPending = freshSys.workflow_status === "technical_pending";
-      const techAssignee = freshSys.technical_assignee_username;
-
-      // If technical section is pending and belongs to someone else, don't open
-      if (isTechnicalPending && techAssignee && techAssignee !== username) {
-        showToast(`Technical section is assigned to ${techAssignee} — waiting for them to complete it.`);
-        return;
-      }
-
-      setQClassification(freshSys.workflow_status === "pending_review");
-      setQSection(isTechnicalPending ? "technical" : "business");
-      setQDialogOpen(true);
-    } catch (e) {
-      showToast(`Failed to load: ${(e as Error).message}`, true);
-    }
+  // The owner questionnaire now lives in the registry's single-page assessment
+  // app. Redirect there instead of opening the legacy QuestionnaireSection modal.
+  function openInRegistryApp(a: Assessment) {
+    localStorage.setItem(
+      "registry.openAssessment",
+      JSON.stringify({ systemId: a.ai_system_id }),
+    );
+    LuigiClient.linkManager().navigate("/home/ai-system-registry");
   }
 
   function closeQuestionnaire() {
@@ -689,7 +660,7 @@ export default function AssessmentsPage() {
     total: assessments.length,
     approved: assessments.filter((a) => a.status === "approved").length,
     submitted: assessments.filter((a) => a.status === "submitted" || a.status === "under_review" || a.status === "pending_review").length,
-    draft: assessments.filter((a) => a.status === "draft").length,
+    draft: assessments.filter((a) => a.status === "draft" || a.status === "questionnaire_pending").length,
   }), [assessments]);
 
   // Sections available for a request-info bounce-back, paired with the owner it routes to.
@@ -763,7 +734,7 @@ export default function AssessmentsPage() {
               {filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No assessments yet. Click "New Assessment" to begin.</TableCell></TableRow>
               ) : filtered.map((a) => (
-                <TableRow key={a.id} data-state={selected === a.id ? "selected" : undefined} className="cursor-pointer" onClick={() => a.status === "questionnaire_pending" ? openQuestionnaire(a) : openDetail(a)}>
+                <TableRow key={a.id} data-state={selected === a.id ? "selected" : undefined} className="cursor-pointer" onClick={() => (a.status === "questionnaire_pending" || a.status === "pending_review") ? openInRegistryApp(a) : openDetail(a)}>
                   <TableCell>
                     <div className="font-medium text-foreground">{a.title}</div>
                     <div className="text-xs text-muted-foreground">{a.id}</div>

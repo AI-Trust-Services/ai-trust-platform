@@ -129,6 +129,14 @@ class SourceDocumentRef(BaseModel):
     page: int | None = None
 
 
+class ContributorRef(BaseModel):
+    """A user who may be assigned questions on this assessment (owner + the
+    system's registered contributors)."""
+
+    username: str
+    display_name: str | None = None
+
+
 class AssessmentStateResponse(BaseModel):
     """Full view model for the start page + left sidebar (#346) in one read."""
 
@@ -156,6 +164,8 @@ class AssessmentStateResponse(BaseModel):
     source_documents: list[SourceDocumentRef] = []
 
     questions: list[QuestionStateResponse] = []
+    # Candidate assignees for per-question assignment (owner + contributors).
+    contributors: list[ContributorRef] = []
     # Whether a prefill pass has already run (so the client knows to show results
     # vs. trigger /open).
     prefilled: bool = False

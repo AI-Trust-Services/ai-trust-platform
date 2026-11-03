@@ -61,6 +61,19 @@ export function AssessmentSidebar({
             Role: <span className="text-foreground">{state.org_role}</span>
           </p>
         )}
+        {/* Per-question confirmation progress: one segment per question,
+            green = owner-confirmed, amber = still outstanding. */}
+        <div className="mt-3 flex gap-0.5">
+          {ORDERED_QUESTION_KEYS.map((k) => (
+            <div
+              key={k}
+              className={cn(
+                "h-1.5 flex-1 rounded-full",
+                stateByKey[k]?.owner_confirmed ? "bg-[#1a9d5c]" : "bg-[#e0a008]",
+              )}
+            />
+          ))}
+        </div>
         {state.attention_count > 0 && (
           <p className="mt-3 text-xs font-medium text-[#8b3a00]">
             {state.attention_count} question{state.attention_count === 1 ? "" : "s"} require your attention
@@ -69,6 +82,25 @@ export function AssessmentSidebar({
       </div>
 
       <nav className="flex-1 px-2 py-3">
+        {/* Overview → back to the assessment start page (#346). */}
+        <div className="mb-4">
+          <div className="px-3 py-1">
+            <span className="text-sm font-semibold">Overview</span>
+          </div>
+          <Link
+            to={`/systems/${id}/assessment`}
+            className={cn(
+              "flex items-start gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-accent",
+              !activeQuestionKey && "bg-accent",
+            )}
+          >
+            <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <span className="flex flex-col">
+              <span>Assessment</span>
+              <span className="text-xs text-muted-foreground">Review the summary</span>
+            </span>
+          </Link>
+        </div>
         {ASSESSMENT_SECTIONS.map((section) => {
           const total = section.questionKeys.length;
           // Completion is OWNER-confirmed (the submit gate), not any confirmation.
