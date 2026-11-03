@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
@@ -53,6 +53,14 @@ class OpenTaskRow(BaseModel):
     assigned_by_username: Optional[str] = None
     owner_username: Optional[str] = None
     assignment_id: Optional[str] = None
+    # Populated for `review` rows only — the CO landing's "Ready for review"
+    # table needs the system's EU AI Act tier (+ the two Art. 50 flags to
+    # re-derive the stacked "Transparency Obligations" label) and planned
+    # rollout date without a second join from the frontend.
+    tier: Optional[str] = None
+    is_chatbot: Optional[bool] = None
+    generates_synthetic_content: Optional[bool] = None
+    planned_rollout_date: Optional[date] = None
 
 
 def _current_user(request: Request) -> str:
@@ -213,6 +221,10 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
                     AISystem.version,
                     AISystem.workflow_status,
                     AISystem.business_owners,
+                    AISystem.tier,
+                    AISystem.is_chatbot,
+                    AISystem.generates_synthetic_content,
+                    AISystem.planned_rollout_date,
                 )
                 .join(AISystem, AISystem.id == Assessment.ai_system_id)
                 .where(
@@ -230,6 +242,10 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
             system_version,
             workflow_status,
             business_owners,
+            tier,
+            is_chatbot,
+            generates_synthetic_content,
+            planned_rollout_date,
         ) in review_rows:
             tasks.append(
                 OpenTaskRow(
@@ -245,6 +261,10 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
                     assigned_by_username=business_owners,
                     owner_username=business_owners,
                     assignment_id=assessment.id,
+                    tier=tier,
+                    is_chatbot=bool(is_chatbot),
+                    generates_synthetic_content=bool(generates_synthetic_content),
+                    planned_rollout_date=planned_rollout_date,
                 )
             )
 
