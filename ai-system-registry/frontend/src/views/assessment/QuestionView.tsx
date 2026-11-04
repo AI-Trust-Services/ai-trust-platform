@@ -161,10 +161,14 @@ export default function QuestionView() {
 
   const postComment = async () => {
     if (!id || !questionKey || !commentDraft.trim()) return;
-    const c = await api.addComment(id, questionKey, commentDraft.trim());
-    setComments((prev) => [...prev, c]);
-    setCommentDraft("");
-    markSaved();
+    try {
+      const c = await api.addComment(id, questionKey, commentDraft.trim());
+      setComments((prev) => [...prev, c]);
+      setCommentDraft("");
+      markSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Comment failed");
+    }
   };
 
   const onConfirm = async () => {

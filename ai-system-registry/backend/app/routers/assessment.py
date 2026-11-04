@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import (
@@ -157,16 +157,17 @@ async def _states_by_key(session, system_id: str) -> dict[str, QuestionState]:
 
 
 async def _comment_counts(session, system_id: str) -> dict[str, int]:
+    # SQL aggregate (count per question_key) — avoids loading full comment rows
+    # (incl. body text) into memory just to count them.
     result = await session.execute(
-        select(QuestionComment).where(
+        select(QuestionComment.question_key, func.count().label("n"))
+        .where(
             QuestionComment.system_id == system_id,
             QuestionComment.deleted_at.is_(None),
         )
+        .group_by(QuestionComment.question_key)
     )
-    counts: dict[str, int] = {}
-    for c in result.scalars().all():
-        counts[c.question_key] = counts.get(c.question_key, 0) + 1
-    return counts
+    return {row.question_key: row.n for row in result.all()}
 
 
 def _needs_attention(state: QuestionState | None, answer: str | None) -> bool:
