@@ -6,16 +6,16 @@ state on ``question_states`` (assignee_username + assigned_by_username), and the
 registry ``workflow.py`` endpoints that used ``question_assignments`` were
 removed. This drops the now-unused table.
 
-Revision ID: 0046
-Revises: 0045
+Revision ID: 0045
+Revises: 0044
 Create Date: 2026-11-03
 """
 
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0046"
-down_revision = "0045"
+revision = "0045"
+down_revision = "0044"
 branch_labels = None
 depends_on = None
 
