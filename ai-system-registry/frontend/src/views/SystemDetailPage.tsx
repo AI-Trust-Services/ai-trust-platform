@@ -35,19 +35,6 @@ import { cn } from "@/lib/utils";
 
 type UserMap = Record<string, { firstName: string; lastName: string }>;
 
-function startRiskClassification(systemId: string) {
-  localStorage.setItem("compliance.pendingAssessment", JSON.stringify({ systemId }));
-  LuigiClient.linkManager().navigate("/home/assessments");
-}
-
-// Open the assessments list WITHOUT the create handoff flag. Setting the flag tells
-// Compliance to CREATE a new assessment, which duplicates / 409s when one already
-// exists — so "Continue"/existing-assessment navigation must not set it (mirrors the
-// start-vs-continue split in Systems.tsx).
-function goToAssessmentsList() {
-  LuigiClient.linkManager().navigate("/home/assessments");
-}
-
 function userName(username: string | null | undefined, userMap: UserMap): string {
   if (!username) return "—";
   const u = userMap[username];
@@ -447,6 +434,7 @@ function OverviewTab({
   onEditModeChange: (v: boolean) => void;
 }) {
   const showToast = useToast();
+  const navigate = useNavigate();
   const { mayWrite, mayWriteAssessments } = useModalControls();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
@@ -529,7 +517,7 @@ function OverviewTab({
                 <Button size="sm" variant="outline"
                   disabled={!mayWriteAssessments}
                   title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-                  onClick={() => assessments.length === 0 ? startRiskClassification(system.id) : goToAssessmentsList()}>
+                  onClick={() => navigate(`/systems/${system.id}/assessment`)}>
                   {assessments.length === 0 ? "Start" : "Continue"}
                 </Button>
               </div>
@@ -687,6 +675,7 @@ function AssessmentsTab({
   onRefresh: () => void;
 }) {
   const showToast = useToast();
+  const navigate = useNavigate();
   const { mayWriteAssessments } = useModalControls();
   const [deleteTarget, setDeleteTarget] = useState<ComplianceAssessment | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -752,7 +741,7 @@ function AssessmentsTab({
               <Button size="sm" className="ml-auto shrink-0"
                 disabled={!mayWriteAssessments}
                 title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-                onClick={() => startRiskClassification(system.id)}>
+                onClick={() => navigate(`/systems/${system.id}/assessment`)}>
                 Start assessment
               </Button>
             </div>
@@ -1554,7 +1543,7 @@ export default function SystemDetailPage() {
               size="sm"
               disabled={!mayWriteAssessments}
               title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-              onClick={() => startRiskClassification(system.id)}
+              onClick={() => navigate(`/systems/${system.id}/assessment`)}
             >
               Start new assessment
             </Button>
@@ -1566,7 +1555,7 @@ export default function SystemDetailPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem disabled={!mayWriteAssessments} onSelect={() => startRiskClassification(system.id)}>
+                <DropdownMenuItem disabled={!mayWriteAssessments} onSelect={() => navigate(`/systems/${system.id}/assessment`)}>
                   Start assessment
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={!mayWrite} onSelect={() => setRolesOpen(true)}>

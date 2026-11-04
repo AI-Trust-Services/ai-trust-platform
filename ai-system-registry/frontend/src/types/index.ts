@@ -100,6 +100,76 @@ export interface QuestionAssignment {
   answered_at: string | null;
 }
 
+// ── Single-page assessment (issues #346 / #314) ──────────────────────────────
+
+export type ConfidenceLevel = "high" | "medium" | "low";
+export type AnswerSource = "ai_prefilled" | "manual";
+
+export interface QuestionState {
+  question_key: string;
+  answer: string | null;
+  answer_source: AnswerSource;
+  confidence: ConfidenceLevel | null;
+  confirmed: boolean;
+  owner_confirmed: boolean;
+  assignee_username: string | null;
+  comment_count: number;
+  needs_attention: boolean;
+  can_edit: boolean;
+}
+
+export interface ConfidenceCounts {
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface DecisiveQuestion {
+  section: string;
+  question_key: string;
+  question_label: string;
+  answer: string | null;
+}
+
+export interface SourceDocumentRef {
+  name: string;
+  page: number | null;
+}
+
+export interface ContributorRef {
+  username: string;
+  display_name: string | null;
+}
+
+export interface AssessmentState {
+  system_id: string;
+  system_name: string;
+  registration_mode: string;
+  workflow_status: string;
+  status_label: string;
+  editable: boolean;
+  tier: TierKey;
+  basis: string | null;
+  org_role: OrgRole | null;
+  reasoning: string | null;
+  transparency: boolean;
+  confidence_counts: ConfidenceCounts;
+  attention_count: number;
+  decisive_questions: DecisiveQuestion[];
+  source_documents: SourceDocumentRef[];
+  questions: QuestionState[];
+  contributors: ContributorRef[];
+  prefilled: boolean;
+}
+
+export interface QuestionComment {
+  id: string;
+  question_key: string;
+  author_username: string;
+  body: string;
+  created_at: string;
+}
+
 export interface UserSummary {
   username: string;
   firstName: string;

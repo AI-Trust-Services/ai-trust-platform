@@ -13,6 +13,7 @@ from ai_trust_tenancy import install_tenant_middleware
 from ai_trust_persistence import SessionLocal
 from app import minio_client
 from app.routers import (
+    assessment,
     classify,
     external,
     intake,
@@ -104,6 +105,7 @@ app.include_router(intake_assist.router, prefix="/v1")
 app.include_router(systems.router, prefix="/v1")
 app.include_router(model_cards.router, prefix="/v1")
 app.include_router(workflow.router, prefix="/v1")
+app.include_router(assessment.router, prefix="/v1")
 app.include_router(classify.router, prefix="/v1")
 app.include_router(external.router, prefix="/v1")
 

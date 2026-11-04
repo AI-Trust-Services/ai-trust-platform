@@ -1,95 +1,82 @@
-"""Scenario 4 — Classification Confirmation.
+"""Scenario 4 — Classification Confirmation (single-page assessment flow).
 
-4a. CO approves a system with tier "high" (is_critical_infrastructure flag); verify that
-    attempting to change risk flags on an approved system returns 422.
-4b. CO overrides tier and org_role at approve time; GET confirms the overridden values.
+4a. CO issues a classification; the approved system then rejects risk-flag edits (422)
+    and assessment edits (409 — locked).
+4b. CO issues the high + transparency combo; GET confirms the transparency companion.
 """
 
 from __future__ import annotations
 
-from conftest import (
-    drive_to_pending_review,
-    register_system,
-    set_all_questionnaire_answers,
-)
+from conftest import drive_to_pending_review, open_assessment, register_system
+
 
 # ---------------------------------------------------------------------------
-# 4a — approval locks risk classification
+# 4a — issuing locks the classification
 # ---------------------------------------------------------------------------
 
 
-async def test_co_approve_locks_classification(owner, engineer, compliance):
-    """Approved system rejects risk-flag edits with 422."""
-    system = await register_system(owner, name="E2E Confirm 4a")
+async def test_issue_locks_classification(owner, compliance):
+    """After the CO issues, the system is approved and immutable."""
+    system = await register_system(owner, mode="ai", name="E2E Confirm 4a")
     sid = system["id"]
 
-    # Set tier to "high" via is_critical_infrastructure flag
+    await drive_to_pending_review(sid, owner, compliance.e2e_username)
+
+    r = await compliance.post(
+        f"/api/registry/v1/systems/{sid}/assessment/issue",
+        json={"tier": "high", "confirmed": True},
+    )
+    assert r.status_code == 200, f"issue failed: {r.status_code} {r.text[:300]}"
+
+    got = (await owner.get(f"/api/registry/v1/systems/{sid}")).json()
+    assert got["workflow_status"] == "approved"
+    assert got["tier"] == "high"
+
+    # Risk-flag edit via PUT is rejected on an approved system (422, systems.py guard).
     r = await owner.put(
         f"/api/registry/v1/systems/{sid}",
         json={"is_critical_infrastructure": True},
     )
-    assert r.status_code == 200, f"PUT flags failed: {r.status_code} {r.text[:300]}"
-    assert r.json()["tier"] == "high"
-
-    # Store all required questionnaire answers (approve gate needs both business + technical).
-    await set_all_questionnaire_answers(owner, sid)
-
-    await drive_to_pending_review(
-        sid, owner, engineer, compliance.e2e_username, with_technical_answers=True
-    )
-
-    # CO approves
-    r = await compliance.post(
-        f"/api/registry/v1/systems/{sid}/workflow/approve", json={}
-    )
-    assert r.status_code == 200, f"approve failed: {r.status_code} {r.text[:300]}"
-
-    r = await owner.get(f"/api/registry/v1/systems/{sid}")
-    got = r.json()
-    assert got["workflow_status"] == "approved"
-    assert got["tier"] == "high"
-
-    # Attempt to change a risk flag — must be rejected (approved state)
-    r = await engineer.put(
-        f"/api/registry/v1/systems/{sid}",
-        json={"is_critical_infrastructure": False},
-    )
     assert r.status_code == 422, (
-        f"Expected 422 when editing risk flag on approved system, got {r.status_code}: {r.text[:300]}"
+        f"expected 422 editing approved system, got {r.status_code}: {r.text[:200]}"
+    )
+
+    # Assessment answer edits are locked (409).
+    base = f"/api/registry/v1/systems/{sid}/assessment"
+    st = await owner.get(f"{base}/state")
+    assert st.json()["editable"] is False
+    qkey = st.json()["questions"][0]["question_key"]
+    r = await owner.post(
+        f"{base}/questions/{qkey}/answer", json={"answer": "post-issue edit"}
+    )
+    assert r.status_code == 409, (
+        f"expected 409 editing locked assessment, got {r.status_code}: {r.text[:200]}"
     )
 
 
 # ---------------------------------------------------------------------------
-# 4b — CO overrides tier and org_role on approval
+# 4b — CO issues the high + transparency combo
 # ---------------------------------------------------------------------------
 
 
-async def test_co_corrects_tier_and_role_on_approval(owner, engineer, compliance):
-    """CO can override tier and org_role at approve time; GET confirms the overrides."""
-    system = await register_system(owner, name="E2E Confirm 4b")
+async def test_issue_high_plus_transparency(owner, compliance):
+    """The only allowed combo — high + transparency — is issued and reflected."""
+    system = await register_system(owner, mode="ai", name="E2E Confirm 4b")
     sid = system["id"]
 
-    await set_all_questionnaire_answers(owner, sid)
-    await drive_to_pending_review(
-        sid, owner, engineer, compliance.e2e_username, with_technical_answers=True
-    )
+    await drive_to_pending_review(sid, owner, compliance.e2e_username)
 
-    # CO approves with explicit tier + org_role overrides
     r = await compliance.post(
-        f"/api/registry/v1/systems/{sid}/workflow/approve",
-        json={"tier": "high", "org_role": "deployer"},
+        f"/api/registry/v1/systems/{sid}/assessment/issue",
+        json={"tier": "high", "transparency": True, "confirmed": True},
     )
-    assert r.status_code == 200, (
-        f"approve with overrides failed: {r.status_code} {r.text[:300]}"
-    )
+    assert r.status_code == 200, f"issue failed: {r.status_code} {r.text[:300]}"
 
-    r = await owner.get(f"/api/registry/v1/systems/{sid}")
-    assert r.status_code == 200
-    got = r.json()
+    got = (await owner.get(f"/api/registry/v1/systems/{sid}")).json()
     assert got["workflow_status"] == "approved"
-    assert got["tier"] == "high", (
-        f"tier should be overridden to 'high', got {got['tier']!r}"
-    )
-    assert got["org_role"] == "deployer", (
-        f"org_role should be 'deployer', got {got['org_role']!r}"
-    )
+    assert got["tier"] == "high"
+    assert got["co_issued_transparency"] is True
+
+    # The assessment state surfaces the transparency companion.
+    st = await owner.get(f"/api/registry/v1/systems/{sid}/assessment/state")
+    assert st.json()["transparency"] is True

@@ -23,8 +23,6 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-const EU_AI_ACT_ID = "FRM-EU-AI-ACT";
-
 // Map the indexing worker's lifecycle to 5 even steps so a single document
 // animates 20→40→60→80→100%. System percentage = average across documents.
 const INDEX_STEP: Record<string, number> = { pending: 1, parsing: 2, embedding: 3, storing: 4, indexed: 5 };
@@ -37,20 +35,24 @@ function docProgress(status: string, stage: string | null): number {
   return 0;
 }
 
-// Only "start" hands a system off to the compliance create-assessment modal via
-// the localStorage flag the compliance MFE consumes. "continue" pre-filters the
-// assessments list to this system; "view" additionally auto-opens the most recent
-// approved assessment's detail panel.
-function goToAssessments(systemId: string, systemName: string, action: AssessmentAction, rows: AssessmentRow[]) {
-  if (action === "start") {
-    localStorage.setItem("compliance.pendingAssessment", JSON.stringify({ systemId, frameworkId: EU_AI_ACT_ID }));
-  } else {
-    localStorage.setItem("compliance.viewSystem", JSON.stringify({ systemId, systemName }));
-    if (action === "view") {
-      const approved = rows.find((r) => r.status === "approved");
-      if (approved) localStorage.setItem("compliance.openAssessment", JSON.stringify({ assessmentId: approved.id }));
-    }
+// "start"/"continue" open the single-page EU AI Act assessment app in the
+// registry itself (/systems/:id/assessment). "view" hands an APPROVED assessment
+// off to the compliance MFE's governance detail via the localStorage flag it
+// consumes (obligations/evidence live there).
+function goToAssessments(
+  systemId: string,
+  systemName: string,
+  action: AssessmentAction,
+  rows: AssessmentRow[],
+  navigate: (path: string) => void,
+) {
+  if (action === "start" || action === "continue") {
+    navigate(`/systems/${systemId}/assessment`);
+    return;
   }
+  localStorage.setItem("compliance.viewSystem", JSON.stringify({ systemId, systemName }));
+  const approved = rows.find((r) => r.status === "approved");
+  if (approved) localStorage.setItem("compliance.openAssessment", JSON.stringify({ assessmentId: approved.id }));
   LuigiClient.linkManager().navigate("/home/assessments");
 }
 
@@ -353,7 +355,7 @@ export default function Systems() {
                             <DropdownMenuItem
                               disabled={indexing[s.id]?.busy}
                               title={indexing[s.id]?.busy ? "Available once document processing is complete" : undefined}
-                              onSelect={() => goToAssessments(s.id, s.name, action, assessmentsBySystem[s.id] ?? [])}>
+                              onSelect={() => goToAssessments(s.id, s.name, action, assessmentsBySystem[s.id] ?? [], navigate)}>
                               {action === "start" ? <Play /> : <ArrowRight />}
                               {ACTION_LABEL[action]}
                             </DropdownMenuItem>

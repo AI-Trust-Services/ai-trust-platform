@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { useLocation, useNavigate, Outlet } from "react-router";
 import { Loader2 } from "lucide-react";
+import LuigiClient from "@luigi-project/client";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { useTheme, useBranding } from "@ai-trust/react-hooks";
 import { usePermissions } from "./hooks/usePermissions";
@@ -38,13 +39,42 @@ export default function App() {
   const mayWriteAssessments = can("assessments:write");
   const noWriteTitle = "Requires permission: systems:write";
 
-  useLuigiInit(() => {
+  // Consume a cross-MFE/in-session handoff: restore a saved path, or redirect
+  // into the single-page assessment app when another MFE (e.g. compliance) asks
+  // us to open an assessment. Idempotent — the flags are removed once read.
+  const consumeHandoff = useCallback(() => {
     const savedPath = sessionStorage.getItem("lastSystemPath");
     if (savedPath) {
       sessionStorage.removeItem("lastSystemPath");
       navigate(savedPath, { replace: true });
+      return;
     }
-  });
+    // Cross-MFE handoff: compliance redirects an owner/CO into the single-page
+    // assessment app via this localStorage flag (replaces the old questionnaire modal).
+    const handoff = localStorage.getItem("registry.openAssessment");
+    if (handoff) {
+      localStorage.removeItem("registry.openAssessment");
+      try {
+        const { systemId } = JSON.parse(handoff);
+        if (systemId) navigate(`/systems/${systemId}/assessment`, { replace: true });
+      } catch {
+        /* ignore malformed handoff */
+      }
+    }
+  }, [navigate]);
+
+  // Fires on a FRESH registry iframe load.
+  useLuigiInit(consumeHandoff);
+
+  // Luigi caches MFE iframes: when it re-reveals an already-loaded registry
+  // iframe (the compliance→registry CO handoff is the common case), addInitListener
+  // does NOT re-fire, so the handoff flag would sit unconsumed and the user would
+  // land on the systems list. Also consume it on every context update — mirrors
+  // what compliance's AssessmentsPage already does for its own handoffs.
+  useEffect(() => {
+    const id = LuigiClient.addContextUpdateListener(() => consumeHandoff());
+    return () => { LuigiClient.removeContextUpdateListener(id); };
+  }, [consumeHandoff]);
   useTheme();
   useBranding();
 
@@ -71,14 +101,17 @@ export default function App() {
   }, []);
 
   const activeView = location.pathname.startsWith("/models") ? "models" : "systems";
-  // Don't show the shell header when viewing a single system — the detail page has its own header.
+  // Don't show the shell header when viewing a single system or the full-height
+  // assessment app — those render their own header.
   const isSystemDetail = /^\/systems\/(?!new$)[^/]+$/.test(location.pathname);
+  const isAssessment = /^\/systems\/[^/]+\/assessment(\/|$)/.test(location.pathname);
+  const hideHeader = isSystemDetail || isAssessment;
 
   return (
     <ToastContext.Provider value={showToast}>
       <ModalContext.Provider value={{ modelCreateOpen, setModelCreateOpen, mayWrite, mayApprove, mayWriteAssessments, username }}>
         <div className="flex h-screen flex-col overflow-hidden">
-        {!isSystemDetail && (
+        {!hideHeader && (
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6 shadow-[var(--shadow-xs)]">
           <div className="flex items-center gap-3">
             <h1 className="text-lg font-semibold">AI System Registry</h1>
