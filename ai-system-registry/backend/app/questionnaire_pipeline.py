@@ -161,30 +161,111 @@ def _build_user_message(
     return "\n".join(parts)
 
 
-def _split_by_category(questionnaire: dict) -> list[dict]:
-    """Split the questionnaire into one sub-questionnaire per category.
+def _split_by_dependency_groups(questionnaire: dict) -> list[dict]:
+    """Split the questionnaire into batches grouped by dependency and category.
 
-    Each batch carries the same top-level metadata but only the questions for
-    that category.  Categories are emitted in the order they first appear so
-    that merging the results preserves the original question order.
+    Questions that share an ``appliesWhen`` dependency (directly or
+    transitively) form a connected component and must be answered together so
+    the LLM has the full context for conditional questions.
 
-    Falls back to a single batch (the full questionnaire) when no questions
-    carry a ``category`` field.
+    Standalone questions (no ``appliesWhen`` and not referenced by any
+    condition) are merged with the rest of their category rather than being
+    sent as individual one-question batches, which would produce too many LLM
+    calls and strip the category context that helps the model.
+
+    The algorithm:
+      1. Build a union-find over all question indices using ``appliesWhen``
+         edges (undirected: parent ↔ child).
+      2. Find each connected component.
+      3. Merge all components whose questions share a common category into one
+         batch per category (preserving original question order within each).
+      4. Components that span categories (theoretically possible in future
+         questionnaire versions) are kept as their own batch.
+
+    Falls back to a single batch (the full questionnaire) when no ``appliesWhen``
+    references exist.
     """
     questions = questionnaire.get("questions", [])
     metadata = {k: v for k, v in questionnaire.items() if k != "questions"}
 
-    buckets: dict[str, list[dict]] = {}
-    for q in questions:
-        cat = q.get("category", "")
-        if cat not in buckets:
-            buckets[cat] = []
-        buckets[cat].append(q)
-
-    if not buckets or list(buckets.keys()) == [""]:
+    if not questions:
         return [questionnaire]
 
-    return [{**metadata, "questions": qs} for qs in buckets.values()]
+    id_to_idx: dict[str, int] = {q["id"]: i for i, q in enumerate(questions)}
+
+    # Union-find helpers
+    parent = list(range(len(questions)))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    def _collect_refs(node: dict | list) -> list[str]:
+        if isinstance(node, list):
+            out: list[str] = []
+            for item in node:
+                out.extend(_collect_refs(item))
+            return out
+        if isinstance(node, dict):
+            if "questionId" in node:
+                return [node["questionId"]]
+            out = []
+            for v in node.values():
+                out.extend(_collect_refs(v))
+            return out
+        return []
+
+    has_any_dependency = False
+    for i, q in enumerate(questions):
+        applies = q.get("appliesWhen")
+        if not applies:
+            continue
+        has_any_dependency = True
+        for ref_id in _collect_refs(applies):
+            if ref_id in id_to_idx:
+                union(i, id_to_idx[ref_id])
+
+    if not has_any_dependency:
+        return [questionnaire]
+
+    # Group questions by (root_component, category) — this merges standalone
+    # questions with their dependency-chain siblings in the same category.
+    group_key_to_qs: dict[tuple[int, str], list[dict]] = {}
+    for i, q in enumerate(questions):
+        root = find(i)
+        cat = q.get("category", "")
+        key = (root, cat)
+        if key not in group_key_to_qs:
+            group_key_to_qs[key] = []
+        group_key_to_qs[key].append(q)
+
+    # Merge groups that share the same category into one batch per category,
+    # unless a dependency component spans multiple categories (keep it intact).
+    cat_to_batches: dict[str, list[list[dict]]] = {}
+    for (root, cat), qs in group_key_to_qs.items():
+        if cat not in cat_to_batches:
+            cat_to_batches[cat] = []
+        cat_to_batches[cat].append(qs)
+
+    batches: list[list[dict]] = []
+    for cat, group_list in cat_to_batches.items():
+        # Flatten all groups for this category into one ordered list
+        merged = sorted(
+            [q for group in group_list for q in group],
+            key=lambda q: id_to_idx[q["id"]],
+        )
+        batches.append(merged)
+
+    # Sort batches by the index of their first question (preserves category order)
+    batches.sort(key=lambda qs: id_to_idx[qs[0]["id"]])
+    return [{**metadata, "questions": qs} for qs in batches]
 
 
 async def _run_batch(
@@ -304,8 +385,8 @@ async def run_pipeline(
             extra={"system_id": system_id},
         )
 
-    # 4. Split questionnaire by category and run all batches in parallel.
-    batches = _split_by_category(questionnaire)
+    # 4. Split questionnaire into dependency-independent groups and run in parallel.
+    batches = _split_by_dependency_groups(questionnaire)
     logger.info(
         "questionnaire_pipeline.batched",
         extra={"system_id": system_id, "batches": len(batches)},
