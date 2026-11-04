@@ -55,7 +55,8 @@ def _validate_llm_output(raw: dict) -> dict:
     if not isinstance(results, list) or len(results) == 0:
         raise LLMParseError("LLM output missing or empty 'results' list")
     missing_ids = [
-        i for i, r in enumerate(results)
+        i
+        for i, r in enumerate(results)
         if not isinstance(r, dict) or not r.get("questionId")
     ]
     if missing_ids:
