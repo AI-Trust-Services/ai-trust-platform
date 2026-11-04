@@ -162,28 +162,16 @@ def _build_user_message(
 
 
 def _split_by_dependency_groups(questionnaire: dict) -> list[dict]:
-    """Split the questionnaire into batches grouped by dependency and category.
+    """Split the questionnaire into independent dependency branches.
 
-    Questions that share an ``appliesWhen`` dependency (directly or
-    transitively) form a connected component and must be answered together so
-    the LLM has the full context for conditional questions.
-
-    Standalone questions (no ``appliesWhen`` and not referenced by any
-    condition) are merged with the rest of their category rather than being
-    sent as individual one-question batches, which would produce too many LLM
-    calls and strip the category context that helps the model.
-
-    The algorithm:
-      1. Build a union-find over all question indices using ``appliesWhen``
-         edges (undirected: parent ↔ child).
-      2. Find each connected component.
-      3. Merge all components whose questions share a common category into one
-         batch per category (preserving original question order within each).
-      4. Components that span categories (theoretically possible in future
-         questionnaire versions) are kept as their own batch.
+    Each branch is a connected component of the ``appliesWhen`` graph: two
+    questions end up in the same batch when one references the other (directly
+    or transitively).  Standalone questions (no ``appliesWhen`` and not
+    referenced by any condition) each form their own single-question batch and
+    are answered in parallel with everything else.
 
     Falls back to a single batch (the full questionnaire) when no ``appliesWhen``
-    references exist.
+    references exist at all.
     """
     questions = questionnaire.get("questions", [])
     metadata = {k: v for k, v in questionnaire.items() if k != "questions"}
@@ -193,7 +181,6 @@ def _split_by_dependency_groups(questionnaire: dict) -> list[dict]:
 
     id_to_idx: dict[str, int] = {q["id"]: i for i, q in enumerate(questions)}
 
-    # Union-find helpers
     parent = list(range(len(questions)))
 
     def find(x: int) -> int:
@@ -235,37 +222,15 @@ def _split_by_dependency_groups(questionnaire: dict) -> list[dict]:
     if not has_any_dependency:
         return [questionnaire]
 
-    # Group questions by (root_component, category) — this merges standalone
-    # questions with their dependency-chain siblings in the same category.
-    group_key_to_qs: dict[tuple[int, str], list[dict]] = {}
+    buckets: dict[int, list[dict]] = {}
     for i, q in enumerate(questions):
         root = find(i)
-        cat = q.get("category", "")
-        key = (root, cat)
-        if key not in group_key_to_qs:
-            group_key_to_qs[key] = []
-        group_key_to_qs[key].append(q)
+        if root not in buckets:
+            buckets[root] = []
+        buckets[root].append(q)
 
-    # Merge groups that share the same category into one batch per category,
-    # unless a dependency component spans multiple categories (keep it intact).
-    cat_to_batches: dict[str, list[list[dict]]] = {}
-    for (root, cat), qs in group_key_to_qs.items():
-        if cat not in cat_to_batches:
-            cat_to_batches[cat] = []
-        cat_to_batches[cat].append(qs)
-
-    batches: list[list[dict]] = []
-    for cat, group_list in cat_to_batches.items():
-        # Flatten all groups for this category into one ordered list
-        merged = sorted(
-            [q for group in group_list for q in group],
-            key=lambda q: id_to_idx[q["id"]],
-        )
-        batches.append(merged)
-
-    # Sort batches by the index of their first question (preserves category order)
-    batches.sort(key=lambda qs: id_to_idx[qs[0]["id"]])
-    return [{**metadata, "questions": qs} for qs in batches]
+    ordered = sorted(buckets.values(), key=lambda qs: id_to_idx[qs[0]["id"]])
+    return [{**metadata, "questions": qs} for qs in ordered]
 
 
 async def _run_batch(
