@@ -31,9 +31,11 @@ export default function AssessmentStartPage() {
   const total = counts.high + counts.medium + counts.low || 1;
   const active = activeTab(state.tier);
   const tierLabel = TIER_META[state.tier]?.label ?? state.tier;
-  // CO entry: when the assessment is locked (submitted) and the viewer can
-  // approve, offer the "Issue a Risk Classification" end view.
-  const canIssue = !state.editable && can("systems:approve");
+  // CO entry: offer "Issue a Risk Classification" only while the assessment is
+  // submitted-but-not-yet-decided (status_label "locked" = workflow pending_review).
+  // An already-approved assessment is read-only with no action (the backend /issue
+  // 409s on a non-pending_review status), matching the CO/contributor read-only view.
+  const canIssue = state.status_label === "locked" && can("systems:approve");
 
   return (
     <div className="mx-auto max-w-4xl px-8 py-8">

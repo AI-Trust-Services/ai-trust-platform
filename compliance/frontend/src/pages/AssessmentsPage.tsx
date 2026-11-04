@@ -25,6 +25,20 @@ import {
 
 const ALL = "__all__";
 
+// Statuses whose row opens the registry single-page assessment app instead of the
+// legacy compliance DetailPanel — every status the single-page flow owns:
+//   questionnaire_pending — the owner questionnaire
+//   pending_review        — the CO review / CoIssueView
+//   returned              — CO-bounced; owner regains edit and resubmits (editable)
+//   approved              — finished, viewed read-only
+// Other statuses (draft, submitted, under_review, inactive) stay on the DetailPanel.
+const OPENS_IN_REGISTRY_APP = new Set([
+  "questionnaire_pending",
+  "pending_review",
+  "returned",
+  "approved",
+]);
+
 // One-shot hand-off from the registry MFE. The richer key carries the chosen system
 // (and optionally framework) so the modal can skip straight to the right step. Read+cleared
 // on arrival so closing the modal or navigating back never reopens it. The legacy boolean
@@ -131,9 +145,10 @@ export default function AssessmentsPage() {
   }, [assessments, pendingOpenAssessmentId]);
 
   async function openDetail(a: Assessment) {
-    // The CO decision now happens in the registry single-page assessment app
-    // (CoIssueView). Redirect pending_review there instead of the legacy RcePanel.
-    if (a.status === "pending_review") {
+    // The owner questionnaire, CO review, and finished (approved) views all live
+    // in the registry single-page assessment app (read-only when locked/approved),
+    // not the legacy RcePanel/DetailPanel. Redirect those statuses there.
+    if (OPENS_IN_REGISTRY_APP.has(a.status)) {
       openInRegistryApp(a);
       return;
     }
@@ -262,7 +277,7 @@ export default function AssessmentsPage() {
               {filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No assessments yet. Click "New Assessment" to begin.</TableCell></TableRow>
               ) : filtered.map((a) => (
-                <TableRow key={a.id} data-state={selected === a.id ? "selected" : undefined} className="cursor-pointer" onClick={() => (a.status === "questionnaire_pending" || a.status === "pending_review") ? openInRegistryApp(a) : openDetail(a)}>
+                <TableRow key={a.id} data-state={selected === a.id ? "selected" : undefined} className="cursor-pointer" onClick={() => OPENS_IN_REGISTRY_APP.has(a.status) ? openInRegistryApp(a) : openDetail(a)}>
                   <TableCell>
                     <div className="font-medium text-foreground">{a.title}</div>
                     <div className="text-xs text-muted-foreground">{a.id}</div>
