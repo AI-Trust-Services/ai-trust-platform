@@ -5,6 +5,8 @@ Rules:
 - If the documents do not contain enough information to answer a question, return an empty string "" for that answer and set its confidence to "low". Do not guess.
 - Confidence is one of exactly: "high" (the documents state this clearly), "medium" (the documents imply it but are not explicit), "low" (little or no supporting evidence, or you left the answer empty).
 - Keep each proposed answer concise and directly responsive to the question.
+- Some questions list a fixed set of allowed options (shown on an indented line as "Answer with EXACTLY one of: <option> | <option> | ..."). For such a question your answer MUST be exactly one of those option strings, copied verbatim — identical characters, punctuation, dashes, and casing. Do NOT paraphrase, abbreviate, translate, reorder, combine, or add any extra text. If the documents do not support any listed option, return an empty string "" with confidence "low".
+- Questions with no listed options are free-text: answer in concise prose as described above.
 - Do NOT output any confidence percentage or numeric score — only the words high/medium/low.
 
 Questions (key — label):

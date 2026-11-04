@@ -33,6 +33,18 @@ function sectionLabel(questionKey: string): string {
   return ASSESSMENT_SECTIONS.find((s) => s.questionKeys.includes(questionKey))?.label ?? "";
 }
 
+const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+
+/** The option to render as selected for a choice question: the exact answer if it
+ * is an option, else a UNIQUE case/whitespace-insensitive match, else null. Never
+ * fuzzy/nearest — an ambiguous answer selects nothing rather than risk a wrong
+ * (e.g. prohibited/exception) option. Backstop behind the backend option constraint. */
+function selectedOption(answer: string, options: string[]): string | null {
+  if (options.includes(answer)) return answer;
+  const hits = options.filter((o) => norm(o) === norm(answer));
+  return hits.length === 1 ? hits[0] : null;
+}
+
 function ConfidenceIndicator({
   level,
   references,
@@ -183,6 +195,11 @@ export default function QuestionView() {
 
   const options = def.options ?? (def.type === "boolean" ? ["Yes", "No"] : []);
   const isChoice = options.length > 0;
+  // Safety net behind the backend option-constraint: a prefilled answer should
+  // already equal an option verbatim, but tolerate a case/whitespace near-miss so
+  // the radio still selects. Only auto-select on a UNIQUE normalized match — never
+  // fuzzy/nearest (a mis-selected prohibited/exception answer is a compliance risk).
+  const selected = isChoice ? selectedOption(answer, options) : null;
 
   return (
     <div className="mx-auto max-w-3xl px-8 py-8">
@@ -258,7 +275,7 @@ export default function QuestionView() {
                 <input
                   type="radio"
                   name={questionKey}
-                  checked={answer === opt}
+                  checked={selected === opt}
                   disabled={!canEdit}
                   onChange={() => {
                     setAnswer(opt);

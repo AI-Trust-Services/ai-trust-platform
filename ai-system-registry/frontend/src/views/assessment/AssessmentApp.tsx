@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useParams, useMatch } from "react-router";
 import { Loader2, Save } from "lucide-react";
 import type { AssessmentState } from "../../types";
 import { api } from "../../api/client";
+import { usePermissions } from "../../hooks/usePermissions";
 import { AssessmentSidebar, ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { AssessmentCompanion } from "./AssessmentCompanion";
 import { ASSESSMENT_SECTIONS } from "./AssessmentSidebar";
@@ -32,6 +33,7 @@ function sectionForQuestion(questionKey?: string): string | undefined {
 export default function AssessmentApp() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { can, loading: permsLoading } = usePermissions();
   const [state, setState] = useState<AssessmentState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -40,15 +42,26 @@ export default function AssessmentApp() {
   const activeQuestionKey = questionMatch?.params.questionKey;
 
   const load = useCallback(async () => {
-    if (!id) return;
+    // Wait for permissions to resolve: usePermissions is fail-closed (can() is
+    // false while loading), so loading first would wrongly send a writer down the
+    // read path and skip prefill on a brand-new assessment.
+    if (!id || permsLoading) return;
     try {
-      // openAssessment is idempotent: prefills on first call, returns cached state after.
-      const s = await api.openAssessment(id);
+      // Writers (business owner / engineer) prefill via POST /open (idempotent).
+      // Read-only roles (e.g. a compliance officer: systems:read + systems:approve,
+      // no systems:write) call GET /state instead — /open is write-gated and would
+      // 403 them. A CO only ever opens an already-prefilled, locked (pending_review)
+      // assessment, so the read path always returns the seeded state it needs.
+      const s = can("systems:write")
+        ? await api.openAssessment(id)
+        : await api.getAssessmentState(id);
       setState(s);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to open assessment");
     }
-  }, [id]);
+    // Depend on permsLoading, not can (a fresh closure each render would loop).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, permsLoading]);
 
   useEffect(() => {
     load();

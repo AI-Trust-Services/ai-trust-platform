@@ -299,8 +299,11 @@ def _assessment_prefill(messages: list[dict]) -> dict:
 
     Parses the question keys out of the catalogue block in the system prompt
     ("<key> — <label>" lines) and emits a stable answer per key so stub/CI runs
-    exercise the confidence bands and the attention count. A deterministic subset
-    is left low-confidence/empty to represent "not enough information".
+    exercise the confidence bands and the attention count. A constrained question
+    (one whose catalogue entry carries an "Answer with EXACTLY one of: ..." line)
+    is answered with its FIRST allowed option verbatim, so the frontend's
+    exact-match radios select it. A deterministic subset of free-text keys is left
+    low-confidence/empty to represent "not enough information".
     """
     system = " ".join(
         m["content"]
@@ -309,11 +312,26 @@ def _assessment_prefill(messages: list[dict]) -> dict:
     )
     # Catalogue lines look like: "data_and_inputs — Data & Inputs".
     keys = re.findall(r"^([a-z_0-9]+) — ", system, flags=re.MULTILINE)
-    low_keys = {"planned_modifications", "sector_legislation", "exception_category"}
+    # Constrained keys carry a continuation line "Answer with EXACTLY one of: a | b | ...".
+    # Map each such key → its first allowed option (verbatim) so the UI selects it.
+    opts_by_key: dict[str, str] = {}
+    for k, opts in re.findall(
+        r"^([a-z_0-9]+) — .*\n\s*Answer with EXACTLY one of: (.+)$",
+        system,
+        flags=re.MULTILINE,
+    ):
+        opts_by_key[k] = opts.split(" | ")[0].strip()
+    # Free-text keys left empty/low → keeps a non-zero attention count in stub runs.
+    low_keys = {"planned_modifications"}
     med_keys = {"technologies", "automation_and_oversight"}
     answers = []
     for k in keys:
-        if k in low_keys:
+        if k in opts_by_key:
+            # Constrained (select/boolean) → a valid, UI-selectable option string.
+            answers.append(
+                {"question_key": k, "answer": opts_by_key[k], "confidence": "high"}
+            )
+        elif k in low_keys:
             answers.append({"question_key": k, "answer": "", "confidence": "low"})
         elif k in med_keys:
             answers.append(

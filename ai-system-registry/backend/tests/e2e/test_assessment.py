@@ -64,6 +64,25 @@ async def test_open_prefills_and_classifies(client: httpx.AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_prefill_choice_answers_are_valid_options(client: httpx.AsyncClient):
+    """A select/boolean question must be prefilled with one of its exact option
+    strings, so the frontend's exact-match radios select it (the bug: the model
+    returned free-text prose that matched no option)."""
+    from app.assessment_catalogue import QUESTION_OPTIONS
+
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    by_key = {q["question_key"]: q for q in state["questions"]}
+    for key, options in QUESTION_OPTIONS.items():
+        q = by_key.get(key)
+        assert q is not None, f"{key} missing from assessment state"
+        # Either a valid option verbatim, or empty (documents didn't support one).
+        assert q["answer"] in options or q["answer"] in ("", None), (
+            f"{key} prefilled with {q['answer']!r}, not one of {options}"
+        )
+
+
+@pytest.mark.asyncio
 async def test_open_is_idempotent(client: httpx.AsyncClient):
     system_id = await _create_system(client)
     first = await _open(client, system_id)

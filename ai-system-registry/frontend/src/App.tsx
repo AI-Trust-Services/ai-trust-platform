@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { useLocation, useNavigate, Outlet } from "react-router";
 import { Loader2 } from "lucide-react";
+import LuigiClient from "@luigi-project/client";
 import { useLuigiInit } from "./hooks/useLuigi";
 import { useTheme, useBranding } from "@ai-trust/react-hooks";
 import { usePermissions } from "./hooks/usePermissions";
@@ -38,14 +39,17 @@ export default function App() {
   const mayWriteAssessments = can("assessments:write");
   const noWriteTitle = "Requires permission: systems:write";
 
-  useLuigiInit(() => {
+  // Consume a cross-MFE/in-session handoff: restore a saved path, or redirect
+  // into the single-page assessment app when another MFE (e.g. compliance) asks
+  // us to open an assessment. Idempotent — the flags are removed once read.
+  const consumeHandoff = useCallback(() => {
     const savedPath = sessionStorage.getItem("lastSystemPath");
     if (savedPath) {
       sessionStorage.removeItem("lastSystemPath");
       navigate(savedPath, { replace: true });
       return;
     }
-    // Cross-MFE handoff: compliance redirects an owner into the single-page
+    // Cross-MFE handoff: compliance redirects an owner/CO into the single-page
     // assessment app via this localStorage flag (replaces the old questionnaire modal).
     const handoff = localStorage.getItem("registry.openAssessment");
     if (handoff) {
@@ -57,7 +61,20 @@ export default function App() {
         /* ignore malformed handoff */
       }
     }
-  });
+  }, [navigate]);
+
+  // Fires on a FRESH registry iframe load.
+  useLuigiInit(consumeHandoff);
+
+  // Luigi caches MFE iframes: when it re-reveals an already-loaded registry
+  // iframe (the compliance→registry CO handoff is the common case), addInitListener
+  // does NOT re-fire, so the handoff flag would sit unconsumed and the user would
+  // land on the systems list. Also consume it on every context update — mirrors
+  // what compliance's AssessmentsPage already does for its own handoffs.
+  useEffect(() => {
+    const id = LuigiClient.addContextUpdateListener(() => consumeHandoff());
+    return () => { LuigiClient.removeContextUpdateListener(id); };
+  }, [consumeHandoff]);
   useTheme();
   useBranding();
 

@@ -57,9 +57,57 @@ ORDERED_QUESTIONS: list[tuple[str, str, str]] = [
 ASSESSMENT_QUESTION_KEYS: list[str] = [q for _, _, q in ORDERED_QUESTIONS]
 
 
-def question_catalogue() -> list[tuple[str, str]]:
-    """(question_key, label) pairs in display order — fed to the prefill prompt."""
-    return [(q, QUESTION_LABEL.get(q, q)) for q in ASSESSMENT_QUESTION_KEYS]
+# Allowed option strings for the constrained (select / boolean) questions,
+# mirroring BUSINESS_QUESTIONS in
+# ai-system-registry/frontend/src/config/questionnaire.ts. Keep in sync — same
+# contract as QUESTION_LABEL ↔ questionnaire.ts (see module docstring). Only
+# select/boolean keys appear here; free-text questions are omitted (no options).
+# The prefill prompt uses these to force the model to answer a choice question
+# with one of these exact strings, so the frontend radios (exact-match) select.
+QUESTION_OPTIONS: dict[str, list[str]] = {
+    "submission_type": [
+        "Initial Submission (first time registering this AI system)",
+        "Update / Correction Submission (resubmission after feedback or system changes)",
+    ],
+    "use_case_type": [
+        "Standard development planned for general availability",
+        "Customer-specific development",
+        "Internal development for own organisational use",
+        "Third-party system or product planned for integration",
+        "Third-party system or product for internal use",
+        "Partner-developed system",
+        "Professional services — multi-customer solution",
+    ],
+    "use_case_status": [
+        "New AI use case",
+        "Existing AI use case",
+        "Other",
+    ],
+    "exception_category": [
+        "AI systems developed and used exclusively for military purposes (Art. 2(3))",
+        "AI systems used by public authorities in third countries for law enforcement (Art. 2(4))",
+        "AI research and development activity (Art. 2(6))",
+        "People using AI systems for purely personal, non-professional activity (Art. 2(10))",
+        "AI components provided under free and open-source licences (Art. 2(12)) — only for non-GPAI models",
+        "None of the above",
+    ],
+    "sector_legislation": [
+        "Yes — covered by sector-specific legislation",
+        "Yes — covered by Union Harmonisation Regulation",
+        "None of the above",
+    ],
+    # Boolean, rendered as Yes/No radios in QuestionView.
+    "used_in_eu": ["Yes", "No"],
+}
+
+
+def question_catalogue() -> list[tuple[str, str, list[str]]]:
+    """(question_key, label, options) in display order — fed to the prefill
+    prompt. ``options`` is ``[]`` for free-text questions."""
+    return [
+        (q, QUESTION_LABEL.get(q, q), QUESTION_OPTIONS.get(q, []))
+        for q in ASSESSMENT_QUESTION_KEYS
+    ]
 
 
 def section_of(question_key: str) -> str:
