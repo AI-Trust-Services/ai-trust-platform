@@ -104,21 +104,32 @@ if [[ -n "${GHCR_PULL_TOKEN:-}" ]]; then
 fi
 
 # Flux's HelmRelease valuesFrom has no cross-namespace support — the secret must exist
-# in the same namespace as the HelmRelease (ocm-system). Only the 5 non-sensitive URL/
-# hostname values needed by the FluxDeployer are stored here; all credentials stay in
+# in the same namespace as the HelmRelease (ocm-system). Only the non-sensitive URL/
+# hostname/image values needed by the FluxDeployer are stored here; all credentials stay in
 # the ai-trust-env secret in the target namespace ($NAMESPACE).
 echo "==> secret/ai-trust-flux-values-${NAMESPACE} in ocm-system (Helm chart URL values for FluxDeployer)"
 kubectl create namespace ocm-system --dry-run=client -o yaml | kubectl apply -f -
 
+flux_values_args=(
+  --from-literal=APP_PUBLIC_URL="${APP_PUBLIC_URL:-}"
+  --from-literal=KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-}"
+  --from-literal=INGRESS_HOST="${INGRESS_HOST}"
+  --from-literal=INGRESS_KEYCLOAK_HOST="${INGRESS_KEYCLOAK_HOST}"
+  --from-literal=INGRESS_MINIO_HOST="${INGRESS_MINIO_HOST}"
+  --from-literal=IMAGE_TAG="${IMAGE_TAG:-latest}"
+  --from-literal=MINIO_IMAGE="ghcr.io/${GHCR_OWNER}/ai-trust-platform/minio:${IMAGE_TAG:-latest}"
+  --from-literal=MC_IMAGE="ghcr.io/${GHCR_OWNER}/ai-trust-platform/mc:${IMAGE_TAG:-latest}"
+)
+# COGNEE_GRAPH_IMAGE (digest-pinned ref from the mirror-cognee-graph CI action) is
+# only added when set — the matching valuesFrom entry in k8s/ocm/manifests.yaml is
+# `optional: true`, so omitting the key entirely (rather than writing an empty
+# value) lets Flux fall back to the chart's committed cogneeEval.graphImage default.
+if [[ -n "${COGNEE_GRAPH_IMAGE:-}" ]]; then
+  flux_values_args+=(--from-literal=COGNEE_GRAPH_IMAGE="${COGNEE_GRAPH_IMAGE}")
+fi
+
 kubectl create secret generic "ai-trust-flux-values-${NAMESPACE}" \
-  --from-literal=APP_PUBLIC_URL="${APP_PUBLIC_URL:-}" \
-  --from-literal=KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-}" \
-  --from-literal=INGRESS_HOST="${INGRESS_HOST}" \
-  --from-literal=INGRESS_KEYCLOAK_HOST="${INGRESS_KEYCLOAK_HOST}" \
-  --from-literal=INGRESS_MINIO_HOST="${INGRESS_MINIO_HOST}" \
-  --from-literal=IMAGE_TAG="${IMAGE_TAG:-latest}" \
-  --from-literal=MINIO_IMAGE="ghcr.io/${GHCR_OWNER}/ai-trust-platform/minio:${IMAGE_TAG:-latest}" \
-  --from-literal=MC_IMAGE="ghcr.io/${GHCR_OWNER}/ai-trust-platform/mc:${IMAGE_TAG:-latest}" \
+  "${flux_values_args[@]}" \
   -n ocm-system --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> configmap/postgres-init (from infra/postgres/init.sh)"
