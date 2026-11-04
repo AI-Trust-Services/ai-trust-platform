@@ -172,7 +172,9 @@ export function AssessmentSidebar({
       <div className="border-t border-border p-4">
         {locked ? (
           <p className="rounded-md bg-[var(--muted)]/60 px-3 py-2 text-center text-xs font-medium text-muted-foreground">
-            Submitted — awaiting Compliance Officer review
+            {state.status_label === "approved"
+              ? "Approved — risk classification issued"
+              : "Submitted — awaiting Compliance Officer review"}
           </p>
         ) : (
           <button

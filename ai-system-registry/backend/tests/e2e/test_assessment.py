@@ -88,6 +88,35 @@ async def test_prefill_choice_answers_are_valid_options(client: httpx.AsyncClien
 
 
 @pytest.mark.asyncio
+async def test_system_storage_answer_writes_to_system_column(
+    client: httpx.AsyncClient,
+):
+    """use_case / department are storage:"system" keys — editing them in the
+    assessment must update the AISystem column (what every other consumer reads),
+    not just the questionnaire_answers JSON."""
+    system_id = await _create_system(client)
+    await _open(client, system_id)
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/use_case/answer",
+        json={"answer": "A detailed, owner-edited use-case description."},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    # The AISystem column reflects the edit (read via the system endpoint).
+    sys_resp = await client.get(f"/v1/systems/{system_id}", headers=_hdr(_OWNER))
+    assert sys_resp.status_code == 200, sys_resp.text
+    assert (
+        sys_resp.json()["use_case"] == "A detailed, owner-edited use-case description."
+    )
+    # And the assessment state reads it back from the column.
+    state = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    uc = next(q for q in state.json()["questions"] if q["question_key"] == "use_case")
+    assert uc["answer"] == "A detailed, owner-edited use-case description."
+
+
+@pytest.mark.asyncio
 async def test_open_is_idempotent(client: httpx.AsyncClient):
     system_id = await _create_system(client)
     first = await _open(client, system_id)
@@ -470,8 +499,8 @@ async def _submit_as_owner(client: httpx.AsyncClient) -> str:
     """Create, prefill, owner-confirm all, and submit — leaving the system in
     pending_review (locked, ready for the CO)."""
     system_id = await _create_system(client)
-    # Assign the compliance officer as the real flow does (the compliance
-    # "New Assessment" modal → /workflow/assign); /issue requires an assigned CO.
+    # Assign the compliance officer as the compliance "New Assessment" modal does
+    # (→ /workflow/assign), so this helper exercises the assigned-CO path.
     r = await client.post(
         f"/v1/systems/{system_id}/workflow/assign",
         json={"compliance_officer_username": _CO},
@@ -674,9 +703,10 @@ async def test_assignment_and_comment_mutations_locked_after_submit(
 
 
 @pytest.mark.asyncio
-async def test_issue_requires_assigned_compliance_officer(client: httpx.AsyncClient):
-    """When no CO is assigned, /issue must 409 (not silently let any approver
-    issue) — the old guard short-circuited on a null compliance_officer_username."""
+async def test_issue_without_assigned_co_allows_any_approver(client: httpx.AsyncClient):
+    """Loose CO model (by design): when no compliance officer is assigned (e.g. the
+    registry's direct "Start assessment" path), any systems:approve caller may issue.
+    A specific assigned CO is only enforced when one was set via /workflow/assign."""
     # _create_system does NOT assign a CO; confirm + submit manually.
     system_id = await _create_system(client)
     state = await _open(client, system_id)
@@ -692,4 +722,5 @@ async def test_issue_requires_assigned_compliance_officer(client: httpx.AsyncCli
         json={"tier": "high", "transparency": True, "confirmed": True},
         headers=_hdr(_CO),
     )
-    assert r.status_code == 409, r.text
+    assert r.status_code == 200, r.text
+    assert r.json()["workflow_status"] == "approved"

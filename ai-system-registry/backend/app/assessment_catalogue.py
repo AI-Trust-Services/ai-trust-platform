@@ -16,6 +16,15 @@ from app.classifier import _ANNEX_III_AREAS, _PROHIBITED_FLAGS
 from app.questionnaire_required import (
     QUESTION_LABEL,
     REQUIRED_AI_TECHNICAL,
+    REQUIRED_BUSINESS,
+)
+
+# Business keys whose canonical value is an AISystem column (storage: "system" in
+# questionnaire.ts), not questionnaire_answers JSON — e.g. department, use_case.
+# The answer read/write helpers route these to/from the row column so edits in the
+# single-page assessment stay consistent with the column every other consumer reads.
+SYSTEM_STORAGE_KEYS: frozenset[str] = frozenset(
+    key for key, storage in REQUIRED_BUSINESS if storage == "system"
 )
 
 # Ordered sections → question keys, mirroring the two questionnaire sections.

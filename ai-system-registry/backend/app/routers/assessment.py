@@ -35,6 +35,7 @@ from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from app import email_sender
 from app.assessment_catalogue import (
     ASSESSMENT_QUESTION_KEYS,
+    SYSTEM_STORAGE_KEYS,
     decisive_question_keys,
     question_catalogue,
     section_of,
@@ -113,10 +114,14 @@ def _answer_store(row: AISystem) -> dict:
     return dict(row.questionnaire_answers or {})
 
 
-def _read_answer(answers: dict, question_key: str) -> str | None:
-    """Read a question's answer. Business keys live at the top level; technical
-    (AI-mode free-text) keys live nested under ``technical``."""
-    if section_of(question_key) == "technical":
+def _read_answer(row: AISystem, answers: dict, question_key: str) -> str | None:
+    """Read a question's answer from its canonical store. System-storage business
+    keys (``SYSTEM_STORAGE_KEYS``, e.g. department/use_case) live on the AISystem
+    column; technical (AI-mode free-text) keys live nested under ``technical``;
+    other business keys live at the top level of ``questionnaire_answers``."""
+    if question_key in SYSTEM_STORAGE_KEYS:
+        v = getattr(row, question_key, None)
+    elif section_of(question_key) == "technical":
         tech = answers.get("technical") or {}
         v = tech.get(question_key)
     else:
@@ -126,8 +131,14 @@ def _read_answer(answers: dict, question_key: str) -> str | None:
     return str(v)
 
 
-def _write_answer(answers: dict, question_key: str, value: str) -> dict:
-    """Return a new answers dict with the question's answer set (section-aware)."""
+def _write_answer(row: AISystem, answers: dict, question_key: str, value: str) -> dict:
+    """Persist a question's answer to its canonical store and return the (possibly
+    updated) answers dict. System-storage keys are written to the AISystem column
+    (the dict is returned unchanged for them); other keys are written into the
+    section-aware ``questionnaire_answers`` dict."""
+    if question_key in SYSTEM_STORAGE_KEYS:
+        setattr(row, question_key, value)
+        return answers
     out = dict(answers)
     if section_of(question_key) == "technical":
         tech = dict(out.get("technical") or {})
@@ -338,11 +349,23 @@ async def open_assessment(
             parsed = await parse_json_response(
                 result["text"], task="assessment_prefill"
             )
+            # Validate the shape here (inside the handler): a syntactically valid
+            # but schema-invalid payload (e.g. a top-level array, or answers as a
+            # string) must surface as the 502 AI-unavailable response, not a 500.
+            if not isinstance(parsed, dict):
+                raise ValueError("prefill response is not a JSON object")
+            raw_answers = parsed.get("answers") or []
+            if not isinstance(raw_answers, list):
+                raise ValueError("prefill 'answers' is not a list")
+            prefilled = {
+                a["question_key"]: a
+                for a in raw_answers
+                if isinstance(a, dict) and "question_key" in a
+            }
         except (LLMParseError, Exception) as exc:  # noqa: BLE001
             logger.error("assessment.prefill_failed", extra={"error": str(exc)})
             raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
 
-        prefilled = {a.get("question_key"): a for a in (parsed.get("answers") or [])}
         answers = _answer_store(row)
         for q_key in ASSESSMENT_QUESTION_KEYS:
             proposal = prefilled.get(q_key) or {}
@@ -351,7 +374,7 @@ async def open_assessment(
             if conf not in ("high", "medium", "low"):
                 conf = "low"
             if ans:
-                answers = _write_answer(answers, q_key, ans)
+                answers = _write_answer(row, answers, q_key, ans)
             session.add(
                 QuestionState(
                     id=new_id("QST"),
@@ -406,7 +429,7 @@ async def _build_state(
     questions: list[QuestionStateResponse] = []
     for q_key in ASSESSMENT_QUESTION_KEYS:
         st = states.get(q_key)
-        ans = _read_answer(answers, q_key)
+        ans = _read_answer(row, answers, q_key)
         if st is not None and st.confidence == "high":
             conf.high += 1
         elif st is not None and st.confidence == "medium":
@@ -447,7 +470,7 @@ async def _build_state(
                 section=section_of(q_key),
                 question_key=q_key,
                 question_label=QUESTION_LABEL.get(q_key, q_key),
-                answer=_read_answer(answers, q_key),
+                answer=_read_answer(row, answers, q_key),
             )
         )
 
@@ -550,7 +573,7 @@ async def save_answer(
         if not _may_edit(row, state, user):
             raise HTTPException(403, "You are not assigned to this question")
 
-        answers = _write_answer(_answer_store(row), question_key, body.answer)
+        answers = _write_answer(row, _answer_store(row), question_key, body.answer)
         row.questionnaire_answers = answers
 
         if state is None:
@@ -609,7 +632,7 @@ async def confirm_question(
             raise HTTPException(403, "You are not assigned to this question")
 
         answers = _answer_store(row)
-        current = (_read_answer(answers, question_key) or "").strip()
+        current = (_read_answer(row, answers, question_key) or "").strip()
         changed = (
             state.answer_source == "manual"
             and current != (state.ai_original_answer or "").strip()
@@ -822,13 +845,15 @@ async def assign_question(
     )
     return QuestionStateResponse(
         question_key=question_key,
-        answer=_read_answer(answers, question_key),
+        answer=_read_answer(row, answers, question_key),
         answer_source=state.answer_source,
         confidence=state.confidence,
         confirmed=bool(state.confirmed_at),
         assignee_username=state.assignee_username,
         comment_count=count,
-        needs_attention=_needs_attention(state, _read_answer(answers, question_key)),
+        needs_attention=_needs_attention(
+            state, _read_answer(row, answers, question_key)
+        ),
     )
 
 
@@ -981,11 +1006,12 @@ async def issue_classification(
                 f"Cannot issue from status '{row.workflow_status}' — "
                 "the assessment must be submitted (locked) first",
             )
-        if not row.compliance_officer_username:
-            raise HTTPException(
-                409, "No compliance officer is assigned to this assessment"
-            )
-        if user != row.compliance_officer_username:
+        # Loose CO model: any systems:approve user may issue. When a specific CO
+        # was assigned (via the compliance "New Assessment" modal → /workflow/assign),
+        # only that CO may issue; when none is assigned (e.g. the registry's direct
+        # "Start assessment" path), any approver may. See CLAUDE.md — CO assignment
+        # is optional by design.
+        if row.compliance_officer_username and user != row.compliance_officer_username:
             raise HTTPException(
                 403, "Only the assigned compliance officer may issue the classification"
             )
