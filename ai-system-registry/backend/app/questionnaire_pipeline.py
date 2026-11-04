@@ -25,7 +25,6 @@ import httpx
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
-from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 
 from app.llm.client import chat
@@ -45,49 +44,25 @@ _RAG_K = 10
 _QUESTIONNAIRE_MAX_TOKENS = int(os.environ.get("QUESTIONNAIRE_MAX_TOKENS", "32000"))
 
 
-# ---------------------------------------------------------------------------
-# Response validation models
-# ---------------------------------------------------------------------------
-
-
-class _AnswerItem(BaseModel):
-    model_config = {"extra": "allow"}
-    value: str
-    answerStrength: str | None = None
-    reason: str | None = None
-
-
-class _Reference(BaseModel):
-    model_config = {"extra": "allow"}
-    sourceType: str | None = None
-    source: str | None = None
-
-
-class _QuestionResult(BaseModel):
-    model_config = {"extra": "allow"}
-    questionId: str
-    question: str
-    questionType: str | None = None
-    answer: list[_AnswerItem]
-    explanation: str
-    references: list[_Reference]
-
-
-class _QuestionnaireOutput(BaseModel):
-    model_config = {"extra": "allow"}
-    results: list[_QuestionResult]
-
-
 def _validate_llm_output(raw: dict) -> dict:
-    """Validate the LLM output against the expected response contract.
+    """Validate the minimum structural contract: non-empty results list with questionIds.
 
-    Raises ``LLMParseError`` if the structure does not match so the caller
-    maps it to a 502 rather than persisting a malformed result.
+    Field-level strictness is intentionally relaxed — real LLMs occasionally
+    emit string fragments inside array fields, and we prefer to persist a
+    slightly malformed result over returning a 502 to the user.
     """
-    try:
-        _QuestionnaireOutput.model_validate(raw)
-    except ValidationError as exc:
-        raise LLMParseError(f"LLM output failed schema validation: {exc}") from exc
+    results = raw.get("results")
+    if not isinstance(results, list) or len(results) == 0:
+        raise LLMParseError("LLM output missing or empty 'results' list")
+    missing_ids = [
+        i for i, r in enumerate(results)
+        if not isinstance(r, dict) or not r.get("questionId")
+    ]
+    if missing_ids:
+        raise LLMParseError(
+            f"LLM output has {len(missing_ids)} result(s) missing 'questionId' "
+            f"at indices {missing_ids[:5]}"
+        )
     return raw
 
 
