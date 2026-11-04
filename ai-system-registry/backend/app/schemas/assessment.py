@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from fastapi import HTTPException
 from pydantic import BaseModel, field_validator
 
 from app.questionnaire_required import VALID_QUESTION_KEYS
@@ -18,8 +19,12 @@ CONFIDENCE_LEVELS = frozenset({"high", "medium", "low"})
 
 
 def _validate_question_key(v: str) -> str:
+    # Called directly (as a statement) at the top of the per-question routes with
+    # the path parameter — NOT as a Pydantic field validator — so a plain
+    # ValueError would propagate to the 500 handler. Raise HTTPException so an
+    # unknown key is a 422 client error, matching the rest of the API contract.
     if v not in VALID_QUESTION_KEYS:
-        raise ValueError(f"Unknown question_key '{v}'")
+        raise HTTPException(status_code=422, detail=f"Unknown question_key '{v}'")
     return v
 
 

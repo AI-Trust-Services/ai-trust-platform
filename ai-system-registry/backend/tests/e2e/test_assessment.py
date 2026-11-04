@@ -88,9 +88,16 @@ async def test_prefill_choice_answers_are_valid_options(client: httpx.AsyncClien
 
 
 @pytest.mark.asyncio
-async def test_system_storage_answer_writes_to_system_column(
-    client: httpx.AsyncClient,
-):
+async def test_unknown_question_key_returns_422(client: httpx.AsyncClient):
+    """An unknown question_key in the path is a client error (422), not a 500 —
+    _validate_question_key raises HTTPException, not a bare ValueError."""
+    system_id = await _create_system(client)
+    await _open(client, system_id)
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/not_a_real_key/confirm",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 422, r.text
     """use_case / department are storage:"system" keys — editing them in the
     assessment must update the AISystem column (what every other consumer reads),
     not just the questionnaire_answers JSON."""
