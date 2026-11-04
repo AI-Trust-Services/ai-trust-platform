@@ -59,15 +59,15 @@ class _AnswerItem(BaseModel):
 
 class _Reference(BaseModel):
     model_config = {"extra": "allow"}
-    sourceType: str
-    source: str
+    sourceType: str | None = None
+    source: str | None = None
 
 
 class _QuestionResult(BaseModel):
     model_config = {"extra": "allow"}
     questionId: str
     question: str
-    questionType: str
+    questionType: str | None = None
     answer: list[_AnswerItem]
     explanation: str
     references: list[_Reference]
