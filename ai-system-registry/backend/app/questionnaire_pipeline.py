@@ -273,6 +273,14 @@ async def run_pipeline(
         max_tokens=_QUESTIONNAIRE_MAX_TOKENS,
     )
 
+    if llm_response.get("finish_reason") == "length":
+        raise LLMParseError(
+            f"LLM output was truncated (finish_reason=length): "
+            f"input={llm_response.get('input_tokens', '?')} output={llm_response.get('output_tokens', '?')} tokens. "
+            f"The combined input+output exceeds the model context window. "
+            f"Increase QUESTIONNAIRE_MAX_TOKENS or reduce input size."
+        )
+
     result = await parse_json_response(
         llm_response["text"],
         task="questionnaire_answer",
