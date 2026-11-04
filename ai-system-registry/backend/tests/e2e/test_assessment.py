@@ -24,10 +24,15 @@ def _hdr(user: str) -> dict:
 
 async def _create_system(client: httpx.AsyncClient, owner: str = _OWNER) -> str:
     """Register an AI-mode system owned by ``owner`` (intake sets business_owners
-    to the acting user)."""
+    to the acting user). ``_CONTRIB`` is registered as a contributor so per-question
+    assignment to them is valid (assign now rejects non-owner/non-contributor users)."""
     r = await client.post(
         "/v1/intake",
-        json={"name": "Assessment System", "registration_mode": "ai"},
+        json={
+            "name": "Assessment System",
+            "registration_mode": "ai",
+            "contributors": [_CONTRIB],
+        },
         headers=_hdr(owner),
     )
     assert r.status_code == 201, r.text
@@ -465,6 +470,14 @@ async def _submit_as_owner(client: httpx.AsyncClient) -> str:
     """Create, prefill, owner-confirm all, and submit — leaving the system in
     pending_review (locked, ready for the CO)."""
     system_id = await _create_system(client)
+    # Assign the compliance officer as the real flow does (the compliance
+    # "New Assessment" modal → /workflow/assign); /issue requires an assigned CO.
+    r = await client.post(
+        f"/v1/systems/{system_id}/workflow/assign",
+        json={"compliance_officer_username": _CO},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
     state = await _open(client, system_id)
     await _confirm_all_as_owner(client, system_id, state)
     r = await client.post(
@@ -569,6 +582,114 @@ async def test_co_cannot_issue_before_submit(client: httpx.AsyncClient):
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/issue",
         json={"tier": "high", "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 409, r.text
+
+
+# ── review-feedback regression tests (PR #358 bot findings) ───────────────────
+
+
+@pytest.mark.asyncio
+async def test_assign_rejects_unregistered_username(client: httpx.AsyncClient):
+    """Assignment must be the owner or a registered contributor (no arbitrary
+    account delegation / notify spam)."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    qkey = state["questions"][0]["question_key"]
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/assign",
+        json={"assignee_username": "stranger99"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 422, r.text
+
+
+@pytest.mark.asyncio
+async def test_non_assignee_cannot_comment(client: httpx.AsyncClient):
+    """A contributor may not comment on a question that isn't assigned to them."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    qkey = state["questions"][0]["question_key"]
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        json={"body": "I shouldn't be able to post this"},
+        headers=_hdr(_CONTRIB),
+    )
+    assert r.status_code == 403, r.text
+
+
+@pytest.mark.asyncio
+async def test_comment_delete_scoped_to_question(client: httpx.AsyncClient):
+    """A comment id from another question on the same system must not be deletable
+    through a mismatched question_key in the URL (→ 404, not a cross-question delete)."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    q1 = state["questions"][0]["question_key"]
+    q2 = state["questions"][1]["question_key"]
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{q1}/comments",
+        json={"body": "comment on q1"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    comment_id = r.json()["id"]
+    # Delete via the WRONG question's path → not found.
+    r = await client.delete(
+        f"/v1/systems/{system_id}/assessment/questions/{q2}/comments/{comment_id}",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 404, r.text
+    # Correct path still works.
+    r = await client.delete(
+        f"/v1/systems/{system_id}/assessment/questions/{q1}/comments/{comment_id}",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 204, r.text
+
+
+@pytest.mark.asyncio
+async def test_assignment_and_comment_mutations_locked_after_submit(
+    client: httpx.AsyncClient,
+):
+    """Once submitted (pending_review), assign/unassign/comment all 409 — the
+    assessment is immutable per the documented locked UX."""
+    system_id = await _submit_as_owner(client)
+    qkey = (
+        await client.get(f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_CO))
+    ).json()["questions"][0]["question_key"]
+    # unassign
+    r = await client.delete(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/assign",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 409, r.text
+    # comment create
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        json={"body": "late comment"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 409, r.text
+
+
+@pytest.mark.asyncio
+async def test_issue_requires_assigned_compliance_officer(client: httpx.AsyncClient):
+    """When no CO is assigned, /issue must 409 (not silently let any approver
+    issue) — the old guard short-circuited on a null compliance_officer_username."""
+    # _create_system does NOT assign a CO; confirm + submit manually.
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    await _confirm_all_as_owner(client, system_id, state)
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/submit",
+        json={"note": "done"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "high", "transparency": True, "confirmed": True},
         headers=_hdr(_CO),
     )
     assert r.status_code == 409, r.text

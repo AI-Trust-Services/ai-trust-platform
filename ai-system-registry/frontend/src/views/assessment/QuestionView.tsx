@@ -245,7 +245,7 @@ export default function QuestionView() {
             </DropdownMenu>
             {/* Three-dot menu — comment actions only (not assignment) */}
             <DropdownMenu>
-              <DropdownMenuTrigger aria-label="Comment actions">
+              <DropdownMenuTrigger aria-label="Comment actions" disabled={!canEdit}>
                 <MoreVertical className="size-4 text-muted-foreground" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">

@@ -461,7 +461,11 @@ async def _build_state(
         ]
     else:
         docs = row.registration_documents or []
-        source_docs = [SourceDocumentRef(name=d.get("name", "document")) for d in docs]
+        # registration_documents entries store the name under "filename" (see
+        # RegistrationDocument in systems.py); "name" would always miss → "document".
+        source_docs = [
+            SourceDocumentRef(name=d.get("filename", "document")) for d in docs
+        ]
 
     # Candidate assignees: the owner + the system's registered contributors.
     contributor_refs: list[ContributorRef] = []
@@ -701,6 +705,11 @@ async def add_comment(
         row = await _get_system(session, system_id)
         if not _is_editable(row):
             raise HTTPException(409, "Assessment is locked and cannot be edited")
+        state = await _load_state(session, system_id, question_key)
+        # Commenting follows the same edit right as the answer: owner any, an
+        # assignee only their own question (mirrors can_edit / the UI gate).
+        if not _may_edit(row, state, user):
+            raise HTTPException(403, "You are not assigned to this question")
         comment = QuestionComment(
             id=new_id("QCM"),
             system_id=system_id,
@@ -728,13 +737,19 @@ async def delete_comment(
 ):
     """Soft-delete a comment. Authors may delete their own; the system owner may
     delete any."""
+    _validate_question_key(question_key)
     user = _current_user(request)
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
+        if not _is_editable(row):
+            raise HTTPException(409, "Assessment is locked and cannot be edited")
         result = await session.execute(
             select(QuestionComment).where(
                 QuestionComment.id == comment_id,
                 QuestionComment.system_id == system_id,
+                # Enforce the nested resource path: a comment id from a different
+                # question on the same system must not be deletable via this URL.
+                QuestionComment.question_key == question_key,
             )
         )
         comment = result.scalar_one_or_none()
@@ -771,6 +786,15 @@ async def assign_question(
         # Owner may reassign any; a current assignee may reassign their own.
         if not _may_edit(row, state, user):
             raise HTTPException(403, "Only the owner or current assignee may reassign")
+
+        # Assignees are the owner or a registered contributor — reject arbitrary
+        # usernames so a direct caller can't delegate data (and trigger a notify
+        # email) to an unrelated account.
+        allowed_assignees = {_system_owner(row), *(row.contributors or [])}
+        if body.assignee_username not in allowed_assignees:
+            raise HTTPException(
+                422, "Assignee must be the owner or a registered contributor"
+            )
 
         if state is None:
             state = QuestionState(
@@ -823,6 +847,8 @@ async def unassign_question(
     user = _current_user(request)
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
+        if not _is_editable(row):
+            raise HTTPException(409, "Assessment is locked and cannot be edited")
         state = await _load_state(session, system_id, question_key)
         if not _may_edit(row, state, user):
             raise HTTPException(403, "Only the owner or current assignee may unassign")
@@ -955,7 +981,11 @@ async def issue_classification(
                 f"Cannot issue from status '{row.workflow_status}' — "
                 "the assessment must be submitted (locked) first",
             )
-        if row.compliance_officer_username and user != row.compliance_officer_username:
+        if not row.compliance_officer_username:
+            raise HTTPException(
+                409, "No compliance officer is assigned to this assessment"
+            )
+        if user != row.compliance_officer_username:
             raise HTTPException(
                 403, "Only the assigned compliance officer may issue the classification"
             )
