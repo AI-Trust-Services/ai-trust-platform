@@ -31,11 +31,15 @@ export function TierBadge({
   workflowStatus,
   isChatbot,
   generatesSyntheticContent,
+  transparency,
 }: {
   tier: TierKey;
   workflowStatus?: string;
   isChatbot?: boolean;
   generatesSyntheticContent?: boolean;
+  /** Pre-derived Art.50 companion (e.g. CO-issued transparency) — when set,
+   *  overrides the isChatbot/generatesSyntheticContent derivation. */
+  transparency?: boolean;
 }) {
   const effectiveTier = workflowStatus === "draft" ? "pending" : tier;
   const meta = TIER_META[effectiveTier] || { label: tier };
@@ -43,7 +47,9 @@ export function TierBadge({
   // the only tier pair that co-applies. The classifier waterfall only records the
   // high tier, so derive the companion flag from the row's Art. 50 triggers.
   const alsoTransparency =
-    effectiveTier === "high" && (isChatbot || generatesSyntheticContent);
+    transparency !== undefined
+      ? transparency
+      : effectiveTier === "high" && (isChatbot || generatesSyntheticContent);
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
       <Badge className={cn("rounded-full font-medium", TIER_CLASSES[effectiveTier] ?? TIER_CLASSES.minimal)}>

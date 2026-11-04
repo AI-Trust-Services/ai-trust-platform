@@ -3,7 +3,6 @@ from ai_trust_persistence.models.branding import Branding
 from ai_trust_persistence.models.platform_settings import PlatformSettings
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.alert_rule import AlertRule
-from ai_trust_persistence.models.question_assignment import QuestionAssignment
 from ai_trust_persistence.models.assessment import Assessment
 from ai_trust_persistence.models.audit_event import AuditEvent
 from ai_trust_persistence.models.requirement import Requirement
@@ -34,6 +33,8 @@ from ai_trust_persistence.models.model_card_feature_store_group import (
     ModelCardFeatureStoreGroup,
 )
 from ai_trust_persistence.models.obligation import Obligation
+from ai_trust_persistence.models.question_comment import QuestionComment
+from ai_trust_persistence.models.question_state import QuestionState
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from ai_trust_persistence.models.test_bed import TestBedRun
 
@@ -63,7 +64,8 @@ __all__ = [
     "EvidenceVersion",
     "PlatformSettings",
     "SystemWorkflowStep",
-    "QuestionAssignment",
+    "QuestionComment",
+    "QuestionState",
     "TestBedRun",
     "evidence_requirements",
 ]

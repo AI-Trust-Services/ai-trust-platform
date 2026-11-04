@@ -54,6 +54,15 @@ class AISystem(Base):
     # Per-field confirmation state from engineer AI-assisted review:
     # {"version": true, "provider": false, ...} — merged via PATCH, never replaced wholesale.
     field_confirmations: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    # CO-issued transparency companion (#348): set true when the compliance officer
+    # issues the "high + high_transparency" combo, so the Art.50 transparency label
+    # persists even when the inferred is_chatbot/generates_synthetic_content flags
+    # are false. Rendered alongside the derived flags by TierBadge.
+    co_issued_transparency: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Source passages (filename + page) that informed the single-page assessment
+    # prefill/classification, captured in /open: [{"name": str, "page": int|null}, ...].
+    # Surfaced (assessment-level) in the start page + confidence modal + CO panel.
+    assessment_sources: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
 
     lifecycle: Mapped[str] = mapped_column(
         String(30), default="development", index=True
