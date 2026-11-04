@@ -340,7 +340,7 @@ def chat(messages: list[dict], *, task: str = "chat") -> dict:
         return _questionnaire_technical_turn(messages)
     if task == "questionnaire_doc_extract":
         return _questionnaire_doc_extract(messages)
-    if task == "questionnaire_answer":
+    if task == "questionnaire_answer" or task.startswith("questionnaire_answer_batch"):
         return _questionnaire_answer(messages)
     # Repair or unknown task: return a harmless empty object.
     return _result("{}")

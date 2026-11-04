@@ -42,7 +42,7 @@ _INDEXING_URL = os.environ.get(
 _QUESTIONNAIRE_BUCKET = "registration-docs"
 _RAG_QUERY = "AI system description purpose capabilities deployment risks"
 _RAG_K = 10
-_QUESTIONNAIRE_MAX_TOKENS = int(os.environ.get("QUESTIONNAIRE_MAX_TOKENS", "24000"))
+_QUESTIONNAIRE_MAX_TOKENS = int(os.environ.get("QUESTIONNAIRE_MAX_TOKENS", "32000"))
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +185,75 @@ def _build_user_message(
     return "\n".join(parts)
 
 
+def _split_by_category(questionnaire: dict) -> list[dict]:
+    """Split the questionnaire into one sub-questionnaire per category.
+
+    Each batch carries the same top-level metadata but only the questions for
+    that category.  Categories are emitted in the order they first appear so
+    that merging the results preserves the original question order.
+
+    Falls back to a single batch (the full questionnaire) when no questions
+    carry a ``category`` field.
+    """
+    questions = questionnaire.get("questions", [])
+    metadata = {k: v for k, v in questionnaire.items() if k != "questions"}
+
+    buckets: dict[str, list[dict]] = {}
+    for q in questions:
+        cat = q.get("category", "")
+        if cat not in buckets:
+            buckets[cat] = []
+        buckets[cat].append(q)
+
+    if not buckets or list(buckets.keys()) == [""]:
+        return [questionnaire]
+
+    return [{**metadata, "questions": qs} for qs in buckets.values()]
+
+
+async def _run_batch(
+    batch: dict,
+    system_prompt: str,
+    registration_evidence: str,
+    rag_chunks: list[dict],
+    batch_idx: int,
+) -> list[dict]:
+    """Run one LLM call for a batch (category slice) of the questionnaire.
+
+    Returns the ``results`` list from the LLM response.
+    Raises ``LLMParseError`` on truncation or unparseable output.
+    """
+    task = f"questionnaire_answer_batch_{batch_idx}"
+    user_message = _build_user_message(batch, registration_evidence, rag_chunks)
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message},
+    ]
+
+    llm_response = await chat(
+        messages,
+        task=task,
+        json_mode=True,
+        max_tokens=_QUESTIONNAIRE_MAX_TOKENS,
+    )
+
+    if llm_response.get("finish_reason") == "length":
+        category = batch.get("questions", [{}])[0].get("category", str(batch_idx))
+        raise LLMParseError(
+            f"LLM output truncated (finish_reason=length) for batch '{category}': "
+            f"input={llm_response.get('input_tokens', '?')} "
+            f"output={llm_response.get('output_tokens', '?')} tokens."
+        )
+
+    parsed = await parse_json_response(
+        llm_response["text"],
+        task=task,
+        max_tokens=_QUESTIONNAIRE_MAX_TOKENS,
+    )
+    _validate_llm_output(parsed)
+    return parsed.get("results", [])
+
+
 async def _upload_result(
     system_id: str,
     questionnaire_id: str,
@@ -259,35 +328,25 @@ async def run_pipeline(
             extra={"system_id": system_id},
         )
 
-    # 4. Assemble messages and call LLM.
-    user_message = _build_user_message(questionnaire, registration_evidence, rag_chunks)
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message},
-    ]
-
-    llm_response = await chat(
-        messages,
-        task="questionnaire_answer",
-        json_mode=True,
-        max_tokens=_QUESTIONNAIRE_MAX_TOKENS,
+    # 4. Split questionnaire by category and run all batches in parallel.
+    batches = _split_by_category(questionnaire)
+    logger.info(
+        "questionnaire_pipeline.batched",
+        extra={"system_id": system_id, "batches": len(batches)},
     )
 
-    if llm_response.get("finish_reason") == "length":
-        raise LLMParseError(
-            f"LLM output was truncated (finish_reason=length): "
-            f"input={llm_response.get('input_tokens', '?')} output={llm_response.get('output_tokens', '?')} tokens. "
-            f"The combined input+output exceeds the model context window. "
-            f"Increase QUESTIONNAIRE_MAX_TOKENS or reduce input size."
-        )
-
-    result = await parse_json_response(
-        llm_response["text"],
-        task="questionnaire_answer",
-        max_tokens=_QUESTIONNAIRE_MAX_TOKENS,
+    batch_results = await asyncio.gather(
+        *[
+            _run_batch(batch, system_prompt, registration_evidence, rag_chunks, idx)
+            for idx, batch in enumerate(batches)
+        ]
     )
 
-    _validate_llm_output(result)
+    # Merge in category order — each batch result is a list[dict].
+    merged: list[dict] = []
+    for batch_list in batch_results:
+        merged.extend(batch_list)
+    result = {"results": merged}
 
     # 5. Persist to MinIO.
     timestamp = datetime.now(timezone.utc)
