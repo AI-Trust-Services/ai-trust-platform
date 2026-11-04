@@ -56,7 +56,9 @@ async def test_question_assignment_and_unassign(owner, compliance, contributor):
         f"/api/registry/v1/systems/{sid}",
         json={"contributors": [contributor.e2e_username]},
     )
-    assert r.status_code == 200, f"add contributor failed: {r.status_code} {r.text[:300]}"
+    assert r.status_code == 200, (
+        f"add contributor failed: {r.status_code} {r.text[:300]}"
+    )
 
     state = await open_assessment(owner, sid)
     qkey = state["questions"][0]["question_key"]
