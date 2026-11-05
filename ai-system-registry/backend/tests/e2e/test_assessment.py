@@ -866,3 +866,67 @@ async def test_issue_without_assigned_co_allows_any_approver(client: httpx.Async
     )
     assert r.status_code == 200, r.text
     assert r.json()["workflow_status"] == "approved"
+
+
+# ── R2-2: issuing a classification generates obligations + requirements ──────
+
+
+async def _count_governance(system_id: str) -> tuple[int, int]:
+    """(#obligations, #requirements) for a system, read straight from the DB."""
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.obligation import Obligation
+    from ai_trust_persistence.models.requirement import Requirement
+    from sqlalchemy import func, select
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    async with AsyncSession(engine) as s:
+        obl = (
+            await s.execute(
+                select(func.count())
+                .select_from(Obligation)
+                .where(Obligation.ai_system_id == system_id)
+            )
+        ).scalar_one()
+        req = (
+            await s.execute(
+                select(func.count())
+                .select_from(Requirement)
+                .where(Requirement.ai_system_id == system_id)
+            )
+        ).scalar_one()
+    return obl, req
+
+
+@pytest.mark.asyncio
+async def test_issue_high_tier_generates_obligations_and_requirements(
+    client: httpx.AsyncClient,
+):
+    """Issuing a high-risk classification generates the governance chain atomically
+    in the same transaction as the approve."""
+    system_id = await _submit_as_owner(client)
+    assert await _count_governance(system_id) == (0, 0)  # none before issue
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "high", "transparency": True, "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 200, r.text
+    obligations, requirements = await _count_governance(system_id)
+    assert obligations > 0, "high-risk issue must generate obligations"
+    assert requirements > 0, "high-risk issue must generate requirements"
+
+
+@pytest.mark.asyncio
+async def test_issue_minimal_tier_generates_no_obligations(
+    client: httpx.AsyncClient,
+):
+    """A minimal-risk classification has no EU AI Act obligations — generation is a
+    no-op (not an error)."""
+    system_id = await _submit_as_owner(client)
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "minimal", "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 200, r.text
+    assert await _count_governance(system_id) == (0, 0)

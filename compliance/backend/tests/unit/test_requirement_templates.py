@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.requirement_templates import (
+from ai_trust_persistence.governance.requirement_templates import (
     _REQUIREMENT_ARTICLES,
     _REQUIREMENT_TEMPLATES,
     _role_allows,
@@ -10,7 +10,7 @@ from app.requirement_templates import (
     cluster_articles,
     requirements_for,
 )
-from app.obligation_templates import obligations_for
+from ai_trust_persistence.governance.obligation_templates import obligations_for
 from app.schemas.requirement import VALID_REQUIREMENT_CATEGORIES
 
 

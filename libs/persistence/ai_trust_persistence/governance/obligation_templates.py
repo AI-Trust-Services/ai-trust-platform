@@ -17,7 +17,7 @@ Hardcoded because the regulations are law, not configuration.
 
 from __future__ import annotations
 
-from app.requirement_templates import requirements_for
+from ai_trust_persistence.governance.requirement_templates import requirements_for
 
 # --- EU AI Act: High / Limited obligation clusters ---------------------------
 # Display metadata only. article_ref is the primary article shown for the cluster;

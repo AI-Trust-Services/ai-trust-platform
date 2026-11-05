@@ -20,7 +20,7 @@ from ai_trust_persistence.models import (
     evidence_requirements,
 )
 from ai_trust_persistence.models.evidence import Evidence
-from app.cascade import (
+from ai_trust_persistence.governance.cascade import (
     refresh_assessment_score,
     refresh_requirement_effectiveness,
     refresh_obligation,

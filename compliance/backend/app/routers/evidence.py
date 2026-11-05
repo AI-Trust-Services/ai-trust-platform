@@ -33,7 +33,7 @@ from ai_trust_persistence.models import (
     evidence_requirements,
 )
 from app import minio_client
-from app.cascade import (
+from ai_trust_persistence.governance import (
     refresh_requirement_effectiveness,
     refresh_obligations_for_requirement,
 )

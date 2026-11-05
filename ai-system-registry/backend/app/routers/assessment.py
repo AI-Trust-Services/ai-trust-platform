@@ -26,8 +26,13 @@ from ai_trust_authorization.constants import (
 )
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.governance import (
+    generate_obligations_in_session,
+    generate_requirements_in_session,
+)
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.assessment import Assessment
+from ai_trust_persistence.models.obligation import Obligation
 from ai_trust_persistence.models.question_comment import QuestionComment
 from ai_trust_persistence.models.question_state import QuestionState
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
@@ -1049,6 +1054,30 @@ async def issue_classification(
         if assessment is not None:
             assessment.status = "approved"
             assessment.confirmed_by = user
+            # Generate the governance chain (obligations + requirements) for the
+            # now-final tier, in THIS transaction so it is atomic with the approve:
+            # created iff the commit succeeds, and never persisted on failure.
+            # Idempotent — skip if obligations already exist (a reject→resubmit→
+            # re-issue cycle must not duplicate). minimal/GPAI/prohibited tiers
+            # yield no obligations (obligations_for returns []), so this is a no-op.
+            existing_obligations = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(Obligation)
+                    .where(Obligation.assessment_id == assessment.id)
+                )
+            ).scalar_one()
+            if existing_obligations == 0:
+                created, _ = await generate_obligations_in_session(
+                    session, assessment, row
+                )
+                if created:
+                    await generate_requirements_in_session(
+                        session,
+                        created,
+                        row.tier,
+                        getattr(row, "org_role", "provider") or "provider",
+                    )
         session.add(
             SystemWorkflowStep(
                 id=new_id("SWS"),
