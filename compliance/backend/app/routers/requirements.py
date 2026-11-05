@@ -16,7 +16,10 @@ from ai_trust_persistence.models import (
     Requirement,
     evidence_requirements,
 )
-from ai_trust_persistence.governance import refresh_obligation, refresh_obligations_for_requirement
+from ai_trust_persistence.governance import (
+    refresh_obligation,
+    refresh_obligations_for_requirement,
+)
 from app.ids import new_id
 from app.schemas import (
     RequirementCreate,
