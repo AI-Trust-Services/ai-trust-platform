@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { CheckCircle2, Circle } from "lucide-react";
-import type { AssessmentState } from "../../types";
+import type { AssessmentState, QuestionState } from "../../types";
 import { BUSINESS_QUESTIONS, AI_TECHNICAL_QUESTIONS } from "../../config/questionnaire";
 import { TierBadge } from "../../components/Badges";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,16 @@ export const ASSESSMENT_SECTIONS: { key: string; label: string; questionKeys: st
 ];
 
 export const ORDERED_QUESTION_KEYS = ASSESSMENT_SECTIONS.flatMap((s) => s.questionKeys);
+
+/** Progress-segment color: owner-confirmed ⇒ green; otherwise by AI confidence
+ * band (green/amber/red), matching the start-page confidence bar. Unknown ⇒ amber. */
+function segmentColor(s?: QuestionState): string {
+  if (s?.owner_confirmed) return "bg-[#1a9d5c]";
+  if (s?.confidence === "high") return "bg-[#1a9d5c]";
+  if (s?.confidence === "medium") return "bg-[#e0a008]";
+  if (s?.confidence === "low") return "bg-[#d14343]";
+  return "bg-[#e0a008]";
+}
 
 /** Left progress sidebar: system name + preliminary classification, per-section
  * completion fractions, per-question status, attention count, Finalize button. */
@@ -61,16 +71,13 @@ export function AssessmentSidebar({
             Role: <span className="text-foreground">{state.org_role}</span>
           </p>
         )}
-        {/* Per-question confirmation progress: one segment per question,
-            green = owner-confirmed, amber = still outstanding. */}
+        {/* Per-question progress: colored by confidence on load (green/amber/red,
+            matching the start-page confidence bar), then green once owner-confirmed. */}
         <div className="mt-3 flex gap-0.5">
           {ORDERED_QUESTION_KEYS.map((k) => (
             <div
               key={k}
-              className={cn(
-                "h-1.5 flex-1 rounded-full",
-                stateByKey[k]?.owner_confirmed ? "bg-[#1a9d5c]" : "bg-[#e0a008]",
-              )}
+              className={cn("h-1.5 flex-1 rounded-full", segmentColor(stateByKey[k]))}
             />
           ))}
         </div>

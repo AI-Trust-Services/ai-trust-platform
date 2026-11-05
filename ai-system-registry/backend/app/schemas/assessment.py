@@ -148,6 +148,9 @@ class AssessmentStateResponse(BaseModel):
     system_id: str
     system_name: str
     registration_mode: str
+    # The system owner's username (creator). Surfaced so the UI can let the owner
+    # delete any comment (contributors may delete only their own).
+    owner_username: str | None = None
     workflow_status: str
     # Owner-facing lifecycle label derived from the status (e.g. "locked" when the
     # assessment is pending_review/submitted, "under_review" when returned).

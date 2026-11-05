@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ChevronLeft, MoreVertical, Users, SignalHigh, SignalMedium, SignalLow } from "lucide-react";
+import { ChevronLeft, MoreVertical, Users, SignalHigh, SignalMedium, SignalLow, Trash2 } from "lucide-react";
 import type { ConfidenceLevel, QuestionComment, QuestionState } from "../../types";
 import { api } from "../../api/client";
 import { usePermissions } from "../../hooks/usePermissions";
+import InitialsAvatar from "../../components/InitialsAvatar";
 import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS, ASSESSMENT_SECTIONS } from "./AssessmentSidebar";
 import {
@@ -168,6 +169,24 @@ export default function QuestionView() {
       markSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Comment failed");
+    }
+  };
+
+  // The author may delete their own comment; the system owner may delete any.
+  // Backend enforces the same rule (delete_comment); this only gates the affordance.
+  const canDeleteComment = (c: QuestionComment): boolean =>
+    !!currentUser &&
+    (currentUser === c.author_username || currentUser === state.owner_username);
+
+  const removeComment = async (commentId: string) => {
+    if (!id || !questionKey) return;
+    if (!confirm("Delete this comment?")) return;
+    try {
+      await api.deleteComment(id, questionKey, commentId);
+      setComments((prev) => prev.filter((x) => x.id !== commentId));
+      markSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
     }
   };
 
@@ -336,19 +355,26 @@ export default function QuestionView() {
             <p className="text-sm font-medium">Comments</p>
             <ul className="mt-2 space-y-3">
               {comments.map((c) => (
-                <li key={c.id} className="flex items-start gap-2">
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#1147E9] text-xs font-semibold text-white">
-                    {c.author_username.slice(0, 2).toUpperCase()}
-                  </span>
-                  <div>
+                <li key={c.id} className="group flex items-start gap-2">
+                  <InitialsAvatar name={displayName(c.author_username)} />
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">
-                      {c.author_username}{" "}
+                      {displayName(c.author_username)}{" "}
                       <span className="font-normal text-muted-foreground">
                         {new Date(c.created_at).toLocaleString()}
                       </span>
                     </p>
                     <p className="text-sm">{c.body}</p>
                   </div>
+                  {canDeleteComment(c) && (
+                    <button
+                      onClick={() => removeComment(c.id)}
+                      aria-label="Delete comment"
+                      className="shrink-0 text-muted-foreground opacity-0 transition hover:text-[var(--danger-fg)] group-hover:opacity-100"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

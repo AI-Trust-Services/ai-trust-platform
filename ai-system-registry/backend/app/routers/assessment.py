@@ -170,8 +170,14 @@ async def _comment_counts(session, system_id: str) -> dict[str, int]:
     return {row.question_key: row.n for row in result.all()}
 
 
-def _needs_attention(state: QuestionState | None, answer: str | None) -> bool:
-    """Low confidence OR the AI left it unanswered (#346 'requires attention')."""
+def _needs_attention(
+    row: AISystem, state: QuestionState | None, answer: str | None
+) -> bool:
+    """A question needs the owner's attention when it is low-confidence OR the AI
+    could not pre-fill it (empty answer) — AND it has not yet been owner-confirmed.
+    Confirming a question clears it from the attention count."""
+    if _is_owner_confirmed(row, state):
+        return False
     if state is not None and state.confidence == "low":
         return True
     return answer is None or (isinstance(answer, str) and not answer.strip())
@@ -437,7 +443,7 @@ async def _build_state(
             conf.medium += 1
         elif st is not None and st.confidence == "low":
             conf.low += 1
-        needs = _needs_attention(st, ans)
+        needs = _needs_attention(row, st, ans)
         if needs:
             attention += 1
         # Per-question edit right for the requesting user — only meaningful while
@@ -503,6 +509,7 @@ async def _build_state(
         system_id=row.id,
         system_name=row.name,
         registration_mode=row.registration_mode,
+        owner_username=_system_owner(row),
         workflow_status=row.workflow_status,
         status_label=_status_label(row),
         editable=editable,
@@ -574,9 +581,14 @@ async def save_answer(
         if not _may_edit(row, state, user):
             raise HTTPException(403, "You are not assigned to this question")
 
+        # Capture the previous stored value BEFORE overwriting, so we can detect a
+        # genuine change (not just a change from the AI original).
+        prev = (_read_answer(row, _answer_store(row), question_key) or "").strip()
+        new = body.answer.strip()
         answers = _write_answer(row, _answer_store(row), question_key, body.answer)
         row.questionnaire_answers = answers
 
+        now = datetime.now(timezone.utc)
         if state is None:
             state = QuestionState(
                 id=new_id("QST"),
@@ -584,16 +596,23 @@ async def save_answer(
                 question_key=question_key,
                 answer_source="manual",
                 ai_original_answer=None,
+                answer_changed_at=now,
             )
             session.add(state)
-        else:
-            # A change away from the AI-proposed value flips the source to manual
-            # and reverts any prior confirmation (re-edit ⇒ Incomplete).
-            if body.answer.strip() != (state.ai_original_answer or "").strip():
-                state.answer_source = "manual"
-                state.confirmed_at = None
-            else:
-                state.answer_source = "ai_prefilled"
+        elif new != prev:
+            # A genuine change: record when it happened (drives the mandatory-
+            # comment-on-change gate) and revert any prior confirmation (re-edit ⇒
+            # Incomplete — including a revert back to the AI original). answer_source
+            # reflects whether the current value differs from the AI's proposal.
+            state.answer_changed_at = now
+            state.confirmed_at = None
+            state.confirmed_by = None
+            state.answer_source = (
+                "manual"
+                if new != (state.ai_original_answer or "").strip()
+                else "ai_prefilled"
+            )
+        # No change ⇒ leave state untouched.
         await session.commit()
         count = (await _comment_counts(session, system_id)).get(question_key, 0)
         return QuestionStateResponse(
@@ -604,7 +623,7 @@ async def save_answer(
             confirmed=bool(state.confirmed_at),
             assignee_username=state.assignee_username,
             comment_count=count,
-            needs_attention=_needs_attention(state, body.answer),
+            needs_attention=_needs_attention(row, state, body.answer),
         )
 
 
@@ -639,18 +658,22 @@ async def confirm_question(
             and current != (state.ai_original_answer or "").strip()
         )
         if changed:
-            # Require at least one (non-deleted) comment on this question.
-            result = await session.execute(
-                select(QuestionComment).where(
-                    QuestionComment.system_id == system_id,
-                    QuestionComment.question_key == question_key,
-                    QuestionComment.deleted_at.is_(None),
-                )
+            # Require a non-deleted comment recorded AT/AFTER the answer change —
+            # not merely that some comment exists (which an unrelated earlier
+            # comment would satisfy). answer_changed_at is set by save_answer on a
+            # genuine change; if it is somehow NULL, fall back to any-comment.
+            q = select(QuestionComment).where(
+                QuestionComment.system_id == system_id,
+                QuestionComment.question_key == question_key,
+                QuestionComment.deleted_at.is_(None),
             )
+            if state.answer_changed_at is not None:
+                q = q.where(QuestionComment.created_at >= state.answer_changed_at)
+            result = await session.execute(q)
             if not result.scalars().first():
                 raise HTTPException(
                     422,
-                    "A comment is required when changing an AI pre-filled answer",
+                    "A comment explaining the change is required before confirming",
                 )
 
         state.confirmed_at = datetime.now(timezone.utc)
@@ -853,7 +876,7 @@ async def assign_question(
         assignee_username=state.assignee_username,
         comment_count=count,
         needs_attention=_needs_attention(
-            state, _read_answer(row, answers, question_key)
+            row, state, _read_answer(row, answers, question_key)
         ),
     )
 

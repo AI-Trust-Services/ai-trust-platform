@@ -199,7 +199,142 @@ async def test_confirm_changed_answer_blocked_without_comment(
     assert r.status_code == 200, r.text
 
 
-# ── edit-gating ──────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_confirm_change_requires_comment_after_the_change(
+    client: httpx.AsyncClient,
+):
+    """A comment that predates the change must NOT satisfy the gate — the comment
+    has to be recorded at/after the answer change (audit of the override)."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    qkey = next(q["question_key"] for q in state["questions"] if q["answer"])
+    # A pre-existing comment, before any change.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        json={"body": "Looks fine as prefilled."},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    # Now change the answer.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "Owner-edited value that differs from the AI proposal."},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    # Confirm must still be rejected: the only comment predates the change.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 422, r.text
+    # A fresh comment (after the change) unblocks it.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        json={"body": "Changed: the prefill missed the HR context."},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_revert_to_ai_original_clears_confirmation(client: httpx.AsyncClient):
+    """Editing a confirmed answer back to the AI original is still a change, so it
+    must clear the prior confirmation (not leave a stale owner-confirmed state)."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    q = next(
+        q
+        for q in state["questions"]
+        if q["answer"] and q["answer_source"] == "ai_prefilled"
+    )
+    qkey, original = q["question_key"], q["answer"]
+    # Confirm the unchanged AI answer (no comment needed).
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    # Change it (manual), add a comment, confirm again.
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "A different, manually-entered value."},
+        headers=_hdr(_OWNER),
+    )
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        json={"body": "Override rationale."},
+        headers=_hdr(_OWNER),
+    )
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    # Revert back to the exact AI original — a genuine change → confirmation clears.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": original},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["confirmed"] is False
+    st = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    q_now = next(x for x in st.json()["questions"] if x["question_key"] == qkey)
+    assert q_now["confirmed"] is False
+    assert q_now["owner_confirmed"] is False
+
+
+@pytest.mark.asyncio
+async def test_state_exposes_owner_username(client: httpx.AsyncClient):
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    assert state["owner_username"] == _OWNER
+
+
+@pytest.mark.asyncio
+async def test_attention_count_drops_when_owner_confirms(client: httpx.AsyncClient):
+    """Confirming a flagged (low-confidence or empty) question removes it from the
+    'N questions require your attention' count — confirmation, not just an answer,
+    is what clears it (the question's confidence band stays 'low')."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    before = state["attention_count"]
+    assert before >= 1
+    # Pick a flagged question. The stub leaves it empty/low-confidence; give it a
+    # value + justifying comment so Confirm passes, then confirm it.
+    target = next(q for q in state["questions"] if q["needs_attention"])
+    qkey = target["question_key"]
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "Owner-supplied answer for a low-evidence question."},
+        headers=_hdr(_OWNER),
+    )
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        json={"body": "Filled in from internal knowledge; docs lacked it."},
+        headers=_hdr(_OWNER),
+    )
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    st = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    body = st.json()
+    q_now = next(x for x in body["questions"] if x["question_key"] == qkey)
+    assert q_now["needs_attention"] is False
+    assert q_now["owner_confirmed"] is True
+    assert body["attention_count"] == before - 1
 
 
 @pytest.mark.asyncio

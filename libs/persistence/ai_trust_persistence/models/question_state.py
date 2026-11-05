@@ -47,6 +47,13 @@ class QuestionState(Base):
     )
     confirmed_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
+    # When the answer last changed from its previous saved value. The confirm
+    # gate requires a justifying comment created at/after this instant when the
+    # answer is a manual change from the AI pre-fill (audit: "why the override").
+    answer_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # "ai_prefilled" until the owner/contributor changes the value → "manual".
     answer_source: Mapped[str] = mapped_column(String(20), default="ai_prefilled")
     # The AI's originally proposed value, retained to detect a change-from-AI
