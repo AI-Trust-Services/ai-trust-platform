@@ -294,6 +294,37 @@ def _classify_questionnaire(messages: list[dict]) -> dict:
     )
 
 
+def _questionnaire_answer(_messages: list[dict]) -> dict:
+    """Stub for the questionnaire answer pipeline task.
+
+    Returns a minimal valid response matching the output schema defined in the
+    questionnaire_answer prompt: one result for Scope_1 with NOT_ENOUGH_INFORMATION
+    (no evidence available in stub mode).
+    """
+    return _result(
+        json.dumps(
+            {
+                "results": [
+                    {
+                        "questionId": "Scope_1",
+                        "question": "Is your system an AI system within the meaning of the AI Act?",
+                        "questionType": "PREDEFINED",
+                        "answer": [
+                            {
+                                "value": "NOT_ENOUGH_INFORMATION",
+                                "answerStrength": None,
+                                "reason": "No sufficient evidence is available in stub mode to determine whether the system qualifies as an AI system under the AI Act.",
+                            }
+                        ],
+                        "explanation": "Stub mode: no real evidence was evaluated. Human verification required.",
+                        "references": [],
+                    }
+                ]
+            }
+        )
+    )
+
+
 def _assessment_prefill(messages: list[dict]) -> dict:
     """Deterministic assessment prefill: propose an answer + confidence per question.
 
@@ -370,5 +401,7 @@ def chat(messages: list[dict], *, task: str = "chat") -> dict:
         return _questionnaire_technical_turn(messages)
     if task == "questionnaire_doc_extract":
         return _questionnaire_doc_extract(messages)
+    if task == "questionnaire_answer" or task.startswith("questionnaire_answer_batch"):
+        return _questionnaire_answer(messages)
     # Repair or unknown task: return a harmless empty object.
     return _result("{}")

@@ -238,7 +238,7 @@ async def _cleanup() -> None:
 
 # Imported here so test files can do `from conftest import VALID_TIERS, register_system`
 # rather than knowing about the helpers module.
-from helpers import VALID_TIERS
+from helpers import VALID_TIERS, BUSINESS_ANSWERS
 from helpers import register_manual_system as _reg
 
 

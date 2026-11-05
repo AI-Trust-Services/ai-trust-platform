@@ -42,6 +42,7 @@ or from the `PROMPTS_DIR` env var if set. The Docker image bakes this directory 
 | `classify_questionnaire` | AI-mode authoritative classification | `flag_names` |
 | `json_repair_system` | JSON auto-repair retry — system prompt | — |
 | `json_repair_user` | JSON auto-repair retry — user prompt | `malformed_response` |
+| `questionnaire_answer` | Questionnaire answer pipeline — system prompt | — (no placeholders; questionnaire config + evidence passed as user message) |
 
 ## Editing & revisions
 

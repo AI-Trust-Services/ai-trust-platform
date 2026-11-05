@@ -19,6 +19,7 @@ Design notes:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from functools import lru_cache
@@ -106,3 +107,25 @@ def render_template(template_id: str, **variables: str) -> str:
         },
     )
     return text
+
+
+@lru_cache(maxsize=None)
+def load_questionnaire(questionnaire_id: str) -> dict:
+    """Read ``<prompts_dir>/<questionnaire_id>.json`` and return the parsed dict.
+
+    Cached by id. Raises ``PromptTemplateError`` when the file does not exist or
+    contains invalid JSON.
+    """
+    prompts_dir = _resolve_prompts_dir()
+    path = prompts_dir / f"{questionnaire_id}.json"
+    if not path.is_file():
+        raise PromptTemplateError(
+            f"Questionnaire '{questionnaire_id}' not found at '{path}'. "
+            f"Questionnaire files live in context/prompts/ (set PROMPTS_DIR to override)."
+        )
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise PromptTemplateError(
+            f"Questionnaire '{questionnaire_id}' at '{path}' contains invalid JSON: {exc}"
+        ) from exc
