@@ -83,7 +83,6 @@ def test_business_owner_permissions():
     assert set(ROLE_PERMISSIONS["business_owner"]) == {
         SYSTEMS_READ,
         SYSTEMS_WRITE,
-        SYSTEMS_APPROVE,
         ASSESSMENTS_READ,
         ASSESSMENTS_WRITE,
         EVIDENCE_READ,
