@@ -105,13 +105,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_question_comments_question_key", table_name="question_comments")
-    op.drop_index(
-        "ix_question_comments_assessment_id", table_name="question_comments"
-    )
+    op.drop_index("ix_question_comments_assessment_id", table_name="question_comments")
     op.drop_index("ix_question_comments_system_id", table_name="question_comments")
     op.drop_table("question_comments")
-    op.drop_index(
-        "ix_question_states_assessment_id", table_name="question_states"
-    )
+    op.drop_index("ix_question_states_assessment_id", table_name="question_states")
     op.drop_index("ix_question_states_system_id", table_name="question_states")
     op.drop_table("question_states")
