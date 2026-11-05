@@ -114,6 +114,7 @@ export interface QuestionState {
   owner_confirmed: boolean;
   assignee_username: string | null;
   comment_count: number;
+  has_qualifying_comment: boolean;
   needs_attention: boolean;
   can_edit: boolean;
 }

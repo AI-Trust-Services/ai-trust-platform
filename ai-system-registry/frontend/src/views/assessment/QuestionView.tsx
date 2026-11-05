@@ -97,13 +97,18 @@ export default function QuestionView() {
   const nextKey = idx >= 0 && idx < ORDERED_QUESTION_KEYS.length - 1 ? ORDERED_QUESTION_KEYS[idx + 1] : null;
 
   const changedFromAi = qState?.answer_source === "manual";
-  const hasComment = comments.length > 0;
+  // Whether a comment that SATISFIES the backend change-gate exists — i.e. one
+  // recorded at/after the last answer change. Backend-computed (mirrors the
+  // confirm gate) so a stale pre-change comment doesn't enable a confirm the
+  // server would reject. Kept fresh by reload() after add/delete/save.
+  const hasQualifyingComment = qState?.has_qualifying_comment ?? false;
   // Read-only: the whole assessment is locked, or this question isn't the
   // current user's to edit. Drives input disabling + hides edit affordances.
   const canEdit = state.editable && (qState?.can_edit ?? false);
   // The CONFIRM gate: must be editable, and if the answer was changed from the
-  // AI pre-fill, a comment is mandatory.
-  const confirmDisabled = busy || !canEdit || (changedFromAi && !hasComment);
+  // AI pre-fill, a qualifying comment (recorded after the change) is mandatory.
+  const confirmDisabled =
+    busy || !canEdit || (changedFromAi && !hasQualifyingComment);
 
   useEffect(() => {
     setAnswer(qState?.answer ?? "");
@@ -167,6 +172,9 @@ export default function QuestionView() {
       setComments((prev) => [...prev, c]);
       setCommentDraft("");
       markSaved();
+      // Refresh so the backend-computed has_qualifying_comment (which drives the
+      // Confirm gate) reflects the new comment.
+      await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Comment failed");
     }
@@ -175,6 +183,7 @@ export default function QuestionView() {
   // The author may delete their own comment; the system owner may delete any.
   // Backend enforces the same rule (delete_comment); this only gates the affordance.
   const canDeleteComment = (c: QuestionComment): boolean =>
+    state.editable &&
     !!currentUser &&
     (currentUser === c.author_username || currentUser === state.owner_username);
 
@@ -323,7 +332,7 @@ export default function QuestionView() {
           </p>
         </div>
 
-        {changedFromAi && !hasComment && canEdit && (
+        {changedFromAi && !hasQualifyingComment && canEdit && (
           <p className="mt-3 text-xs font-medium text-[#8b3a00]">
             You changed the AI answer — add a comment explaining the change before confirming.
           </p>

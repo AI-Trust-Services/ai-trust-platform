@@ -930,3 +930,50 @@ async def test_issue_minimal_tier_generates_no_obligations(
     )
     assert r.status_code == 200, r.text
     assert await _count_governance(system_id) == (0, 0)
+
+
+@pytest.mark.asyncio
+async def test_state_has_qualifying_comment_tracks_change_gate(
+    client: httpx.AsyncClient,
+):
+    """/state.has_qualifying_comment mirrors the confirm gate: false for a changed
+    answer whose only comment predates the change, true once a post-change comment
+    exists. Lets the frontend enable Confirm exactly as the backend will accept."""
+
+    def _q(state: dict, key: str) -> dict:
+        return next(x for x in state["questions"] if x["question_key"] == key)
+
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    qkey = next(q["question_key"] for q in state["questions"] if q["answer"])
+    # Comment BEFORE the change.
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        json={"body": "pre-change note"},
+        headers=_hdr(_OWNER),
+    )
+    # Change the answer.
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "Owner-edited value differing from the AI proposal."},
+        headers=_hdr(_OWNER),
+    )
+    st = (
+        await client.get(
+            f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+        )
+    ).json()
+    # Only a pre-change comment exists → does NOT qualify.
+    assert _q(st, qkey)["has_qualifying_comment"] is False
+    # Add a post-change comment → now qualifies.
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        json={"body": "post-change justification"},
+        headers=_hdr(_OWNER),
+    )
+    st = (
+        await client.get(
+            f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+        )
+    ).json()
+    assert _q(st, qkey)["has_qualifying_comment"] is True

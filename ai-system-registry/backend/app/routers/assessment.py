@@ -175,6 +175,32 @@ async def _comment_counts(session, system_id: str) -> dict[str, int]:
     return {row.question_key: row.n for row in result.all()}
 
 
+async def _qualifying_comment_keys(
+    session, system_id: str, states: dict[str, QuestionState]
+) -> set[str]:
+    """Question keys that have a non-deleted comment recorded AT/AFTER the answer
+    last changed — i.e. a comment that *qualifies* for the mandatory-comment-on-
+    change confirm gate. Mirrors the gate in ``confirm_question`` so the frontend
+    can enable/disable Confirm exactly as the backend will accept it. Questions
+    whose ``answer_changed_at`` is null are treated as 'any non-deleted comment
+    qualifies' (same fallback as the gate)."""
+    result = await session.execute(
+        select(QuestionComment.question_key, func.max(QuestionComment.created_at))
+        .where(
+            QuestionComment.system_id == system_id,
+            QuestionComment.deleted_at.is_(None),
+        )
+        .group_by(QuestionComment.question_key)
+    )
+    latest_by_key = {k: ts for k, ts in result.all()}
+    qualifying: set[str] = set()
+    for key, latest in latest_by_key.items():
+        changed_at = states.get(key).answer_changed_at if states.get(key) else None
+        if changed_at is None or (latest is not None and latest >= changed_at):
+            qualifying.add(key)
+    return qualifying
+
+
 def _needs_attention(
     row: AISystem, state: QuestionState | None, answer: str | None
 ) -> bool:
@@ -433,6 +459,7 @@ async def _build_state(
 ) -> AssessmentStateResponse:
     states = await _states_by_key(session, row.id)
     counts = await _comment_counts(session, row.id)
+    qualifying = await _qualifying_comment_keys(session, row.id, states)
     answers = _answer_store(row)
     editable = _is_editable(row)
 
@@ -464,6 +491,7 @@ async def _build_state(
                 owner_confirmed=_is_owner_confirmed(row, st),
                 assignee_username=st.assignee_username if st else None,
                 comment_count=counts.get(q_key, 0),
+                has_qualifying_comment=q_key in qualifying,
                 needs_attention=needs,
                 can_edit=can_edit,
             )
@@ -593,7 +621,11 @@ async def save_answer(
         answers = _write_answer(row, _answer_store(row), question_key, body.answer)
         row.questionnaire_answers = answers
 
-        now = datetime.now(timezone.utc)
+        # Stamp the answer-change time from the DATABASE clock (func.now()), the
+        # same clock QuestionComment.created_at uses (server_default=func.now()),
+        # so the confirm gate's `created_at >= answer_changed_at` comparison is
+        # not corrupted by backend↔Postgres clock skew on a multi-node deploy.
+        change_ts = func.now()
         if state is None:
             state = QuestionState(
                 id=new_id("QST"),
@@ -601,7 +633,7 @@ async def save_answer(
                 question_key=question_key,
                 answer_source="manual",
                 ai_original_answer=None,
-                answer_changed_at=now,
+                answer_changed_at=change_ts,
             )
             session.add(state)
         elif new != prev:
@@ -609,7 +641,7 @@ async def save_answer(
             # comment-on-change gate) and revert any prior confirmation (re-edit ⇒
             # Incomplete — including a revert back to the AI original). answer_source
             # reflects whether the current value differs from the AI's proposal.
-            state.answer_changed_at = now
+            state.answer_changed_at = change_ts
             state.confirmed_at = None
             state.confirmed_by = None
             state.answer_source = (
