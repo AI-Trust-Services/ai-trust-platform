@@ -183,6 +183,21 @@ class SubmitRequest(BaseModel):
     note: str | None = None
 
 
+class QuestionnaireResultItem(BaseModel):
+    """One result from the questionnaire-run pipeline output."""
+
+    questionId: str
+    answer: list[dict] = []
+    explanation: str = ""
+
+
+class ApplyRunRequest(BaseModel):
+    """Body for POST /assessment/apply-run."""
+
+    run_key: str
+    results: list[QuestionnaireResultItem]
+
+
 # ── Compliance Officer end view (#348) ───────────────────────────────────────
 
 # Tiers the CO may issue, and the only allowed companion.

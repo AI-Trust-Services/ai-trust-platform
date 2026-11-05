@@ -7,10 +7,10 @@ import { usePermissions } from "../../hooks/usePermissions";
 import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS, ASSESSMENT_SECTIONS } from "./AssessmentSidebar";
 import {
-  BUSINESS_QUESTIONS,
-  AI_TECHNICAL_QUESTIONS,
-  type QuestionDef,
-} from "../../config/questionnaire";
+  QUESTION_DEF_BY_ID,
+  isPredefined,
+  isMultiselect,
+} from "../../config/aiQuestionnaire";
 import {
   Dialog,
   DialogContent,
@@ -25,24 +25,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-const QUESTION_DEFS: Record<string, QuestionDef> = Object.fromEntries(
-  [...BUSINESS_QUESTIONS, ...AI_TECHNICAL_QUESTIONS].map((q) => [q.key, q]),
-);
-
 function sectionLabel(questionKey: string): string {
   return ASSESSMENT_SECTIONS.find((s) => s.questionKeys.includes(questionKey))?.label ?? "";
-}
-
-const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-
-/** The option to render as selected for a choice question: the exact answer if it
- * is an option, else a UNIQUE case/whitespace-insensitive match, else null. Never
- * fuzzy/nearest — an ambiguous answer selects nothing rather than risk a wrong
- * (e.g. prohibited/exception) option. Backstop behind the backend option constraint. */
-function selectedOption(answer: string, options: string[]): string | null {
-  if (options.includes(answer)) return answer;
-  const hits = options.filter((o) => norm(o) === norm(answer));
-  return hits.length === 1 ? hits[0] : null;
 }
 
 function ConfidenceIndicator({
@@ -80,7 +64,7 @@ export default function QuestionView() {
     () => state.questions.find((q) => q.question_key === questionKey),
     [state.questions, questionKey],
   );
-  const def = questionKey ? QUESTION_DEFS[questionKey] : undefined;
+  const def = questionKey ? QUESTION_DEF_BY_ID[questionKey] : undefined;
 
   const [answer, setAnswer] = useState(qState?.answer ?? "");
   const [comments, setComments] = useState<QuestionComment[]>([]);
@@ -97,11 +81,7 @@ export default function QuestionView() {
 
   const changedFromAi = qState?.answer_source === "manual";
   const hasComment = comments.length > 0;
-  // Read-only: the whole assessment is locked, or this question isn't the
-  // current user's to edit. Drives input disabling + hides edit affordances.
   const canEdit = state.editable && (qState?.can_edit ?? false);
-  // The CONFIRM gate: must be editable, and if the answer was changed from the
-  // AI pre-fill, a comment is mandatory.
   const confirmDisabled = busy || !canEdit || (changedFromAi && !hasComment);
 
   useEffect(() => {
@@ -113,7 +93,6 @@ export default function QuestionView() {
     api.listComments(id, questionKey).then(setComments).catch(() => setComments([]));
   }, [id, questionKey]);
 
-  // Resolve contributor usernames → display names for the assignee dropdown.
   useEffect(() => {
     api
       .getAllUsers()
@@ -143,7 +122,6 @@ export default function QuestionView() {
     }
   };
 
-  // Owner or current assignee may (re)assign this question.
   const mayAssign =
     canEdit || (!!qState?.assignee_username && qState.assignee_username === currentUser);
   const assignedToMe = qState?.assignee_username === currentUser && !!currentUser;
@@ -188,8 +166,6 @@ export default function QuestionView() {
   };
 
   const goNext = async () => {
-    // "Next" does not confirm; if a confirmed answer was re-edited the backend
-    // already reverted it to Incomplete on save. Just navigate.
     if (nextKey && id) navigate(`/systems/${id}/assessment/q/${nextKey}`);
   };
 
@@ -197,13 +173,19 @@ export default function QuestionView() {
     return <div className="p-8 text-sm text-muted-foreground">Unknown question.</div>;
   }
 
-  const options = def.options ?? (def.type === "boolean" ? ["Yes", "No"] : []);
-  const isChoice = options.length > 0;
-  // Safety net behind the backend option-constraint: a prefilled answer should
-  // already equal an option verbatim, but tolerate a case/whitespace near-miss so
-  // the radio still selects. Only auto-select on a UNIQUE normalized match — never
-  // fuzzy/nearest (a mis-selected prohibited/exception answer is a compliance risk).
-  const selected = isChoice ? selectedOption(answer, options) : null;
+  // MULTISELECT: parse the current answer as a JSON string array.
+  const selectedMulti: string[] = isMultiselect(def)
+    ? (() => { try { return JSON.parse(answer || "[]") as string[]; } catch { return []; } })()
+    : [];
+
+  const toggleOption = (val: string) => {
+    const next = selectedMulti.includes(val)
+      ? selectedMulti.filter((v) => v !== val)
+      : [...selectedMulti, val];
+    const serialized = JSON.stringify(next);
+    setAnswer(serialized);
+    saveAnswer(serialized);
+  };
 
   return (
     <div className="mx-auto max-w-3xl px-8 py-8">
@@ -221,7 +203,6 @@ export default function QuestionView() {
                 {displayName(qState.assignee_username)}
               </span>
             )}
-            {/* Assign-to-colleague — people icon → assignee dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger aria-label="Assign to colleague" disabled={!mayAssign}>
                 <Users
@@ -247,7 +228,6 @@ export default function QuestionView() {
                 <DropdownMenuItem onClick={() => assignTo(null)}>Set unassigned</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            {/* Three-dot menu — comment actions only (not assignment) */}
             <DropdownMenu>
               <DropdownMenuTrigger aria-label="Comment actions" disabled={!canEdit}>
                 <MoreVertical className="size-4 text-muted-foreground" />
@@ -261,8 +241,7 @@ export default function QuestionView() {
           </div>
         </div>
 
-        <h1 className="mt-1 text-2xl font-bold">{def.label}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{def.hint}</p>
+        <h1 className="mt-1 text-2xl font-bold">{def.question}</h1>
 
         <div className="mt-3">
           <ConfidenceIndicator
@@ -273,13 +252,14 @@ export default function QuestionView() {
         </div>
 
         <div className="mt-5 space-y-2">
-          {isChoice ? (
-            options.map((opt) => (
+          {isPredefined(def) ? (
+            // PREDEFINED: radio buttons
+            def.allowedAnswers.map((opt) => (
               <label key={opt} className="flex cursor-pointer items-center gap-2 text-sm">
                 <input
                   type="radio"
                   name={questionKey}
-                  checked={selected === opt}
+                  checked={answer === opt}
                   disabled={!canEdit}
                   onChange={() => {
                     setAnswer(opt);
@@ -289,7 +269,21 @@ export default function QuestionView() {
                 <span>{opt}</span>
               </label>
             ))
+          ) : isMultiselect(def) ? (
+            // MULTISELECT: checkboxes
+            def.allowedAnswers.map((opt) => (
+              <label key={opt.value} className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selectedMulti.includes(opt.value)}
+                  disabled={!canEdit}
+                  onChange={() => toggleOption(opt.value)}
+                />
+                <span>{opt.label}</span>
+              </label>
+            ))
           ) : (
+            // DESCRIPTIVE: textarea
             <textarea
               className="min-h-24 w-full rounded-md border border-border p-3 text-sm disabled:bg-[var(--muted)]/40"
               value={answer}
@@ -393,7 +387,7 @@ export default function QuestionView() {
             <DialogTitle>Answer confidence</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 text-sm">
-            <p className="font-medium">{def.label}</p>
+            <p className="font-medium">{def.question}</p>
             <p>
               Confidence level:{" "}
               <span className="font-medium capitalize">{qState?.confidence ?? "not assessed"}</span>

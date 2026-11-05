@@ -11,10 +11,9 @@ its transaction (``async with SessionLocal()``), per the repo convention.
 
 from __future__ import annotations
 
-import os
+import json
 from datetime import datetime, timezone
 
-import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import func, select
 
@@ -24,7 +23,7 @@ from ai_trust_authorization.constants import (
     SYSTEMS_READ,
     SYSTEMS_WRITE,
 )
-from ai_trust_logging import correlation_id_var, get_logger
+from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.assessment import Assessment
@@ -35,22 +34,13 @@ from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from app import email_sender
 from app.assessment_catalogue import (
     ASSESSMENT_QUESTION_KEYS,
-    SYSTEM_STORAGE_KEYS,
-    decisive_question_keys,
-    question_catalogue,
-    section_of,
 )
 from app.classifier import classify_ai_questionnaire
 from app.ids import new_id
-from app.llm import (
-    LLMParseError,
-    build_assessment_prefill_messages,
-    chat,
-    parse_json_response,
-)
 from app.questionnaire_required import QUESTION_LABEL
 from app.schemas.assessment import (
     AnswerRequest,
+    ApplyRunRequest,
     AssessmentStateResponse,
     AssignRequest,
     CommentCreate,
@@ -58,7 +48,6 @@ from app.schemas.assessment import (
     ConfidenceCounts,
     ContributorRef,
     ConfirmResponse,
-    DecisiveQuestion,
     QuestionStateResponse,
     SourceDocumentRef,
     SubmitRequest,
@@ -70,20 +59,11 @@ from app.schemas.assessment import (
 router = APIRouter(tags=["assessment"])
 logger = get_logger(__name__)
 
-_AI_UNAVAILABLE = "AI classification is unavailable. Please try again shortly."
-
 # The single-page assessment flow is EU-AI-Act-specific (classifier, question
 # catalogue, and prompts are all EU AI Act). The compliance Assessment record it
 # creates is therefore always under this framework (seeded by persistence
 # migration 0003). Named here rather than inlined as a magic string.
 _EU_AI_ACT_FRAMEWORK_ID = "FRM-EU-AI-ACT"
-
-_INDEXING_URL = os.environ.get(
-    "INDEXING_BACKEND_URL", "http://document-indexing-backend:8011"
-)
-_SERVICE_PRINCIPAL = os.environ.get(
-    "EXTERNAL_API_SERVICE_PRINCIPAL", "svc-external-api"
-)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -115,37 +95,17 @@ def _answer_store(row: AISystem) -> dict:
 
 
 def _read_answer(row: AISystem, answers: dict, question_key: str) -> str | None:
-    """Read a question's answer from its canonical store. System-storage business
-    keys (``SYSTEM_STORAGE_KEYS``, e.g. department/use_case) live on the AISystem
-    column; technical (AI-mode free-text) keys live nested under ``technical``;
-    other business keys live at the top level of ``questionnaire_answers``."""
-    if question_key in SYSTEM_STORAGE_KEYS:
-        v = getattr(row, question_key, None)
-    elif section_of(question_key) == "technical":
-        tech = answers.get("technical") or {}
-        v = tech.get(question_key)
-    else:
-        v = answers.get(question_key)
+    """Read a question's answer from the flat questionnaire_answers JSONB dict."""
+    v = answers.get(question_key)
     if v is None:
         return None
     return str(v)
 
 
 def _write_answer(row: AISystem, answers: dict, question_key: str, value: str) -> dict:
-    """Persist a question's answer to its canonical store and return the (possibly
-    updated) answers dict. System-storage keys are written to the AISystem column
-    (the dict is returned unchanged for them); other keys are written into the
-    section-aware ``questionnaire_answers`` dict."""
-    if question_key in SYSTEM_STORAGE_KEYS:
-        setattr(row, question_key, value)
-        return answers
+    """Write a question's answer into the flat questionnaire_answers JSONB dict."""
     out = dict(answers)
-    if section_of(question_key) == "technical":
-        tech = dict(out.get("technical") or {})
-        tech[question_key] = value
-        out["technical"] = tech
-    else:
-        out[question_key] = value
+    out[question_key] = value
     return out
 
 
@@ -261,58 +221,7 @@ async def _ensure_assessment(session, row: AISystem) -> None:
     )
 
 
-async def _retrieve_context(
-    system_id: str,
-) -> tuple[str, list[SourceDocumentRef]]:
-    """Fetch top document passages for prefill. Returns (context_block, sources).
-
-    Fails soft: if indexing is unreachable or returns nothing, returns an empty
-    block and an empty source list (prefill then proposes low-confidence /
-    empty answers)."""
-    payload = {"ai_system_id": system_id, "query": "EU AI Act classification", "k": 12}
-    headers = {"x-forwarded-preferred-username": _SERVICE_PRINCIPAL}
-    cid = correlation_id_var.get("")
-    if cid:
-        headers["x-correlation-id"] = cid
-    url = f"{_INDEXING_URL}/v1/retrieve"
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-        if resp.status_code >= 400:
-            logger.warning(
-                "assessment.retrieve_failed", extra={"status": resp.status_code}
-            )
-            return "", []
-        data = resp.json()
-    except (httpx.TimeoutException, httpx.RequestError, ValueError) as exc:
-        logger.warning("assessment.retrieve_unreachable", extra={"error": str(exc)})
-        return "", []
-
-    # /v1/retrieve returns a bare JSON array of passages (response_model=
-    # list[RetrievedPassage]). Tolerate an object wrapper too, defensively.
-    if isinstance(data, dict):
-        results = data.get("results") or data.get("passages") or []
-    elif isinstance(data, list):
-        results = data
-    else:
-        results = []
-    passages: list[str] = []
-    sources: dict[tuple[str, int | None], SourceDocumentRef] = {}
-    for r in results:
-        passage = r.get("passage") or ""
-        src = r.get("source") or {}
-        name = src.get("filename") or "document"
-        page = src.get("page")
-        if passage:
-            loc = f" (p. {page})" if page is not None else ""
-            passages.append(f"[{name}{loc}] {passage}")
-        key = (name, page)
-        if key not in sources:
-            sources[key] = SourceDocumentRef(name=name, page=page)
-    return "\n\n".join(passages), list(sources.values())
-
-
-# ── open / prefill ─────────────────────────────────────────────────────────
+# ── open ─────────────────────────────────────────────────────────────────────
 
 
 @router.post(
@@ -324,95 +233,32 @@ async def open_assessment(
     request: Request,
     _: str = Depends(require_permission(SYSTEMS_WRITE)),
 ):
-    """Lazily prefill + classify on first open; return cached state thereafter.
-
-    One batched LLM call proposes an answer + confidence per question from the
-    system's indexed documents, then the deterministic classifier derives the
-    tier. Seeds ``question_states`` and persists answers. Idempotent: once
-    ``question_states`` rows exist, this is a plain read."""
+    """Lazily seed empty question_states rows on first open; return cached state
+    thereafter. No LLM call — answers are populated separately via /apply-run.
+    Idempotent: once question_states rows exist, this is a plain read."""
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
         existing = await _states_by_key(session, system_id)
         if existing:
-            # Self-heal: ensure the compliance Assessment row exists even for
-            # systems prefilled before that creation was added (idempotent).
             await _ensure_assessment(session, row)
             await session.commit()
             return await _build_state(session, row, _current_user(request))
 
-        # ── prefill pass (one batched LLM call) ──
-        context_block, sources = await _retrieve_context(system_id)
-        messages = build_assessment_prefill_messages(
-            question_catalogue(), retrieved_context=context_block
-        )
-        try:
-            result = await chat(messages, json_mode=True, task="assessment_prefill")
-            parsed = await parse_json_response(
-                result["text"], task="assessment_prefill"
-            )
-            # Validate the shape here (inside the handler): a syntactically valid
-            # but schema-invalid payload (e.g. a top-level array, or answers as a
-            # string) must surface as the 502 AI-unavailable response, not a 500.
-            if not isinstance(parsed, dict):
-                raise ValueError("prefill response is not a JSON object")
-            raw_answers = parsed.get("answers") or []
-            if not isinstance(raw_answers, list):
-                raise ValueError("prefill 'answers' is not a list")
-            prefilled = {
-                a["question_key"]: a
-                for a in raw_answers
-                if isinstance(a, dict) and "question_key" in a
-            }
-        except (LLMParseError, Exception) as exc:  # noqa: BLE001
-            logger.error("assessment.prefill_failed", extra={"error": str(exc)})
-            raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
-
-        answers = _answer_store(row)
         for q_key in ASSESSMENT_QUESTION_KEYS:
-            proposal = prefilled.get(q_key) or {}
-            ans = (proposal.get("answer") or "").strip()
-            conf = proposal.get("confidence")
-            if conf not in ("high", "medium", "low"):
-                conf = "low"
-            if ans:
-                answers = _write_answer(row, answers, q_key, ans)
             session.add(
                 QuestionState(
                     id=new_id("QST"),
                     system_id=system_id,
                     question_key=q_key,
                     answer_source="ai_prefilled",
-                    ai_original_answer=ans or None,
-                    confidence=conf,
+                    ai_original_answer=None,
+                    confidence=None,
                 )
             )
-        row.questionnaire_answers = answers
 
-        # ── classification (tier) — deterministic over the LLM-inferred flags ──
-        try:
-            classification, rationale = await classify_ai_questionnaire(row)
-        except (LLMParseError, Exception) as exc:  # noqa: BLE001
-            logger.error("assessment.classify_failed", extra={"error": str(exc)})
-            raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
-        row.tier = classification.tier
-        row.basis = classification.basis
-        row.annex_iii_area = classification.annex_iii_area
-        row.classification_rationale = rationale
-        if rationale.get("org_role"):
-            row.org_role = rationale["org_role"]
-        # Persist the source passages (filename + page) that informed the prefill,
-        # so the start page / confidence modal / CO panel can cite them with pages.
-        row.assessment_sources = [s.model_dump() for s in sources]
-
-        # Ensure a compliance Assessment record exists so the governance tables
-        # (owner's Assessments tab, /home/assessments) reflect this assessment.
         await _ensure_assessment(session, row)
-
         await session.commit()
-        logger.info(
-            "assessment.opened",
-            extra={"system_id": system_id, "tier": row.tier},
-        )
+        logger.info("assessment.opened", extra={"system_id": system_id})
         row = await _get_system(session, system_id)
         return await _build_state(session, row, _current_user(request))
 
@@ -459,21 +305,6 @@ async def _build_state(
         )
 
     rationale = row.classification_rationale or {}
-    fired = [
-        f.get("flag")
-        for f in (rationale.get("flags") or [])
-        if isinstance(f, dict) and f.get("value")
-    ]
-    decisive = []
-    for q_key in decisive_question_keys([f for f in fired if f]):
-        decisive.append(
-            DecisiveQuestion(
-                section=section_of(q_key),
-                question_key=q_key,
-                question_label=QUESTION_LABEL.get(q_key, q_key),
-                answer=_read_answer(row, answers, q_key),
-            )
-        )
 
     # Source documents that informed the classification (assessment-level).
     # Prefer the persisted retrieval sources (they carry page numbers); fall back
@@ -518,7 +349,7 @@ async def _build_state(
         ),
         confidence_counts=conf,
         attention_count=attention,
-        decisive_questions=decisive,
+        decisive_questions=[],
         source_documents=source_docs,
         questions=questions,
         contributors=contributor_refs,
@@ -536,6 +367,99 @@ async def get_assessment_state(
     _: str = Depends(require_permission(SYSTEMS_READ)),
 ):
     async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        return await _build_state(session, row, _current_user(request))
+
+
+@router.post(
+    "/systems/{system_id}/assessment/apply-run",
+    response_model=AssessmentStateResponse,
+)
+async def apply_questionnaire_run(
+    system_id: str,
+    body: ApplyRunRequest,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    """Write questionnaire-run pipeline results into question_states + derive tier.
+
+    Accepts the output of POST /questionnaire-run and upserts one QuestionState
+    per answered question. After writing all answers, runs the deterministic
+    classifier to derive the preliminary tier.  Returns the updated AssessmentState."""
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        if not _is_editable(row):
+            raise HTTPException(409, "Assessment is locked and cannot be edited")
+
+        answers = _answer_store(row)
+        existing_states = await _states_by_key(session, system_id)
+
+        for item in body.results:
+            q_key = item.questionId
+            if q_key not in {s.question_key for s in existing_states.values()} | set(
+                ASSESSMENT_QUESTION_KEYS
+            ):
+                continue
+            if not item.answer:
+                continue
+
+            # Combine multiple answer values (e.g. MULTISELECT) as a JSON array;
+            # single-value questions (PREDEFINED, DESCRIPTIVE) use the plain value.
+            raw_values = [a.get("value", "") for a in item.answer if a.get("value")]
+            if not raw_values:
+                continue
+            answer_value = (
+                json.dumps(raw_values) if len(raw_values) > 1 else raw_values[0]
+            )
+            answers = _write_answer(row, answers, q_key, answer_value)
+
+            if q_key in existing_states:
+                st = existing_states[q_key]
+                st.answer_source = "ai_prefilled"
+                st.ai_original_answer = answer_value
+                st.confidence = None
+                st.confirmed_at = None
+                st.confirmed_by = None
+            else:
+                session.add(
+                    QuestionState(
+                        id=new_id("QST"),
+                        system_id=system_id,
+                        question_key=q_key,
+                        answer_source="ai_prefilled",
+                        ai_original_answer=answer_value,
+                        confidence=None,
+                    )
+                )
+
+        row.questionnaire_answers = answers
+
+        try:
+            classification, rationale = await classify_ai_questionnaire(row)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "assessment.apply_run_classify_failed", extra={"error": str(exc)}
+            )
+            classification = None
+            rationale = {}
+
+        if classification is not None:
+            row.tier = classification.tier
+            row.basis = classification.basis
+            row.annex_iii_area = classification.annex_iii_area
+            row.classification_rationale = rationale
+            if rationale.get("org_role"):
+                row.org_role = rationale["org_role"]
+
+        await session.commit()
+        logger.info(
+            "assessment.apply_run",
+            extra={
+                "system_id": system_id,
+                "run_key": body.run_key,
+                "tier": row.tier,
+            },
+        )
         row = await _get_system(session, system_id)
         return await _build_state(session, row, _current_user(request))
 

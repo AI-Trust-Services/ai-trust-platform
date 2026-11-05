@@ -511,3 +511,24 @@ export interface AuditEventListResponse {
   items: AuditEvent[];
 }
 
+export interface QuestionnaireAnswer {
+  value: string;
+  answerStrength?: string | null;
+  reason?: string;
+}
+
+export interface QuestionnaireResultItem {
+  questionId: string;
+  question?: string;
+  questionType?: string;
+  answer: QuestionnaireAnswer[];
+  explanation?: string;
+  references?: string[];
+}
+
+export interface QuestionnaireRunResponse {
+  run_key: string;
+  presigned_url: string;
+  result: { results: QuestionnaireResultItem[] };
+}
+

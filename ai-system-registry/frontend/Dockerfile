@@ -5,6 +5,9 @@ WORKDIR /app
 # Copy shared libraries first (for better layer caching)
 COPY libs/react-hooks /libs/react-hooks
 
+# Copy the EU AI Act questionnaire JSON so it can be imported at build time.
+COPY context/prompts/ai-questionnaire.json /app/context/prompts/ai-questionnaire.json
+
 # Copy frontend package.json and install deps
 COPY ai-system-registry/frontend/package*.json ./
 RUN npm ci

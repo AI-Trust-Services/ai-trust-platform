@@ -2,25 +2,15 @@ import { useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { CheckCircle2, Circle } from "lucide-react";
 import type { AssessmentState } from "../../types";
-import { BUSINESS_QUESTIONS, AI_TECHNICAL_QUESTIONS } from "../../config/questionnaire";
+import { AI_SECTIONS, ORDERED_QUESTION_IDS, QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
 import { TierBadge } from "../../components/Badges";
 import { cn } from "@/lib/utils";
 
-/** Ordered sections → question keys, mirroring the backend assessment_catalogue. */
-export const ASSESSMENT_SECTIONS: { key: string; label: string; questionKeys: string[] }[] = [
-  {
-    key: "business",
-    label: "Use Case & Context",
-    questionKeys: BUSINESS_QUESTIONS.filter((q) => q.key !== "external_id").map((q) => q.key),
-  },
-  {
-    key: "technical",
-    label: "AI Risk Classification",
-    questionKeys: AI_TECHNICAL_QUESTIONS.map((q) => q.key),
-  },
-];
+/** Ordered sections → question keys, derived from ai-questionnaire.json. */
+export const ASSESSMENT_SECTIONS: { key: string; label: string; questionKeys: string[] }[] =
+  AI_SECTIONS.map((s) => ({ key: s.key, label: s.label, questionKeys: s.questionIds }));
 
-export const ORDERED_QUESTION_KEYS = ASSESSMENT_SECTIONS.flatMap((s) => s.questionKeys);
+export const ORDERED_QUESTION_KEYS = ORDERED_QUESTION_IDS;
 
 /** Left progress sidebar: system name + preliminary classification, per-section
  * completion fractions, per-question status, attention count, Finalize button. */
@@ -103,7 +93,6 @@ export function AssessmentSidebar({
         </div>
         {ASSESSMENT_SECTIONS.map((section) => {
           const total = section.questionKeys.length;
-          // Completion is OWNER-confirmed (the submit gate), not any confirmation.
           const complete = section.questionKeys.filter((k) => stateByKey[k]?.owner_confirmed).length;
           return (
             <div key={section.key} className="mb-4">
@@ -117,8 +106,6 @@ export function AssessmentSidebar({
                 {section.questionKeys.map((key) => {
                   const q = stateByKey[key];
                   const ownerConfirmed = q?.owner_confirmed;
-                  // Confirmed by a contributor but not yet by the owner — progress,
-                  // but still needs the owner's confirmation before submit.
                   const contributorOnly = q?.confirmed && !ownerConfirmed;
                   const statusText = ownerConfirmed
                     ? "Complete"
@@ -193,7 +180,6 @@ export function AssessmentSidebar({
   );
 }
 
-// Flat label lookup built from the frontend questionnaire config.
 export const QUESTION_LABELS: Record<string, string> = Object.fromEntries(
-  [...BUSINESS_QUESTIONS, ...AI_TECHNICAL_QUESTIONS].map((q) => [q.key, q.label]),
+  Object.values(QUESTION_DEF_BY_ID).map((q) => [q.id, q.question]),
 );

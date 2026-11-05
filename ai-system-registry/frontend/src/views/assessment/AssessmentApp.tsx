@@ -103,7 +103,7 @@ export default function AssessmentApp() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-muted-foreground">
         <Loader2 className="size-6 animate-spin" />
-        <p className="text-sm">Our AI is reviewing your documents and pre-filling the assessment…</p>
+        <p className="text-sm">Loading assessment…</p>
       </div>
     );
   }

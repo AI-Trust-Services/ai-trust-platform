@@ -18,6 +18,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@ai-trust/react-hooks": ["../../libs/react-hooks/src/index.ts"],
+      "@questionnaire": ["../../context/prompts/ai-questionnaire.json"],
       "react": ["./node_modules/@types/react"]
     }
   },
