@@ -131,7 +131,12 @@ async def _comment_counts(session, system_id: str) -> dict[str, int]:
 
 
 def _needs_attention(state: QuestionState | None, answer: str | None) -> bool:
-    """Low confidence OR the AI left it unanswered (#346 'requires attention')."""
+    """Low confidence OR unanswered — but only while not yet owner-confirmed.
+
+    Once the owner confirms a question they have reviewed it and accepted the
+    answer, so attention is cleared regardless of confidence or emptiness."""
+    if state is not None and state.confirmed_at is not None:
+        return False
     if state is not None and state.confidence == "low":
         return True
     return answer is None or (isinstance(answer, str) and not answer.strip())

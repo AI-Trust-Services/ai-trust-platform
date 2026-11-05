@@ -396,12 +396,12 @@ export default function QuestionView() {
       </div>
 
       <Dialog open={confModalOpen} onOpenChange={setConfModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Answer confidence</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 text-sm">
-            <p className="font-medium">{def.question}</p>
+          <div className="space-y-4 pb-2 text-sm">
+            <p className="font-medium leading-snug">{def.question}</p>
             <p>
               Confidence:{" "}
               <span className="font-medium capitalize">{qState?.confidence ?? "not assessed"}</span>
@@ -413,20 +413,22 @@ export default function QuestionView() {
               </div>
             )}
             <div>
-              <p className="mb-1 font-medium">Evidence references</p>
+              <p className="mb-2 font-medium">Evidence references</p>
               {qState?.ai_references && qState.ai_references.length > 0 ? (
-                <ul className="space-y-2 text-muted-foreground">
+                <ul className="space-y-2">
                   {qState.ai_references.map((ref, i) => (
-                    <li key={i} className="rounded-md border border-border p-2 text-xs">
+                    <li key={i} className="rounded-md border border-border p-3 text-xs">
                       <span className="font-medium text-foreground">
                         {ref.source ?? "Unknown source"}
                       </span>
-                      {ref.location && <span className="ml-1">— {ref.location}</span>}
+                      {ref.location && <span className="ml-1 text-muted-foreground">— {ref.location}</span>}
                       {ref.sourceType && (
                         <span className="ml-1 text-muted-foreground/60">({ref.sourceType})</span>
                       )}
                       {ref.quote && (
-                        <p className="mt-1 border-l-2 border-border pl-2 italic">&ldquo;{ref.quote}&rdquo;</p>
+                        <p className="mt-1.5 border-l-2 border-border pl-2 italic text-muted-foreground">
+                          &ldquo;{ref.quote}&rdquo;
+                        </p>
                       )}
                     </li>
                   ))}

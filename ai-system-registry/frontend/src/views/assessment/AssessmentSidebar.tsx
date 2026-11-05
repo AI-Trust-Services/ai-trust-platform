@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router";
-import { CheckCircle2, Circle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle } from "lucide-react";
 import type { AssessmentState } from "../../types";
 import { AI_SECTIONS, ORDERED_QUESTION_IDS, QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
 import { TierBadge } from "../../components/Badges";
@@ -66,6 +66,7 @@ export function AssessmentSidebar({
         </div>
         {state.attention_count > 0 && (
           <p className="mt-3 text-xs font-medium text-[#8b3a00]">
+            <AlertTriangle className="mb-0.5 mr-1 inline size-3" />
             {state.attention_count} question{state.attention_count === 1 ? "" : "s"} require your attention
           </p>
         )}
@@ -103,15 +104,18 @@ export function AssessmentSidebar({
                 </span>
               </div>
               <ul>
-                {section.questionKeys.map((key) => {
+              {section.questionKeys.map((key) => {
                   const q = stateByKey[key];
                   const ownerConfirmed = q?.owner_confirmed;
                   const contributorOnly = q?.confirmed && !ownerConfirmed;
+                  const needsAttention = q?.needs_attention && !ownerConfirmed;
                   const statusText = ownerConfirmed
                     ? "Complete"
                     : contributorOnly
                       ? "Confirmed by contributor"
-                      : "Incomplete";
+                      : needsAttention
+                        ? "Requires attention"
+                        : "Incomplete";
                   return (
                     <li key={key}>
                       <Link
@@ -123,6 +127,8 @@ export function AssessmentSidebar({
                       >
                         {ownerConfirmed ? (
                           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#1a5c35]" />
+                        ) : needsAttention ? (
+                          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[#b57e00]" />
                         ) : (
                           <Circle
                             className={cn(
@@ -132,15 +138,17 @@ export function AssessmentSidebar({
                           />
                         )}
                         <span className="flex flex-col">
-                          <span>{QUESTION_LABELS[key] ?? key}</span>
+                          <span className="line-clamp-2">{QUESTION_LABELS[key] ?? key}</span>
                           <span
                             className={cn(
                               "text-xs",
                               ownerConfirmed
                                 ? "text-[#1a5c35]"
-                                : contributorOnly
+                                : needsAttention
                                   ? "text-[#b57e00]"
-                                  : "text-muted-foreground",
+                                  : contributorOnly
+                                    ? "text-[#b57e00]"
+                                    : "text-muted-foreground",
                             )}
                           >
                             {statusText}
