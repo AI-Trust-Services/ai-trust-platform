@@ -544,15 +544,11 @@ async def save_answer(
         else:
             # A change away from the AI-proposed value flips the source to manual
             # and reverts any prior confirmation (re-edit ⇒ Incomplete).
-            # NOT_ENOUGH_INFORMATION is treated as "no AI answer" — replacing it
-            # with a real answer does not require a justification comment.
-            ai_original = (state.ai_original_answer or "").strip()
-            not_enough = ai_original == "NOT_ENOUGH_INFORMATION"
-            if not_enough or body.answer.strip() == ai_original:
-                state.answer_source = "ai_prefilled"
-            else:
+            if body.answer.strip() != (state.ai_original_answer or "").strip():
                 state.answer_source = "manual"
                 state.confirmed_at = None
+            else:
+                state.answer_source = "ai_prefilled"
         await session.commit()
         count = (await _comment_counts(session, system_id)).get(question_key, 0)
         return QuestionStateResponse(
@@ -593,13 +589,9 @@ async def confirm_question(
 
         answers = _answer_store(row)
         current = (_read_answer(row, answers, question_key) or "").strip()
-        ai_original = (state.ai_original_answer or "").strip()
-        # NOT_ENOUGH_INFORMATION is treated as no AI answer — replacing it never
-        # requires a justification comment (it was never a real AI-provided answer).
         changed = (
             state.answer_source == "manual"
-            and ai_original != "NOT_ENOUGH_INFORMATION"
-            and current != ai_original
+            and current != (state.ai_original_answer or "").strip()
         )
         if changed:
             # Require at least one (non-deleted) comment on this question.

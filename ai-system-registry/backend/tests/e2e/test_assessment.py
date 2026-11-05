@@ -141,8 +141,13 @@ async def test_apply_run_writes_answers_and_classifies(client: httpx.AsyncClient
 @pytest.mark.asyncio
 async def test_prefill_choice_answers_are_valid_options(client: httpx.AsyncClient):
     """A predefined question answered by apply-run must contain a value from the
-    question's allowed options, so the frontend's exact-match radios select it."""
+    question's allowed options, so the frontend's exact-match radios select it —
+    or one of the LLM's system-defined outcomes (NOT_ENOUGH_INFORMATION, CONFLICT),
+    which are valid answer values per questionnaire_answer.md but are not
+    "configured" options (not part of QUESTION_OPTIONS)."""
     from app.assessment_catalogue import QUESTION_OPTIONS
+
+    _SYSTEM_OUTCOMES = {"NOT_ENOUGH_INFORMATION", "CONFLICT"}
 
     system_id = await _create_system(client)
     await _open(client, system_id)
@@ -152,10 +157,13 @@ async def test_prefill_choice_answers_are_valid_options(client: httpx.AsyncClien
         q = by_key.get(key)
         if q is None:
             continue
-        # Either a valid option verbatim, or empty (stub didn't answer this question).
-        assert q["answer"] in options or q["answer"] in ("", None), (
-            f"{key} filled with {q['answer']!r}, not one of {options}"
-        )
+        # A valid configured option verbatim, a system-defined outcome, or empty
+        # (stub didn't answer this question).
+        assert (
+            q["answer"] in options
+            or q["answer"] in _SYSTEM_OUTCOMES
+            or q["answer"] in ("", None)
+        ), f"{key} filled with {q['answer']!r}, not one of {options}"
 
 
 @pytest.mark.asyncio
