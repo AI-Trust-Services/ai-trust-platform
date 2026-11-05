@@ -5,7 +5,7 @@ import type { AssessmentState } from "../../types";
 import { api } from "../../api/client";
 import { usePermissions } from "../../hooks/usePermissions";
 import { AssessmentSidebar, ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
-import { AssessmentCompanion } from "./AssessmentCompanion";
+import { ComplianceAdvisor } from "./ComplianceAdvisor";
 import { ASSESSMENT_SECTIONS } from "./AssessmentSidebar";
 
 interface AssessmentCtx {
@@ -29,7 +29,7 @@ function sectionForQuestion(questionKey?: string): string | undefined {
 
 /** Full-height single-page assessment app: loads/prefills state, renders the left
  * progress sidebar, the active screen (start page or question view via Outlet),
- * and the right companion. */
+ * and the right advisor. */
 export default function AssessmentApp() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -37,6 +37,7 @@ export default function AssessmentApp() {
   const [state, setState] = useState<AssessmentState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [advisorExpanded, setAdvisorExpanded] = useState(false);
 
   const questionMatch = useMatch("/systems/:id/assessment/q/:questionKey");
   const activeQuestionKey = questionMatch?.params.questionKey;
@@ -128,12 +129,18 @@ export default function AssessmentApp() {
             finalizeEnabled={allConfirmed}
             locked={!state.editable}
           />
-          <main className="min-w-0 flex-1 overflow-y-auto bg-[var(--muted)]/30">
-            <Outlet />
-          </main>
-          <AssessmentCompanion
+          {/* When the advisor is expanded it covers the whole middle region
+              (everything right of the question-list sidebar), so hide main. */}
+          {!advisorExpanded && (
+            <main className="min-w-0 flex-1 overflow-y-auto bg-[var(--muted)]/30">
+              <Outlet />
+            </main>
+          )}
+          <ComplianceAdvisor
+            systemId={id}
             section={sectionForQuestion(activeQuestionKey)}
-            sourceDocuments={state.source_documents}
+            expanded={advisorExpanded}
+            onExpandedChange={setAdvisorExpanded}
           />
         </div>
       </div>

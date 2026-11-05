@@ -60,6 +60,10 @@ def get_langfuse():
     The client is a singleton; caching here avoids re-reading env and rebuilding
     it on every request. Import of the ``langfuse`` package is deferred so the
     module stays importable even if the dependency is somehow missing.
+
+    Constructing the client also registers a global OpenTelemetry
+    ``TracerProvider`` with Langfuse's span processor, which is what lets
+    OTel-instrumented libraries (e.g. PydanticAI) export spans to Langfuse.
     """
     if not is_enabled():
         return None

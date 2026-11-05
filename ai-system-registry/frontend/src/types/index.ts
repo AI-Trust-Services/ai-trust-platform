@@ -362,6 +362,22 @@ export interface ChatMessage {
   content: string;
 }
 
+// ── Compliance Advisor (grounded EU AI Act chatbot) ─────────────────────
+export interface AdvisorSource {
+  kind: "document" | "act";
+  ref: string;
+  detail: string | null;
+  page: number | null;
+  document_id: string | null;
+  version_id: string | null;
+}
+
+export interface AdvisorAnswer {
+  answer: string;
+  sources: AdvisorSource[];
+  degraded: boolean;
+}
+
 export interface RationaleItem {
   flag: string;
   value: boolean | number;

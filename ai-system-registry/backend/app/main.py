@@ -13,6 +13,7 @@ from ai_trust_tenancy import install_tenant_middleware
 from ai_trust_persistence import SessionLocal
 from app import minio_client
 from app.routers import (
+    advisor,
     assessment,
     classify,
     external,
@@ -110,6 +111,7 @@ app.include_router(assessment.router, prefix="/v1")
 app.include_router(classify.router, prefix="/v1")
 app.include_router(external.router, prefix="/v1")
 app.include_router(questionnaire.router, prefix="/v1")
+app.include_router(advisor.router, prefix="/v1")
 
 
 @app.get("/health")
