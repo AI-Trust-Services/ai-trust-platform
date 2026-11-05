@@ -131,15 +131,14 @@ async def _comment_counts(session, system_id: str) -> dict[str, int]:
 
 
 def _needs_attention(state: QuestionState | None, answer: str | None) -> bool:
-    """Low confidence OR unanswered — but only while not yet owner-confirmed.
+    """Low-confidence AI answer — requires human review.
 
-    Once the owner confirms a question they have reviewed it and accepted the
-    answer, so attention is cleared regardless of confidence or emptiness."""
+    Only flagged when the LLM actually provided an answer with low confidence.
+    Questions with no answer (unanswered/NOT_ENOUGH_INFORMATION) stay Incomplete,
+    not Requires Attention. Once owner-confirmed, always cleared."""
     if state is not None and state.confirmed_at is not None:
         return False
-    if state is not None and state.confidence == "low":
-        return True
-    return answer is None or (isinstance(answer, str) and not answer.strip())
+    return state is not None and state.confidence == "low"
 
 
 def _may_edit(row: AISystem, state: QuestionState | None, user: str) -> bool:
@@ -545,11 +544,15 @@ async def save_answer(
         else:
             # A change away from the AI-proposed value flips the source to manual
             # and reverts any prior confirmation (re-edit ⇒ Incomplete).
-            if body.answer.strip() != (state.ai_original_answer or "").strip():
+            # NOT_ENOUGH_INFORMATION is treated as "no AI answer" — replacing it
+            # with a real answer does not require a justification comment.
+            ai_original = (state.ai_original_answer or "").strip()
+            not_enough = ai_original == "NOT_ENOUGH_INFORMATION"
+            if not_enough or body.answer.strip() == ai_original:
+                state.answer_source = "ai_prefilled"
+            else:
                 state.answer_source = "manual"
                 state.confirmed_at = None
-            else:
-                state.answer_source = "ai_prefilled"
         await session.commit()
         count = (await _comment_counts(session, system_id)).get(question_key, 0)
         return QuestionStateResponse(
@@ -590,9 +593,13 @@ async def confirm_question(
 
         answers = _answer_store(row)
         current = (_read_answer(row, answers, question_key) or "").strip()
+        ai_original = (state.ai_original_answer or "").strip()
+        # NOT_ENOUGH_INFORMATION is treated as no AI answer — replacing it never
+        # requires a justification comment (it was never a real AI-provided answer).
         changed = (
             state.answer_source == "manual"
-            and current != (state.ai_original_answer or "").strip()
+            and ai_original != "NOT_ENOUGH_INFORMATION"
+            and current != ai_original
         )
         if changed:
             # Require at least one (non-deleted) comment on this question.

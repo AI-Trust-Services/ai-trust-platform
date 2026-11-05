@@ -109,13 +109,16 @@ export function AssessmentSidebar({
                   const ownerConfirmed = q?.owner_confirmed;
                   const contributorOnly = q?.confirmed && !ownerConfirmed;
                   const needsAttention = q?.needs_attention && !ownerConfirmed;
+                  const notEnoughInfo = !ownerConfirmed && q?.answer === "NOT_ENOUGH_INFORMATION";
                   const statusText = ownerConfirmed
                     ? "Complete"
                     : contributorOnly
                       ? "Confirmed by contributor"
                       : needsAttention
                         ? "Requires attention"
-                        : "Incomplete";
+                        : notEnoughInfo
+                          ? "Not enough information"
+                          : "Incomplete";
                   return (
                     <li key={key}>
                       <Link

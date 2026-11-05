@@ -297,15 +297,22 @@ export default function QuestionView() {
               </label>
             ))
           ) : (
-            // DESCRIPTIVE: textarea
-            <textarea
-              className="min-h-24 w-full rounded-md border border-border p-3 text-sm disabled:bg-[var(--muted)]/40"
-              value={answer}
-              disabled={!canEdit}
-              onChange={(e) => setAnswer(e.target.value)}
-              onBlur={() => answer !== (qState?.answer ?? "") && saveAnswer(answer)}
-              placeholder="Enter your answer"
-            />
+            // DESCRIPTIVE: textarea; NOT_ENOUGH_INFORMATION is shown as a styled
+            // label rather than raw text so the user sees it clearly.
+            answer === "NOT_ENOUGH_INFORMATION" && !canEdit ? (
+              <p className="rounded-md border border-border bg-[var(--muted)]/30 p-3 text-sm italic text-muted-foreground">
+                Not enough information
+              </p>
+            ) : (
+              <textarea
+                className="min-h-24 w-full rounded-md border border-border p-3 text-sm disabled:bg-[var(--muted)]/40"
+                value={answer === "NOT_ENOUGH_INFORMATION" ? "" : answer}
+                disabled={!canEdit}
+                onChange={(e) => setAnswer(e.target.value)}
+                onBlur={() => answer !== (qState?.answer ?? "") && saveAnswer(answer)}
+                placeholder="Enter your answer"
+              />
+            )
           )}
           <p className="text-xs text-muted-foreground">
             {qState?.answer_source === "manual" ? "Manual entry" : "AI-assisted answer"}
