@@ -99,11 +99,11 @@ async def _apply_run(client: httpx.AsyncClient, system_id: str, user: str = _OWN
 @pytest.mark.asyncio
 async def test_open_seeds_empty_questions(client: httpx.AsyncClient):
     """POST /open creates one question_state per catalogue key with no answers
-    and no confidence. prefilled=True (rows exist), tier stays pending."""
+    and no confidence. prefilled=False (no answers yet), tier stays pending."""
     system_id = await _create_system(client)
     state = await _open(client, system_id)
 
-    assert state["prefilled"] is True
+    assert state["prefilled"] is False
     # Every catalogue question has a state entry.
     assert len(state["questions"]) >= 1
     # All questions start with no answer and no confidence.

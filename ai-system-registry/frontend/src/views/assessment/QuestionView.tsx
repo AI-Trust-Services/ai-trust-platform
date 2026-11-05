@@ -25,6 +25,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
+/** Display label for a raw option value (e.g. "YES" → "Yes"). */
+const OPTION_LABELS: Record<string, string> = {
+  YES: "Yes",
+  NO: "No",
+  PARTIALLY: "Partially",
+  NOT_APPLICABLE: "Not applicable",
+  NOT_ENOUGH_INFORMATION: "Not enough information",
+  CONFLICT: "Conflicting evidence",
+};
+
+function optionLabel(value: string): string {
+  return OPTION_LABELS[value] ?? value;
+}
+
 function sectionLabel(questionKey: string): string {
   return ASSESSMENT_SECTIONS.find((s) => s.questionKeys.includes(questionKey))?.label ?? "";
 }
@@ -246,14 +260,14 @@ export default function QuestionView() {
         <div className="mt-3">
           <ConfidenceIndicator
             level={qState?.confidence ?? null}
-            references={state.source_documents.length}
+            references={qState?.ai_references?.length ?? 0}
             onClick={() => setConfModalOpen(true)}
           />
         </div>
 
         <div className="mt-5 space-y-2">
           {isPredefined(def) ? (
-            // PREDEFINED: radio buttons
+            // PREDEFINED: radio buttons with human-readable labels
             def.allowedAnswers.map((opt) => (
               <label key={opt} className="flex cursor-pointer items-center gap-2 text-sm">
                 <input
@@ -266,7 +280,7 @@ export default function QuestionView() {
                     saveAnswer(opt);
                   }}
                 />
-                <span>{opt}</span>
+                <span>{optionLabel(opt)}</span>
               </label>
             ))
           ) : isMultiselect(def) ? (
@@ -294,7 +308,7 @@ export default function QuestionView() {
             />
           )}
           <p className="text-xs text-muted-foreground">
-            {qState?.answer_source === "manual" ? "Manual entry" : "Pre-filled AI answer"}
+            {qState?.answer_source === "manual" ? "Manual entry" : "AI-assisted answer"}
           </p>
         </div>
 
@@ -389,22 +403,36 @@ export default function QuestionView() {
           <div className="space-y-3 text-sm">
             <p className="font-medium">{def.question}</p>
             <p>
-              Confidence level:{" "}
+              Confidence:{" "}
               <span className="font-medium capitalize">{qState?.confidence ?? "not assessed"}</span>
             </p>
+            {qState?.ai_explanation && (
+              <div>
+                <p className="mb-1 font-medium">Explanation</p>
+                <p className="text-muted-foreground">{qState.ai_explanation}</p>
+              </div>
+            )}
             <div>
-              <p className="mb-1 font-medium">Sources that informed this classification</p>
-              {state.source_documents.length > 0 ? (
-                <ul className="space-y-1 text-muted-foreground">
-                  {state.source_documents.map((d, i) => (
-                    <li key={`${d.name}-${i}`}>
-                      {d.name}
-                      {d.page != null ? ` — p. ${d.page}` : ""}
+              <p className="mb-1 font-medium">Evidence references</p>
+              {qState?.ai_references && qState.ai_references.length > 0 ? (
+                <ul className="space-y-2 text-muted-foreground">
+                  {qState.ai_references.map((ref, i) => (
+                    <li key={i} className="rounded-md border border-border p-2 text-xs">
+                      <span className="font-medium text-foreground">
+                        {ref.source ?? "Unknown source"}
+                      </span>
+                      {ref.location && <span className="ml-1">— {ref.location}</span>}
+                      {ref.sourceType && (
+                        <span className="ml-1 text-muted-foreground/60">({ref.sourceType})</span>
+                      )}
+                      {ref.quote && (
+                        <p className="mt-1 border-l-2 border-border pl-2 italic">&ldquo;{ref.quote}&rdquo;</p>
+                      )}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-muted-foreground">No source documents available.</p>
+                <p className="text-muted-foreground">No references available for this question.</p>
               )}
             </div>
           </div>

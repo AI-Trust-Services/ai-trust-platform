@@ -301,6 +301,8 @@ async def _build_state(
                 comment_count=counts.get(q_key, 0),
                 needs_attention=needs,
                 can_edit=can_edit,
+                ai_references=st.ai_references or [] if st else [],
+                ai_explanation=st.ai_explanation if st else None,
             )
         )
 
@@ -353,7 +355,7 @@ async def _build_state(
         source_documents=source_docs,
         questions=questions,
         contributors=contributor_refs,
-        prefilled=bool(states),
+        prefilled=bool(answers),
     )
 
 
@@ -413,13 +415,27 @@ async def apply_questionnaire_run(
             )
             answers = _write_answer(row, answers, q_key, answer_value)
 
+            # Map answerStrength (HIGH/MEDIUM/LOW/null) → confidence band.
+            # For MULTISELECT take the lowest strength across all returned options.
+            _STRENGTH_RANK = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
+            strengths = [
+                a.get("answerStrength") for a in item.answer if a.get("answerStrength")
+            ]
+            if strengths:
+                lowest = min(strengths, key=lambda s: _STRENGTH_RANK.get(s, 0))
+                confidence = lowest.lower()  # "high" | "medium" | "low"
+            else:
+                confidence = None
+
             if q_key in existing_states:
                 st = existing_states[q_key]
                 st.answer_source = "ai_prefilled"
                 st.ai_original_answer = answer_value
-                st.confidence = None
+                st.confidence = confidence
                 st.confirmed_at = None
                 st.confirmed_by = None
+                st.ai_references = item.references or []
+                st.ai_explanation = item.explanation or None
             else:
                 session.add(
                     QuestionState(
@@ -428,7 +444,9 @@ async def apply_questionnaire_run(
                         question_key=q_key,
                         answer_source="ai_prefilled",
                         ai_original_answer=answer_value,
-                        confidence=None,
+                        confidence=confidence,
+                        ai_references=item.references or [],
+                        ai_explanation=item.explanation or None,
                     )
                 )
 
