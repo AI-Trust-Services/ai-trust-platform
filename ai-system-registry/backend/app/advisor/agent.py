@@ -70,15 +70,15 @@ _HTTP_TIMEOUT = 20.0
 
 
 def _tracing_on() -> bool:
-    """Advisor Langfuse tracing: opt-out flag (default ON), no-op without keys.
+    """Advisor Langfuse tracing: opt-in flag (default OFF).
 
-    ``ADVISOR_TRACING`` defaults to ``true`` — set it to ``false``/``0``/``no``
-    to disable. Even when on, tracing only emits when Langfuse credentials are
-    configured (``langfuse_client.is_enabled()``); otherwise it is a silent no-op,
-    so local/CI runs never need the flag.
+    ``ADVISOR_TRACING`` defaults to ``false`` — set it to ``true``/``1``/``yes``
+    to enable. Even when on, tracing only emits when Langfuse credentials are
+    configured (``langfuse_client.is_enabled()``); so enabling the flag without
+    ``LANGFUSE_*`` set is still a silent no-op.
     """
-    flag = os.environ.get("ADVISOR_TRACING", "true").strip().lower()
-    return flag not in ("false", "0", "no", "off")
+    flag = os.environ.get("ADVISOR_TRACING", "false").strip().lower()
+    return flag in ("true", "1", "yes", "on")
 
 
 class AdvisorGuardrailError(Exception):
@@ -136,8 +136,14 @@ class AdvisorDeps:
     access_token: str | None = None
     correlation_id: str | None = None
     # Populated by the RAG tool with the source refs it actually returned, used
-    # after the run to resolve document_id/version_id for each cited document.
+    # after the run to resolve document_id/version_id for each cited document
+    # and to drop document citations that match no retrieved passage.
     retrieved: list[dict] = field(default_factory=list)
+    # Set True by the Act tool when cognee returned real (non-gap) evidence this
+    # run; when False, act citations are dropped (the model cited the Act with no
+    # grounding). Cognee's output has no per-reference anchor, so this is a
+    # run-level grounding flag, not per-citation validation.
+    act_grounded: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +366,8 @@ async def _search_eu_ai_act(deps: AdvisorDeps, query: str) -> str:
     if data.get("knowledge_gap") or not answer:
         return "No relevant EU AI Act provision was found for this query."
 
+    # Cognee returned a real, non-gap answer — act citations are grounded this run.
+    deps.act_grounded = True
     lines = ["EU AI Act grounded answer (cite as act references):", str(answer)]
     if evidence:
         lines.append("\nSupporting references:")
@@ -426,23 +434,33 @@ async def ask_advisor(
         return result.output
 
     output = await _run_traced(_run, message=message, deps=deps)
-    _resolve_document_links(output, deps.retrieved)
+    _filter_and_resolve_sources(output, deps)
     return output, False
 
 
-def _resolve_document_links(answer: AdvisorAnswer, retrieved: list[dict]) -> None:
-    """Attach ``document_id``/``version_id`` to each cited document source.
+def _filter_and_resolve_sources(answer: AdvisorAnswer, deps: AdvisorDeps) -> None:
+    """Resolve deep-links and drop ungrounded citations, in place.
 
-    Matches the LLM's ``filename`` (+ ``page`` when it helps disambiguate) back
-    to the refs the RAG tool actually returned. The model never emits these ids,
-    so a citation can only deep-link to a document that was genuinely retrieved.
+    Grounding is enforced server-side so the UI never presents a model-invented
+    reference as a real source:
+
+    - **document** — matched to a ref the RAG tool actually returned (by
+      ``filename`` + ``page``, falling back to ``filename``); matched sources get
+      ``document_id``/``version_id`` for the deep-link, and **unmatched document
+      sources are dropped** (the model cited a doc that was never retrieved).
+    - **act** — kept only when the Act tool got real evidence from cognee this
+      run (``deps.act_grounded``). Cognee returns no per-reference anchor, so this
+      is a run-level grounding check, not per-citation validation; when the Act
+      tool returned nothing/knowledge-gap, all act citations are dropped.
     """
-    if not retrieved:
-        return
+    retrieved = deps.retrieved
+    kept: list[AdvisorSource] = []
     for src in answer.sources:
-        if src.kind != "document":
+        if src.kind == "act":
+            if deps.act_grounded:
+                kept.append(src)
             continue
-        # Prefer an exact filename+page match; fall back to filename only.
+        # document: find the real retrieved ref it refers to.
         match = next(
             (
                 r
@@ -451,11 +469,14 @@ def _resolve_document_links(answer: AdvisorAnswer, retrieved: list[dict]) -> Non
             ),
             None,
         ) or next((r for r in retrieved if r["filename"] == src.ref), None)
-        if match:
-            src.document_id = match.get("document_id")
-            src.version_id = match.get("version_id")
-            if src.page is None:
-                src.page = match.get("page")
+        if not match:
+            continue  # drop: no retrieved passage backs this document citation
+        src.document_id = match.get("document_id")
+        src.version_id = match.get("version_id")
+        if src.page is None:
+            src.page = match.get("page")
+        kept.append(src)
+    answer.sources = kept
 
 
 async def _run_traced(run, *, message: str, deps: AdvisorDeps) -> AdvisorAnswer:

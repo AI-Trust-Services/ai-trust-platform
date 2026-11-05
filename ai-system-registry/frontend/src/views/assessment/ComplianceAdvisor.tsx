@@ -61,6 +61,10 @@ function SourceChip({ source }: { source: AdvisorSource }) {
 
   async function open() {
     if (!canLink || !source.document_id) return;
+    // Open the tab synchronously inside the click handler so the browser keeps
+    // the user activation; a presign request first would lose it and the tab
+    // gets blocked as a pop-up. Fill its location once the URL resolves.
+    const win = window.open("", "_blank", "noopener,noreferrer");
     try {
       const { url } = await api.getDocumentDownloadUrlIndexed(
         source.document_id,
@@ -68,9 +72,10 @@ function SourceChip({ source }: { source: AdvisorSource }) {
       );
       const isPdf = source.ref.toLowerCase().endsWith(".pdf");
       const target = isPdf && source.page != null ? `${url}#page=${source.page}` : url;
-      window.open(target, "_blank", "noopener,noreferrer");
+      if (win) win.location.href = target;
+      else window.open(target, "_blank", "noopener,noreferrer");
     } catch {
-      /* best-effort: a failed presign just does nothing */
+      win?.close();
     }
   }
 
@@ -205,7 +210,13 @@ export function ComplianceAdvisor({
           >
             {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
           </button>
-          <button onClick={() => setCollapsed(true)} title="Collapse advisor">
+          <button
+            onClick={() => {
+              setCollapsed(true);
+              onExpandedChange(false);
+            }}
+            title="Collapse advisor"
+          >
             <PanelRightClose className="size-4" />
           </button>
         </div>

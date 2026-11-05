@@ -137,6 +137,7 @@ export default function AssessmentApp() {
             </main>
           )}
           <ComplianceAdvisor
+            key={id}
             systemId={id}
             section={sectionForQuestion(activeQuestionKey)}
             expanded={advisorExpanded}

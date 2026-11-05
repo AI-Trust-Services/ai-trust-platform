@@ -44,11 +44,11 @@ async def test_ask_returns_grounded_answer(client: httpx.AsyncClient):
     body = r.json()
     assert body["answer"]  # non-empty
     assert body["degraded"] is False
-    # The stub model emits one document + one act source.
-    kinds = {s["kind"] for s in body["sources"]}
-    assert kinds == {"document", "act"}
-    doc = next(s for s in body["sources"] if s["kind"] == "document")
-    assert doc["ref"] and doc["page"] == 1
+    # In stub/CI mode neither downstream tool is reachable (RAG matches nothing;
+    # cognee returns no evidence → act_grounded False), so the server-side
+    # grounding filter correctly drops the stub's unverified document + act
+    # citations: an answer with no genuinely-grounded source yields no sources.
+    assert body["sources"] == []
 
 
 @pytest.mark.asyncio
@@ -199,24 +199,27 @@ async def test_tool_spans_distinguish_cognee_and_rag():
     assert "search_system_documents" in tool_names  # RAG
 
 
-def test_resolve_document_links_matches_retrieved_refs():
-    """A cited document source is enriched with document_id/version_id from the
-    refs the RAG tool actually returned (never invented by the model); an Act
-    source and an unmatched filename stay unlinked."""
+def test_filter_and_resolve_sources_drops_ungrounded():
+    """Server-side grounding enforcement: a matched document citation is enriched
+    with document_id/version_id; an unmatched document citation is dropped; act
+    citations are kept only when cognee returned real evidence (act_grounded)."""
     from app.advisor.agent import (
         AdvisorAnswer,
+        AdvisorDeps,
         AdvisorSource,
-        _resolve_document_links,
+        _filter_and_resolve_sources,
     )
 
-    answer = AdvisorAnswer(
-        answer="x",
-        sources=[
-            AdvisorSource(kind="document", ref="spec.pdf", page=3),
-            AdvisorSource(kind="document", ref="ghost.pdf", page=1),
-            AdvisorSource(kind="act", ref="Article 6"),
-        ],
-    )
+    def _answer():
+        return AdvisorAnswer(
+            answer="x",
+            sources=[
+                AdvisorSource(kind="document", ref="spec.pdf", page=3),
+                AdvisorSource(kind="document", ref="ghost.pdf", page=1),
+                AdvisorSource(kind="act", ref="Article 6"),
+            ],
+        )
+
     retrieved = [
         {
             "filename": "spec.pdf",
@@ -225,9 +228,25 @@ def test_resolve_document_links_matches_retrieved_refs():
             "version_id": "DOCV-1",
         },
     ]
-    _resolve_document_links(answer, retrieved)
 
-    assert answer.sources[0].document_id == "DOC-1"  # matched
-    assert answer.sources[0].version_id == "DOCV-1"
-    assert answer.sources[1].document_id is None  # no retrieved match → unlinked
-    assert answer.sources[2].document_id is None  # act never links
+    # Act grounded: matched doc kept + linked, unmatched doc dropped, act kept.
+    ans = _answer()
+    _filter_and_resolve_sources(
+        ans,
+        AdvisorDeps(
+            system_id="S", username="u", retrieved=retrieved, act_grounded=True
+        ),
+    )
+    kinds = [(s.kind, s.ref, s.document_id) for s in ans.sources]
+    assert kinds == [("document", "spec.pdf", "DOC-1"), ("act", "Article 6", None)]
+    assert ans.sources[0].version_id == "DOCV-1"
+
+    # Act NOT grounded (cognee returned nothing this run): the act citation is dropped too.
+    ans2 = _answer()
+    _filter_and_resolve_sources(
+        ans2,
+        AdvisorDeps(
+            system_id="S", username="u", retrieved=retrieved, act_grounded=False
+        ),
+    )
+    assert [(s.kind, s.ref) for s in ans2.sources] == [("document", "spec.pdf")]
