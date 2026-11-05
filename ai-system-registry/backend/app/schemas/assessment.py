@@ -152,6 +152,7 @@ class AssessmentStateResponse(BaseModel):
     """Full view model for the start page + left sidebar (#346) in one read."""
 
     system_id: str
+    assessment_id: str | None = None
     system_name: str
     registration_mode: str
     # The system owner's username (creator). Surfaced so the UI can let the owner

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
@@ -37,6 +38,18 @@ class Assessment(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
 
     confirmed_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    # Per-cycle classification snapshot (single-page EU AI Act flow). The live
+    # classification lives on the AISystem row and is overwritten each cycle; these
+    # capture what THIS assessment was issued at, so a historical read-only "View
+    # results" shows the cycle exactly as approved. Set by issue_classification.
+    tier: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    basis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    annex_iii_area: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    org_role: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    co_issued_transparency: Mapped[bool | None] = mapped_column(nullable=True)
+    assessment_sources: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    classification_rationale: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

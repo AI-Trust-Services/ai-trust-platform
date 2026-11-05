@@ -719,6 +719,12 @@ function AssessmentsTab({
     LuigiClient.linkManager().navigate("/home/assessments");
   }
 
+  // "View results" — open a SPECIFIC assessment cycle read-only in the single-page
+  // screen (by id), not the compliance list.
+  function viewResults(a: ComplianceAssessment) {
+    navigate(`/systems/${system.id}/assessment?assessment=${encodeURIComponent(a.id)}`);
+  }
+
   // Sequential index within non-inactive assessments for display name.
   const seqIndex = (a: ComplianceAssessment) =>
     assessments.filter((x) => x.status !== "inactive").indexOf(a) + 1 || assessments.indexOf(a) + 1;
@@ -760,7 +766,7 @@ function AssessmentsTab({
                 isChatbot={system.is_chatbot}
                 generatesSyntheticContent={system.generates_synthetic_content}
               />
-              <Button size="sm" variant="outline" className="ml-auto shrink-0" onClick={goToCompliance}>
+              <Button size="sm" variant="outline" className="ml-auto shrink-0" onClick={() => viewResults(approvedAssessment)}>
                 View results
               </Button>
             </div>
@@ -911,7 +917,7 @@ function AssessmentsTab({
                         )}
                         {(isUnderReview || isApproved || isInactive) && (
                           <>
-                            <Button size="sm" variant="outline" onClick={goToCompliance}>
+                            <Button size="sm" variant="outline" onClick={() => viewResults(a)}>
                               View results
                             </Button>
                             {/* Only under-review assessments get mutation actions. Approved
@@ -1386,6 +1392,20 @@ export default function SystemDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
+  // "Start new assessment" — the registry endpoint archives an approved cycle and
+  // begins a fresh one, or (if the current cycle is unapproved) just opens that
+  // one. Then navigate into the single-page app for the current cycle.
+  async function startNew() {
+    if (!id) return;
+    try {
+      await api.startNewAssessment(id);
+    } catch (e) {
+      showToast(`Could not start a new assessment: ${(e as Error).message}`, true);
+      return;
+    }
+    navigate(`/systems/${id}/assessment`);
+  }
+
   const loadAll = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -1543,7 +1563,7 @@ export default function SystemDetailPage() {
               size="sm"
               disabled={!mayWriteAssessments}
               title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-              onClick={() => navigate(`/systems/${system.id}/assessment`)}
+              onClick={startNew}
             >
               Start new assessment
             </Button>

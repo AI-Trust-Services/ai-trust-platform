@@ -589,19 +589,11 @@ async def test_submit_advances_compliance_assessment_status(
 
     system_id = await _create_system(client)
     state = await _open(client, system_id)
-
-    # Seed a current compliance Assessment row in questionnaire_pending.
-    async with AsyncSession(engine) as s:
-        s.add(
-            Assessment(
-                id="ASS-TEST0001",
-                ai_system_id=system_id,
-                framework_id="FRM-EU-AI-ACT",
-                title="EU AI Act Assessment",
-                status="questionnaire_pending",
-            )
-        )
-        await s.commit()
+    # /open creates the current compliance Assessment and scopes this cycle's
+    # question_states to it — use that id (no manual seeding needed now that state
+    # is per-assessment).
+    assessment_id = state["assessment_id"]
+    assert assessment_id
 
     await _confirm_all_as_owner(client, system_id, state)
     r = await client.post(
@@ -613,7 +605,7 @@ async def test_submit_advances_compliance_assessment_status(
 
     async with AsyncSession(engine) as s:
         row = (
-            await s.execute(select(Assessment).where(Assessment.id == "ASS-TEST0001"))
+            await s.execute(select(Assessment).where(Assessment.id == assessment_id))
         ).scalar_one()
         assert row.status == "pending_review"
 
@@ -977,3 +969,92 @@ async def test_state_has_qualifying_comment_tracks_change_gate(
         )
     ).json()
     assert _q(st, qkey)["has_qualifying_comment"] is True
+
+
+# ── per-assessment-cycle: start-new + frozen history + by-id view ────────────
+
+
+async def _issue_as_co(client: httpx.AsyncClient, system_id: str, tier: str = "high"):
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": tier, "transparency": tier == "high", "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+@pytest.mark.asyncio
+async def test_start_new_after_approved_creates_fresh_cycle(
+    client: httpx.AsyncClient,
+):
+    """Once approved, Start-new archives the old cycle and opens a fresh, blank one;
+    the old cycle's answers stay frozen and viewable by id."""
+    system_id = await _submit_as_owner(client)
+    first = await _issue_as_co(client, system_id, "high")
+    first_id = first["assessment_id"]
+    assert first["workflow_status"] == "approved"
+
+    # Start a new cycle.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/start-new", headers=_hdr(_OWNER)
+    )
+    assert r.status_code == 200, r.text
+    second = r.json()
+    # A different assessment id, and a fresh (not-approved, editable) cycle.
+    assert second["assessment_id"] != first_id
+    assert second["workflow_status"] != "approved"
+    assert second["editable"] is True
+    # The old cycle is still readable by id, read-only, with its frozen high tier.
+    old = await client.get(
+        f"/v1/systems/{system_id}/assessment/state?assessment_id={first_id}",
+        headers=_hdr(_OWNER),
+    )
+    assert old.status_code == 200, old.text
+    old_body = old.json()
+    assert old_body["assessment_id"] == first_id
+    assert old_body["editable"] is False
+    assert old_body["tier"] == "high"
+
+
+@pytest.mark.asyncio
+async def test_start_new_on_unapproved_opens_same_cycle(client: httpx.AsyncClient):
+    """If the current cycle is NOT approved, Start-new just opens it — no new cycle,
+    nothing archived (cycles are sequential)."""
+    system_id = await _create_system(client)
+    opened = await _open(client, system_id)
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/start-new", headers=_hdr(_OWNER)
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["assessment_id"] == opened["assessment_id"]
+
+
+@pytest.mark.asyncio
+async def test_state_by_unknown_assessment_id_404(client: httpx.AsyncClient):
+    system_id = await _create_system(client)
+    await _open(client, system_id)
+    r = await client.get(
+        f"/v1/systems/{system_id}/assessment/state?assessment_id=ASS-NOPE0000",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 404, r.text
+
+
+@pytest.mark.asyncio
+async def test_new_cycle_states_are_isolated(client: httpx.AsyncClient):
+    """Answers/confirmations from an approved cycle do not bleed into a new cycle."""
+    system_id = await _submit_as_owner(client)
+    first = await _issue_as_co(client, system_id, "high")
+    first_id = first["assessment_id"]
+    # Old cycle: everything owner-confirmed.
+    assert all(q["owner_confirmed"] for q in first["questions"])
+
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/start-new", headers=_hdr(_OWNER)
+    )
+    assert r.status_code == 200, r.text
+    second = r.json()
+    assert second["assessment_id"] != first_id
+    # Fresh cycle: nothing confirmed yet.
+    assert all(not q["owner_confirmed"] for q in second["questions"])

@@ -29,6 +29,7 @@ def upgrade() -> None:
     op.create_table(
         "question_states",
         sa.Column("id", sa.String(20), nullable=False),
+        sa.Column("assessment_id", sa.String(30), nullable=False),
         sa.Column("system_id", sa.String(20), nullable=False),
         sa.Column("question_key", sa.String(100), nullable=False),
         sa.Column("confirmed_at", sa.DateTime(timezone=True), nullable=True),
@@ -38,6 +39,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="ai_prefilled",
         ),
+        sa.Column("answer", sa.Text(), nullable=True),
         sa.Column("ai_original_answer", sa.Text(), nullable=True),
         sa.Column("confidence", sa.String(10), nullable=True),
         sa.Column("assignee_username", sa.String(200), nullable=True),
@@ -55,15 +57,22 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("now()"),
         ),
+        sa.ForeignKeyConstraint(
+            ["assessment_id"], ["assessments.id"], ondelete="CASCADE"
+        ),
         sa.ForeignKeyConstraint(["system_id"], ["ai_systems.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("system_id", "question_key", name="uq_question_state"),
+        sa.UniqueConstraint("assessment_id", "question_key", name="uq_question_state"),
     )
     op.create_index("ix_question_states_system_id", "question_states", ["system_id"])
+    op.create_index(
+        "ix_question_states_assessment_id", "question_states", ["assessment_id"]
+    )
 
     op.create_table(
         "question_comments",
         sa.Column("id", sa.String(20), nullable=False),
+        sa.Column("assessment_id", sa.String(30), nullable=False),
         sa.Column("system_id", sa.String(20), nullable=False),
         sa.Column("question_key", sa.String(100), nullable=False),
         sa.Column("author_username", sa.String(200), nullable=False),
@@ -75,11 +84,17 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
         ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["assessment_id"], ["assessments.id"], ondelete="CASCADE"
+        ),
         sa.ForeignKeyConstraint(["system_id"], ["ai_systems.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
         "ix_question_comments_system_id", "question_comments", ["system_id"]
+    )
+    op.create_index(
+        "ix_question_comments_assessment_id", "question_comments", ["assessment_id"]
     )
     op.create_index(
         "ix_question_comments_question_key",
@@ -90,7 +105,13 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_question_comments_question_key", table_name="question_comments")
+    op.drop_index(
+        "ix_question_comments_assessment_id", table_name="question_comments"
+    )
     op.drop_index("ix_question_comments_system_id", table_name="question_comments")
     op.drop_table("question_comments")
+    op.drop_index(
+        "ix_question_states_assessment_id", table_name="question_states"
+    )
     op.drop_index("ix_question_states_system_id", table_name="question_states")
     op.drop_table("question_states")
