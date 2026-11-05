@@ -432,13 +432,20 @@ async def apply_questionnaire_run(
             else:
                 confidence = None
 
+            # Auto-confirm HIGH/MEDIUM confidence answers — the owner can review
+            # and re-edit them later; LOW confidence and unanswered ones stay
+            # incomplete so they surface as "requires attention".
+            auto_confirm = confidence in ("high", "medium")
+            now = datetime.now(timezone.utc) if auto_confirm else None
+            acting_user = _current_user(request)
+
             if q_key in existing_states:
                 st = existing_states[q_key]
                 st.answer_source = "ai_prefilled"
                 st.ai_original_answer = answer_value
                 st.confidence = confidence
-                st.confirmed_at = None
-                st.confirmed_by = None
+                st.confirmed_at = now
+                st.confirmed_by = acting_user if auto_confirm else None
                 st.ai_references = item.references or []
                 st.ai_explanation = item.explanation or None
             else:
@@ -450,6 +457,8 @@ async def apply_questionnaire_run(
                         answer_source="ai_prefilled",
                         ai_original_answer=answer_value,
                         confidence=confidence,
+                        confirmed_at=now,
+                        confirmed_by=acting_user if auto_confirm else None,
                         ai_references=item.references or [],
                         ai_explanation=item.explanation or None,
                     )
