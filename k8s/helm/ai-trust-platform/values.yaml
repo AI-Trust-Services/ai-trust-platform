@@ -149,6 +149,9 @@ components:
     extraEnv:
       OPENFGA_URL: http://openfga:8080
       KEYCLOAK_URL: http://keycloak:8080
+      # Compliance Advisor agent — grounding tools + guardrails.
+      INDEXING_BACKEND_URL: http://document-indexing-backend:8011
+      COGNEE_BACKEND_URL: http://cognee-eval-backend:8014
     dependsOnJobs: [db-migrate, openfga-provision]
     dependsOnServices:
       - name: minio
