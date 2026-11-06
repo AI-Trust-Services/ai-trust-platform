@@ -1016,6 +1016,26 @@ async def test_start_new_after_approved_creates_fresh_cycle(
     assert old_body["editable"] is False
     assert old_body["tier"] == "high"
 
+    # Each cycle's compliance Assessment is titled with its sequence number (#N),
+    # so obligations/requirements filters can distinguish cycles.
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.assessment import Assessment
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    async with AsyncSession(engine) as s:
+        titles = (
+            (
+                await s.execute(
+                    select(Assessment.title).where(Assessment.ai_system_id == system_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert any(t.endswith("(#1)") for t in titles), titles
+    assert any(t.endswith("(#2)") for t in titles), titles
+
 
 @pytest.mark.asyncio
 async def test_start_new_on_unapproved_opens_same_cycle(client: httpx.AsyncClient):

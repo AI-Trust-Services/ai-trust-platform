@@ -44,6 +44,17 @@ const router = createHashRouter([
         ],
       },
       {
+        // Read-only view of a SPECIFIC (historical) assessment cycle by id —
+        // "View results". Same components; AssessmentApp renders it read-only and
+        // nested links carry the :assessmentId so in-app nav stays on this cycle.
+        path: "systems/:id/assessment/view/:assessmentId",
+        element: <RequirePermission anyOf={SYSTEM_PERMS}><AssessmentApp /></RequirePermission>,
+        children: [
+          { index: true, element: <AssessmentStartPage /> },
+          { path: "q/:questionKey", element: <QuestionView /> },
+        ],
+      },
+      {
         path: "models",
         element: <RequirePermission anyOf={SYSTEM_PERMS}><ModelListPage /></RequirePermission>,
       },

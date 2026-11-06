@@ -720,9 +720,9 @@ function AssessmentsTab({
   }
 
   // "View results" — open a SPECIFIC assessment cycle read-only in the single-page
-  // screen (by id), not the compliance list.
+  // screen (by id in the route path), not the compliance list.
   function viewResults(a: ComplianceAssessment) {
-    navigate(`/systems/${system.id}/assessment?assessment=${encodeURIComponent(a.id)}`);
+    navigate(`/systems/${system.id}/assessment/view/${a.id}`);
   }
 
   // Sequential index within non-inactive assessments for display name.
@@ -861,12 +861,16 @@ function AssessmentsTab({
                       )}
                     </TableCell>
                     <TableCell>
-                      {isApproved ? (
+                      {(a.tier ?? (isApproved ? system.tier : null)) ? (
                         <TierBadge
-                          tier={system.tier}
+                          tier={(a.tier ?? system.tier) as typeof system.tier}
                           workflowStatus={system.workflow_status}
                           isChatbot={system.is_chatbot}
-                          generatesSyntheticContent={system.generates_synthetic_content}
+                          generatesSyntheticContent={
+                            a.tier != null
+                              ? !!a.co_issued_transparency
+                              : system.generates_synthetic_content
+                          }
                         />
                       ) : <span className="text-muted-foreground">—</span>}
                     </TableCell>

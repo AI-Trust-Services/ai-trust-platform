@@ -75,7 +75,7 @@ function ConfidenceIndicator({
 export default function QuestionView() {
   const { id, questionKey } = useParams();
   const navigate = useNavigate();
-  const { state, reload, markSaved } = useAssessment();
+  const { state, reload, markSaved, basePath } = useAssessment();
 
   const qState: QuestionState | undefined = useMemo(
     () => state.questions.find((q) => q.question_key === questionKey),
@@ -207,7 +207,7 @@ export default function QuestionView() {
       await api.confirmQuestion(id, questionKey);
       markSaved();
       await reload();
-      if (nextKey) navigate(`/systems/${id}/assessment/q/${nextKey}`);
+      if (nextKey) navigate(`${basePath}/q/${nextKey}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Confirm failed");
     } finally {
@@ -218,7 +218,7 @@ export default function QuestionView() {
   const goNext = async () => {
     // "Next" does not confirm; if a confirmed answer was re-edited the backend
     // already reverted it to Incomplete on save. Just navigate.
-    if (nextKey && id) navigate(`/systems/${id}/assessment/q/${nextKey}`);
+    if (nextKey && id) navigate(`${basePath}/q/${nextKey}`);
   };
 
   if (!def || !questionKey) {
@@ -395,7 +395,7 @@ export default function QuestionView() {
 
       <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-card px-5 py-3">
         <button
-          onClick={() => prevKey && navigate(`/systems/${id}/assessment/q/${prevKey}`)}
+          onClick={() => prevKey && navigate(`${basePath}/q/${prevKey}`)}
           disabled={!prevKey}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40"
         >

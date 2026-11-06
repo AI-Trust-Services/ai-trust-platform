@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { Outlet, useNavigate, useParams, useMatch, useSearchParams } from "react-router";
+import { Outlet, useNavigate, useParams, useMatch } from "react-router";
 import { Loader2, Save } from "lucide-react";
 import type { AssessmentState } from "../../types";
 import { api } from "../../api/client";
@@ -13,6 +13,10 @@ interface AssessmentCtx {
   reload: () => Promise<void>;
   savedAt: number | null;
   markSaved: () => void;
+  // Base path for all nested links — `/systems/:id/assessment` for the live cycle,
+  // or `/systems/:id/assessment/view/:assessmentId` for a read-only historical one,
+  // so in-app navigation stays pinned to the cycle being viewed.
+  basePath: string;
 }
 
 const Ctx = createContext<AssessmentCtx | null>(null);
@@ -31,19 +35,23 @@ function sectionForQuestion(questionKey?: string): string | undefined {
  * progress sidebar, the active screen (start page or question view via Outlet),
  * and the right companion. */
 export default function AssessmentApp() {
-  const { id } = useParams();
+  const { id, assessmentId: viewAssessmentId } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  // "View results" deep-link: ?assessment=<id> opens that specific (historical)
-  // cycle read-only, regardless of write permission.
-  const viewAssessmentId = searchParams.get("assessment") || undefined;
+  // "View results": the /assessment/view/:assessmentId route opens that specific
+  // (historical) cycle read-only, regardless of write permission.
   const { can, loading: permsLoading } = usePermissions();
   const [state, setState] = useState<AssessmentState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  const questionMatch = useMatch("/systems/:id/assessment/q/:questionKey");
-  const activeQuestionKey = questionMatch?.params.questionKey;
+  // A question can be active under either the editable base or the read-only
+  // /view/:assessmentId base.
+  const editMatch = useMatch("/systems/:id/assessment/q/:questionKey");
+  const viewMatch = useMatch(
+    "/systems/:id/assessment/view/:assessmentId/q/:questionKey",
+  );
+  const activeQuestionKey =
+    editMatch?.params.questionKey ?? viewMatch?.params.questionKey;
 
   const load = useCallback(async () => {
     // Wait for permissions to resolve: usePermissions is fail-closed (can() is
@@ -74,11 +82,17 @@ export default function AssessmentApp() {
 
   const reload = useCallback(async () => {
     if (!id) return;
-    const s = await api.getAssessmentState(id);
+    const s = await api.getAssessmentState(id, viewAssessmentId);
     setState(s);
-  }, [id]);
+  }, [id, viewAssessmentId]);
 
   const markSaved = useCallback(() => setSavedAt(Date.now()), []);
+
+  // Base path for nested links — pins historical ("View results") navigation to
+  // its cycle; the live cycle uses the plain assessment base.
+  const basePath = viewAssessmentId
+    ? `/systems/${id}/assessment/view/${viewAssessmentId}`
+    : `/systems/${id}/assessment`;
 
   // The submit gate is OWNER-confirmed on every question (backend-authoritative).
   const allConfirmed =
@@ -114,7 +128,7 @@ export default function AssessmentApp() {
   }
 
   return (
-    <Ctx.Provider value={{ state, reload, savedAt, markSaved }}>
+    <Ctx.Provider value={{ state, reload, savedAt, markSaved, basePath }}>
       <div className="flex h-full flex-col">
         <header className="flex h-12 shrink-0 items-center justify-end gap-3 border-b border-border bg-card px-6 text-sm">
           {savedAt && <span className="text-muted-foreground">Changes saved.</span>}
@@ -132,6 +146,7 @@ export default function AssessmentApp() {
             onFinalize={onFinalize}
             finalizeEnabled={allConfirmed}
             locked={!state.editable}
+            basePath={basePath}
           />
           <main className="min-w-0 flex-1 overflow-y-auto bg-[var(--muted)]/30">
             <Outlet />

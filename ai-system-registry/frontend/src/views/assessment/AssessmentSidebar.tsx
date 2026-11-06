@@ -40,12 +40,14 @@ export function AssessmentSidebar({
   onFinalize,
   finalizeEnabled,
   locked = false,
+  basePath,
 }: {
   state: AssessmentState;
   activeQuestionKey?: string;
   onFinalize: () => void;
   finalizeEnabled: boolean;
   locked?: boolean;
+  basePath: string;
 }) {
   const { id } = useParams();
   const stateByKey = useMemo(
@@ -95,7 +97,7 @@ export function AssessmentSidebar({
             <span className="text-sm font-semibold">Overview</span>
           </div>
           <Link
-            to={`/systems/${id}/assessment`}
+            to={basePath}
             className={cn(
               "flex items-start gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-accent",
               !activeQuestionKey && "bg-accent",
@@ -135,7 +137,7 @@ export function AssessmentSidebar({
                   return (
                     <li key={key}>
                       <Link
-                        to={`/systems/${id}/assessment/q/${key}`}
+                        to={`${basePath}/q/${key}`}
                         className={cn(
                           "flex items-start gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-accent",
                           activeQuestionKey === key && "bg-accent",

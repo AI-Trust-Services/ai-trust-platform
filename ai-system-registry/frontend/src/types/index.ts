@@ -492,6 +492,8 @@ export interface ComplianceAssessment {
   score: number | null;
   notes: string;
   confirmed_by: string | null;
+  tier: TierKey | null;
+  co_issued_transparency: boolean | null;
   created_at: string;
   updated_at: string;
 }

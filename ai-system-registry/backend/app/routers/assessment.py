@@ -291,11 +291,24 @@ async def _ensure_assessment(session, row: AISystem) -> Assessment:
     current = await _current_assessment(session, row.id)
     if current is not None:
         return current
+    # Title each cycle with its sequence number so obligations/requirements filters
+    # and the assessments list distinguish cycles ("… (#1)", "(#2)", …). Count all
+    # EU-AI-Act assessments for this system (incl. inactive/superseded) for the seq.
+    prior = (
+        await session.execute(
+            select(func.count())
+            .select_from(Assessment)
+            .where(
+                Assessment.ai_system_id == row.id,
+                Assessment.framework_id == _EU_AI_ACT_FRAMEWORK_ID,
+            )
+        )
+    ).scalar_one()
     assessment = Assessment(
         id=new_id("ASS"),
         ai_system_id=row.id,
         framework_id=_EU_AI_ACT_FRAMEWORK_ID,
-        title=f"EU AI Act Assessment — {row.name}",
+        title=f"EU AI Act Assessment — {row.name} (#{prior + 1})",
         status="questionnaire_pending",
     )
     session.add(assessment)

@@ -84,6 +84,10 @@ class AssessmentResponse(BaseModel):
     score: float | None
     notes: str
     confirmed_by: str | None = None
+    # Per-cycle classification snapshot (set when the single-page CO issues) — lets
+    # the registry show a superseded cycle's own frozen tier, not the live system row.
+    tier: str | None = None
+    co_issued_transparency: bool | None = None
     created_at: datetime
     updated_at: datetime
 
