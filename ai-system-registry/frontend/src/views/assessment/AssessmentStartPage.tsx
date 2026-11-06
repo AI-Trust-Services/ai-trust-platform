@@ -25,7 +25,7 @@ function activeTab(tier: string): string {
 export default function AssessmentStartPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { state } = useAssessment();
+  const { state, basePath } = useAssessment();
   const { can } = usePermissions();
   const counts = state.confidence_counts;
   const total = counts.high + counts.medium + counts.low || 1;
@@ -109,7 +109,7 @@ export default function AssessmentStartPage() {
                       {d.section}: {d.question_label}
                     </p>
                     <button
-                      onClick={() => navigate(`/systems/${id}/assessment/q/${d.question_key}`)}
+                      onClick={() => navigate(`${basePath}/q/${d.question_key}`)}
                       className="inline-flex items-center gap-1 text-sm text-[#1147E9] hover:underline"
                     >
                       Go to question <ArrowRight className="size-3.5" />
@@ -131,7 +131,7 @@ export default function AssessmentStartPage() {
 
       <div className="mt-6 flex items-center gap-4">
         <button
-          onClick={() => navigate(`/systems/${id}/assessment/q/${ORDERED_QUESTION_KEYS[0]}`)}
+          onClick={() => navigate(`${basePath}/q/${ORDERED_QUESTION_KEYS[0]}`)}
           className="rounded-md bg-[#1147E9] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0d39c4]"
         >
           Continue to first question

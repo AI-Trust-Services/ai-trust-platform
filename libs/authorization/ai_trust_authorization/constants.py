@@ -107,7 +107,9 @@ ROLE_PERMISSIONS = {
     "business_owner": [
         SYSTEMS_READ,
         SYSTEMS_WRITE,
-        SYSTEMS_APPROVE,
+        # NOTE: no SYSTEMS_APPROVE — separation of duties. The business owner
+        # submits an assessment but must not issue/approve their own risk
+        # classification (issue #348); approval is compliance-officer-only.
         ASSESSMENTS_READ,
         ASSESSMENTS_WRITE,
         EVIDENCE_READ,

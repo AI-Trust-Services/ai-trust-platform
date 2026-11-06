@@ -26,8 +26,14 @@ from ai_trust_authorization.constants import (
 )
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_persistence import SessionLocal
+from ai_trust_persistence.governance import (
+    generate_obligations_in_session,
+    generate_requirements_in_session,
+    sync_system_compliance,
+)
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.assessment import Assessment
+from ai_trust_persistence.models.obligation import Obligation
 from ai_trust_persistence.models.question_comment import QuestionComment
 from ai_trust_persistence.models.question_state import QuestionState
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
@@ -149,20 +155,20 @@ def _write_answer(row: AISystem, answers: dict, question_key: str, value: str) -
     return out
 
 
-async def _states_by_key(session, system_id: str) -> dict[str, QuestionState]:
+async def _states_by_key(session, assessment_id: str) -> dict[str, QuestionState]:
     result = await session.execute(
-        select(QuestionState).where(QuestionState.system_id == system_id)
+        select(QuestionState).where(QuestionState.assessment_id == assessment_id)
     )
     return {s.question_key: s for s in result.scalars().all()}
 
 
-async def _comment_counts(session, system_id: str) -> dict[str, int]:
+async def _comment_counts(session, assessment_id: str) -> dict[str, int]:
     # SQL aggregate (count per question_key) — avoids loading full comment rows
     # (incl. body text) into memory just to count them.
     result = await session.execute(
         select(QuestionComment.question_key, func.count().label("n"))
         .where(
-            QuestionComment.system_id == system_id,
+            QuestionComment.assessment_id == assessment_id,
             QuestionComment.deleted_at.is_(None),
         )
         .group_by(QuestionComment.question_key)
@@ -170,8 +176,40 @@ async def _comment_counts(session, system_id: str) -> dict[str, int]:
     return {row.question_key: row.n for row in result.all()}
 
 
-def _needs_attention(state: QuestionState | None, answer: str | None) -> bool:
-    """Low confidence OR the AI left it unanswered (#346 'requires attention')."""
+async def _qualifying_comment_keys(
+    session, assessment_id: str, states: dict[str, QuestionState]
+) -> set[str]:
+    """Question keys that have a non-deleted comment recorded AT/AFTER the answer
+    last changed — i.e. a comment that *qualifies* for the mandatory-comment-on-
+    change confirm gate. Mirrors the gate in ``confirm_question`` so the frontend
+    can enable/disable Confirm exactly as the backend will accept it. Questions
+    whose ``answer_changed_at`` is null are treated as 'any non-deleted comment
+    qualifies' (same fallback as the gate). Scoped to one assessment cycle."""
+    result = await session.execute(
+        select(QuestionComment.question_key, func.max(QuestionComment.created_at))
+        .where(
+            QuestionComment.assessment_id == assessment_id,
+            QuestionComment.deleted_at.is_(None),
+        )
+        .group_by(QuestionComment.question_key)
+    )
+    latest_by_key = {k: ts for k, ts in result.all()}
+    qualifying: set[str] = set()
+    for key, latest in latest_by_key.items():
+        changed_at = states.get(key).answer_changed_at if states.get(key) else None
+        if changed_at is None or (latest is not None and latest >= changed_at):
+            qualifying.add(key)
+    return qualifying
+
+
+def _needs_attention(
+    row: AISystem, state: QuestionState | None, answer: str | None
+) -> bool:
+    """A question needs the owner's attention when it is low-confidence OR the AI
+    could not pre-fill it (empty answer) — AND it has not yet been owner-confirmed.
+    Confirming a question clears it from the attention count."""
+    if _is_owner_confirmed(row, state):
+        return False
     if state is not None and state.confidence == "low":
         return True
     return answer is None or (isinstance(answer, str) and not answer.strip())
@@ -243,22 +281,40 @@ async def _current_assessment(session, system_id: str) -> Assessment | None:
     return result.scalar_one_or_none()
 
 
-async def _ensure_assessment(session, row: AISystem) -> None:
-    """Create a compliance Assessment row (questionnaire_pending) for this system
-    if none exists. Idempotent; caller owns the transaction. Keeps the governance
-    tables (owner's Assessments tab, /home/assessments) in sync with the
-    single-page flow, and self-heals systems prefilled before this existed."""
-    if await _current_assessment(session, row.id) is not None:
-        return
-    session.add(
-        Assessment(
-            id=new_id("ASS"),
-            ai_system_id=row.id,
-            framework_id=_EU_AI_ACT_FRAMEWORK_ID,
-            title=f"EU AI Act Assessment — {row.name}",
-            status="questionnaire_pending",
+async def _ensure_assessment(session, row: AISystem) -> Assessment:
+    """Return the current (non-inactive) compliance Assessment for this system,
+    creating a fresh ``questionnaire_pending`` one if none exists. Idempotent;
+    caller owns the transaction. Keeps the governance tables (owner's Assessments
+    tab, /home/assessments) in sync with the single-page flow, and self-heals
+    systems prefilled before this existed. The returned Assessment's ``id`` is the
+    scope key for this cycle's question_states / question_comments."""
+    current = await _current_assessment(session, row.id)
+    if current is not None:
+        return current
+    # Title each cycle with its sequence number so obligations/requirements filters
+    # and the assessments list distinguish cycles ("… (#1)", "(#2)", …). Count all
+    # EU-AI-Act assessments for this system (incl. inactive/superseded) for the seq.
+    prior = (
+        await session.execute(
+            select(func.count())
+            .select_from(Assessment)
+            .where(
+                Assessment.ai_system_id == row.id,
+                Assessment.framework_id == _EU_AI_ACT_FRAMEWORK_ID,
+            )
         )
+    ).scalar_one()
+    assessment = Assessment(
+        id=new_id("ASS"),
+        ai_system_id=row.id,
+        framework_id=_EU_AI_ACT_FRAMEWORK_ID,
+        title=f"EU AI Act Assessment — {row.name} (#{prior + 1})",
+        status="questionnaire_pending",
     )
+    session.add(assessment)
+    # Flush so the new id is usable as an FK by freshly-seeded question_states.
+    await session.flush()
+    return assessment
 
 
 async def _retrieve_context(
@@ -332,13 +388,15 @@ async def open_assessment(
     ``question_states`` rows exist, this is a plain read."""
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
-        existing = await _states_by_key(session, system_id)
+        # Resolve (or create) the current assessment cycle FIRST — its id is the
+        # scope for this cycle's question_states. A new cycle (after the prior was
+        # historicized → inactive) yields a fresh Assessment with no states, so
+        # the prefill below runs again for the blank cycle.
+        assessment = await _ensure_assessment(session, row)
+        existing = await _states_by_key(session, assessment.id)
         if existing:
-            # Self-heal: ensure the compliance Assessment row exists even for
-            # systems prefilled before that creation was added (idempotent).
-            await _ensure_assessment(session, row)
             await session.commit()
-            return await _build_state(session, row, _current_user(request))
+            return await _build_state(session, row, _current_user(request), assessment)
 
         # ── prefill pass (one batched LLM call) ──
         context_block, sources = await _retrieve_context(system_id)
@@ -379,8 +437,10 @@ async def open_assessment(
             session.add(
                 QuestionState(
                     id=new_id("QST"),
+                    assessment_id=assessment.id,
                     system_id=system_id,
                     question_key=q_key,
+                    answer=ans or None,
                     answer_source="ai_prefilled",
                     ai_original_answer=ans or None,
                     confidence=conf,
@@ -404,44 +464,58 @@ async def open_assessment(
         # so the start page / confidence modal / CO panel can cite them with pages.
         row.assessment_sources = [s.model_dump() for s in sources]
 
-        # Ensure a compliance Assessment record exists so the governance tables
-        # (owner's Assessments tab, /home/assessments) reflect this assessment.
-        await _ensure_assessment(session, row)
-
         await session.commit()
         logger.info(
             "assessment.opened",
             extra={"system_id": system_id, "tier": row.tier},
         )
         row = await _get_system(session, system_id)
-        return await _build_state(session, row, _current_user(request))
+        return await _build_state(session, row, _current_user(request), assessment)
 
 
 async def _build_state(
-    session, row: AISystem, user: str | None = None
+    session,
+    row: AISystem,
+    user: str | None = None,
+    assessment: Assessment | None = None,
 ) -> AssessmentStateResponse:
-    states = await _states_by_key(session, row.id)
-    counts = await _comment_counts(session, row.id)
+    # The cycle this view is scoped to. Defaults to the current assessment; a
+    # specific (possibly historical/approved) assessment can be passed for a
+    # read-only "View results" of that cycle.
+    if assessment is None:
+        assessment = await _ensure_assessment(session, row)
+    current = await _current_assessment(session, row.id)
+    is_current = current is not None and current.id == assessment.id
+    # A historical (non-current) cycle is always read-only; the live cycle uses
+    # the system-level lock.
+    frozen = not is_current
+    states = await _states_by_key(session, assessment.id)
+    counts = await _comment_counts(session, assessment.id)
+    qualifying = await _qualifying_comment_keys(session, assessment.id, states)
     answers = _answer_store(row)
-    editable = _is_editable(row)
+    editable = (not frozen) and _is_editable(row)
 
     conf = ConfidenceCounts()
     attention = 0
     questions: list[QuestionStateResponse] = []
     for q_key in ASSESSMENT_QUESTION_KEYS:
         st = states.get(q_key)
-        ans = _read_answer(row, answers, q_key)
+        # The frozen per-cycle answer lives on the question_state; fall back to the
+        # live system row only when a state has no stored answer (older rows).
+        ans = (st.answer if st and st.answer is not None else None) or _read_answer(
+            row, answers, q_key
+        )
         if st is not None and st.confidence == "high":
             conf.high += 1
         elif st is not None and st.confidence == "medium":
             conf.medium += 1
         elif st is not None and st.confidence == "low":
             conf.low += 1
-        needs = _needs_attention(st, ans)
+        needs = _needs_attention(row, st, ans)
         if needs:
             attention += 1
         # Per-question edit right for the requesting user — only meaningful while
-        # the assessment is editable (not locked/approved).
+        # the assessment is editable (current cycle, not locked/approved).
         can_edit = editable and (user is not None and _may_edit(row, st, user))
         questions.append(
             QuestionStateResponse(
@@ -453,12 +527,34 @@ async def _build_state(
                 owner_confirmed=_is_owner_confirmed(row, st),
                 assignee_username=st.assignee_username if st else None,
                 comment_count=counts.get(q_key, 0),
+                has_qualifying_comment=q_key in qualifying,
                 needs_attention=needs,
                 can_edit=can_edit,
             )
         )
 
-    rationale = row.classification_rationale or {}
+    # Classification: for a historical (frozen) cycle use the Assessment's snapshot
+    # (what it was approved at); for the live cycle use the system row.
+    snap = frozen and assessment.tier is not None
+    tier = assessment.tier if snap else row.tier
+    basis = assessment.basis if snap else row.basis
+    org_role = assessment.org_role if snap else row.org_role
+    co_transparency = (
+        assessment.co_issued_transparency if snap else row.co_issued_transparency
+    )
+    # Transparency obligation also derives from the chatbot / synthetic-content
+    # flags; read the frozen snapshot for a historical cycle so a later edit to
+    # the live system row doesn't rewrite what the cycle was approved at.
+    is_chatbot = assessment.is_chatbot if snap else row.is_chatbot
+    gen_synthetic = (
+        assessment.generates_synthetic_content
+        if snap
+        else row.generates_synthetic_content
+    )
+    rationale = (
+        assessment.classification_rationale if snap else row.classification_rationale
+    ) or {}
+    sources_raw = assessment.assessment_sources if snap else row.assessment_sources
     fired = [
         f.get("flag")
         for f in (rationale.get("flags") or [])
@@ -471,17 +567,20 @@ async def _build_state(
                 section=section_of(q_key),
                 question_key=q_key,
                 question_label=QUESTION_LABEL.get(q_key, q_key),
-                answer=_read_answer(row, answers, q_key),
+                answer=(
+                    (states.get(q_key).answer if states.get(q_key) else None)
+                    or _read_answer(row, answers, q_key)
+                ),
             )
         )
 
     # Source documents that informed the classification (assessment-level).
     # Prefer the persisted retrieval sources (they carry page numbers); fall back
     # to the registration document names when no prefill sources were captured.
-    if row.assessment_sources:
+    if sources_raw:
         source_docs = [
             SourceDocumentRef(name=s.get("name", "document"), page=s.get("page"))
-            for s in row.assessment_sources
+            for s in sources_raw
         ]
     else:
         docs = row.registration_documents or []
@@ -501,21 +600,19 @@ async def _build_state(
 
     return AssessmentStateResponse(
         system_id=row.id,
+        assessment_id=assessment.id,
         system_name=row.name,
         registration_mode=row.registration_mode,
+        owner_username=_system_owner(row),
         workflow_status=row.workflow_status,
-        status_label=_status_label(row),
+        status_label="approved" if frozen else _status_label(row),
         editable=editable,
-        tier=row.tier,
-        basis=row.basis,
-        org_role=row.org_role,
+        tier=tier,
+        basis=basis,
+        org_role=org_role,
         reasoning=rationale.get("reasoning"),
-        transparency=row.tier == "high"
-        and bool(
-            row.co_issued_transparency
-            or row.is_chatbot
-            or row.generates_synthetic_content
-        ),
+        transparency=tier == "high"
+        and bool(co_transparency or is_chatbot or gen_synthetic),
         confidence_counts=conf,
         attention_count=attention,
         decisive_questions=decisive,
@@ -533,20 +630,34 @@ async def _build_state(
 async def get_assessment_state(
     system_id: str,
     request: Request,
+    assessment_id: str | None = None,
     _: str = Depends(require_permission(SYSTEMS_READ)),
 ):
+    """Current cycle by default; pass ``?assessment_id=ASS-…`` to view a specific
+    (e.g. historical/approved) cycle read-only ("View results")."""
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
-        return await _build_state(session, row, _current_user(request))
+        target = None
+        if assessment_id:
+            result = await session.execute(
+                select(Assessment).where(
+                    Assessment.id == assessment_id,
+                    Assessment.ai_system_id == system_id,
+                )
+            )
+            target = result.scalar_one_or_none()
+            if target is None:
+                raise HTTPException(404, "Assessment not found for this system")
+        return await _build_state(session, row, _current_user(request), target)
 
 
 # ── per-question: answer / confirm ───────────────────────────────────────────
 
 
-async def _load_state(session, system_id: str, question_key: str) -> QuestionState:
+async def _load_state(session, assessment_id: str, question_key: str) -> QuestionState:
     result = await session.execute(
         select(QuestionState).where(
-            QuestionState.system_id == system_id,
+            QuestionState.assessment_id == assessment_id,
             QuestionState.question_key == question_key,
         )
     )
@@ -570,32 +681,56 @@ async def save_answer(
         row = await _get_system(session, system_id)
         if not _is_editable(row):
             raise HTTPException(409, "Assessment is locked and cannot be edited")
-        state = await _load_state(session, system_id, question_key)
+        assessment = await _ensure_assessment(session, row)
+        state = await _load_state(session, assessment.id, question_key)
         if not _may_edit(row, state, user):
             raise HTTPException(403, "You are not assigned to this question")
 
+        # Capture the previous stored value BEFORE overwriting, so we can detect a
+        # genuine change (not just a change from the AI original).
+        prev = (state.answer if state and state.answer is not None else None) or (
+            _read_answer(row, _answer_store(row), question_key) or ""
+        )
+        prev = prev.strip()
+        new = body.answer.strip()
+        # Keep the system row's questionnaire_answers in sync (other consumers read
+        # it + the classifier), AND store the frozen per-cycle value on the state.
         answers = _write_answer(row, _answer_store(row), question_key, body.answer)
         row.questionnaire_answers = answers
 
+        # Stamp the answer-change time from the DATABASE clock (func.now()), the
+        # same clock QuestionComment.created_at uses (server_default=func.now()),
+        # so the confirm gate's `created_at >= answer_changed_at` comparison is
+        # not corrupted by backend↔Postgres clock skew on a multi-node deploy.
+        change_ts = func.now()
         if state is None:
             state = QuestionState(
                 id=new_id("QST"),
+                assessment_id=assessment.id,
                 system_id=system_id,
                 question_key=question_key,
+                answer=body.answer or None,
                 answer_source="manual",
                 ai_original_answer=None,
+                answer_changed_at=change_ts,
             )
             session.add(state)
         else:
-            # A change away from the AI-proposed value flips the source to manual
-            # and reverts any prior confirmation (re-edit ⇒ Incomplete).
-            if body.answer.strip() != (state.ai_original_answer or "").strip():
-                state.answer_source = "manual"
+            state.answer = body.answer or None
+            if new != prev:
+                # A genuine change: record when it happened (drives the mandatory-
+                # comment-on-change gate) and revert any prior confirmation (re-edit
+                # ⇒ Incomplete — including a revert back to the AI original).
+                state.answer_changed_at = change_ts
                 state.confirmed_at = None
-            else:
-                state.answer_source = "ai_prefilled"
+                state.confirmed_by = None
+                state.answer_source = (
+                    "manual"
+                    if new != (state.ai_original_answer or "").strip()
+                    else "ai_prefilled"
+                )
         await session.commit()
-        count = (await _comment_counts(session, system_id)).get(question_key, 0)
+        count = (await _comment_counts(session, assessment.id)).get(question_key, 0)
         return QuestionStateResponse(
             question_key=question_key,
             answer=body.answer,
@@ -604,7 +739,7 @@ async def save_answer(
             confirmed=bool(state.confirmed_at),
             assignee_username=state.assignee_username,
             comment_count=count,
-            needs_attention=_needs_attention(state, body.answer),
+            needs_attention=_needs_attention(row, state, body.answer),
         )
 
 
@@ -626,31 +761,39 @@ async def confirm_question(
         row = await _get_system(session, system_id)
         if not _is_editable(row):
             raise HTTPException(409, "Assessment is locked and cannot be edited")
-        state = await _load_state(session, system_id, question_key)
+        assessment = await _ensure_assessment(session, row)
+        state = await _load_state(session, assessment.id, question_key)
         if state is None:
             raise HTTPException(404, "Question has no state; open the assessment first")
         if not _may_edit(row, state, user):
             raise HTTPException(403, "You are not assigned to this question")
 
-        answers = _answer_store(row)
-        current = (_read_answer(row, answers, question_key) or "").strip()
+        current = (state.answer if state.answer is not None else None) or (
+            _read_answer(row, _answer_store(row), question_key) or ""
+        )
+        current = current.strip()
         changed = (
             state.answer_source == "manual"
             and current != (state.ai_original_answer or "").strip()
         )
         if changed:
-            # Require at least one (non-deleted) comment on this question.
-            result = await session.execute(
-                select(QuestionComment).where(
-                    QuestionComment.system_id == system_id,
-                    QuestionComment.question_key == question_key,
-                    QuestionComment.deleted_at.is_(None),
-                )
+            # Require a non-deleted comment recorded AT/AFTER the answer change —
+            # not merely that some comment exists (which an unrelated earlier
+            # comment would satisfy). answer_changed_at is set by save_answer on a
+            # genuine change; if it is somehow NULL, fall back to any-comment.
+            # Scoped to THIS assessment cycle.
+            q = select(QuestionComment).where(
+                QuestionComment.assessment_id == assessment.id,
+                QuestionComment.question_key == question_key,
+                QuestionComment.deleted_at.is_(None),
             )
+            if state.answer_changed_at is not None:
+                q = q.where(QuestionComment.created_at >= state.answer_changed_at)
+            result = await session.execute(q)
             if not result.scalars().first():
                 raise HTTPException(
                     422,
-                    "A comment is required when changing an AI pre-filled answer",
+                    "A comment explaining the change is required before confirming",
                 )
 
         state.confirmed_at = datetime.now(timezone.utc)
@@ -675,11 +818,22 @@ async def unconfirm_question(
         row = await _get_system(session, system_id)
         if not _is_editable(row):
             raise HTTPException(409, "Assessment is locked and cannot be edited")
-        state = await _load_state(session, system_id, question_key)
+        assessment = await _ensure_assessment(session, row)
+        state = await _load_state(session, assessment.id, question_key)
         if state is None:
             raise HTTPException(404, "Question has no state")
         if not _may_edit(row, state, user):
             raise HTTPException(403, "You are not assigned to this question")
+        # Only the user who confirmed it, or the system owner, may clear a
+        # confirmation — a contributor must not wipe the owner's sign-off.
+        if (
+            state.confirmed_by
+            and user != state.confirmed_by
+            and user != _system_owner(row)
+        ):
+            raise HTTPException(
+                403, "Only the confirmer or the system owner may unconfirm"
+            )
         state.confirmed_at = None
         state.confirmed_by = None
         await session.commit()
@@ -696,14 +850,34 @@ async def unconfirm_question(
 async def list_comments(
     system_id: str,
     question_key: str,
+    assessment_id: str | None = None,
     _: str = Depends(require_permission(SYSTEMS_READ)),
 ):
+    """Comments for a question in a specific cycle. Pass ``?assessment_id=`` to
+    read a historical cycle's comments ("View results"); defaults to the current
+    cycle. Read-only — resolves the cycle without creating one (a GET must not
+    flush a new Assessment row), so an unopened system simply has no comments."""
     _validate_question_key(question_key)
     async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        if assessment_id:
+            result = await session.execute(
+                select(Assessment).where(
+                    Assessment.id == assessment_id,
+                    Assessment.ai_system_id == system_id,
+                )
+            )
+            assessment = result.scalar_one_or_none()
+            if assessment is None:
+                raise HTTPException(404, "Assessment not found for this system")
+        else:
+            assessment = await _current_assessment(session, row.id)
+        if assessment is None:
+            return []
         result = await session.execute(
             select(QuestionComment)
             .where(
-                QuestionComment.system_id == system_id,
+                QuestionComment.assessment_id == assessment.id,
                 QuestionComment.question_key == question_key,
                 QuestionComment.deleted_at.is_(None),
             )
@@ -729,13 +903,15 @@ async def add_comment(
         row = await _get_system(session, system_id)
         if not _is_editable(row):
             raise HTTPException(409, "Assessment is locked and cannot be edited")
-        state = await _load_state(session, system_id, question_key)
+        assessment = await _ensure_assessment(session, row)
+        state = await _load_state(session, assessment.id, question_key)
         # Commenting follows the same edit right as the answer: owner any, an
         # assignee only their own question (mirrors can_edit / the UI gate).
         if not _may_edit(row, state, user):
             raise HTTPException(403, "You are not assigned to this question")
         comment = QuestionComment(
             id=new_id("QCM"),
+            assessment_id=assessment.id,
             system_id=system_id,
             question_key=question_key,
             author_username=user,
@@ -767,12 +943,13 @@ async def delete_comment(
         row = await _get_system(session, system_id)
         if not _is_editable(row):
             raise HTTPException(409, "Assessment is locked and cannot be edited")
+        assessment = await _ensure_assessment(session, row)
         result = await session.execute(
             select(QuestionComment).where(
                 QuestionComment.id == comment_id,
-                QuestionComment.system_id == system_id,
+                QuestionComment.assessment_id == assessment.id,
                 # Enforce the nested resource path: a comment id from a different
-                # question on the same system must not be deletable via this URL.
+                # question must not be deletable via this URL.
                 QuestionComment.question_key == question_key,
             )
         )
@@ -806,7 +983,8 @@ async def assign_question(
         row = await _get_system(session, system_id)
         if not _is_editable(row):
             raise HTTPException(409, "Assessment is locked and cannot be edited")
-        state = await _load_state(session, system_id, question_key)
+        assessment = await _ensure_assessment(session, row)
+        state = await _load_state(session, assessment.id, question_key)
         # Owner may reassign any; a current assignee may reassign their own.
         if not _may_edit(row, state, user):
             raise HTTPException(403, "Only the owner or current assignee may reassign")
@@ -823,6 +1001,7 @@ async def assign_question(
         if state is None:
             state = QuestionState(
                 id=new_id("QST"),
+                assessment_id=assessment.id,
                 system_id=system_id,
                 question_key=question_key,
             )
@@ -832,7 +1011,7 @@ async def assign_question(
         state.assigned_at = datetime.now(timezone.utc)
         system_name = row.name
         await session.commit()
-        count = (await _comment_counts(session, system_id)).get(question_key, 0)
+        count = (await _comment_counts(session, assessment.id)).get(question_key, 0)
         answers = _answer_store(row)
 
     label = QUESTION_LABEL.get(question_key, question_key)
@@ -846,15 +1025,16 @@ async def assign_question(
     )
     return QuestionStateResponse(
         question_key=question_key,
-        answer=_read_answer(row, answers, question_key),
+        # Per-cycle frozen answer (matches _build_state); the live system row may
+        # diverge from this cycle's answer after a re-assessment (review: :999).
+        # Same fallback as _build_state for a not-yet-answered state.
+        answer=state.answer or _read_answer(row, answers, question_key),
         answer_source=state.answer_source,
         confidence=state.confidence,
         confirmed=bool(state.confirmed_at),
         assignee_username=state.assignee_username,
         comment_count=count,
-        needs_attention=_needs_attention(
-            state, _read_answer(row, answers, question_key)
-        ),
+        needs_attention=_needs_attention(row, state, state.answer),
     )
 
 
@@ -875,7 +1055,8 @@ async def unassign_question(
         row = await _get_system(session, system_id)
         if not _is_editable(row):
             raise HTTPException(409, "Assessment is locked and cannot be edited")
-        state = await _load_state(session, system_id, question_key)
+        assessment = await _ensure_assessment(session, row)
+        state = await _load_state(session, assessment.id, question_key)
         if not _may_edit(row, state, user):
             raise HTTPException(403, "Only the owner or current assignee may unassign")
         if state is not None:
@@ -904,14 +1085,15 @@ async def finalize_assessment(
         row = await _get_system(session, system_id)
         if user != _system_owner(row):
             raise HTTPException(403, "Only the owner may finalize the assessment")
-        states = await _states_by_key(session, system_id)
+        assessment = await _ensure_assessment(session, row)
+        states = await _states_by_key(session, assessment.id)
         unconfirmed = _owner_unconfirmed(row, states)
         if unconfirmed:
             raise HTTPException(
                 422,
                 f"{len(unconfirmed)} question(s) still require your confirmation",
             )
-        return await _build_state(session, row, user)
+        return await _build_state(session, row, user, assessment)
 
 
 @router.post(
@@ -936,7 +1118,8 @@ async def submit_assessment(
             raise HTTPException(403, "Only the owner may submit the assessment")
         if not _is_editable(row):
             raise HTTPException(409, "Assessment is already locked")
-        states = await _states_by_key(session, system_id)
+        assessment = await _current_assessment(session, system_id)
+        states = await _states_by_key(session, assessment.id) if assessment else {}
         unconfirmed = _owner_unconfirmed(row, states)
         if unconfirmed:
             raise HTTPException(
@@ -947,7 +1130,6 @@ async def submit_assessment(
         row.assignee_username = row.compliance_officer_username
         # Atomic cross-service write (shared DB) — advance the compliance
         # Assessment row the owner's tab reads, mirroring advance-from-classification.
-        assessment = await _current_assessment(session, system_id)
         if assessment is not None:
             assessment.status = "pending_review"
         session.add(
@@ -962,7 +1144,7 @@ async def submit_assessment(
         )
         await session.commit()
         row = await _get_system(session, system_id)
-        return await _build_state(session, row, user)
+        return await _build_state(session, row, user, assessment)
 
 
 # ── compliance officer: issue / reject (#348) ────────────────────────────────
@@ -1026,6 +1208,42 @@ async def issue_classification(
         if assessment is not None:
             assessment.status = "approved"
             assessment.confirmed_by = user
+            # Snapshot the classification onto THIS assessment so a later re-assessment
+            # (which overwrites the live system row) doesn't mutate this frozen cycle —
+            # a historical "View results" reads these, not the current system row.
+            assessment.tier = row.tier
+            assessment.basis = row.basis
+            assessment.annex_iii_area = row.annex_iii_area
+            assessment.org_role = row.org_role
+            assessment.co_issued_transparency = row.co_issued_transparency
+            assessment.is_chatbot = row.is_chatbot
+            assessment.generates_synthetic_content = row.generates_synthetic_content
+            assessment.assessment_sources = row.assessment_sources
+            assessment.classification_rationale = row.classification_rationale
+            # Generate the governance chain (obligations + requirements) for the
+            # now-final tier, in THIS transaction so it is atomic with the approve:
+            # created iff the commit succeeds, and never persisted on failure.
+            # Idempotent — skip if obligations already exist (a reject→resubmit→
+            # re-issue cycle must not duplicate). minimal/GPAI/prohibited tiers
+            # yield no obligations (obligations_for returns []), so this is a no-op.
+            existing_obligations = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(Obligation)
+                    .where(Obligation.assessment_id == assessment.id)
+                )
+            ).scalar_one()
+            if existing_obligations == 0:
+                created, _ = await generate_obligations_in_session(
+                    session, assessment, row
+                )
+                if created:
+                    await generate_requirements_in_session(
+                        session,
+                        created,
+                        row.tier,
+                        getattr(row, "org_role", "provider") or "provider",
+                    )
         session.add(
             SystemWorkflowStep(
                 id=new_id("SWS"),
@@ -1119,3 +1337,69 @@ async def reject_assessment(
         )
     logger.info("assessment.returned", extra={"system_id": system_id, "by": user})
     return state
+
+
+@router.post(
+    "/systems/{system_id}/assessment/start-new",
+    response_model=AssessmentStateResponse,
+)
+async def start_new_assessment(
+    system_id: str,
+    request: Request,
+    _: str = Depends(require_permission(SYSTEMS_WRITE)),
+):
+    """Begin a fresh assessment cycle on an already-approved system.
+
+    Archives the approved assessment (status=inactive, kept for audit) and resets
+    the system's live classification (tier=pending, workflow_status=draft), then
+    lazily prefills a brand-new cycle exactly like the first-ever start. The prior
+    cycle's frozen question_states/answers/comments stay attached to the archived
+    assessment and remain viewable read-only by id. Registry-side (shared DB) so
+    the owner — who has systems:write but not assessments:approve — can start it
+    without the compliance /historicize permission.
+
+    If the current assessment is NOT approved (an in-progress cycle, or none yet),
+    there is nothing to archive — this just opens that current cycle (cycles are
+    sequential, so there is only ever one active). A fresh cycle is created only
+    when the current one is approved."""
+    user = _current_user(request)
+    async with SessionLocal() as session:
+        row = await _get_system(session, system_id)
+        if user != _system_owner(row):
+            raise HTTPException(403, "Only the owner may start a new assessment")
+        current = await _current_assessment(session, system_id)
+        if current is None or current.status != "approved":
+            # Nothing to archive — fall through to opening the current (or a
+            # freshly-ensured) cycle. Point "Start new" at the in-progress one.
+            return await open_assessment(system_id, request)
+        # Archive the approved cycle (frozen; its states/comments stay attached).
+        current.status = "inactive"
+        current.updated_at = datetime.now(timezone.utc)
+        # Reset the live classification so the fresh cycle re-prefills from scratch.
+        # Mirror compliance /historicize (tier=pending, workflow=draft); the other
+        # fields are reset to their column defaults — basis is NOT NULL (""),
+        # co_issued_transparency NOT NULL (False); the JSONB/int fields are nullable.
+        row.tier = "pending"
+        row.workflow_status = "draft"
+        row.basis = ""
+        row.annex_iii_area = None
+        row.co_issued_transparency = False
+        row.classification_rationale = None
+        row.assessment_sources = None
+        row.assignee_username = None
+        session.add(
+            SystemWorkflowStep(
+                id=new_id("SWS"),
+                system_id=system_id,
+                step="assessment_restarted",
+                actor_username=user,
+            )
+        )
+        await session.flush()
+        # Re-sync the compliance score now the approved cycle is inactive.
+        await sync_system_compliance(session, system_id)
+        await session.commit()
+    logger.info("assessment.restarted", extra={"system_id": system_id, "by": user})
+    # Delegate to the normal open path — now that no non-inactive assessment
+    # exists, it creates a fresh questionnaire_pending cycle and seeds blank states.
+    return await open_assessment(system_id, request)
