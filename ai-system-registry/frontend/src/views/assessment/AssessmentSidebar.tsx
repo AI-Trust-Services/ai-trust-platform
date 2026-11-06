@@ -2,25 +2,16 @@ import { useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { CheckCircle2, Circle } from "lucide-react";
 import type { AssessmentState, QuestionState } from "../../types";
-import { BUSINESS_QUESTIONS, AI_TECHNICAL_QUESTIONS } from "../../config/questionnaire";
+import { AI_SECTIONS, ORDERED_QUESTION_IDS, QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
 import { TierBadge } from "../../components/Badges";
 import { cn } from "@/lib/utils";
 
-/** Ordered sections → question keys, mirroring the backend assessment_catalogue. */
-export const ASSESSMENT_SECTIONS: { key: string; label: string; questionKeys: string[] }[] = [
-  {
-    key: "business",
-    label: "Use Case & Context",
-    questionKeys: BUSINESS_QUESTIONS.filter((q) => q.key !== "external_id").map((q) => q.key),
-  },
-  {
-    key: "technical",
-    label: "AI Risk Classification",
-    questionKeys: AI_TECHNICAL_QUESTIONS.map((q) => q.key),
-  },
-];
+/** Ordered sections → question keys, derived from ai-questionnaire.json
+ * (each JSON category is one section). */
+export const ASSESSMENT_SECTIONS: { key: string; label: string; questionKeys: string[] }[] =
+  AI_SECTIONS.map((s) => ({ key: s.key, label: s.label, questionKeys: s.questionIds }));
 
-export const ORDERED_QUESTION_KEYS = ASSESSMENT_SECTIONS.flatMap((s) => s.questionKeys);
+export const ORDERED_QUESTION_KEYS = ORDERED_QUESTION_IDS;
 
 /** Progress-segment color: owner-confirmed ⇒ green; otherwise by AI confidence
  * band (green/amber/red), matching the start-page confidence bar. Unknown ⇒ amber. */
@@ -154,7 +145,7 @@ export function AssessmentSidebar({
                           />
                         )}
                         <span className="flex flex-col">
-                          <span>{QUESTION_LABELS[key] ?? key}</span>
+                          <span className="line-clamp-2">{QUESTION_LABELS[key] ?? key}</span>
                           <span
                             className={cn(
                               "text-xs",
@@ -204,5 +195,5 @@ export function AssessmentSidebar({
 
 // Flat label lookup built from the frontend questionnaire config.
 export const QUESTION_LABELS: Record<string, string> = Object.fromEntries(
-  [...BUSINESS_QUESTIONS, ...AI_TECHNICAL_QUESTIONS].map((q) => [q.key, q.label]),
+  Object.values(QUESTION_DEF_BY_ID).map((q) => [q.id, q.question]),
 );

@@ -56,6 +56,9 @@ class QuestionStateResponse(BaseModel):
     # Whether the requesting user may edit THIS question right now (only meaningful
     # when the assessment-level `editable` is true).
     can_edit: bool = True
+    # Evidence references and explanation from the questionnaire-run pipeline.
+    ai_references: list[dict] = []
+    ai_explanation: str | None = None
 
 
 class AnswerRequest(BaseModel):

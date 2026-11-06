@@ -1,21 +1,29 @@
 """E2E tests for the single-page EU AI Act assessment flow.
 
-Covers the owner flow (#346/#314): open/prefill, per-question state, the
-mandatory-comment-on-change confirm gate, edit-gating for contributors, the
-finalize/submit all-confirmed gates, comment soft-delete permissions, and
-assignment. The acting user is read from ``x-forwarded-preferred-username``.
+Covers the owner flow (#346/#314/#362): open (questionnaire-pipeline prefill),
+per-question state, the mandatory-comment-on-change confirm gate, edit-gating for
+contributors, the finalize/submit all-confirmed gates, comment soft-delete
+permissions, assignment, and per-cycle history. The acting user is read from
+``x-forwarded-preferred-username``.
 
-Runs in stub LLM mode (THALAMUS_BASE_URL unset → stub), so /open produces
-deterministic per-question answers + confidence bands.
+Runs in stub LLM mode (THALAMUS_BASE_URL unset → stub), so the questionnaire
+pipeline that ``/open`` runs produces a deterministic minimal result (one
+Scope_1 answer, no answer strength → low confidence). Its MinIO result upload is
+patched so a live MinIO is not required.
 """
 
 from __future__ import annotations
+
+from contextlib import ExitStack
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 
 _OWNER = "owner1"
 _CONTRIB = "contrib1"
+
+_STUB_PRESIGNED = "http://minio:9000/stub.json?sig=stub"
 
 
 def _hdr(user: str) -> dict:
@@ -39,7 +47,39 @@ async def _create_system(client: httpx.AsyncClient, owner: str = _OWNER) -> str:
     return r.json()["system"]["id"]
 
 
+@pytest.fixture(autouse=True)
+def _stub_pipeline_minio():
+    """The questionnaire pipeline that /open runs uploads each run's result to
+    MinIO. Patch it for every test in this module — /open is reached directly and
+    indirectly (e.g. POST /assessment/start-new opens the fresh cycle) — so no
+    live MinIO is required."""
+    with ExitStack() as stack:
+        stack.enter_context(
+            patch(
+                "app.questionnaire_pipeline.minio_client.ensure_bucket",
+                new_callable=AsyncMock,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.questionnaire_pipeline.asyncio.to_thread",
+                new_callable=AsyncMock,
+                return_value=None,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.questionnaire_pipeline.minio_client.get_presigned_url",
+                new_callable=AsyncMock,
+                return_value=_STUB_PRESIGNED,
+            )
+        )
+        yield
+
+
 async def _open(client: httpx.AsyncClient, system_id: str, user: str = _OWNER):
+    """POST /open (prefills via the questionnaire pipeline on first call for a
+    cycle; a plain read afterwards)."""
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/open", headers=_hdr(user)
     )
@@ -47,44 +87,79 @@ async def _open(client: httpx.AsyncClient, system_id: str, user: str = _OWNER):
     return r.json()
 
 
-# ── open / prefill ───────────────────────────────────────────────────────────
+# ── open / prefill ────────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_open_prefills_and_classifies(client: httpx.AsyncClient):
+async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClient):
+    """POST /open runs the questionnaire pipeline: every catalogue question gets a
+    state, the stub's Scope_1 answer is written (low confidence, with its
+    explanation), nothing is pre-confirmed, and the classifier derives a tier."""
     system_id = await _create_system(client)
     state = await _open(client, system_id)
 
     assert state["prefilled"] is True
-    assert state["tier"]  # classification ran
-    # Every catalogue question has a state entry.
-    assert len(state["questions"]) >= 1
-    # Confidence counts sum to the number of questions with a band.
-    counts = state["confidence_counts"]
-    assert counts["high"] + counts["medium"] + counts["low"] == len(state["questions"])
-    # The stub leaves a few low-confidence/empty → attention count is non-zero.
-    assert state["attention_count"] >= 1
-    # No question is confirmed yet.
+    assert len(state["questions"]) > 1
+    by_key = {q["question_key"]: q for q in state["questions"]}
+    scope = by_key["Scope_1"]
+    assert scope["answer"] == "NOT_ENOUGH_INFORMATION"
+    assert scope["answer_source"] == "ai_prefilled"
+    assert scope["confidence"] == "low"
+    assert scope["ai_explanation"]
+    # Questions the pipeline did not answer are blank, low confidence.
+    others = [q for k, q in by_key.items() if k != "Scope_1"]
+    assert all(not q["answer"] for q in others)
+    assert all(q["confidence"] == "low" for q in others)
+    # No question is auto-confirmed — the owner reviews every one.
     assert all(not q["confirmed"] for q in state["questions"])
+    assert all(not q["owner_confirmed"] for q in state["questions"])
+    # Classifier ran after the prefill.
+    assert state["tier"] is not None
+
+
+@pytest.mark.asyncio
+async def test_open_returns_502_when_pipeline_fails(client: httpx.AsyncClient):
+    """A pipeline failure surfaces as 502 and writes nothing (a retry re-runs it)."""
+    system_id = await _create_system(client)
+    with patch(
+        "app.routers.assessment.run_pipeline",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("llm down"),
+    ):
+        r = await client.post(
+            f"/v1/systems/{system_id}/assessment/open", headers=_hdr(_OWNER)
+        )
+    assert r.status_code == 502, r.text
+    state = await _open(client, system_id)
+    assert state["prefilled"] is True
 
 
 @pytest.mark.asyncio
 async def test_prefill_choice_answers_are_valid_options(client: httpx.AsyncClient):
-    """A select/boolean question must be prefilled with one of its exact option
-    strings, so the frontend's exact-match radios select it (the bug: the model
-    returned free-text prose that matched no option)."""
+    """A predefined question answered by the prefill must contain a value from the
+    question's allowed options, so the frontend's exact-match radios select it —
+    or one of the LLM's system-defined outcomes (NOT_ENOUGH_INFORMATION, CONFLICT),
+    which are valid answer values per questionnaire_answer.md but are not
+    "configured" options (not part of QUESTION_OPTIONS)."""
     from app.assessment_catalogue import QUESTION_OPTIONS
 
+    _SYSTEM_OUTCOMES = {"NOT_ENOUGH_INFORMATION", "CONFLICT"}
+
     system_id = await _create_system(client)
+    await _open(client, system_id)
     state = await _open(client, system_id)
     by_key = {q["question_key"]: q for q in state["questions"]}
     for key, options in QUESTION_OPTIONS.items():
         q = by_key.get(key)
-        assert q is not None, f"{key} missing from assessment state"
-        # Either a valid option verbatim, or empty (documents didn't support one).
-        assert q["answer"] in options or q["answer"] in ("", None), (
-            f"{key} prefilled with {q['answer']!r}, not one of {options}"
-        )
+        if q is None:
+            continue
+        # A valid configured option verbatim, a system-defined outcome, or empty
+        # (stub didn't answer this question).
+        assert (
+            q["answer"] in options
+            or q["answer"] in _SYSTEM_OUTCOMES
+            or q["answer"] in ("", None)
+        ), f"{key} filled with {q['answer']!r}, not one of {options}"
 
 
 @pytest.mark.asyncio
@@ -98,38 +173,14 @@ async def test_unknown_question_key_returns_422(client: httpx.AsyncClient):
         headers=_hdr(_OWNER),
     )
     assert r.status_code == 422, r.text
-    """use_case / department are storage:"system" keys — editing them in the
-    assessment must update the AISystem column (what every other consumer reads),
-    not just the questionnaire_answers JSON."""
-    system_id = await _create_system(client)
-    await _open(client, system_id)
-    r = await client.post(
-        f"/v1/systems/{system_id}/assessment/questions/use_case/answer",
-        json={"answer": "A detailed, owner-edited use-case description."},
-        headers=_hdr(_OWNER),
-    )
-    assert r.status_code == 200, r.text
-    # The AISystem column reflects the edit (read via the system endpoint).
-    sys_resp = await client.get(f"/v1/systems/{system_id}", headers=_hdr(_OWNER))
-    assert sys_resp.status_code == 200, sys_resp.text
-    assert (
-        sys_resp.json()["use_case"] == "A detailed, owner-edited use-case description."
-    )
-    # And the assessment state reads it back from the column.
-    state = await client.get(
-        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
-    )
-    uc = next(q for q in state.json()["questions"] if q["question_key"] == "use_case")
-    assert uc["answer"] == "A detailed, owner-edited use-case description."
 
 
 @pytest.mark.asyncio
 async def test_open_is_idempotent(client: httpx.AsyncClient):
     system_id = await _create_system(client)
     first = await _open(client, system_id)
-    # Confirm one question, then re-open: state must be preserved (not re-prefilled).
+    # Confirm one question (no answer → source stays ai_prefilled, no comment needed).
     qkey = first["questions"][0]["question_key"]
-    # Give it a comment-free confirm path: it's an AI-prefilled answer (unchanged).
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
         headers=_hdr(_OWNER),
@@ -147,9 +198,12 @@ async def test_open_is_idempotent(client: httpx.AsyncClient):
 async def test_confirm_unchanged_ai_answer_needs_no_comment(
     client: httpx.AsyncClient,
 ):
+    """After the prefill, confirming an AI-prefilled answer without changes requires
+    no comment."""
     system_id = await _create_system(client)
+    await _open(client, system_id)
     state = await _open(client, system_id)
-    # Pick a high-confidence (non-empty) AI-prefilled question.
+    # Pick a question that was answered by the AI.
     qkey = next(
         q["question_key"]
         for q in state["questions"]
@@ -168,6 +222,7 @@ async def test_confirm_changed_answer_blocked_without_comment(
     client: httpx.AsyncClient,
 ):
     system_id = await _create_system(client)
+    await _open(client, system_id)
     state = await _open(client, system_id)
     qkey = next(q["question_key"] for q in state["questions"] if q["answer"])
     # Change the AI answer.
@@ -436,8 +491,8 @@ async def test_finalize_blocked_until_all_confirmed(client: httpx.AsyncClient):
 async def test_submit_after_confirming_all(client: httpx.AsyncClient):
     system_id = await _create_system(client)
     state = await _open(client, system_id)
-    # Confirm every question. For changed answers we'd need comments, but all are
-    # AI-prefilled & unchanged here, so confirm is comment-free.
+    # Confirm every question. All are AI-prefilled & unchanged (empty), so
+    # confirm is comment-free.
     for q in state["questions"]:
         r = await client.post(
             f"/v1/systems/{system_id}/assessment/questions/{q['question_key']}/confirm",
@@ -464,6 +519,7 @@ async def test_reedit_confirmed_question_reverts_to_incomplete(
     client: httpx.AsyncClient,
 ):
     system_id = await _create_system(client)
+    await _open(client, system_id)
     state = await _open(client, system_id)
     qkey = next(
         q["question_key"]
@@ -626,11 +682,12 @@ async def test_can_edit_false_for_contributor_on_unassigned(
 
 # ── iteration 3 (#348): CO issue / reject ────────────────────────────────────
 
+
 _CO = "officer1"
 
 
 async def _submit_as_owner(client: httpx.AsyncClient) -> str:
-    """Create, prefill, owner-confirm all, and submit — leaving the system in
+    """Create, open, owner-confirm all, and submit — leaving the system in
     pending_review (locked, ready for the CO)."""
     system_id = await _create_system(client)
     # Assign the compliance officer as the compliance "New Assessment" modal does
@@ -1187,7 +1244,7 @@ async def test_list_comments_unopened_system_does_not_create_assessment(
     system_id = await _create_system(client)
     # A valid question key; the system has never been /open-ed, so no cycle exists.
     r = await client.get(
-        f"/v1/systems/{system_id}/assessment/questions/use_case_owner/comments",
+        f"/v1/systems/{system_id}/assessment/questions/Scope_1/comments",
         headers=_hdr(_OWNER),
     )
     assert r.status_code == 200, r.text

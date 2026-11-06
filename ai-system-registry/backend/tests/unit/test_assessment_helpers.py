@@ -2,72 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from app.routers import assessment
-
-
-class _FakeClient:
-    def __init__(self, resp):
-        self._resp = resp
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *_a):
-        return False
-
-    async def post(self, *_a, **_k):
-        return self._resp
-
-
-def _resp(json_value, status=200):
-    r = MagicMock()
-    r.status_code = status
-    r.json = lambda: json_value
-    return r
-
-
-@pytest.mark.asyncio
-async def test_retrieve_context_parses_bare_list():
-    """/v1/retrieve returns a bare JSON array (list[RetrievedPassage]) — not an
-    object. Regression guard for the 'list has no attribute get' 500."""
-    payload = [
-        {
-            "passage": "EU market from March 2026.",
-            "source": {"filename": "a.pdf", "page": 14},
-        },
-        {"passage": "Screens applicants.", "source": {"filename": "b.docx", "page": 3}},
-    ]
-    with patch.object(
-        assessment.httpx, "AsyncClient", lambda **k: _FakeClient(_resp(payload))
-    ):
-        ctx, sources = await assessment._retrieve_context("SYS-X")
-    assert "March 2026" in ctx
-    assert [(s.name, s.page) for s in sources] == [("a.pdf", 14), ("b.docx", 3)]
-
-
-@pytest.mark.asyncio
-async def test_retrieve_context_tolerates_object_wrapper():
-    payload = {
-        "results": [{"passage": "x", "source": {"filename": "a.pdf", "page": None}}]
-    }
-    with patch.object(
-        assessment.httpx, "AsyncClient", lambda **k: _FakeClient(_resp(payload))
-    ):
-        ctx, sources = await assessment._retrieve_context("SYS-X")
-    assert sources and sources[0].name == "a.pdf"
-
-
-@pytest.mark.asyncio
-async def test_retrieve_context_fails_soft_on_error_status():
-    with patch.object(
-        assessment.httpx, "AsyncClient", lambda **k: _FakeClient(_resp([], status=502))
-    ):
-        ctx, sources = await assessment._retrieve_context("SYS-X")
-    assert ctx == "" and sources == []
 
 
 def test_status_label_maps_locked_and_returned():
@@ -90,3 +27,88 @@ def test_is_editable():
     ]:
         sys.workflow_status = ws
         assert assessment._is_editable(sys) is expected
+
+
+# ── questionnaire-pipeline result conversion ─────────────────────────────────
+
+
+def _item(qid, answers, refs=None, explanation="because"):
+    return {
+        "questionId": qid,
+        "answer": answers,
+        "explanation": explanation,
+        "references": refs or [],
+    }
+
+
+def test_proposals_predefined_uses_plain_value_and_strength_band():
+    out = assessment._proposals_from_results(
+        [_item("Scope_1", [{"value": "YES", "answerStrength": "MEDIUM"}])]
+    )
+    assert out["Scope_1"]["answer"] == "YES"
+    assert out["Scope_1"]["confidence"] == "medium"
+    assert out["Scope_1"]["explanation"] == "because"
+
+
+def test_proposals_multiselect_serialises_json_array_with_lowest_strength():
+    import json
+
+    from app.assessment_catalogue import QUESTION_TYPES
+
+    key = next(k for k, t in QUESTION_TYPES.items() if t == "MULTISELECT")
+    out = assessment._proposals_from_results(
+        [
+            _item(
+                key,
+                [
+                    {"value": "a", "answerStrength": "HIGH"},
+                    {"value": "b", "answerStrength": "LOW"},
+                ],
+            )
+        ]
+    )
+    assert json.loads(out[key]["answer"]) == ["a", "b"]
+    assert out[key]["confidence"] == "low"
+
+
+def test_proposals_single_multiselect_value_is_still_a_json_array():
+    import json
+
+    from app.assessment_catalogue import QUESTION_TYPES
+
+    key = next(k for k, t in QUESTION_TYPES.items() if t == "MULTISELECT")
+    out = assessment._proposals_from_results(
+        [_item(key, [{"value": "a", "answerStrength": "HIGH"}])]
+    )
+    assert json.loads(out[key]["answer"]) == ["a"]
+
+
+def test_proposals_skip_unknown_ids_unanswered_and_malformed_items():
+    out = assessment._proposals_from_results(
+        [
+            _item("Not_A_Question", [{"value": "YES"}]),
+            _item("Scope_1", []),
+            _item("Scope_2", [{"value": ""}]),
+            "garbage",
+            {"questionId": "Scope_3", "answer": None},
+        ]
+    )
+    assert out == {}
+
+
+def test_proposals_without_strength_default_to_low_confidence():
+    out = assessment._proposals_from_results(
+        [_item("Scope_1", [{"value": "NOT_ENOUGH_INFORMATION"}])]
+    )
+    assert out["Scope_1"]["confidence"] == "low"
+
+
+def test_sources_are_distinct_in_first_seen_order():
+    proposals = {
+        "Scope_1": {"references": [{"source": "a.pdf"}, {"source": "b.pdf"}]},
+        "Scope_2": {"references": [{"source": "a.pdf"}, {"quote": "no source"}, "x"]},
+    }
+    assert [s.name for s in assessment._sources_from_proposals(proposals)] == [
+        "a.pdf",
+        "b.pdf",
+    ]

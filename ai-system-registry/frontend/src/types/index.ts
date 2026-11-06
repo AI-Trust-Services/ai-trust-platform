@@ -117,6 +117,14 @@ export interface QuestionState {
   has_qualifying_comment: boolean;
   needs_attention: boolean;
   can_edit: boolean;
+  ai_references: Array<{
+    sourceType?: string;
+    source?: string;
+    sourceId?: string | null;
+    location?: string | null;
+    quote?: string | null;
+  }>;
+  ai_explanation: string | null;
 }
 
 export interface ConfidenceCounts {
@@ -515,4 +523,5 @@ export interface AuditEventListResponse {
   total: number;
   items: AuditEvent[];
 }
+
 

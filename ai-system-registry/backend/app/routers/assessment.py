@@ -11,10 +11,10 @@ its transaction (``async with SessionLocal()``), per the repo convention.
 
 from __future__ import annotations
 
-import os
+import json
 from datetime import datetime, timezone
+from typing import Any
 
-import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import func, select
 
@@ -24,7 +24,7 @@ from ai_trust_authorization.constants import (
     SYSTEMS_READ,
     SYSTEMS_WRITE,
 )
-from ai_trust_logging import correlation_id_var, get_logger
+from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.governance import (
     generate_obligations_in_session,
@@ -41,19 +41,12 @@ from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from app import email_sender
 from app.assessment_catalogue import (
     ASSESSMENT_QUESTION_KEYS,
-    SYSTEM_STORAGE_KEYS,
-    decisive_question_keys,
-    question_catalogue,
-    section_of,
+    QUESTION_TYPES,
 )
 from app.classifier import classify_ai_questionnaire
 from app.ids import new_id
-from app.llm import (
-    LLMParseError,
-    build_assessment_prefill_messages,
-    chat,
-    parse_json_response,
-)
+from app.llm import LLMParseError
+from app.questionnaire_pipeline import run_pipeline
 from app.questionnaire_required import QUESTION_LABEL
 from app.schemas.assessment import (
     AnswerRequest,
@@ -64,7 +57,6 @@ from app.schemas.assessment import (
     ConfidenceCounts,
     ContributorRef,
     ConfirmResponse,
-    DecisiveQuestion,
     QuestionStateResponse,
     SourceDocumentRef,
     SubmitRequest,
@@ -84,12 +76,14 @@ _AI_UNAVAILABLE = "AI classification is unavailable. Please try again shortly."
 # migration 0003). Named here rather than inlined as a magic string.
 _EU_AI_ACT_FRAMEWORK_ID = "FRM-EU-AI-ACT"
 
-_INDEXING_URL = os.environ.get(
-    "INDEXING_BACKEND_URL", "http://document-indexing-backend:8011"
-)
-_SERVICE_PRINCIPAL = os.environ.get(
-    "EXTERNAL_API_SERVICE_PRINCIPAL", "svc-external-api"
-)
+# The questionnaire + answer prompt `/open` runs through the questionnaire-answer
+# pipeline (context/prompts/<id>.json / <id>.md) — same defaults as
+# POST /systems/{id}/questionnaire-run.
+_QUESTIONNAIRE_ID = "ai-questionnaire"
+_QUESTIONNAIRE_PROMPT_ID = "questionnaire_answer"
+
+# answerStrength (pipeline) → confidence band; the lowest wins for MULTISELECT.
+_STRENGTH_RANK = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -121,38 +115,81 @@ def _answer_store(row: AISystem) -> dict:
 
 
 def _read_answer(row: AISystem, answers: dict, question_key: str) -> str | None:
-    """Read a question's answer from its canonical store. System-storage business
-    keys (``SYSTEM_STORAGE_KEYS``, e.g. department/use_case) live on the AISystem
-    column; technical (AI-mode free-text) keys live nested under ``technical``;
-    other business keys live at the top level of ``questionnaire_answers``."""
-    if question_key in SYSTEM_STORAGE_KEYS:
-        v = getattr(row, question_key, None)
-    elif section_of(question_key) == "technical":
-        tech = answers.get("technical") or {}
-        v = tech.get(question_key)
-    else:
-        v = answers.get(question_key)
+    """Read a question's answer from the flat questionnaire_answers JSONB dict
+    (keys are the ai-questionnaire.json question ids)."""
+    v = answers.get(question_key)
     if v is None:
         return None
     return str(v)
 
 
 def _write_answer(row: AISystem, answers: dict, question_key: str, value: str) -> dict:
-    """Persist a question's answer to its canonical store and return the (possibly
-    updated) answers dict. System-storage keys are written to the AISystem column
-    (the dict is returned unchanged for them); other keys are written into the
-    section-aware ``questionnaire_answers`` dict."""
-    if question_key in SYSTEM_STORAGE_KEYS:
-        setattr(row, question_key, value)
-        return answers
+    """Write a question's answer into the flat questionnaire_answers JSONB dict
+    and return the updated dict."""
     out = dict(answers)
-    if section_of(question_key) == "technical":
-        tech = dict(out.get("technical") or {})
-        tech[question_key] = value
-        out["technical"] = tech
-    else:
-        out[question_key] = value
+    out[question_key] = value
     return out
+
+
+def _proposals_from_results(results: list[Any]) -> dict[str, dict[str, Any]]:
+    """Convert questionnaire-pipeline ``results`` into per-question proposals.
+
+    Returns ``{question_id: {answer, confidence, references, explanation}}`` for
+    every known question that has a non-empty answer. Unknown ids and unanswered
+    items are skipped (the caller seeds those as blank, low-confidence states).
+
+    MULTISELECT always serialises to a JSON array (even one option) — the frontend
+    JSON.parse()s it; PREDEFINED/DESCRIPTIVE use the plain value. ``answerStrength``
+    (HIGH/MEDIUM/LOW) maps to a confidence band; for MULTISELECT the lowest
+    strength across the returned options wins. No strength ⇒ ``low``."""
+    known = set(ASSESSMENT_QUESTION_KEYS)
+    out: dict[str, dict[str, Any]] = {}
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        q_key = item.get("questionId")
+        if q_key not in known:
+            continue
+        options = [a for a in (item.get("answer") or []) if isinstance(a, dict)]
+        values = [str(a["value"]) for a in options if a.get("value")]
+        if not values:
+            continue
+        value = (
+            json.dumps(values)
+            if len(values) > 1 or QUESTION_TYPES.get(q_key) == "MULTISELECT"
+            else values[0]
+        )
+        strengths = [
+            a["answerStrength"]
+            for a in options
+            if a.get("answerStrength") in _STRENGTH_RANK
+        ]
+        confidence = (
+            min(strengths, key=lambda s: _STRENGTH_RANK[s]).lower()
+            if strengths
+            else "low"
+        )
+        out[q_key] = {
+            "answer": value,
+            "confidence": confidence,
+            "references": item.get("references") or [],
+            "explanation": item.get("explanation") or None,
+        }
+    return out
+
+
+def _sources_from_proposals(
+    proposals: dict[str, dict[str, Any]],
+) -> list[SourceDocumentRef]:
+    """Distinct source documents cited across all answers' evidence references,
+    in first-seen order (assessment-level "sources that informed this")."""
+    seen: dict[str, SourceDocumentRef] = {}
+    for p in proposals.values():
+        for ref in p["references"]:
+            name = ref.get("source") if isinstance(ref, dict) else None
+            if name and name not in seen:
+                seen[name] = SourceDocumentRef(name=name)
+    return list(seen.values())
 
 
 async def _states_by_key(session, assessment_id: str) -> dict[str, QuestionState]:
@@ -317,57 +354,6 @@ async def _ensure_assessment(session, row: AISystem) -> Assessment:
     return assessment
 
 
-async def _retrieve_context(
-    system_id: str,
-) -> tuple[str, list[SourceDocumentRef]]:
-    """Fetch top document passages for prefill. Returns (context_block, sources).
-
-    Fails soft: if indexing is unreachable or returns nothing, returns an empty
-    block and an empty source list (prefill then proposes low-confidence /
-    empty answers)."""
-    payload = {"ai_system_id": system_id, "query": "EU AI Act classification", "k": 12}
-    headers = {"x-forwarded-preferred-username": _SERVICE_PRINCIPAL}
-    cid = correlation_id_var.get("")
-    if cid:
-        headers["x-correlation-id"] = cid
-    url = f"{_INDEXING_URL}/v1/retrieve"
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-        if resp.status_code >= 400:
-            logger.warning(
-                "assessment.retrieve_failed", extra={"status": resp.status_code}
-            )
-            return "", []
-        data = resp.json()
-    except (httpx.TimeoutException, httpx.RequestError, ValueError) as exc:
-        logger.warning("assessment.retrieve_unreachable", extra={"error": str(exc)})
-        return "", []
-
-    # /v1/retrieve returns a bare JSON array of passages (response_model=
-    # list[RetrievedPassage]). Tolerate an object wrapper too, defensively.
-    if isinstance(data, dict):
-        results = data.get("results") or data.get("passages") or []
-    elif isinstance(data, list):
-        results = data
-    else:
-        results = []
-    passages: list[str] = []
-    sources: dict[tuple[str, int | None], SourceDocumentRef] = {}
-    for r in results:
-        passage = r.get("passage") or ""
-        src = r.get("source") or {}
-        name = src.get("filename") or "document"
-        page = src.get("page")
-        if passage:
-            loc = f" (p. {page})" if page is not None else ""
-            passages.append(f"[{name}{loc}] {passage}")
-        key = (name, page)
-        if key not in sources:
-            sources[key] = SourceDocumentRef(name=name, page=page)
-    return "\n\n".join(passages), list(sources.values())
-
-
 # ── open / prefill ─────────────────────────────────────────────────────────
 
 
@@ -382,10 +368,13 @@ async def open_assessment(
 ):
     """Lazily prefill + classify on first open; return cached state thereafter.
 
-    One batched LLM call proposes an answer + confidence per question from the
-    system's indexed documents, then the deterministic classifier derives the
-    tier. Seeds ``question_states`` and persists answers. Idempotent: once
-    ``question_states`` rows exist, this is a plain read."""
+    The questionnaire-answer pipeline (``run_pipeline``: registration data + RAG
+    evidence, ai-questionnaire.json) proposes an answer, confidence, explanation
+    and evidence references per question, then the deterministic classifier
+    derives the tier. Seeds this cycle's ``question_states`` (all unconfirmed) and
+    persists answers. Any pipeline/classifier failure → 502 and nothing is
+    written. Idempotent: once ``question_states`` rows exist, this is a plain
+    read."""
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
         # Resolve (or create) the current assessment cycle FIRST — its id is the
@@ -398,52 +387,42 @@ async def open_assessment(
             await session.commit()
             return await _build_state(session, row, _current_user(request), assessment)
 
-        # ── prefill pass (one batched LLM call) ──
-        context_block, sources = await _retrieve_context(system_id)
-        messages = build_assessment_prefill_messages(
-            question_catalogue(), retrieved_context=context_block
-        )
+        # ── prefill pass (questionnaire-answer pipeline: registration data + RAG
+        # evidence → one LLM run per dependency group → per-question answers) ──
         try:
-            result = await chat(messages, json_mode=True, task="assessment_prefill")
-            parsed = await parse_json_response(
-                result["text"], task="assessment_prefill"
+            output = await run_pipeline(
+                system_id=system_id,
+                questionnaire_id=_QUESTIONNAIRE_ID,
+                prompt_id=_QUESTIONNAIRE_PROMPT_ID,
+                username=_current_user(request),
             )
-            # Validate the shape here (inside the handler): a syntactically valid
-            # but schema-invalid payload (e.g. a top-level array, or answers as a
-            # string) must surface as the 502 AI-unavailable response, not a 500.
-            if not isinstance(parsed, dict):
-                raise ValueError("prefill response is not a JSON object")
-            raw_answers = parsed.get("answers") or []
-            if not isinstance(raw_answers, list):
-                raise ValueError("prefill 'answers' is not a list")
-            prefilled = {
-                a["question_key"]: a
-                for a in raw_answers
-                if isinstance(a, dict) and "question_key" in a
-            }
-        except (LLMParseError, Exception) as exc:  # noqa: BLE001
+            proposals = _proposals_from_results(
+                (output.get("result") or {}).get("results") or []
+            )
+        except Exception as exc:  # noqa: BLE001
             logger.error("assessment.prefill_failed", extra={"error": str(exc)})
             raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
 
         answers = _answer_store(row)
         for q_key in ASSESSMENT_QUESTION_KEYS:
-            proposal = prefilled.get(q_key) or {}
-            ans = (proposal.get("answer") or "").strip()
-            conf = proposal.get("confidence")
-            if conf not in ("high", "medium", "low"):
-                conf = "low"
+            proposal = proposals.get(q_key)
+            ans = proposal["answer"] if proposal else None
             if ans:
                 answers = _write_answer(row, answers, q_key, ans)
+            # Seeded UNCONFIRMED for every confidence band: the owner reviews and
+            # confirms each question (the submit gate is owner-confirmed on all).
             session.add(
                 QuestionState(
                     id=new_id("QST"),
                     assessment_id=assessment.id,
                     system_id=system_id,
                     question_key=q_key,
-                    answer=ans or None,
+                    answer=ans,
                     answer_source="ai_prefilled",
-                    ai_original_answer=ans or None,
-                    confidence=conf,
+                    ai_original_answer=ans,
+                    confidence=proposal["confidence"] if proposal else "low",
+                    ai_references=proposal["references"] if proposal else None,
+                    ai_explanation=proposal["explanation"] if proposal else None,
                 )
             )
         row.questionnaire_answers = answers
@@ -460,9 +439,11 @@ async def open_assessment(
         row.classification_rationale = rationale
         if rationale.get("org_role"):
             row.org_role = rationale["org_role"]
-        # Persist the source passages (filename + page) that informed the prefill,
-        # so the start page / confidence modal / CO panel can cite them with pages.
-        row.assessment_sources = [s.model_dump() for s in sources]
+        # Persist the source documents cited by the answers' evidence references,
+        # so the start page / CO panel can list what informed the assessment.
+        row.assessment_sources = [
+            s.model_dump() for s in _sources_from_proposals(proposals)
+        ]
 
         await session.commit()
         logger.info(
@@ -530,6 +511,8 @@ async def _build_state(
                 has_qualifying_comment=q_key in qualifying,
                 needs_attention=needs,
                 can_edit=can_edit,
+                ai_references=(st.ai_references or []) if st else [],
+                ai_explanation=st.ai_explanation if st else None,
             )
         )
 
@@ -555,24 +538,6 @@ async def _build_state(
         assessment.classification_rationale if snap else row.classification_rationale
     ) or {}
     sources_raw = assessment.assessment_sources if snap else row.assessment_sources
-    fired = [
-        f.get("flag")
-        for f in (rationale.get("flags") or [])
-        if isinstance(f, dict) and f.get("value")
-    ]
-    decisive = []
-    for q_key in decisive_question_keys([f for f in fired if f]):
-        decisive.append(
-            DecisiveQuestion(
-                section=section_of(q_key),
-                question_key=q_key,
-                question_label=QUESTION_LABEL.get(q_key, q_key),
-                answer=(
-                    (states.get(q_key).answer if states.get(q_key) else None)
-                    or _read_answer(row, answers, q_key)
-                ),
-            )
-        )
 
     # Source documents that informed the classification (assessment-level).
     # Prefer the persisted retrieval sources (they carry page numbers); fall back
@@ -615,7 +580,9 @@ async def _build_state(
         and bool(co_transparency or is_chatbot or gen_synthetic),
         confidence_counts=conf,
         attention_count=attention,
-        decisive_questions=decisive,
+        # No flag→question mapping exists for the ai-questionnaire.json ids, so the
+        # "Why this classification" list is empty (the reasoning text still shows).
+        decisive_questions=[],
         source_documents=source_docs,
         questions=questions,
         contributors=contributor_refs,

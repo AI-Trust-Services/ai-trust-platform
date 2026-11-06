@@ -341,13 +341,13 @@ def _assessment_prefill(messages: list[dict]) -> dict:
         for m in messages
         if m["role"] == "system" and isinstance(m["content"], str)
     )
-    # Catalogue lines look like: "data_and_inputs — Data & Inputs".
-    keys = re.findall(r"^([a-z_0-9]+) — ", system, flags=re.MULTILINE)
+    # Catalogue lines look like: "Scope_1 — Is your system an AI system...".
+    keys = re.findall(r"^([A-Za-z0-9_]+) — ", system, flags=re.MULTILINE)
     # Constrained keys carry a continuation line "Answer with EXACTLY one of: a | b | ...".
     # Map each such key → its first allowed option (verbatim) so the UI selects it.
     opts_by_key: dict[str, str] = {}
     for k, opts in re.findall(
-        r"^([a-z_0-9]+) — .*\n\s*Answer with EXACTLY one of: (.+)$",
+        r"^([A-Za-z0-9_]+) — .*\n\s*Answer with EXACTLY one of: (.+)$",
         system,
         flags=re.MULTILINE,
     ):

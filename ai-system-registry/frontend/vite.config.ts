@@ -11,6 +11,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "src"),
       "@ai-trust/react-hooks": path.resolve(__dirname, "../../libs/react-hooks/src"),
+      "@questionnaire": path.resolve(__dirname, "../../context/prompts/ai-questionnaire.json"),
     },
   },
   build: {

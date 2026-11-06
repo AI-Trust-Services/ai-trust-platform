@@ -7,7 +7,6 @@ import type {
   ComplianceAssessment, AuditEventListResponse,
   AssessmentState, QuestionState, QuestionComment,
 } from "../types"
-import type { SectionKey } from "../config/questionnaire";
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
 const USERS_API_BASE = import.meta.env.VITE_USERS_API_BASE;
@@ -108,7 +107,7 @@ export const api = {
   // Merge questionnaire answers — only the keys sent are merged. section="business"
   // merges at the top level; section="technical" merges into the nested "technical"
   // sub-object (AI-mode free-text technical answers).
-  patchQuestionnaireAnswers: (systemId: string, answers: Record<string, string>, section: SectionKey = "business") =>
+  patchQuestionnaireAnswers: (systemId: string, answers: Record<string, string>, section: "business" | "technical" = "business") =>
     request<AISystem>(`/systems/${encodeURIComponent(systemId)}/questionnaire`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -288,14 +287,14 @@ export const api = {
   },
 
   // Questionnaire chatbot — stateful, system must exist in DB.
-  questionnaireTurn: (systemId: string, section: SectionKey, transcript: ChatMessage[], fields: Record<string, unknown>) =>
+  questionnaireTurn: (systemId: string, section: "business" | "technical", transcript: ChatMessage[], fields: Record<string, unknown>) =>
     request<AssistTurnResponse>(`/intake/assist/questionnaire/${encodeURIComponent(systemId)}/turn`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ section, transcript, fields }),
     }),
 
-  questionnaireExtract: (systemId: string, section: SectionKey, file: File) => {
+  questionnaireExtract: (systemId: string, section: "business" | "technical", file: File) => {
     const fd = new FormData();
     fd.append("file", file);
     return request<AssistExtractResponse>(`/intake/assist/questionnaire/${encodeURIComponent(systemId)}/extract?section=${section}`, { method: "POST", body: fd });
