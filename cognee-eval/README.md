@@ -17,12 +17,14 @@ two clusters anymore — only a tag pointer to set:
 
 1. An operator sets `COGNEE_GRAPH_TAG=<tag>` in `k8s/env/ai-trust-main/.env` or
    `k8s/env/ai-trust-test/.env` to whatever tag ai-test-lab just published (e.g.
-   `eu-ai-act-20261104`).
+   `eu-ai-act-20261104`). Both files default to `eu-ai-act-20261030`.
 2. On the next run of `build-push-deploy.yml`, the `mirror-cognee-graph` composite
-   action pulls that tag from ai-test-lab's package, re-pushes it into
-   `ghcr.io/<owner>/ai-trust-platform/cognee-graph` (so the existing read-only init
-   container and pull secrets keep working unchanged), and emits the resulting
-   `@sha256`-pinned digest.
+   action first checks whether that tag already exists in
+   `ghcr.io/<owner>/ai-trust-platform/cognee-graph` (e.g. a prior run already mirrored
+   it) and reuses it directly if so. Otherwise it pulls the tag from ai-test-lab's
+   package, re-pushes it into `ghcr.io/<owner>/ai-trust-platform/cognee-graph` (so the
+   existing read-only init container and pull secrets keep working unchanged), and
+   emits the resulting `@sha256`-pinned digest either way.
 3. That digest is threaded into the `ai-trust-flux-values-<namespace>` Secret as
    `COGNEE_GRAPH_IMAGE` (see `k8s/scripts/bootstrap.sh`) and mapped by Flux
    `valuesFrom` onto `cogneeEval.graphImage` (see `k8s/ocm/manifests.yaml`) — no chart

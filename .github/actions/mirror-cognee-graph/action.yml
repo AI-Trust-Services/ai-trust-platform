@@ -1,15 +1,18 @@
 name: Mirror Cognee Graph Image
 description: >-
-  Mirrors the cognee-graph snapshot image published by ai-test-lab into this
-  repo's own GHCR package, so the existing read-only init container / pull
-  secrets keep pulling from ghcr.io/<owner>/ai-trust-platform unchanged.
+  Ensures the cognee-graph snapshot image for COGNEE_GRAPH_TAG exists in this
+  repo's own GHCR package, mirroring it from ai-test-lab if needed, so the
+  existing read-only init container / pull secrets keep pulling from
+  ghcr.io/<owner>/ai-trust-platform unchanged.
 
 # Reads COGNEE_GRAPH_TAG from the target cluster's env file (the tag an operator
-# set after ai-test-lab published a new graph), pulls that tag from ai-test-lab's
-# package (this repo's workflows are granted read access to it), re-tags and
-# pushes it into ai-trust-platform's own package, and outputs the resulting
-# @sha256-pinned image ref for the Flux valuesFrom wiring (see
-# apply-to-cluster/action.yml, bootstrap.sh, k8s/ocm/manifests.yaml).
+# set after ai-test-lab published a new graph). First checks whether that tag
+# already exists in ai-trust-platform's own package (e.g. a prior run already
+# mirrored it) and reuses it directly if so. Otherwise pulls the tag from
+# ai-test-lab's package (this repo's workflows are granted read access to it),
+# re-tags and pushes it into ai-trust-platform's own package. Either way it
+# outputs the resulting @sha256-pinned image ref for the Flux valuesFrom wiring
+# (see apply-to-cluster/action.yml, bootstrap.sh, k8s/ocm/manifests.yaml).
 #
 # If COGNEE_GRAPH_TAG is unset/blank (no graph published/configured yet for this
 # cluster), this action skips the mirror entirely rather than failing the
@@ -72,15 +75,23 @@ runs:
         SOURCE_IMAGE="ghcr.io/ai-trust-services/ai-test-lab/cognee-graph:${GRAPH_TAG}"
         DEST_IMAGE="ghcr.io/${OWNER}/ai-trust-platform/cognee-graph:${GRAPH_TAG}"
 
-        echo "Pulling ${SOURCE_IMAGE}..."
-        docker pull "$SOURCE_IMAGE"
-
-        docker tag "$SOURCE_IMAGE" "$DEST_IMAGE"
-
-        echo "Pushing ${DEST_IMAGE}..."
-        docker push "$DEST_IMAGE"
+        # Prefer a tag already mirrored into ai-trust-platform's own package —
+        # avoids re-pulling/re-pushing the (large) graph snapshot on every
+        # deployment once a tag has been mirrored once. `buildx imagetools
+        # inspect` only fetches manifest metadata, not image layers.
+        if docker buildx imagetools inspect "$DEST_IMAGE" >/dev/null 2>&1; then
+          echo "${DEST_IMAGE} already exists — reusing it (no mirror needed)."
+          docker pull "$DEST_IMAGE"
+        else
+          echo "${DEST_IMAGE} not found — mirroring from ${SOURCE_IMAGE}."
+          echo "Pulling ${SOURCE_IMAGE}..."
+          docker pull "$SOURCE_IMAGE"
+          docker tag "$SOURCE_IMAGE" "$DEST_IMAGE"
+          echo "Pushing ${DEST_IMAGE}..."
+          docker push "$DEST_IMAGE"
+        fi
 
         DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "$DEST_IMAGE")"
-        echo "Mirrored image: ${DIGEST}"
+        echo "Using image: ${DIGEST}"
         echo "cognee_graph_image=${DIGEST}" >> "$GITHUB_OUTPUT"
         echo "skipped=false" >> "$GITHUB_OUTPUT"
