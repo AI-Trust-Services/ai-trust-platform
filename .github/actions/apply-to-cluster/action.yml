@@ -63,6 +63,10 @@ inputs:
     description: "LANGFUSE_SECRET_KEY secret — shared Langfuse project secret key (optional; tracing disabled when blank)"
     required: false
     default: ""
+  cognee_graph_image:
+    description: "Digest-pinned ghcr.io/<owner>/ai-trust-platform/cognee-graph@sha256:<digest> ref from mirror-cognee-graph (optional — falls back to the chart's committed graphImage default when blank)"
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -204,6 +208,7 @@ runs:
       shell: bash
       env:
         IMAGE_TAG: ${{ inputs.ocm_version }}
+        COGNEE_GRAPH_IMAGE: ${{ inputs.cognee_graph_image }}
       run: bash k8s/scripts/bootstrap.sh
 
     - name: Create ghcr.io pull secret
