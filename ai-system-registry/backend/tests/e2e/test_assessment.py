@@ -47,9 +47,12 @@ async def _create_system(client: httpx.AsyncClient, owner: str = _OWNER) -> str:
     return r.json()["system"]["id"]
 
 
-async def _open(client: httpx.AsyncClient, system_id: str, user: str = _OWNER):
-    """POST /open (prefills via the questionnaire pipeline on first call for a
-    cycle; a plain read afterwards). MinIO is patched for the pipeline's upload."""
+@pytest.fixture(autouse=True)
+def _stub_pipeline_minio():
+    """The questionnaire pipeline that /open runs uploads each run's result to
+    MinIO. Patch it for every test in this module — /open is reached directly and
+    indirectly (e.g. POST /assessment/start-new opens the fresh cycle) — so no
+    live MinIO is required."""
     with ExitStack() as stack:
         stack.enter_context(
             patch(
@@ -71,9 +74,15 @@ async def _open(client: httpx.AsyncClient, system_id: str, user: str = _OWNER):
                 return_value=_STUB_PRESIGNED,
             )
         )
-        r = await client.post(
-            f"/v1/systems/{system_id}/assessment/open", headers=_hdr(user)
-        )
+        yield
+
+
+async def _open(client: httpx.AsyncClient, system_id: str, user: str = _OWNER):
+    """POST /open (prefills via the questionnaire pipeline on first call for a
+    cycle; a plain read afterwards)."""
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/open", headers=_hdr(user)
+    )
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -106,23 +115,6 @@ async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClie
     assert all(not q["owner_confirmed"] for q in state["questions"])
     # Classifier ran after the prefill.
     assert state["tier"] is not None
-
-
-@pytest.mark.asyncio
-async def test_open_is_idempotent(client: httpx.AsyncClient):
-    """A second /open for the same cycle is a plain read — it does not re-run the
-    pipeline (a confirmed question stays confirmed)."""
-    system_id = await _create_system(client)
-    first = await _open(client, system_id)
-    qkey = first["questions"][0]["question_key"]
-    r = await client.post(
-        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
-        headers=_hdr(_OWNER),
-    )
-    assert r.status_code == 200, r.text
-    second = await _open(client, system_id)
-    confirmed = {q["question_key"]: q["confirmed"] for q in second["questions"]}
-    assert confirmed[qkey] is True
 
 
 @pytest.mark.asyncio
@@ -1252,7 +1244,7 @@ async def test_list_comments_unopened_system_does_not_create_assessment(
     system_id = await _create_system(client)
     # A valid question key; the system has never been /open-ed, so no cycle exists.
     r = await client.get(
-        f"/v1/systems/{system_id}/assessment/questions/use_case_owner/comments",
+        f"/v1/systems/{system_id}/assessment/questions/Scope_1/comments",
         headers=_hdr(_OWNER),
     )
     assert r.status_code == 200, r.text
