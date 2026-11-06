@@ -33,6 +33,7 @@ def _load():
     sections_dict: dict[str, list[str]] = {}
     options: dict[str, list[str]] = {}
     labels: dict[str, str] = {}
+    types: dict[str, str] = {}
 
     for q in questions:
         qid = q.get("id")
@@ -42,6 +43,7 @@ def _load():
         sections_dict.setdefault(category, []).append(qid)
         labels[qid] = q.get("question", qid)
         qtype = q.get("type", "DESCRIPTIVE")
+        types[qid] = qtype
         allowed = q.get("allowedAnswers") or []
         if qtype == "PREDEFINED":
             options[qid] = [a if isinstance(a, str) else str(a) for a in allowed]
@@ -53,7 +55,7 @@ def _load():
 
     sections = [(cat, cat, ids) for cat, ids in sections_dict.items()]
     all_keys = [q for _, _, ids in sections for q in ids]
-    return sections, all_keys, options, labels
+    return sections, all_keys, options, labels, types
 
 
 # Ordered sections: list of (section_key, section_label, [question_ids])
@@ -64,8 +66,16 @@ ASSESSMENT_QUESTION_KEYS: list[str]
 QUESTION_OPTIONS: dict[str, list[str]]
 # Human-readable label per question key
 _QUESTION_LABEL: dict[str, str]
+# Question type (PREDEFINED | MULTISELECT | DESCRIPTIVE) per question key
+QUESTION_TYPES: dict[str, str]
 
-SECTIONS, ASSESSMENT_QUESTION_KEYS, QUESTION_OPTIONS, _QUESTION_LABEL = _load()
+(
+    SECTIONS,
+    ASSESSMENT_QUESTION_KEYS,
+    QUESTION_OPTIONS,
+    _QUESTION_LABEL,
+    QUESTION_TYPES,
+) = _load()
 
 
 def question_catalogue() -> list[tuple[str, str, list[str]]]:

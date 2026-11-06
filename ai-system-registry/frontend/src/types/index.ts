@@ -531,7 +531,13 @@ export interface QuestionnaireResultItem {
   questionType?: string;
   answer: QuestionnaireAnswer[];
   explanation?: string;
-  references?: string[];
+  references?: Array<{
+    sourceType?: string;
+    source?: string;
+    sourceId?: string | null;
+    location?: string | null;
+    quote?: string | null;
+  }>;
 }
 
 export interface QuestionnaireRunResponse {

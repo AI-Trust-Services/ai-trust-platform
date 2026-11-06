@@ -34,6 +34,7 @@ from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from app import email_sender
 from app.assessment_catalogue import (
     ASSESSMENT_QUESTION_KEYS,
+    QUESTION_TYPES,
 )
 from app.classifier import classify_ai_questionnaire
 from app.ids import new_id
@@ -239,16 +240,16 @@ async def open_assessment(
 ):
     """Lazily seed empty question_states rows on first open; return cached state
     thereafter. No LLM call — answers are populated separately via /apply-run.
-    Idempotent: once question_states rows exist, this is a plain read."""
+    Idempotent: once question_states rows exist, this backfills any catalogue
+    keys added since (e.g. ai-questionnaire.json grew) rather than a plain read,
+    so assessments opened before a catalogue change still get the new rows."""
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
         existing = await _states_by_key(session, system_id)
-        if existing:
-            await _ensure_assessment(session, row)
-            await session.commit()
-            return await _build_state(session, row, _current_user(request))
 
         for q_key in ASSESSMENT_QUESTION_KEYS:
+            if q_key in existing:
+                continue
             session.add(
                 QuestionState(
                     id=new_id("QST"),
@@ -409,13 +410,16 @@ async def apply_questionnaire_run(
             if not item.answer:
                 continue
 
-            # Combine multiple answer values (e.g. MULTISELECT) as a JSON array;
-            # single-value questions (PREDEFINED, DESCRIPTIVE) use the plain value.
+            # MULTISELECT always serializes to a JSON array (even one option) —
+            # QuestionView.tsx JSON.parse()s the stored answer for that type.
+            # PREDEFINED/DESCRIPTIVE use the plain value.
             raw_values = [a.get("value", "") for a in item.answer if a.get("value")]
             if not raw_values:
                 continue
             answer_value = (
-                json.dumps(raw_values) if len(raw_values) > 1 else raw_values[0]
+                json.dumps(raw_values)
+                if len(raw_values) > 1 or QUESTION_TYPES.get(q_key) == "MULTISELECT"
+                else raw_values[0]
             )
             answers = _write_answer(row, answers, q_key, answer_value)
 
@@ -467,20 +471,23 @@ async def apply_questionnaire_run(
 
         try:
             classification, rationale = await classify_ai_questionnaire(row)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
+        except Exception as exc:
+            # Fail the whole request (no commit) rather than silently keeping a
+            # stale/pending tier while reporting 200 — mirrors the old /open flow.
+            logger.error(
                 "assessment.apply_run_classify_failed", extra={"error": str(exc)}
             )
-            classification = None
-            rationale = {}
+            raise HTTPException(
+                status_code=502,
+                detail="AI classification is unavailable. Please try again shortly.",
+            ) from exc
 
-        if classification is not None:
-            row.tier = classification.tier
-            row.basis = classification.basis
-            row.annex_iii_area = classification.annex_iii_area
-            row.classification_rationale = rationale
-            if rationale.get("org_role"):
-                row.org_role = rationale["org_role"]
+        row.tier = classification.tier
+        row.basis = classification.basis
+        row.annex_iii_area = classification.annex_iii_area
+        row.classification_rationale = rationale
+        if rationale.get("org_role"):
+            row.org_role = rationale["org_role"]
 
         await session.commit()
         logger.info(
