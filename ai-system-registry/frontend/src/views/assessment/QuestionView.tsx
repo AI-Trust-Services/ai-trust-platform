@@ -116,8 +116,13 @@ export default function QuestionView() {
 
   useEffect(() => {
     if (!id || !questionKey) return;
-    api.listComments(id, questionKey).then(setComments).catch(() => setComments([]));
-  }, [id, questionKey]);
+    // Scope comments to THIS cycle (state.assessment_id) so a historical "View
+    // results" shows the viewed cycle's comments, not the current cycle's.
+    api
+      .listComments(id, questionKey, state.assessment_id)
+      .then(setComments)
+      .catch(() => setComments([]));
+  }, [id, questionKey, state.assessment_id]);
 
   // Resolve contributor usernames → display names for the assignee dropdown.
   useEffect(() => {

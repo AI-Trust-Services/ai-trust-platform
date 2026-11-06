@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import LuigiClient from "@luigi-project/client";
 import {
@@ -725,9 +725,16 @@ function AssessmentsTab({
     navigate(`/systems/${system.id}/assessment/view/${a.id}`);
   }
 
-  // Sequential index within non-inactive assessments for display name.
-  const seqIndex = (a: ComplianceAssessment) =>
-    assessments.filter((x) => x.status !== "inactive").indexOf(a) + 1 || assessments.indexOf(a) + 1;
+  // Sequential cycle number ("Assessment N") — MUST match the backend's title
+  // suffix "(#N)" (set in _ensure_assessment, chronological, counts all cycles
+  // incl. inactive) so the number agrees with the obligations/requirements
+  // filter dropdown. `assessments` arrives created_at DESC, so chronological
+  // #1 = oldest. Index into an ascending copy.
+  const chronological = useMemo(
+    () => [...assessments].sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    [assessments],
+  );
+  const seqIndex = (a: ComplianceAssessment) => chronological.indexOf(a) + 1;
 
   return (
     <div className="space-y-6">

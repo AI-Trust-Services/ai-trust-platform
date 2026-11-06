@@ -144,6 +144,7 @@ export interface ContributorRef {
 
 export interface AssessmentState {
   system_id: string;
+  assessment_id: string;
   system_name: string;
   registration_mode: string;
   owner_username: string | null;

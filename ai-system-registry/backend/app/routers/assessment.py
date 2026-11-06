@@ -542,6 +542,15 @@ async def _build_state(
     co_transparency = (
         assessment.co_issued_transparency if snap else row.co_issued_transparency
     )
+    # Transparency obligation also derives from the chatbot / synthetic-content
+    # flags; read the frozen snapshot for a historical cycle so a later edit to
+    # the live system row doesn't rewrite what the cycle was approved at.
+    is_chatbot = assessment.is_chatbot if snap else row.is_chatbot
+    gen_synthetic = (
+        assessment.generates_synthetic_content
+        if snap
+        else row.generates_synthetic_content
+    )
     rationale = (
         assessment.classification_rationale if snap else row.classification_rationale
     ) or {}
@@ -603,7 +612,7 @@ async def _build_state(
         org_role=org_role,
         reasoning=rationale.get("reasoning"),
         transparency=tier == "high"
-        and bool(co_transparency or row.is_chatbot or row.generates_synthetic_content),
+        and bool(co_transparency or is_chatbot or gen_synthetic),
         confidence_counts=conf,
         attention_count=attention,
         decisive_questions=decisive,
@@ -841,12 +850,30 @@ async def unconfirm_question(
 async def list_comments(
     system_id: str,
     question_key: str,
+    assessment_id: str | None = None,
     _: str = Depends(require_permission(SYSTEMS_READ)),
 ):
+    """Comments for a question in a specific cycle. Pass ``?assessment_id=`` to
+    read a historical cycle's comments ("View results"); defaults to the current
+    cycle. Read-only — resolves the cycle without creating one (a GET must not
+    flush a new Assessment row), so an unopened system simply has no comments."""
     _validate_question_key(question_key)
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
-        assessment = await _ensure_assessment(session, row)
+        if assessment_id:
+            result = await session.execute(
+                select(Assessment).where(
+                    Assessment.id == assessment_id,
+                    Assessment.ai_system_id == system_id,
+                )
+            )
+            assessment = result.scalar_one_or_none()
+            if assessment is None:
+                raise HTTPException(404, "Assessment not found for this system")
+        else:
+            assessment = await _current_assessment(session, row.id)
+        if assessment is None:
+            return []
         result = await session.execute(
             select(QuestionComment)
             .where(
@@ -998,15 +1025,16 @@ async def assign_question(
     )
     return QuestionStateResponse(
         question_key=question_key,
-        answer=_read_answer(row, answers, question_key),
+        # Per-cycle frozen answer (matches _build_state); the live system row may
+        # diverge from this cycle's answer after a re-assessment (review: :999).
+        # Same fallback as _build_state for a not-yet-answered state.
+        answer=state.answer or _read_answer(row, answers, question_key),
         answer_source=state.answer_source,
         confidence=state.confidence,
         confirmed=bool(state.confirmed_at),
         assignee_username=state.assignee_username,
         comment_count=count,
-        needs_attention=_needs_attention(
-            row, state, _read_answer(row, answers, question_key)
-        ),
+        needs_attention=_needs_attention(row, state, state.answer),
     )
 
 
@@ -1188,6 +1216,8 @@ async def issue_classification(
             assessment.annex_iii_area = row.annex_iii_area
             assessment.org_role = row.org_role
             assessment.co_issued_transparency = row.co_issued_transparency
+            assessment.is_chatbot = row.is_chatbot
+            assessment.generates_synthetic_content = row.generates_synthetic_content
             assessment.assessment_sources = row.assessment_sources
             assessment.classification_rationale = row.classification_rationale
             # Generate the governance chain (obligations + requirements) for the

@@ -149,9 +149,9 @@ export const api = {
       `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/unconfirm`,
       { method: "POST" },
     ),
-  listComments: (systemId: string, questionKey: string) =>
+  listComments: (systemId: string, questionKey: string, assessmentId?: string) =>
     request<QuestionComment[]>(
-      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/comments`,
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/comments${assessmentId ? `?assessment_id=${encodeURIComponent(assessmentId)}` : ""}`,
     ),
   addComment: (systemId: string, questionKey: string, body: string) =>
     request<QuestionComment>(

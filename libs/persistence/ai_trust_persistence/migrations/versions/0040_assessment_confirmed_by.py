@@ -30,6 +30,11 @@ def upgrade() -> None:
     op.add_column(
         "assessments", sa.Column("co_issued_transparency", sa.Boolean(), nullable=True)
     )
+    op.add_column("assessments", sa.Column("is_chatbot", sa.Boolean(), nullable=True))
+    op.add_column(
+        "assessments",
+        sa.Column("generates_synthetic_content", sa.Boolean(), nullable=True),
+    )
     op.add_column(
         "assessments", sa.Column("assessment_sources", JSONB(), nullable=True)
     )
@@ -41,6 +46,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("assessments", "classification_rationale")
     op.drop_column("assessments", "assessment_sources")
+    op.drop_column("assessments", "generates_synthetic_content")
+    op.drop_column("assessments", "is_chatbot")
     op.drop_column("assessments", "co_issued_transparency")
     op.drop_column("assessments", "org_role")
     op.drop_column("assessments", "annex_iii_area")

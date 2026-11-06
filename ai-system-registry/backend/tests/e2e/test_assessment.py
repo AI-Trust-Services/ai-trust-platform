@@ -1078,3 +1078,126 @@ async def test_new_cycle_states_are_isolated(client: httpx.AsyncClient):
     assert second["assessment_id"] != first_id
     # Fresh cycle: nothing confirmed yet.
     assert all(not q["owner_confirmed"] for q in second["questions"])
+
+
+@pytest.mark.asyncio
+async def test_frozen_cycle_transparency_survives_live_flag_edit(
+    client: httpx.AsyncClient,
+):
+    """A historical cycle's transparency reads the Assessment snapshot, not the
+    live system row — so editing is_chatbot/generates_synthetic_content after
+    approval must NOT change what the frozen cycle reports (review: :605)."""
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.ai_system import AISystem
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    system_id = await _submit_as_owner(client)
+    first = await _issue_as_co(client, system_id, "high")
+    first_id = first["assessment_id"]
+    assert first["transparency"] is True  # high + transparency issued
+
+    # Supersede it with a new cycle so the first becomes a frozen historical cycle
+    # (a current-but-approved cycle still tracks the live row by design; the
+    # snapshot only governs a superseded read).
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/start-new", headers=_hdr(_OWNER)
+    )
+    assert r.status_code == 200, r.text
+
+    # Owner later flips the live transparency-input flags off on the system row.
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        row.is_chatbot = False
+        row.generates_synthetic_content = False
+        row.co_issued_transparency = False
+        await s.commit()
+
+    # The frozen cycle still reports transparency from its snapshot.
+    old = await client.get(
+        f"/v1/systems/{system_id}/assessment/state?assessment_id={first_id}",
+        headers=_hdr(_OWNER),
+    )
+    assert old.status_code == 200, old.text
+    assert old.json()["transparency"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_comments_scoped_to_viewed_cycle(client: httpx.AsyncClient):
+    """Comments are per-cycle: ?assessment_id= returns the viewed cycle's comments,
+    and the default (current cycle) does not leak an old cycle's comments."""
+    system_id = await _create_system(client)
+    first = await _open(client, system_id)
+    first_id = first["assessment_id"]
+    qkey = first["questions"][0]["question_key"]
+    # A comment on the first cycle.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        json={"body": "first-cycle note"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+
+    # Approve + start a fresh cycle.
+    await _confirm_all_as_owner(client, system_id, first)
+    await client.post(
+        f"/v1/systems/{system_id}/workflow/assign",
+        json={"compliance_officer_username": _CO},
+        headers=_hdr(_OWNER),
+    )
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/submit",
+        json={"note": "done"},
+        headers=_hdr(_OWNER),
+    )
+    await _issue_as_co(client, system_id, "high")
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/start-new", headers=_hdr(_OWNER)
+    )
+    assert r.status_code == 200, r.text
+
+    # The current cycle has no comments on that question…
+    cur = await client.get(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        headers=_hdr(_OWNER),
+    )
+    assert cur.status_code == 200, cur.text
+    assert cur.json() == []
+    # …but the first cycle's comment is still readable by its id.
+    old = await client.get(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments"
+        f"?assessment_id={first_id}",
+        headers=_hdr(_OWNER),
+    )
+    assert old.status_code == 200, old.text
+    bodies = [c["body"] for c in old.json()]
+    assert "first-cycle note" in bodies
+
+
+@pytest.mark.asyncio
+async def test_list_comments_unopened_system_does_not_create_assessment(
+    client: httpx.AsyncClient,
+):
+    """A GET of comments on a never-opened system is read-only: it returns [] and
+    must NOT flush a new Assessment row (review: :849)."""
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.assessment import Assessment
+    from sqlalchemy import func, select
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    system_id = await _create_system(client)
+    # A valid question key; the system has never been /open-ed, so no cycle exists.
+    r = await client.get(
+        f"/v1/systems/{system_id}/assessment/questions/use_case_owner/comments",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json() == []
+    async with AsyncSession(engine) as s:
+        n = (
+            await s.execute(
+                select(func.count())
+                .select_from(Assessment)
+                .where(Assessment.ai_system_id == system_id)
+            )
+        ).scalar_one()
+    assert n == 0, "read-only comment GET must not create an Assessment"

@@ -48,6 +48,12 @@ class Assessment(Base):
     annex_iii_area: Mapped[int | None] = mapped_column(Integer, nullable=True)
     org_role: Mapped[str | None] = mapped_column(String(30), nullable=True)
     co_issued_transparency: Mapped[bool | None] = mapped_column(nullable=True)
+    # Transparency inputs are snapshotted too: the transparency obligation flag
+    # derives from (is_chatbot OR generates_synthetic_content), and those flags
+    # live on the mutable AISystem row. Without a per-cycle copy, a historical
+    # read would pick up a later edit to those flags (review: assessment.py:605).
+    is_chatbot: Mapped[bool | None] = mapped_column(nullable=True)
+    generates_synthetic_content: Mapped[bool | None] = mapped_column(nullable=True)
     assessment_sources: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     classification_rationale: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
