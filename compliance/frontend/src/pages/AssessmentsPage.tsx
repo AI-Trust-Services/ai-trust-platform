@@ -300,7 +300,7 @@ export default function AssessmentsPage() {
                           title={mayWrite ? undefined : noWriteTitle}
                           onClick={() => act(api.submitAssessment, a.id, "Submitted")}>Submit</Button>
                       )}
-                      {a.status !== "approved" && a.status !== "questionnaire_pending" && a.status !== "pending_review" && (
+                      {a.status !== "approved" && !OPENS_IN_REGISTRY_APP.has(a.status) && (
                         <Button variant="ghost" size="sm" disabled={busy === a.id || !mayApprove}
                           title={mayApprove ? undefined : noApproveTitle}
                           onClick={() => act(api.approveAssessment, a.id, (r) => `Approved — score ${r.score ?? "N/A"}%`)}>Approve</Button>
@@ -365,7 +365,7 @@ export default function AssessmentsPage() {
                       title={mayWrite ? undefined : noWriteTitle}
                       onClick={() => act(api.submitAssessment, selectedDetail.id, "Submitted")}>Submit</Button>
                   )}
-                  {selectedDetail.status !== "approved" && (
+                  {selectedDetail.status !== "approved" && !OPENS_IN_REGISTRY_APP.has(selectedDetail.status) && (
                     <Button variant="outline" size="sm" disabled={busy === selectedDetail.id || !mayApprove}
                       title={mayApprove ? undefined : noApproveTitle}
                       onClick={() => act(api.approveAssessment, selectedDetail.id, (r) => `Approved — score ${r.score ?? "N/A"}%`)}>Approve</Button>

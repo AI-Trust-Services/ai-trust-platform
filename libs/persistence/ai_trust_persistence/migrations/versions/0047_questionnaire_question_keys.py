@@ -6,15 +6,15 @@ The new catalogue uses keys from ai-questionnaire.json (Scope_1, High_Risk_1...)
 This migration removes the stale rows so /open can seed fresh empty rows on
 the next visit.
 
-Revision ID: 0046
-Revises: 0045
+Revision ID: 0047
+Revises: 0046
 Create Date: 2026-11-05
 """
 
 from alembic import op
 
-revision = "0046"
-down_revision = "0045"
+revision = "0047"
+down_revision = "0046"
 branch_labels = None
 depends_on = None
 

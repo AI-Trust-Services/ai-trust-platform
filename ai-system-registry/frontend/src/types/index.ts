@@ -114,6 +114,7 @@ export interface QuestionState {
   owner_confirmed: boolean;
   assignee_username: string | null;
   comment_count: number;
+  has_qualifying_comment: boolean;
   needs_attention: boolean;
   can_edit: boolean;
   ai_references: Array<{
@@ -151,8 +152,10 @@ export interface ContributorRef {
 
 export interface AssessmentState {
   system_id: string;
+  assessment_id: string;
   system_name: string;
   registration_mode: string;
+  owner_username: string | null;
   workflow_status: string;
   status_label: string;
   editable: boolean;
@@ -498,6 +501,8 @@ export interface ComplianceAssessment {
   score: number | null;
   notes: string;
   confirmed_by: string | null;
+  tier: TierKey | null;
+  co_issued_transparency: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -519,30 +524,4 @@ export interface AuditEventListResponse {
   items: AuditEvent[];
 }
 
-export interface QuestionnaireAnswer {
-  value: string;
-  answerStrength?: string | null;
-  reason?: string;
-}
-
-export interface QuestionnaireResultItem {
-  questionId: string;
-  question?: string;
-  questionType?: string;
-  answer: QuestionnaireAnswer[];
-  explanation?: string;
-  references?: Array<{
-    sourceType?: string;
-    source?: string;
-    sourceId?: string | null;
-    location?: string | null;
-    quote?: string | null;
-  }>;
-}
-
-export interface QuestionnaireRunResponse {
-  run_key: string;
-  presigned_url: string;
-  result: { results: QuestionnaireResultItem[] };
-}
 

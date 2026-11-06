@@ -3,8 +3,8 @@
 These store the per-question evidence references and explanation text returned
 by the questionnaire-run pipeline, surfaced in the QuestionView confidence modal.
 
-Revision ID: 0047
-Revises: 0046
+Revision ID: 0048
+Revises: 0047
 Create Date: 2026-11-05
 """
 
@@ -12,8 +12,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-revision = "0047"
-down_revision = "0046"
+revision = "0048"
+down_revision = "0047"
 branch_labels = None
 depends_on = None
 

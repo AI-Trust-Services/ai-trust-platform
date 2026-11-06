@@ -44,6 +44,12 @@ class QuestionStateResponse(BaseModel):
     owner_confirmed: bool = False
     assignee_username: str | None = None
     comment_count: int = 0
+    # True when a non-deleted comment exists that was recorded at/after the last
+    # answer change — i.e. a comment that satisfies the mandatory-comment-on-change
+    # confirm gate. The frontend drives the Confirm button from this (not raw
+    # comment_count) so a stale pre-change comment doesn't enable a confirm the
+    # backend would reject.
+    has_qualifying_comment: bool = False
     # Derived: this question is flagged for the owner's attention
     # (low confidence OR left unanswered by the AI).
     needs_attention: bool = False
@@ -149,8 +155,12 @@ class AssessmentStateResponse(BaseModel):
     """Full view model for the start page + left sidebar (#346) in one read."""
 
     system_id: str
+    assessment_id: str | None = None
     system_name: str
     registration_mode: str
+    # The system owner's username (creator). Surfaced so the UI can let the owner
+    # delete any comment (contributors may delete only their own).
+    owner_username: str | None = None
     workflow_status: str
     # Owner-facing lifecycle label derived from the status (e.g. "locked" when the
     # assessment is pending_review/submitted, "under_review" when returned).
@@ -184,22 +194,6 @@ class AssessmentStateResponse(BaseModel):
 
 class SubmitRequest(BaseModel):
     note: str | None = None
-
-
-class QuestionnaireResultItem(BaseModel):
-    """One result from the questionnaire-run pipeline output."""
-
-    questionId: str
-    answer: list[dict] = []
-    explanation: str = ""
-    references: list[dict] = []
-
-
-class ApplyRunRequest(BaseModel):
-    """Body for POST /assessment/apply-run."""
-
-    run_key: str
-    results: list[QuestionnaireResultItem]
 
 
 # ── Compliance Officer end view (#348) ───────────────────────────────────────

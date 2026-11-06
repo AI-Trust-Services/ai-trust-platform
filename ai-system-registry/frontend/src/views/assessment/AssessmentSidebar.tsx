@@ -1,16 +1,27 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router";
-import { AlertTriangle, CheckCircle2, Circle } from "lucide-react";
-import type { AssessmentState } from "../../types";
+import { CheckCircle2, Circle } from "lucide-react";
+import type { AssessmentState, QuestionState } from "../../types";
 import { AI_SECTIONS, ORDERED_QUESTION_IDS, QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
 import { TierBadge } from "../../components/Badges";
 import { cn } from "@/lib/utils";
 
-/** Ordered sections → question keys, derived from ai-questionnaire.json. */
+/** Ordered sections → question keys, derived from ai-questionnaire.json
+ * (each JSON category is one section). */
 export const ASSESSMENT_SECTIONS: { key: string; label: string; questionKeys: string[] }[] =
   AI_SECTIONS.map((s) => ({ key: s.key, label: s.label, questionKeys: s.questionIds }));
 
 export const ORDERED_QUESTION_KEYS = ORDERED_QUESTION_IDS;
+
+/** Progress-segment color: owner-confirmed ⇒ green; otherwise by AI confidence
+ * band (green/amber/red), matching the start-page confidence bar. Unknown ⇒ amber. */
+function segmentColor(s?: QuestionState): string {
+  if (s?.owner_confirmed) return "bg-[#1a9d5c]";
+  if (s?.confidence === "high") return "bg-[#1a9d5c]";
+  if (s?.confidence === "medium") return "bg-[#e0a008]";
+  if (s?.confidence === "low") return "bg-[#d14343]";
+  return "bg-[#e0a008]";
+}
 
 /** Left progress sidebar: system name + preliminary classification, per-section
  * completion fractions, per-question status, attention count, Finalize button. */
@@ -20,12 +31,14 @@ export function AssessmentSidebar({
   onFinalize,
   finalizeEnabled,
   locked = false,
+  basePath,
 }: {
   state: AssessmentState;
   activeQuestionKey?: string;
   onFinalize: () => void;
   finalizeEnabled: boolean;
   locked?: boolean;
+  basePath: string;
 }) {
   const { id } = useParams();
   const stateByKey = useMemo(
@@ -51,22 +64,18 @@ export function AssessmentSidebar({
             Role: <span className="text-foreground">{state.org_role}</span>
           </p>
         )}
-        {/* Per-question confirmation progress: one segment per question,
-            green = owner-confirmed, amber = still outstanding. */}
+        {/* Per-question progress: colored by confidence on load (green/amber/red,
+            matching the start-page confidence bar), then green once owner-confirmed. */}
         <div className="mt-3 flex gap-0.5">
           {ORDERED_QUESTION_KEYS.map((k) => (
             <div
               key={k}
-              className={cn(
-                "h-1.5 flex-1 rounded-full",
-                stateByKey[k]?.owner_confirmed ? "bg-[#1a9d5c]" : "bg-[#e0a008]",
-              )}
+              className={cn("h-1.5 flex-1 rounded-full", segmentColor(stateByKey[k]))}
             />
           ))}
         </div>
         {state.attention_count > 0 && (
           <p className="mt-3 text-xs font-medium text-[#8b3a00]">
-            <AlertTriangle className="mb-0.5 mr-1 inline size-3" />
             {state.attention_count} question{state.attention_count === 1 ? "" : "s"} require your attention
           </p>
         )}
@@ -79,7 +88,7 @@ export function AssessmentSidebar({
             <span className="text-sm font-semibold">Overview</span>
           </div>
           <Link
-            to={`/systems/${id}/assessment`}
+            to={basePath}
             className={cn(
               "flex items-start gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-accent",
               !activeQuestionKey && "bg-accent",
@@ -94,6 +103,7 @@ export function AssessmentSidebar({
         </div>
         {ASSESSMENT_SECTIONS.map((section) => {
           const total = section.questionKeys.length;
+          // Completion is OWNER-confirmed (the submit gate), not any confirmation.
           const complete = section.questionKeys.filter((k) => stateByKey[k]?.owner_confirmed).length;
           return (
             <div key={section.key} className="mb-4">
@@ -104,25 +114,21 @@ export function AssessmentSidebar({
                 </span>
               </div>
               <ul>
-              {section.questionKeys.map((key) => {
+                {section.questionKeys.map((key) => {
                   const q = stateByKey[key];
                   const ownerConfirmed = q?.owner_confirmed;
+                  // Confirmed by a contributor but not yet by the owner — progress,
+                  // but still needs the owner's confirmation before submit.
                   const contributorOnly = q?.confirmed && !ownerConfirmed;
-                  const needsAttention = q?.needs_attention && !ownerConfirmed;
-                  const notEnoughInfo = !ownerConfirmed && q?.answer === "NOT_ENOUGH_INFORMATION";
                   const statusText = ownerConfirmed
                     ? "Complete"
                     : contributorOnly
                       ? "Confirmed by contributor"
-                      : needsAttention
-                        ? "Requires attention"
-                        : notEnoughInfo
-                          ? "Not enough information"
-                          : "Incomplete";
+                      : "Incomplete";
                   return (
                     <li key={key}>
                       <Link
-                        to={`/systems/${id}/assessment/q/${key}`}
+                        to={`${basePath}/q/${key}`}
                         className={cn(
                           "flex items-start gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-accent",
                           activeQuestionKey === key && "bg-accent",
@@ -130,8 +136,6 @@ export function AssessmentSidebar({
                       >
                         {ownerConfirmed ? (
                           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#1a5c35]" />
-                        ) : needsAttention ? (
-                          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[#b57e00]" />
                         ) : (
                           <Circle
                             className={cn(
@@ -147,11 +151,9 @@ export function AssessmentSidebar({
                               "text-xs",
                               ownerConfirmed
                                 ? "text-[#1a5c35]"
-                                : needsAttention
+                                : contributorOnly
                                   ? "text-[#b57e00]"
-                                  : contributorOnly
-                                    ? "text-[#b57e00]"
-                                    : "text-muted-foreground",
+                                  : "text-muted-foreground",
                             )}
                           >
                             {statusText}
@@ -191,6 +193,7 @@ export function AssessmentSidebar({
   );
 }
 
+// Flat label lookup built from the frontend questionnaire config.
 export const QUESTION_LABELS: Record<string, string> = Object.fromEntries(
   Object.values(QUESTION_DEF_BY_ID).map((q) => [q.id, q.question]),
 );
