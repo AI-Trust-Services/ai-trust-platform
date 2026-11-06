@@ -114,6 +114,7 @@ export interface QuestionState {
   owner_confirmed: boolean;
   assignee_username: string | null;
   comment_count: number;
+  has_qualifying_comment: boolean;
   needs_attention: boolean;
   can_edit: boolean;
 }
@@ -143,8 +144,10 @@ export interface ContributorRef {
 
 export interface AssessmentState {
   system_id: string;
+  assessment_id: string;
   system_name: string;
   registration_mode: string;
+  owner_username: string | null;
   workflow_status: string;
   status_label: string;
   editable: boolean;
@@ -506,6 +509,8 @@ export interface ComplianceAssessment {
   score: number | null;
   notes: string;
   confirmed_by: string | null;
+  tier: TierKey | null;
+  co_issued_transparency: boolean | null;
   created_at: string;
   updated_at: string;
 }

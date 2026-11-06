@@ -13,6 +13,10 @@ interface AssessmentCtx {
   reload: () => Promise<void>;
   savedAt: number | null;
   markSaved: () => void;
+  // Base path for all nested links — `/systems/:id/assessment` for the live cycle,
+  // or `/systems/:id/assessment/view/:assessmentId` for a read-only historical one,
+  // so in-app navigation stays pinned to the cycle being viewed.
+  basePath: string;
 }
 
 const Ctx = createContext<AssessmentCtx | null>(null);
@@ -31,16 +35,24 @@ function sectionForQuestion(questionKey?: string): string | undefined {
  * progress sidebar, the active screen (start page or question view via Outlet),
  * and the right advisor. */
 export default function AssessmentApp() {
-  const { id } = useParams();
+  const { id, assessmentId: viewAssessmentId } = useParams();
   const navigate = useNavigate();
+  // "View results": the /assessment/view/:assessmentId route opens that specific
+  // (historical) cycle read-only, regardless of write permission.
   const { can, loading: permsLoading } = usePermissions();
   const [state, setState] = useState<AssessmentState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [advisorExpanded, setAdvisorExpanded] = useState(false);
 
-  const questionMatch = useMatch("/systems/:id/assessment/q/:questionKey");
-  const activeQuestionKey = questionMatch?.params.questionKey;
+  // A question can be active under either the editable base or the read-only
+  // /view/:assessmentId base.
+  const editMatch = useMatch("/systems/:id/assessment/q/:questionKey");
+  const viewMatch = useMatch(
+    "/systems/:id/assessment/view/:assessmentId/q/:questionKey",
+  );
+  const activeQuestionKey =
+    editMatch?.params.questionKey ?? viewMatch?.params.questionKey;
 
   const load = useCallback(async () => {
     // Wait for permissions to resolve: usePermissions is fail-closed (can() is
@@ -48,21 +60,22 @@ export default function AssessmentApp() {
     // read path and skip prefill on a brand-new assessment.
     if (!id || permsLoading) return;
     try {
-      // Writers (business owner / engineer) prefill via POST /open (idempotent).
-      // Read-only roles (e.g. a compliance officer: systems:read + systems:approve,
-      // no systems:write) call GET /state instead — /open is write-gated and would
-      // 403 them. A CO only ever opens an already-prefilled, locked (pending_review)
-      // assessment, so the read path always returns the seeded state it needs.
-      const s = can("systems:write")
-        ? await api.openAssessment(id)
-        : await api.getAssessmentState(id);
+      // A specific-assessment view (View results) is always read-only via /state.
+      // Otherwise: writers (BO / engineer) prefill via POST /open (idempotent);
+      // read-only roles (e.g. a CO) call GET /state — /open is write-gated.
+      const s = viewAssessmentId
+        ? await api.getAssessmentState(id, viewAssessmentId)
+        : can("systems:write")
+          ? await api.openAssessment(id)
+          : await api.getAssessmentState(id);
       setState(s);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to open assessment");
     }
-    // Depend on permsLoading, not can (a fresh closure each render would loop).
+    // Depend on permsLoading + viewAssessmentId, not can (a fresh closure each
+    // render would loop).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, permsLoading]);
+  }, [id, permsLoading, viewAssessmentId]);
 
   useEffect(() => {
     load();
@@ -70,11 +83,17 @@ export default function AssessmentApp() {
 
   const reload = useCallback(async () => {
     if (!id) return;
-    const s = await api.getAssessmentState(id);
+    const s = await api.getAssessmentState(id, viewAssessmentId);
     setState(s);
-  }, [id]);
+  }, [id, viewAssessmentId]);
 
   const markSaved = useCallback(() => setSavedAt(Date.now()), []);
+
+  // Base path for nested links — pins historical ("View results") navigation to
+  // its cycle; the live cycle uses the plain assessment base.
+  const basePath = viewAssessmentId
+    ? `/systems/${id}/assessment/view/${viewAssessmentId}`
+    : `/systems/${id}/assessment`;
 
   // The submit gate is OWNER-confirmed on every question (backend-authoritative).
   const allConfirmed =
@@ -110,7 +129,7 @@ export default function AssessmentApp() {
   }
 
   return (
-    <Ctx.Provider value={{ state, reload, savedAt, markSaved }}>
+    <Ctx.Provider value={{ state, reload, savedAt, markSaved, basePath }}>
       <div className="flex h-full flex-col">
         <header className="flex h-12 shrink-0 items-center justify-end gap-3 border-b border-border bg-card px-6 text-sm">
           {savedAt && <span className="text-muted-foreground">Changes saved.</span>}
@@ -128,6 +147,7 @@ export default function AssessmentApp() {
             onFinalize={onFinalize}
             finalizeEnabled={allConfirmed}
             locked={!state.editable}
+            basePath={basePath}
           />
           {/* When the advisor is expanded it covers the whole middle region
               (everything right of the question-list sidebar), so hide main. */}

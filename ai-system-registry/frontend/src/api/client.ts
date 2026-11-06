@@ -123,8 +123,18 @@ export const api = {
     request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/open`, {
       method: "POST",
     }),
-  getAssessmentState: (systemId: string) =>
-    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/state`),
+  // Archive the approved cycle and begin a fresh one (owner-only; registry-side).
+  startNewAssessment: (systemId: string) =>
+    request<AssessmentState>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/start-new`,
+      { method: "POST" },
+    ),
+  // Current cycle by default; pass assessmentId to view a specific (historical)
+  // cycle read-only ("View results").
+  getAssessmentState: (systemId: string, assessmentId?: string) =>
+    request<AssessmentState>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/state${assessmentId ? `?assessment_id=${encodeURIComponent(assessmentId)}` : ""}`,
+    ),
   // Compliance Advisor — one stateless, grounded chat turn (frontend holds + resends transcript).
   advisorAsk: (systemId: string, message: string, transcript: ChatMessage[]) =>
     request<AdvisorAnswer>(
@@ -150,9 +160,9 @@ export const api = {
       `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/unconfirm`,
       { method: "POST" },
     ),
-  listComments: (systemId: string, questionKey: string) =>
+  listComments: (systemId: string, questionKey: string, assessmentId?: string) =>
     request<QuestionComment[]>(
-      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/comments`,
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/comments${assessmentId ? `?assessment_id=${encodeURIComponent(assessmentId)}` : ""}`,
     ),
   addComment: (systemId: string, questionKey: string, body: string) =>
     request<QuestionComment>(

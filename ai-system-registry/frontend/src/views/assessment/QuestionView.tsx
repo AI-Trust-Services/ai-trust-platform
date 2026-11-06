@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ChevronLeft, MoreVertical, Users, SignalHigh, SignalMedium, SignalLow } from "lucide-react";
+import { ChevronLeft, MoreVertical, Users, SignalHigh, SignalMedium, SignalLow, Trash2 } from "lucide-react";
 import type { ConfidenceLevel, QuestionComment, QuestionState } from "../../types";
 import { api } from "../../api/client";
 import { usePermissions } from "../../hooks/usePermissions";
+import InitialsAvatar from "../../components/InitialsAvatar";
 import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS, ASSESSMENT_SECTIONS } from "./AssessmentSidebar";
 import {
@@ -74,7 +75,7 @@ function ConfidenceIndicator({
 export default function QuestionView() {
   const { id, questionKey } = useParams();
   const navigate = useNavigate();
-  const { state, reload, markSaved } = useAssessment();
+  const { state, reload, markSaved, basePath } = useAssessment();
 
   const qState: QuestionState | undefined = useMemo(
     () => state.questions.find((q) => q.question_key === questionKey),
@@ -96,13 +97,18 @@ export default function QuestionView() {
   const nextKey = idx >= 0 && idx < ORDERED_QUESTION_KEYS.length - 1 ? ORDERED_QUESTION_KEYS[idx + 1] : null;
 
   const changedFromAi = qState?.answer_source === "manual";
-  const hasComment = comments.length > 0;
+  // Whether a comment that SATISFIES the backend change-gate exists — i.e. one
+  // recorded at/after the last answer change. Backend-computed (mirrors the
+  // confirm gate) so a stale pre-change comment doesn't enable a confirm the
+  // server would reject. Kept fresh by reload() after add/delete/save.
+  const hasQualifyingComment = qState?.has_qualifying_comment ?? false;
   // Read-only: the whole assessment is locked, or this question isn't the
   // current user's to edit. Drives input disabling + hides edit affordances.
   const canEdit = state.editable && (qState?.can_edit ?? false);
   // The CONFIRM gate: must be editable, and if the answer was changed from the
-  // AI pre-fill, a comment is mandatory.
-  const confirmDisabled = busy || !canEdit || (changedFromAi && !hasComment);
+  // AI pre-fill, a qualifying comment (recorded after the change) is mandatory.
+  const confirmDisabled =
+    busy || !canEdit || (changedFromAi && !hasQualifyingComment);
 
   useEffect(() => {
     setAnswer(qState?.answer ?? "");
@@ -110,8 +116,13 @@ export default function QuestionView() {
 
   useEffect(() => {
     if (!id || !questionKey) return;
-    api.listComments(id, questionKey).then(setComments).catch(() => setComments([]));
-  }, [id, questionKey]);
+    // Scope comments to THIS cycle (state.assessment_id) so a historical "View
+    // results" shows the viewed cycle's comments, not the current cycle's.
+    api
+      .listComments(id, questionKey, state.assessment_id)
+      .then(setComments)
+      .catch(() => setComments([]));
+  }, [id, questionKey, state.assessment_id]);
 
   // Resolve contributor usernames → display names for the assignee dropdown.
   useEffect(() => {
@@ -166,8 +177,30 @@ export default function QuestionView() {
       setComments((prev) => [...prev, c]);
       setCommentDraft("");
       markSaved();
+      // Refresh so the backend-computed has_qualifying_comment (which drives the
+      // Confirm gate) reflects the new comment.
+      await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Comment failed");
+    }
+  };
+
+  // The author may delete their own comment; the system owner may delete any.
+  // Backend enforces the same rule (delete_comment); this only gates the affordance.
+  const canDeleteComment = (c: QuestionComment): boolean =>
+    state.editable &&
+    !!currentUser &&
+    (currentUser === c.author_username || currentUser === state.owner_username);
+
+  const removeComment = async (commentId: string) => {
+    if (!id || !questionKey) return;
+    if (!confirm("Delete this comment?")) return;
+    try {
+      await api.deleteComment(id, questionKey, commentId);
+      setComments((prev) => prev.filter((x) => x.id !== commentId));
+      markSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
     }
   };
 
@@ -179,7 +212,7 @@ export default function QuestionView() {
       await api.confirmQuestion(id, questionKey);
       markSaved();
       await reload();
-      if (nextKey) navigate(`/systems/${id}/assessment/q/${nextKey}`);
+      if (nextKey) navigate(`${basePath}/q/${nextKey}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Confirm failed");
     } finally {
@@ -190,7 +223,7 @@ export default function QuestionView() {
   const goNext = async () => {
     // "Next" does not confirm; if a confirmed answer was re-edited the backend
     // already reverted it to Incomplete on save. Just navigate.
-    if (nextKey && id) navigate(`/systems/${id}/assessment/q/${nextKey}`);
+    if (nextKey && id) navigate(`${basePath}/q/${nextKey}`);
   };
 
   if (!def || !questionKey) {
@@ -304,7 +337,7 @@ export default function QuestionView() {
           </p>
         </div>
 
-        {changedFromAi && !hasComment && canEdit && (
+        {changedFromAi && !hasQualifyingComment && canEdit && (
           <p className="mt-3 text-xs font-medium text-[#8b3a00]">
             You changed the AI answer — add a comment explaining the change before confirming.
           </p>
@@ -336,19 +369,26 @@ export default function QuestionView() {
             <p className="text-sm font-medium">Comments</p>
             <ul className="mt-2 space-y-3">
               {comments.map((c) => (
-                <li key={c.id} className="flex items-start gap-2">
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#1147E9] text-xs font-semibold text-white">
-                    {c.author_username.slice(0, 2).toUpperCase()}
-                  </span>
-                  <div>
+                <li key={c.id} className="group flex items-start gap-2">
+                  <InitialsAvatar name={displayName(c.author_username)} />
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">
-                      {c.author_username}{" "}
+                      {displayName(c.author_username)}{" "}
                       <span className="font-normal text-muted-foreground">
                         {new Date(c.created_at).toLocaleString()}
                       </span>
                     </p>
                     <p className="text-sm">{c.body}</p>
                   </div>
+                  {canDeleteComment(c) && (
+                    <button
+                      onClick={() => removeComment(c.id)}
+                      aria-label="Delete comment"
+                      className="shrink-0 text-muted-foreground opacity-0 transition hover:text-[var(--danger-fg)] group-hover:opacity-100"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -360,7 +400,7 @@ export default function QuestionView() {
 
       <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-card px-5 py-3">
         <button
-          onClick={() => prevKey && navigate(`/systems/${id}/assessment/q/${prevKey}`)}
+          onClick={() => prevKey && navigate(`${basePath}/q/${prevKey}`)}
           disabled={!prevKey}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40"
         >

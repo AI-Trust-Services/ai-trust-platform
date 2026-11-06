@@ -24,6 +24,13 @@ class QuestionComment(Base):
     __tablename__ = "question_comments"
 
     id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    # The assessment cycle this comment belongs to (per-cycle, like QuestionState).
+    assessment_id: Mapped[str] = mapped_column(
+        String(30),
+        ForeignKey("assessments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     system_id: Mapped[str] = mapped_column(
         String(20),
         ForeignKey("ai_systems.id", ondelete="CASCADE"),
