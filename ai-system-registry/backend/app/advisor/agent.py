@@ -58,11 +58,13 @@ _COGNEE_URL = os.environ.get(
 # budget ceiling. The token default is generous because a *single* grounded turn
 # legitimately carries large context (system-document RAG passages + the EU AI
 # Act answer + the system prompt) — a real Thalamus turn was measured at ~37k
-# tokens, so 20k wrongly tripped on the happy path. Keep the request/tool caps
-# low (loops are the real risk); give tokens headroom.
-_REQUEST_LIMIT = int(os.environ.get("ADVISOR_REQUEST_LIMIT", "6"))
+# tokens, so 20k wrongly tripped on the happy path. The request/tool caps are
+# the real loop guard but kept comfortably above a normal turn (two tools, each
+# possibly refined once, plus synthesis) so legitimate multi-step answers aren't
+# cut off; tokens get headroom.
+_REQUEST_LIMIT = int(os.environ.get("ADVISOR_REQUEST_LIMIT", "10"))
 _TOKEN_LIMIT = int(os.environ.get("ADVISOR_TOKEN_LIMIT", "120000"))
-_TOOL_CALLS_LIMIT = int(os.environ.get("ADVISOR_TOOL_CALLS_LIMIT", "6"))
+_TOOL_CALLS_LIMIT = int(os.environ.get("ADVISOR_TOOL_CALLS_LIMIT", "10"))
 _TIMEOUT_SECONDS = float(os.environ.get("ADVISOR_TIMEOUT_SECONDS", "45"))
 
 _RAG_K = 6
