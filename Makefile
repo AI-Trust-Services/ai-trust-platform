@@ -61,15 +61,19 @@ bootstrap:
 build:
 	bash k8s/scripts/build-and-load-images.sh
 
+COGNEE_GRAPH_IMAGE := $(shell grep -E '^COGNEE_GRAPH_IMAGE=' .env 2>/dev/null | tail -1 | cut -d= -f2-)
+
 install:
 	@if helm status $(RELEASE) -n $(NAMESPACE) >/dev/null 2>&1; then \
 		echo "==> release '$(RELEASE)' already installed, resetting immutable Jobs then upgrading"; \
 		kubectl delete job -n $(NAMESPACE) -l app.kubernetes.io/instance=$(RELEASE) --ignore-not-found; \
 	fi
-	helm upgrade --install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml
+	helm upgrade --install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml \
+		$(if $(COGNEE_GRAPH_IMAGE),--set cogneeEval.graphImage=$(COGNEE_GRAPH_IMAGE))
 
 upgrade:
-	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml
+	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml \
+		$(if $(COGNEE_GRAPH_IMAGE),--set cogneeEval.graphImage=$(COGNEE_GRAPH_IMAGE))
 
 # After `make build && make upgrade`, pods that weren't restarted by Helm (because
 # their rendered template didn't change) still run the old :local image. This target

@@ -122,8 +122,8 @@ flux_values_args=(
 )
 # COGNEE_GRAPH_IMAGE (digest-pinned ref from the mirror-cognee-graph CI action) is
 # only added when set — the matching valuesFrom entry in k8s/ocm/manifests.yaml is
-# `optional: true`, so omitting the key entirely (rather than writing an empty
-# value) lets Flux fall back to the chart's committed cogneeEval.graphImage default.
+# `optional: true`, so omitting the key entirely means the Flux HelmRelease has no
+# graphImage override (the value must be provided another way, e.g. --set on kind).
 if [[ -n "${COGNEE_GRAPH_IMAGE:-}" ]]; then
   flux_values_args+=(--from-literal=COGNEE_GRAPH_IMAGE="${COGNEE_GRAPH_IMAGE}")
 fi
