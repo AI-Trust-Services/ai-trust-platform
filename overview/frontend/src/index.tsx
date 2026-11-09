@@ -3,6 +3,7 @@ import { createHashRouter, RouterProvider, Navigate } from "react-router";
 import "./index.css";
 import App from "./App";
 import Landing from "./views/Landing";
+import TaskView from "./views/TaskView";
 
 const router = createHashRouter([
   {
@@ -10,6 +11,7 @@ const router = createHashRouter([
     element: <App />,
     children: [
       { path: "overview", element: <Landing /> },
+      { path: "tasks", element: <TaskView /> },
       { index: true, element: <Navigate to="overview" replace /> },
       { path: "*", element: <Navigate to="overview" replace /> },
     ],
