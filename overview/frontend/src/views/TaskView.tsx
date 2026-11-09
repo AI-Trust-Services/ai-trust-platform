@@ -33,18 +33,31 @@ type LoadState = "loading" | "ready" | "error";
 type SortDir = "asc" | "desc";
 
 /**
- * Task View (issue #276) — a standalone, nav-accessible page listing every
- * questionnaire task the current user owns, one row per question.
+ * One AI system's bundle of open questions for the current user — the
+ * grouped row the Task View renders. Mirrors the landing's Open Tasks
+ * grouping so the two views read consistently.
+ */
+interface SystemGroup {
+  system_id: string;
+  system_name: string;
+  system_version: string;
+  workflow_status: string | null;
+  owner_username: string | null;
+  questions: OpenTaskRow[]; // sorted by questionnaire order
+  earliest_assigned_at: string;
+}
+
+/**
+ * Task View (issue #276) — a standalone, nav-accessible page listing the
+ * questionnaire tasks the current user owns, grouped per AI system (one row
+ * per system, "Q2, Q4, Q7…" stacked) exactly like the landing's Open Tasks
+ * section — but as a dedicated page with AI-system / Owner filters and a
+ * sortable assign date.
  *
- * Scope: the `required` (the user is the active section assignee and the
- * question is still unanswered) and `assigned` (an explicit per-question
- * delegation) sources from GET /me/open-tasks. `review` rows (CO approval
- * tasks) are deliberately excluded — they are not questions and live in the
- * compliance-officer landing's "Ready for review" queue instead.
- *
- * Unlike the landing's Open Tasks section — which groups questions per system
- * — this page is a flat per-question table with AI-system / Owner filters and
- * a sortable assign date.
+ * Scope: the `required` (user is the active section assignee, question still
+ * unanswered) and `assigned` (explicit per-question delegation) sources from
+ * GET /me/open-tasks. `review` rows (CO approval tasks) are excluded — they
+ * are not questions and live in the compliance-officer landing's queue.
  */
 export default function TaskView() {
   const [state, setState] = useState<LoadState>("loading");
@@ -88,7 +101,7 @@ export default function TaskView() {
   );
 
   // Filter options are derived from the rows themselves, so the dropdowns only
-  // ever offer values that actually appear — no empty "AI system X" entries.
+  // ever offer values that actually appear.
   const systemOptions = useMemo(() => {
     const m = new Map<string, string>();
     for (const r of rows) if (!m.has(r.system_id)) m.set(r.system_id, r.system_name);
@@ -105,27 +118,24 @@ export default function TaskView() {
       if (!u || seen.has(u)) continue;
       seen.add(u);
       const info = userMap.get(u);
-      const label = info
-        ? `${info.firstName} ${info.lastName}`.trim() || u
-        : u;
-      out.push({ value: u, label });
+      out.push({ value: u, label: info ? fullName(info, u) : u });
     }
     return out.sort((a, b) => a.label.localeCompare(b.label));
   }, [rows, userMap]);
 
-  const visibleRows = useMemo(() => {
+  const visibleGroups = useMemo(() => {
     const filtered = rows.filter((r) => {
       if (systemSel.size > 0 && !systemSel.has(r.system_id)) return false;
       if (ownerSel.size > 0 && !(r.owner_username && ownerSel.has(r.owner_username)))
         return false;
       return true;
     });
-    filtered.sort((a, b) => {
-      const cmp =
-        new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime();
+    const groups = groupBySystem(filtered);
+    groups.sort((a, b) => {
+      const cmp = a.earliest_assigned_at.localeCompare(b.earliest_assigned_at);
       return sortDir === "asc" ? cmp : -cmp;
     });
-    return filtered;
+    return groups;
   }, [rows, systemSel, ownerSel, sortDir]);
 
   const filtersActive = systemSel.size > 0 || ownerSel.size > 0;
@@ -140,7 +150,7 @@ export default function TaskView() {
         <div className="flex flex-col gap-1">
           <h1 className="text-3xl font-semibold tracking-[-0.02em]">Task View</h1>
           <p className="text-sm text-muted-foreground">
-            Every assessment question assigned to you, across all AI systems.
+            Every assessment question assigned to you, grouped by AI system.
           </p>
         </div>
 
@@ -177,11 +187,11 @@ export default function TaskView() {
           </div>
         )}
         {state === "ready" &&
-          (visibleRows.length === 0 ? (
+          (visibleGroups.length === 0 ? (
             <EmptyState filtersActive={filtersActive} />
           ) : (
             <TasksTable
-              rows={visibleRows}
+              groups={visibleGroups}
               latestBySystem={latestBySystem}
               userMap={userMap}
               sortDir={sortDir}
@@ -196,13 +206,13 @@ export default function TaskView() {
 }
 
 function TasksTable({
-  rows,
+  groups,
   latestBySystem,
   userMap,
   sortDir,
   onToggleSort,
 }: {
-  rows: OpenTaskRow[];
+  groups: SystemGroup[];
   latestBySystem: Map<string, AssessmentSummary>;
   userMap: Map<string, UserSummary>;
   sortDir: SortDir;
@@ -213,7 +223,7 @@ function TasksTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-xs font-medium text-muted-foreground">
-            <th className="px-4 py-3 text-left">Assigned question</th>
+            <th className="px-4 py-3 text-left">Assigned to you</th>
             <th className="px-4 py-3 text-left">
               <SortButton dir={sortDir} onClick={onToggleSort}>
                 Assign date
@@ -226,11 +236,11 @@ function TasksTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {groups.map((g) => (
             <TaskRow
-              key={`${row.system_id}:${row.section}:${row.question_key}`}
-              row={row}
-              latestAssessment={latestBySystem.get(row.system_id) ?? null}
+              key={g.system_id}
+              group={g}
+              latestAssessment={latestBySystem.get(g.system_id) ?? null}
               userMap={userMap}
             />
           ))}
@@ -241,66 +251,79 @@ function TasksTable({
 }
 
 function TaskRow({
-  row,
+  group,
   latestAssessment,
   userMap,
 }: {
-  row: OpenTaskRow;
+  group: SystemGroup;
   latestAssessment: AssessmentSummary | null;
   userMap: Map<string, UserSummary>;
 }) {
   function openSystem() {
-    sessionStorage.setItem("lastSystemPath", `/systems/${row.system_id}`);
+    sessionStorage.setItem("lastSystemPath", `/systems/${group.system_id}`);
     navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
-  // Jump straight to the questionnaire so the user can answer their question.
-  // `fromDelegate` bypasses the technical-pending gate for per-question
-  // delegates (source="assigned"); section owners (source="required") are the
-  // assignee anyway so it is a no-op for them. No assessment yet → fall back to
-  // the system detail.
-  function openQuestion() {
+  // Open the questionnaire so the user can answer. `fromDelegate` bypasses the
+  // technical-pending gate for per-question delegates (any `assigned` row in
+  // the group); section owners are the assignee anyway. No assessment yet →
+  // fall back to the system detail.
+  function openQuestions() {
     if (!latestAssessment) {
       openSystem();
       return;
     }
     localStorage.setItem(
       "compliance.viewSystem",
-      JSON.stringify({ systemId: row.system_id, systemName: row.system_name }),
+      JSON.stringify({ systemId: group.system_id, systemName: group.system_name }),
     );
     localStorage.setItem(
       "compliance.openAssessment",
       JSON.stringify({
         assessmentId: latestAssessment.id,
         questionnaire: true,
-        fromDelegate: row.source === "assigned",
+        fromDelegate: group.questions.some((q) => q.source === "assigned"),
       }),
     );
     navigateTo("/home/assessments", COMPLIANCE_URL);
   }
+  function openAssessment() {
+    if (!latestAssessment) {
+      openSystem();
+      return;
+    }
+    localStorage.setItem(
+      "compliance.viewSystem",
+      JSON.stringify({ systemId: group.system_id, systemName: group.system_name }),
+    );
+    localStorage.setItem(
+      "compliance.openAssessment",
+      JSON.stringify({ assessmentId: latestAssessment.id }),
+    );
+    navigateTo("/home/assessments", COMPLIANCE_URL);
+  }
 
-  const ownerInfo = row.owner_username
-    ? userMap.get(row.owner_username)
+  const label = formatQuestionLabels(group.questions);
+  const full = group.questions
+    .map((q) => `${formatQuestionNumber(q.question_key)} · ${q.question_label}`)
+    .join(" · ");
+  const ownerInfo = group.owner_username
+    ? userMap.get(group.owner_username)
     : undefined;
-  const ownerName = row.owner_username
-    ? ownerInfo
-      ? `${ownerInfo.firstName} ${ownerInfo.lastName}`.trim() || row.owner_username
-      : row.owner_username
-    : null;
 
   return (
     <tr className="border-b border-border last:border-b-0">
       <td className="max-w-[320px] px-4 py-3">
         <button
           type="button"
-          onClick={openQuestion}
+          onClick={openQuestions}
           className="block w-full truncate text-left font-medium text-foreground underline underline-offset-2"
-          title={`${formatQuestionNumber(row.question_key)} · ${row.question_label}`}
+          title={full}
         >
-          {formatQuestionNumber(row.question_key)} · {row.question_label}
+          {label}
         </button>
       </td>
       <td className="px-4 py-3 text-muted-foreground">
-        {formatRelativeDate(row.assigned_at)}
+        {formatRelativeDate(group.earliest_assigned_at)}
       </td>
       <td className="px-4 py-3">
         <button
@@ -310,25 +333,27 @@ function TaskRow({
         >
           <span
             className="truncate font-medium text-foreground underline underline-offset-2"
-            title={row.system_name}
+            title={group.system_name}
           >
-            {row.system_name}
+            {group.system_name}
           </span>
           <span className="text-xs text-muted-foreground">
-            {row.system_id} · v{row.system_version}
+            {group.system_id} · v{group.system_version}
           </span>
         </button>
       </td>
       <td className="px-4 py-3">
-        {row.owner_username ? (
+        {group.owner_username ? (
           <div className="flex items-center gap-2">
             <InitialsAvatar
-              username={row.owner_username}
+              username={group.owner_username}
               firstName={ownerInfo?.firstName}
               lastName={ownerInfo?.lastName}
               size="sm"
             />
-            <span className="text-foreground">{ownerName}</span>
+            <span className="text-foreground">
+              {ownerInfo ? fullName(ownerInfo, group.owner_username) : group.owner_username}
+            </span>
           </div>
         ) : (
           <span className="text-muted-foreground">—</span>
@@ -337,7 +362,7 @@ function TaskRow({
       <td className="px-4 py-3">
         <AssessmentStageCell
           assessment={latestAssessment}
-          workflowStatus={row.workflow_status}
+          workflowStatus={group.workflow_status}
         />
       </td>
       <td className="px-4 py-3 text-right">
@@ -345,9 +370,9 @@ function TaskRow({
           variant="outline"
           size="icon"
           className="size-8"
-          onClick={openQuestion}
-          aria-label={`Open question ${formatQuestionNumber(row.question_key)} for ${row.system_name}`}
-          title="Open the question in the assessment"
+          onClick={openAssessment}
+          aria-label={`Open assessment for ${group.system_name}`}
+          title={latestAssessment ? "Open assessment" : "View system detail"}
         >
           <Eye className="size-4" />
         </Button>
@@ -454,7 +479,42 @@ function TableSkeleton() {
   );
 }
 
-// ── small helpers ───────────────────────────────────────────────────────────
+// ── grouping + small helpers ─────────────────────────────────────────────────
+
+function groupBySystem(rows: OpenTaskRow[]): SystemGroup[] {
+  const map = new Map<string, SystemGroup>();
+  for (const row of rows) {
+    const existing = map.get(row.system_id);
+    if (existing) {
+      existing.questions.push(row);
+      if (row.assigned_at < existing.earliest_assigned_at) {
+        existing.earliest_assigned_at = row.assigned_at;
+      }
+    } else {
+      map.set(row.system_id, {
+        system_id: row.system_id,
+        system_name: row.system_name,
+        system_version: row.system_version,
+        workflow_status: row.workflow_status,
+        owner_username: row.owner_username,
+        questions: [row],
+        earliest_assigned_at: row.assigned_at,
+      });
+    }
+  }
+  // Order each group's questions by questionnaire order so the preview reads
+  // "Q2, Q4, Q7" rather than in assignment order.
+  for (const g of map.values()) {
+    g.questions.sort(
+      (a, b) => questionIndex(a.question_key) - questionIndex(b.question_key),
+    );
+  }
+  return [...map.values()];
+}
+
+function fullName(u: UserSummary, fallback: string): string {
+  return `${u.firstName} ${u.lastName}`.trim() || fallback;
+}
 
 function toggle(set: Set<string>, value: string): Set<string> {
   const next = new Set(set);
@@ -472,6 +532,15 @@ function filterLabel(
   if (sel.size === 1)
     return options.find((o) => o.value === [...sel][0])?.label ?? defaultLabel;
   return `${defaultLabel} (${sel.size})`;
+}
+
+function formatQuestionLabels(questions: OpenTaskRow[]): string {
+  if (questions.length === 1) {
+    const q = questions[0];
+    return `${formatQuestionNumber(q.question_key)} · ${q.question_label}`;
+  }
+  // Multiple: compact "Q2, Q4, Q7…".
+  return `${questions.map((q) => formatQuestionNumber(q.question_key)).join(", ")}…`;
 }
 
 // Ordered question keys mirror the registry questionnaire — a deliberate
@@ -496,6 +565,11 @@ const QUESTION_ORDER: readonly string[] = [
   "user_interaction",
   "prohibited_practices",
 ];
+
+function questionIndex(key: string): number {
+  const i = QUESTION_ORDER.indexOf(key);
+  return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+}
 
 function formatQuestionNumber(key: string): string {
   const i = QUESTION_ORDER.indexOf(key);
