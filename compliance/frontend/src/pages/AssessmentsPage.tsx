@@ -383,6 +383,18 @@ export default function AssessmentsPage() {
         onSuccess={load}
         initialSystemId={pendingAssessment?.systemId}
         initialFrameworkId={pendingAssessment?.frameworkId}
+        onOpenInRegistry={async (systemId) => {
+          setCreateOpen(false);
+          setPendingAssessment(null);
+          try {
+            await registryClient.startNewAssessment(systemId);
+          } catch (e) {
+            showToast(`Could not start assessment: ${(e as Error).message}`, true);
+            return;
+          }
+          localStorage.setItem("registry.openAssessment", JSON.stringify({ systemId }));
+          LuigiClient.linkManager().navigate("/home/ai-system-registry");
+        }}
       />
     </>
   );
