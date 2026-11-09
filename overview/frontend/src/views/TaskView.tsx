@@ -15,30 +15,111 @@ import {
   type UserSummary,
 } from "../api/client";
 import { OpenTasksSection } from "../components/landing/OpenTasksSection";
+import { ReviewQueueTable } from "../components/landing/ReviewQueueTable";
 import {
   deriveOwnerTasks,
   filterContributorTasksForOwner,
 } from "../components/landing/ownerTasks";
+import { COMPLIANCE_OFFICER_ROLE } from "./ComplianceLanding";
 
 type LoadState = "loading" | "ready" | "error";
 type SortDir = "asc" | "desc";
 
 /**
- * Task View (issue #276) — a standalone, nav-accessible page listing the
- * current user's open questionnaire tasks.
+ * Task View (issue #276) — a standalone, nav-accessible page at route `/tasks`.
  *
- * It reuses the landing's `OpenTasksSection` verbatim so the behaviour matches
- * the Overview page exactly: for AI systems the user *owns*, the rows collapse
- * to system-level "Start / Continue EU AI Act Assessment" actions
- * (`deriveOwnerTasks`); questions appear as grouped rows only for systems the
- * user does not own (`filterContributorTasksForOwner`). On top of that shared
- * table, this page adds a "Task View" header, AI-system / Owner filters, an
- * assign-date sort control, and a Refresh (reset-filters) button.
- *
- * Scope: the `required` + `assigned` sources of `/me/open-tasks`. CO `review`
- * rows are excluded — they live in the compliance-officer landing's queue.
+ * Role-aware, mirroring the per-role split of the Overview landing: owners (and
+ * contributors) get their open-task table, while a Compliance Officer gets the
+ * same "Ready for review" queue they see on their landing. The branch sits in a
+ * thin wrapper that only resolves the role, so each inner view keeps a stable
+ * hook order and only fetches the slice it needs.
  */
 export default function TaskView() {
+  const [isComplianceOfficer, setIsComplianceOfficer] = useState<
+    boolean | null
+  >(null);
+
+  useEffect(() => {
+    api
+      .me()
+      .then((me) =>
+        setIsComplianceOfficer(
+          (me.roles ?? []).includes(COMPLIANCE_OFFICER_ROLE),
+        ),
+      )
+      .catch(() => setIsComplianceOfficer(false));
+  }, []);
+
+  // Hold a blank placeholder until the role resolves so we never flash the
+  // owner view at a CO (or vice versa) on slow networks.
+  if (isComplianceOfficer === null) {
+    return <main className="min-h-screen bg-[#f6f7fb]" />;
+  }
+  return isComplianceOfficer ? <ComplianceTaskView /> : <OwnerTaskView />;
+}
+
+/**
+ * Compliance Officer Task View — mirrors the "Ready for review" queue from the
+ * CO landing (`ComplianceLanding`) verbatim: same `ReviewQueueTable`, fed by the
+ * `review` source of `/me/open-tasks`. Owner-only filters/sort/refresh controls
+ * are intentionally absent so the appearance matches the landing queue exactly.
+ */
+function ComplianceTaskView() {
+  const [state, setState] = useState<LoadState>("loading");
+  const [reviewRows, setReviewRows] = useState<OpenTaskRow[]>([]);
+  const [users, setUsers] = useState<UserSummary[]>([]);
+
+  useEffect(() => {
+    Promise.all([
+      api.myOpenTasks(),
+      api.allUsers().catch(() => [] as UserSummary[]),
+    ])
+      .then(([tasks, allUsers]) => {
+        setReviewRows(tasks.filter((t) => t.source === "review"));
+        setUsers(allUsers);
+        setState("ready");
+      })
+      .catch(() => setState("error"));
+  }, []);
+
+  const userMap = useMemo(() => {
+    const m = new Map<string, UserSummary>();
+    for (const u of users) m.set(u.username, u);
+    return m;
+  }, [users]);
+
+  return (
+    <main className="min-h-screen bg-[#f6f7fb]">
+      <div className="flex w-full max-w-[1600px] flex-col gap-6 px-4 py-8">
+        <h1 className="text-3xl font-semibold tracking-[-0.02em]">Task View</h1>
+        {state === "loading" && <TableSkeleton />}
+        {state === "error" && (
+          <div className="rounded-2xl border border-[var(--danger-border)] bg-[var(--danger-bg)] px-6 py-4 text-sm text-[var(--danger-fg)]">
+            Failed to load your review queue. Please retry in a moment.
+          </div>
+        )}
+        {state === "ready" && (
+          <ReviewQueueTable rows={reviewRows} userMap={userMap} />
+        )}
+      </div>
+    </main>
+  );
+}
+
+/**
+ * Owner / contributor Task View — reuses the landing's `OpenTasksSection`
+ * verbatim so the behaviour matches the Overview page exactly: for AI systems
+ * the user *owns*, the rows collapse to system-level "Start / Continue EU AI Act
+ * Assessment" actions (`deriveOwnerTasks`); questions appear as grouped rows
+ * only for systems the user does not own (`filterContributorTasksForOwner`). On
+ * top of that shared table, this page adds a "Task View" header, AI-system /
+ * Owner filters, an assign-date sort control, and a Refresh (reset-filters)
+ * button.
+ *
+ * Scope: the `required` + `assigned` sources of `/me/open-tasks`. CO `review`
+ * rows are excluded — they live in the Compliance Officer view above.
+ */
+function OwnerTaskView() {
   const [state, setState] = useState<LoadState>("loading");
   const [openTasks, setOpenTasks] = useState<OpenTaskRow[]>([]);
   const [mySystems, setMySystems] = useState<MySystemRow[]>([]);
