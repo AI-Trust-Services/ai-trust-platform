@@ -254,6 +254,28 @@ runs:
         envsubst '${OCM_VERSION} ${NAMESPACE}' < k8s/ocm/manifests.yaml | kubectl apply -f -
         echo "Applied OCM CRs with ComponentVersion pinned to ${OCM_VERSION} in namespace ${NAMESPACE}"
 
+    - name: Remediate OCM controller after cert renewal
+      shell: bash
+      run: |
+        # cert-manager auto-renews the OCM registry's self-signed CA (ocm-registry-certificate)
+        # roughly every 90 days. The new CA keypair is written to the ocm-registry-tls-certs
+        # secret, but the OCM controller caches the CA bundle at startup — so it rejects the
+        # registry's new TLS cert until it is restarted. Detect this by checking whether any
+        # OCM Resource reports an x509 "unknown authority" error and, if so, roll the controller.
+        TLS_ERR=$(kubectl get resource -n ocm-system -o json 2>/dev/null \
+          | jq -r '.items[].status.conditions[]? | select(.type=="Ready" and .status=="False") | .message' \
+          | grep -i "x509\|certificate signed by unknown authority\|tls:" || true)
+        if [[ -n "$TLS_ERR" ]]; then
+          echo "OCM Resource TLS error detected — rolling out ocm-controller to pick up renewed CA cert..."
+          echo "Error was: $TLS_ERR"
+          kubectl rollout restart deployment/ocm-controller -n ocm-system
+          kubectl rollout status deployment/ocm-controller -n ocm-system --timeout=120s
+          echo "ocm-controller restarted — waiting 10s for reconcile loop to resume..."
+          sleep 10
+        else
+          echo "No OCM Resource TLS errors detected — skipping ocm-controller restart."
+        fi
+
     - name: Remediate stalled HelmRelease
       shell: bash
       run: |
