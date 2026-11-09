@@ -122,6 +122,10 @@ export function AssessmentSidebar({
                   const contributorOnly = q?.confirmed && !ownerConfirmed;
                   const needsAttention = q?.needs_attention && !ownerConfirmed;
                   const llmPending = q?.llm_pending;
+                  // Only show the attention indicator (orange) when there IS an
+                  // answer but confidence is low — blank/unanswered questions are
+                  // just grey "Incomplete", not flagged as needing attention.
+                  const showAttention = needsAttention && !!q?.answer && !llmPending;
                   const statusText = ownerConfirmed
                     ? "Complete"
                     : contributorOnly
@@ -153,7 +157,7 @@ export function AssessmentSidebar({
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="flex items-center gap-1.5 leading-snug">
                             <span className="line-clamp-2">{QUESTION_LABELS[key] ?? key}</span>
-                            {needsAttention && !llmPending && (
+                            {showAttention && (
                               <AlertTriangle className="size-3 shrink-0 text-[#c45000]" />
                             )}
                           </span>
@@ -164,7 +168,7 @@ export function AssessmentSidebar({
                                 ? "text-[#1a5c35]"
                                 : contributorOnly
                                   ? "text-[#b57e00]"
-                                  : needsAttention && !llmPending
+                                  : showAttention
                                     ? "text-[#c45000]"
                                     : "text-muted-foreground",
                             )}
