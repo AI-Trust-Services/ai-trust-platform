@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, Info, RefreshCw } from "lucide-react";
+import { ChevronDown, Info, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -163,19 +163,6 @@ export default function TaskView() {
           />
           <Button
             variant="outline"
-            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-            title="Sort by assign date"
-            className="gap-1.5 bg-card shadow-sm"
-          >
-            Assign date
-            {sortDir === "asc" ? (
-              <ArrowUp className="size-3.5" />
-            ) : (
-              <ArrowDown className="size-3.5" />
-            )}
-          </Button>
-          <Button
-            variant="outline"
             onClick={resetFilters}
             disabled={!filtersActive}
             title="Reset filters to all values"
@@ -208,6 +195,9 @@ export default function TaskView() {
           <OpenTasksSection
             hideHeader
             sortDir={sortDir}
+            onToggleSort={() =>
+              setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+            }
             state="ready"
             rows={filteredContributorTasks}
             ownerTasks={filteredOwnerTasks}

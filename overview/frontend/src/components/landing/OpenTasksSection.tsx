@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Eye, Inbox, Play, ArrowRight } from "lucide-react";
+import { Eye, Inbox, Play, ArrowRight, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { navigateTo } from "../../hooks/useLuigi";
 import {
@@ -40,11 +40,13 @@ interface OpenTasksSectionProps {
   assessments: AssessmentSummary[];
   userMap: Map<string, UserSummary>;
   // Task View reuses this table on its own page: it supplies its own "Task
-  // View" heading (hideHeader) and an external assign-date sort control
-  // (sortDir). Both default to the landing's behaviour so the landing is
-  // untouched.
+  // View" heading (hideHeader), the assign-date sort direction (sortDir), and
+  // an onToggleSort handler that turns the "Assign date" column header into a
+  // clickable sort control. All default to the landing's behaviour (fixed
+  // heading, date-desc, non-clickable header) so the landing is untouched.
   hideHeader?: boolean;
   sortDir?: "asc" | "desc";
+  onToggleSort?: () => void;
 }
 
 export function OpenTasksSection({
@@ -55,6 +57,7 @@ export function OpenTasksSection({
   userMap,
   hideHeader = false,
   sortDir = "desc",
+  onToggleSort,
 }: OpenTasksSectionProps) {
   const latestBySystem = useMemo(
     () => pickLatestAssessmentPerSystem(assessments),
@@ -99,6 +102,8 @@ export function OpenTasksSection({
           latestBySystem={latestBySystem}
           assessmentsById={assessmentsById}
           userMap={userMap}
+          sortDir={sortDir}
+          onToggleSort={onToggleSort}
         />
       ) : (
         <EmptyState />
@@ -120,12 +125,16 @@ function TasksTable({
   latestBySystem,
   assessmentsById,
   userMap,
+  sortDir,
+  onToggleSort,
 }: {
   groups: SystemGroup[];
   ownerTasks: OwnerTaskRow[];
   latestBySystem: Map<string, AssessmentSummary>;
   assessmentsById: Map<string, AssessmentSummary>;
   userMap: Map<string, UserSummary>;
+  sortDir: "asc" | "desc";
+  onToggleSort?: () => void;
 }) {
   // For review groups the stage must reflect *the* assessment the CO is being
   // asked to review — not the system's latest assessment, which may already be
@@ -142,7 +151,24 @@ function TasksTable({
         <thead>
           <tr className="border-b border-border text-xs font-medium text-muted-foreground">
             <th className="px-4 py-3 text-left">Assigned to you</th>
-            <th className="px-4 py-3 text-left">Assign date</th>
+            <th className="px-4 py-3 text-left">
+              {onToggleSort ? (
+                <button
+                  type="button"
+                  onClick={onToggleSort}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  Assign date
+                  {sortDir === "asc" ? (
+                    <ArrowUp className="size-3" />
+                  ) : (
+                    <ArrowDown className="size-3" />
+                  )}
+                </button>
+              ) : (
+                "Assign date"
+              )}
+            </th>
             <th className="px-4 py-3 text-left">AI System</th>
             <th className="px-4 py-3 text-left">Owner</th>
             <th className="px-4 py-3 text-left">Assessment stage</th>
