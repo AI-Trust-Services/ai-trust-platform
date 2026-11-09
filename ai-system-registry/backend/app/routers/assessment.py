@@ -587,16 +587,18 @@ async def _build_state(
             conf.medium += 1
         elif st is not None and st.confidence == "low":
             conf.low += 1
-        needs = _needs_attention(row, st, ans)
-        if needs:
-            attention += 1
-        # Per-question edit right for the requesting user — only meaningful while
-        # the assessment is editable (current cycle, not locked/approved).
-        can_edit = editable and (user is not None and _may_edit(row, st, user))
         # llm_pending: the background prefill is still running and this specific
         # question has not yet received an AI answer. Once the batch covering this
         # question completes, answer is written and llm_pending flips to False.
         llm_pending = assessment.llm_status == "pending" and not ans
+        needs = _needs_attention(row, st, ans)
+        # Suppress attention while the LLM is still pending for this question —
+        # the answer hasn't arrived yet, so there's nothing to review.
+        if needs and not llm_pending:
+            attention += 1
+        # Per-question edit right for the requesting user — only meaningful while
+        # the assessment is editable (current cycle, not locked/approved).
+        can_edit = editable and (user is not None and _may_edit(row, st, user))
         questions.append(
             QuestionStateResponse(
                 question_key=q_key,
@@ -608,7 +610,7 @@ async def _build_state(
                 assignee_username=st.assignee_username if st else None,
                 comment_count=counts.get(q_key, 0),
                 has_qualifying_comment=q_key in qualifying,
-                needs_attention=needs,
+                needs_attention=needs and not llm_pending,
                 can_edit=can_edit,
                 ai_references=(st.ai_references or []) if st else [],
                 ai_explanation=st.ai_explanation if st else None,
