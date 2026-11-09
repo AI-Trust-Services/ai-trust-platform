@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ChevronLeft, MoreVertical, Users, SignalHigh, SignalMedium, SignalLow, Trash2 } from "lucide-react";
+import { ChevronLeft, Loader2, MoreVertical, Users, SignalHigh, SignalMedium, SignalLow, Trash2 } from "lucide-react";
 import type { ConfidenceLevel, QuestionComment, QuestionState } from "../../types";
 import { api } from "../../api/client";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -100,9 +100,12 @@ export default function QuestionView() {
   // confirm gate) so a stale pre-change comment doesn't enable a confirm the
   // server would reject. Kept fresh by reload() after add/delete/save.
   const hasQualifyingComment = qState?.has_qualifying_comment ?? false;
+  // True while this question is still waiting for the AI background pipeline
+  // to produce an answer. Inputs are locked until the answer arrives.
+  const llmPending = qState?.llm_pending ?? false;
   // Read-only: the whole assessment is locked, or this question isn't the
   // current user's to edit. Drives input disabling + hides edit affordances.
-  const canEdit = state.editable && (qState?.can_edit ?? false);
+  const canEdit = !llmPending && state.editable && (qState?.can_edit ?? false);
   // The CONFIRM gate: must be editable, and if the answer was changed from the
   // AI pre-fill, a qualifying comment (recorded after the change) is mandatory.
   const confirmDisabled =
@@ -313,6 +316,13 @@ export default function QuestionView() {
             onClick={() => setConfModalOpen(true)}
           />
         </div>
+
+        {llmPending && (
+          <div className="mt-4 flex items-center gap-2 rounded-md border border-[#e0a008]/40 bg-[#fffbeb] px-4 py-2.5 text-sm text-[#854d0e]">
+            <Loader2 className="size-4 shrink-0 animate-spin" />
+            <span>Waiting for AI answer — inputs will unlock when this batch completes</span>
+          </div>
+        )}
 
         <div className="mt-5 space-y-2">
           {isPredefined(def) ? (
