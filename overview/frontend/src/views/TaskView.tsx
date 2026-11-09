@@ -4,8 +4,9 @@ import {
   ArrowUp,
   ChevronDown,
   Eye,
+  Info,
   Inbox,
-  RotateCcw,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,6 +64,7 @@ export default function TaskView() {
   const [state, setState] = useState<LoadState>("loading");
   const [rows, setRows] = useState<OpenTaskRow[]>([]);
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
+  const [assessmentsFailed, setAssessmentsFailed] = useState(false);
   const [users, setUsers] = useState<UserSummary[]>([]);
 
   const [systemSel, setSystemSel] = useState<Set<string>>(new Set());
@@ -70,9 +72,19 @@ export default function TaskView() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   useEffect(() => {
+    // Keep the page resilient: /me/open-tasks is the page's success condition,
+    // while assessments only enrich the stage column + supply the id the quick-
+    // open needs. A failed assessments fetch must not blank the whole task list
+    // — but we DO track the failure (distinct from "this system has no
+    // assessment yet") so we can warn the user honestly, since without it a row
+    // click silently lands on the system instead of the questionnaire.
+    let assessmentsOk = true;
     Promise.all([
       api.myOpenTasks(),
-      api.allAssessments().catch(() => [] as AssessmentSummary[]),
+      api.allAssessments().catch(() => {
+        assessmentsOk = false;
+        return [] as AssessmentSummary[];
+      }),
       api.allUsers().catch(() => [] as UserSummary[]),
     ])
       .then(([tasks, allAssessments, allUsers]) => {
@@ -84,6 +96,7 @@ export default function TaskView() {
         );
         setAssessments(allAssessments);
         setUsers(allUsers);
+        setAssessmentsFailed(!assessmentsOk);
         setState("ready");
       })
       .catch(() => setState("error"));
@@ -174,10 +187,22 @@ export default function TaskView() {
             title="Reset filters to all values"
             className="gap-1.5 bg-card shadow-sm"
           >
-            <RotateCcw className="size-3.5" />
+            <RefreshCw className="size-3.5" />
             Refresh
           </Button>
         </div>
+
+        {state === "ready" && assessmentsFailed && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <Info className="mt-0.5 size-4 shrink-0" />
+            <span>
+              Assessment details couldn&apos;t be loaded — the assessment-stage
+              column may be incomplete, and opening a task may take you to the AI
+              system instead of its questionnaire. Reload in a moment to try
+              again.
+            </span>
+          </div>
+        )}
 
         {state === "loading" && <TableSkeleton />}
         {state === "error" && (
