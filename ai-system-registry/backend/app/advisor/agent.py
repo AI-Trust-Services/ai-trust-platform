@@ -204,21 +204,30 @@ def _setup_tracing_once() -> None:
     global _tracing_ready
     if _tracing_ready:
         return
-    _tracing_ready = True  # set first: a failure must not retry on every build
+    # Permanent "off" cases set the flag immediately and never retry (the
+    # opt-out flag or absent credentials won't change for the pod's life). A
+    # *transient* error (a network blip reaching Langfuse, a flaky import)
+    # leaves the flag False so the next advisor turn retries setup, rather than
+    # disabling tracing for the whole pod on one hiccup.
     if not _tracing_on():
+        _tracing_ready = True
         return
     try:
         from app import langfuse_client
 
         if not langfuse_client.is_enabled():
+            _tracing_ready = True  # credentials absent — permanent, don't retry
             return
         if langfuse_client.get_langfuse() is None:  # registers the tracer provider
+            _tracing_ready = True  # same — permanent config absence
             return
         from pydantic_ai import Agent
 
         Agent.instrument_all()
+        _tracing_ready = True  # only mark done on actual success
         logger.info("advisor.tracing_enabled")
     except Exception as exc:  # pragma: no cover - tracing is best-effort
+        # Transient — leave _tracing_ready False so the next request retries.
         logger.warning("advisor.tracing_setup_failed", extra={"error": str(exc)})
 
 

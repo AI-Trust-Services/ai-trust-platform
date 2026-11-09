@@ -34,6 +34,12 @@ const SECTION_GUIDANCE: Record<string, { title: string; body: string }> = {
 interface Turn {
   role: "user" | "assistant";
   content: string;
+  // What is actually sent to the LLM for this turn. For a user turn this is
+  // `content` prefixed with the section context (`[Section: …]`); the raw
+  // `content` is shown in the chat bubble. Resending `apiContent` in the
+  // transcript keeps the section context present on every later turn, not just
+  // the first. Absent for assistant turns (content is sent as-is).
+  apiContent?: string;
   sources?: AdvisorSource[];
 }
 
@@ -144,10 +150,13 @@ export function ComplianceAdvisor({
     setInput("");
     const scoped = guidance ? `[Section: ${guidance.title}]\n${text}` : text;
     const prior = turns;
-    setTurns((t) => [...t, { role: "user", content: text }]);
+    setTurns((t) => [...t, { role: "user", content: text, apiContent: scoped }]);
     setLoading(true);
     try {
-      const transcript: ChatMessage[] = prior.map((t) => ({ role: t.role, content: t.content }));
+      const transcript: ChatMessage[] = prior.map((t) => ({
+        role: t.role,
+        content: t.apiContent ?? t.content,
+      }));
       const res = await api.advisorAsk(systemId, scoped, transcript);
       setTurns((t) => [
         ...t,

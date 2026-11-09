@@ -13,7 +13,7 @@ Gated ``systems:read`` — the advisor is read-only drill-down, matching the
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy import select
 
 from ai_trust_authorization.permissions import require_permission
@@ -38,7 +38,19 @@ _MAX_TRANSCRIPT_TURNS = 20
 
 class TranscriptTurn(BaseModel):
     role: str = Field(pattern=r"^(user|assistant)$")
-    content: str = Field(max_length=_MAX_MESSAGE_LEN)
+    content: str
+
+    @field_validator("content")
+    @classmethod
+    def _cap_user_content(cls, v: str, info: ValidationInfo) -> str:
+        # Cap only *user* turns — the DoS guard is on user input. An assistant
+        # reply can legitimately exceed the cap (long markdown), and the
+        # frontend resends the full transcript each turn, so capping both roles
+        # would 422 the next user turn after a verbose answer. `role` is
+        # declared before `content`, so it is already validated here.
+        if info.data.get("role") == "user" and len(v) > _MAX_MESSAGE_LEN:
+            raise ValueError(f"User message exceeds {_MAX_MESSAGE_LEN} characters")
+        return v
 
 
 class AdvisorAskRequest(BaseModel):

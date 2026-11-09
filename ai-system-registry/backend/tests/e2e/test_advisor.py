@@ -176,26 +176,35 @@ async def test_tool_spans_distinguish_cognee_and_rag():
 
     from app.advisor.agent import ask_advisor, AdvisorDeps
 
-    exporter = InMemorySpanExporter()
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    trace.set_tracer_provider(provider)
-    Agent.instrument_all()  # enable PydanticAI OTel instrumentation
+    # Capture the current (process-wide) provider and restore it after the
+    # test. trace.set_tracer_provider() replaces the global provider, so without
+    # teardown every later test inherits this InMemorySpanExporter provider —
+    # under a randomized test order (pytest-randomly) that silently diverts
+    # their spans and can fail unrelated tests.
+    original_provider = trace.get_tracer_provider()
+    try:
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
+        Agent.instrument_all()  # enable PydanticAI OTel instrumentation
 
-    await ask_advisor(
-        message="is this high risk?",
-        deps=AdvisorDeps(system_id="SYS-1", username="u"),
-    )
-    provider.force_flush()
+        await ask_advisor(
+            message="is this high risk?",
+            deps=AdvisorDeps(system_id="SYS-1", username="u"),
+        )
+        provider.force_flush()
 
-    tool_names = {
-        s.attributes.get("gen_ai.tool.name")
-        for s in exporter.get_finished_spans()
-        if s.attributes.get("gen_ai.tool.name")
-    }
-    # The stub TestModel calls every tool; both grounding tools must be traceable.
-    assert "search_eu_ai_act" in tool_names  # cognee
-    assert "search_system_documents" in tool_names  # RAG
+        tool_names = {
+            s.attributes.get("gen_ai.tool.name")
+            for s in exporter.get_finished_spans()
+            if s.attributes.get("gen_ai.tool.name")
+        }
+        # The stub TestModel calls every tool; both grounding tools must be traceable.
+        assert "search_eu_ai_act" in tool_names  # cognee
+        assert "search_system_documents" in tool_names  # RAG
+    finally:
+        trace.set_tracer_provider(original_provider)
 
 
 def test_filter_and_resolve_sources_drops_ungrounded():
