@@ -92,13 +92,11 @@ function ComplianceTaskView() {
     <main className="min-h-screen bg-[#f6f7fb]">
       <div className="flex w-full max-w-[1600px] flex-col gap-6 px-4 py-8">
         <h1 className="text-3xl font-semibold tracking-[-0.02em]">Task View</h1>
-        {state === "loading" && <TableSkeleton />}
-        {state === "error" && (
-          <div className="rounded-2xl border border-[var(--danger-border)] bg-[var(--danger-bg)] px-6 py-4 text-sm text-[var(--danger-fg)]">
-            Failed to load your review queue. Please retry in a moment.
-          </div>
-        )}
-        {state === "ready" && (
+        {state === "loading" ? (
+          <TableSkeleton />
+        ) : (
+          // A failed fetch degrades to the table's own empty state (never a red
+          // banner); the global health banner already signals a down backend.
           <ReviewQueueTable rows={reviewRows} userMap={userMap} />
         )}
       </div>
@@ -266,13 +264,11 @@ function OwnerTaskView() {
           </div>
         )}
 
-        {state === "loading" && <TableSkeleton />}
-        {state === "error" && (
-          <div className="rounded-2xl border border-[var(--danger-border)] bg-[var(--danger-bg)] px-6 py-4 text-sm text-[var(--danger-fg)]">
-            Failed to load your tasks. Please retry in a moment.
-          </div>
-        )}
-        {state === "ready" && (
+        {state === "loading" ? (
+          <TableSkeleton />
+        ) : (
+          // A failed fetch degrades to the table's own empty state (never a red
+          // banner); the global health banner already signals a down backend.
           <OpenTasksSection
             hideHeader
             sortDir={sortDir}
