@@ -117,7 +117,8 @@ async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClie
     others = [q for k, q in by_key.items() if k != "Scope_1"]
     assert all(not q["answer"] for q in others)
     assert all(q["confidence"] == "low" for q in others)
-    # No question is auto-confirmed — the owner reviews every one.
+    # The stub answer has no answerStrength → low confidence → not auto-confirmed.
+    # High/medium confidence answers from a real LLM would be auto-confirmed.
     assert all(not q["confirmed"] for q in state["questions"])
     assert all(not q["owner_confirmed"] for q in state["questions"])
     # Classifier ran after the prefill.
