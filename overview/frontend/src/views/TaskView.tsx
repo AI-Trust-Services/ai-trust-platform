@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronDown,
-  Eye,
-  Info,
-  Inbox,
-  RefreshCw,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Info, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,52 +9,39 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   api,
-  COMPLIANCE_URL,
-  REGISTRY_URL,
   type AssessmentSummary,
+  type MySystemRow,
   type OpenTaskRow,
   type UserSummary,
 } from "../api/client";
-import { navigateTo } from "../hooks/useLuigi";
-import { InitialsAvatar } from "../components/InitialsAvatar";
+import { OpenTasksSection } from "../components/landing/OpenTasksSection";
 import {
-  AssessmentStageCell,
-  pickLatestAssessmentPerSystem,
-} from "../components/landing/AssessmentStage";
+  deriveOwnerTasks,
+  filterContributorTasksForOwner,
+} from "../components/landing/ownerTasks";
 
 type LoadState = "loading" | "ready" | "error";
 type SortDir = "asc" | "desc";
 
 /**
- * One AI system's bundle of open questions for the current user — the
- * grouped row the Task View renders. Mirrors the landing's Open Tasks
- * grouping so the two views read consistently.
- */
-interface SystemGroup {
-  system_id: string;
-  system_name: string;
-  system_version: string;
-  workflow_status: string | null;
-  owner_username: string | null;
-  questions: OpenTaskRow[]; // sorted by questionnaire order
-  earliest_assigned_at: string;
-}
-
-/**
  * Task View (issue #276) — a standalone, nav-accessible page listing the
- * questionnaire tasks the current user owns, grouped per AI system (one row
- * per system, "Q2, Q4, Q7…" stacked) exactly like the landing's Open Tasks
- * section — but as a dedicated page with AI-system / Owner filters and a
- * sortable assign date.
+ * current user's open questionnaire tasks.
  *
- * Scope: the `required` (user is the active section assignee, question still
- * unanswered) and `assigned` (explicit per-question delegation) sources from
- * GET /me/open-tasks. `review` rows (CO approval tasks) are excluded — they
- * are not questions and live in the compliance-officer landing's queue.
+ * It reuses the landing's `OpenTasksSection` verbatim so the behaviour matches
+ * the Overview page exactly: for AI systems the user *owns*, the rows collapse
+ * to system-level "Start / Continue EU AI Act Assessment" actions
+ * (`deriveOwnerTasks`); questions appear as grouped rows only for systems the
+ * user does not own (`filterContributorTasksForOwner`). On top of that shared
+ * table, this page adds a "Task View" header, AI-system / Owner filters, an
+ * assign-date sort control, and a Refresh (reset-filters) button.
+ *
+ * Scope: the `required` + `assigned` sources of `/me/open-tasks`. CO `review`
+ * rows are excluded — they live in the compliance-officer landing's queue.
  */
 export default function TaskView() {
   const [state, setState] = useState<LoadState>("loading");
-  const [rows, setRows] = useState<OpenTaskRow[]>([]);
+  const [openTasks, setOpenTasks] = useState<OpenTaskRow[]>([]);
+  const [mySystems, setMySystems] = useState<MySystemRow[]>([]);
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
   const [assessmentsFailed, setAssessmentsFailed] = useState(false);
   const [users, setUsers] = useState<UserSummary[]>([]);
@@ -72,28 +51,27 @@ export default function TaskView() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   useEffect(() => {
-    // Keep the page resilient: /me/open-tasks is the page's success condition,
-    // while assessments only enrich the stage column + supply the id the quick-
-    // open needs. A failed assessments fetch must not blank the whole task list
-    // — but we DO track the failure (distinct from "this system has no
-    // assessment yet") so we can warn the user honestly, since without it a row
-    // click silently lands on the system instead of the questionnaire.
+    // /me/open-tasks + /me/systems are the page's success condition; a failed
+    // assessments fetch only costs the stage column + quick-open id, so keep it
+    // resilient but track the failure to warn the user honestly (see notice).
     let assessmentsOk = true;
     Promise.all([
       api.myOpenTasks(),
+      api.mySystems().catch(() => [] as MySystemRow[]),
       api.allAssessments().catch(() => {
         assessmentsOk = false;
         return [] as AssessmentSummary[];
       }),
       api.allUsers().catch(() => [] as UserSummary[]),
     ])
-      .then(([tasks, allAssessments, allUsers]) => {
+      .then(([tasks, systems, allAssessments, allUsers]) => {
         // assigned + required only; review tasks belong to the CO queue.
-        setRows(
+        setOpenTasks(
           tasks.filter(
             (t) => t.source === "assigned" || t.source === "required",
           ),
         );
+        setMySystems(systems);
         setAssessments(allAssessments);
         setUsers(allUsers);
         setAssessmentsFailed(!assessmentsOk);
@@ -108,48 +86,56 @@ export default function TaskView() {
     return m;
   }, [users]);
 
-  const latestBySystem = useMemo(
-    () => pickLatestAssessmentPerSystem(assessments),
-    [assessments],
+  // Owner logic, identical to the landing: owned systems become system-level
+  // Start/Continue rows; question rows remain only for non-owned systems.
+  const ownerTasks = useMemo(
+    () => deriveOwnerTasks(mySystems, assessments),
+    [mySystems, assessments],
   );
+  const contributorTasks = useMemo(() => {
+    const ownedIds = new Set(mySystems.map((s) => s.id));
+    return filterContributorTasksForOwner(openTasks, ownedIds);
+  }, [openTasks, mySystems]);
 
-  // Filter options are derived from the rows themselves, so the dropdowns only
-  // ever offer values that actually appear.
+  // Filter options are derived from the rows actually shown (owner + question
+  // rows), so the dropdowns never offer values that aren't present.
   const systemOptions = useMemo(() => {
     const m = new Map<string, string>();
-    for (const r of rows) if (!m.has(r.system_id)) m.set(r.system_id, r.system_name);
+    for (const t of ownerTasks) if (!m.has(t.system_id)) m.set(t.system_id, t.system_name);
+    for (const r of contributorTasks) if (!m.has(r.system_id)) m.set(r.system_id, r.system_name);
     return [...m.entries()]
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [rows]);
+  }, [ownerTasks, contributorTasks]);
 
   const ownerOptions = useMemo(() => {
     const seen = new Set<string>();
     const out: { value: string; label: string }[] = [];
-    for (const r of rows) {
-      const u = r.owner_username;
-      if (!u || seen.has(u)) continue;
+    const add = (u: string | null) => {
+      if (!u || seen.has(u)) return;
       seen.add(u);
       const info = userMap.get(u);
       out.push({ value: u, label: info ? fullName(info, u) : u });
-    }
+    };
+    for (const t of ownerTasks) add(t.owner_username);
+    for (const r of contributorTasks) add(r.owner_username);
     return out.sort((a, b) => a.label.localeCompare(b.label));
-  }, [rows, userMap]);
+  }, [ownerTasks, contributorTasks, userMap]);
 
-  const visibleGroups = useMemo(() => {
-    const filtered = rows.filter((r) => {
-      if (systemSel.size > 0 && !systemSel.has(r.system_id)) return false;
-      if (ownerSel.size > 0 && !(r.owner_username && ownerSel.has(r.owner_username)))
-        return false;
-      return true;
-    });
-    const groups = groupBySystem(filtered);
-    groups.sort((a, b) => {
-      const cmp = a.earliest_assigned_at.localeCompare(b.earliest_assigned_at);
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-    return groups;
-  }, [rows, systemSel, ownerSel, sortDir]);
+  const matches = (systemId: string, owner: string | null) =>
+    (systemSel.size === 0 || systemSel.has(systemId)) &&
+    (ownerSel.size === 0 || (!!owner && ownerSel.has(owner)));
+
+  const filteredOwnerTasks = useMemo(
+    () => ownerTasks.filter((t) => matches(t.system_id, t.owner_username)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ownerTasks, systemSel, ownerSel],
+  );
+  const filteredContributorTasks = useMemo(
+    () => contributorTasks.filter((r) => matches(r.system_id, r.owner_username)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [contributorTasks, systemSel, ownerSel],
+  );
 
   const filtersActive = systemSel.size > 0 || ownerSel.size > 0;
   function resetFilters() {
@@ -175,6 +161,19 @@ export default function TaskView() {
             selected={ownerSel}
             onToggle={(v) => setOwnerSel((s) => toggle(s, v))}
           />
+          <Button
+            variant="outline"
+            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+            title="Sort by assign date"
+            className="gap-1.5 bg-card shadow-sm"
+          >
+            Assign date
+            {sortDir === "asc" ? (
+              <ArrowUp className="size-3.5" />
+            ) : (
+              <ArrowDown className="size-3.5" />
+            )}
+          </Button>
           <Button
             variant="outline"
             onClick={resetFilters}
@@ -205,198 +204,19 @@ export default function TaskView() {
             Failed to load your tasks. Please retry in a moment.
           </div>
         )}
-        {state === "ready" &&
-          (visibleGroups.length === 0 ? (
-            <EmptyState filtersActive={filtersActive} />
-          ) : (
-            <TasksTable
-              groups={visibleGroups}
-              latestBySystem={latestBySystem}
-              userMap={userMap}
-              sortDir={sortDir}
-              onToggleSort={() =>
-                setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-              }
-            />
-          ))}
+        {state === "ready" && (
+          <OpenTasksSection
+            hideHeader
+            sortDir={sortDir}
+            state="ready"
+            rows={filteredContributorTasks}
+            ownerTasks={filteredOwnerTasks}
+            assessments={assessments}
+            userMap={userMap}
+          />
+        )}
       </div>
     </main>
-  );
-}
-
-function TasksTable({
-  groups,
-  latestBySystem,
-  userMap,
-  sortDir,
-  onToggleSort,
-}: {
-  groups: SystemGroup[];
-  latestBySystem: Map<string, AssessmentSummary>;
-  userMap: Map<string, UserSummary>;
-  sortDir: SortDir;
-  onToggleSort: () => void;
-}) {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-xs font-medium text-muted-foreground">
-            <th className="px-4 py-3 text-left">Assigned to you</th>
-            <th className="px-4 py-3 text-left">
-              <SortButton dir={sortDir} onClick={onToggleSort}>
-                Assign date
-              </SortButton>
-            </th>
-            <th className="px-4 py-3 text-left">AI System</th>
-            <th className="px-4 py-3 text-left">Owner</th>
-            <th className="px-4 py-3 text-left">Assessment stage</th>
-            <th className="w-16 px-4 py-3 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map((g) => (
-            <TaskRow
-              key={g.system_id}
-              group={g}
-              latestAssessment={latestBySystem.get(g.system_id) ?? null}
-              userMap={userMap}
-            />
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function TaskRow({
-  group,
-  latestAssessment,
-  userMap,
-}: {
-  group: SystemGroup;
-  latestAssessment: AssessmentSummary | null;
-  userMap: Map<string, UserSummary>;
-}) {
-  function openSystem() {
-    sessionStorage.setItem("lastSystemPath", `/systems/${group.system_id}`);
-    navigateTo("/home/ai-system-registry", REGISTRY_URL);
-  }
-  // Open the questionnaire so the user can answer. `fromDelegate` bypasses the
-  // technical-pending gate for per-question delegates (any `assigned` row in
-  // the group); section owners are the assignee anyway. No assessment yet →
-  // fall back to the system detail.
-  function openQuestions() {
-    if (!latestAssessment) {
-      openSystem();
-      return;
-    }
-    localStorage.setItem(
-      "compliance.viewSystem",
-      JSON.stringify({ systemId: group.system_id, systemName: group.system_name }),
-    );
-    localStorage.setItem(
-      "compliance.openAssessment",
-      JSON.stringify({
-        assessmentId: latestAssessment.id,
-        questionnaire: true,
-        fromDelegate: group.questions.some((q) => q.source === "assigned"),
-      }),
-    );
-    navigateTo("/home/assessments", COMPLIANCE_URL);
-  }
-  function openAssessment() {
-    if (!latestAssessment) {
-      openSystem();
-      return;
-    }
-    localStorage.setItem(
-      "compliance.viewSystem",
-      JSON.stringify({ systemId: group.system_id, systemName: group.system_name }),
-    );
-    localStorage.setItem(
-      "compliance.openAssessment",
-      JSON.stringify({ assessmentId: latestAssessment.id }),
-    );
-    navigateTo("/home/assessments", COMPLIANCE_URL);
-  }
-
-  const label = formatQuestionLabels(group.questions);
-  const full = group.questions
-    .map((q) => `${formatQuestionNumber(q.question_key)} · ${q.question_label}`)
-    .join(" · ");
-  const ownerInfo = group.owner_username
-    ? userMap.get(group.owner_username)
-    : undefined;
-
-  return (
-    <tr className="border-b border-border last:border-b-0">
-      <td className="max-w-[320px] px-4 py-3">
-        <button
-          type="button"
-          onClick={openQuestions}
-          className="block w-full truncate text-left font-medium text-foreground underline underline-offset-2"
-          title={full}
-        >
-          {label}
-        </button>
-      </td>
-      <td className="px-4 py-3 text-muted-foreground">
-        {formatRelativeDate(group.earliest_assigned_at)}
-      </td>
-      <td className="px-4 py-3">
-        <button
-          type="button"
-          onClick={openSystem}
-          className="flex flex-col items-start text-left"
-        >
-          <span
-            className="truncate font-medium text-foreground underline underline-offset-2"
-            title={group.system_name}
-          >
-            {group.system_name}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {group.system_id} · v{group.system_version}
-          </span>
-        </button>
-      </td>
-      <td className="px-4 py-3">
-        {group.owner_username ? (
-          <div className="flex items-center gap-2">
-            <InitialsAvatar
-              username={group.owner_username}
-              firstName={ownerInfo?.firstName}
-              lastName={ownerInfo?.lastName}
-              size="sm"
-            />
-            <span className="text-foreground">
-              {ownerInfo ? fullName(ownerInfo, group.owner_username) : group.owner_username}
-            </span>
-          </div>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
-      </td>
-      <td className="px-4 py-3">
-        <AssessmentStageCell
-          assessment={latestAssessment}
-          workflowStatus={group.workflow_status}
-        />
-      </td>
-      <td className="px-4 py-3 text-right">
-        <Button
-          variant="outline"
-          size="icon"
-          className="size-8"
-          onClick={openAssessment}
-          aria-label={`Open assessment for ${group.system_name}`}
-          title={latestAssessment ? "Open assessment" : "View system detail"}
-        >
-          <Eye className="size-4" />
-        </Button>
-      </td>
-    </tr>
   );
 }
 
@@ -418,7 +238,7 @@ function FilterDropdown({
           {label} <ChevronDown className="opacity-60" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
+      <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
         {options.length === 0 ? (
           <div className="px-2 py-1.5 text-sm text-muted-foreground">
             No options
@@ -440,48 +260,6 @@ function FilterDropdown({
   );
 }
 
-function SortButton({
-  dir,
-  onClick,
-  children,
-}: {
-  dir: SortDir;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  const Icon = dir === "asc" ? ArrowUp : ArrowDown;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-    >
-      {children}
-      <Icon className="size-3" />
-    </button>
-  );
-}
-
-function EmptyState({ filtersActive }: { filtersActive: boolean }) {
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-12 text-center">
-      <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <Inbox className="size-5" />
-      </span>
-      <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-semibold text-foreground">
-          {filtersActive ? "No tasks match these filters" : "No tasks assigned to you"}
-        </h3>
-        <p className="max-w-md text-xs text-muted-foreground">
-          {filtersActive
-            ? "Try clearing the AI-system or owner filters."
-            : "When a question in an AI System assessment is assigned to you, or a section you own still has open questions, it'll appear here."}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function TableSkeleton() {
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -498,38 +276,7 @@ function TableSkeleton() {
   );
 }
 
-// ── grouping + small helpers ─────────────────────────────────────────────────
-
-function groupBySystem(rows: OpenTaskRow[]): SystemGroup[] {
-  const map = new Map<string, SystemGroup>();
-  for (const row of rows) {
-    const existing = map.get(row.system_id);
-    if (existing) {
-      existing.questions.push(row);
-      if (row.assigned_at < existing.earliest_assigned_at) {
-        existing.earliest_assigned_at = row.assigned_at;
-      }
-    } else {
-      map.set(row.system_id, {
-        system_id: row.system_id,
-        system_name: row.system_name,
-        system_version: row.system_version,
-        workflow_status: row.workflow_status,
-        owner_username: row.owner_username,
-        questions: [row],
-        earliest_assigned_at: row.assigned_at,
-      });
-    }
-  }
-  // Order each group's questions by questionnaire order so the preview reads
-  // "Q2, Q4, Q7" rather than in assignment order.
-  for (const g of map.values()) {
-    g.questions.sort(
-      (a, b) => questionIndex(a.question_key) - questionIndex(b.question_key),
-    );
-  }
-  return [...map.values()];
-}
+// ── small helpers ───────────────────────────────────────────────────────────
 
 function fullName(u: UserSummary, fallback: string): string {
   return `${u.firstName} ${u.lastName}`.trim() || fallback;
@@ -551,57 +298,4 @@ function filterLabel(
   if (sel.size === 1)
     return options.find((o) => o.value === [...sel][0])?.label ?? defaultLabel;
   return `${defaultLabel} (${sel.size})`;
-}
-
-function formatQuestionLabels(questions: OpenTaskRow[]): string {
-  if (questions.length === 1) {
-    const q = questions[0];
-    return `${formatQuestionNumber(q.question_key)} · ${q.question_label}`;
-  }
-  // Multiple: compact "Q2, Q4, Q7…".
-  return `${questions.map((q) => formatQuestionNumber(q.question_key)).join(", ")}…`;
-}
-
-// Ordered question keys mirror the registry questionnaire — a deliberate
-// duplication of OpenTasksSection's list (and the backend's REQUIRED_*). A key
-// missing here just renders as "Q?", which degrades gracefully.
-const QUESTION_ORDER: readonly string[] = [
-  "submission_type",
-  "use_case_owner",
-  "use_case_type",
-  "department",
-  "technologies",
-  "use_case_status",
-  "use_case",
-  "planned_modifications",
-  "exception_category",
-  "sector_legislation",
-  "data_and_inputs",
-  "decision_domain",
-  "automation_and_oversight",
-  "affected_people",
-  "model_nature",
-  "user_interaction",
-  "prohibited_practices",
-];
-
-function questionIndex(key: string): number {
-  const i = QUESTION_ORDER.indexOf(key);
-  return i === -1 ? Number.MAX_SAFE_INTEGER : i;
-}
-
-function formatQuestionNumber(key: string): string {
-  const i = QUESTION_ORDER.indexOf(key);
-  return i === -1 ? "Q?" : `Q${i + 1}`;
-}
-
-function formatRelativeDate(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "—";
-  const diffDays = Math.floor((Date.now() - then) / (1000 * 60 * 60 * 24));
-  if (diffDays <= 0) return "today";
-  if (diffDays === 1) return "1 day ago";
-  if (diffDays < 30) return `${diffDays} days ago`;
-  const months = Math.floor(diffDays / 30);
-  return months === 1 ? "1 month ago" : `${months} months ago`;
 }

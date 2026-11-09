@@ -39,6 +39,12 @@ interface OpenTasksSectionProps {
   ownerTasks: OwnerTaskRow[];
   assessments: AssessmentSummary[];
   userMap: Map<string, UserSummary>;
+  // Task View reuses this table on its own page: it supplies its own "Task
+  // View" heading (hideHeader) and an external assign-date sort control
+  // (sortDir). Both default to the landing's behaviour so the landing is
+  // untouched.
+  hideHeader?: boolean;
+  sortDir?: "asc" | "desc";
 }
 
 export function OpenTasksSection({
@@ -47,6 +53,8 @@ export function OpenTasksSection({
   ownerTasks,
   assessments,
   userMap,
+  hideHeader = false,
+  sortDir = "desc",
 }: OpenTasksSectionProps) {
   const latestBySystem = useMemo(
     () => pickLatestAssessmentPerSystem(assessments),
@@ -59,6 +67,14 @@ export function OpenTasksSection({
   }, [assessments]);
 
   const groups = groupBySystem(rows);
+  groups.sort((a, b) => {
+    const c = a.earliest_assigned_at.localeCompare(b.earliest_assigned_at);
+    return sortDir === "asc" ? c : -c;
+  });
+  const sortedOwnerTasks = [...ownerTasks].sort((a, b) => {
+    const c = a.assigned_at.localeCompare(b.assigned_at);
+    return sortDir === "asc" ? c : -c;
+  });
   const totalQuestions = rows.length;
   const totalOwnerTasks = ownerTasks.length;
   const totalSystems = groups.length + totalOwnerTasks;
@@ -66,18 +82,20 @@ export function OpenTasksSection({
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold text-foreground">Open Tasks</h2>
-        <span className="text-xs text-muted-foreground">
-          {state === "ready" && hasAnything
-            ? formatSummary(totalSystems, totalQuestions)
-            : "No open tasks"}
-        </span>
-      </div>
+      {!hideHeader && (
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold text-foreground">Open Tasks</h2>
+          <span className="text-xs text-muted-foreground">
+            {state === "ready" && hasAnything
+              ? formatSummary(totalSystems, totalQuestions)
+              : "No open tasks"}
+          </span>
+        </div>
+      )}
       {state === "ready" && hasAnything ? (
         <TasksTable
           groups={groups}
-          ownerTasks={ownerTasks}
+          ownerTasks={sortedOwnerTasks}
           latestBySystem={latestBySystem}
           assessmentsById={assessmentsById}
           userMap={userMap}
