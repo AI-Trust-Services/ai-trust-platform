@@ -7,45 +7,45 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_READ
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
-from ai_trust_persistence.models.assessment import Assessment
-from ai_trust_persistence.models.question_assignment import QuestionAssignment
-from app.questionnaire_required import (
-    QUESTION_LABEL,
-    missing_business_keys,
-    missing_technical_keys,
-)
+from ai_trust_persistence.models.question_state import QuestionState
+from app.questionnaire_required import QUESTION_LABEL
 
 router = APIRouter(tags=["me"])
 logger = get_logger(__name__)
 
 
 class OpenTaskRow(BaseModel):
-    """One unanswered questionnaire question the user is responsible for.
+    """One actionable item for the current user on the Landing Zone.
 
-    Two sources, same shape:
-      * **required** — the question is required for the current section
-        (business/technical) and still unanswered, and the user is the
-        section-assignee while the workflow is in a state that expects that
-        section (`business_pending`, `technical_pending`, or `info_requested`
-        with the matching `info_requested_section`). The system cannot
-        progress until these are filled.
-      * **assigned** — an explicit per-question delegation via
-        `POST /workflow/question-assign`. `assignment_id` and
-        `assigned_by_username` are set.
+    Two sources, same row shape:
+      * **assigned** — a per-question delegation in the single-page assessment:
+        a ``question_states`` row whose ``assignee_username`` is the user and
+        that is not yet confirmed (``confirmed_at IS NULL``). ``assignment_id``
+        carries the QuestionState id; ``question_key`` the question.
+      * **review** — an AI system awaiting this user's compliance review
+        (``compliance_officer_username == user`` and
+        ``workflow_status == "pending_review"``). Carries ``tier`` + the two
+        Art. 50 flags + ``planned_rollout_date`` for the CO landing's
+        "Ready for review" table.
+
+    (The pre-#358 ``required`` section-assignee source is gone: the single-page
+    assessment replaced the two-phase business/technical workflow, so there is
+    no section-pending state to derive it from. An owner's "complete the
+    assessment" task is surfaced by the landing from ``/me/systems`` instead.)
     """
 
-    source: str  # "required" | "assigned" | "review"
+    source: str  # "assigned" | "review"
     system_id: str
     system_name: str
     system_version: str
-    section: str  # business | technical | review
+    section: str  # "" for assigned, "review" for review (kept for frontend shape)
     workflow_status: Optional[str]
     question_key: str
     question_label: str
@@ -53,10 +53,6 @@ class OpenTaskRow(BaseModel):
     assigned_by_username: Optional[str] = None
     owner_username: Optional[str] = None
     assignment_id: Optional[str] = None
-    # Populated for `review` rows only — the CO landing's "Ready for review"
-    # table needs the system's EU AI Act tier (+ the two Art. 50 flags to
-    # re-derive the stacked "Transparency Obligations" label) and planned
-    # rollout date without a second join from the frontend.
     tier: Optional[str] = None
     is_chatbot: Optional[bool] = None
     generates_synthetic_content: Optional[bool] = None
@@ -67,38 +63,69 @@ def _current_user(request: Request) -> str:
     return request.headers.get("x-forwarded-preferred-username", "unknown")
 
 
-def _active_section(status: str, info_requested_section: str | None) -> str | None:
-    """Return the section currently blocking progression, or None."""
-    if status == "business_pending":
-        return "business"
-    if status == "technical_pending":
-        return "technical"
-    if status == "info_requested":
-        return info_requested_section
-    return None
-
-
 @router.get(
     "/me/open-tasks",
     response_model=list[OpenTaskRow],
     dependencies=[Depends(require_permission(SYSTEMS_READ))],
 )
 async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
-    """Required + explicitly-assigned questions open for the current user."""
+    """Per-question assignments + compliance reviews open for the current user."""
     user = _current_user(request)
     tasks: list[OpenTaskRow] = []
 
     async with SessionLocal() as session:
-        # Required-but-unanswered questions on systems where this user is the
-        # active section-assignee.
-        system_rows = (
+        # Per-question delegations: question_states assigned to this user and not
+        # yet confirmed (confirmed ⇒ done). One task per open question.
+        assigned_rows = (
+            await session.execute(
+                select(
+                    QuestionState,
+                    AISystem.name,
+                    AISystem.version,
+                    AISystem.workflow_status,
+                    AISystem.business_owners,
+                )
+                .join(AISystem, AISystem.id == QuestionState.system_id)
+                .where(
+                    QuestionState.assignee_username == user,
+                    QuestionState.confirmed_at.is_(None),
+                )
+            )
+        ).all()
+
+        for (
+            qs,
+            system_name,
+            system_version,
+            workflow_status,
+            business_owners,
+        ) in assigned_rows:
+            tasks.append(
+                OpenTaskRow(
+                    source="assigned",
+                    system_id=qs.system_id,
+                    system_name=system_name,
+                    system_version=system_version,
+                    section="",
+                    workflow_status=workflow_status,
+                    question_key=qs.question_key,
+                    question_label=QUESTION_LABEL.get(qs.question_key, qs.question_key),
+                    assigned_at=qs.assigned_at or qs.created_at,
+                    assigned_by_username=qs.assigned_by_username,
+                    owner_username=business_owners,
+                    assignment_id=qs.id,
+                )
+            )
+
+        # AI systems awaiting this user's compliance review. The CO is otherwise
+        # invisible to Open Tasks (not a per-question assignee) — one row per
+        # system currently in pending_review.
+        review_rows = (
             (
                 await session.execute(
                     select(AISystem).where(
-                        or_(
-                            AISystem.business_assignee_username == user,
-                            AISystem.technical_assignee_username == user,
-                        )
+                        AISystem.compliance_officer_username == user,
+                        AISystem.workflow_status == "pending_review",
                     )
                 )
             )
@@ -106,172 +133,24 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
             .all()
         )
 
-        # Keys currently delegated to a per-question assignee. The
-        # questionnaire disables these for the section-assignee, so they must
-        # not surface as required owner-tasks (would duplicate the delegate's
-        # assigned task and point to a locked question). Scoped to this user's
-        # systems — a platform-wide scan would load every open delegation in
-        # the org just to look up keys for these few systems.
-        delegated_keys: dict[tuple[str, str], set[str]] = {}
-        system_ids = [row.id for row in system_rows]
-        if system_ids:
-            delegation_rows = (
-                await session.execute(
-                    select(
-                        QuestionAssignment.system_id,
-                        QuestionAssignment.section,
-                        QuestionAssignment.question_key,
-                    ).where(
-                        QuestionAssignment.answered_at.is_(None),
-                        QuestionAssignment.system_id.in_(system_ids),
-                    )
-                )
-            ).all()
-            for sys_id, sec, key in delegation_rows:
-                delegated_keys.setdefault((sys_id, sec), set()).add(key)
-
-        for row in system_rows:
-            section = _active_section(row.workflow_status, row.info_requested_section)
-            if section == "business" and row.business_assignee_username == user:
-                missing_keys = missing_business_keys(row)
-            elif section == "technical" and row.technical_assignee_username == user:
-                missing_keys = missing_technical_keys(row)
-            else:
-                continue
-            delegated = delegated_keys.get((row.id, section), set())
-            missing_keys = [k for k in missing_keys if k not in delegated]
-
-            for key in missing_keys:
-                tasks.append(
-                    OpenTaskRow(
-                        source="required",
-                        system_id=row.id,
-                        system_name=row.name,
-                        system_version=row.version,
-                        section=section,
-                        workflow_status=row.workflow_status,
-                        question_key=key,
-                        question_label=QUESTION_LABEL.get(key, key),
-                        assigned_at=row.updated_at or row.created_at,
-                        assigned_by_username=row.business_owners or None,
-                        owner_username=row.business_owners,
-                    )
-                )
-
-        # Explicit per-question assignments. We filter on `answered_at IS NULL`
-        # in SQL but still need the row's workflow state to decide whether the
-        # section is actually editable — a lingering open assignment on a
-        # section the workflow has already moved past is unactionable and
-        # must not surface as a task.
-        question_rows = (
-            await session.execute(
-                select(
-                    QuestionAssignment,
-                    AISystem.name,
-                    AISystem.version,
-                    AISystem.workflow_status,
-                    AISystem.business_owners,
-                    AISystem.info_requested_section,
-                )
-                .join(AISystem, AISystem.id == QuestionAssignment.system_id)
-                .where(
-                    QuestionAssignment.assignee_username == user,
-                    QuestionAssignment.answered_at.is_(None),
-                )
-            )
-        ).all()
-
-        for (
-            qa,
-            system_name,
-            system_version,
-            workflow_status,
-            business_owners,
-            info_requested_section,
-        ) in question_rows:
-            # Suppress tasks for sections that are not currently editable:
-            # only the active section (business_pending → business,
-            # technical_pending → technical, info_requested → the bounced
-            # section) can be answered. Any other workflow state locks the
-            # whole questionnaire.
-            if _active_section(workflow_status, info_requested_section) != qa.section:
-                continue
-            tasks.append(
-                OpenTaskRow(
-                    source="assigned",
-                    system_id=qa.system_id,
-                    system_name=system_name,
-                    system_version=system_version,
-                    section=qa.section,
-                    workflow_status=workflow_status,
-                    question_key=qa.question_key,
-                    question_label=QUESTION_LABEL.get(qa.question_key, qa.question_key),
-                    assigned_at=qa.assigned_at,
-                    assigned_by_username=qa.assigned_by_username,
-                    owner_username=business_owners,
-                    assignment_id=qa.id,
-                )
-            )
-
-        # Compliance assessments awaiting review by the current user when
-        # assigned as the system's compliance officer. The CO is otherwise
-        # invisible to Open Tasks since they are not a section-assignee and
-        # cannot be a per-question delegate (separation of duties). One row
-        # per assessment — a system can legitimately have several assessments
-        # (e.g. an approved one plus a newer pending_review), and the overview
-        # groups by assessment so each shows the right stage.
-        review_rows = (
-            await session.execute(
-                select(
-                    Assessment,
-                    AISystem.name,
-                    AISystem.version,
-                    AISystem.workflow_status,
-                    AISystem.business_owners,
-                    AISystem.tier,
-                    AISystem.is_chatbot,
-                    AISystem.generates_synthetic_content,
-                    AISystem.planned_rollout_date,
-                )
-                .join(AISystem, AISystem.id == Assessment.ai_system_id)
-                .where(
-                    AISystem.compliance_officer_username == user,
-                    Assessment.status.in_(
-                        ["submitted", "under_review", "pending_review"]
-                    ),
-                )
-            )
-        ).all()
-
-        for (
-            assessment,
-            system_name,
-            system_version,
-            workflow_status,
-            business_owners,
-            tier,
-            is_chatbot,
-            generates_synthetic_content,
-            planned_rollout_date,
-        ) in review_rows:
+        for row in review_rows:
             tasks.append(
                 OpenTaskRow(
                     source="review",
-                    system_id=assessment.ai_system_id,
-                    system_name=system_name,
-                    system_version=system_version,
+                    system_id=row.id,
+                    system_name=row.name,
+                    system_version=row.version,
                     section="review",
-                    workflow_status=workflow_status,
+                    workflow_status=row.workflow_status,
                     question_key="assessment_review",
-                    question_label=f"Review assessment: {assessment.title}",
-                    assigned_at=assessment.updated_at or assessment.created_at,
-                    assigned_by_username=business_owners,
-                    owner_username=business_owners,
-                    assignment_id=assessment.id,
-                    tier=tier,
-                    is_chatbot=bool(is_chatbot),
-                    generates_synthetic_content=bool(generates_synthetic_content),
-                    planned_rollout_date=planned_rollout_date,
+                    question_label=f"Review assessment: {row.name}",
+                    assigned_at=row.updated_at or row.created_at,
+                    assigned_by_username=row.business_owners,
+                    owner_username=row.business_owners,
+                    tier=row.tier,
+                    is_chatbot=bool(row.is_chatbot),
+                    generates_synthetic_content=bool(row.generates_synthetic_content),
+                    planned_rollout_date=row.planned_rollout_date,
                 )
             )
 

@@ -3,7 +3,6 @@ import { Eye, Inbox, Play, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { navigateTo } from "../../hooks/useLuigi";
 import {
-  COMPLIANCE_URL,
   REGISTRY_URL,
   type AssessmentSummary,
   type OpenTaskRow,
@@ -159,28 +158,15 @@ function OwnerRow({
     sessionStorage.setItem("lastSystemPath", `/systems/${task.system_id}`);
     navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
-  // "Start" opens the compliance Create-Assessment modal, pre-filled with the
-  // owned system. "Continue" deep-links into the latest assessment detail.
+  // Both "Start" and "Continue" land in the registry's single-page assessment
+  // app; its start page decides new-vs-continue. (Replaces the old compliance
+  // Create-Assessment modal / questionnaire handoff, removed in #358.)
   function handlePrimary() {
-    if (task.kind === "start") {
-      localStorage.setItem(
-        "compliance.pendingAssessment",
-        JSON.stringify({ systemId: task.system_id }),
-      );
-      navigateTo("/home/assessments", COMPLIANCE_URL);
-      return;
-    }
-    localStorage.setItem(
-      "compliance.viewSystem",
-      JSON.stringify({ systemId: task.system_id, systemName: task.system_name }),
+    sessionStorage.setItem(
+      "lastSystemPath",
+      `/systems/${task.system_id}/assessment`,
     );
-    if (task.latest_assessment) {
-      localStorage.setItem(
-        "compliance.openAssessment",
-        JSON.stringify({ assessmentId: task.latest_assessment.id }),
-      );
-    }
-    navigateTo("/home/assessments", COMPLIANCE_URL);
+    navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
 
   const label =
@@ -277,77 +263,27 @@ function TaskRow({
     sessionStorage.setItem("lastSystemPath", `/systems/${group.system_id}`);
     navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
-  // Jump the user straight to where they can act on the open task.
-  //   - CO review task → compliance assessment detail (approval view)
-  //   - section-assignee task → compliance questionnaire modal (answering view)
-  // Both targets live in the compliance MFE; the registry questionnaire is
-  // wrapped by compliance's QuestionnaireSection, not the registry UI.
+  // Jump the user into the registry's single-page assessment app (replaces the
+  // old compliance questionnaire modal / assessment detail, removed in #358).
+  //   - a per-question task → deep-link to that exact question (.../q/:key)
+  //   - a review task → the assessment overview, where the CO reviews/raises issues
+  const assessmentBase = `/systems/${group.system_id}/assessment`;
+  function goToRegistry(path: string) {
+    sessionStorage.setItem("lastSystemPath", path);
+    navigateTo("/home/ai-system-registry", REGISTRY_URL);
+  }
   function openQuestions() {
-    if (group.is_review && group.review_assessment_id) {
-      localStorage.setItem(
-        "compliance.viewSystem",
-        JSON.stringify({ systemId: group.system_id, systemName: group.system_name }),
-      );
-      localStorage.setItem(
-        "compliance.openAssessment",
-        JSON.stringify({ assessmentId: group.review_assessment_id }),
-      );
-      navigateTo("/home/assessments", COMPLIANCE_URL);
+    if (group.is_review) {
+      goToRegistry(assessmentBase);
       return;
     }
-    if (!latestAssessment) {
-      // No assessment yet → nothing to answer in compliance; drop the user on
-      // the system detail so they can see what's going on.
-      openSystem();
-      return;
-    }
-    localStorage.setItem(
-      "compliance.viewSystem",
-      JSON.stringify({ systemId: group.system_id, systemName: group.system_name }),
-    );
-    // `questionnaire: true` tells AssessmentsPage to auto-open the
-    // questionnaire modal (not just the read-only detail side-panel).
-    // `fromDelegate: true` when any task in the group is a per-question
-    // delegation bypasses the technical-pending gate that otherwise rejects
-    // anyone other than the technical section assignee — delegates are
-    // allowed to answer their specific question.
-    const fromDelegate = group.questions.some((q) => q.source === "assigned");
-    localStorage.setItem(
-      "compliance.openAssessment",
-      JSON.stringify({
-        assessmentId: latestAssessment.id,
-        questionnaire: true,
-        fromDelegate,
-      }),
-    );
-    navigateTo("/home/assessments", COMPLIANCE_URL);
+    // Land on the first open question in the group; the app can page through
+    // the rest from there.
+    const firstKey = group.questions[0]?.question_key;
+    goToRegistry(firstKey ? `${assessmentBase}/q/${firstKey}` : assessmentBase);
   }
   function openAssessment() {
-    if (group.is_review && group.review_assessment_id) {
-      localStorage.setItem(
-        "compliance.viewSystem",
-        JSON.stringify({ systemId: group.system_id, systemName: group.system_name }),
-      );
-      localStorage.setItem(
-        "compliance.openAssessment",
-        JSON.stringify({ assessmentId: group.review_assessment_id }),
-      );
-      navigateTo("/home/assessments", COMPLIANCE_URL);
-      return;
-    }
-    if (!latestAssessment) {
-      openSystem();
-      return;
-    }
-    localStorage.setItem(
-      "compliance.viewSystem",
-      JSON.stringify({ systemId: group.system_id, systemName: group.system_name }),
-    );
-    localStorage.setItem(
-      "compliance.openAssessment",
-      JSON.stringify({ assessmentId: latestAssessment.id }),
-    );
-    navigateTo("/home/assessments", COMPLIANCE_URL);
+    goToRegistry(assessmentBase);
   }
 
   const labels = formatTaskLabel(group);

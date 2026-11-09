@@ -9,7 +9,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { navigateTo } from "../../hooks/useLuigi";
 import {
-  COMPLIANCE_URL,
   REGISTRY_URL,
   type AssessmentSummary,
   type MySystemRow,
@@ -117,19 +116,15 @@ function SystemRowView({
     sessionStorage.setItem("lastSystemPath", `/systems/${system.id}`);
     navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
-  // Jump straight to the latest assessment detail. Only enabled when one
-  // exists; the extra `openAssessment` key tells compliance to open it.
+  // Open the system's assessment in the registry single-page app (replaces the
+  // old compliance assessment-detail handoff, removed in #358).
   function openLatestAssessment() {
     if (!latestAssessment) return;
-    localStorage.setItem(
-      "compliance.viewSystem",
-      JSON.stringify({ systemId: system.id, systemName: system.name }),
+    sessionStorage.setItem(
+      "lastSystemPath",
+      `/systems/${system.id}/assessment`,
     );
-    localStorage.setItem(
-      "compliance.openAssessment",
-      JSON.stringify({ assessmentId: latestAssessment.id }),
-    );
-    navigateTo("/home/assessments", COMPLIANCE_URL);
+    navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
 
   const team = teamMembers(system);
