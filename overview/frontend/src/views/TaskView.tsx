@@ -160,12 +160,7 @@ export default function TaskView() {
   return (
     <main className="min-h-screen bg-[#f6f7fb]">
       <div className="flex w-full max-w-[1600px] flex-col gap-6 px-4 py-8">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-semibold tracking-[-0.02em]">Task View</h1>
-          <p className="text-sm text-muted-foreground">
-            Every assessment question assigned to you, grouped by AI system.
-          </p>
-        </div>
+        <h1 className="text-3xl font-semibold tracking-[-0.02em]">Task View</h1>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
           <FilterDropdown
