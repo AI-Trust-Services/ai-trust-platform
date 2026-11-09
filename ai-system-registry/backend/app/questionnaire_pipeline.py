@@ -352,20 +352,28 @@ async def run_pipeline_sequential(
             extra={"system_id": system_id},
         )
 
-    # 4. Split then run SEQUENTIALLY so partial results land in DB between batches.
+    # 4. Split and run PARALLEL — all independent dependency groups fire at once.
+    # Each batch calls batch_callback as soon as it finishes so partial results
+    # land in the DB and are visible via polling before the slowest batch completes.
     batches = _split_by_dependency_groups(questionnaire)
     logger.info(
-        "questionnaire_pipeline.batched_sequential",
+        "questionnaire_pipeline.batched_parallel",
         extra={"system_id": system_id, "batches": len(batches)},
     )
 
-    merged: list[dict] = []
-    for idx, batch in enumerate(batches):
-        batch_results = await _run_batch(
+    async def _run_and_callback(idx: int, batch: dict) -> list[dict]:
+        results = await _run_batch(
             batch, system_prompt, registration_evidence, rag_chunks, idx
         )
-        merged.extend(batch_results)
-        await batch_callback(batch_results)
+        await batch_callback(results)
+        return results
+
+    batch_results_list = await asyncio.gather(
+        *[_run_and_callback(idx, batch) for idx, batch in enumerate(batches)]
+    )
+    merged: list[dict] = []
+    for br in batch_results_list:
+        merged.extend(br)
 
     result = {"results": merged}
 
