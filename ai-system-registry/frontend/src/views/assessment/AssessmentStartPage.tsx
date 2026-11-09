@@ -51,7 +51,7 @@ export default function AssessmentStartPage() {
       {state.prefill_pending && (
         <div className="mt-4 flex items-center gap-2 rounded-xl border border-[#e0a008]/40 bg-[#fffbeb] px-5 py-3 text-sm text-[#854d0e]">
           <Loader2 className="size-4 shrink-0 animate-spin" />
-          <span>AI is generating answers — this classification will update when all batches complete</span>
+          <span>AI is generating answers based on uploaded system data</span>
         </div>
       )}
 
@@ -84,7 +84,7 @@ export default function AssessmentStartPage() {
               key={t.key}
               className={
                 "rounded-md border px-3 py-2 text-center text-sm " +
-                (t.key === active
+                (!state.prefill_pending && t.key === active
                   ? "border-[#1147E9] font-semibold text-[#1147E9]"
                   : "border-border text-muted-foreground")
               }

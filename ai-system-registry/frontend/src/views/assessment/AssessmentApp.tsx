@@ -165,12 +165,6 @@ export default function AssessmentApp() {
   return (
     <Ctx.Provider value={{ state, reload, savedAt, markSaved, basePath }}>
       <div className="flex h-full flex-col">
-        {state.prefill_pending && (
-          <div className="flex shrink-0 items-center gap-2 border-b border-[#e0a008]/40 bg-[#fffbeb] px-6 py-2 text-sm text-[#854d0e]">
-            <Loader2 className="size-4 animate-spin" />
-            <span>AI is reviewing your documents — answers will appear as they are ready</span>
-          </div>
-        )}
         {state.prefill_failed && (
           <div className="flex shrink-0 items-center gap-2 border-b border-[#fca5a5]/40 bg-[#fef2f2] px-6 py-2 text-sm text-[#991b1b]">
             <span>AI pre-fill failed. Reload the page or start the assessment again to retry.</span>
