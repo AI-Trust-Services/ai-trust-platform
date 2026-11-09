@@ -325,6 +325,50 @@ All other config lives in `k8s/env/<cluster>/.env` (committed). No per-cluster G
 5. Add `<cluster-name>` to the `options` list in the `build-push-deploy.yml` `workflow_dispatch` input for `gardener_cluster`, and add the matching `k8s/env/<cluster-name>/.env` entry for `integration-tests.yml`
 6. Trigger `build-push-deploy.yml` with `gardener_cluster=<cluster-name>`
 
+## Operational runbooks (Gardener)
+
+### OCM registry CA renewal — deploy pipeline breaks every ~90 days
+
+**Symptom:** the `Deploy to cluster` step in the main deployment workflow times out after 15 minutes with:
+
+```
+Ready=True but lastAppliedRevision=0.0.0-ai-trust-main-<old> does not yet contain <new> — still waiting...
+```
+
+`kubectl get ocirepository -n ocm-system` shows:
+
+```
+NAME               READY   STATUS
+ai-trust-ai-trust  False   failed to determine artifact digest: ... x509: certificate signed by unknown authority
+```
+
+**Root cause:** `ocm controller install` creates a self-signed CA (`ocm-issuer` ClusterIssuer → `ocm-registry-certificate` Certificate → `ocm-registry-tls-certs` Secret) that cert-manager automatically renews every ~90 days. When it renews, cert-manager writes a **new CA keypair** into the secret. Kubernetes updates the volume-mount files in the `registry` pod, but the Docker Distribution registry process never hot-reloads its TLS cert — it keeps serving the old cert. Meanwhile, `ocm-controller` and Flux's `source-controller` eventually read the new CA from the secret and reject the registry's old cert, breaking the entire OCM → Flux → HelmRelease pipeline.
+
+**Fix (one-time, after each renewal):**
+
+```bash
+export KUBECONFIG="/path/to/kubeconfig-<shoot>.yaml"
+# Restart the registry so it serves the newly-issued cert
+kubectl rollout restart deployment/registry -n ocm-system
+kubectl rollout status deployment/registry -n ocm-system --timeout=120s
+# Restart both controllers so they re-read the CA from the secret
+kubectl rollout restart deployment/ocm-controller -n ocm-system
+kubectl rollout restart deployment/source-controller -n flux-system
+kubectl rollout status deployment/ocm-controller -n ocm-system --timeout=120s
+kubectl rollout status deployment/source-controller -n flux-system --timeout=120s
+```
+
+Then re-trigger the deployment workflow. Recovery takes ~2 minutes once all three pods are running.
+
+**Automated mitigation:** the `apply-to-cluster` composite action detects the x509 error on OCM Resources and OCIRepositories at deploy time and performs the rollout restarts automatically, so deployments self-heal after the first one that encounters the renewed cert.
+
+**Check certificate status / next renewal date:**
+
+```bash
+kubectl get certificate ocm-registry-certificate -n ocm-system \
+  -o jsonpath='{.status.notAfter}{"\n"}{.status.renewalTime}{"\n"}'
+```
+
 ## Known limitations / gaps (local kind scope)
 
 - Single-node only for kind: `postgres-data`, `clickhouse-data`, and `minio-data`
