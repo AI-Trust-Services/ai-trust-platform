@@ -6,6 +6,7 @@ import type {
   RegisterSystemInput, IndexedDocument, AssessmentRow,
   ComplianceAssessment, AuditEventListResponse,
   AssessmentState, QuestionState, QuestionComment,
+  AdvisorAnswer,
 } from "../types"
 import type { SectionKey } from "../config/questionnaire";
 
@@ -133,6 +134,16 @@ export const api = {
   getAssessmentState: (systemId: string, assessmentId?: string) =>
     request<AssessmentState>(
       `/systems/${encodeURIComponent(systemId)}/assessment/state${assessmentId ? `?assessment_id=${encodeURIComponent(assessmentId)}` : ""}`,
+    ),
+  // Compliance Advisor — one stateless, grounded chat turn (frontend holds + resends transcript).
+  advisorAsk: (systemId: string, message: string, transcript: ChatMessage[]) =>
+    request<AdvisorAnswer>(
+      `/systems/${encodeURIComponent(systemId)}/advisor/ask`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, transcript }),
+      },
     ),
   saveAnswer: (systemId: string, questionKey: string, answer: string) =>
     request<QuestionState>(
@@ -419,9 +430,15 @@ export const api = {
   historicizeAssessment: (assessmentId: string) =>
     request<null>(`/assessments/${encodeURIComponent(assessmentId)}/historicize`, { method: "POST" }, COMPLIANCE_API_BASE),
 
-  // Presigned download URL from the indexing service (MinIO).
-  getDocumentDownloadUrlIndexed: (documentId: string) =>
-    request<{ url: string }>(`/documents/${encodeURIComponent(documentId)}/download-url`, {}, INDEXING_API_BASE),
+  // Presigned download URL from the indexing service (MinIO). Pass version_id to
+  // open the exact version a retrieval citation came from.
+  getDocumentDownloadUrlIndexed: (documentId: string, versionId?: string) =>
+    request<{ url: string }>(
+      `/documents/${encodeURIComponent(documentId)}/download-url` +
+        (versionId ? `?version_id=${encodeURIComponent(versionId)}` : ""),
+      {},
+      INDEXING_API_BASE,
+    ),
 };
 
 export const auditApi = {
