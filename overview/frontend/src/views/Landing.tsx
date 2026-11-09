@@ -83,6 +83,11 @@ export default function Landing() {
     Promise.all([
       api.myOpenTasks(),
       api.mySystems(),
+      // Pulls up to 500 assessments org-wide and filters client-side by the
+      // user's owned systems to derive each row's stage. Fine at MVP scale;
+      // beyond ~500 assessments an owner's assessment could fall outside the
+      // window and show a stale stage. Revisit with a scoped /me/assessments
+      // endpoint (or per-system ?ai_system_id= fetches) if that becomes real.
       api.allAssessments().catch(() => [] as AssessmentSummary[]),
       api.allUsers().catch(() => [] as UserSummary[]),
     ])

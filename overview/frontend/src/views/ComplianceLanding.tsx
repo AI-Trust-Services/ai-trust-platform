@@ -46,6 +46,8 @@ export default function ComplianceLanding({
   useEffect(() => {
     Promise.all([
       api.myOpenTasks(),
+      // Fetch 5 but RecentSystemsPanel renders only the first 3 — the small
+      // buffer lets the panel drop malformed/odd rows without going short.
       api.recentSystems(5).catch(() => [] as RecentSystemRow[]),
       api.allUsers().catch(() => [] as UserSummary[]),
     ])
