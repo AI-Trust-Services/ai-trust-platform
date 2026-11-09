@@ -26,6 +26,7 @@ from app.advisor.agent import (
     AdvisorDeps,
     AdvisorGuardrailError,
     AdvisorSource,
+    AdvisorUpstreamError,
     ask_advisor,
 )
 
@@ -50,7 +51,6 @@ class AdvisorAskRequest(BaseModel):
 class AdvisorAskResponse(BaseModel):
     answer: str
     sources: list[AdvisorSource]
-    degraded: bool
 
 
 def _bearer_token(request: Request) -> str | None:
@@ -77,7 +77,9 @@ async def advisor_ask(
     """Answer one advisor question, grounded in the system's docs + the EU AI Act.
 
     - 404 if the system is not found.
-    - 502 if the agent trips a guardrail (usage limit / timeout) with no answer.
+    - 429 if the LLM backend is rate-limited (retry shortly).
+    - 502 if the agent trips a guardrail with no answer, or the LLM backend is
+      unavailable.
     """
     # 404-before-work: confirms the system exists (and avoids wasted LLM spend).
     async with SessionLocal() as session:
@@ -98,20 +100,30 @@ async def advisor_ask(
     )
 
     try:
-        answer, degraded = await ask_advisor(
+        answer = await ask_advisor(
             message=body.message,
             deps=deps,
             transcript=[t.model_dump() for t in body.transcript],
         )
+    except AdvisorUpstreamError as exc:
+        # Upstream LLM fault — distinguish a transient throttle (429, client
+        # should back off) from the backend being down (502). Either way it is
+        # not a bug in our code, so never a raw 500.
+        raise HTTPException(
+            status_code=429 if exc.retryable else 502,
+            detail=(
+                "The assistant is briefly rate-limited. Please retry shortly."
+                if exc.retryable
+                else "The assistant is temporarily unavailable. Please try again."
+            ),
+        ) from exc
     except AdvisorGuardrailError as exc:
         raise HTTPException(
             status_code=502,
             detail="The assistant could not complete this request. Please try again.",
         ) from exc
 
-    return AdvisorAskResponse(
-        answer=answer.answer, sources=answer.sources, degraded=degraded
-    )
+    return AdvisorAskResponse(answer=answer.answer, sources=answer.sources)
 
 
 # Re-export for callers/tests that import the output model from the router.

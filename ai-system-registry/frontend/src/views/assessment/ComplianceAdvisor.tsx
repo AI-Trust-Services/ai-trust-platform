@@ -35,7 +35,6 @@ interface Turn {
   role: "user" | "assistant";
   content: string;
   sources?: AdvisorSource[];
-  degraded?: boolean;
 }
 
 // Human-readable "what the advisor is doing" lines, cycled while a turn is in
@@ -152,7 +151,7 @@ export function ComplianceAdvisor({
       const res = await api.advisorAsk(systemId, scoped, transcript);
       setTurns((t) => [
         ...t,
-        { role: "assistant", content: res.answer, sources: res.sources, degraded: res.degraded },
+        { role: "assistant", content: res.answer, sources: res.sources },
       ]);
       requestAnimationFrame(() =>
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }),
@@ -269,11 +268,6 @@ export function ComplianceAdvisor({
               )}
               {turn.role === "assistant" && turn.sources && turn.sources.length === 0 && (
                 <p className="text-xs italic text-muted-foreground">No grounding sources found.</p>
-              )}
-              {turn.degraded && (
-                <p className="text-xs italic text-[var(--warning-fg,#b57e00)]">
-                  Answer may be incomplete.
-                </p>
               )}
             </div>
           ))}

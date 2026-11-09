@@ -378,7 +378,6 @@ export interface AdvisorSource {
 export interface AdvisorAnswer {
   answer: string;
   sources: AdvisorSource[];
-  degraded: boolean;
 }
 
 export interface RationaleItem {

@@ -35,7 +35,11 @@ import httpx
 from ai_trust_logging import get_logger
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext, UsageLimits
-from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.exceptions import (
+    ModelAPIError,
+    ModelRateLimitError,
+    UsageLimitExceeded,
+)
 
 from app.llm import client as llm_client
 from app.llm.templates import load_template
@@ -85,6 +89,23 @@ def _tracing_on() -> bool:
 
 class AdvisorGuardrailError(Exception):
     """A guardrail tripped (usage limit or timeout). Router maps to 502."""
+
+
+class AdvisorUpstreamError(Exception):
+    """The LLM backend (Thalamus) was unavailable or rate-limited.
+
+    Distinct from ``AdvisorGuardrailError`` (our own usage/timeout caps): this
+    is an *upstream* fault surfaced by PydanticAI (``ModelAPIError`` and
+    subclasses). Kept framework-agnostic — the router owns the HTTP mapping,
+    mirroring ``AdvisorGuardrailError``. ``retryable`` is ``True`` for a rate
+    limit (client should back off → 429) and ``False`` for a connection/HTTP
+    fault (upstream is down → 502), so a caller can tell "LLM is briefly
+    throttled" from "LLM is down" from "our code is broken" (a real 500).
+    """
+
+    def __init__(self, message: str, *, retryable: bool) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 # ---------------------------------------------------------------------------
@@ -389,12 +410,13 @@ async def ask_advisor(
     message: str,
     deps: AdvisorDeps,
     transcript: list[dict] | None = None,
-) -> tuple[AdvisorAnswer, bool]:
-    """Run one advisor turn. Returns ``(answer, degraded)``.
+) -> AdvisorAnswer:
+    """Run one advisor turn. Returns the grounded answer.
 
-    ``degraded`` is ``True`` when a guardrail trimmed the run but a usable answer
-    was still produced. A guardrail that produces no answer raises
-    ``AdvisorGuardrailError`` (router → 502).
+    A guardrail that produces no answer raises ``AdvisorGuardrailError`` (router
+    → 502); an upstream LLM fault raises ``AdvisorUpstreamError`` (router → 429
+    rate-limited / 502 unavailable). There is no partial-answer path — a tripped
+    guardrail always raises rather than returning a trimmed answer.
 
     ``transcript`` is the prior conversation (``[{role, content}, …]``); it is
     prepended to the current message as context (stateless — the frontend holds
@@ -421,6 +443,22 @@ async def ask_advisor(
                 extra={"system_id": deps.system_id, "error": str(exc)},
             )
             raise AdvisorGuardrailError(str(exc)) from exc
+        except ModelRateLimitError as exc:
+            logger.warning(
+                "advisor.upstream_rate_limited",
+                extra={"system_id": deps.system_id, "error": str(exc)},
+            )
+            raise AdvisorUpstreamError(str(exc), retryable=True) from exc
+        except ModelAPIError as exc:
+            # HTTP / connection / timeout / overloaded — any upstream fault.
+            # ModelAPIError is the base of ModelHTTPError, ModelConnectionError,
+            # ModelTimeoutError, etc. in pydantic-ai, so a new subclass can't
+            # silently fall through to a raw 500.
+            logger.error(
+                "advisor.upstream_unavailable",
+                extra={"system_id": deps.system_id, "error": str(exc)},
+            )
+            raise AdvisorUpstreamError(str(exc), retryable=False) from exc
 
         usage = result.usage
         logger.info(
@@ -437,7 +475,7 @@ async def ask_advisor(
 
     output = await _run_traced(_run, message=message, deps=deps)
     _filter_and_resolve_sources(output, deps)
-    return output, False
+    return output
 
 
 def _filter_and_resolve_sources(answer: AdvisorAnswer, deps: AdvisorDeps) -> None:

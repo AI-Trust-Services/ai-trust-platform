@@ -43,7 +43,6 @@ async def test_ask_returns_grounded_answer(client: httpx.AsyncClient):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["answer"]  # non-empty
-    assert body["degraded"] is False
     # In stub/CI mode neither downstream tool is reachable (RAG matches nothing;
     # cognee returns no evidence → act_grounded False), so the server-side
     # grounding filter correctly drops the stub's unverified document + act
