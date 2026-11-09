@@ -1,0 +1,104 @@
+name: Mirror Cognee Graph Image
+description: >-
+  Ensures the cognee-graph snapshot image for COGNEE_GRAPH_TAG exists in this
+  repo's own GHCR package, mirroring it from ai-test-lab if needed, so the
+  existing read-only init container / pull secrets keep pulling from
+  ghcr.io/<owner>/ai-trust-platform unchanged.
+
+# Reads COGNEE_GRAPH_TAG from the target cluster's env file (the tag an operator
+# set after ai-test-lab published a new graph). First checks whether that tag
+# already exists in ai-trust-platform's own package (e.g. a prior run already
+# mirrored it) and reuses it directly if so. Otherwise pulls the tag from
+# ai-test-lab's package (this repo's workflows are granted read access to it),
+# re-tags and pushes it into ai-trust-platform's own package. Either way it
+# outputs the resulting @sha256-pinned image ref for the Flux valuesFrom wiring
+# (see apply-to-cluster/action.yml, bootstrap.sh, k8s/ocm/manifests.yaml).
+#
+# If COGNEE_GRAPH_TAG is unset/blank (no graph published/configured yet for this
+# cluster), this action skips the mirror entirely rather than failing the
+# deployment — cogneeEval.graphImage then falls back to the chart's committed
+# default (see values.yaml).
+
+inputs:
+  cluster:
+    description: "Target cluster name (must match a directory under k8s/env/)"
+    required: true
+  owner:
+    description: "Lowercase GitHub repository owner"
+    required: true
+
+outputs:
+  cognee_graph_image:
+    description: "Digest-pinned ghcr.io/<owner>/ai-trust-platform/cognee-graph@sha256:<digest> ref, or empty if skipped"
+    value: ${{ steps.mirror.outputs.cognee_graph_image }}
+  skipped:
+    description: "\"true\" if no COGNEE_GRAPH_TAG was configured for this cluster and the mirror was skipped"
+    value: ${{ steps.mirror.outputs.skipped }}
+
+runs:
+  using: composite
+  steps:
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+
+    - name: Mirror cognee-graph tag from ai-test-lab
+      id: mirror
+      shell: bash
+      env:
+        OWNER: ${{ inputs.owner }}
+        CLUSTER: ${{ inputs.cluster }}
+      run: |
+        set -euo pipefail
+
+        ENV_FILE="k8s/env/${CLUSTER}/.env"
+        if [[ ! -f "$ENV_FILE" ]]; then
+          echo "error: $ENV_FILE not found" >&2
+          exit 1
+        fi
+
+        # Extract COGNEE_GRAPH_TAG without sourcing the whole file (it may
+        # reference ${NAMESPACE}, which isn't resolved here and isn't needed
+        # for this plain tag value).
+        GRAPH_TAG="$(grep -E '^COGNEE_GRAPH_TAG=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '\r' || true)"
+
+        if [[ -z "$GRAPH_TAG" ]]; then
+          echo "COGNEE_GRAPH_TAG not set in ${ENV_FILE} — skipping cognee-graph mirror (chart default graphImage will be used)."
+          echo "cognee_graph_image=" >> "$GITHUB_OUTPUT"
+          echo "skipped=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        SOURCE_IMAGE="ghcr.io/ai-trust-services/ai-test-lab/cognee-graph:${GRAPH_TAG}"
+        DEST_REPO="ghcr.io/${OWNER}/ai-trust-platform/cognee-graph"
+        DEST_IMAGE="${DEST_REPO}:${GRAPH_TAG}"
+
+        # Prefer a tag already mirrored into ai-trust-platform's own package —
+        # avoids re-pulling/re-pushing the (large) graph snapshot on every
+        # deployment once a tag has been mirrored once. `buildx imagetools
+        # inspect` only fetches manifest metadata, not image layers.
+        if docker buildx imagetools inspect "$DEST_IMAGE" >/dev/null 2>&1; then
+          echo "${DEST_IMAGE} already exists — reusing it (no mirror needed)."
+        else
+          echo "${DEST_IMAGE} not found — mirroring from ${SOURCE_IMAGE}."
+          echo "Pulling ${SOURCE_IMAGE}..."
+          docker pull "$SOURCE_IMAGE"
+          docker tag "$SOURCE_IMAGE" "$DEST_IMAGE"
+          echo "Pushing ${DEST_IMAGE}..."
+          docker push "$DEST_IMAGE"
+        fi
+
+        # Resolve the digest from the destination registry manifest, not local
+        # `docker inspect` — after pulling SOURCE_IMAGE and re-tagging/pushing
+        # it as DEST_IMAGE, the same local image ID carries RepoDigests entries
+        # for *both* repos, and `{{index .RepoDigests 0}}` is not guaranteed to
+        # pick the ai-trust-platform one (the cluster's pull secret can't reach
+        # ai-test-lab's package).
+        MANIFEST_DIGEST="$(docker buildx imagetools inspect "$DEST_IMAGE" --format '{{.Manifest.Digest}}')"
+        DIGEST="${DEST_REPO}@${MANIFEST_DIGEST}"
+        echo "Using image: ${DIGEST}"
+        echo "cognee_graph_image=${DIGEST}" >> "$GITHUB_OUTPUT"
+        echo "skipped=false" >> "$GITHUB_OUTPUT"

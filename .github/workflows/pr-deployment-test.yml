@@ -122,6 +122,13 @@ jobs:
           owner: ${{ steps.vars.outputs.owner }}
           tag: ${{ steps.vars.outputs.tag }}
 
+      - name: Mirror cognee-graph image from ai-test-lab
+        id: mirror-cognee-graph
+        uses: ./.github/actions/mirror-cognee-graph
+        with:
+          cluster: ${{ steps.vars.outputs.cluster }}
+          owner: ${{ steps.vars.outputs.owner }}
+
       - name: Deploy to cluster
         uses: ./.github/actions/apply-to-cluster
         with:
@@ -130,6 +137,7 @@ jobs:
           namespace: ${{ steps.vars.outputs.namespace }}
           github_actor: ${{ github.actor }}
           ghcr_pull_token: ${{ secrets.GHCR_PULL_TOKEN }}
+          cognee_graph_image: ${{ steps.mirror-cognee-graph.outputs.cognee_graph_image }}
           app_admin_password: ${{ secrets.APP_ADMIN_PASSWORD }}
           clickhouse_password: ${{ secrets.CLICKHOUSE_PASSWORD }}
           keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}

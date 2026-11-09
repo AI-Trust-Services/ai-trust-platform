@@ -121,7 +121,10 @@ indexing:
     serviceType: ClusterIP
 
 # Cognee eval — graph-based grounded Q&A over the EU AI Act.
-# Enabled by default with the digest-pinned read-only graph below; uses Thalamus for generation (THALAMUS_* in the Secret).
+# Enabled by default in read-only mode; uses Thalamus for generation (THALAMUS_* in the Secret).
+# graphImage is NOT set here — on Gardener it is injected at deploy time via the
+# COGNEE_GRAPH_IMAGE key in the ai-trust-flux-values-<namespace> Secret (Flux valuesFrom,
+# see k8s/ocm/manifests.yaml). For kind it is set in values-kind.yaml.
 cogneeEval:
   enabled: true
   backendPort: 8014
@@ -132,7 +135,6 @@ cogneeEval:
   # and no graph mutation is possible. Build/test leaves this false (StatefulSet
   # + PVC, full feedback loop). See cognee-eval/CLAUDE.md.
   readOnly: true
-  graphImage: "ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph@sha256:3b76d89972135d39c15a23492003dded854942f2d59926c1384e46fc7e4c380b"
 
 # ── the 7 near-identical backend+frontend MFE pairs ──
 # dependsOnJobs: Job names that must Complete before this backend starts
