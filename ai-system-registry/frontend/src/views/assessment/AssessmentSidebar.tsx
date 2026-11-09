@@ -169,9 +169,7 @@ export function AssessmentSidebar({
                                 ? "text-[#1a5c35]"
                                 : contributorOnly
                                   ? "text-[#b57e00]"
-                                  : showAttention
-                                    ? "text-[#c45000]"
-                                    : "text-muted-foreground",
+                                  : "text-muted-foreground",
                             )}
                           >
                             {statusText}
