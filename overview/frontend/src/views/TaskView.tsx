@@ -61,13 +61,17 @@ export default function TaskView() {
 /**
  * Compliance Officer Task View — mirrors the "Ready for review" queue from the
  * CO landing (`ComplianceLanding`) verbatim: same `ReviewQueueTable`, fed by the
- * `review` source of `/me/open-tasks`. Owner-only filters/sort/refresh controls
- * are intentionally absent so the appearance matches the landing queue exactly.
+ * `review` source of `/me/open-tasks`. Carries the same AI-system / Owner
+ * filters + Refresh (reset) control as the owner view; the ReviewQueueTable
+ * keeps its own column sort.
  */
 function ComplianceTaskView() {
   const [state, setState] = useState<LoadState>("loading");
   const [reviewRows, setReviewRows] = useState<OpenTaskRow[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
+
+  const [systemSel, setSystemSel] = useState<Set<string>>(new Set());
+  const [ownerSel, setOwnerSel] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     Promise.all([
@@ -88,16 +92,82 @@ function ComplianceTaskView() {
     return m;
   }, [users]);
 
+  // Filter options derive from the review rows actually present, so the
+  // dropdowns never offer a system/owner that isn't in the queue.
+  const systemOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of reviewRows)
+      if (!m.has(r.system_id)) m.set(r.system_id, r.system_name);
+    return [...m.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [reviewRows]);
+
+  const ownerOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { value: string; label: string }[] = [];
+    for (const r of reviewRows) {
+      const u = r.owner_username;
+      if (!u || seen.has(u)) continue;
+      seen.add(u);
+      const info = userMap.get(u);
+      out.push({ value: u, label: info ? fullName(info, u) : u });
+    }
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  }, [reviewRows, userMap]);
+
+  const filteredReviewRows = useMemo(
+    () =>
+      reviewRows.filter(
+        (r) =>
+          (systemSel.size === 0 || systemSel.has(r.system_id)) &&
+          (ownerSel.size === 0 ||
+            (!!r.owner_username && ownerSel.has(r.owner_username))),
+      ),
+    [reviewRows, systemSel, ownerSel],
+  );
+
+  const filtersActive = systemSel.size > 0 || ownerSel.size > 0;
+
   return (
     <main className="min-h-screen bg-[#f6f7fb]">
       <div className="flex w-full max-w-[1600px] flex-col gap-6 px-4 py-8">
         <h1 className="text-3xl font-semibold tracking-[-0.02em]">Task View</h1>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <FilterDropdown
+            label={filterLabel("All AI systems", systemSel, systemOptions)}
+            options={systemOptions}
+            selected={systemSel}
+            onToggle={(v) => setSystemSel((s) => toggle(s, v))}
+          />
+          <FilterDropdown
+            label={filterLabel("All owners", ownerSel, ownerOptions)}
+            options={ownerOptions}
+            selected={ownerSel}
+            onToggle={(v) => setOwnerSel((s) => toggle(s, v))}
+          />
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSystemSel(new Set());
+              setOwnerSel(new Set());
+            }}
+            disabled={!filtersActive}
+            title="Reset filters to all values"
+            className="gap-1.5 bg-card shadow-sm"
+          >
+            <RefreshCw className="size-3.5" />
+            Refresh
+          </Button>
+        </div>
+
         {state === "loading" ? (
           <TableSkeleton />
         ) : (
           // A failed fetch degrades to the table's own empty state (never a red
           // banner); the global health banner already signals a down backend.
-          <ReviewQueueTable rows={reviewRows} userMap={userMap} />
+          <ReviewQueueTable rows={filteredReviewRows} userMap={userMap} />
         )}
       </div>
     </main>
