@@ -154,7 +154,7 @@ export default function TaskView() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <FilterDropdown
             label={filterLabel("All AI systems", systemSel, systemOptions)}
             options={systemOptions}
@@ -168,15 +168,14 @@ export default function TaskView() {
             onToggle={(v) => setOwnerSel((s) => toggle(s, v))}
           />
           <Button
-            variant="ghost"
-            size="sm"
+            variant="outline"
             onClick={resetFilters}
             disabled={!filtersActive}
-            title="Reset filters"
-            className="gap-1.5 text-muted-foreground"
+            title="Reset filters to all values"
+            className="gap-1.5 bg-card shadow-sm"
           >
             <RotateCcw className="size-3.5" />
-            Reset
+            Refresh
           </Button>
         </div>
 
@@ -395,7 +394,7 @@ function FilterDropdown({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="gap-1">
+        <Button variant="outline" className="gap-1 bg-card shadow-sm">
           {label} <ChevronDown className="opacity-60" />
         </Button>
       </DropdownMenuTrigger>
