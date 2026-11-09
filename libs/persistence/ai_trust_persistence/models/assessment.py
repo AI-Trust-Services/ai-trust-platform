@@ -57,6 +57,10 @@ class Assessment(Base):
     assessment_sources: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     classification_rationale: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
+    # Tracks whether the AI prefill pipeline is running in the background.
+    # "pending" = pipeline running; null = done (or not started); "failed" = errored.
+    llm_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

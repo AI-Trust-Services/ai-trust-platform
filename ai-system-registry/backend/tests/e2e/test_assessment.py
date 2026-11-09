@@ -78,13 +78,20 @@ def _stub_pipeline_minio():
 
 
 async def _open(client: httpx.AsyncClient, system_id: str, user: str = _OWNER):
-    """POST /open (prefills via the questionnaire pipeline on first call for a
-    cycle; a plain read afterwards)."""
+    """POST /open (seeds states + schedules background prefill on first call for a
+    cycle; a plain read afterwards). Then fetches GET /state to return the settled
+    state after the background task has run (ASGI background tasks complete before
+    the next request in the same test client session)."""
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/open", headers=_hdr(user)
     )
     assert r.status_code == 200, r.text
-    return r.json()
+    # Background task ran; fetch settled state.
+    r2 = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(user)
+    )
+    assert r2.status_code == 200, r2.text
+    return r2.json()
 
 
 # ── open / prefill ────────────────────────────────────────────────────────────
@@ -118,20 +125,32 @@ async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClie
 
 
 @pytest.mark.asyncio
-async def test_open_returns_502_when_pipeline_fails(client: httpx.AsyncClient):
-    """A pipeline failure surfaces as 502 and writes nothing (a retry re-runs it)."""
+async def test_open_sets_prefill_failed_when_pipeline_fails(client: httpx.AsyncClient):
+    """A pipeline failure in the background sets prefill_failed=True on the state.
+    A second call to /open retries the pipeline (re-schedules the background task)."""
     system_id = await _create_system(client)
     with patch(
-        "app.routers.assessment.run_pipeline",
+        "app.routers.assessment.run_pipeline_sequential",
         new_callable=AsyncMock,
         side_effect=RuntimeError("llm down"),
     ):
+        # /open always returns 200 now — pipeline errors land in the background.
         r = await client.post(
             f"/v1/systems/{system_id}/assessment/open", headers=_hdr(_OWNER)
         )
-    assert r.status_code == 502, r.text
-    state = await _open(client, system_id)
+    assert r.status_code == 200, r.text
+    # Background task ran (ASGI runs it after response); read settled state.
+    r2 = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    state = r2.json()
     assert state["prefilled"] is True
+    assert state["prefill_failed"] is True
+    assert state["prefill_pending"] is False
+    # Retry: calling /open again clears the failure and re-schedules.
+    state2 = await _open(client, system_id)
+    assert state2["prefilled"] is True
+    assert state2["prefill_failed"] is False
 
 
 @pytest.mark.asyncio

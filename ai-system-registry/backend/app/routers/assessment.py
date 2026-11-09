@@ -46,7 +46,7 @@ from app.assessment_catalogue import (
 from app.classifier import classify_ai_questionnaire
 from app.ids import new_id
 from app.llm import LLMParseError
-from app.questionnaire_pipeline import run_pipeline
+from app.questionnaire_pipeline import run_pipeline, run_pipeline_sequential
 from app.questionnaire_required import QUESTION_LABEL
 from app.schemas.assessment import (
     AnswerRequest,
@@ -357,6 +357,105 @@ async def _ensure_assessment(session, row: AISystem) -> Assessment:
 # ── open / prefill ─────────────────────────────────────────────────────────
 
 
+async def _run_prefill_background(
+    system_id: str,
+    assessment_id: str,
+    username: str,
+) -> None:
+    """Background task: run the questionnaire-answer pipeline sequentially,
+    writing each batch's answers into question_states as they arrive, then
+    classify and clear ``assessment.llm_status``.
+
+    Each batch is one LLM call covering a connected dependency group. After
+    each call we flush its answers to the DB so the frontend can poll
+    GET /state and see them before all batches are done.
+    """
+
+    async def _on_batch(batch_results: list) -> None:
+        """Persist one batch's answers into the existing question_states rows."""
+        proposals = _proposals_from_results(batch_results)
+        if not proposals:
+            return
+        async with SessionLocal() as session:
+            row = await _get_system(session, system_id)
+            answers = _answer_store(row)
+            states = await _states_by_key(session, assessment_id)
+            for q_key, prop in proposals.items():
+                ans = prop["answer"]
+                if not ans:
+                    continue
+                answers = _write_answer(row, answers, q_key, ans)
+                st = states.get(q_key)
+                if st is not None:
+                    st.answer = ans
+                    st.ai_original_answer = ans
+                    st.confidence = prop["confidence"]
+                    st.ai_references = prop["references"] or None
+                    st.ai_explanation = prop["explanation"] or None
+            row.questionnaire_answers = answers
+            await session.commit()
+            logger.info(
+                "assessment.prefill_batch_applied",
+                extra={
+                    "system_id": system_id,
+                    "assessment_id": assessment_id,
+                    "questions": len(proposals),
+                },
+            )
+
+    try:
+        output = await run_pipeline_sequential(
+            system_id=system_id,
+            questionnaire_id=_QUESTIONNAIRE_ID,
+            prompt_id=_QUESTIONNAIRE_PROMPT_ID,
+            username=username,
+            batch_callback=_on_batch,
+        )
+        proposals = _proposals_from_results(
+            (output.get("result") or {}).get("results") or []
+        )
+
+        # Classify and clear llm_status in one transaction.
+        async with SessionLocal() as session:
+            row = await _get_system(session, system_id)
+            try:
+                classification, rationale = await classify_ai_questionnaire(row)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("assessment.classify_failed", extra={"error": str(exc)})
+                assessment = await _current_assessment(session, system_id)
+                if assessment:
+                    assessment.llm_status = "failed"
+                await session.commit()
+                return
+            row.tier = classification.tier
+            row.basis = classification.basis
+            row.annex_iii_area = classification.annex_iii_area
+            row.classification_rationale = rationale
+            if rationale.get("org_role"):
+                row.org_role = rationale["org_role"]
+            row.assessment_sources = [
+                s.model_dump() for s in _sources_from_proposals(proposals)
+            ]
+            assessment = await _current_assessment(session, system_id)
+            if assessment:
+                assessment.llm_status = None
+            await session.commit()
+            logger.info(
+                "assessment.prefill_completed",
+                extra={"system_id": system_id, "tier": row.tier},
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "assessment.prefill_background_failed",
+            extra={"system_id": system_id, "error": str(exc)},
+        )
+        async with SessionLocal() as session:
+            assessment = await _current_assessment(session, system_id)
+            if assessment:
+                assessment.llm_status = "failed"
+            await session.commit()
+
+
 @router.post(
     "/systems/{system_id}/assessment/open",
     response_model=AssessmentStateResponse,
@@ -364,93 +463,73 @@ async def _ensure_assessment(session, row: AISystem) -> Assessment:
 async def open_assessment(
     system_id: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     _: str = Depends(require_permission(SYSTEMS_WRITE)),
 ):
-    """Lazily prefill + classify on first open; return cached state thereafter.
+    """Seed blank question states immediately and return; the AI prefill runs in
+    the background.
 
-    The questionnaire-answer pipeline (``run_pipeline``: registration data + RAG
-    evidence, ai-questionnaire.json) proposes an answer, confidence, explanation
-    and evidence references per question, then the deterministic classifier
-    derives the tier. Seeds this cycle's ``question_states`` (all unconfirmed) and
-    persists answers. Any pipeline/classifier failure → 502 and nothing is
-    written. Idempotent: once ``question_states`` rows exist, this is a plain
-    read."""
+    On first open: seeds all question_states (blank answers, low confidence, all
+    unconfirmed), marks ``assessment.llm_status = "pending"``, then schedules
+    ``_run_prefill_background`` as a FastAPI background task (fires after the HTTP
+    response is sent). Returns the blank state immediately with
+    ``prefill_pending=True`` so the client can start polling GET /state.
+
+    Idempotent: if question_states already exist (even with llm_status=pending from
+    a prior open), returns the current state without re-seeding or re-running.
+    """
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)
-        # Resolve (or create) the current assessment cycle FIRST — its id is the
-        # scope for this cycle's question_states. A new cycle (after the prior was
-        # historicized → inactive) yields a fresh Assessment with no states, so
-        # the prefill below runs again for the blank cycle.
         assessment = await _ensure_assessment(session, row)
         existing = await _states_by_key(session, assessment.id)
         if existing:
-            await session.commit()
+            # Retry after a background failure: clear llm_status and re-schedule.
+            if assessment.llm_status == "failed":
+                assessment.llm_status = "pending"
+                await session.commit()
+                background_tasks.add_task(
+                    _run_prefill_background,
+                    system_id,
+                    assessment.id,
+                    _current_user(request),
+                )
+            else:
+                await session.commit()
             return await _build_state(session, row, _current_user(request), assessment)
 
-        # ── prefill pass (questionnaire-answer pipeline: registration data + RAG
-        # evidence → one LLM run per dependency group → per-question answers) ──
-        try:
-            output = await run_pipeline(
-                system_id=system_id,
-                questionnaire_id=_QUESTIONNAIRE_ID,
-                prompt_id=_QUESTIONNAIRE_PROMPT_ID,
-                username=_current_user(request),
-            )
-            proposals = _proposals_from_results(
-                (output.get("result") or {}).get("results") or []
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.error("assessment.prefill_failed", extra={"error": str(exc)})
-            raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
-
-        answers = _answer_store(row)
+        # Seed all question_states blank — answers arrive via the background task.
         for q_key in ASSESSMENT_QUESTION_KEYS:
-            proposal = proposals.get(q_key)
-            ans = proposal["answer"] if proposal else None
-            if ans:
-                answers = _write_answer(row, answers, q_key, ans)
-            # Seeded UNCONFIRMED for every confidence band: the owner reviews and
-            # confirms each question (the submit gate is owner-confirmed on all).
             session.add(
                 QuestionState(
                     id=new_id("QST"),
                     assessment_id=assessment.id,
                     system_id=system_id,
                     question_key=q_key,
-                    answer=ans,
+                    answer=None,
                     answer_source="ai_prefilled",
-                    ai_original_answer=ans,
-                    confidence=proposal["confidence"] if proposal else "low",
-                    ai_references=proposal["references"] if proposal else None,
-                    ai_explanation=proposal["explanation"] if proposal else None,
+                    ai_original_answer=None,
+                    confidence="low",
+                    ai_references=None,
+                    ai_explanation=None,
                 )
             )
-        row.questionnaire_answers = answers
-
-        # ── classification (tier) — deterministic over the LLM-inferred flags ──
-        try:
-            classification, rationale = await classify_ai_questionnaire(row)
-        except (LLMParseError, Exception) as exc:  # noqa: BLE001
-            logger.error("assessment.classify_failed", extra={"error": str(exc)})
-            raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
-        row.tier = classification.tier
-        row.basis = classification.basis
-        row.annex_iii_area = classification.annex_iii_area
-        row.classification_rationale = rationale
-        if rationale.get("org_role"):
-            row.org_role = rationale["org_role"]
-        # Persist the source documents cited by the answers' evidence references,
-        # so the start page / CO panel can list what informed the assessment.
-        row.assessment_sources = [
-            s.model_dump() for s in _sources_from_proposals(proposals)
-        ]
-
+        assessment.llm_status = "pending"
         await session.commit()
         logger.info(
             "assessment.opened",
-            extra={"system_id": system_id, "tier": row.tier},
+            extra={"system_id": system_id, "prefill": "background"},
         )
+
+    background_tasks.add_task(
+        _run_prefill_background,
+        system_id,
+        assessment.id,
+        _current_user(request),
+    )
+
+    async with SessionLocal() as session:
         row = await _get_system(session, system_id)
+        assessment = await _current_assessment(session, system_id)
         return await _build_state(session, row, _current_user(request), assessment)
 
 
@@ -498,6 +577,10 @@ async def _build_state(
         # Per-question edit right for the requesting user — only meaningful while
         # the assessment is editable (current cycle, not locked/approved).
         can_edit = editable and (user is not None and _may_edit(row, st, user))
+        # llm_pending: the background prefill is still running and this specific
+        # question has not yet received an AI answer. Once the batch covering this
+        # question completes, answer is written and llm_pending flips to False.
+        llm_pending = assessment.llm_status == "pending" and not ans
         questions.append(
             QuestionStateResponse(
                 question_key=q_key,
@@ -513,6 +596,7 @@ async def _build_state(
                 can_edit=can_edit,
                 ai_references=(st.ai_references or []) if st else [],
                 ai_explanation=st.ai_explanation if st else None,
+                llm_pending=llm_pending,
             )
         )
 
@@ -587,6 +671,8 @@ async def _build_state(
         questions=questions,
         contributors=contributor_refs,
         prefilled=bool(states),
+        prefill_pending=assessment.llm_status == "pending",
+        prefill_failed=assessment.llm_status == "failed",
     )
 
 
@@ -1313,6 +1399,7 @@ async def reject_assessment(
 async def start_new_assessment(
     system_id: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     _: str = Depends(require_permission(SYSTEMS_WRITE)),
 ):
     """Begin a fresh assessment cycle on an already-approved system.
@@ -1338,7 +1425,7 @@ async def start_new_assessment(
         if current is None or current.status != "approved":
             # Nothing to archive — fall through to opening the current (or a
             # freshly-ensured) cycle. Point "Start new" at the in-progress one.
-            return await open_assessment(system_id, request)
+            return await open_assessment(system_id, request, background_tasks)
         # Archive the approved cycle (frozen; its states/comments stay attached).
         current.status = "inactive"
         current.updated_at = datetime.now(timezone.utc)
@@ -1369,4 +1456,4 @@ async def start_new_assessment(
     logger.info("assessment.restarted", extra={"system_id": system_id, "by": user})
     # Delegate to the normal open path — now that no non-inactive assessment
     # exists, it creates a fresh questionnaire_pending cycle and seeds blank states.
-    return await open_assessment(system_id, request)
+    return await open_assessment(system_id, request, background_tasks)

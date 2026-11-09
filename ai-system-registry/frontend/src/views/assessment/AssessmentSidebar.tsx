@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router";
-import { CheckCircle2, Circle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, Loader2 } from "lucide-react";
 import type { AssessmentState, QuestionState } from "../../types";
 import { AI_SECTIONS, ORDERED_QUESTION_IDS, QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
 import { TierBadge } from "../../components/Badges";
@@ -120,11 +120,15 @@ export function AssessmentSidebar({
                   // Confirmed by a contributor but not yet by the owner — progress,
                   // but still needs the owner's confirmation before submit.
                   const contributorOnly = q?.confirmed && !ownerConfirmed;
+                  const needsAttention = q?.needs_attention && !ownerConfirmed;
+                  const llmPending = q?.llm_pending;
                   const statusText = ownerConfirmed
                     ? "Complete"
                     : contributorOnly
                       ? "Confirmed by contributor"
-                      : "Incomplete";
+                      : llmPending
+                        ? "Waiting for AI…"
+                        : "Incomplete";
                   return (
                     <li key={key}>
                       <Link
@@ -136,6 +140,8 @@ export function AssessmentSidebar({
                       >
                         {ownerConfirmed ? (
                           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#1a5c35]" />
+                        ) : llmPending ? (
+                          <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
                         ) : (
                           <Circle
                             className={cn(
@@ -144,8 +150,13 @@ export function AssessmentSidebar({
                             )}
                           />
                         )}
-                        <span className="flex flex-col">
-                          <span className="line-clamp-2">{QUESTION_LABELS[key] ?? key}</span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="flex items-center gap-1.5 leading-snug">
+                            <span className="line-clamp-2">{QUESTION_LABELS[key] ?? key}</span>
+                            {needsAttention && !llmPending && (
+                              <AlertTriangle className="size-3 shrink-0 text-[#c45000]" />
+                            )}
+                          </span>
                           <span
                             className={cn(
                               "text-xs",
@@ -153,7 +164,9 @@ export function AssessmentSidebar({
                                 ? "text-[#1a5c35]"
                                 : contributorOnly
                                   ? "text-[#b57e00]"
-                                  : "text-muted-foreground",
+                                  : needsAttention && !llmPending
+                                    ? "text-[#c45000]"
+                                    : "text-muted-foreground",
                             )}
                           >
                             {statusText}

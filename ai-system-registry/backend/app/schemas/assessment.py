@@ -59,6 +59,10 @@ class QuestionStateResponse(BaseModel):
     # Evidence references and explanation from the questionnaire-run pipeline.
     ai_references: list[dict] = []
     ai_explanation: str | None = None
+    # True while the background prefill pipeline is running and this question has
+    # not yet received an AI answer. Clears automatically once the batch that
+    # covers this question completes.
+    llm_pending: bool = False
 
 
 class AnswerRequest(BaseModel):
@@ -190,6 +194,11 @@ class AssessmentStateResponse(BaseModel):
     # Whether a prefill pass has already run (so the client knows to show results
     # vs. trigger /open).
     prefilled: bool = False
+    # True while the background prefill pipeline is still running — the client
+    # should poll GET /state every few seconds until this flips to false.
+    prefill_pending: bool = False
+    # True if the background pipeline failed — client may retry by calling /open again.
+    prefill_failed: bool = False
 
 
 class SubmitRequest(BaseModel):

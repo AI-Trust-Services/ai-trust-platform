@@ -125,6 +125,9 @@ export interface QuestionState {
     quote?: string | null;
   }>;
   ai_explanation: string | null;
+  // True while the background prefill pipeline is running and this question
+  // has not yet received an AI answer. Clears when the batch covering it completes.
+  llm_pending: boolean;
 }
 
 export interface ConfidenceCounts {
@@ -171,6 +174,10 @@ export interface AssessmentState {
   questions: QuestionState[];
   contributors: ContributorRef[];
   prefilled: boolean;
+  // True while the background prefill pipeline is still running.
+  prefill_pending: boolean;
+  // True if the background pipeline failed — user may retry via /open.
+  prefill_failed: boolean;
 }
 
 export interface QuestionComment {
