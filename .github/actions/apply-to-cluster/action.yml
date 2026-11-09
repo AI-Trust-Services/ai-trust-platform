@@ -254,16 +254,20 @@ runs:
         envsubst '${OCM_VERSION} ${NAMESPACE}' < k8s/ocm/manifests.yaml | kubectl apply -f -
         echo "Applied OCM CRs with ComponentVersion pinned to ${OCM_VERSION} in namespace ${NAMESPACE}"
 
-    - name: Remediate OCM controller and Flux source-controller after cert renewal
+    - name: Remediate OCM registry after cert renewal
       shell: bash
       run: |
         # cert-manager auto-renews the OCM registry's self-signed CA (ocm-registry-certificate)
-        # roughly every 90 days. The new CA keypair lands in ocm-registry-tls-certs but both
-        # ocm-controller and Flux's source-controller cache the CA at startup — so they reject
-        # the registry's new TLS cert with "x509: certificate signed by unknown authority".
-        # This manifests as GetResourceFailed on OCM Resources and as a failed OCIRepository,
-        # both of which block the HelmRelease from picking up any new chart version.
-        # Detect the error on either surface and roll both controllers.
+        # roughly every 90 days. The new CA keypair is written to ocm-registry-tls-certs, and
+        # Kubernetes updates the volume-mount files in the registry pod automatically — but the
+        # Docker Distribution registry process loaded the cert at startup and never hot-reloads
+        # it. So after renewal the registry keeps serving the OLD cert while all consumers
+        # (ocm-controller, Flux source-controller) read the NEW CA from the secret, causing
+        # "x509: certificate signed by unknown authority" on every TLS handshake.
+        #
+        # Fix: restart registry (serves new cert), ocm-controller, and source-controller so all
+        # three agree on the same CA. Detect the condition by checking for TLS errors on OCM
+        # Resources or OCIRepositories before taking action.
         OCM_TLS_ERR=$(kubectl get resource -n ocm-system -o json 2>/dev/null \
           | jq -r '.items[].status.conditions[]? | select(.type=="Ready" and .status=="False") | .message' \
           | grep -i "x509\|certificate signed by unknown authority\|tls:" || true)
@@ -271,17 +275,19 @@ runs:
           | jq -r '.items[].status.conditions[]? | select(.type=="Ready" and .status=="False") | .message' \
           | grep -i "x509\|certificate signed by unknown authority\|tls:" || true)
         if [[ -n "$OCM_TLS_ERR" || -n "$FLUX_TLS_ERR" ]]; then
-          echo "TLS cert mismatch detected after CA renewal — restarting ocm-controller and source-controller..."
+          echo "TLS cert mismatch detected after CA renewal — restarting registry, ocm-controller, and source-controller..."
           [[ -n "$OCM_TLS_ERR" ]]  && echo "OCM Resource error:     $OCM_TLS_ERR"
           [[ -n "$FLUX_TLS_ERR" ]] && echo "OCIRepository error:    $FLUX_TLS_ERR"
+          kubectl rollout restart deployment/registry -n ocm-system
           kubectl rollout restart deployment/ocm-controller -n ocm-system
           kubectl rollout restart deployment/source-controller -n flux-system
+          kubectl rollout status deployment/registry -n ocm-system --timeout=120s
           kubectl rollout status deployment/ocm-controller -n ocm-system --timeout=120s
           kubectl rollout status deployment/source-controller -n flux-system --timeout=120s
-          echo "Controllers restarted — waiting 15s for reconcile loops to resume..."
+          echo "All three rolled — waiting 15s for reconcile loops to resume..."
           sleep 15
         else
-          echo "No TLS errors detected on OCM Resources or OCIRepositories — skipping controller restarts."
+          echo "No TLS errors detected on OCM Resources or OCIRepositories — skipping restarts."
         fi
 
     - name: Remediate stalled HelmRelease
