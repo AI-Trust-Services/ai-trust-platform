@@ -17,9 +17,10 @@ export const ORDERED_QUESTION_KEYS = ORDERED_QUESTION_IDS;
  * band (green/amber/red), matching the start-page confidence bar. Unknown ⇒ amber. */
 function segmentColor(s?: QuestionState): string {
   if (s?.owner_confirmed) return "bg-[#1a9d5c]";
-  if (s?.confidence === "high") return "bg-[#1a9d5c]";
-  if (s?.confidence === "medium") return "bg-[#e0a008]";
-  if (s?.confidence === "low") return "bg-[#d14343]";
+  if (!s?.answer) return "bg-[var(--border)]";
+  if (s.confidence === "high") return "bg-[#1a9d5c]";
+  if (s.confidence === "medium") return "bg-[#e0a008]";
+  if (s.confidence === "low") return "bg-[#d14343]";
   return "bg-[#e0a008]";
 }
 
