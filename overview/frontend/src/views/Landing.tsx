@@ -141,6 +141,14 @@ export default function Landing() {
     );
   }
 
+  // Owner view: hold the blank placeholder until the open-tasks / my-systems
+  // fetch resolves. Rendering the sections while still loading would flash
+  // their "No tasks / No systems yet" empty states before the hero curtain or
+  // the populated tables appear.
+  if (state === "loading") {
+    return <main className="min-h-screen bg-[#f6f7fb]" />;
+  }
+
   if (showHeroCurtain) {
     return (
       <main className="relative min-h-screen overflow-hidden bg-[#f6f7fb]">

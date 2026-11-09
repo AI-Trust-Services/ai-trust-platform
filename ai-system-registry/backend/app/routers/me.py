@@ -109,19 +109,26 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
         # Keys currently delegated to a per-question assignee. The
         # questionnaire disables these for the section-assignee, so they must
         # not surface as required owner-tasks (would duplicate the delegate's
-        # assigned task and point to a locked question).
-        delegation_rows = (
-            await session.execute(
-                select(
-                    QuestionAssignment.system_id,
-                    QuestionAssignment.section,
-                    QuestionAssignment.question_key,
-                ).where(QuestionAssignment.answered_at.is_(None))
-            )
-        ).all()
+        # assigned task and point to a locked question). Scoped to this user's
+        # systems — a platform-wide scan would load every open delegation in
+        # the org just to look up keys for these few systems.
         delegated_keys: dict[tuple[str, str], set[str]] = {}
-        for sys_id, sec, key in delegation_rows:
-            delegated_keys.setdefault((sys_id, sec), set()).add(key)
+        system_ids = [row.id for row in system_rows]
+        if system_ids:
+            delegation_rows = (
+                await session.execute(
+                    select(
+                        QuestionAssignment.system_id,
+                        QuestionAssignment.section,
+                        QuestionAssignment.question_key,
+                    ).where(
+                        QuestionAssignment.answered_at.is_(None),
+                        QuestionAssignment.system_id.in_(system_ids),
+                    )
+                )
+            ).all()
+            for sys_id, sec, key in delegation_rows:
+                delegated_keys.setdefault((sys_id, sec), set()).add(key)
 
         for row in system_rows:
             section = _active_section(row.workflow_status, row.info_requested_section)

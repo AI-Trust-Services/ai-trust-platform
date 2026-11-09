@@ -210,9 +210,9 @@ All traffic enters through **oauth2-proxy** at port 8080; nothing else is browse
 
 - **`libs/authorization`** — `require_permission("evidence:approve")` is a `Depends()` that reads `X-Forwarded-Preferred-Username`, calls OpenFGA, returns 403 on denial. **Fails closed.** Permission strings + role definitions live in `ai_trust_authorization.constants` (single source of truth).
 - **`openfga` + `openfga-provision`** — OpenFGA has its own Postgres DB (`openfga`, created by `infra/postgres/init.sh`). Provision (one-shot) creates the store, uploads the model generated from `constants.py`, seeds role→permission tuples, seeds `APP_ADMIN_USERNAME` as Platform Admin, writes the store ID to the `openfga-config` volume. Backends read it from `/config/store_id` at startup (or `OPENFGA_STORE_ID` env var, which takes precedence — used for tests/prod without the volume).
-- **IAM API** (`users` backend, all at `/v1`): `roles.py` (`GET /roles`, dropdown list) · `iam.py` (`GET /iam/roles` with full permission lists) · `permissions.py` (`GET /me/permissions`) · `custom_roles.py` (`GET/POST/PUT/DELETE /iam/custom-roles`) · user management in `users.py` (`GET/POST /users`, `PUT/DELETE /users/{id}/roles/{role}`).
+- **IAM API** (`users` backend, all at `/v1`): `roles.py` (`GET /roles`, dropdown list) · `iam.py` (`GET /iam/roles` with full permission lists) · `permissions.py` (`GET /me/permissions`, `GET /me` — profile + OpenFGA roles) · `organization.py` (`GET /me/organization-contacts` — first Compliance Officer + Platform Admin as contact cards, for the overview Landing Zone) · `custom_roles.py` (`GET/POST/PUT/DELETE /iam/custom-roles`) · user management in `users.py` (`GET/POST /users`, `GET /users/by-role`, `PUT/DELETE /users/{id}/roles/{role}`).
 - **IAM UI** — separate `iam/` MFE at `/iam/`, shown in nav only to users with `iam:manage`.
-- **Built-in roles** — `platform_administrator`, `ai_engineer`, `ai_compliance_officer`, `business_owner`, `auditor`, `executive`. Single-role invariant enforced in `assign_role`.
+- **Built-in roles** — `platform_administrator`, `ai_engineer`, `ai_compliance_officer`, `business_owner`, `auditor`, `executive`. Single-role invariant enforced in `assign_role`. The compliance officer holds `systems:write` (can register/edit systems, not only approve) — per-role permission lists are enumerated only in `ai_trust_authorization.constants.ROLE_PERMISSIONS`.
 - **Service principals** — non-human callers seeded unconditionally (every env, incl. prod) by `openfga-provision` (`seed_service_principals`): `svc-external-api` is a member of `auditor`, forwarded by the registry's external read API (`/v1/external/*`) as `X-Forwarded-Preferred-Username` when it calls document-indexing retrieval on behalf of an off-platform caller.
 - **Custom roles** — stored in Postgres (`custom_roles`, IDs prefixed `ROLE-`), permission tuples in OpenFGA. Deletion order: OpenFGA member tuples → permission tuples → Postgres row.
 - **Permission naming** — `resource:action` (e.g. `systems:read`). OpenFGA relation = `can_` + name with `:` → `_` (e.g. `can_read_systems`); mapping in `RELATION_BY_PERMISSION`. **To add a permission, edit `constants.py` only** — `openfga-provision` regenerates the model from it at startup (re-uploaded only if the store has no model). Never hand-edit an FGA schema file.
@@ -233,7 +233,7 @@ All React frontends (registry, alerts, DTA, compliance, monitoring, users, iam, 
 - **nginx headers** — `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` (required for Luigi iframe embedding).
 - **UI components** — Radix UI primitives + Tailwind CSS 4 (shadcn pattern). Named imports from `@/components/ui/`. Never raw HTML elements where a component exists.
 
-**Exceptions:** Overview is static HTML served by nginx (no build). DTA uses a dev proxy (`vite.config.ts` proxies `/api/*` → `http://localhost:8006`, no local CORS).
+**Exceptions:** DTA uses a dev proxy (`vite.config.ts` proxies `/api/*` → `http://localhost:8006`, no local CORS).
 
 ## Backend stacks
 
