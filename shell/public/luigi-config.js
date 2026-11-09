@@ -49,6 +49,7 @@
   // pathSegment → permissions that make the node visible (ANY of them suffices).
   const PAGE_PERMISSIONS = {
     "overview": ["systems:read", "systems:write", "assessments:read", "assessments:write", "assessments:approve", "evidence:read", "evidence:write", "evidence:approve", "monitoring:read", "alerts:read", "alerts:handle", "alerts:manage_rules", "audit:read"],
+    "task-view": ["systems:read", "systems:write", "assessments:read", "assessments:write", "assessments:approve"],
     "ai-system-registry": ["systems:read", "systems:write"],
     "model-catalog": ["systems:read", "systems:write"],
     // [MVP-off] AI test-bed MFE
@@ -80,6 +81,13 @@
         icon: "home",
         viewUrl: "/overview/",
         navigationContext: "overview",
+      },
+      {
+        pathSegment: "task-view",
+        label: "Task View",
+        icon: "activities",
+        viewUrl: "/overview/#/tasks",
+        navigationContext: "task-view",
       },
       {
         pathSegment: "ai-system-registry",
