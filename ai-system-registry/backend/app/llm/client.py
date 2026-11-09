@@ -113,13 +113,16 @@ async def chat(
         )
         raise
 
-    logger.info(
+    finish_reason = result.get("finish_reason", "stop")
+    log = logger.warning if finish_reason == "length" else logger.info
+    log(
         "llm.request",
         extra={
             "model": model,
             "task": task,
             "input_tokens": result.get("input_tokens", 0),
             "output_tokens": result.get("output_tokens", 0),
+            "finish_reason": finish_reason,
         },
     )
     return result

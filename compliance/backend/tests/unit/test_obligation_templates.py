@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from app.ids import new_id
-from app.obligation_templates import obligations_for
+from ai_trust_persistence.governance.obligation_templates import obligations_for
 
 
 # ---------------------------------------------------------------------------

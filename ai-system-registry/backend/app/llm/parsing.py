@@ -46,8 +46,15 @@ def _extract_json(text: str) -> dict:
     raise json.JSONDecodeError("no JSON object found", candidate, 0)
 
 
-async def parse_json_response(text: str, *, task: str = "parse") -> dict[str, Any]:
-    """Parse ``text`` as a JSON object, with one LLM repair retry on failure."""
+async def parse_json_response(
+    text: str, *, task: str = "parse", max_tokens: int = 1024
+) -> dict[str, Any]:
+    """Parse ``text`` as a JSON object, with one LLM repair retry on failure.
+
+    ``max_tokens`` controls the repair call token limit — callers with large
+    outputs (e.g. the questionnaire pipeline) should pass their own limit so
+    the repair call has enough room to reproduce the full response.
+    """
     try:
         return _extract_json(text)
     except (json.JSONDecodeError, ValueError):
@@ -67,7 +74,10 @@ async def parse_json_response(text: str, *, task: str = "parse") -> dict[str, An
     repaired: dict | None = None
     try:
         repaired = await chat(
-            repair_messages, json_mode=True, task=f"{task}_repair", max_tokens=1024
+            repair_messages,
+            json_mode=True,
+            task=f"{task}_repair",
+            max_tokens=max_tokens,
         )
         return _extract_json(repaired["text"])
     except Exception as exc:

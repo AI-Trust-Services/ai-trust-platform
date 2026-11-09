@@ -11,7 +11,7 @@ from ai_trust_authorization.constants import ASSESSMENTS_READ, ASSESSMENTS_WRITE
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models import Assessment, Obligation, Requirement
-from app.cascade import refresh_assessment_score
+from ai_trust_persistence.governance import refresh_assessment_score
 from app.ids import new_id
 from app.schemas import (
     ObligationCreate,

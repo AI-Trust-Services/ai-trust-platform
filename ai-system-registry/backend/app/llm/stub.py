@@ -11,6 +11,7 @@ their own deterministic sequences.
 from __future__ import annotations
 
 import json
+import re
 
 from app.llm.prompts import REQUIRED_FIELD_KEYS, BUSINESS_QUESTIONNAIRE_KEYS
 from app.classifier import CLASSIFIER_INPUTS
@@ -293,6 +294,95 @@ def _classify_questionnaire(messages: list[dict]) -> dict:
     )
 
 
+def _questionnaire_answer(_messages: list[dict]) -> dict:
+    """Stub for the questionnaire answer pipeline task.
+
+    Returns a minimal valid response matching the output schema defined in the
+    questionnaire_answer prompt: one result for Scope_1 with NOT_ENOUGH_INFORMATION
+    (no evidence available in stub mode).
+    """
+    return _result(
+        json.dumps(
+            {
+                "results": [
+                    {
+                        "questionId": "Scope_1",
+                        "question": "Is your system an AI system within the meaning of the AI Act?",
+                        "questionType": "PREDEFINED",
+                        "answer": [
+                            {
+                                "value": "NOT_ENOUGH_INFORMATION",
+                                "answerStrength": None,
+                                "reason": "No sufficient evidence is available in stub mode to determine whether the system qualifies as an AI system under the AI Act.",
+                            }
+                        ],
+                        "explanation": "Stub mode: no real evidence was evaluated. Human verification required.",
+                        "references": [],
+                    }
+                ]
+            }
+        )
+    )
+
+
+def _assessment_prefill(messages: list[dict]) -> dict:
+    """Deterministic assessment prefill: propose an answer + confidence per question.
+
+    Parses the question keys out of the catalogue block in the system prompt
+    ("<key> — <label>" lines) and emits a stable answer per key so stub/CI runs
+    exercise the confidence bands and the attention count. A constrained question
+    (one whose catalogue entry carries an "Answer with EXACTLY one of: ..." line)
+    is answered with its FIRST allowed option verbatim, so the frontend's
+    exact-match radios select it. A deterministic subset of free-text keys is left
+    low-confidence/empty to represent "not enough information".
+    """
+    system = " ".join(
+        m["content"]
+        for m in messages
+        if m["role"] == "system" and isinstance(m["content"], str)
+    )
+    # Catalogue lines look like: "data_and_inputs — Data & Inputs".
+    keys = re.findall(r"^([a-z_0-9]+) — ", system, flags=re.MULTILINE)
+    # Constrained keys carry a continuation line "Answer with EXACTLY one of: a | b | ...".
+    # Map each such key → its first allowed option (verbatim) so the UI selects it.
+    opts_by_key: dict[str, str] = {}
+    for k, opts in re.findall(
+        r"^([a-z_0-9]+) — .*\n\s*Answer with EXACTLY one of: (.+)$",
+        system,
+        flags=re.MULTILINE,
+    ):
+        opts_by_key[k] = opts.split(" | ")[0].strip()
+    # Free-text keys left empty/low → keeps a non-zero attention count in stub runs.
+    low_keys = {"planned_modifications"}
+    med_keys = {"technologies", "automation_and_oversight"}
+    answers = []
+    for k in keys:
+        if k in opts_by_key:
+            # Constrained (select/boolean) → a valid, UI-selectable option string.
+            answers.append(
+                {"question_key": k, "answer": opts_by_key[k], "confidence": "high"}
+            )
+        elif k in low_keys:
+            answers.append({"question_key": k, "answer": "", "confidence": "low"})
+        elif k in med_keys:
+            answers.append(
+                {
+                    "question_key": k,
+                    "answer": f"Proposed answer for {k} (see documents).",
+                    "confidence": "medium",
+                }
+            )
+        else:
+            answers.append(
+                {
+                    "question_key": k,
+                    "answer": f"Proposed answer for {k} from the uploaded documents.",
+                    "confidence": "high",
+                }
+            )
+    return _result(json.dumps({"answers": answers}))
+
+
 def chat(messages: list[dict], *, task: str = "chat") -> dict:
     """Synchronous stub dispatch, keyed by task."""
     if task == "turn":
@@ -303,11 +393,15 @@ def chat(messages: list[dict], *, task: str = "chat") -> dict:
         return _infer_flags(messages)
     if task == "classify_questionnaire":
         return _classify_questionnaire(messages)
+    if task == "assessment_prefill":
+        return _assessment_prefill(messages)
     if task == "questionnaire_turn_business":
         return _questionnaire_business_turn(messages)
     if task == "questionnaire_turn_technical":
         return _questionnaire_technical_turn(messages)
     if task == "questionnaire_doc_extract":
         return _questionnaire_doc_extract(messages)
+    if task == "questionnaire_answer" or task.startswith("questionnaire_answer_batch"):
+        return _questionnaire_answer(messages)
     # Repair or unknown task: return a harmless empty object.
     return _result("{}")

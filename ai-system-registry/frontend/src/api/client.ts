@@ -1,10 +1,11 @@
 import type {
   AISystem, ModelCard, ModelCardCreate, ModelCardPatch, Metric,
   Source, Dataset, MetricCreate, SourceCreate, DatasetCreate,
-  DatasetPatch, ModelSystemResponse, AISystemFormData, PermissionsResponse, WorkflowStep,
+  DatasetPatch, ModelSystemResponse, AISystemFormData, PermissionsResponse,
   UserSummary, ChatMessage, AssistTurnResponse, AssistExtractResponse, ClassificationResult,
-  QuestionAssignment, RegisterSystemInput, IndexedDocument, AssessmentRow,
+  RegisterSystemInput, IndexedDocument, AssessmentRow,
   ComplianceAssessment, AuditEventListResponse,
+  AssessmentState, QuestionState, QuestionComment,
 } from "../types"
 import type { SectionKey } from "../config/questionnaire";
 
@@ -114,6 +115,91 @@ export const api = {
       body: JSON.stringify({ answers, section }),
     }),
 
+  // ── Single-page assessment (#346 / #314) ─────────────────────────────────────
+  // All routes under /systems/{id}/assessment. openAssessment triggers the one-time
+  // AI prefill + classification (idempotent); the rest are per-question actions.
+  openAssessment: (systemId: string) =>
+    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/open`, {
+      method: "POST",
+    }),
+  // Archive the approved cycle and begin a fresh one (owner-only; registry-side).
+  startNewAssessment: (systemId: string) =>
+    request<AssessmentState>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/start-new`,
+      { method: "POST" },
+    ),
+  // Current cycle by default; pass assessmentId to view a specific (historical)
+  // cycle read-only ("View results").
+  getAssessmentState: (systemId: string, assessmentId?: string) =>
+    request<AssessmentState>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/state${assessmentId ? `?assessment_id=${encodeURIComponent(assessmentId)}` : ""}`,
+    ),
+  saveAnswer: (systemId: string, questionKey: string, answer: string) =>
+    request<QuestionState>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/answer`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answer }) },
+    ),
+  confirmQuestion: (systemId: string, questionKey: string) =>
+    request<{ question_key: string; confirmed: boolean }>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/confirm`,
+      { method: "POST" },
+    ),
+  unconfirmQuestion: (systemId: string, questionKey: string) =>
+    request<{ question_key: string; confirmed: boolean }>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/unconfirm`,
+      { method: "POST" },
+    ),
+  listComments: (systemId: string, questionKey: string, assessmentId?: string) =>
+    request<QuestionComment[]>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/comments${assessmentId ? `?assessment_id=${encodeURIComponent(assessmentId)}` : ""}`,
+    ),
+  addComment: (systemId: string, questionKey: string, body: string) =>
+    request<QuestionComment>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/comments`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body }) },
+    ),
+  deleteComment: (systemId: string, questionKey: string, commentId: string) =>
+    request<null>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/comments/${encodeURIComponent(commentId)}`,
+      { method: "DELETE" },
+    ),
+  assignQuestion: (systemId: string, questionKey: string, assigneeUsername: string) =>
+    request<QuestionState>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/assign`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assignee_username: assigneeUsername }) },
+    ),
+  unassignQuestion: (systemId: string, questionKey: string) =>
+    request<null>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/questions/${encodeURIComponent(questionKey)}/assign`,
+      { method: "DELETE" },
+    ),
+  finalizeAssessment: (systemId: string) =>
+    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/finalize`, {
+      method: "POST",
+    }),
+  submitAssessmentToCO: (systemId: string, note?: string) =>
+    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note ?? null }),
+    }),
+  // Compliance Officer end view (#348).
+  issueClassification: (
+    systemId: string,
+    data: { tier: string; transparency: boolean; note?: string; confirmed: boolean },
+  ) =>
+    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/issue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+  rejectAssessment: (systemId: string, note: string) =>
+    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    }),
+
   // ── Model Cards ────────────────────────────────────────────────────────────
   getModels: () => request<ModelCard[]>("/model-cards?limit=200"),
   getModelCard: (id: string) => request<ModelCard>(`/model-cards/${id}`),
@@ -201,52 +287,6 @@ export const api = {
     });
   },
 
-  getWorkflow: (systemId: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow`),
-
-  submitForReview: (systemId: string, assigneeUsername: string, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assignee_username: assigneeUsername, note: note ?? null }),
-    }),
-
-  approveSystem: (systemId: string, note?: string, tier?: string, orgRole?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: note ?? null, tier: tier ?? null, org_role: orgRole ?? null }),
-    }),
-
-  rejectSystem: (systemId: string, note: string, assigneeUsername: string, sendTo: "business" | "technical" = "business") =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/reject`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note, assignee_username: assigneeUsername, send_to: sendTo }),
-    }),
-
-  // New questionnaire workflow endpoints.
-  assignWorkflow: (systemId: string, body: { business_assignee_username: string; technical_assignee_username?: string; compliance_officer_username: string; note?: string }) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/assign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-
-  submitBusinessSection: (systemId: string, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-business`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: note ?? null }),
-    }),
-
-  submitTechnicalSection: (systemId: string, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-technical`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: note ?? null }),
-    }),
-
   // Questionnaire chatbot — stateful, system must exist in DB.
   questionnaireTurn: (systemId: string, section: SectionKey, transcript: ChatMessage[], fields: Record<string, unknown>) =>
     request<AssistTurnResponse>(`/intake/assist/questionnaire/${encodeURIComponent(systemId)}/turn`, {
@@ -260,46 +300,6 @@ export const api = {
     fd.append("file", file);
     return request<AssistExtractResponse>(`/intake/assist/questionnaire/${encodeURIComponent(systemId)}/extract?section=${section}`, { method: "POST", body: fd });
   },
-
-  // CO sends a system back to a specific contributor for more information.
-  requestInfo: (systemId: string, contributorUsername: string, note: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/request-info`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contributor_username: contributorUsername, note }),
-    }),
-
-  // Contributor returns an info-requested system to the CO.
-  submitInfo: (systemId: string, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/submit-info`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: note ?? null }),
-    }),
-
-  // Section owner hands a section to a contributor (task handoff).
-  subAssign: (systemId: string, section: SectionKey, subAssigneeUsername: string, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/sub-assign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ section, sub_assignee_username: subAssigneeUsername, note: note ?? null }),
-    }),
-
-  // Contributor marks a sub-assigned section complete, returning it to the owner.
-  subComplete: (systemId: string, section: SectionKey, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/sub-complete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ section, note: note ?? null }),
-    }),
-
-  // Section owner cancels an active sub-assignment and reclaims editing.
-  subReclaim: (systemId: string, section: SectionKey, note?: string) =>
-    request<WorkflowStep[]>(`/systems/${systemId}/workflow/sub-reclaim`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ section, note: note ?? null }),
-    }),
 
   // Full-manual supporting documents.
   uploadDocument: (systemId: string, file: File) => {
@@ -398,39 +398,6 @@ export const api = {
       { method: "DELETE" },
       INDEXING_API_BASE,
     ),
-
-  getRceSummary: (systemId: string) =>
-    request<{
-      tier: string | null;
-      org_role: string | null;
-      registration_mode: string | null;
-      classification_rationale: unknown;
-      obligations: Array<{ title: string; article_ref: string; description: string }>;
-    }>(`/systems/${encodeURIComponent(systemId)}/workflow/rce-summary`),
-
-  getQuestionAssignments: (systemId: string) =>
-    request<QuestionAssignment[]>(`/systems/${encodeURIComponent(systemId)}/workflow/question-assignments`),
-
-  questionAssign: (systemId: string, body: { section: string; question_key: string; assignee_username: string; note?: string }) =>
-    request<QuestionAssignment[]>(`/systems/${encodeURIComponent(systemId)}/workflow/question-assign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-
-  questionUnassign: (systemId: string, body: { section: string; question_key: string }) =>
-    request<QuestionAssignment[]>(`/systems/${encodeURIComponent(systemId)}/workflow/question-assign`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-
-  questionAnswer: (systemId: string, body: { section: string; question_key: string }) =>
-    request<QuestionAssignment[]>(`/systems/${encodeURIComponent(systemId)}/workflow/question-answer`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
 
   // ── Compliance assessments (detail page) ──────────────────────────────────
   getAssessmentsForSystem: (systemId: string) =>

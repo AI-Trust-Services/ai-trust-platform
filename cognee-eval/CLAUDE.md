@@ -172,6 +172,15 @@ semantic interchange format into a *live writable* remote — the opposite of re
    ghcr.io/<owner>/ai-trust-platform/cognee-graph@sha256:<digest>` (always a digest, never a mutable
    tag) in the prod override, then deploy.
 
+> **This manual flow is the fallback / kind-local path.** For `ai-trust-main` and `ai-trust-test`,
+> ai-test-lab now publishes promoted graphs directly to `ghcr.io/ai-trust-services/ai-test-lab/cognee-graph`,
+> and `build-push-deploy.yml`'s `mirror-cognee-graph` action automatically checks whether the tag set via
+> `COGNEE_GRAPH_TAG` in the cluster's `k8s/env/<cluster>/.env` (default `eu-ai-act-20261030`) already
+> exists in this repo's own package, reusing it if so, or else pulls it from ai-test-lab's package and
+> re-pushes it here — pinning the resulting digest into `cogneeEval.graphImage` through Flux
+> `valuesFrom` either way — no manual step 2/3 needed for those clusters. See `cognee-eval/README.md`
+> for the full flow.
+
 **First-boot safety:** in read-only mode the lifespan runs `consistency_check()` — opens the Kuzu DB directly (read-only) and counts `Node` rows; no LLM or embedding call, so it works in kind/local without network access. If the snapshot is torn/empty, `/health` returns 503 and the pod never becomes Ready, so a bad artifact never serves traffic.
 
 > The graph image is a deliberate exception to the "adding a service" checklist: it is **not** in

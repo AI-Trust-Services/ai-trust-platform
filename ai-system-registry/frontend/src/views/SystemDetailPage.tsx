@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import LuigiClient from "@luigi-project/client";
 import {
@@ -34,19 +34,6 @@ import {
 import { cn } from "@/lib/utils";
 
 type UserMap = Record<string, { firstName: string; lastName: string }>;
-
-function startRiskClassification(systemId: string) {
-  localStorage.setItem("compliance.pendingAssessment", JSON.stringify({ systemId }));
-  LuigiClient.linkManager().navigate("/home/assessments");
-}
-
-// Open the assessments list WITHOUT the create handoff flag. Setting the flag tells
-// Compliance to CREATE a new assessment, which duplicates / 409s when one already
-// exists — so "Continue"/existing-assessment navigation must not set it (mirrors the
-// start-vs-continue split in Systems.tsx).
-function goToAssessmentsList() {
-  LuigiClient.linkManager().navigate("/home/assessments");
-}
 
 function userName(username: string | null | undefined, userMap: UserMap): string {
   if (!username) return "—";
@@ -447,6 +434,7 @@ function OverviewTab({
   onEditModeChange: (v: boolean) => void;
 }) {
   const showToast = useToast();
+  const navigate = useNavigate();
   const { mayWrite, mayWriteAssessments } = useModalControls();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
@@ -529,7 +517,7 @@ function OverviewTab({
                 <Button size="sm" variant="outline"
                   disabled={!mayWriteAssessments}
                   title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-                  onClick={() => assessments.length === 0 ? startRiskClassification(system.id) : goToAssessmentsList()}>
+                  onClick={() => navigate(`/systems/${system.id}/assessment`)}>
                   {assessments.length === 0 ? "Start" : "Continue"}
                 </Button>
               </div>
@@ -687,6 +675,7 @@ function AssessmentsTab({
   onRefresh: () => void;
 }) {
   const showToast = useToast();
+  const navigate = useNavigate();
   const { mayWriteAssessments } = useModalControls();
   const [deleteTarget, setDeleteTarget] = useState<ComplianceAssessment | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -730,9 +719,22 @@ function AssessmentsTab({
     LuigiClient.linkManager().navigate("/home/assessments");
   }
 
-  // Sequential index within non-inactive assessments for display name.
-  const seqIndex = (a: ComplianceAssessment) =>
-    assessments.filter((x) => x.status !== "inactive").indexOf(a) + 1 || assessments.indexOf(a) + 1;
+  // "View results" — open a SPECIFIC assessment cycle read-only in the single-page
+  // screen (by id in the route path), not the compliance list.
+  function viewResults(a: ComplianceAssessment) {
+    navigate(`/systems/${system.id}/assessment/view/${a.id}`);
+  }
+
+  // Sequential cycle number ("Assessment N") — MUST match the backend's title
+  // suffix "(#N)" (set in _ensure_assessment, chronological, counts all cycles
+  // incl. inactive) so the number agrees with the obligations/requirements
+  // filter dropdown. `assessments` arrives created_at DESC, so chronological
+  // #1 = oldest. Index into an ascending copy.
+  const chronological = useMemo(
+    () => [...assessments].sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    [assessments],
+  );
+  const seqIndex = (a: ComplianceAssessment) => chronological.indexOf(a) + 1;
 
   return (
     <div className="space-y-6">
@@ -752,7 +754,7 @@ function AssessmentsTab({
               <Button size="sm" className="ml-auto shrink-0"
                 disabled={!mayWriteAssessments}
                 title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-                onClick={() => startRiskClassification(system.id)}>
+                onClick={() => navigate(`/systems/${system.id}/assessment`)}>
                 Start assessment
               </Button>
             </div>
@@ -771,7 +773,7 @@ function AssessmentsTab({
                 isChatbot={system.is_chatbot}
                 generatesSyntheticContent={system.generates_synthetic_content}
               />
-              <Button size="sm" variant="outline" className="ml-auto shrink-0" onClick={goToCompliance}>
+              <Button size="sm" variant="outline" className="ml-auto shrink-0" onClick={() => viewResults(approvedAssessment)}>
                 View results
               </Button>
             </div>
@@ -866,12 +868,16 @@ function AssessmentsTab({
                       )}
                     </TableCell>
                     <TableCell>
-                      {isApproved ? (
+                      {(a.tier ?? (isApproved ? system.tier : null)) ? (
                         <TierBadge
-                          tier={system.tier}
+                          tier={(a.tier ?? system.tier) as typeof system.tier}
                           workflowStatus={system.workflow_status}
                           isChatbot={system.is_chatbot}
-                          generatesSyntheticContent={system.generates_synthetic_content}
+                          generatesSyntheticContent={
+                            a.tier != null
+                              ? !!a.co_issued_transparency
+                              : system.generates_synthetic_content
+                          }
                         />
                       ) : <span className="text-muted-foreground">—</span>}
                     </TableCell>
@@ -922,7 +928,7 @@ function AssessmentsTab({
                         )}
                         {(isUnderReview || isApproved || isInactive) && (
                           <>
-                            <Button size="sm" variant="outline" onClick={goToCompliance}>
+                            <Button size="sm" variant="outline" onClick={() => viewResults(a)}>
                               View results
                             </Button>
                             {/* Only under-review assessments get mutation actions. Approved
@@ -1400,6 +1406,20 @@ export default function SystemDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
+  // "Start new assessment" — the registry endpoint archives an approved cycle and
+  // begins a fresh one, or (if the current cycle is unapproved) just opens that
+  // one. Then navigate into the single-page app for the current cycle.
+  async function startNew() {
+    if (!id) return;
+    try {
+      await api.startNewAssessment(id);
+    } catch (e) {
+      showToast(`Could not start a new assessment: ${(e as Error).message}`, true);
+      return;
+    }
+    navigate(`/systems/${id}/assessment`);
+  }
+
   const loadAll = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -1557,7 +1577,7 @@ export default function SystemDetailPage() {
               size="sm"
               disabled={!mayWriteAssessments}
               title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-              onClick={() => startRiskClassification(system.id)}
+              onClick={startNew}
             >
               Start new assessment
             </Button>
@@ -1569,7 +1589,7 @@ export default function SystemDetailPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem disabled={!mayWriteAssessments} onSelect={() => startRiskClassification(system.id)}>
+                <DropdownMenuItem disabled={!mayWriteAssessments} onSelect={() => navigate(`/systems/${system.id}/assessment`)}>
                   Start assessment
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={!mayWrite} onSelect={() => setRolesOpen(true)}>

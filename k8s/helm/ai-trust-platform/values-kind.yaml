@@ -47,7 +47,6 @@ otel:
 cogneeEval:
   enabled: true
   # Serves the frozen graph snapshot from GHCR (never ingests).
-  # After each promote-graph.yml run, update graphImage to the new @sha256 digest.
+  # graphImage is set at deploy time via COGNEE_GRAPH_IMAGE in .env (passed as --set by the Makefile).
   # Set readOnly: false only on a dedicated build/test instance for graph curation.
   readOnly: true
-  graphImage: ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph@sha256:3b76d89972135d39c15a23492003dded854942f2d59926c1384e46fc7e4c380b

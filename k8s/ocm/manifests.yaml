@@ -82,6 +82,15 @@ spec:
         name: ai-trust-flux-values-${NAMESPACE}
         valuesKey: MC_IMAGE
         targetPath: minio.mcImage
+      - kind: Secret
+        name: ai-trust-flux-values-${NAMESPACE}
+        valuesKey: COGNEE_GRAPH_IMAGE
+        targetPath: cogneeEval.graphImage
+        # Only present once a cognee-graph has been mirrored from ai-test-lab for this
+        # cluster (see mirror-cognee-graph action + bootstrap.sh). When absent, Flux
+        # falls back to the chart's committed cogneeEval.graphImage default instead of
+        # failing the HelmRelease reconcile.
+        optional: true
     values:
       image:
         repository: ghcr.io/ai-trust-services/ai-trust-platform

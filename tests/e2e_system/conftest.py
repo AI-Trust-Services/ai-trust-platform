@@ -236,9 +236,9 @@ async def _cleanup() -> None:
 # Domain helpers (re-exported for test modules)
 # ---------------------------------------------------------------------------
 
-# Imported here so test files can do `from conftest import BUSINESS_ANSWERS, register_system`
+# Imported here so test files can do `from conftest import VALID_TIERS, register_system`
 # rather than knowing about the helpers module.
-from helpers import AI_TECHNICAL_ANSWERS, BUSINESS_ANSWERS, VALID_TIERS
+from helpers import VALID_TIERS, BUSINESS_ANSWERS
 from helpers import register_manual_system as _reg
 
 
@@ -324,74 +324,61 @@ async def contributor():
 # ---------------------------------------------------------------------------
 
 
-async def set_all_questionnaire_answers(
-    client: httpx.AsyncClient,
-    system_id: str,
-) -> None:
-    """PATCH business questionnaire answers on a draft system.
+# ---------------------------------------------------------------------------
+# Single-page assessment helpers (importable from test modules)
+# ---------------------------------------------------------------------------
 
-    intake.py hardcodes registration_mode='ai' and does not store questionnaire_answers,
-    so we must PATCH after registration for any test that drives through to approval.
-    Only the business section can be PATCHed in draft state; the technical section requires
-    technical_pending state — pass with_technical_answers=True to drive_to_pending_review
-    to have it PATCH technical answers before submit-technical.
-    """
-    r = await client.patch(
-        f"/api/registry/v1/systems/{system_id}/questionnaire",
-        json={"section": "business", "answers": BUSINESS_ANSWERS},
-    )
-    assert r.status_code == 200, (
-        f"PATCH business answers failed: {r.status_code} {r.text[:300]}"
-    )
+
+async def open_assessment(client: httpx.AsyncClient, system_id: str) -> dict:
+    """POST /assessment/open — lazy AI prefill + classification. Returns the state."""
+    r = await client.post(f"/api/registry/v1/systems/{system_id}/assessment/open")
+    assert r.status_code == 200, f"open failed: {r.status_code} {r.text[:300]}"
+    return r.json()
+
+
+async def confirm_all(client: httpx.AsyncClient, system_id: str, state: dict) -> None:
+    """Owner-confirm every question (the submit gate). A prefilled answer is
+    unchanged, so no mandatory comment is needed."""
+    base = f"/api/registry/v1/systems/{system_id}/assessment"
+    for q in state["questions"]:
+        r = await client.post(f"{base}/questions/{q['question_key']}/confirm")
+        assert r.status_code == 200, (
+            f"confirm {q['question_key']} failed: {r.status_code} {r.text[:300]}"
+        )
 
 
 async def drive_to_pending_review(
     system_id: str,
     owner_client: httpx.AsyncClient,
-    engineer_client: httpx.AsyncClient,
     compliance_username: str,
-    *,
-    with_technical_answers: bool = False,
-) -> None:
-    """Assign + submit-business + submit-technical, asserting each transition via GET.
+) -> dict:
+    """Open the assessment, owner-confirm all questions, and submit to the CO —
+    leaving the system in pending_review (locked). Returns the final state.
 
-    Pass with_technical_answers=True for tests that need approval (the approve gate checks
-    REQUIRED_AI_TECHNICAL keys). Technical PATCH is done in technical_pending state before
-    submit-technical, using engineer_client (the technical section owner).
+    The CO is recorded via the compliance 'New Assessment' assign path; here we
+    set it directly through the workflow/assign utility (still live) so /submit
+    assigns the right compliance officer, matching how creation records it.
     """
-    base = f"/api/registry/v1/systems/{system_id}/workflow"
-
-    r = await owner_client.post(
-        f"{base}/assign",
+    # Record the CO (and owner as business assignee) while the system is a draft.
+    assign = await owner_client.post(
+        f"/api/registry/v1/systems/{system_id}/workflow/assign",
         json={
             "business_assignee_username": owner_client.e2e_username,
-            "technical_assignee_username": engineer_client.e2e_username,
             "compliance_officer_username": compliance_username,
         },
     )
-    assert r.status_code == 200, f"assign failed: {r.status_code} {r.text[:300]}"
-    sys = (await owner_client.get(f"/api/registry/v1/systems/{system_id}")).json()
-    assert sys["workflow_status"] == "business_pending", sys["workflow_status"]
-
-    r = await owner_client.post(f"{base}/submit-business", json={})
-    assert r.status_code == 200, (
-        f"submit-business failed: {r.status_code} {r.text[:300]}"
+    assert assign.status_code == 200, (
+        f"assign failed: {assign.status_code} {assign.text[:300]}"
     )
-    sys = (await owner_client.get(f"/api/registry/v1/systems/{system_id}")).json()
-    assert sys["workflow_status"] == "technical_pending", sys["workflow_status"]
 
-    if with_technical_answers:
-        r = await engineer_client.patch(
-            f"/api/registry/v1/systems/{system_id}/questionnaire",
-            json={"section": "technical", "answers": AI_TECHNICAL_ANSWERS},
-        )
-        assert r.status_code == 200, (
-            f"PATCH technical answers failed: {r.status_code} {r.text[:300]}"
-        )
+    state = await open_assessment(owner_client, system_id)
+    await confirm_all(owner_client, system_id, state)
 
-    r = await engineer_client.post(f"{base}/submit-technical", json={})
-    assert r.status_code == 200, (
-        f"submit-technical failed: {r.status_code} {r.text[:300]}"
+    r = await owner_client.post(
+        f"/api/registry/v1/systems/{system_id}/assessment/submit",
+        json={"note": "ready for review"},
     )
+    assert r.status_code == 200, f"submit failed: {r.status_code} {r.text[:300]}"
     sys = (await owner_client.get(f"/api/registry/v1/systems/{system_id}")).json()
     assert sys["workflow_status"] == "pending_review", sys["workflow_status"]
+    return r.json()

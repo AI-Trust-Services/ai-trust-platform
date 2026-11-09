@@ -61,15 +61,21 @@ bootstrap:
 build:
 	bash k8s/scripts/build-and-load-images.sh
 
+COGNEE_GRAPH_TAG  := $(shell grep -E '^COGNEE_GRAPH_TAG=' .env 2>/dev/null | tail -1 | cut -d= -f2-)
+COGNEE_GRAPH_REPO := ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph
+COGNEE_GRAPH_IMAGE := $(if $(COGNEE_GRAPH_TAG),$(shell docker buildx imagetools inspect "$(COGNEE_GRAPH_REPO):$(COGNEE_GRAPH_TAG)" --format '$(COGNEE_GRAPH_REPO)@{{.Manifest.Digest}}' 2>/dev/null))
+
 install:
 	@if helm status $(RELEASE) -n $(NAMESPACE) >/dev/null 2>&1; then \
 		echo "==> release '$(RELEASE)' already installed, resetting immutable Jobs then upgrading"; \
 		kubectl delete job -n $(NAMESPACE) -l app.kubernetes.io/instance=$(RELEASE) --ignore-not-found; \
 	fi
-	helm upgrade --install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml
+	helm upgrade --install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml \
+		$(if $(COGNEE_GRAPH_IMAGE),--set cogneeEval.graphImage=$(COGNEE_GRAPH_IMAGE))
 
 upgrade:
-	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml
+	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml \
+		$(if $(COGNEE_GRAPH_IMAGE),--set cogneeEval.graphImage=$(COGNEE_GRAPH_IMAGE))
 
 # After `make build && make upgrade`, pods that weren't restarted by Helm (because
 # their rendered template didn't change) still run the old :local image. This target

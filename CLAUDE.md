@@ -97,12 +97,19 @@ make test-int                       # kind cluster, namespace ai-trust
 - Details → [tests/integration/README.md](tests/integration/README.md).
 
 ### On-demand label workflows (deployed-namespace, OIDC)
-Two workflows run against a PR author's **already-deployed** namespace on `ai-trust-test` (add
-`garden-deploy` first), triggered by a PR label. Both authenticate through oauth2-proxy with a real
-Keycloak OIDC session cookie — no kubeconfig or port-forward (contrast `tests/integration/`). Neither
+Three workflows run against a PR author's **already-deployed** namespace on `ai-trust-test` (add
+`garden-deploy` first), triggered by a PR label. All authenticate through oauth2-proxy with a real
+Keycloak OIDC session — no kubeconfig or port-forward (contrast `tests/integration/`). None
 is a PR gate.
 - **`e2e-test`** → `.github/workflows/e2e-system-tests.yml` runs `tests/e2e_system/` (black-box OIDC
   E2E: auth, registration, self-assessment, classification) against the deployed namespace.
+- **`playwright-test`** → `.github/workflows/playwright-frontend-tests.yml` runs `tests/playwright/`
+  (`@playwright/test`, TypeScript): a real browser logs in via OIDC, smoke-tests that each MVP MFE
+  mounts + its backend is healthy, and registers an AI system end-to-end. A `setup` project
+  provisions personas and captures one `storageState` each; a `teardown` project cleans up. The HTML
+  report + `test-results/` (traces, failure screenshots, videos) are uploaded as CI artifacts.
+  Details → [tests/playwright/README.md](tests/playwright/README.md) and the Frontend tests section
+  of [docs/tests.md](docs/tests.md).
 - **`langfuse-test`** → `.github/workflows/langfuse-benchmark.yml` runs
   `tests/langfuse_benchmark/benchmark.py`: batch-imports the 339 ground-truth scenarios via
   `POST /api/registry/v1/intake/batch` (needs `ENABLE_BATCH_IMPORT=true`, set in
@@ -245,7 +252,7 @@ All backends are **FastAPI 0.115 + Python 3.12** on port 8001+:
 
 ## Shared libs
 
-- **`libs/persistence`** — async SQLAlchemy engine (`database.py`, reads `DATABASE_URL`; pool 5/+10, `pool_pre_ping`), ORM `models/` (one file per entity), Alembic `migrations/versions/` (all tables, all components).
+- **`libs/persistence`** — async SQLAlchemy engine (`database.py`, reads `DATABASE_URL`; pool 5/+10, `pool_pre_ping`), ORM `models/` (one file per entity), Alembic `migrations/versions/` (all tables, all components). **`ai_trust_persistence.governance`** — shared EU AI Act governance logic used by *both* the compliance and registry backends: `obligation_templates.py`/`requirement_templates.py` (hardcoded obligation/requirement sets; `obligations_for`, `requirements_for`, `cluster_articles`), `cascade.py` (status cascade + score recalc), and `generation.py` (`generate_obligations_in_session` / `generate_requirements_in_session` — insert obligations+requirements in the caller's transaction, never commit). Compliance calls these on assessment create / advance-from-classification; the registry calls them inside `issue_classification` so the governance chain is generated atomically with the CO's approve. All functions take a caller session and don't commit.
 - **`libs/clickhouse`** — connection factory (`database.py`, reads `CLICKHOUSE_*`, fail-fast), `tables.py` (single source for table/column names), versioned SQL `migrations/` (applied in filename order, tracked in `otel.schema_migrations`).
 - **`libs/logging`** — `logger.py` JSON formatter (UTC timestamp, level, logger, correlation ID, `extra={}` fields). `correlation_id_var` is a `contextvars.ContextVar` set once per request in `logging_middleware`; it propagates through all `await`s automatically. Middleware logs INFO for 2xx, WARNING for 4xx, ERROR for 5xx. Usage: `from ai_trust_logging import get_logger, correlation_id_var`.
 - **`libs/react-hooks`** — shared React hooks for all MFEs. Provides `useBranding()` (applies branding colors from localStorage) and `useTheme()` (applies dark/light mode). All MFE frontends import via `@ai-trust/react-hooks` path alias (configured in each MFE's `tsconfig.json` + `vite.config.ts`). Frontend Dockerfiles use repo-root context (`context: .`) to access the shared lib.
