@@ -87,9 +87,15 @@ export function ReviewQueueTable({ rows, userMap }: ReviewQueueTableProps) {
 
   function openSystem(row: OpenTaskRow) {
     // Hand off via sessionStorage.lastSystemPath — the registry MFE reads this
-    // on Luigi init and navigates to the system detail view internally. Keeps
-    // the side-nav visible because Luigi stays on the top-level node.
-    sessionStorage.setItem("lastSystemPath", `/systems/${row.system_id}`);
+    // on Luigi init and navigates internally. This is the CO review queue, so
+    // jump straight into the single-page assessment/review flow (its start page
+    // surfaces the CO "Issue a Risk Classification" review) rather than the
+    // system-detail assessment overview. Keeps the side-nav visible because
+    // Luigi stays on the top-level node.
+    sessionStorage.setItem(
+      "lastSystemPath",
+      `/systems/${row.system_id}/assessment`,
+    );
     navigateTo("/home/ai-system-registry", REGISTRY_URL);
   }
 
@@ -190,8 +196,8 @@ export function ReviewQueueTable({ rows, userMap }: ReviewQueueTableProps) {
                       size="icon"
                       className="size-8"
                       onClick={() => openSystem(row)}
-                      aria-label={`View system detail for ${row.system_name}`}
-                      title="View system detail"
+                      aria-label={`Review assessment for ${row.system_name}`}
+                      title="Review assessment"
                     >
                       <Eye className="size-4" />
                     </Button>
