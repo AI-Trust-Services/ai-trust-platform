@@ -3,10 +3,12 @@
 {{- if and .Values.cogneeEval.readOnly .Values.cogneeEval.graphImage (not (regexMatch "@sha256:[a-fA-F0-9]{64}$" .Values.cogneeEval.graphImage)) }}
 {{- fail "cogneeEval.graphImage must be pinned by @sha256 digest when set" }}
 {{- end }}
-{{- if .Values.cogneeEval.readOnly }}
+{{- if and .Values.cogneeEval.readOnly .Values.cogneeEval.graphImage }}
 {{/* Read-only production: frozen graph snapshot hydrated into an emptyDir by an
      init container; COGNEE_READONLY gates off ingest/feedback. No PVC — the pod
-     is stateless and reconstructs the exact pinned graph on every start. */}}
+     is stateless and reconstructs the exact pinned graph on every start.
+     Falls through to the StatefulSet branch when graphImage is unset (kind dev
+     without GHCR access). */}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
