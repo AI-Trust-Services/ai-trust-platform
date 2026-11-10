@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import psycopg2
@@ -43,7 +44,6 @@ _TEST_DATABASE_URL = (
 # during test collection (it reads this env var on import, before e2e_setup runs).
 os.environ.setdefault("DATABASE_URL", _TEST_DATABASE_URL)
 _ALEMBIC_INI = Path(__file__).parents[4] / "libs" / "persistence" / "alembic.ini"
-_ALEMBIC_BIN = Path(__file__).parents[2] / ".venv" / "bin" / "alembic"
 
 
 def _pg_reachable() -> bool:
@@ -80,8 +80,12 @@ def _ensure_test_db() -> None:
 
 
 def _run_migrations() -> None:
+    # Invoke alembic as `python -m alembic` via the running interpreter rather
+    # than the console-script entry point: the venv's alembic.exe launcher is not
+    # present on every OS/venv layout (and is blocked by some Windows exec
+    # policies), whereas `-m` works anywhere the package is installed.
     subprocess.run(
-        [str(_ALEMBIC_BIN), "-c", str(_ALEMBIC_INI), "upgrade", "head"],
+        [sys.executable, "-m", "alembic", "-c", str(_ALEMBIC_INI), "upgrade", "head"],
         env={**os.environ, "DATABASE_URL": _TEST_DATABASE_URL},
         check=True,
     )

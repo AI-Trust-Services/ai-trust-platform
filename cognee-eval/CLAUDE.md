@@ -80,7 +80,7 @@ open http://localhost:8080/api/cognee/v1/graph/viz
 | Variable | Default | Description |
 |---|---|---|
 | `THALAMUS_BASE_URL` | _(unset → stub)_ | Thalamus OpenAI-compatible gateway (incl. `/v1`); unset or `stub` → offline/CI. All cognee generation + extraction. |
-| `THALAMUS_MODEL` | `mistralai/Mistral-Small-4-119B-2603` | Model ID the gateway serves — used for generation and extraction |
+| `THALAMUS_MODEL` | `mistralai/Mistral-Medium-3.5-128B` | Model ID the gateway serves — used for generation and extraction |
 | `THALAMUS_BEARER_TOKEN` | _(empty)_ | Static bearer token sent as `Authorization: Bearer <token>`; required when `THALAMUS_BASE_URL` is a real gateway |
 | `THALAMUS_EMBEDDING_MODEL` | `Snowflake/snowflake-arctic-embed-m` | Embedding model used to vectorise recall queries — must match the model used during ingest in ai-test-lab. Does **not** affect ingest embeddings (`setup_cognee()` hardcodes this model for cognee's pipeline). |
 | `COGNEE_SKIP_CONNECTION_TEST` | `true` (set in code) | Suppresses cognee's first-use LLM/embedding probe — it can fail against OpenAI-compat endpoints even when real calls work. Set in `cognee_client.py` via `os.environ.setdefault`; override with `false` to re-enable. |
