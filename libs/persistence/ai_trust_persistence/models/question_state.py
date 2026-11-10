@@ -19,9 +19,10 @@ class QuestionState(Base):
     change), the per-question AI ``confidence`` band, and the per-question
     ``assignee`` (null ⇒ the system owner is the editor).
 
-    Scoped per system (not per compliance ``Assessment``) — consistent with
-    ``ai_systems.questionnaire_answers`` and the classification, which also live
-    on the system row and are edited in place across re-assessments.
+    Scoped per assessment CYCLE (``assessment_id``) — each assessment owns its
+    own frozen question set; once a cycle is approved its states are immutable
+    and a new cycle starts fresh. ``system_id`` is denormalized for owner lookups
+    and delete scoping, but is NOT the scope key (see ``__table_args__``).
     """
 
     __tablename__ = "question_states"
