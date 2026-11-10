@@ -383,8 +383,8 @@ async def delete_assessment(assessment_id: str, request: Request) -> dict:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
         row = await _load(session, assessment_id)
-        if row.status == "approved":
-            raise HTTPException(409, "Cannot delete an approved assessment")
+        if row.status in ("approved", "inactive"):
+            raise HTTPException(409, "Cannot delete an approved or historicized assessment")
         ai_system_id = row.ai_system_id
         system = (
             await session.execute(select(AISystem).where(AISystem.id == ai_system_id))

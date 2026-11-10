@@ -298,7 +298,7 @@ export default function AssessmentsPage() {
                           title={mayWrite ? undefined : noWriteTitle}
                           onClick={() => act(api.submitAssessment, a.id, "Submitted")}>Submit</Button>
                       )}
-                      {a.status !== "approved" && (
+                      {!(["approved", "inactive"] as string[]).includes(a.status) && (
                         <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"
                           disabled={busy === a.id || !mayWrite} title={mayWrite ? undefined : noWriteTitle}
                           onClick={async () => {

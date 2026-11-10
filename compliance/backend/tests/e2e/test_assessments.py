@@ -350,6 +350,18 @@ async def test_delete_approved_assessment_returns_409(client: httpx.AsyncClient)
     assert r.status_code == 409
 
 
+async def test_delete_inactive_assessment_returns_409(client: httpx.AsyncClient):
+    # inactive = historicized approved assessment; must also be non-deletable
+    system = await create_system()
+    ass = await create_assessment(client, system["id"])
+    await create_obligation(client, ass["id"])
+    await client.post(f"/v1/assessments/{ass['id']}/submit")
+    await client.post(f"/v1/assessments/{ass['id']}/approve")
+    await client.post(f"/v1/assessments/{ass['id']}/historicize")
+    r = await client.delete(f"/v1/assessments/{ass['id']}")
+    assert r.status_code == 409
+
+
 # ---------------------------------------------------------------------------
 # POST /assessments/{id}/abort
 # ---------------------------------------------------------------------------
