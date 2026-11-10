@@ -308,6 +308,105 @@ async def _upload_result(
     return key
 
 
+async def run_pipeline_streaming(
+    system_id: str,
+    questionnaire_id: str,
+    prompt_id: str,
+    username: str,
+    batch_callback: Any,  # async callable(batch_results: list[dict]) -> None
+) -> dict[str, Any]:
+    """Like ``run_pipeline`` but calls ``batch_callback(results)`` as each batch
+    completes.
+
+    Batches (independent dependency groups) run **in parallel**, but invocations
+    of ``batch_callback`` are **serialised** by an internal lock, so a callback
+    may safely do a read-modify-write of shared state (e.g. the
+    ``questionnaire_answers`` JSONB column) without losing a concurrent batch's
+    writes. This lets callers persist partial results after each batch so they
+    are visible via polling before the full pipeline finishes.
+
+    ``batch_callback`` is ``async``.  If a batch or callback raises, the
+    exception propagates out of the ``gather``.
+
+    Returns ``{run_key, presigned_url, result}`` exactly like ``run_pipeline``.
+    """
+    # 1. Load system row.
+    async with SessionLocal() as session:
+        row = (
+            await session.execute(select(AISystem).where(AISystem.id == system_id))
+        ).scalar_one_or_none()
+    if row is None:
+        raise KeyError(f"AI system '{system_id}' not found")
+
+    # 2. Load questionnaire config and system prompt.
+    questionnaire = load_questionnaire(questionnaire_id)
+    system_prompt = load_template(prompt_id)
+
+    # 3. Evidence.
+    registration_evidence = _system_evidence(row)
+    rag_chunks = await _retrieve_rag_documents(system_id, username)
+    if rag_chunks:
+        logger.info(
+            "questionnaire_pipeline.rag_retrieved",
+            extra={"system_id": system_id, "chunks": len(rag_chunks)},
+        )
+    else:
+        logger.info(
+            "questionnaire_pipeline.rag_skipped",
+            extra={"system_id": system_id},
+        )
+
+    # 4. Split and run PARALLEL — all independent dependency groups fire at once.
+    # Each batch calls batch_callback as soon as it finishes so partial results
+    # land in the DB and are visible via polling before the slowest batch completes.
+    batches = _split_by_dependency_groups(questionnaire)
+    logger.info(
+        "questionnaire_pipeline.batched_parallel",
+        extra={"system_id": system_id, "batches": len(batches)},
+    )
+
+    callback_lock = asyncio.Lock()
+
+    async def _run_and_callback(idx: int, batch: dict) -> list[dict]:
+        results = await _run_batch(
+            batch, system_prompt, registration_evidence, rag_chunks, idx
+        )
+        async with callback_lock:
+            await batch_callback(results)
+        return results
+
+    batch_results_list = await asyncio.gather(
+        *[_run_and_callback(idx, batch) for idx, batch in enumerate(batches)]
+    )
+    merged: list[dict] = []
+    for br in batch_results_list:
+        merged.extend(br)
+
+    result = {"results": merged}
+
+    # 5. Persist to MinIO.
+    timestamp = datetime.now(timezone.utc)
+    run_key = await _upload_result(system_id, questionnaire_id, result, timestamp)
+    presigned_url = await minio_client.get_presigned_url(run_key, expires_hours=24)
+
+    logger.info(
+        "questionnaire_pipeline.completed",
+        extra={
+            "system_id": system_id,
+            "questionnaire_id": questionnaire_id,
+            "prompt_id": prompt_id,
+            "questions_answered": len(result.get("results", [])),
+            "run_key": run_key,
+        },
+    )
+
+    return {
+        "run_key": run_key,
+        "presigned_url": presigned_url,
+        "result": result,
+    }
+
+
 async def run_pipeline(
     system_id: str,
     questionnaire_id: str,

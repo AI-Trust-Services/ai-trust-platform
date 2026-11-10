@@ -107,6 +107,17 @@ export interface QuestionState {
   has_qualifying_comment: boolean;
   needs_attention: boolean;
   can_edit: boolean;
+  ai_references: Array<{
+    sourceType?: string;
+    source?: string;
+    sourceId?: string | null;
+    location?: string | null;
+    quote?: string | null;
+  }>;
+  ai_explanation: string | null;
+  // True while the background prefill pipeline is running and this question
+  // has not yet received an AI answer. Clears when the batch covering it completes.
+  llm_pending: boolean;
 }
 
 export interface ConfidenceCounts {
@@ -153,6 +164,10 @@ export interface AssessmentState {
   questions: QuestionState[];
   contributors: ContributorRef[];
   prefilled: boolean;
+  // True while the background prefill pipeline is still running.
+  prefill_pending: boolean;
+  // True if the background pipeline failed — user may retry via /open.
+  prefill_failed: boolean;
 }
 
 export interface QuestionComment {
@@ -355,6 +370,21 @@ export interface ChatMessage {
   content: string;
 }
 
+// ── Compliance Advisor (grounded EU AI Act chatbot) ─────────────────────
+export interface AdvisorSource {
+  kind: "document" | "act";
+  ref: string;
+  detail: string | null;
+  page: number | null;
+  document_id: string | null;
+  version_id: string | null;
+}
+
+export interface AdvisorAnswer {
+  answer: string;
+  sources: AdvisorSource[];
+}
+
 export interface RationaleItem {
   flag: string;
   value: boolean | number;
@@ -505,4 +535,5 @@ export interface AuditEventListResponse {
   total: number;
   items: AuditEvent[];
 }
+
 

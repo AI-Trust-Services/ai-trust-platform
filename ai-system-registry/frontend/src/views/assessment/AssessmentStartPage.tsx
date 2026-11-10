@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -48,6 +48,13 @@ export default function AssessmentStartPage() {
         preliminary risk classification, then review the answers it was least sure about.
       </p>
 
+      {state.prefill_pending && (
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-[#e0a008]/40 bg-[#fffbeb] px-5 py-3 text-sm text-[#854d0e]">
+          <Loader2 className="size-4 shrink-0 animate-spin" />
+          <span>AI is generating answers based on uploaded system data</span>
+        </div>
+      )}
+
       <div className="mt-6 rounded-xl border border-border bg-card p-6">
         <div className="flex items-start justify-between">
           <span className="rounded-full bg-[#eaecee] px-3 py-1 text-xs font-medium text-[#556b82]">
@@ -60,7 +67,15 @@ export default function AssessmentStartPage() {
           )}
         </div>
         <h2 className="mt-4 text-xl font-bold">
-          Preliminary Risk Classification: <span className="text-[#8b3a00]">{tierLabel}</span>
+          Preliminary Risk Classification:{" "}
+          {state.prefill_pending ? (
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              <span>Calculating…</span>
+            </span>
+          ) : (
+            <span className="text-[#8b3a00]">{tierLabel}</span>
+          )}
         </h2>
 
         <div className="mt-4 grid grid-cols-4 gap-2">
@@ -69,7 +84,7 @@ export default function AssessmentStartPage() {
               key={t.key}
               className={
                 "rounded-md border px-3 py-2 text-center text-sm " +
-                (t.key === active
+                (!state.prefill_pending && t.key === active
                   ? "border-[#1147E9] font-semibold text-[#1147E9]"
                   : "border-border text-muted-foreground")
               }
