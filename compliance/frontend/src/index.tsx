@@ -32,8 +32,8 @@ const router = createHashRouter([
         path: "evidence",
         element: <RequirePermission anyOf={EVIDENCE_PERMS}><EvidencePage /></RequirePermission>,
       },
-      { index: true, element: <Navigate to="assessments" replace /> },
-      { path: "*", element: <Navigate to="assessments" replace /> },
+      { index: true, element: <Navigate to="obligations" replace /> },
+      { path: "*", element: <Navigate to="obligations" replace /> },
     ],
   },
 ]);
