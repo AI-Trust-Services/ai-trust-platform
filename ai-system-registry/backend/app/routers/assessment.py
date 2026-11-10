@@ -44,6 +44,7 @@ from app.assessment_catalogue import (
     QUESTION_TYPES,
 )
 from app.classifier import classify_ai_questionnaire
+from app.dossier import create_dossier_in_session, write_ai_output_in_session
 from app.ids import new_id
 from app.llm import LLMParseError
 from app.questionnaire_pipeline import run_pipeline_streaming
@@ -460,6 +461,38 @@ async def _run_prefill_background(
                 "assessment.prefill_completed",
                 extra={"system_id": system_id, "tier": row.tier},
             )
+
+        # #366: freeze the AI output layer (per-question answers + proposed
+        # classification) into the dossier. Separate txn + own error handling so
+        # this append-only, write-once side-effect can never roll back the
+        # classification result committed above.
+        try:
+            async with SessionLocal() as session:
+                await write_ai_output_in_session(
+                    session,
+                    assessment_id,
+                    (output.get("result") or {}).get("results") or [],
+                    {
+                        "tier": classification.tier,
+                        "basis": classification.basis,
+                        "annex_iii_area": classification.annex_iii_area,
+                        "org_role": rationale.get("org_role"),
+                        "rationale": rationale,
+                        "assessment_sources": [
+                            s.model_dump() for s in _sources_from_proposals(proposals)
+                        ],
+                    },
+                )
+                await session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "assessment.dossier_ai_output_failed",
+                extra={
+                    "system_id": system_id,
+                    "assessment_id": assessment_id,
+                    "error": str(exc),
+                },
+            )
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "assessment.prefill_background_failed",
@@ -528,6 +561,20 @@ async def open_assessment(
                     ai_references=None,
                     ai_explanation=None,
                 )
+            )
+        # #366: freeze the assessment dossier (inputs/config/prompts) at start,
+        # atomically with seeding this cycle. Best-effort — a snapshot failure
+        # must not block starting the assessment.
+        try:
+            await create_dossier_in_session(session, row, assessment.id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "assessment.dossier_create_failed",
+                extra={
+                    "system_id": system_id,
+                    "assessment_id": assessment.id,
+                    "error": str(exc),
+                },
             )
         assessment.llm_status = "pending"
         await session.commit()
