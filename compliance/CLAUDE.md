@@ -15,6 +15,8 @@ Backend (`compliance/backend/app/`):
 
 **Evidence** — `POST /api/v1/evidence` accepts `requirement_ids` as repeated form fields (multi-value, one M2M row each); at least one `requirement_id` required. Versioned: `/upload-version` snapshots current file metadata to `evidence_versions` before replacing (old MinIO file deleted, snapshot retained); `/versions` returns history oldest-first; `version_label` tracks the current label. Stored in MinIO bucket `evidence-files`, key `evidence/{evidence_id}/{filename}`.
 
+**Frontend access control** — `AssessmentsPage` (aggregated KPI/chart/table view) and its shell nav item are gated to `assessments:approve` (Compliance Officer only). Obligations, requirements, and evidence pages remain accessible to all roles holding the relevant `assessments:read/write` or `evidence:read/write/approve` permissions.
+
 ## Evidence expiry (policy-checker-worker)
 Three alert rules seeded in migration `0004` drive evidence expiry:
 - `evidence_expired` — marks approved evidence past `validity_until` as `expired`, cascades requirement effectiveness + obligation status, fires alert
