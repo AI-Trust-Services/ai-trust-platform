@@ -57,7 +57,7 @@
     "decision-trace-analyzer": ["monitoring:read"],
     "monitoring": ["monitoring:read"],
     "alerts": ["alerts:read", "alerts:handle", "alerts:manage_rules"],
-    "assessments": ["assessments:read", "assessments:write", "assessments:approve"],
+    "assessments": ["assessments:approve"],
     "obligations": ["assessments:read", "assessments:write", "assessments:approve"],
     "requirements": ["assessments:read", "assessments:write", "assessments:approve"],
     "evidence": ["evidence:read", "evidence:write", "evidence:approve"],

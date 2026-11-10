@@ -18,7 +18,7 @@ const router = createHashRouter([
     children: [
       {
         path: "assessments",
-        element: <RequirePermission anyOf={ASSESSMENT_PERMS}><AssessmentsPage /></RequirePermission>,
+        element: <RequirePermission anyOf={["assessments:approve"]}><AssessmentsPage /></RequirePermission>,
       },
       {
         path: "obligations",
