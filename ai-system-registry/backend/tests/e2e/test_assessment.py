@@ -131,7 +131,7 @@ async def test_open_sets_prefill_failed_when_pipeline_fails(client: httpx.AsyncC
     A second call to /open retries the pipeline (re-schedules the background task)."""
     system_id = await _create_system(client)
     with patch(
-        "app.routers.assessment.run_pipeline_sequential",
+        "app.routers.assessment.run_pipeline_streaming",
         new_callable=AsyncMock,
         side_effect=RuntimeError("llm down"),
     ):

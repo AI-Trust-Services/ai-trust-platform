@@ -89,9 +89,11 @@ export default function AssessmentApp() {
   // Poll GET /state every 3 s while the background prefill pipeline is running.
   // Stops automatically when prefill_pending flips to false (all batches done).
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prefillPending = state?.prefill_pending;
+  const hasState = state != null;
   useEffect(() => {
-    if (!state) return;
-    if (state.prefill_pending) {
+    if (!hasState) return;
+    if (prefillPending) {
       if (pollRef.current) return; // already polling
       pollRef.current = setInterval(async () => {
         try {
@@ -117,9 +119,7 @@ export default function AssessmentApp() {
         pollRef.current = null;
       }
     };
-  // Only react to the pending flag changing, not every state update.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state?.prefill_pending]);
+  }, [hasState, prefillPending, id, viewAssessmentId]);
 
   const markSaved = useCallback(() => setSavedAt(Date.now()), []);
 

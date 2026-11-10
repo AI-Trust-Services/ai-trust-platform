@@ -46,7 +46,7 @@ from app.assessment_catalogue import (
 from app.classifier import classify_ai_questionnaire
 from app.ids import new_id
 from app.llm import LLMParseError
-from app.questionnaire_pipeline import run_pipeline, run_pipeline_sequential
+from app.questionnaire_pipeline import run_pipeline_streaming
 from app.questionnaire_required import QUESTION_LABEL
 from app.schemas.assessment import (
     AnswerRequest,
@@ -151,7 +151,9 @@ def _proposals_from_results(results: list[Any]) -> dict[str, dict[str, Any]]:
         if q_key not in known:
             continue
         options = [a for a in (item.get("answer") or []) if isinstance(a, dict)]
-        values = [str(a["value"]) for a in options if a.get("value")]
+        values = [
+            str(a["value"]) for a in options if a.get("value") not in (None, "")
+        ]
         if not values:
             continue
         value = (
@@ -362,8 +364,8 @@ async def _run_prefill_background(
     assessment_id: str,
     username: str,
 ) -> None:
-    """Background task: run the questionnaire-answer pipeline sequentially,
-    writing each batch's answers into question_states as they arrive, then
+    """Background task: run the questionnaire-answer pipeline (batches run in
+    parallel; their callbacks are serialised), writing each batch's answers into question_states as they arrive, then
     classify and clear ``assessment.llm_status``.
 
     Each batch is one LLM call covering a connected dependency group. After
@@ -420,7 +422,7 @@ async def _run_prefill_background(
             )
 
     try:
-        output = await run_pipeline_sequential(
+        output = await run_pipeline_streaming(
             system_id=system_id,
             questionnaire_id=_QUESTIONNAIRE_ID,
             prompt_id=_QUESTIONNAIRE_PROMPT_ID,

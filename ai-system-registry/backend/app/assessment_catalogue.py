@@ -7,26 +7,12 @@ Replaces the old static catalogue that mirrored the frontend questionnaire.ts pl
 from __future__ import annotations
 
 import json
-import pathlib
 
-_HERE = pathlib.Path(__file__).resolve().parent
-
-
-def _find_questionnaire() -> pathlib.Path:
-    candidate = _HERE
-    for _ in range(8):
-        p = candidate / "context" / "prompts" / "ai-questionnaire.json"
-        if p.exists():
-            return p
-        candidate = candidate.parent
-    fallback = pathlib.Path("/app/context/prompts/ai-questionnaire.json")
-    if fallback.exists():
-        return fallback
-    raise FileNotFoundError("ai-questionnaire.json not found")
+from app.questionnaire_loader import find_questionnaire
 
 
 def _load():
-    path = _find_questionnaire()
+    path = find_questionnaire()
     data = json.loads(path.read_text(encoding="utf-8"))
     questions = data.get("questions") or []
 

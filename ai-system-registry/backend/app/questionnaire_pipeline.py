@@ -308,21 +308,25 @@ async def _upload_result(
     return key
 
 
-async def run_pipeline_sequential(
+async def run_pipeline_streaming(
     system_id: str,
     questionnaire_id: str,
     prompt_id: str,
     username: str,
     batch_callback: Any,  # async callable(batch_results: list[dict]) -> None
 ) -> dict[str, Any]:
-    """Like ``run_pipeline`` but fires batches **sequentially**, calling
-    ``batch_callback(results)`` after each one completes.
+    """Like ``run_pipeline`` but calls ``batch_callback(results)`` as each batch
+    completes.
 
-    This allows callers to persist partial results to the DB after each batch
-    so they are visible via polling before the full pipeline finishes.
+    Batches (independent dependency groups) run **in parallel**, but invocations
+    of ``batch_callback`` are **serialised** by an internal lock, so a callback
+    may safely do a read-modify-write of shared state (e.g. the
+    ``questionnaire_answers`` JSONB column) without losing a concurrent batch's
+    writes. This lets callers persist partial results after each batch so they
+    are visible via polling before the full pipeline finishes.
 
-    ``batch_callback`` is ``async``.  If a batch raises, the exception propagates
-    and no further batches are run.
+    ``batch_callback`` is ``async``.  If a batch or callback raises, the
+    exception propagates out of the ``gather``.
 
     Returns ``{run_key, presigned_url, result}`` exactly like ``run_pipeline``.
     """
@@ -361,11 +365,14 @@ async def run_pipeline_sequential(
         extra={"system_id": system_id, "batches": len(batches)},
     )
 
+    callback_lock = asyncio.Lock()
+
     async def _run_and_callback(idx: int, batch: dict) -> list[dict]:
         results = await _run_batch(
             batch, system_prompt, registration_evidence, rag_chunks, idx
         )
-        await batch_callback(results)
+        async with callback_lock:
+            await batch_callback(results)
         return results
 
     batch_results_list = await asyncio.gather(
