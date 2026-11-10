@@ -51,7 +51,7 @@ export interface OrganizationContactsResponse {
 }
 
 export interface OpenTaskRow {
-  source: "required" | "assigned" | "review";
+  source: "assigned" | "review";
   system_id: string;
   system_name: string;
   system_version: string;

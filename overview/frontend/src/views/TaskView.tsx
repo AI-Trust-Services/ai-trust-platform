@@ -184,7 +184,7 @@ function ComplianceTaskView() {
  * Owner filters, an assign-date sort control, and a Refresh (reset-filters)
  * button.
  *
- * Scope: the `required` + `assigned` sources of `/me/open-tasks`. CO `review`
+ * Scope: the `assigned` source of `/me/open-tasks`. CO `review`
  * rows are excluded — they live in the Compliance Officer view above.
  */
 function OwnerTaskView() {
@@ -214,12 +214,8 @@ function OwnerTaskView() {
       api.allUsers().catch(() => [] as UserSummary[]),
     ])
       .then(([tasks, systems, allAssessments, allUsers]) => {
-        // assigned + required only; review tasks belong to the CO queue.
-        setOpenTasks(
-          tasks.filter(
-            (t) => t.source === "assigned" || t.source === "required",
-          ),
-        );
+        // assigned only; review tasks belong to the CO queue.
+        setOpenTasks(tasks.filter((t) => t.source === "assigned"));
         setMySystems(systems);
         setAssessments(allAssessments);
         setUsers(allUsers);

@@ -40,7 +40,7 @@ export const MOCK_OPEN_TASKS: OpenTaskRow[] = [
     assignment_id: "QA-DEMO-02",
   },
   {
-    source: "required",
+    source: "assigned",
     system_id: "SYS-DEMO-03",
     system_name: "Customer Support Chatbot",
     system_version: "2.3.0",

@@ -183,6 +183,7 @@ function TasksTable({
               key={g.is_review ? `${g.system_id}:review:${g.review_assessment_id}` : g.system_id}
               group={g}
               latestAssessment={assessmentForGroup(g)}
+              userMap={userMap}
             />
           ))}
         </tbody>
@@ -296,9 +297,11 @@ function OwnerRow({
 function TaskRow({
   group,
   latestAssessment,
+  userMap,
 }: {
   group: SystemGroup;
   latestAssessment: AssessmentSummary | null;
+  userMap: Map<string, UserSummary>;
 }) {
   function openSystem() {
     // Hand off via sessionStorage.lastSystemPath — the registry MFE reads this
@@ -336,6 +339,9 @@ function TaskRow({
     : group.questions
         .map((q) => `${formatQuestionNumber(q.question_key)} · ${q.question_label}`)
         .join(" · ");
+  const ownerInfo = group.owner_username
+    ? userMap.get(group.owner_username)
+    : undefined;
 
   return (
     <tr className="border-b border-border last:border-b-0">
@@ -372,8 +378,18 @@ function TaskRow({
       <td className="px-4 py-3">
         {group.owner_username ? (
           <div className="flex items-center gap-2">
-            <InitialsAvatar username={group.owner_username} size="sm" />
-            <span className="text-foreground">{group.owner_username}</span>
+            <InitialsAvatar
+              username={group.owner_username}
+              firstName={ownerInfo?.firstName}
+              lastName={ownerInfo?.lastName}
+              size="sm"
+            />
+            <span className="text-foreground">
+              {ownerInfo
+                ? `${ownerInfo.firstName} ${ownerInfo.lastName}`.trim() ||
+                  group.owner_username
+                : group.owner_username}
+            </span>
           </div>
         ) : (
           <span className="text-muted-foreground">—</span>
