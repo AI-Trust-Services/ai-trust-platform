@@ -7,8 +7,9 @@
 {{/* Read-only production: frozen graph snapshot hydrated into an emptyDir by an
      init container; COGNEE_READONLY gates off ingest/feedback. No PVC — the pod
      is stateless and reconstructs the exact pinned graph on every start.
-     Falls through to the StatefulSet branch when graphImage is unset (kind dev
-     without GHCR access). */}}
+     readOnly=true + graphImage are set together by the Makefile (kind) or Flux
+     valuesFrom Secret (Gardener). Requiring both ensures the Deployment never
+     renders with a blank init-container image. */}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

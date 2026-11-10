@@ -46,7 +46,7 @@ otel:
 
 cogneeEval:
   enabled: true
-  # Serves the frozen graph snapshot from GHCR (never ingests).
-  # graphImage is set at deploy time via COGNEE_GRAPH_IMAGE in .env (passed as --set by the Makefile).
-  # Set readOnly: false only on a dedicated build/test instance for graph curation.
-  readOnly: true
+  # Default to writable StatefulSet for kind dev (no GHCR access needed).
+  # When COGNEE_GRAPH_IMAGE resolves at deploy time, the Makefile overrides
+  # both readOnly and graphImage to enable the frozen read-only Deployment.
+  readOnly: false
