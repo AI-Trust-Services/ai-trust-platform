@@ -96,11 +96,11 @@ def test_proposals_skip_unknown_ids_unanswered_and_malformed_items():
     assert out == {}
 
 
-def test_proposals_without_strength_default_to_low_confidence():
+def test_proposals_without_strength_return_none_confidence():
     out = assessment._proposals_from_results(
         [_item("Scope_1", [{"value": "NOT_ENOUGH_INFORMATION"}])]
     )
-    assert out["Scope_1"]["confidence"] == "low"
+    assert out["Scope_1"]["confidence"] is None
 
 
 def test_sources_are_distinct_in_first_seen_order():

@@ -100,8 +100,9 @@ async def _open(client: httpx.AsyncClient, system_id: str, user: str = _OWNER):
 @pytest.mark.asyncio
 async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClient):
     """POST /open runs the questionnaire pipeline: every catalogue question gets a
-    state, the stub's Scope_1 answer is written (low confidence, with its
-    explanation), nothing is pre-confirmed, and the classifier derives a tier."""
+    state, the stub's Scope_1 answer is written (null confidence because the stub
+    returns NOT_ENOUGH_INFORMATION with no answerStrength), nothing is pre-confirmed,
+    and the classifier derives a tier."""
     system_id = await _create_system(client)
     state = await _open(client, system_id)
 
@@ -111,13 +112,13 @@ async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClie
     scope = by_key["Scope_1"]
     assert scope["answer"] == "NOT_ENOUGH_INFORMATION"
     assert scope["answer_source"] == "ai_prefilled"
-    assert scope["confidence"] == "low"
+    assert scope["confidence"] is None
     assert scope["ai_explanation"]
-    # Questions the pipeline did not answer are blank, low confidence.
+    # Questions the pipeline did not answer are blank, null confidence.
     others = [q for k, q in by_key.items() if k != "Scope_1"]
     assert all(not q["answer"] for q in others)
-    assert all(q["confidence"] == "low" for q in others)
-    # The stub answer has no answerStrength → low confidence → not auto-confirmed.
+    assert all(q["confidence"] is None for q in others)
+    # Null confidence → not auto-confirmed.
     # High/medium confidence answers from a real LLM would be auto-confirmed.
     assert all(not q["confirmed"] for q in state["questions"])
     assert all(not q["owner_confirmed"] for q in state["questions"])
