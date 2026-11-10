@@ -392,7 +392,9 @@ async def delete_assessment(assessment_id: str, request: Request) -> dict:
         if not row:
             raise HTTPException(404, f"Assessment {assessment_id} not found")
         if row.status in ("approved", "inactive"):
-            raise HTTPException(409, "Cannot delete an approved or historicized assessment")
+            raise HTTPException(
+                409, "Cannot delete an approved or historicized assessment"
+            )
         ai_system_id = row.ai_system_id
         system = (
             await session.execute(select(AISystem).where(AISystem.id == ai_system_id))
