@@ -13,6 +13,9 @@ interface AssessmentCtx {
   reload: () => Promise<void>;
   savedAt: number | null;
   markSaved: () => void;
+  // Username → display name, fetched once here so children (e.g. QuestionView)
+  // don't each re-fetch the whole user directory on every mount/navigation.
+  userMap: Record<string, { firstName: string; lastName: string }>;
   // Base path for all nested links — `/systems/:id/assessment` for the live cycle,
   // or `/systems/:id/assessment/view/:assessmentId` for a read-only historical one,
   // so in-app navigation stays pinned to the cycle being viewed.
@@ -43,6 +46,24 @@ export default function AssessmentApp() {
   const [state, setState] = useState<AssessmentState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [userMap, setUserMap] = useState<
+    Record<string, { firstName: string; lastName: string }>
+  >({});
+
+  // Resolve usernames → display names once for the whole assessment app (the
+  // assignee dropdown + comment authors in QuestionView). Fetched here rather
+  // than in QuestionView so it isn't re-fetched on every question navigation.
+  useEffect(() => {
+    api
+      .getAllUsers()
+      .then((users) => {
+        const m: Record<string, { firstName: string; lastName: string }> = {};
+        for (const u of users)
+          m[u.username] = { firstName: u.firstName, lastName: u.lastName };
+        setUserMap(m);
+      })
+      .catch(() => setUserMap({}));
+  }, []);
 
   // A question can be active under either the editable base or the read-only
   // /view/:assessmentId base.
@@ -133,7 +154,7 @@ export default function AssessmentApp() {
   }
 
   return (
-    <Ctx.Provider value={{ state, reload, savedAt, markSaved, basePath }}>
+    <Ctx.Provider value={{ state, reload, savedAt, markSaved, userMap, basePath }}>
       <div className="flex h-full flex-col">
         <header className="flex h-12 shrink-0 items-center justify-end gap-3 border-b border-border bg-card px-6 text-sm">
           {savedAt && <span className="text-muted-foreground">Changes saved.</span>}
