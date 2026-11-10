@@ -94,17 +94,21 @@ kubectl create secret generic ai-trust-env \
 # creates the same-named secret from the CI GHCR_PULL_TOKEN.
 # Also runs `docker login ghcr.io` so that the Makefile's `imagetools inspect`
 # call can resolve the COGNEE_GRAPH_TAG digest without a separate manual login.
+# GHCR_USERNAME: the GitHub username that owns the PAT (defaults to GHCR_OWNER /
+# GITHUB_REPOSITORY_OWNER for CI; local devs should set this in .env to their own
+# GitHub username, since a PAT authenticates as its creator, not the org).
 GHCR_OWNER="${GITHUB_REPOSITORY_OWNER:-ai-trust-services}"
 GHCR_OWNER="$(echo "$GHCR_OWNER" | tr '[:upper:]' '[:lower:]')"
+GHCR_USERNAME="${GHCR_USERNAME:-${GHCR_OWNER}}"
 if [[ -n "${GHCR_PULL_TOKEN:-}" ]]; then
   echo "==> secret/ghcr-pull-secret (private GHCR image pulls)"
   kubectl create secret docker-registry ghcr-pull-secret \
     --docker-server=ghcr.io \
-    --docker-username="$GHCR_OWNER" \
+    --docker-username="$GHCR_USERNAME" \
     --docker-password="$GHCR_PULL_TOKEN" \
     -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
   echo "==> docker login ghcr.io (so imagetools inspect can resolve COGNEE_GRAPH_TAG)"
-  echo "$GHCR_PULL_TOKEN" | docker login ghcr.io -u "$GHCR_OWNER" --password-stdin
+  echo "$GHCR_PULL_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
 fi
 
 # Flux's HelmRelease valuesFrom has no cross-namespace support — the secret must exist
