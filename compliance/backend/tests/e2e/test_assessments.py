@@ -340,6 +340,52 @@ async def test_delete_assessment_keeps_manual_requirements(client: httpx.AsyncCl
     assert manual["id"] in ids
 
 
+async def test_delete_approved_assessment_returns_409(client: httpx.AsyncClient):
+    system = await create_system()
+    ass = await create_assessment(client, system["id"])
+    await create_obligation(client, ass["id"])
+    await client.post(f"/v1/assessments/{ass['id']}/submit")
+    await client.post(f"/v1/assessments/{ass['id']}/approve")
+    r = await client.delete(f"/v1/assessments/{ass['id']}")
+    assert r.status_code == 409
+
+
+async def test_delete_inactive_assessment_returns_409(client: httpx.AsyncClient):
+    # inactive = historicized approved assessment; must also be non-deletable
+    system = await create_system()
+    ass = await create_assessment(client, system["id"])
+    await create_obligation(client, ass["id"])
+    await client.post(f"/v1/assessments/{ass['id']}/submit")
+    await client.post(f"/v1/assessments/{ass['id']}/approve")
+    await client.post(f"/v1/assessments/{ass['id']}/historicize")
+    r = await client.delete(f"/v1/assessments/{ass['id']}")
+    assert r.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# POST /assessments/{id}/abort
+# ---------------------------------------------------------------------------
+
+
+async def test_abort_draft_assessment_deletes_it(client: httpx.AsyncClient):
+    system = await create_system()
+    ass = await create_assessment(client, system["id"])
+    r = await client.post(f"/v1/assessments/{ass['id']}/abort")
+    assert r.status_code == 200
+    assert r.json()["status"] == "deleted"
+    assert (await client.get(f"/v1/assessments/{ass['id']}")).status_code == 404
+
+
+async def test_abort_approved_assessment_returns_409(client: httpx.AsyncClient):
+    system = await create_system()
+    ass = await create_assessment(client, system["id"])
+    await create_obligation(client, ass["id"])
+    await client.post(f"/v1/assessments/{ass['id']}/submit")
+    await client.post(f"/v1/assessments/{ass['id']}/approve")
+    r = await client.post(f"/v1/assessments/{ass['id']}/abort")
+    assert r.status_code == 409
+
+
 # ---------------------------------------------------------------------------
 # POST /assessments/{id}/generate-obligations
 # ---------------------------------------------------------------------------
