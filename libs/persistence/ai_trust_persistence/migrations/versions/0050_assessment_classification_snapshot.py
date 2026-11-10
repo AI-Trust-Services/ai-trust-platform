@@ -6,8 +6,8 @@ the cycle exactly as approved — independent of later edits to the mutable AISy
 row. Columns added by this migration back the fields on the Assessment model, set
 by issue_classification.
 
-Revision ID: 0047
-Revises: 0046
+Revision ID: 0050
+Revises: 0049
 Create Date: 2026-11-09
 """
 
@@ -15,8 +15,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-revision = "0047"
-down_revision = "0046"
+revision = "0050"
+down_revision = "0049"
 branch_labels = None
 depends_on = None
 
