@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Outlet, useNavigate, useParams, useMatch } from "react-router";
 import { Loader2, Save } from "lucide-react";
 import type { AssessmentState } from "../../types";
@@ -87,6 +87,41 @@ export default function AssessmentApp() {
     setState(s);
   }, [id, viewAssessmentId]);
 
+  // Poll GET /state every 3 s while the background prefill pipeline is running.
+  // Stops automatically when prefill_pending flips to false (all batches done).
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prefillPending = state?.prefill_pending;
+  const hasState = state != null;
+  useEffect(() => {
+    if (!hasState) return;
+    if (prefillPending) {
+      if (pollRef.current) return; // already polling
+      pollRef.current = setInterval(async () => {
+        try {
+          const s = await api.getAssessmentState(id!, viewAssessmentId);
+          setState(s);
+          if (!s.prefill_pending) {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+          }
+        } catch {
+          // ignore transient errors; keep polling
+        }
+      }, 3000);
+    } else {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    }
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [hasState, prefillPending, id, viewAssessmentId]);
+
   const markSaved = useCallback(() => setSavedAt(Date.now()), []);
 
   // Base path for nested links — pins historical ("View results") navigation to
@@ -123,7 +158,7 @@ export default function AssessmentApp() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-muted-foreground">
         <Loader2 className="size-6 animate-spin" />
-        <p className="text-sm">Our AI is reviewing your documents and pre-filling the assessment…</p>
+        <p className="text-sm">Loading assessment…</p>
       </div>
     );
   }
@@ -131,6 +166,11 @@ export default function AssessmentApp() {
   return (
     <Ctx.Provider value={{ state, reload, savedAt, markSaved, basePath }}>
       <div className="flex h-full flex-col">
+        {state.prefill_failed && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-[#fca5a5]/40 bg-[#fef2f2] px-6 py-2 text-sm text-[#991b1b]">
+            <span>AI pre-fill failed. Reload the page or start the assessment again to retry.</span>
+          </div>
+        )}
         <header className="flex h-12 shrink-0 items-center justify-end gap-3 border-b border-border bg-card px-6 text-sm">
           {savedAt && <span className="text-muted-foreground">Changes saved.</span>}
           <button

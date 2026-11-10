@@ -1,34 +1,26 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router";
-import { CheckCircle2, Circle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, Loader2 } from "lucide-react";
 import type { AssessmentState, QuestionState } from "../../types";
-import { BUSINESS_QUESTIONS, AI_TECHNICAL_QUESTIONS } from "../../config/questionnaire";
+import { AI_SECTIONS, ORDERED_QUESTION_IDS, QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
 import { TierBadge } from "../../components/Badges";
 import { cn } from "@/lib/utils";
 
-/** Ordered sections → question keys, mirroring the backend assessment_catalogue. */
-export const ASSESSMENT_SECTIONS: { key: string; label: string; questionKeys: string[] }[] = [
-  {
-    key: "business",
-    label: "Use Case & Context",
-    questionKeys: BUSINESS_QUESTIONS.filter((q) => q.key !== "external_id").map((q) => q.key),
-  },
-  {
-    key: "technical",
-    label: "AI Risk Classification",
-    questionKeys: AI_TECHNICAL_QUESTIONS.map((q) => q.key),
-  },
-];
+/** Ordered sections → question keys, derived from ai-questionnaire.json
+ * (each JSON category is one section). */
+export const ASSESSMENT_SECTIONS: { key: string; label: string; questionKeys: string[] }[] =
+  AI_SECTIONS.map((s) => ({ key: s.key, label: s.label, questionKeys: s.questionIds }));
 
-export const ORDERED_QUESTION_KEYS = ASSESSMENT_SECTIONS.flatMap((s) => s.questionKeys);
+export const ORDERED_QUESTION_KEYS = ORDERED_QUESTION_IDS;
 
 /** Progress-segment color: owner-confirmed ⇒ green; otherwise by AI confidence
  * band (green/amber/red), matching the start-page confidence bar. Unknown ⇒ amber. */
 function segmentColor(s?: QuestionState): string {
   if (s?.owner_confirmed) return "bg-[#1a9d5c]";
-  if (s?.confidence === "high") return "bg-[#1a9d5c]";
-  if (s?.confidence === "medium") return "bg-[#e0a008]";
-  if (s?.confidence === "low") return "bg-[#d14343]";
+  if (!s?.answer) return "bg-[var(--border)]";
+  if (s.confidence === "high") return "bg-[#1a9d5c]";
+  if (s.confidence === "medium") return "bg-[#e0a008]";
+  if (s.confidence === "low") return "bg-[#d14343]";
   return "bg-[#e0a008]";
 }
 
@@ -129,11 +121,19 @@ export function AssessmentSidebar({
                   // Confirmed by a contributor but not yet by the owner — progress,
                   // but still needs the owner's confirmation before submit.
                   const contributorOnly = q?.confirmed && !ownerConfirmed;
+                  const needsAttention = q?.needs_attention && !ownerConfirmed;
+                  const llmPending = q?.llm_pending;
+                  // Only show the attention indicator (orange) when there IS an
+                  // answer but confidence is low — blank/unanswered questions are
+                  // just grey "Incomplete", not flagged as needing attention.
+                  const showAttention = needsAttention && !!q?.answer && !llmPending;
                   const statusText = ownerConfirmed
                     ? "Complete"
                     : contributorOnly
                       ? "Confirmed by contributor"
-                      : "Incomplete";
+                      : llmPending
+                        ? "Waiting for AI…"
+                        : "Incomplete";
                   return (
                     <li key={key}>
                       <Link
@@ -145,6 +145,8 @@ export function AssessmentSidebar({
                       >
                         {ownerConfirmed ? (
                           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#1a5c35]" />
+                        ) : llmPending ? (
+                          <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
                         ) : (
                           <Circle
                             className={cn(
@@ -153,8 +155,13 @@ export function AssessmentSidebar({
                             )}
                           />
                         )}
-                        <span className="flex flex-col">
-                          <span>{QUESTION_LABELS[key] ?? key}</span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="flex items-center gap-1.5 leading-snug">
+                            <span className="line-clamp-2">{QUESTION_LABELS[key] ?? key}</span>
+                            {showAttention && (
+                              <AlertTriangle className="size-3 shrink-0 text-[#c45000]" />
+                            )}
+                          </span>
                           <span
                             className={cn(
                               "text-xs",
@@ -204,5 +211,5 @@ export function AssessmentSidebar({
 
 // Flat label lookup built from the frontend questionnaire config.
 export const QUESTION_LABELS: Record<string, string> = Object.fromEntries(
-  [...BUSINESS_QUESTIONS, ...AI_TECHNICAL_QUESTIONS].map((q) => [q.key, q.label]),
+  Object.values(QUESTION_DEF_BY_ID).map((q) => [q.id, q.question]),
 );

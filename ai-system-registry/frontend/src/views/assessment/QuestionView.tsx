@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ChevronLeft, MoreVertical, Users, SignalHigh, SignalMedium, SignalLow, Trash2 } from "lucide-react";
+import { ChevronLeft, Loader2, MoreVertical, Users, SignalHigh, SignalMedium, SignalLow, Trash2 } from "lucide-react";
 import type { ConfidenceLevel, QuestionComment, QuestionState } from "../../types";
 import { api } from "../../api/client";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -8,10 +8,10 @@ import InitialsAvatar from "../../components/InitialsAvatar";
 import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS, ASSESSMENT_SECTIONS } from "./AssessmentSidebar";
 import {
-  BUSINESS_QUESTIONS,
-  AI_TECHNICAL_QUESTIONS,
-  type QuestionDef,
-} from "../../config/questionnaire";
+  QUESTION_DEF_BY_ID,
+  isPredefined,
+  isMultiselect,
+} from "../../config/aiQuestionnaire";
 import {
   Dialog,
   DialogContent,
@@ -26,24 +26,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-const QUESTION_DEFS: Record<string, QuestionDef> = Object.fromEntries(
-  [...BUSINESS_QUESTIONS, ...AI_TECHNICAL_QUESTIONS].map((q) => [q.key, q]),
-);
+/** Display label for a raw option value (e.g. "YES" → "Yes"). */
+const OPTION_LABELS: Record<string, string> = {
+  YES: "Yes",
+  NO: "No",
+  PARTIALLY: "Partially",
+  NOT_APPLICABLE: "Not applicable",
+  NOT_ENOUGH_INFORMATION: "Not enough information",
+  CONFLICT: "Conflicting evidence",
+};
+
+function optionLabel(value: string): string {
+  return OPTION_LABELS[value] ?? value;
+}
 
 function sectionLabel(questionKey: string): string {
   return ASSESSMENT_SECTIONS.find((s) => s.questionKeys.includes(questionKey))?.label ?? "";
-}
-
-const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-
-/** The option to render as selected for a choice question: the exact answer if it
- * is an option, else a UNIQUE case/whitespace-insensitive match, else null. Never
- * fuzzy/nearest — an ambiguous answer selects nothing rather than risk a wrong
- * (e.g. prohibited/exception) option. Backstop behind the backend option constraint. */
-function selectedOption(answer: string, options: string[]): string | null {
-  if (options.includes(answer)) return answer;
-  const hits = options.filter((o) => norm(o) === norm(answer));
-  return hits.length === 1 ? hits[0] : null;
 }
 
 function ConfidenceIndicator({
@@ -81,7 +79,7 @@ export default function QuestionView() {
     () => state.questions.find((q) => q.question_key === questionKey),
     [state.questions, questionKey],
   );
-  const def = questionKey ? QUESTION_DEFS[questionKey] : undefined;
+  const def = questionKey ? QUESTION_DEF_BY_ID[questionKey] : undefined;
 
   const [answer, setAnswer] = useState(qState?.answer ?? "");
   const [comments, setComments] = useState<QuestionComment[]>([]);
@@ -102,9 +100,12 @@ export default function QuestionView() {
   // confirm gate) so a stale pre-change comment doesn't enable a confirm the
   // server would reject. Kept fresh by reload() after add/delete/save.
   const hasQualifyingComment = qState?.has_qualifying_comment ?? false;
+  // True while this question is still waiting for the AI background pipeline
+  // to produce an answer. Inputs are locked until the answer arrives.
+  const llmPending = qState?.llm_pending ?? false;
   // Read-only: the whole assessment is locked, or this question isn't the
   // current user's to edit. Drives input disabling + hides edit affordances.
-  const canEdit = state.editable && (qState?.can_edit ?? false);
+  const canEdit = !llmPending && state.editable && (qState?.can_edit ?? false);
   // The CONFIRM gate: must be editable, and if the answer was changed from the
   // AI pre-fill, a qualifying comment (recorded after the change) is mandatory.
   const confirmDisabled =
@@ -230,13 +231,25 @@ export default function QuestionView() {
     return <div className="p-8 text-sm text-muted-foreground">Unknown question.</div>;
   }
 
-  const options = def.options ?? (def.type === "boolean" ? ["Yes", "No"] : []);
-  const isChoice = options.length > 0;
-  // Safety net behind the backend option-constraint: a prefilled answer should
-  // already equal an option verbatim, but tolerate a case/whitespace near-miss so
-  // the radio still selects. Only auto-select on a UNIQUE normalized match — never
-  // fuzzy/nearest (a mis-selected prohibited/exception answer is a compliance risk).
-  const selected = isChoice ? selectedOption(answer, options) : null;
+  // MULTISELECT: the stored answer is a JSON string array.
+  const selectedMulti: string[] = isMultiselect(def)
+    ? (() => {
+        try {
+          return JSON.parse(answer || "[]") as string[];
+        } catch {
+          return [];
+        }
+      })()
+    : [];
+
+  const toggleOption = (val: string) => {
+    const next = selectedMulti.includes(val)
+      ? selectedMulti.filter((v) => v !== val)
+      : [...selectedMulti, val];
+    const serialized = JSON.stringify(next);
+    setAnswer(serialized);
+    saveAnswer(serialized);
+  };
 
   return (
     <div className="mx-auto max-w-3xl px-8 py-8">
@@ -294,38 +307,60 @@ export default function QuestionView() {
           </div>
         </div>
 
-        <h1 className="mt-1 text-2xl font-bold">{def.label}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{def.hint}</p>
+        <h1 className="mt-1 text-2xl font-bold">{def.question}</h1>
 
         <div className="mt-3">
           <ConfidenceIndicator
             level={qState?.confidence ?? null}
-            references={state.source_documents.length}
+            references={qState?.ai_references?.length ?? 0}
             onClick={() => setConfModalOpen(true)}
           />
         </div>
 
+        {llmPending && (
+          <div className="mt-4 flex items-center gap-2 rounded-md border border-[#e0a008]/40 bg-[#fffbeb] px-4 py-2.5 text-sm text-[#854d0e]">
+            <Loader2 className="size-4 shrink-0 animate-spin" />
+            <span>Waiting for AI answer — inputs will unlock when this batch completes</span>
+          </div>
+        )}
+
         <div className="mt-5 space-y-2">
-          {isChoice ? (
-            options.map((opt) => (
+          {isPredefined(def) ? (
+            def.allowedAnswers.map((opt) => (
               <label key={opt} className="flex cursor-pointer items-center gap-2 text-sm">
                 <input
                   type="radio"
                   name={questionKey}
-                  checked={selected === opt}
+                  checked={answer === opt}
                   disabled={!canEdit}
                   onChange={() => {
                     setAnswer(opt);
                     saveAnswer(opt);
                   }}
                 />
-                <span>{opt}</span>
+                <span>{optionLabel(opt)}</span>
               </label>
             ))
+          ) : isMultiselect(def) ? (
+            def.allowedAnswers.map((opt) => (
+              <label key={opt.value} className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selectedMulti.includes(opt.value)}
+                  disabled={!canEdit}
+                  onChange={() => toggleOption(opt.value)}
+                />
+                <span>{opt.label}</span>
+              </label>
+            ))
+          ) : answer === "NOT_ENOUGH_INFORMATION" && !canEdit ? (
+            <p className="rounded-md border border-border bg-[var(--muted)]/30 p-3 text-sm italic text-muted-foreground">
+              Not enough information
+            </p>
           ) : (
             <textarea
               className="min-h-24 w-full rounded-md border border-border p-3 text-sm disabled:bg-[var(--muted)]/40"
-              value={answer}
+              value={answer === "NOT_ENOUGH_INFORMATION" ? "" : answer}
               disabled={!canEdit}
               onChange={(e) => setAnswer(e.target.value)}
               onBlur={() => answer !== (qState?.answer ?? "") && saveAnswer(answer)}
@@ -428,29 +463,45 @@ export default function QuestionView() {
       </div>
 
       <Dialog open={confModalOpen} onOpenChange={setConfModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Answer confidence</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 text-sm">
-            <p className="font-medium">{def.label}</p>
+          <div className="space-y-4 pb-2 text-sm">
+            <p className="font-medium leading-snug">{def.question}</p>
             <p>
               Confidence level:{" "}
               <span className="font-medium capitalize">{qState?.confidence ?? "not assessed"}</span>
             </p>
+            {qState?.ai_explanation && (
+              <div>
+                <p className="mb-1 font-medium">Explanation</p>
+                <p className="text-muted-foreground">{qState.ai_explanation}</p>
+              </div>
+            )}
             <div>
-              <p className="mb-1 font-medium">Sources that informed this classification</p>
-              {state.source_documents.length > 0 ? (
-                <ul className="space-y-1 text-muted-foreground">
-                  {state.source_documents.map((d, i) => (
-                    <li key={`${d.name}-${i}`}>
-                      {d.name}
-                      {d.page != null ? ` — p. ${d.page}` : ""}
+              <p className="mb-2 font-medium">Evidence references</p>
+              {qState?.ai_references && qState.ai_references.length > 0 ? (
+                <ul className="space-y-2">
+                  {qState.ai_references.map((ref, i) => (
+                    <li key={i} className="rounded-md border border-border p-3 text-xs">
+                      <span className="font-medium text-foreground">
+                        {ref.source ?? "Unknown source"}
+                      </span>
+                      {ref.location && <span className="ml-1 text-muted-foreground">— {ref.location}</span>}
+                      {ref.sourceType && (
+                        <span className="ml-1 text-muted-foreground/60">({ref.sourceType})</span>
+                      )}
+                      {ref.quote && (
+                        <p className="mt-1.5 border-l-2 border-border pl-2 italic text-muted-foreground">
+                          &ldquo;{ref.quote}&rdquo;
+                        </p>
+                      )}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-muted-foreground">No source documents available.</p>
+                <p className="text-muted-foreground">No references available for this question.</p>
               )}
             </div>
           </div>

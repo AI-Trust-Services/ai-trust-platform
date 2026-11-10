@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_trust_persistence.database import Base
@@ -78,6 +80,13 @@ class QuestionState(Base):
 
     # Per-question AI confidence band: "high" | "medium" | "low" (null if N/A).
     confidence: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
+    # Evidence references and explanation from the questionnaire-run pipeline.
+    # Stored as-returned by the LLM; surfaced in the QuestionView confidence modal.
+    ai_references: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    ai_explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Per-question assignment. null assignee ⇒ the system owner is the editor.
     assignee_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
