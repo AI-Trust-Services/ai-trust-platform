@@ -329,9 +329,6 @@ function TaskRow({
     const firstKey = group.questions[0]?.question_key;
     goToRegistry(firstKey ? `${assessmentBase}/q/${firstKey}` : assessmentBase);
   }
-  function openAssessment() {
-    goToRegistry(assessmentBase);
-  }
 
   const labels = formatTaskLabel(group);
   const full = group.is_review
@@ -406,13 +403,13 @@ function TaskRow({
           variant="outline"
           size="icon"
           className="size-8"
-          onClick={openAssessment}
+          onClick={openQuestions}
           aria-label={`Open ${group.system_name}`}
           title={
             group.is_review
               ? "Open assessment for review"
               : latestAssessment
-                ? "Open assessment"
+                ? "Jump to question"
                 : "View system detail"
           }
         >
