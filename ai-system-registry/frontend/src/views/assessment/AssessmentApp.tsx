@@ -60,13 +60,18 @@ export default function AssessmentApp() {
     if (!id || permsLoading) return;
     try {
       // A specific-assessment view (View results) is always read-only via /state.
-      // Otherwise: writers (BO / engineer) prefill via POST /open (idempotent);
-      // read-only roles (e.g. a CO) call GET /state — /open is write-gated.
+      // Approvers (the compliance officer) are reviewers → always GET /state,
+      // never the write-gated POST /open prefill — even though the CO role now
+      // also holds systems:write (for system registration/editing), it must not
+      // trigger prefill/reclassification by opening an assessment. Writers who
+      // are NOT approvers (owner / engineer) prefill via POST /open (idempotent).
       const s = viewAssessmentId
         ? await api.getAssessmentState(id, viewAssessmentId)
-        : can("systems:write")
-          ? await api.openAssessment(id)
-          : await api.getAssessmentState(id);
+        : can("systems:approve")
+          ? await api.getAssessmentState(id)
+          : can("systems:write")
+            ? await api.openAssessment(id)
+            : await api.getAssessmentState(id);
       setState(s);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to open assessment");
