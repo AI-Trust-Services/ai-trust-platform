@@ -1,12 +1,14 @@
 {{- if .Values.cogneeEval.enabled }}
 {{/* Cognee eval backend — graph-based grounded Q&A over the EU AI Act. */}}
-{{- if and .Values.cogneeEval.readOnly .Values.cogneeEval.graphImage (not (regexMatch "@sha256:[a-fA-F0-9]{64}$" .Values.cogneeEval.graphImage)) }}
+{{- if and .Values.cogneeEval.graphImage (not (regexMatch "@sha256:[a-fA-F0-9]{64}$" .Values.cogneeEval.graphImage)) }}
 {{- fail "cogneeEval.graphImage must be pinned by @sha256 digest when set" }}
 {{- end }}
-{{- if .Values.cogneeEval.readOnly }}
-{{/* Read-only production: frozen graph snapshot hydrated into an emptyDir by an
-     init container; COGNEE_READONLY gates off ingest/feedback. No PVC — the pod
-     is stateless and reconstructs the exact pinned graph on every start. */}}
+{{- if .Values.cogneeEval.graphImage }}
+{{/* Read-only mode: frozen graph snapshot hydrated into an emptyDir by an init
+     container; COGNEE_READONLY gates off ingest/feedback. No PVC — the pod is
+     stateless and reconstructs the exact pinned graph on every start.
+     When graphImage is unset (COGNEE_GRAPH_TAG blank or imagetools inspect failed)
+     falls through to the StatefulSet branch (ingest mode, local PVC). */}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
