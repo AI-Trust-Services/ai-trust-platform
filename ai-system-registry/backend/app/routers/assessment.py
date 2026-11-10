@@ -167,7 +167,7 @@ def _proposals_from_results(results: list[Any]) -> dict[str, dict[str, Any]]:
         confidence = (
             min(strengths, key=lambda s: _STRENGTH_RANK[s]).lower()
             if strengths
-            else "low"
+            else None
         )
         out[q_key] = {
             "answer": value,
