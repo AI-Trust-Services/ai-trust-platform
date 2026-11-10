@@ -136,12 +136,14 @@ def _proposals_from_results(results: list[Any]) -> dict[str, dict[str, Any]]:
 
     Returns ``{question_id: {answer, confidence, references, explanation}}`` for
     every known question that has a non-empty answer. Unknown ids and unanswered
-    items are skipped (the caller seeds those as blank, low-confidence states).
+    items are skipped (the caller seeds those blank, with no confidence band).
 
     MULTISELECT always serialises to a JSON array (even one option) — the frontend
     JSON.parse()s it; PREDEFINED/DESCRIPTIVE use the plain value. ``answerStrength``
     (HIGH/MEDIUM/LOW) maps to a confidence band; for MULTISELECT the lowest
-    strength across the returned options wins. No strength ⇒ ``low``."""
+    strength across the returned options wins. No strength ⇒ ``None`` — the prompt
+    requires a null ``answerStrength`` for ``NOT_ENOUGH_INFORMATION``/``CONFLICT``,
+    which is "not assessed", not "low confidence"."""
     known = set(ASSESSMENT_QUESTION_KEYS)
     out: dict[str, dict[str, Any]] = {}
     for item in results:
@@ -242,12 +244,19 @@ async def _qualifying_comment_keys(
 def _needs_attention(
     row: AISystem, state: QuestionState | None, answer: str | None
 ) -> bool:
-    """A question needs the owner's attention when it is low-confidence OR the AI
-    could not pre-fill it (empty answer) — AND it has not yet been owner-confirmed.
-    Confirming a question clears it from the attention count."""
+    """A question needs the owner's attention when the AI did not establish an
+    answer — AND it has not yet been owner-confirmed. Confirming clears it.
+
+    "Did not establish" covers both bands below HIGH/MEDIUM:
+    ``low`` (a suggested pre-fill the prompt says requires human verification) and
+    *no band at all* (``confidence is None``). The latter is the pipeline's
+    ``NOT_ENOUGH_INFORMATION`` / ``CONFLICT`` outcome, where ``answerStrength`` is
+    null by contract — note the answer string is then non-blank, so the
+    empty-answer check below does not catch it. HIGH/MEDIUM answers are
+    auto-confirmed on the owner's behalf, so they exit at the guard above."""
     if _is_owner_confirmed(row, state):
         return False
-    if state is not None and state.confidence == "low":
+    if state is not None and state.confidence in (None, "low"):
         return True
     return answer is None or (isinstance(answer, str) and not answer.strip())
 
@@ -485,8 +494,8 @@ async def open_assessment(
     """Seed blank question states immediately and return; the AI prefill runs in
     the background.
 
-    On first open: seeds all question_states (blank answers, low confidence, all
-    unconfirmed), marks ``assessment.llm_status = "pending"``, then schedules
+    On first open: seeds all question_states (blank answers, no confidence band,
+    all unconfirmed), marks ``assessment.llm_status = "pending"``, then schedules
     ``_run_prefill_background`` as a FastAPI background task (fires after the HTTP
     response is sent). Returns the blank state immediately with
     ``prefill_pending=True`` so the client can start polling GET /state.
@@ -524,7 +533,10 @@ async def open_assessment(
                     answer=None,
                     answer_source="ai_prefilled",
                     ai_original_answer=None,
-                    confidence="low",
+                    # No answer yet ⇒ no confidence band at all (not "low", which
+                    # would render a misleading red chip). The background prefill
+                    # overwrites this for every question the LLM answers.
+                    confidence=None,
                     ai_references=None,
                     ai_explanation=None,
                 )

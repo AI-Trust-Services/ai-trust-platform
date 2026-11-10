@@ -8,7 +8,7 @@ permissions, assignment, and per-cycle history. The acting user is read from
 
 Runs in stub LLM mode (THALAMUS_BASE_URL unset → stub), so the questionnaire
 pipeline that ``/open`` runs produces a deterministic minimal result (one
-Scope_1 answer, no answer strength → low confidence). Its MinIO result upload is
+Scope_1 answer, no answer strength → no confidence band). Its MinIO result upload is
 patched so a live MinIO is not required.
 """
 
@@ -122,6 +122,12 @@ async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClie
     # High/medium confidence answers from a real LLM would be auto-confirmed.
     assert all(not q["confirmed"] for q in state["questions"])
     assert all(not q["owner_confirmed"] for q in state["questions"])
+    # Nothing was established, so every question is flagged for review — including
+    # Scope_1, whose NOT_ENOUGH_INFORMATION answer is a non-blank string with no
+    # confidence band (issue #383: that case used to report needs_attention=False).
+    assert all(q["needs_attention"] for q in state["questions"])
+    assert state["attention_count"] == len(state["questions"])
+    assert state["confidence_counts"] == {"high": 0, "medium": 0, "low": 0}
     # Classifier ran after the prefill.
     assert state["tier"] is not None
 
@@ -377,15 +383,15 @@ async def test_state_exposes_owner_username(client: httpx.AsyncClient):
 
 @pytest.mark.asyncio
 async def test_attention_count_drops_when_owner_confirms(client: httpx.AsyncClient):
-    """Confirming a flagged (low-confidence or empty) question removes it from the
-    'N questions require your attention' count — confirmation, not just an answer,
-    is what clears it (the question's confidence band stays 'low')."""
+    """Confirming a flagged question (low confidence, no confidence band, or empty)
+    removes it from the 'N questions require your attention' count — confirmation,
+    not just an answer, is what clears it (the confidence band is left untouched)."""
     system_id = await _create_system(client)
     state = await _open(client, system_id)
     before = state["attention_count"]
     assert before >= 1
-    # Pick a flagged question. The stub leaves it empty/low-confidence; give it a
-    # value + justifying comment so Confirm passes, then confirm it.
+    # Pick a flagged question. The stub leaves it empty with no confidence band;
+    # give it a value + justifying comment so Confirm passes, then confirm it.
     target = next(q for q in state["questions"] if q["needs_attention"])
     qkey = target["question_key"]
     await client.post(

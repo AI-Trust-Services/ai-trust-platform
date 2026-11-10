@@ -103,6 +103,57 @@ def test_proposals_without_strength_return_none_confidence():
     assert out["Scope_1"]["confidence"] is None
 
 
+# ── attention flag ───────────────────────────────────────────────────────────
+
+
+def _row(owner: str = "owner"):
+    row = MagicMock()
+    row.business_owners = owner
+    return row
+
+
+def _state(confidence=None, confirmed_at=None, confirmed_by=None):
+    st = MagicMock()
+    st.confidence = confidence
+    st.confirmed_at = confirmed_at
+    st.confirmed_by = confirmed_by
+    return st
+
+
+def test_needs_attention_when_no_confidence_band():
+    """NOT_ENOUGH_INFORMATION is a NON-BLANK answer with a null answerStrength, so
+    the empty-answer check never catches it — the missing band has to."""
+    assert (
+        assessment._needs_attention(
+            _row(), _state(confidence=None), "NOT_ENOUGH_INFORMATION"
+        )
+        is True
+    )
+
+
+def test_needs_attention_when_low_confidence():
+    assert assessment._needs_attention(_row(), _state(confidence="low"), "YES") is True
+
+
+def test_needs_attention_when_answer_blank():
+    assert assessment._needs_attention(_row(), _state(confidence=None), None) is True
+    assert assessment._needs_attention(_row(), _state(confidence=None), "   ") is True
+
+
+def test_no_attention_once_owner_confirmed():
+    st = _state(confidence="low", confirmed_at="2026-01-01", confirmed_by="owner")
+    assert assessment._needs_attention(_row("owner"), st, "YES") is False
+
+
+def test_no_attention_for_established_band():
+    """HIGH/MEDIUM are auto-confirmed on the owner's behalf; even before that lands
+    an established band is not flagged for review."""
+    for band in ("high", "medium"):
+        assert (
+            assessment._needs_attention(_row(), _state(confidence=band), "YES") is False
+        )
+
+
 def test_sources_are_distinct_in_first_seen_order():
     proposals = {
         "Scope_1": {"references": [{"source": "a.pdf"}, {"source": "b.pdf"}]},
