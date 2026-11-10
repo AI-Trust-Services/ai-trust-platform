@@ -63,11 +63,6 @@ class AnswerRequest(BaseModel):
 
     answer: str
 
-    @field_validator("answer")
-    @classmethod
-    def _strip(cls, v: str) -> str:
-        return v
-
 
 class ConfirmResponse(BaseModel):
     """Returned by confirm/unconfirm so the client can update the sidebar."""
