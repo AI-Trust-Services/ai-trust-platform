@@ -151,9 +151,7 @@ def _proposals_from_results(results: list[Any]) -> dict[str, dict[str, Any]]:
         if q_key not in known:
             continue
         options = [a for a in (item.get("answer") or []) if isinstance(a, dict)]
-        values = [
-            str(a["value"]) for a in options if a.get("value") not in (None, "")
-        ]
+        values = [str(a["value"]) for a in options if a.get("value") not in (None, "")]
         if not values:
             continue
         value = (
