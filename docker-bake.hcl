@@ -319,6 +319,8 @@ target "overview-frontend" {
     VITE_COMPLIANCE_URL      = VITE_COMPLIANCE_URL
     VITE_COMPLIANCE_API_BASE = VITE_COMPLIANCE_API_BASE
     VITE_USERS_API_BASE      = VITE_USERS_API_BASE
+    VITE_ALERTS_API_BASE     = VITE_ALERTS_API_BASE
+    VITE_ALERTS_URL          = VITE_ALERTS_URL
   }
   cache-from = ["type=gha,scope=overview-frontend"]
   cache-to   = ["type=gha,mode=max,scope=overview-frontend"]

@@ -106,7 +106,9 @@ build overview-frontend . ./overview/frontend/Dockerfile \
   --build-arg "VITE_REGISTRY_URL=${VITE_REGISTRY_URL}" \
   --build-arg "VITE_COMPLIANCE_URL=${VITE_COMPLIANCE_URL}" \
   --build-arg "VITE_COMPLIANCE_API_BASE=${VITE_COMPLIANCE_API_BASE}" \
-  --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}"
+  --build-arg "VITE_USERS_API_BASE=${VITE_USERS_API_BASE:-/api/users/v1}" \
+  --build-arg "VITE_ALERTS_API_BASE=${VITE_ALERTS_API_BASE}" \
+  --build-arg "VITE_ALERTS_URL=${VITE_ALERTS_URL}"
 
 build alerts-frontend . ./alerts/frontend/Dockerfile \
   --build-arg "VITE_ALERTS_API_BASE=${VITE_ALERTS_API_BASE}" \
