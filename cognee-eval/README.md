@@ -93,6 +93,6 @@ Then: `make upgrade && make rollout`.
 
 ## Notes
 
-- **GHCR auth**: on kind, set `GHCR_PULL_TOKEN=<PAT with read:packages>` and `GHCR_USERNAME=<your-github-username>` in `.env` — `bootstrap.sh` creates the pull secret and runs `docker login ghcr.io` automatically. On Gardener the deploy workflow handles it.
+- **GHCR auth**: on kind, set `GHCR_PULL_TOKEN=<PAT with read:packages>` in `.env` — `bootstrap.sh` creates the pull secret and runs `docker login ghcr.io` automatically. On Gardener the deploy workflow handles it.
 - **Promotion is manual by design** — a human blesses the graph before it ships to prod.
 - **Feedback merges into the main graph** — the snapshot carries source doc + all approved feedback as one coherent graph.
