@@ -7,10 +7,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
-from ai_trust_authorization import require_permission
-from ai_trust_authorization.constants import SYSTEMS_READ
+from ai_trust_authorization import check_permission, require_permission
+from ai_trust_authorization.constants import SYSTEMS_APPROVE, SYSTEMS_READ
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
@@ -29,9 +29,11 @@ class OpenTaskRow(BaseModel):
         a ``question_states`` row whose ``assignee_username`` is the user and
         that is not yet confirmed (``confirmed_at IS NULL``). ``assignment_id``
         carries the QuestionState id; ``question_key`` the question.
-      * **review** — an AI system awaiting this user's compliance review
-        (``compliance_officer_username == user`` and
-        ``workflow_status == "pending_review"``). Carries ``tier`` + the two
+      * **review** — an AI system awaiting compliance review
+        (``workflow_status == "pending_review"``), surfaced to the assigned
+        ``compliance_officer_username`` if one is set, otherwise to every
+        approver (``systems:approve`` holder) so an unassigned submitted
+        assessment is never invisible. Carries ``tier`` + the two
         Art. 50 flags + ``planned_rollout_date`` for the CO landing's
         "Ready for review" table.
 
@@ -119,13 +121,26 @@ async def my_open_tasks(request: Request) -> list[OpenTaskRow]:
 
         # AI systems awaiting this user's compliance review. The CO is otherwise
         # invisible to Open Tasks (not a per-question assignee) — one row per
-        # system currently in pending_review.
+        # system currently in pending_review. A system with a specific CO
+        # assigned surfaces only to that CO; a submitted assessment with NO CO
+        # assigned surfaces to every approver (anyone holding systems:approve),
+        # mirroring issue_classification, which lets any approver issue when the
+        # CO field is empty — so a submitted review is never invisible.
+        can_approve = await check_permission(user, SYSTEMS_APPROVE)
+        review_conditions = [AISystem.compliance_officer_username == user]
+        if can_approve:
+            review_conditions.append(
+                or_(
+                    AISystem.compliance_officer_username.is_(None),
+                    AISystem.compliance_officer_username == "",
+                )
+            )
         review_rows = (
             (
                 await session.execute(
                     select(AISystem).where(
-                        AISystem.compliance_officer_username == user,
                         AISystem.workflow_status == "pending_review",
+                        or_(*review_conditions),
                     )
                 )
             )

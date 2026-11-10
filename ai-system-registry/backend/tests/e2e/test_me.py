@@ -3,7 +3,8 @@
 GET /v1/me/open-tasks — two sources:
   * `assigned` — a `question_states` row assigned to the user and not yet
     confirmed.
-  * `review`   — a system in `pending_review` where the user is the CO.
+  * `review`   — a system in `pending_review`, shown to the assigned CO or, if
+    none is assigned, to any approver (`systems:approve`).
 GET /v1/me/systems — AI systems the current user owns (`business_owners`).
 
 Data is seeded directly via the ORM so arbitrary states can be built without
@@ -226,3 +227,56 @@ async def test_open_tasks_empty_for_unrelated_user(client: httpx.AsyncClient):
     r = await client.get("/v1/me/open-tasks", headers=_hdr(_OTHER))
     assert r.status_code == 200
     assert r.json() == []
+
+
+async def test_open_tasks_review_unassigned_visible_to_approver(
+    client: httpx.AsyncClient,
+):
+    """A submitted assessment with NO CO assigned surfaces to every approver.
+
+    The single-page submit flow does not assign a specific CO, so the review
+    must be visible to any ``systems:approve`` holder — mirroring
+    issue_classification, which lets any approver issue when the CO field is
+    empty. (In e2e the OpenFGA check is mocked to always-allow, so the acting
+    user counts as an approver.)
+    """
+    await _add(
+        _sys(
+            id="SYS-REV00004",
+            compliance_officer_username=None,
+            workflow_status="pending_review",
+            tier="high",
+        )
+    )
+    r = await client.get("/v1/me/open-tasks", headers=_hdr(_OTHER))
+    assert r.status_code == 200
+    review = [t for t in r.json() if t["source"] == "review"]
+    assert len(review) == 1
+    assert review[0]["system_id"] == "SYS-REV00004"
+
+
+async def test_open_tasks_review_unassigned_hidden_from_non_approver(
+    client: httpx.AsyncClient, monkeypatch
+):
+    """An unassigned review is hidden from a user who cannot approve.
+
+    Flip the OpenFGA check so ``systems:approve`` (can_approve_systems) is
+    denied while ``systems:read`` (the endpoint's own gate) still passes.
+    """
+    import ai_trust_authorization.openfga_client as _fga
+
+    async def _co_read_only(_user: str, relation: str, _obj: str) -> bool:
+        return relation != "can_approve_systems"
+
+    monkeypatch.setattr(_fga, "check", _co_read_only)
+
+    await _add(
+        _sys(
+            id="SYS-REV00005",
+            compliance_officer_username=None,
+            workflow_status="pending_review",
+        )
+    )
+    r = await client.get("/v1/me/open-tasks", headers=_hdr(_OTHER))
+    assert r.status_code == 200
+    assert [t for t in r.json() if t["source"] == "review"] == []
