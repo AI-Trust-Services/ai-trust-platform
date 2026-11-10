@@ -4,6 +4,10 @@ from ai_trust_persistence.models.platform_settings import PlatformSettings
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.alert_rule import AlertRule
 from ai_trust_persistence.models.assessment import Assessment
+from ai_trust_persistence.models.assessment_dossier import (
+    AssessmentDossier,
+    AssessmentDossierOutput,
+)
 from ai_trust_persistence.models.audit_event import AuditEvent
 from ai_trust_persistence.models.requirement import Requirement
 from ai_trust_persistence.models.custom_role import CustomRole
@@ -58,6 +62,8 @@ __all__ = [
     "ModelCardFeatureStoreGroup",
     "Framework",
     "Assessment",
+    "AssessmentDossier",
+    "AssessmentDossierOutput",
     "Obligation",
     "Requirement",
     "Evidence",
