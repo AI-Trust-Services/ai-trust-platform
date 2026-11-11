@@ -73,7 +73,11 @@ function ConfidenceIndicator({
 export default function QuestionView() {
   const { id, questionKey } = useParams();
   const navigate = useNavigate();
-  const { state, reload, markSaved, basePath, userMap } = useAssessment();
+  const { state, reload, markSaved, basePath, userMap, ensureUserMap } = useAssessment();
+
+  // Trigger the lazy user-map fetch on first QuestionView mount. AssessmentApp
+  // guards with a ref so this is a no-op on every subsequent question navigation.
+  useEffect(() => { ensureUserMap(); }, [ensureUserMap]);
 
   const qState: QuestionState | undefined = useMemo(
     () => state.questions.find((q) => q.question_key === questionKey),

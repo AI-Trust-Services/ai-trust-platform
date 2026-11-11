@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+
 import { Outlet, useNavigate, useParams, useMatch } from "react-router";
 import { Loader2, Save } from "lucide-react";
 import type { AssessmentState } from "../../types";
@@ -13,9 +14,11 @@ interface AssessmentCtx {
   reload: () => Promise<void>;
   savedAt: number | null;
   markSaved: () => void;
-  // Username → display name, fetched once here so children (e.g. QuestionView)
-  // don't each re-fetch the whole user directory on every mount/navigation.
+  // Username → display name. Populated lazily on first QuestionView mount so
+  // roles that never open a question (e.g. CO on CoIssueView) pay no cost.
   userMap: Record<string, { firstName: string; lastName: string }>;
+  // Call once from QuestionView to trigger the fetch (idempotent — ref-guarded).
+  ensureUserMap: () => void;
   // Base path for all nested links — `/systems/:id/assessment` for the live cycle,
   // or `/systems/:id/assessment/view/:assessmentId` for a read-only historical one,
   // so in-app navigation stays pinned to the cycle being viewed.
@@ -49,12 +52,16 @@ export default function AssessmentApp() {
   const [userMap, setUserMap] = useState<
     Record<string, { firstName: string; lastName: string }>
   >({});
+  const userMapLoaded = useRef(false);
   const [advisorExpanded, setAdvisorExpanded] = useState(false);
 
-  // Resolve usernames → display names once for the whole assessment app (the
-  // assignee dropdown + comment authors in QuestionView). Fetched here rather
-  // than in QuestionView so it isn't re-fetched on every question navigation.
-  useEffect(() => {
+  // Lazily resolve usernames → display names. Called by QuestionView on first
+  // mount so roles that never open a question (e.g. CO on CoIssueView) pay zero
+  // Keycloak round-trips. The ref guard prevents a double-fetch when two question
+  // navigations happen in quick succession.
+  const ensureUserMap = useCallback(() => {
+    if (userMapLoaded.current) return;
+    userMapLoaded.current = true;
     api
       .getAllUsers()
       .then((users) => {
@@ -190,7 +197,7 @@ export default function AssessmentApp() {
   }
 
   return (
-    <Ctx.Provider value={{ state, reload, savedAt, markSaved, userMap, basePath }}>
+    <Ctx.Provider value={{ state, reload, savedAt, markSaved, userMap, ensureUserMap, basePath }}>
       <div className="flex h-full flex-col">
         {state.prefill_failed && (
           <div className="flex shrink-0 items-center gap-2 border-b border-[#fca5a5]/40 bg-[#fef2f2] px-6 py-2 text-sm text-[#991b1b]">
