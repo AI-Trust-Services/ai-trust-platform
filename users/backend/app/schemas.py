@@ -57,3 +57,15 @@ class UsersListResponse(BaseModel):
 class PermissionsResponse(BaseModel):
     username: str
     permissions: list[str]
+
+
+class OrganizationContact(BaseModel):
+    username: str
+    firstName: str
+    lastName: str
+    email: str
+
+
+class OrganizationContactsResponse(BaseModel):
+    compliance_officer: Optional[OrganizationContact] = None
+    organization_admin: Optional[OrganizationContact] = None

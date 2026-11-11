@@ -41,7 +41,7 @@ _INDEXING_URL = os.environ.get(
 _QUESTIONNAIRE_BUCKET = "registration-docs"
 _RAG_QUERY = "AI system description purpose capabilities deployment risks"
 _RAG_K = 10
-_QUESTIONNAIRE_MAX_TOKENS = int(os.environ.get("QUESTIONNAIRE_MAX_TOKENS", "32000"))
+_QUESTIONNAIRE_MAX_TOKENS = int(os.environ.get("QUESTIONNAIRE_MAX_TOKENS", "24000"))
 
 
 def _validate_llm_output(raw: dict) -> dict:

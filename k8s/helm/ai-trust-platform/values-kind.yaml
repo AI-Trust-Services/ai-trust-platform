@@ -46,7 +46,10 @@ otel:
 
 cogneeEval:
   enabled: true
-  # Serves the frozen graph snapshot from GHCR (never ingests).
-  # graphImage is set at deploy time via COGNEE_GRAPH_IMAGE in .env (passed as --set by the Makefile).
-  # Set readOnly: false only on a dedicated build/test instance for graph curation.
+  # kind pulls the frozen graph snapshot from GHCR via the ghcr-pull-secret that
+  # bootstrap.sh creates. graphImage MUST be set here: values.yaml no longer carries
+  # a default (on Gardener it comes from the Flux-injected COGNEE_GRAPH_IMAGE), so
+  # without this kind renders an empty init-container image and `helm upgrade` fails.
+  # The Makefile's --set from COGNEE_GRAPH_TAG (.env) overrides this when present.
   readOnly: true
+  graphImage: "ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph@sha256:3b76d89972135d39c15a23492003dded854942f2d59926c1384e46fc7e4c380b"

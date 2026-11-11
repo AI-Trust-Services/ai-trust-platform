@@ -6,7 +6,8 @@ Runs once after OpenFGA is healthy. Idempotent — safe to re-run.
 Steps:
   1. Find (or create) the store named "ai-trust".
   2. Write the authorization model (flat RBAC against platform:global).
-  3. Seed role→permission tuples for all built-in roles.
+  3. Reconcile role→permission tuples for all built-in roles (add missing,
+     prune stale) so the store matches ROLE_PERMISSIONS on every run.
   4. If INITIAL_ADMIN_USER is set, assign it the platform_administrator role.
   5. Write the store ID to /config/store_id on the shared volume so backends
      can read it on startup.
@@ -169,24 +170,45 @@ async def write_model(client: OpenFgaClient) -> None:
 
 
 async def seed_role_tuples(client: OpenFgaClient) -> None:
-    """Write role→permission tuples for all built-in roles.
+    """Reconcile role→permission tuples for all built-in roles to match constants.
 
-    OpenFGA's write is not on-conflict-safe: writing an existing tuple errors.
-    We write each tuple individually and ignore 'already exists' errors so the
-    script stays idempotent.
+    Declarative: on every run the store is converged to ``ROLE_PERMISSIONS`` — the
+    desired tuples are written (idempotent add) AND any permission a built-in role
+    no longer holds is deleted. Without the prune step a *removal* in constants.py
+    (e.g. dropping ``systems:approve`` from ``business_owner`` for separation of
+    duties) would never take effect on an already-provisioned store, since OpenFGA
+    writes only add. Scoped strictly to built-in role→permission tuples on
+    ``platform:global`` — user→role memberships, custom roles, admin assignments,
+    and service principals are never touched.
+
+    OpenFGA's write/delete is not on-conflict-safe: writing an existing tuple or
+    deleting a missing one errors. We apply each tuple individually and ignore the
+    'already exists' / 'tuple does not exist' errors so the script stays idempotent.
     """
-    tuples: list[ClientTuple] = []
+    all_relations = set(RELATION_BY_PERMISSION.values())
+    writes: list[ClientTuple] = []
+    deletes: list[ClientTuple] = []
     for role, permissions in ROLE_PERMISSIONS.items():
-        for permission in permissions:
-            relation = RELATION_BY_PERMISSION[permission]
-            tuples.append(
+        desired = {RELATION_BY_PERMISSION[p] for p in permissions}
+        for relation in desired:
+            writes.append(
                 ClientTuple(
                     user=f"role:{role}#member",
                     relation=relation,
                     object=PLATFORM_OBJECT,
                 )
             )
-    await _write_tuples_idempotent(client, tuples, label="role permission")
+        # Prune any permission this role no longer holds (stale from a prior model).
+        for relation in all_relations - desired:
+            deletes.append(
+                ClientTuple(
+                    user=f"role:{role}#member",
+                    relation=relation,
+                    object=PLATFORM_OBJECT,
+                )
+            )
+    await _write_tuples_idempotent(client, writes, label="role permission")
+    await _delete_tuples_idempotent(client, deletes, label="stale role permission")
 
 
 async def seed_admin_users(client: OpenFgaClient) -> None:
@@ -245,6 +267,29 @@ async def _write_tuples_idempotent(
                 continue
             raise
     print(f"Wrote {written} new {label} tuple(s) ({len(tuples)} total).")
+
+
+async def _delete_tuples_idempotent(
+    client: OpenFgaClient, tuples: list[ClientTuple], label: str
+) -> None:
+    deleted = 0
+    for t in tuples:
+        try:
+            await client.write(ClientWriteRequest(deletes=[t]))
+            deleted += 1
+        except Exception as e:
+            # OpenFGA returns 400 write_failed_due_to_invalid_input when the tuple
+            # to delete does not exist. Treat as idempotent success (already pruned).
+            msg = str(e)
+            if (
+                "write_failed" in msg
+                or "does not exist" in msg
+                or "not found" in msg
+                or "cannot delete" in msg
+            ):
+                continue
+            raise
+    print(f"Deleted {deleted} stale {label} tuple(s) ({len(tuples)} candidate(s)).")
 
 
 def write_store_id_file(store_id: str) -> None:

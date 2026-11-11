@@ -18,7 +18,7 @@ class QuestionComment(Base):
 
     Soft-deleted via ``deleted_at`` so the thread history is preserved; a comment
     author may delete their own comment and the system owner may delete any.
-    Scoped per system (see ``QuestionState``).
+    Scoped per assessment cycle (``assessment_id``; see ``QuestionState``).
     """
 
     __tablename__ = "question_comments"

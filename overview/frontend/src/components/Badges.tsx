@@ -10,6 +10,7 @@ const TIER_CLASSES: Record<TierKey, string> = {
   "gpai-standard": "bg-[#f4edff] text-[#6C1AF4]",
   limited: "bg-[#fffbeb] text-[#b45309]",
   minimal: "bg-[#f0fdf4] text-[#15803d]",
+  pending: "bg-[#f4f4f5] text-[#71717a]",
 };
 
 const LIFECYCLE_CLASSES: Record<LifecycleKey, string> = {

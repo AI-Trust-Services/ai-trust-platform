@@ -10,7 +10,7 @@ import {
   PieChart as PieChartIcon, BarChart3, type LucideIcon,
 } from "lucide-react";
 import { api, ALERTS_URL, COMPLIANCE_URL, REGISTRY_URL } from "../api/client";
-import { useToast, useHeader } from "../App";
+import { useToast, useHeader } from "./DashboardLayout";
 import { navigateTo } from "../hooks/useLuigi";
 import type { ComplianceStats, DashboardCard, DateRange, OverviewStats, AlertEvent } from "../types";
 import { TIER_COLORS, statusColor } from "../utils";
