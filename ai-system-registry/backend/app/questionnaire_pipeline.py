@@ -68,31 +68,37 @@ def _validate_llm_output(raw: dict) -> dict:
 
 
 def _system_evidence(row: AISystem) -> str:
-    """Serialise the AI system row as a structured evidence block for the LLM."""
+    """Serialise the AI system row as a structured evidence block for the LLM.
+
+    **Allowlist — do not add columns here.** A field belongs in this block only if
+    the user can *see it and change it* in the UI: a visible, editable value that is
+    wrong can be discovered and corrected by its owner, an invisible one never can.
+    These five are exactly the fields the registration form collects
+    (``RegisterSystem.tsx``) and the "AI System Details" card edits
+    (``SystemDetailPage.tsx``).
+
+    Every other column on ``ai_systems`` is either a schema default nobody entered
+    (``system_type='application'``, ``autonomy_level='decision_support'``,
+    ``org_role='provider'``, ``version='1.0.0'``, the risk booleans — all
+    ``NOT NULL`` with a default and collected by no UI), a derived value
+    (``tier`` is the classifier's own output), or never populated
+    (``department``/``use_case``/``people_affected``/``decision_context``). The
+    system prompt declares this block authoritative evidence and grades anything
+    stated here HIGH, so passing a default through makes the model answer
+    confidently from a fact nobody asserted (issue #383). Everything substantive
+    must come from the uploaded + indexed documents instead.
+
+    ``questionnaire_answers`` is excluded for a different reason: those are the
+    model's own prior answers to the same questions, and the prompt states
+    "Questionnaire answers are not factual evidence for other questions".
+    """
     fields = {
-        "name": row.name,
-        "version": row.version,
-        "provider": row.provider,
-        "org_name": row.org_name,
-        "org_role": row.org_role,
-        "description": row.description,
-        "intended_purpose": row.intended_purpose,
-        "department": row.department,
-        "use_case": row.use_case,
-        "people_affected": row.people_affected,
-        "decision_context": row.decision_context,
-        "system_type": row.system_type,
-        "autonomy_level": row.autonomy_level,
-        "lifecycle": row.lifecycle,
-        "deployment_country": row.deployment_country,
-        "is_gpai": row.is_gpai,
-        "is_chatbot": row.is_chatbot,
-        "generates_synthetic_content": row.generates_synthetic_content,
-        "tier": row.tier,
+        "name": row.name,  # "Name of AI system"
+        "intended_purpose": row.intended_purpose,  # "System Description"
+        "lifecycle": row.lifecycle,  # "Development stage"
+        "planned_rollout_date": row.planned_rollout_date,  # "Planned roll-out date"
+        "git_repo_url": row.git_repo_url,  # "Github repository"
     }
-    # Include questionnaire answers if already collected via the workflow.
-    if row.questionnaire_answers:
-        fields["questionnaire_answers"] = row.questionnaire_answers
 
     lines = ["Registration Data — AI System Inventory\n"]
     for key, value in fields.items():

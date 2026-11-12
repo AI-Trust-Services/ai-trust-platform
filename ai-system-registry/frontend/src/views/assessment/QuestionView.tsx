@@ -102,6 +102,21 @@ export default function QuestionView() {
   const nextKey = idx >= 0 && idx < ORDERED_QUESTION_KEYS.length - 1 ? ORDERED_QUESTION_KEYS[idx + 1] : null;
 
   const changedFromAi = qState?.answer_source === "manual";
+  // Provenance line under the input. `answer_source` is seeded "ai_prefilled" for
+  // EVERY question at /open, so it alone does not mean the AI answered this one —
+  // an unanswered question would otherwise claim "Pre-filled AI answer" (#383).
+  // NOT_ENOUGH_INFORMATION / CONFLICT are the AI explicitly declining to answer;
+  // the control renders blank for them, so say what actually happened.
+  const answerSourceLabel = changedFromAi
+    ? "Manual entry"
+    : qState?.answer === "NOT_ENOUGH_INFORMATION" ||
+        qState?.answer === '["NOT_ENOUGH_INFORMATION"]'
+      ? "AI found no supporting evidence"
+      : qState?.answer === "CONFLICT" || qState?.answer === '["CONFLICT"]'
+        ? "AI found conflicting evidence"
+        : qState?.answer
+          ? "Pre-filled AI answer"
+          : "Not answered by AI";
   // Whether a comment that SATISFIES the backend change-gate exists — i.e. one
   // recorded at/after the last answer change. Backend-computed (mirrors the
   // confirm gate) so a stale pre-change comment doesn't enable a confirm the
@@ -364,9 +379,7 @@ export default function QuestionView() {
               placeholder="Enter your answer"
             />
           )}
-          <p className="text-xs text-muted-foreground">
-            {qState?.answer_source === "manual" ? "Manual entry" : "Pre-filled AI answer"}
-          </p>
+          <p className="text-xs text-muted-foreground">{answerSourceLabel}</p>
         </div>
 
         {changedFromAi && !hasQualifyingComment && canEdit && (
