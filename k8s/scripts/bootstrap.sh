@@ -88,10 +88,12 @@ kubectl create secret generic ai-trust-env \
   --from-literal=LANGFUSE_TRACING_ENVIRONMENT="${LANGFUSE_TRACING_ENVIRONMENT}" \
   -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-# Pull secret for private GHCR images (e.g. the cognee-eval read-only graph
+# Pull secret for private GHCR images (e.g. the cognee-eval frozen graph
 # snapshot). Only created when GHCR_PULL_TOKEN is set in .env — devs who don't
 # pull private images can leave it blank. Mirrors the Gardener deploy, which
 # creates the same-named secret from the CI GHCR_PULL_TOKEN.
+# Also runs `docker login ghcr.io` so that the Makefile's `imagetools inspect`
+# call can resolve the COGNEE_GRAPH_TAG digest without a separate manual login.
 GHCR_OWNER="${GITHUB_REPOSITORY_OWNER:-ai-trust-services}"
 GHCR_OWNER="$(echo "$GHCR_OWNER" | tr '[:upper:]' '[:lower:]')"
 if [[ -n "${GHCR_PULL_TOKEN:-}" ]]; then
@@ -101,6 +103,8 @@ if [[ -n "${GHCR_PULL_TOKEN:-}" ]]; then
     --docker-username="$GHCR_OWNER" \
     --docker-password="$GHCR_PULL_TOKEN" \
     -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+  echo "==> docker login ghcr.io (so imagetools inspect can resolve COGNEE_GRAPH_TAG)"
+  echo "$GHCR_PULL_TOKEN" | docker login ghcr.io -u "$GHCR_OWNER" --password-stdin
 fi
 
 # Flux's HelmRelease valuesFrom has no cross-namespace support — the secret must exist

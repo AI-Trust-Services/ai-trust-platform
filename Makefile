@@ -61,9 +61,17 @@ bootstrap:
 build:
 	bash k8s/scripts/build-and-load-images.sh
 
-COGNEE_GRAPH_TAG  := $(shell grep -E '^COGNEE_GRAPH_TAG=' .env 2>/dev/null | tail -1 | cut -d= -f2-)
+COGNEE_GRAPH_TAG   = $(shell grep -E '^COGNEE_GRAPH_TAG=' .env 2>/dev/null | tail -1 | cut -d= -f2-)
 COGNEE_GRAPH_REPO := ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph
-COGNEE_GRAPH_IMAGE := $(if $(COGNEE_GRAPH_TAG),$(shell docker buildx imagetools inspect "$(COGNEE_GRAPH_REPO):$(COGNEE_GRAPH_TAG)" --format '$(COGNEE_GRAPH_REPO)@{{.Manifest.Digest}}' 2>/dev/null))
+COGNEE_GRAPH_IMAGE = $(if $(COGNEE_GRAPH_TAG),$(shell \
+  _result=$$(docker buildx imagetools inspect "$(COGNEE_GRAPH_REPO):$(COGNEE_GRAPH_TAG)" \
+    --format '$(COGNEE_GRAPH_REPO)@{{.Manifest.Digest}}' 2>/dev/null); \
+  if [ -z "$$_result" ]; then \
+    echo >&2 "WARNING: COGNEE_GRAPH_TAG is set but imagetools inspect failed (GHCR auth?)."; \
+    echo >&2 "         Run: echo \$$GHCR_PULL_TOKEN | docker login ghcr.io -u <github-user> --password-stdin"; \
+    echo >&2 "         Falling back to StatefulSet (ingest mode, no frozen graph)."; \
+  fi; \
+  echo "$$_result"))
 
 install:
 	@if helm status $(RELEASE) -n $(NAMESPACE) >/dev/null 2>&1; then \
