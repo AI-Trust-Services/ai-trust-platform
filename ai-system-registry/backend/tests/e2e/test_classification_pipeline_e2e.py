@@ -97,7 +97,9 @@ def _mock_classification_minio():
 
     async def _capture_to_thread(fn, *args, **kwargs):
         if hasattr(fn, "__name__") and fn.__name__ == "_get":
-            return json.loads(_STUB_QUESTIONNAIRE_RESULT)
+            return (
+                _STUB_QUESTIONNAIRE_RESULT  # bytes — matches what the real _get returns
+            )
         return None
 
     get_patch = patch(
