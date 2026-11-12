@@ -46,6 +46,7 @@ from app.assessment_catalogue import (
 from app.classifier import classify_ai_questionnaire
 from app.ids import new_id
 from app.llm import LLMParseError
+from app.classification_pipeline import run_classification
 from app.questionnaire_pipeline import run_pipeline_streaming
 from app.questionnaire_required import QUESTION_LABEL
 from app.schemas.assessment import (
@@ -467,6 +468,19 @@ async def _run_prefill_background(
             logger.info(
                 "assessment.prefill_completed",
                 extra={"system_id": system_id, "tier": row.tier},
+            )
+
+        # Step 2: risk & role classification — non-fatal, Step 1 results already persisted.
+        try:
+            await run_classification(
+                system_id=system_id,
+                questionnaire_run_key=output["run_key"],
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "classification_pipeline.failed",
+                extra={"system_id": system_id, "error": str(exc)},
+                exc_info=True,
             )
     except Exception as exc:  # noqa: BLE001
         logger.error(

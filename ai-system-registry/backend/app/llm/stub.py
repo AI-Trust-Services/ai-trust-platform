@@ -383,6 +383,42 @@ def _assessment_prefill(messages: list[dict]) -> dict:
     return _result(json.dumps({"answers": answers}))
 
 
+def _risk_role_classification(messages: list[dict]) -> dict:
+    """Stub for one active-label classification call (Step 2 pipeline).
+
+    Returns a minimal valid single-label result matching the LLM 2 output schema.
+    The label id is extracted from the user message if possible; defaults to HIGH_RISK.
+    """
+    blob = " ".join(
+        m.get("content", "") if isinstance(m.get("content"), str) else ""
+        for m in messages
+        if m.get("role") == "user"
+    )
+    # Try to extract the labelId from the CLASSIFICATION_CONFIG block in the user message.
+    label_id = "HIGH_RISK"
+    import re as _re
+    match = _re.search(r'"id"\s*:\s*"([A-Z_]+)"', blob)
+    if match:
+        label_id = match.group(1)
+    return _result(
+        json.dumps(
+            {
+                "classifications": [
+                    {
+                        "labelId": label_id,
+                        "result": False,
+                        "confidence": 60.00,
+                        "explanation": (
+                            "Stub mode: no evidence evaluated. "
+                            "Human verification required."
+                        ),
+                    }
+                ]
+            }
+        )
+    )
+
+
 def chat(messages: list[dict], *, task: str = "chat") -> dict:
     """Synchronous stub dispatch, keyed by task."""
     if task == "turn":
@@ -403,5 +439,7 @@ def chat(messages: list[dict], *, task: str = "chat") -> dict:
         return _questionnaire_doc_extract(messages)
     if task == "questionnaire_answer" or task.startswith("questionnaire_answer_batch"):
         return _questionnaire_answer(messages)
+    if task.startswith("risk_role_classification_"):
+        return _risk_role_classification(messages)
     # Repair or unknown task: return a harmless empty object.
     return _result("{}")

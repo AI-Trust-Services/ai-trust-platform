@@ -68,7 +68,7 @@ def load_template(template_id: str) -> str:
     file does not exist.
     """
     prompts_dir = _resolve_prompts_dir()
-    path = prompts_dir / f"{template_id}.md"
+    path = prompts_dir / Path(f"{template_id}.md")
     if not path.is_file():
         raise PromptTemplateError(
             f"Prompt template '{template_id}' not found at '{path}'. "
@@ -117,7 +117,7 @@ def load_questionnaire(questionnaire_id: str) -> dict:
     contains invalid JSON.
     """
     prompts_dir = _resolve_prompts_dir()
-    path = prompts_dir / f"{questionnaire_id}.json"
+    path = prompts_dir / Path(f"{questionnaire_id}.json")
     if not path.is_file():
         raise PromptTemplateError(
             f"Questionnaire '{questionnaire_id}' not found at '{path}'. "

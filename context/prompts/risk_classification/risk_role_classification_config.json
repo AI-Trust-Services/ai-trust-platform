@@ -1,0 +1,811 @@
+{
+  "schemaVersion": "1.0",
+  "classificationConfigId": "ai-act-label-classification",
+  "version": "1.0.0",
+  "title": "AI System Risk & Role Classification",
+  "defaultLanguage": "en",
+  "questionnaireId": "ai-questionnaire",
+  "questionnaireVersion": "1.0.0",
+  "riskLabels": [
+    {
+      "id": "PROHIBITED",
+      "activate": true,
+      "definition": "The AI system meets at least one configured prohibited-practice condition.",
+      "rules": [
+        {
+          "id": "SENSITIVE_BIOMETRIC_CATEGORISATION",
+          "when": {
+            "all": [
+              {
+                "questionId": "Prohibited_1",
+                "operator": "IN",
+                "values": [
+                  "YES",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "questionId": "Prohibited_2",
+                "operator": "IN",
+                "values": [
+                  "NO",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "questionId": "Prohibited_3",
+                "operator": "IN",
+                "values": [
+                  "NO",
+                  "PARTIALLY"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "MANIPULATIVE_OR_DECEPTIVE_TECHNIQUES",
+          "when": {
+            "all": [
+              {
+                "questionId": "Prohibited_4",
+                "operator": "IN",
+                "values": [
+                  "YES",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "questionId": "Prohibited_5",
+                "operator": "IN",
+                "values": [
+                  "YES",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "questionId": "Prohibited_6",
+                "operator": "IN",
+                "values": [
+                  "YES",
+                  "PARTIALLY"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "EXPLOITATION_OF_VULNERABILITY",
+          "when": {
+            "questionId": "Prohibited_7",
+            "operator": "IN",
+            "values": [
+              "YES",
+              "PARTIALLY"
+            ]
+          }
+        },
+        {
+          "id": "SOCIAL_SCORING",
+          "when": {
+            "questionId": "Prohibited_8",
+            "operator": "IN",
+            "values": [
+              "YES",
+              "PARTIALLY"
+            ]
+          }
+        },
+        {
+          "id": "REAL_TIME_REMOTE_BIOMETRIC_IDENTIFICATION",
+          "when": {
+            "all": [
+              {
+                "questionId": "Prohibited_9",
+                "operator": "IN",
+                "values": [
+                  "YES",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "any": [
+                  {
+                    "questionId": "Prohibited_10",
+                    "operator": "IN",
+                    "values": [
+                      "NO",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "Prohibited_11",
+                    "operator": "IN",
+                    "values": [
+                      "NO",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "Prohibited_12",
+                    "operator": "IN",
+                    "values": [
+                      "NO",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "Prohibited_13",
+                    "operator": "IN",
+                    "values": [
+                      "NO",
+                      "PARTIALLY"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "CRIMINAL_RISK_ASSESSMENT",
+          "when": {
+            "all": [
+              {
+                "questionId": "Prohibited_14",
+                "operator": "IN",
+                "values": [
+                  "YES",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "questionId": "Prohibited_15",
+                "operator": "IN",
+                "values": [
+                  "NO",
+                  "PARTIALLY"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "UNTARGETED_FACIAL_SCRAPING",
+          "when": {
+            "questionId": "Prohibited_16",
+            "operator": "IN",
+            "values": [
+              "YES",
+              "PARTIALLY"
+            ]
+          }
+        },
+        {
+          "id": "EMOTION_RECOGNITION_WORK_OR_EDUCATION",
+          "when": {
+            "questionId": "Prohibited_17",
+            "operator": "IN",
+            "values": [
+              "YES",
+              "PARTIALLY"
+            ]
+          }
+        },
+        {
+          "id": "NON_CONSENSUAL_INTIMATE_CONTENT",
+          "when": {
+            "questionId": "Prohibited_18",
+            "operator": "IN",
+            "values": [
+              "YES",
+              "PARTIALLY"
+            ]
+          }
+        },
+        {
+          "id": "CHILD_ABUSE_MATERIAL",
+          "when": {
+            "questionId": "Prohibited_19",
+            "operator": "IN",
+            "values": [
+              "YES",
+              "PARTIALLY"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "HIGH_RISK",
+      "activate": true,
+      "definition": "The AI system meets at least one configured high-risk condition. All high-risk categories are consolidated into this single label.",
+      "rules": [
+        {
+          "id": "ANNEX_I_PRODUCT_OR_SAFETY_COMPONENT",
+          "when": {
+            "any": [
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "MACHINERY"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "SAFETY_OF_TOYS"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "RECREATIONAL_CRAFT_AND_PERSONAL_WATERCRAFT"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "LIFTS_AND_SAFETY_COMPONENTS"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "EXPLOSIVE_ATMOSPHERES"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "RADIO_EQUIPMENT"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "PRESSURE_EQUIPMENT"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "CABLEWAY_INSTALLATIONS"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "PERSONAL_PROTECTIVE_EQUIPMENT"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "BURNING_GASEOUS_FUELS"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "MEDICAL_DEVICES"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "IN_VITRO_DIAGNOSTIC_MEDICAL_DEVICES"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "CIVIL_AVIATION_SECURITY"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "TWO_OR_THREE_WHEEL_VEHICLES_AND_QUADRICYCLES"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "AGRICULTURAL_AND_FORESTRY_VEHICLES"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "MARINE_EQUIPMENT"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "RAIL_SYSTEMS"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "MOTOR_VEHICLE_APPROVAL_AND_MARKET_SURVEILLANCE"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "MOTOR_VEHICLE_TYPE_APPROVAL_REQUIREMENTS"
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "CIVIL_AVIATION_AND_EASA"
+              }
+            ]
+          }
+        },
+        {
+          "id": "ANNEX_III_USE_CASE",
+          "when": {
+            "all": [
+              {
+                "any": [
+                  {
+                    "questionId": "High_Risk_3",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_4",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_5",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_6",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_7",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_8",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_9",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_10",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_11",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_12",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_13",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_14",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_15",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_16",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_17",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_18",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_19",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_20",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_21",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_22",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_23",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_24",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_25",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_26",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_27",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_28",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_29",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_30",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  }
+                ]
+              },
+              {
+                "any": [
+                  {
+                    "questionId": "High_Risk_31",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_32",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "all": [
+                      {
+                        "questionId": "High_Risk_31",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "questionId": "High_Risk_32",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "all": [
+                          {
+                            "questionId": "High_Risk_33",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_34",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_35",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_36",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "TRANSPARENCY",
+      "activate": true,
+      "definition": "At least one configured transparency-related condition applies to the AI system. This label is evaluated independently of the base risk classification.",
+      "rules": [
+        {
+          "id": "INTERACTION_WITH_NATURAL_PERSONS",
+          "when": {
+            "questionId": "Transparency_1",
+            "operator": "IN",
+            "values": [
+              "YES",
+              "PARTIALLY"
+            ]
+          }
+        },
+        {
+          "id": "SYNTHETIC_CONTENT",
+          "when": {
+            "questionId": "Transparency_2",
+            "operator": "IN",
+            "values": [
+              "YES",
+              "PARTIALLY"
+            ]
+          }
+        },
+        {
+          "id": "DEEPFAKE",
+          "when": {
+            "questionId": "Transparency_3",
+            "operator": "IN",
+            "values": [
+              "YES",
+              "PARTIALLY"
+            ]
+          }
+        },
+        {
+          "id": "PUBLIC_INTEREST_TEXT_WITHOUT_FULL_EDITORIAL_EXCEPTION",
+          "when": {
+            "all": [
+              {
+                "questionId": "Transparency_4",
+                "operator": "IN",
+                "values": [
+                  "YES",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "questionId": "Transparency_5",
+                "operator": "IN",
+                "values": [
+                  "NO",
+                  "PARTIALLY"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "EMOTION_RECOGNITION_OR_BIOMETRIC_CATEGORISATION",
+          "when": {
+            "questionId": "Transparency_6",
+            "operator": "IN",
+            "values": [
+              "YES",
+              "PARTIALLY"
+            ]
+          }
+        },
+        {
+          "id": "HIGH_RISK_DECISION_OR_DECISION_SUPPORT",
+          "when": {
+            "questionId": "Transparency_7",
+            "operator": "IN",
+            "values": [
+              "YES",
+              "PARTIALLY"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "roleLabels": [
+    {
+      "id": "PROVIDER",
+      "activate": true,
+      "definition": "A natural or legal person that develops an AI system or GPAI model, has it developed and places it on the market or puts it into service under its own name or trademark, or otherwise assumes provider obligations through the configured provider-triggering situations.",
+      "rules": [
+        {
+          "id": "PROVIDER_ROLE",
+          "when": {
+            "any": [
+              {
+                "questionId": "Role_4",
+                "operator": "EQUALS",
+                "value": "YES"
+              },
+              {
+                "questionId": "Role_5",
+                "operator": "EQUALS",
+                "value": "YES"
+              },
+              {
+                "questionId": "Role_6",
+                "operator": "EQUALS",
+                "value": "YES"
+              },
+              {
+                "questionId": "Role_7",
+                "operator": "EQUALS",
+                "value": "YES"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "DEPLOYER",
+      "activate": true,
+      "definition": "A natural or legal person who uses the AI system under its own responsibility.",
+      "rules": [
+        {
+          "id": "DEPLOYER_ROLE",
+          "when": {
+            "questionId": "Role_3",
+            "operator": "EQUALS",
+            "value": "YES"
+          }
+        }
+      ]
+    },
+    {
+      "id": "IMPORTER",
+      "activate": true,
+      "definition": "A natural or legal person established in the Union that places on the market an AI system bearing the name or trademark of a natural or legal person established outside the Union.",
+      "rules": [
+        {
+          "id": "IMPORTER_ROLE",
+          "when": {
+            "questionId": "Role_2",
+            "operator": "EQUALS",
+            "value": "YES"
+          }
+        }
+      ]
+    },
+    {
+      "id": "DISTRIBUTOR",
+      "activate": false,
+      "definition": "A natural or legal person in the supply chain, other than the provider or importer, that makes an AI system available on the Union market.",
+      "rules": []
+    },
+    {
+      "id": "AUTHORISED_REPRESENTATIVE",
+      "activate": true,
+      "definition": "A natural or legal person established in the Union that has received and accepted a written mandate from a provider to perform specified obligations on the provider's behalf.",
+      "rules": [
+        {
+          "id": "AUTHORISED_REPRESENTATIVE_ROLE",
+          "when": {
+            "questionId": "Role_1",
+            "operator": "EQUALS",
+            "value": "YES"
+          }
+        }
+      ]
+    }
+  ]
+}
