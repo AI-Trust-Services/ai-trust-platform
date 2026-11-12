@@ -161,9 +161,7 @@ def _proposals_from_results(results: list[Any]) -> dict[str, dict[str, Any]]:
             if len(values) > 1 or QUESTION_TYPES.get(q_key) == "MULTISELECT"
             else values[0]
         )
-        answered_options = [
-            a for a in options if a.get("value") not in (None, "")
-        ]
+        answered_options = [a for a in options if a.get("value") not in (None, "")]
         confidence = (
             min(
                 (a["answerStrength"] for a in answered_options),
