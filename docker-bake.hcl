@@ -314,12 +314,13 @@ target "overview-frontend" {
   tags       = [tag("overview-frontend")]
   args = {
     VITE_OVERVIEW_API_BASE   = VITE_OVERVIEW_API_BASE
-    VITE_ALERTS_API_BASE     = VITE_ALERTS_API_BASE
-    VITE_ALERTS_URL          = VITE_ALERTS_URL
+    VITE_REGISTRY_API_BASE   = VITE_REGISTRY_API_BASE
     VITE_REGISTRY_URL        = VITE_REGISTRY_URL
     VITE_COMPLIANCE_URL      = VITE_COMPLIANCE_URL
     VITE_COMPLIANCE_API_BASE = VITE_COMPLIANCE_API_BASE
     VITE_USERS_API_BASE      = VITE_USERS_API_BASE
+    VITE_ALERTS_API_BASE     = VITE_ALERTS_API_BASE
+    VITE_ALERTS_URL          = VITE_ALERTS_URL
   }
   cache-from = ["type=gha,scope=overview-frontend"]
   cache-to   = ["type=gha,mode=max,scope=overview-frontend"]

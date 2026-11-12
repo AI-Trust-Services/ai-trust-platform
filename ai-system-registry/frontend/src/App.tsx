@@ -23,6 +23,24 @@ interface ModalControls {
 const ToastContext = createContext<ToastFn | null>(null);
 export const useToast = () => useContext(ToastContext)!;
 
+/**
+ * True only when the shell's top window was reloaded (browser refresh), as
+ * opposed to a Luigi side-nav click that merely swaps the iframe src. The
+ * registry runs same-origin with the shell, so the top window's navigation
+ * timing is readable; a cross-origin/unsupported read falls back to "not a
+ * reload" → land on the systems list.
+ */
+function isShellReload(): boolean {
+  try {
+    const nav = window.top?.performance?.getEntriesByType?.(
+      "navigation",
+    )?.[0] as PerformanceNavigationTiming | undefined;
+    return nav?.type === "reload";
+  } catch {
+    return false;
+  }
+}
+
 export const ModalContext = createContext<ModalControls | null>(null);
 export const useModalControls = () => useContext(ModalContext)!;
 
@@ -39,9 +57,10 @@ export default function App() {
   const mayWriteAssessments = can("assessments:write");
   const noWriteTitle = "Requires permission: systems:write";
 
-  // Consume a cross-MFE/in-session handoff: restore a saved path, or redirect
-  // into the single-page assessment app when another MFE (e.g. compliance) asks
-  // us to open an assessment. Idempotent — the flags are removed once read.
+  // Consume a cross-MFE/in-session handoff: restore a saved path, redirect into
+  // the single-page assessment app when another MFE (e.g. compliance) asks us to
+  // open an assessment, or — on a genuine browser refresh — restore the last-open
+  // system detail. Idempotent: the flags are removed once read.
   const consumeHandoff = useCallback(() => {
     const savedPath = sessionStorage.getItem("lastSystemPath");
     if (savedPath) {
@@ -60,6 +79,16 @@ export default function App() {
       } catch {
         /* ignore malformed handoff */
       }
+      return;
+    }
+    // Browser-refresh restore. Luigi reloads the iframe to /registry/ on BOTH a
+    // real page refresh and a side-nav click, and both fire this init — but only
+    // a refresh reloads the shell top window. Restore the last-open detail page
+    // only on a genuine refresh, so a nav-menu click lands on the list, not the
+    // old detail.
+    const restorePath = sessionStorage.getItem("registryRestorePath");
+    if (restorePath && isShellReload()) {
+      navigate(restorePath, { replace: true });
     }
   }, [navigate]);
 

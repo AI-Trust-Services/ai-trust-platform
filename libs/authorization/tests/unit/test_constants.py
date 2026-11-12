@@ -66,6 +66,7 @@ def test_ai_engineer_permissions():
 def test_ai_compliance_officer_permissions():
     assert set(ROLE_PERMISSIONS["ai_compliance_officer"]) == {
         SYSTEMS_READ,
+        SYSTEMS_WRITE,
         SYSTEMS_APPROVE,
         ASSESSMENTS_READ,
         ASSESSMENTS_WRITE,

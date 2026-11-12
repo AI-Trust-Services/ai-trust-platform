@@ -161,14 +161,15 @@ def _proposals_from_results(results: list[Any]) -> dict[str, dict[str, Any]]:
             if len(values) > 1 or QUESTION_TYPES.get(q_key) == "MULTISELECT"
             else values[0]
         )
-        strengths = [
-            a["answerStrength"]
-            for a in options
-            if a.get("answerStrength") in _STRENGTH_RANK
+        answered_options = [
+            a for a in options if a.get("value") not in (None, "")
         ]
         confidence = (
-            min(strengths, key=lambda s: _STRENGTH_RANK[s]).lower()
-            if strengths
+            min(
+                (a["answerStrength"] for a in answered_options),
+                key=lambda s: _STRENGTH_RANK[s],
+            ).lower()
+            if all(a.get("answerStrength") in _STRENGTH_RANK for a in answered_options)
             else None
         )
         out[q_key] = {
