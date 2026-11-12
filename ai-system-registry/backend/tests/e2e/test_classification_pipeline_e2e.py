@@ -1,4 +1,4 @@
-"""E2E tests for the classification pipeline (Step 2).
+"""E2E tests for the classification pipeline (Step 2) and pipeline orchestration endpoints.
 
 Uses the stub LLM provider. MinIO operations are patched to avoid a live instance.
 RAG retrieval is mocked via respx.
@@ -7,7 +7,7 @@ RAG retrieval is mocked via respx.
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -48,6 +48,18 @@ _STUB_QUESTIONNAIRE_RESULT = json.dumps(
     }
 ).encode("utf-8")
 
+_STUB_CLASSIFICATION_OUTPUT = {
+    "run_key": _STUB_CLASSIFICATION_KEY,
+    "presigned_url": _STUB_PRESIGNED_C,
+    "result": {
+        "questionnaire_run_key": _STUB_QUESTIONNAIRE_KEY,
+        "config_id": "risk_role_classification_config",
+        "config_version": "1.0.0",
+        "prompt_id": "risk_role_classification",
+        "classifications": [],
+    },
+}
+
 
 async def _create_system(client: httpx.AsyncClient) -> str:
     r = await client.post(
@@ -79,16 +91,15 @@ def _mock_questionnaire_minio():
 
 
 def _mock_classification_minio():
-    """Patch Step 2 MinIO calls — read returns a minimal questionnaire result."""
-    # Mock the MinIO get_object response for reading Step 1 output.
-    mock_response = MagicMock()
-    mock_response.read.return_value = _STUB_QUESTIONNAIRE_RESULT
-    mock_response.close = MagicMock()
-    mock_response.release_conn = MagicMock()
+    """Patch Step 2 MinIO calls."""
+    async def _capture_to_thread(fn, *args, **kwargs):
+        if hasattr(fn, "__name__") and fn.__name__ == "_get":
+            return json.loads(_STUB_QUESTIONNAIRE_RESULT)
+        return None
 
     get_patch = patch(
         "app.classification_pipeline.asyncio.to_thread",
-        new_callable=AsyncMock,
+        side_effect=_capture_to_thread,
     )
     ensure_patch = patch(
         "app.classification_pipeline.minio_client.ensure_bucket",
@@ -99,71 +110,98 @@ def _mock_classification_minio():
         new_callable=AsyncMock,
         return_value=_STUB_PRESIGNED_C,
     )
-    return get_patch, ensure_patch, presign_patch, mock_response
+    return get_patch, ensure_patch, presign_patch
+
+
+# ---------------------------------------------------------------------------
+# run_classification (library function)
+# ---------------------------------------------------------------------------
 
 
 async def test_run_classification_writes_to_minio(client: httpx.AsyncClient):
-    """After a questionnaire run, run_classification writes a valid JSON blob to MinIO."""
+    """run_classification writes a valid JSON blob to MinIO and returns correct schema."""
     from app.classification_pipeline import run_classification
 
     sid = await _create_system(client)
+    get_p, ensure_p, presign_p = _mock_classification_minio()
 
-    get_p, ensure_p, presign_p, mock_resp = _mock_classification_minio()
-
-    # Intercept asyncio.to_thread to capture the stored classification JSON.
-    put_calls: list[bytes] = []
-
-    async def _capture_to_thread(fn, *args, **kwargs):
-        if hasattr(fn, "__name__") and fn.__name__ == "_get":
-            # Reading Step 1 result from MinIO.
-            return json.loads(_STUB_QUESTIONNAIRE_RESULT)
-        if hasattr(fn, "__name__") and fn.__name__ == "_put":
-            # Writing Step 2 result — capture the data argument (io.BytesIO).
-            import io
-            bio = args[2] if len(args) > 2 else kwargs.get("Body")
-            if hasattr(bio, "read"):
-                put_calls.append(bio.read())
-            return None
-        return None
-
-    with patch(
-        "app.classification_pipeline.asyncio.to_thread",
-        side_effect=_capture_to_thread,
-    ), ensure_p, presign_p:
+    with get_p, ensure_p, presign_p:
         output = await run_classification(
             system_id=sid,
             questionnaire_run_key=_STUB_QUESTIONNAIRE_KEY,
         )
 
-    assert "run_key" in output
     assert output["run_key"].startswith("classification-results/")
     assert "presigned_url" in output
     result = output["result"]
     assert result["config_id"] == "risk_role_classification_config"
     assert "config_version" in result
-    assert "classifications" in result
     assert isinstance(result["classifications"], list)
 
 
-async def test_questionnaire_run_triggers_classification(client: httpx.AsyncClient):
-    """POST /systems/{id}/questionnaire-run triggers Step 2 (non-fatally)."""
+# ---------------------------------------------------------------------------
+# POST /v1/systems/{id}/classification-run
+# ---------------------------------------------------------------------------
+
+
+async def test_classification_run_endpoint(client: httpx.AsyncClient):
+    """POST /classification-run returns 200 with correct schema."""
+    sid = await _create_system(client)
+    get_p, ensure_p, presign_p = _mock_classification_minio()
+
+    with get_p, ensure_p, presign_p:
+        r = await client.post(
+            f"/v1/systems/{sid}/classification-run",
+            json={"questionnaire_run_key": _STUB_QUESTIONNAIRE_KEY},
+            headers=_HDR,
+        )
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["run_key"].startswith("classification-results/")
+    assert "presigned_url" in body
+    assert "classifications" in body["result"]
+
+
+async def test_classification_run_endpoint_missing_key_returns_404(
+    client: httpx.AsyncClient,
+):
+    """POST /classification-run with a non-existent MinIO key returns 404."""
+    sid = await _create_system(client)
+
+    async def _raise_key_error(fn, *args, **kwargs):
+        raise KeyError("questionnaire-results/missing/key.json")
+
+    with patch(
+        "app.classification_pipeline.asyncio.to_thread",
+        side_effect=_raise_key_error,
+    ):
+        r = await client.post(
+            f"/v1/systems/{sid}/classification-run",
+            json={"questionnaire_run_key": "questionnaire-results/missing/key.json"},
+            headers=_HDR,
+        )
+
+    assert r.status_code == 404, r.text
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/systems/{id}/pipeline-run
+# ---------------------------------------------------------------------------
+
+
+async def test_pipeline_run_endpoint(client: httpx.AsyncClient):
+    """POST /pipeline-run returns both questionnaire and classification keys."""
     sid = await _create_system(client)
 
     q_upload_p, q_put_p, q_presign_p = _mock_questionnaire_minio()
 
-    classification_called = []
-
     async def _fake_run_classification(**kwargs):
-        classification_called.append(kwargs)
-        return {
-            "run_key": _STUB_CLASSIFICATION_KEY,
-            "presigned_url": _STUB_PRESIGNED_C,
-            "result": {"classifications": []},
-        }
+        return _STUB_CLASSIFICATION_OUTPUT
 
     with q_upload_p, q_put_p, q_presign_p:
         with patch(
-            "app.routers.questionnaire.run_classification",
+            "app.routers.pipeline.run_classification",
             side_effect=_fake_run_classification,
         ):
             with respx.mock(assert_all_mocked=False) as mock:
@@ -171,33 +209,33 @@ async def test_questionnaire_run_triggers_classification(client: httpx.AsyncClie
                     return_value=httpx.Response(503, json={"detail": "unavailable"})
                 )
                 r = await client.post(
-                    f"/v1/systems/{sid}/questionnaire-run",
+                    f"/v1/systems/{sid}/pipeline-run",
                     json={},
                     headers=_HDR,
                 )
 
     assert r.status_code == 200, r.text
-    # Step 2 was called with the Step 1 run_key.
-    assert len(classification_called) == 1
-    assert "questionnaire_run_key" in classification_called[0]
+    body = r.json()
+    assert "questionnaire" in body
+    assert "classification" in body
+    assert body["questionnaire"]["run_key"].startswith("questionnaire-results/")
+    assert body["classification"]["run_key"] == _STUB_CLASSIFICATION_KEY
 
 
-async def test_classification_failure_does_not_break_questionnaire_run(
+async def test_questionnaire_run_does_not_trigger_classification(
     client: httpx.AsyncClient,
 ):
-    """Step 2 failure is non-fatal — Step 1 response is still 200."""
+    """POST /questionnaire-run is Step 1 only — classification is NOT auto-triggered."""
     sid = await _create_system(client)
 
     q_upload_p, q_put_p, q_presign_p = _mock_questionnaire_minio()
+    classification_called = []
 
-    async def _failing_classification(**kwargs):
-        raise RuntimeError("MinIO unavailable")
+    async def _spy(**kwargs):
+        classification_called.append(kwargs)
 
     with q_upload_p, q_put_p, q_presign_p:
-        with patch(
-            "app.routers.questionnaire.run_classification",
-            side_effect=_failing_classification,
-        ):
+        with patch("app.routers.pipeline.run_classification", side_effect=_spy):
             with respx.mock(assert_all_mocked=False) as mock:
                 mock.post(_RETRIEVE_URL).mock(
                     return_value=httpx.Response(503)
@@ -209,5 +247,4 @@ async def test_classification_failure_does_not_break_questionnaire_run(
                 )
 
     assert r.status_code == 200, r.text
-    body = r.json()
-    assert "run_key" in body
+    assert classification_called == [], "classification must not be auto-triggered from questionnaire-run"

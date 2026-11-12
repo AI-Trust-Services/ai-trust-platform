@@ -66,7 +66,7 @@ curl "<presigned_url from response>"
 ```
 
 
-**Risk & role classification pipeline — Step 2** (`app/classification_pipeline.py`, issue #368) — reads a completed questionnaire result from MinIO and derives per-label EU AI Act risk/role classifications using the LLM 2 system prompt. Triggered non-fatally after every successful Step 1 run (from both `routers/assessment.py` `_run_prefill_background` and `routers/questionnaire.py` `trigger_questionnaire_run`). Frontend display and hierarchy resolution are out of scope here (see issue #371).
+**Risk & role classification pipeline — Step 2** (`app/classification_pipeline.py`, issue #368) — reads a completed questionnaire result from MinIO and derives per-label EU AI Act risk/role classifications using the LLM 2 system prompt. Exposed as explicit API endpoints (see Pipeline endpoints below); **not** auto-triggered from `questionnaire-run` or assessment prefill. Frontend display and hierarchy resolution are out of scope here (see issue #371).
 - **Input:** `questionnaire_run_key` (the MinIO key written by Step 1), `system_id`.
 - **Config:** `context/prompts/risk_classification/risk_role_classification_config.json` — lists `riskLabels` (PROHIBITED, HIGH_RISK, TRANSPARENCY) and `roleLabels` (PROVIDER, DEPLOYER, IMPORTER, DISTRIBUTOR `activate:false`, AUTHORISED_REPRESENTATIVE). Each label has a `rules[]` array with `when` trees referencing `questionId` values. **Active labels only** (those with `activate: true` or no `activate` key) are processed; currently 6 active + 1 inactive (DISTRIBUTOR).
 - **System prompt:** `context/prompts/risk_classification/risk_role_classification.md` (LLM 2 prompt). To change wording, edit the `.md` — no code change.
@@ -75,6 +75,11 @@ curl "<presigned_url from response>"
 - **Output schema:** `{questionnaire_run_key, config_id, config_version, prompt_id, classifications: [{labelId, result: bool, confidence: float, explanation: str}]}`.
 - **Storage:** MinIO `registration-docs` bucket, key `classification-results/{system_id}/{config_id}/{iso_timestamp}.json`. Append-only — each run writes a new file. Subfolder template loading (`app/llm/templates.py`) uses `Path()` to support `/` separators in template IDs (e.g. `"risk_classification/risk_role_classification"`).
 - **Stub mode:** `app/llm/stub.py` `_risk_role_classification` handles `task.startswith("risk_role_classification_")` — extracts `labelId` from the user message JSON and returns a minimal valid `{classifications: [{labelId, result: false, confidence: 60.0, explanation: "Stub mode…"}]}`.
+
+**Pipeline endpoints** (`routers/pipeline.py`, all `systems:write`) — explicit step-by-step and full-pipeline triggers:
+- `POST /v1/systems/{id}/classification-run` — Step 2 only. Body: `{questionnaire_run_key: str, classification_config_id?, prompt_id?}`. Returns `{run_key, presigned_url, result}`. 404 if the MinIO key or config/prompt file is not found; 502 on unparseable LLM output.
+- `POST /v1/systems/{id}/pipeline-run` — Step 1 → Step 2 in sequence. Optional body fields: `questionnaire_id`, `questionnaire_prompt_id`, `classification_config_id`, `classification_prompt_id` (all default to the standard files). Returns `{questionnaire: {run_key, presigned_url, result}, classification: {run_key, presigned_url, result}}`. Step 3 (#371 hierarchy resolver) adds a `hierarchy` key here. Both steps are fatal — a classification failure surfaces as 502 (caller explicitly requested the full pipeline).
+- **`POST /questionnaire-run` is Step 1 only** — it no longer auto-triggers classification. Call `/classification-run` or `/pipeline-run` explicitly for Step 2.
 
 **Side-effect-free evaluation** (`routers/classify.py`):
 - `POST /v1/classify/evaluate` (`systems:read`) — runs the full LLM inference + deterministic classifier without writing to the database. Used by the document-indexing AI Test Bed to score sample fixtures. Body: `{answers: {business: {…}, technical: {…}}, enabled_sources?, injected_context?, prompt_override?, model?, role?}`. Returns `{tier, basis, obligations, confidence, rationale}`. Malformed LLM JSON → 502.

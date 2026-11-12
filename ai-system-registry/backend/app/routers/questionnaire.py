@@ -15,15 +15,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ai_trust_logging import get_logger
 from ai_trust_authorization.permissions import require_permission
-from app.classification_pipeline import run_classification
 from app.llm.parsing import LLMParseError
 from app.llm.templates import PromptTemplateError
 from app.questionnaire_pipeline import run_pipeline
 
 router = APIRouter(tags=["questionnaire"])
-logger = get_logger(__name__)
 
 
 class QuestionnaireRunRequest(BaseModel):
@@ -83,18 +80,5 @@ async def trigger_questionnaire_run(
             status_code=502,
             detail=f"LLM returned unparseable output: {exc}",
         ) from exc
-
-    # Step 2: risk & role classification — non-fatal, Step 1 results already persisted.
-    try:
-        await run_classification(
-            system_id=system_id,
-            questionnaire_run_key=output["run_key"],
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "classification_pipeline.failed",
-            extra={"system_id": system_id, "error": str(exc)},
-            exc_info=True,
-        )
 
     return QuestionnaireRunResponse(**output)
