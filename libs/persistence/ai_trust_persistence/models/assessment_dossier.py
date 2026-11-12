@@ -11,15 +11,14 @@ from ai_trust_persistence.database import Base
 
 
 class AssessmentDossier(Base):
-    """Immutable, append-only snapshot of one assessment run's INPUTS (EU AI Act).
+    """Immutable snapshot of one assessment run's INPUTS (EU AI Act).
 
-    Issue #366. This row is INSERTed once at assessment start and **never updated
-    or deleted** — a DB trigger rejects every UPDATE/DELETE (see migration 0050),
-    so it is technically impossible to change a captured dossier, not merely
-    detectable after the fact. It freezes exactly what went into a run, so an
-    auditor can reconstruct "which inputs/configuration produced which outputs"
-    independent of later edits to the live AISystem row, its documents, or the
-    prompt/config files.
+    Issue #366. This row is INSERTed once at assessment start and its contents are
+    **never updated** — a BEFORE UPDATE trigger rejects every UPDATE (see
+    migrations 0050 + 0051), so a captured dossier can never be tampered with. It
+    freezes exactly what went into a run, so an auditor can reconstruct "which
+    inputs/configuration produced which outputs" independent of later edits to the
+    live AISystem row, its documents, or the prompt/config files.
 
     1:1 with an assessment cycle (``assessment_id`` unique). The run's OUTPUTS are
     **not** stored here — they are append-only rows in
@@ -27,10 +26,13 @@ class AssessmentDossier(Base):
     this frozen row. "Run complete" is *derived* from the presence of an ``ai``
     output row, not a mutable status column (there is none, by design).
 
-    FKs are ``RESTRICT``: an assessment/system that has a dossier cannot be
-    deleted out from under it — the run's record is permanent. (TRUNCATE CASCADE,
-    used by the test conftest, bypasses both the RESTRICT and the row trigger, so
-    tests still reset cleanly.)
+    FKs are ``CASCADE`` (migration 0051, originally RESTRICT): a dossier lives and
+    dies with its assessment. A deleted/aborted (stale) assessment takes its
+    dossier with it; approved/historicized assessments are never deleted
+    (compliance blocks that at the app layer), so their dossiers persist. RESTRICT
+    was reverted because it made it impossible to delete/abort an opened
+    assessment. (TRUNCATE CASCADE, used by the test conftest, bypasses the row
+    trigger, so tests still reset cleanly.)
 
     The depth of ``inputs['documents']`` is PM-open (#366): reference+hash, the
     serialized text the LLM actually saw, or a byte-exact MinIO copy — the column
@@ -43,20 +45,20 @@ class AssessmentDossier(Base):
     # The assessment cycle this dossier belongs to — 1:1 (unique).
     assessment_id: Mapped[str] = mapped_column(
         String(30),
-        ForeignKey("assessments.id", ondelete="RESTRICT"),
+        ForeignKey("assessments.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
     )
     # Denormalized for "all dossiers for this system" lookups; not the scope key.
     ai_system_id: Mapped[str] = mapped_column(
         String(20),
-        ForeignKey("ai_systems.id", ondelete="RESTRICT"),
+        ForeignKey("ai_systems.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    # Frozen at assessment start; never mutated (DB-enforced append-only).
-    # System name + description + linked documents (document depth is PM-open).
+    # Frozen at assessment start; never mutated (DB-enforced: BEFORE UPDATE trigger).
+    # System relational evidence + linked documents (document depth is PM-open).
     inputs: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     # Questionnaire config + risk/role classification config, verbatim + sha256.
     config_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
@@ -77,11 +79,13 @@ class AssessmentDossierOutput(Base):
     final classification) once, on "Submit to Compliance Officer". A future
     ticket may add ``co_issued``.
 
-    Append-only + write-once-per-layer: INSERTed once, never updated or deleted
-    (DB trigger, migration 0050), and ``UNIQUE(dossier_id, layer)`` guarantees a
-    layer cannot be written twice. This is *why* the AI layer can never be
-    overwritten by the user-confirmed layer (#370's hard requirement): they are
-    physically separate, immutable rows — not two fields on one mutable row.
+    Write-once-per-layer: INSERTed once, never updated (a BEFORE UPDATE trigger,
+    migrations 0050 + 0051, rejects mutation), and ``UNIQUE(dossier_id, layer)``
+    guarantees a layer cannot be written twice. This is *why* the AI layer can
+    never be overwritten by the user-confirmed layer (#370's hard requirement):
+    they are physically separate, immutable rows — not two fields on one mutable
+    row. The FK is ``CASCADE`` (0051), so a layer is removed only when its dossier
+    is (i.e. when the assessment is deleted).
     """
 
     __tablename__ = "assessment_dossier_outputs"
@@ -92,7 +96,7 @@ class AssessmentDossierOutput(Base):
     id: Mapped[str] = mapped_column(String(30), primary_key=True)
     dossier_id: Mapped[str] = mapped_column(
         String(30),
-        ForeignKey("assessment_dossiers.id", ondelete="RESTRICT"),
+        ForeignKey("assessment_dossiers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

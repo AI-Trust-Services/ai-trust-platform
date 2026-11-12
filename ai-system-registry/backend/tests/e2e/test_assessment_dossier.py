@@ -265,13 +265,15 @@ async def test_pipeline_writes_ai_output_layer(client: httpx.AsyncClient):
     assert payload["classification"]["tier"] is not None
 
 
-# ── immutability: append-only is DB-enforced ──────────────────────────────────
+# ── immutability: contents frozen (UPDATE), but a dossier is deletable ─────────
 
 
 @pytest.mark.asyncio
-async def test_dossier_is_append_only(client: httpx.AsyncClient):
-    """The BEFORE UPDATE/DELETE trigger makes a captured dossier un-mutable and
-    un-deletable — changing a value is technically impossible, not just detectable."""
+async def test_dossier_contents_immutable_but_deletable(client: httpx.AsyncClient):
+    """A captured dossier's CONTENTS are frozen — a BEFORE UPDATE trigger rejects
+    every UPDATE. DELETE is allowed (the trigger blocks UPDATE only), so the
+    assessment lifecycle can remove a dossier when its assessment is
+    deleted/aborted; the FK CASCADE then drops its output layers too."""
     system_id = await _create_system(client, "Immutable System", "desc")
     await _open_and_settle(client, system_id)
     dossier_id = _fetch_dossier(system_id)["id"]
@@ -281,7 +283,7 @@ async def test_dossier_is_append_only(client: httpx.AsyncClient):
     try:
         cur = conn.cursor()
 
-        # UPDATE a frozen column → blocked.
+        # UPDATE a frozen column → blocked (contents can never change).
         with pytest.raises(psycopg2.Error) as ei_update:
             cur.execute(
                 "UPDATE assessment_dossiers SET config_snapshot = '{}'::jsonb "
@@ -290,17 +292,41 @@ async def test_dossier_is_append_only(client: httpx.AsyncClient):
             )
         assert "append-only" in str(ei_update.value).lower()
 
-        # DELETE the dossier row → blocked.
-        with pytest.raises(psycopg2.Error) as ei_delete:
-            cur.execute("DELETE FROM assessment_dossiers WHERE id = %s", (dossier_id,))
-        assert "append-only" in str(ei_delete.value).lower()
+        # DELETE the dossier → allowed now, and cascades to its output layers.
+        cur.execute("DELETE FROM assessment_dossiers WHERE id = %s", (dossier_id,))
+        cur.execute(
+            "SELECT count(*) FROM assessment_dossier_outputs WHERE dossier_id = %s",
+            (dossier_id,),
+        )
+        assert cur.fetchone()[0] == 0, "output layers should cascade-delete"
+    finally:
+        conn.close()
 
-        # DELETE an output layer → blocked too.
-        with pytest.raises(psycopg2.Error) as ei_out:
-            cur.execute(
-                "DELETE FROM assessment_dossier_outputs WHERE dossier_id = %s",
-                (dossier_id,),
-            )
-        assert "append-only" in str(ei_out.value).lower()
+
+@pytest.mark.asyncio
+async def test_deleting_assessment_cascades_dossier(client: httpx.AsyncClient):
+    """Deleting the parent assessment removes its dossier (FK CASCADE) — the exact
+    operation that compliance /abort and /delete perform. Before migration 0051
+    the RESTRICT FK blocked this with a ForeignKeyViolationError (→ 500)."""
+    system_id = await _create_system(client, "Cascade System", "desc")
+    await _open_and_settle(client, system_id)
+    d = _fetch_dossier(system_id)
+
+    conn = _pg()
+    conn.autocommit = True
+    try:
+        cur = conn.cursor()
+        # Delete the assessment the dossier hangs off (same as abort/delete).
+        cur.execute(
+            "DELETE FROM assessments WHERE id = "
+            "(SELECT assessment_id FROM assessment_dossiers WHERE id = %s)",
+            (d["id"],),
+        )
+        cur.execute(
+            "SELECT count(*) FROM assessment_dossiers WHERE id = %s", (d["id"],)
+        )
+        assert cur.fetchone()[0] == 0, (
+            "dossier should cascade-delete with its assessment"
+        )
     finally:
         conn.close()
