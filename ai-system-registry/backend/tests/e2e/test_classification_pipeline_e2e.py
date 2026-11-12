@@ -145,13 +145,13 @@ async def test_run_classification_writes_to_minio(client: httpx.AsyncClient):
 
 
 async def test_classification_run_endpoint(client: httpx.AsyncClient):
-    """POST /classification-run returns 200 with correct schema."""
+    """POST /classification-llm-run returns 200 with correct schema."""
     sid = await _create_system(client)
     get_p, ensure_p, presign_p = _mock_classification_minio()
 
     with get_p, ensure_p, presign_p:
         r = await client.post(
-            f"/v1/systems/{sid}/classification-run",
+            f"/v1/systems/{sid}/classification-llm-run",
             json={"questionnaire_run_key": _STUB_QUESTIONNAIRE_KEY},
             headers=_HDR,
         )
@@ -166,7 +166,7 @@ async def test_classification_run_endpoint(client: httpx.AsyncClient):
 async def test_classification_run_endpoint_missing_key_returns_404(
     client: httpx.AsyncClient,
 ):
-    """POST /classification-run with a non-existent MinIO key returns 404."""
+    """POST /classification-llm-run with a non-existent MinIO key returns 404."""
     sid = await _create_system(client)
 
     async def _raise_key_error(fn, *args, **kwargs):
@@ -177,7 +177,7 @@ async def test_classification_run_endpoint_missing_key_returns_404(
         side_effect=_raise_key_error,
     ):
         r = await client.post(
-            f"/v1/systems/{sid}/classification-run",
+            f"/v1/systems/{sid}/classification-llm-run",
             json={"questionnaire_run_key": "questionnaire-results/missing/key.json"},
             headers=_HDR,
         )
@@ -191,7 +191,7 @@ async def test_classification_run_endpoint_missing_key_returns_404(
 
 
 async def test_pipeline_run_endpoint(client: httpx.AsyncClient):
-    """POST /pipeline-run returns both questionnaire and classification keys."""
+    """POST /ai-assisted-assessment-prefill-run returns both questionnaire and classification keys."""
     sid = await _create_system(client)
 
     q_upload_p, q_put_p, q_presign_p = _mock_questionnaire_minio()
@@ -209,7 +209,7 @@ async def test_pipeline_run_endpoint(client: httpx.AsyncClient):
                     return_value=httpx.Response(503, json={"detail": "unavailable"})
                 )
                 r = await client.post(
-                    f"/v1/systems/{sid}/pipeline-run",
+                    f"/v1/systems/{sid}/ai-assisted-assessment-prefill-run",
                     json={},
                     headers=_HDR,
                 )
@@ -225,7 +225,7 @@ async def test_pipeline_run_endpoint(client: httpx.AsyncClient):
 async def test_questionnaire_run_does_not_trigger_classification(
     client: httpx.AsyncClient,
 ):
-    """POST /questionnaire-run is Step 1 only — classification is NOT auto-triggered."""
+    """POST /questionnaire-llm-run is Step 1 only — classification is NOT auto-triggered."""
     sid = await _create_system(client)
 
     q_upload_p, q_put_p, q_presign_p = _mock_questionnaire_minio()
@@ -241,10 +241,10 @@ async def test_questionnaire_run_does_not_trigger_classification(
                     return_value=httpx.Response(503)
                 )
                 r = await client.post(
-                    f"/v1/systems/{sid}/questionnaire-run",
+                    f"/v1/systems/{sid}/questionnaire-llm-run",
                     json={},
                     headers=_HDR,
                 )
 
     assert r.status_code == 200, r.text
-    assert classification_called == [], "classification must not be auto-triggered from questionnaire-run"
+    assert classification_called == [], "classification must not be auto-triggered from questionnaire-llm-run"

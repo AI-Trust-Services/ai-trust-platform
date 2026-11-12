@@ -1,4 +1,4 @@
-"""POST /v1/systems/{system_id}/questionnaire-run — AI-powered questionnaire answer pipeline.
+"""POST /v1/systems/{system_id}/questionnaire-llm-run — AI-powered questionnaire answer pipeline.
 
 Triggers the questionnaire answer pipeline for a given AI system. The pipeline
 reads registration data + optional RAG documents, calls the LLM using the
@@ -20,7 +20,7 @@ from app.llm.parsing import LLMParseError
 from app.llm.templates import PromptTemplateError
 from app.questionnaire_pipeline import run_pipeline
 
-router = APIRouter(tags=["questionnaire"])
+router = APIRouter(tags=["assessment"])
 
 
 class QuestionnaireRunRequest(BaseModel):
@@ -45,16 +45,16 @@ class QuestionnaireRunResponse(BaseModel):
 
 
 @router.post(
-    "/systems/{system_id}/questionnaire-run",
+    "/systems/{system_id}/questionnaire-llm-run",
     response_model=QuestionnaireRunResponse,
     dependencies=[Depends(require_permission("systems:write"))],
 )
-async def trigger_questionnaire_run(
+async def trigger_questionnaire_llm_run(
     system_id: str,
     body: QuestionnaireRunRequest,
     request: Request,
 ) -> QuestionnaireRunResponse:
-    """Trigger the AI-powered questionnaire answer pipeline for an AI system.
+    """Trigger the AI-powered questionnaire answer pipeline for an AI system (Step 1).
 
     Returns the MinIO key, a 24-hour presigned download URL, and the full
     parsed LLM result ``{"results": [...]}``.

@@ -22,7 +22,7 @@ from app.llm.parsing import LLMParseError
 from app.llm.templates import PromptTemplateError
 from app.questionnaire_pipeline import run_pipeline
 
-router = APIRouter(tags=["pipeline"])
+router = APIRouter(tags=["assessment"])
 logger = get_logger(__name__)
 
 _DEFAULT_QUESTIONNAIRE_ID = "ai-questionnaire"
@@ -87,17 +87,17 @@ def _map_errors(exc: Exception) -> HTTPException:
 
 
 @router.post(
-    "/systems/{system_id}/classification-run",
+    "/systems/{system_id}/classification-llm-run",
     response_model=ClassificationRunResponse,
     dependencies=[Depends(require_permission("systems:write"))],
 )
-async def trigger_classification_run(
+async def trigger_classification_llm_run(
     system_id: str,
     body: ClassificationRunRequest,
 ) -> ClassificationRunResponse:
     """Run Step 2 (risk & role classification) against a completed questionnaire result.
 
-    Pass the ``run_key`` returned by ``POST /questionnaire-run`` as
+    Pass the ``run_key`` returned by ``POST /questionnaire-llm-run`` as
     ``questionnaire_run_key``. Returns the MinIO key, a 24-hour presigned URL,
     and the full classification result.
 
@@ -118,16 +118,16 @@ async def trigger_classification_run(
 
 
 @router.post(
-    "/systems/{system_id}/pipeline-run",
+    "/systems/{system_id}/ai-assisted-assessment-prefill-run",
     response_model=PipelineRunResponse,
     dependencies=[Depends(require_permission("systems:write"))],
 )
-async def trigger_pipeline_run(
+async def trigger_ai_assisted_assessment_prefill_run(
     system_id: str,
     body: PipelineRunRequest,
     request: Request,
 ) -> PipelineRunResponse:
-    """Run the full LLM classification pipeline: Step 1 (questionnaire) → Step 2 (classification).
+    """Run the full AI-assisted assessment prefill pipeline: Step 1 (questionnaire) → Step 2 (classification).
 
     Returns both step outputs under ``questionnaire`` and ``classification`` keys.
     Issue #371 will add a ``hierarchy`` key for Step 3 without breaking this contract.
