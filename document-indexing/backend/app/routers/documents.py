@@ -14,7 +14,12 @@ from ai_trust_authorization.constants import (
 )
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
-from ai_trust_persistence.models import AISystem, Document, DocumentVersion
+from ai_trust_persistence.models import (
+    AISystem,
+    AssessmentDossier,
+    Document,
+    DocumentVersion,
+)
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -378,6 +383,39 @@ async def document_download_url(
     return DownloadUrlResponse(url=url, expires_hours=1)
 
 
+async def _assert_not_in_dossier(session: AsyncSession, document_id: str) -> None:
+    """Refuse to hard-delete a document pinned by any assessment dossier (#366).
+
+    A dossier freezes ``inputs.documents[].document_id`` as the audit record of
+    which files produced a classification; purging the original would break that
+    record. Replace (upload a new version) is the supported way to update a
+    referenced document — it keeps the pinned version intact. Same shared DB, so
+    this is a plain JSONB containment check.
+
+    ponytail: brute-force JSONB scan (no GIN index) — dossiers are few; add
+    `ix_assessment_dossiers_inputs` (gin) if this ever shows up in a slow query.
+    """
+    referenced = (
+        await session.execute(
+            select(AssessmentDossier.id)
+            .where(
+                AssessmentDossier.inputs.contains(
+                    {"documents": [{"document_id": document_id}]}
+                )
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if referenced:
+        raise HTTPException(
+            409,
+            "This document is part of an assessment record and cannot be deleted — "
+            "the assessment that used it keeps that exact version for audit. Upload "
+            "a new version (Replace) instead; the record stays pinned to the version "
+            "it was classified on.",
+        )
+
+
 @router.delete(
     "/documents/{document_id}",
     dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
@@ -385,8 +423,13 @@ async def document_download_url(
 async def delete_document(document_id: str) -> dict:
     """Hard delete — the document row is removed; the ON DELETE CASCADE FKs drop every
     version and chunk with it, and the originals are purged from MinIO. Nothing of a
-    deleted document is retained (chunks naturally stop appearing in retrieval)."""
+    deleted document is retained (chunks naturally stop appearing in retrieval).
+
+    Refused with 409 if any assessment dossier references the document (#366) — the
+    audit record pins the version it used, so Replace (new version) is the way to
+    update a referenced document."""
     async with SessionLocal() as session:
+        await _assert_not_in_dossier(session, document_id)
         keys = await _purge_document(session, document_id)
         await session.commit()
     # MinIO has no cascade — delete each version's original after the DB row is gone

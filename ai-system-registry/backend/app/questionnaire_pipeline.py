@@ -67,9 +67,16 @@ def _validate_llm_output(raw: dict) -> dict:
     return raw
 
 
-def _system_evidence(row: AISystem) -> str:
-    """Serialise the AI system row as a structured evidence block for the LLM."""
-    fields = {
+def _evidence_fields(row: AISystem) -> dict[str, Any]:
+    """The registry relational fields fed to the LLM as evidence.
+
+    Single source of truth for *what the pipeline consumes from the registry row* —
+    used both to render the evidence text (below) and to freeze the relational
+    inputs into the assessment dossier (``app.dossier``), so the snapshot captures
+    exactly the registry data a run saw (#366). ``questionnaire_answers`` is
+    included only when present.
+    """
+    fields: dict[str, Any] = {
         "name": row.name,
         "version": row.version,
         "provider": row.provider,
@@ -90,12 +97,15 @@ def _system_evidence(row: AISystem) -> str:
         "generates_synthetic_content": row.generates_synthetic_content,
         "tier": row.tier,
     }
-    # Include questionnaire answers if already collected via the workflow.
     if row.questionnaire_answers:
         fields["questionnaire_answers"] = row.questionnaire_answers
+    return fields
 
+
+def _system_evidence(row: AISystem) -> str:
+    """Serialise the AI system row as a structured evidence block for the LLM."""
     lines = ["Registration Data — AI System Inventory\n"]
-    for key, value in fields.items():
+    for key, value in _evidence_fields(row).items():
         if value is not None and value != "":
             lines.append(f"  {key}: {value}")
     return "\n".join(lines)

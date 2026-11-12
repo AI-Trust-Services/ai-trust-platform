@@ -16,10 +16,8 @@ from __future__ import annotations
 
 import hashlib
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
-
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_trust_logging import get_logger
 from ai_trust_persistence.models.ai_system import AISystem
@@ -27,10 +25,14 @@ from ai_trust_persistence.models.assessment_dossier import (
     AssessmentDossier,
     AssessmentDossierOutput,
 )
-
+from ai_trust_persistence.models.document import Document, DocumentVersion
+from app import classifier
 from app.ids import new_id
 from app.llm.templates import load_template
 from app.questionnaire_loader import find_questionnaire
+from app.questionnaire_pipeline import _evidence_fields
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 logger = get_logger(__name__)
 
@@ -45,56 +47,95 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _snapshot_documents(row: AISystem) -> list[dict[str, Any]]:
-    """Freeze the linked documents at assessment start.
+async def _snapshot_documents(session, system_id: str) -> list[dict[str, Any]]:
+    """Freeze the documents that fed this run: the current + indexed version of
+    each of the system's documents at assessment start.
 
-    **PM-OPEN (#366)** — the depth here is the one undecided question. The
-    current safe minimum is the metadata already on the registry row (no extra
-    I/O), a strict subset of every option, so it is never wrong. When the PM
-    decides, ONLY this function changes (table, triggers, and call sites do not):
-      - reference+hash  → add a sha256 of each document's MinIO bytes;
-      - what the LLM saw → add the serialized extracted text/chunks;
-      - byte-exact      → copy the MinIO object to a dossier-scoped key / pin its
-                          object version.
+    Only ``is_current`` AND ``status='indexed'`` versions are captured — exactly
+    the set the RAG pipeline could retrieve. A document still processing (or
+    failed) at open was not part of the run, so it is not in the snapshot (the UI
+    also blocks starting an assessment while any doc is processing). Each entry
+    pins the exact ``version_id``, so a later Replace (new version) never changes
+    this frozen list, and the pinned original stays downloadable for audit — a
+    hard delete of a referenced document is refused (see the indexing DELETE
+    guard). This is the per-file version model from the #366 design: each file has
+    its own lineage, and the snapshot is the cluster that pins which version each
+    assessment used.
     """
+    rows = (
+        await session.execute(
+            select(
+                Document.id,
+                Document.filename,
+                DocumentVersion.id,
+                DocumentVersion.version_label,
+                DocumentVersion.minio_key,
+                DocumentVersion.indexed_at,
+            )
+            .join(DocumentVersion, DocumentVersion.document_id == Document.id)
+            .where(
+                Document.ai_system_id == system_id,
+                Document.deleted_at.is_(None),
+                DocumentVersion.is_current.is_(True),
+                DocumentVersion.status == "indexed",
+            )
+            .order_by(Document.created_at)
+        )
+    ).all()
     return [
         {
-            "filename": d.get("filename"),
-            "minio_key": d.get("minio_key"),
-            "uploaded_at": d.get("uploaded_at"),
+            "document_id": doc_id,
+            "version_id": version_id,
+            "version_label": version_label,
+            "filename": filename,
+            "minio_key": minio_key,
+            "indexed_at": indexed_at.isoformat() if indexed_at else None,
         }
-        for d in (row.registration_documents or [])
+        for doc_id, filename, version_id, version_label, minio_key, indexed_at in rows
     ]
 
 
-def _build_input_snapshot(row: AISystem) -> dict[str, Any]:
+async def _build_input_snapshot(session, row: AISystem) -> dict[str, Any]:
+    """Freeze the run's inputs: the registry relational evidence (verbatim) + the
+    documents (pinned by version).
+
+    ``system`` captures the full set of registry fields the pipeline feeds the LLM
+    (``questionnaire_pipeline._evidence_fields`` — the single source of truth), not
+    just name/description, so the dossier reflects exactly the relational data a run
+    saw (#366). This is the versioning of relational registry data: each assessment
+    freezes its own copy, independent of later edits to the live system row.
+    """
     return {
-        "system": {
-            "id": row.id,
-            "name": row.name,
-            "description": row.description,
-        },
-        "documents": _snapshot_documents(row),
+        "system": {"id": row.id, **_evidence_fields(row)},
+        "documents": await _snapshot_documents(session, row.id),
     }
 
 
 @lru_cache(maxsize=1)
 def _build_config_snapshot() -> dict[str, Any]:
-    """Questionnaire config, verbatim + sha256. Static per deploy → cached.
+    """Questionnaire + classification config, pinned by sha256. Static per deploy → cached.
 
-    ``classification`` is **PM-OPEN (#366)**: "risk & role classification
-    configuration" has no config file — the classifier is deterministic code
-    (classifier.py waterfall). Left null pending the PM's definition; the
-    classification *prompt* is captured in the prompt snapshot.
+    ``questionnaire`` is captured verbatim (+ sha256). ``classification`` is the
+    risk/role classification logic — there is no separate config *file* today (the
+    classifier is deterministic Python), so per the #366 design discussion it is a
+    **version reference**: the classifier source pinned by sha256, a "list entry"
+    (not embedded content). This pins the exact label/threshold logic a run used.
+    **PM-open (#366):** if a dedicated classification config file is introduced,
+    capture it here the same way the questionnaire is.
     """
     content = find_questionnaire().read_text(encoding="utf-8")
+    classifier_src = Path(classifier.__file__).read_text(encoding="utf-8")
     return {
         "questionnaire": {
             "id": _QUESTIONNAIRE_ID,
             "sha256": _sha256(content),
             "content": content,
         },
-        "classification": None,
+        "classification": {
+            "id": "classifier",
+            "source": "ai-system-registry/backend/app/classifier.py",
+            "sha256": _sha256(classifier_src),
+        },
     }
 
 
@@ -137,7 +178,7 @@ async def create_dossier_in_session(session, row: AISystem, assessment_id: str) 
             id=new_id("DOS"),
             assessment_id=assessment_id,
             ai_system_id=row.id,
-            inputs=_build_input_snapshot(row),
+            inputs=await _build_input_snapshot(session, row),
             config_snapshot=_build_config_snapshot(),
             prompt_snapshot=_build_prompt_snapshot(),
         )

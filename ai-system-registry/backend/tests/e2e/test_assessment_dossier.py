@@ -148,6 +148,10 @@ async def test_open_creates_dossier_with_frozen_inputs(client: httpx.AsyncClient
     assert d["inputs"]["system"]["id"] == system_id
     assert d["inputs"]["system"]["name"] == "Dossier System"
     assert d["inputs"]["system"]["description"] == "a test description"
+    # Full relational evidence is frozen — the whole field set the pipeline feeds
+    # the LLM, not just name/description (#366 relational-data versioning).
+    for k in ("org_role", "intended_purpose", "system_type", "tier", "lifecycle"):
+        assert k in d["inputs"]["system"], f"evidence field {k!r} missing from snapshot"
     assert d["inputs"]["documents"] == []
 
     # Config snapshot: questionnaire captured verbatim + sha256.
@@ -165,6 +169,73 @@ async def test_open_creates_dossier_with_frozen_inputs(client: httpx.AsyncClient
     assert classify["id"] == "classify_questionnaire"
     assert classify["content"]
     assert len(classify["sha256"]) == 64
+
+    # Classification config: pinned by sha256 reference (no separate config file —
+    # the classifier is deterministic Python, pinned by source hash per #366).
+    c = d["config_snapshot"]["classification"]
+    assert c["id"] == "classifier"
+    assert c["source"].endswith("classifier.py")
+    assert len(c["sha256"]) == 64
+
+
+def _insert_document(
+    system_id: str, doc_id: str, version_id: str, filename: str, status: str
+) -> None:
+    """Seed a document + a current version at the given indexing status, so the
+    snapshot query (current + indexed) can pick it up. ``documents.ai_system_id``
+    has no FK, so no extra parent rows are needed."""
+    conn = _pg()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO documents (id, ai_system_id, filename) VALUES (%s, %s, %s)",
+            (doc_id, system_id, filename),
+        )
+        cur.execute(
+            "INSERT INTO document_versions "
+            "(id, document_id, version_label, minio_key, file_name, file_size, "
+            " status, is_current, indexed_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, TRUE, now())",
+            (
+                version_id,
+                doc_id,
+                "1.0",
+                f"{doc_id}/{version_id}/{filename}",
+                filename,
+                123,
+                status,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_pins_current_indexed_document_versions(
+    client: httpx.AsyncClient,
+):
+    """The snapshot captures each document's current + indexed version (pinned by
+    version_id); a version still processing at open is excluded (it did not feed
+    the run)."""
+    system_id = await _create_system(client, "Docs System", "desc")
+    _insert_document(
+        system_id, "DOC-DOSIND01", "DOCV-DOSIND01", "indexed.pdf", "indexed"
+    )
+    _insert_document(
+        system_id, "DOC-DOSPEN02", "DOCV-DOSPEN02", "pending.pdf", "pending"
+    )
+
+    await _open_and_settle(client, system_id)
+
+    docs = _fetch_dossier(system_id)["inputs"]["documents"]
+    assert len(docs) == 1, "only the current + indexed version is captured"
+    d0 = docs[0]
+    assert d0["document_id"] == "DOC-DOSIND01"
+    assert d0["version_id"] == "DOCV-DOSIND01"
+    assert d0["version_label"] == "1.0"
+    assert d0["filename"] == "indexed.pdf"
+    assert d0["indexed_at"] is not None
 
 
 @pytest.mark.asyncio

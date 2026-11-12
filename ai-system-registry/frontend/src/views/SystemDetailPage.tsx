@@ -420,6 +420,30 @@ function getFileImpact(assessments: ComplianceAssessment[]): "approved" | "submi
   return "none";
 }
 
+// Detailed, action- and impact-specific warning copy. Users must understand the
+// exact consequence before they touch a document an assessment depends on:
+// Replace keeps the old version (audit-safe) but resets/aborts the live assessment;
+// Delete of a referenced document is refused server-side (#366 dossier guard).
+function fileActionWarning(
+  action: "delete" | "replace",
+  impact: "approved" | "submitted" | "draft" | "none",
+): string {
+  if (action === "replace") {
+    if (impact === "approved")
+      return "Uploading a new version archives the current approved assessment: the system becomes unclassified and a new assessment must be run on the new version. The approved assessment is preserved unchanged — it keeps the exact version it was classified on, for audit.";
+    if (impact === "submitted")
+      return "Uploading a new version aborts the assessment awaiting Compliance Officer review. Its progress is discarded and it must be redone on the new version. The previous version is kept in the document's history for the record.";
+    if (impact === "draft")
+      return "Uploading a new version resets the in-progress assessment and re-runs the AI pre-fill on the new version. The previous version is kept in the document's history for the record.";
+    return "Uploading a new version supersedes the current file for future assessments. The previous version is kept in the document's history.";
+  }
+  if (impact === "approved")
+    return "This document is part of an approved assessment's audit record, so it cannot be deleted — that version must stay available. Use Replace to upload a new version, or start a new assessment instead.";
+  if (impact === "submitted" || impact === "draft")
+    return "This document is used by an assessment in progress. Deletion will be refused while that assessment references it. Abort or finish the assessment first, or use Replace to supersede the file.";
+  return "This permanently deletes the document and all of its indexed content. This cannot be undone.";
+}
+
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 
 function OverviewTab({
@@ -1022,9 +1046,6 @@ function FilesTab({
   const impact = getFileImpact(assessments);
 
   const needsWarning = impact !== "none";
-  const warningText = impact === "approved"
-    ? "Replacing or deleting this document will reset the risk classification. The system will be marked as unclassified and a new assessment will be required."
-    : "This document is used in an active assessment. Proceeding will abort the current classification progress.";
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -1045,7 +1066,11 @@ function FilesTab({
   }
 
   function initiateAction(file: IndexedDocument, action: FileAction) {
-    if (!needsWarning) {
+    // Delete is destructive and permanent → always confirm, even with no assessment.
+    // Replace is non-destructive (old version retained) → confirm only when it would
+    // disturb a live assessment.
+    const needsConfirm = action === "delete" || needsWarning;
+    if (!needsConfirm) {
       void executeAction(file, action, null);
     } else {
       setPendingAction({ file, action });
@@ -1080,7 +1105,11 @@ function FilesTab({
       setPendingAction(null);
       onRefresh();
     } catch (e) {
-      showToast(`Operation failed: ${(e as Error).message}`, true);
+      const msg = (e as Error).message;
+      // The server refuses deleting a document pinned by an assessment dossier (409,
+      // #366). Surface its explanation directly rather than a generic failure prefix.
+      const blocked = /assessment record|cannot be deleted/i.test(msg);
+      showToast(blocked ? msg : `Operation failed: ${msg}`, true);
     }
     setConfirming(false);
   }
@@ -1351,7 +1380,7 @@ function FilesTab({
             <DialogTitle>
               {pendingAction?.action === "delete" ? "Delete" : "Replace"} document?
             </DialogTitle>
-            <DialogDescription>{warningText}</DialogDescription>
+            <DialogDescription>{pendingAction ? fileActionWarning(pendingAction.action, impact) : ""}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose asChild>

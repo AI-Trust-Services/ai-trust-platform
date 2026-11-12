@@ -214,6 +214,85 @@ async def test_delete_nonexistent_document_returns_404(client: httpx.AsyncClient
     assert r.status_code == 404
 
 
+async def _seed_dossier_referencing(
+    system_id: str, document_id: str, version_id: str
+) -> None:
+    """Minimal assessment chain + a dossier whose inputs pin the given document —
+    the state the #366 delete guard checks for."""
+    from ai_trust_persistence import SessionLocal
+    from ai_trust_persistence.models import Assessment, AssessmentDossier, Framework
+
+    async with SessionLocal() as session:
+        if await session.get(Framework, "FWK-DELGUARD") is None:
+            session.add(Framework(id="FWK-DELGUARD", name="EU AI Act"))
+            await session.flush()
+        session.add(
+            Assessment(
+                id="ASS-DELGUARD",
+                ai_system_id=system_id,
+                framework_id="FWK-DELGUARD",
+                title="Delete-guard assessment",
+            )
+        )
+        await session.flush()
+        session.add(
+            AssessmentDossier(
+                id="DOS-DELGUARD",
+                assessment_id="ASS-DELGUARD",
+                ai_system_id=system_id,
+                inputs={
+                    "system": {"id": system_id},
+                    "documents": [
+                        {"document_id": document_id, "version_id": version_id}
+                    ],
+                },
+                config_snapshot={},
+                prompt_snapshot={},
+            )
+        )
+        await session.commit()
+
+
+async def test_delete_blocked_when_referenced_by_dossier(
+    client: httpx.AsyncClient, system_id: str
+):
+    """A document pinned by an assessment dossier (#366) cannot be hard-deleted —
+    409, and the document is still there afterwards. Replace is the supported path."""
+    up = await client.post(
+        f"/v1/systems/{system_id}/documents",
+        files={"file": ("pinned.pdf", _PDF_BYTES, "application/pdf")},
+        headers=_HDR,
+    )
+    doc_id = up.json()["document_id"]
+    version_id = up.json()["version_id"]
+    await _seed_dossier_referencing(system_id, doc_id, version_id)
+
+    r = await client.delete(f"/v1/documents/{doc_id}", headers=_HDR)
+    assert r.status_code == 409
+    assert "assessment record" in r.json()["detail"].lower()
+
+    # Not deleted — still fetchable.
+    assert (
+        await client.get(f"/v1/documents/{doc_id}", headers=_HDR)
+    ).status_code == 200
+
+
+async def test_delete_allowed_when_not_referenced(
+    client: httpx.AsyncClient, system_id: str
+):
+    """A document no dossier references deletes normally (guard is a no-op)."""
+    up = await client.post(
+        f"/v1/systems/{system_id}/documents",
+        files={"file": ("free.pdf", _PDF_BYTES, "application/pdf")},
+        headers=_HDR,
+    )
+    doc_id = up.json()["document_id"]
+
+    r = await client.delete(f"/v1/documents/{doc_id}", headers=_HDR)
+    assert r.status_code == 200
+    assert r.json()["deleted"] is True
+
+
 async def test_delete_all_system_documents(client: httpx.AsyncClient, system_id: str):
     # Upload two documents, then purge the whole system in one call (used to clean up
     # when a draft registration is abandoned, since the registry has no FK to cascade).
