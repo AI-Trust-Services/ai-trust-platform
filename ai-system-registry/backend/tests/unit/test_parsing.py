@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.documents import MAX_TEXT_LENGTH, parse_document
-from app.llm.parsing import LLMParseError, parse_json_response
+from app.llm.parsing import LLMParseError, parse_json_response, parse_with_retry
 
 
 # ---------------------------------------------------------------------------
@@ -87,3 +87,126 @@ def test_truncated_document_extract_still_returns_content():
     doc = parse_document("long.txt", content)
     assert doc.text is not None
     assert doc.text.startswith("A" * MAX_TEXT_LENGTH)
+
+
+# ---------------------------------------------------------------------------
+# parse_with_retry
+# ---------------------------------------------------------------------------
+
+_VALID_RESPONSE = '{"ok": true}'
+_VALID_PARSED = {"ok": True}
+
+_REPAIR_RESPONSE = {"text": _VALID_RESPONSE, "input_tokens": 0, "output_tokens": 0}
+
+
+def _identity_validator(raw: dict) -> dict:
+    """Validator that always passes."""
+    return raw
+
+
+def _rejecting_validator(raw: dict) -> dict:
+    """Validator that always fails."""
+    raise LLMParseError("schema not satisfied")
+
+
+@pytest.mark.asyncio
+async def test_parse_with_retry_succeeds_on_first_attempt():
+    """Valid JSON + passing validator returns on attempt 1 without any chat call."""
+    mock_chat = AsyncMock()
+    result = await parse_with_retry(
+        _VALID_RESPONSE,
+        task="test",
+        validator=_identity_validator,
+        chat_fn=mock_chat,
+        messages=[],
+    )
+    assert result == _VALID_PARSED
+    mock_chat.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_parse_with_retry_succeeds_on_attempt_2():
+    """Bad initial text triggers retry; second attempt (repair call) returns valid JSON."""
+    call_count = 0
+
+    async def _chat_fn(messages, task, json_mode):
+        nonlocal call_count
+        call_count += 1
+        return _REPAIR_RESPONSE
+
+    result = await parse_with_retry(
+        "not json at all",
+        task="test",
+        validator=_identity_validator,
+        chat_fn=_chat_fn,
+        messages=[],
+    )
+    assert result == _VALID_PARSED
+    assert call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_parse_with_retry_succeeds_on_attempt_3():
+    """First two attempts fail; third attempt succeeds."""
+    call_count = 0
+
+    async def _chat_fn(messages, task, json_mode):
+        nonlocal call_count
+        call_count += 1
+        if call_count < 2:
+            return {"text": "still bad", "input_tokens": 0, "output_tokens": 0}
+        return _REPAIR_RESPONSE
+
+    result = await parse_with_retry(
+        "not json",
+        task="test",
+        validator=_identity_validator,
+        chat_fn=_chat_fn,
+        messages=[],
+    )
+    assert result == _VALID_PARSED
+    assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_parse_with_retry_raises_after_max_attempts():
+    """All attempts fail — LLMParseError raised after max_attempts."""
+    mock_chat = AsyncMock(
+        return_value={"text": "bad json", "input_tokens": 0, "output_tokens": 0}
+    )
+    with pytest.raises(LLMParseError, match="3 attempts"):
+        await parse_with_retry(
+            "bad json",
+            task="test",
+            validator=_identity_validator,
+            chat_fn=mock_chat,
+            messages=[],
+            max_attempts=3,
+        )
+    assert mock_chat.call_count == 2  # attempts 2 and 3 each call chat once
+
+
+@pytest.mark.asyncio
+async def test_parse_with_retry_validator_error_triggers_retry():
+    """Valid JSON but failing validator also triggers a retry (not an immediate raise)."""
+    call_count = 0
+
+    async def _chat_fn(messages, task, json_mode):
+        nonlocal call_count
+        call_count += 1
+        return _REPAIR_RESPONSE
+
+    def _validator_on_second(raw: dict) -> dict:
+        if call_count == 0:
+            raise LLMParseError("first attempt bad structure")
+        return raw
+
+    result = await parse_with_retry(
+        _VALID_RESPONSE,
+        task="test",
+        validator=_validator_on_second,
+        chat_fn=_chat_fn,
+        messages=[],
+    )
+    assert result == _VALID_PARSED
+    assert call_count == 1

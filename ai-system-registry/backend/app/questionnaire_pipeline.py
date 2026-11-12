@@ -28,8 +28,9 @@ from ai_trust_persistence.models.ai_system import AISystem
 from sqlalchemy import select
 
 from app.llm.client import chat
-from app.llm.parsing import LLMParseError, parse_json_response
+from app.llm.parsing import LLMParseError, parse_with_retry
 from app.llm.templates import load_questionnaire, load_template
+from app.llm.validators import validate_questionnaire_batch
 from app import minio_client
 
 logger = get_logger(__name__)
@@ -45,26 +46,8 @@ _QUESTIONNAIRE_MAX_TOKENS = int(os.environ.get("QUESTIONNAIRE_MAX_TOKENS", "2400
 
 
 def _validate_llm_output(raw: dict) -> dict:
-    """Validate the minimum structural contract: non-empty results list with questionIds.
-
-    Field-level strictness is intentionally relaxed — real LLMs occasionally
-    emit string fragments inside array fields, and we prefer to persist a
-    slightly malformed result over returning a 502 to the user.
-    """
-    results = raw.get("results")
-    if not isinstance(results, list) or len(results) == 0:
-        raise LLMParseError("LLM output missing or empty 'results' list")
-    missing_ids = [
-        i
-        for i, r in enumerate(results)
-        if not isinstance(r, dict) or not r.get("questionId")
-    ]
-    if missing_ids:
-        raise LLMParseError(
-            f"LLM output has {len(missing_ids)} result(s) missing 'questionId' "
-            f"at indices {missing_ids[:5]}"
-        )
-    return raw
+    """Delegate to the strict schema validator (kept for backward compatibility)."""
+    return validate_questionnaire_batch(raw)
 
 
 def _system_evidence(row: AISystem) -> str:
@@ -249,7 +232,8 @@ async def _run_batch(
     """Run one LLM call for a batch (category slice) of the questionnaire.
 
     Returns the ``results`` list from the LLM response.
-    Raises ``LLMParseError`` on truncation or unparseable output.
+    Raises ``LLMParseError`` on truncation or unparseable/invalid output after
+    up to 3 total LLM attempts.
     """
     task = f"questionnaire_answer_batch_{batch_idx}"
     user_message = _build_user_message(batch, registration_evidence, rag_chunks)
@@ -273,12 +257,14 @@ async def _run_batch(
             f"output={llm_response.get('output_tokens', '?')} tokens."
         )
 
-    parsed = await parse_json_response(
+    parsed = await parse_with_retry(
         llm_response["text"],
         task=task,
-        max_tokens=_QUESTIONNAIRE_MAX_TOKENS,
+        validator=validate_questionnaire_batch,
+        chat_fn=chat,
+        messages=messages,
+        max_attempts=3,
     )
-    _validate_llm_output(parsed)
     return parsed.get("results", [])
 
 
@@ -382,11 +368,18 @@ async def run_pipeline_streaming(
         return results
 
     batch_results_list = await asyncio.gather(
-        *[_run_and_callback(idx, batch) for idx, batch in enumerate(batches)]
+        *[_run_and_callback(idx, batch) for idx, batch in enumerate(batches)],
+        return_exceptions=True,
     )
     merged: list[dict] = []
-    for br in batch_results_list:
-        merged.extend(br)
+    for idx, outcome in enumerate(batch_results_list):
+        if isinstance(outcome, Exception):
+            logger.warning(
+                "questionnaire_pipeline.batch_failed",
+                extra={"system_id": system_id, "batch_idx": idx, "error": str(outcome)},
+            )
+        else:
+            merged.extend(outcome)
 
     result = {"results": merged}
 
@@ -466,13 +459,21 @@ async def run_pipeline(
         *[
             _run_batch(batch, system_prompt, registration_evidence, rag_chunks, idx)
             for idx, batch in enumerate(batches)
-        ]
+        ],
+        return_exceptions=True,
     )
 
     # Merge in category order — each batch result is a list[dict].
+    # Failed batches are logged and skipped; their questions stay answer=None in the DB.
     merged: list[dict] = []
-    for batch_list in batch_results:
-        merged.extend(batch_list)
+    for idx, outcome in enumerate(batch_results):
+        if isinstance(outcome, Exception):
+            logger.warning(
+                "questionnaire_pipeline.batch_failed",
+                extra={"system_id": system_id, "batch_idx": idx, "error": str(outcome)},
+            )
+        else:
+            merged.extend(outcome)
     result = {"results": merged}
 
     # 5. Persist to MinIO.

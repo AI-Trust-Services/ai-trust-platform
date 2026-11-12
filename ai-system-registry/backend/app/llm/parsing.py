@@ -1,16 +1,16 @@
-"""JSON parsing for LLM responses, with a single auto-repair retry (design Q12).
+"""JSON parsing for LLM responses, with auto-repair and structural validation retries.
 
 The model is asked for a single JSON object per turn, but small models drift:
 they wrap output in code fences, add prose, or emit trailing text. We strip the
-obvious cases; if that fails, we make ONE repair call asking the model to return
-only valid JSON, then give up with a typed LLMParseError.
+obvious cases; if that fails, we retry up to max_attempts total with a repair
+prompt. Structural validation failures (wrong schema shape) also trigger retries.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import Any, Callable
 
 from ai_trust_logging import get_logger
 
@@ -92,3 +92,91 @@ async def parse_json_response(
             },
         )
         raise LLMParseError(f"Could not parse LLM response for task '{task}'") from exc
+
+
+async def parse_with_retry(
+    text: str,
+    task: str,
+    validator: Callable[[dict], dict],
+    chat_fn: Callable,
+    messages: list[dict],
+    max_attempts: int = 3,
+) -> dict[str, Any]:
+    """Parse + structurally validate with up to ``max_attempts`` total LLM calls.
+
+    Attempt 1: parse ``text`` then run ``validator``.
+    Attempt 2+: re-call ``chat_fn`` with a repair prompt, parse the new response,
+                then validate again. The repair prompt on attempt 3 also includes
+                the previous validator error so the model knows what to fix.
+
+    Raises ``LLMParseError`` after ``max_attempts`` exhausted.
+
+    Args:
+        text: The initial LLM response text.
+        task: Task label for logging.
+        validator: Callable that takes a parsed dict and returns it unchanged,
+                   or raises ``LLMParseError`` on structural violations.
+        chat_fn: Async callable matching ``chat(messages, task, json_mode)`` signature.
+        messages: The original messages list used to produce ``text``; the repair
+                  prompt is appended to this conversation and a new call is made.
+        max_attempts: Total number of LLM calls allowed (default 3).
+    """
+    last_error: Exception | None = None
+    current_text = text
+
+    for attempt in range(1, max_attempts + 1):
+        if attempt > 1:
+            # Re-call the LLM with repair prompt.
+            repair_hint = ""
+            if last_error is not None:
+                repair_hint = f"\n\nSpecific issue to fix: {last_error}"
+            repair_messages = [
+                {
+                    "role": "system",
+                    "content": render_template("json_repair_system"),
+                },
+                {
+                    "role": "user",
+                    "content": render_template(
+                        "json_repair_user",
+                        malformed_response=current_text + repair_hint,
+                    ),
+                },
+            ]
+            logger.warning(
+                "llm.parse_with_retry.attempt",
+                extra={"task": task, "attempt": attempt, "error": str(last_error)},
+            )
+            try:
+                response = await chat_fn(
+                    repair_messages, task=f"{task}_repair_{attempt}", json_mode=True
+                )
+                current_text = response["text"]
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        try:
+            parsed = _extract_json(current_text)
+        except (json.JSONDecodeError, ValueError) as exc:
+            last_error = LLMParseError(f"JSON parse failed: {exc}")
+            continue
+
+        try:
+            return validator(parsed)
+        except LLMParseError as exc:
+            last_error = exc
+            continue
+
+    logger.error(
+        "llm.parse_with_retry.exhausted",
+        extra={
+            "task": task,
+            "max_attempts": max_attempts,
+            "last_error": str(last_error),
+        },
+    )
+    raise LLMParseError(
+        f"Could not produce a valid response for task '{task}' after {max_attempts} attempts. "
+        f"Last error: {last_error}"
+    )

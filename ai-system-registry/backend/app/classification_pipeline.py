@@ -25,8 +25,9 @@ from typing import Any
 from ai_trust_logging import get_logger
 
 from app.llm.client import chat
-from app.llm.parsing import LLMParseError, parse_json_response
+from app.llm.parsing import LLMParseError, parse_with_retry
 from app.llm.templates import PromptTemplateError, load_template, load_questionnaire
+from app.llm.validators import validate_classification_label
 from app import minio_client
 
 logger = get_logger(__name__)
@@ -186,23 +187,16 @@ async def _classify_label(
             f"output={llm_response.get('output_tokens', '?')} tokens."
         )
 
-    parsed = await parse_json_response(llm_response["text"], task=task)
+    parsed = await parse_with_retry(
+        llm_response["text"],
+        task=task,
+        validator=validate_classification_label,
+        chat_fn=chat,
+        messages=messages,
+        max_attempts=3,
+    )
 
-    # Extract the single classification entry for this label.
-    classifications = parsed.get("classifications", [])
-    if not classifications:
-        raise LLMParseError(
-            f"LLM returned empty 'classifications' array for label '{label_id}'"
-        )
-    entry = classifications[0]
-    required_keys = {"labelId", "result", "confidence", "explanation"}
-    missing = required_keys - set(entry.keys())
-    if missing:
-        raise LLMParseError(
-            f"LLM classification entry for label '{label_id}' missing keys: {missing}"
-        )
-
-    return entry
+    return parsed["classifications"][0]
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +326,11 @@ async def run_classification(
         if isinstance(outcome, Exception):
             logger.warning(
                 "classification_pipeline.label_failed",
-                extra={"system_id": system_id, "label_id": label["id"], "error": str(outcome)},
+                extra={
+                    "system_id": system_id,
+                    "label_id": label["id"],
+                    "error": str(outcome),
+                },
             )
         else:
             classifications.append(outcome)
