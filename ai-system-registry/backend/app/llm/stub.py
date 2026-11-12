@@ -397,6 +397,7 @@ def _risk_role_classification(messages: list[dict]) -> dict:
     # Try to extract the labelId from the CLASSIFICATION_CONFIG block in the user message.
     label_id = "HIGH_RISK"
     import re as _re
+
     match = _re.search(r'"id"\s*:\s*"([A-Z_]+)"', blob)
     if match:
         label_id = match.group(1)

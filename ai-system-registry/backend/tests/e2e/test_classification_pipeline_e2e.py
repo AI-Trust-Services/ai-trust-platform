@@ -20,11 +20,13 @@ _RETRIEVE_URL = "http://document-indexing-backend:8011/v1/retrieve"
 _STUB_QUESTIONNAIRE_KEY = (
     "questionnaire-results/SYS-TEST0001/ai-questionnaire/2026-01-01T00-00-00Z.json"
 )
-_STUB_CLASSIFICATION_KEY = (
-    "classification-results/SYS-TEST0001/risk_role_classification_config/2026-01-01T00-00-00Z.json"
+_STUB_CLASSIFICATION_KEY = "classification-results/SYS-TEST0001/risk_role_classification_config/2026-01-01T00-00-00Z.json"
+_STUB_PRESIGNED_Q = (
+    "http://minio:9000/registration-docs/questionnaire-stub.json?X-Amz-Signature=stub"
 )
-_STUB_PRESIGNED_Q = "http://minio:9000/registration-docs/questionnaire-stub.json?X-Amz-Signature=stub"
-_STUB_PRESIGNED_C = "http://minio:9000/registration-docs/classification-stub.json?X-Amz-Signature=stub"
+_STUB_PRESIGNED_C = (
+    "http://minio:9000/registration-docs/classification-stub.json?X-Amz-Signature=stub"
+)
 
 # Minimal questionnaire result that satisfies the classification pipeline validator.
 _STUB_QUESTIONNAIRE_RESULT = json.dumps(
@@ -92,6 +94,7 @@ def _mock_questionnaire_minio():
 
 def _mock_classification_minio():
     """Patch Step 2 MinIO calls."""
+
     async def _capture_to_thread(fn, *args, **kwargs):
         if hasattr(fn, "__name__") and fn.__name__ == "_get":
             return json.loads(_STUB_QUESTIONNAIRE_RESULT)
@@ -237,9 +240,7 @@ async def test_questionnaire_run_does_not_trigger_classification(
     with q_upload_p, q_put_p, q_presign_p:
         with patch("app.routers.pipeline.run_classification", side_effect=_spy):
             with respx.mock(assert_all_mocked=False) as mock:
-                mock.post(_RETRIEVE_URL).mock(
-                    return_value=httpx.Response(503)
-                )
+                mock.post(_RETRIEVE_URL).mock(return_value=httpx.Response(503))
                 r = await client.post(
                     f"/v1/systems/{sid}/questionnaire-llm-run",
                     json={},
@@ -247,4 +248,6 @@ async def test_questionnaire_run_does_not_trigger_classification(
                 )
 
     assert r.status_code == 200, r.text
-    assert classification_called == [], "classification must not be auto-triggered from questionnaire-llm-run"
+    assert classification_called == [], (
+        "classification must not be auto-triggered from questionnaire-llm-run"
+    )

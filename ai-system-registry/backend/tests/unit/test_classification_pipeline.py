@@ -54,8 +54,14 @@ def test_label_question_ids_multiple_rules():
         "id": "DEPLOYER",
         "activate": True,
         "rules": [
-            {"id": "RULE_A", "when": {"questionId": "Role_3", "operator": "EQUALS", "value": "YES"}},
-            {"id": "RULE_B", "when": {"questionId": "Role_4", "operator": "EQUALS", "value": "YES"}},
+            {
+                "id": "RULE_A",
+                "when": {"questionId": "Role_3", "operator": "EQUALS", "value": "YES"},
+            },
+            {
+                "id": "RULE_B",
+                "when": {"questionId": "Role_4", "operator": "EQUALS", "value": "YES"},
+            },
         ],
     }
     assert _label_question_ids(label) == {"Role_3", "Role_4"}
@@ -83,7 +89,9 @@ def test_scope_questionnaire_data_filters_correctly():
 
 
 def test_scope_questionnaire_data_no_match_returns_empty():
-    results = [{"questionId": "Q1", "answer": [{"value": "YES", "answerStrength": "HIGH"}]}]
+    results = [
+        {"questionId": "Q1", "answer": [{"value": "YES", "answerStrength": "HIGH"}]}
+    ]
     assert _scope_questionnaire_data(results, {"Q99"}) == []
 
 
@@ -103,7 +111,9 @@ def _make_result(q_id: str, answers: list[dict]) -> dict:
 def test_validate_valid_data_passes():
     data = [
         _make_result("Q1", [{"value": "YES", "answerStrength": "HIGH"}]),
-        _make_result("Q2", [{"value": "NOT_ENOUGH_INFORMATION", "answerStrength": None}]),
+        _make_result(
+            "Q2", [{"value": "NOT_ENOUGH_INFORMATION", "answerStrength": None}]
+        ),
     ]
     _validate_questionnaire_data(data)  # must not raise
 
@@ -136,7 +146,9 @@ def test_validate_not_applicable_with_regular_value_raises():
             ],
         )
     ]
-    with pytest.raises(LLMParseError, match="NOT_APPLICABLE combined with regular answer"):
+    with pytest.raises(
+        LLMParseError, match="NOT_APPLICABLE combined with regular answer"
+    ):
         _validate_questionnaire_data(data)
 
 

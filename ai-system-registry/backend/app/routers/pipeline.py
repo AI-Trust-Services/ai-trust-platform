@@ -27,7 +27,9 @@ logger = get_logger(__name__)
 
 _DEFAULT_QUESTIONNAIRE_ID = "ai-questionnaire"
 _DEFAULT_QUESTIONNAIRE_PROMPT_ID = "questionnaire_answer"
-_DEFAULT_CLASSIFICATION_CONFIG_ID = "risk_classification/risk_role_classification_config"
+_DEFAULT_CLASSIFICATION_CONFIG_ID = (
+    "risk_classification/risk_role_classification_config"
+)
 _DEFAULT_CLASSIFICATION_PROMPT_ID = "risk_classification/risk_role_classification"
 
 
