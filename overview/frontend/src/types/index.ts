@@ -1,4 +1,4 @@
-export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal";
+export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal" | "pending";
 export type LifecycleKey = "development" | "testing" | "prod_ready" | "market" | "service" | "updated" | "decommissioned";
 
 export interface OverviewStats {
@@ -122,4 +122,3 @@ export interface DateRange {
   preset: "7d" | "30d" | "90d";
   days: number;
 }
-

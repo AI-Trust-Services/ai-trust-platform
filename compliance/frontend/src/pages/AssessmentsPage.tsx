@@ -115,9 +115,7 @@ export default function AssessmentsPage() {
   const showToast = useToast();
   const { can } = usePermissions();
   const mayWrite = can("assessments:write");
-  const mayApprove = can("assessments:approve");
   const noWriteTitle = "Requires permission: assessments:write";
-  const noApproveTitle = "Requires permission: assessments:approve";
 
   const load = useCallback(async () => {
     try {
@@ -300,26 +298,23 @@ export default function AssessmentsPage() {
                           title={mayWrite ? undefined : noWriteTitle}
                           onClick={() => act(api.submitAssessment, a.id, "Submitted")}>Submit</Button>
                       )}
-                      {a.status !== "approved" && !OPENS_IN_REGISTRY_APP.has(a.status) && (
-                        <Button variant="ghost" size="sm" disabled={busy === a.id || !mayApprove}
-                          title={mayApprove ? undefined : noApproveTitle}
-                          onClick={() => act(api.approveAssessment, a.id, (r) => `Approved — score ${r.score ?? "N/A"}%`)}>Approve</Button>
-                      )}
-                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"
-                        disabled={busy === a.id || !mayWrite} title={mayWrite ? undefined : noWriteTitle}
-                        onClick={async () => {
-                          if (!confirm(`Delete "${a.title}"?`)) return;
-                          setBusy(a.id);
-                          try {
-                            await api.deleteAssessment(a.id);
-                            if (a.status === "questionnaire_pending") {
-                              try { await registryClient.resetWorkflow(a.ai_system_id); } catch { /* non-fatal */ }
+                      {!(["approved", "inactive"] as string[]).includes(a.status) && (
+                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"
+                          disabled={busy === a.id || !mayWrite} title={mayWrite ? undefined : noWriteTitle}
+                          onClick={async () => {
+                            if (!confirm(`Delete "${a.title}"?`)) return;
+                            setBusy(a.id);
+                            try {
+                              await api.deleteAssessment(a.id);
+                              if (a.status === "questionnaire_pending") {
+                                try { await registryClient.resetWorkflow(a.ai_system_id); } catch { /* non-fatal */ }
+                              }
+                              showToast("Deleted"); closePanel(); await load();
                             }
-                            showToast("Deleted"); closePanel(); await load();
-                          }
-                          catch (e) { showToast((e as Error).message, true); }
-                          finally { setBusy(null); }
-                        }}>Delete</Button>
+                            catch (e) { showToast((e as Error).message, true); }
+                            finally { setBusy(null); }
+                          }}>Delete</Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -364,11 +359,6 @@ export default function AssessmentsPage() {
                     <Button variant="outline" size="sm" disabled={busy === selectedDetail.id || !mayWrite}
                       title={mayWrite ? undefined : noWriteTitle}
                       onClick={() => act(api.submitAssessment, selectedDetail.id, "Submitted")}>Submit</Button>
-                  )}
-                  {selectedDetail.status !== "approved" && !OPENS_IN_REGISTRY_APP.has(selectedDetail.status) && (
-                    <Button variant="outline" size="sm" disabled={busy === selectedDetail.id || !mayApprove}
-                      title={mayApprove ? undefined : noApproveTitle}
-                      onClick={() => act(api.approveAssessment, selectedDetail.id, (r) => `Approved — score ${r.score ?? "N/A"}%`)}>Approve</Button>
                   )}
                 </div>
               </>
