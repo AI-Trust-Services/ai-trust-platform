@@ -123,8 +123,18 @@ async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClie
     assert scope["confidence"] is None
     assert scope["ai_explanation"]
     # The stub follows the answer contract: every question of every batch is
-    # answered NOT_ENOUGH_INFORMATION, with no confidence band.
-    assert all(q["answer"] == "NOT_ENOUGH_INFORMATION" for q in state["questions"])
+    # answered NOT_ENOUGH_INFORMATION, with no confidence band. MULTISELECT answers
+    # are stored as a JSON array (the frontend JSON.parse()s them), so for those the
+    # stored value is '["NOT_ENOUGH_INFORMATION"]'.
+    from app.assessment_catalogue import QUESTION_TYPES
+
+    for q in state["questions"]:
+        expected = (
+            '["NOT_ENOUGH_INFORMATION"]'
+            if QUESTION_TYPES.get(q["question_key"]) == "MULTISELECT"
+            else "NOT_ENOUGH_INFORMATION"
+        )
+        assert q["answer"] == expected, q["question_key"]
     assert all(q["confidence"] is None for q in state["questions"])
     # Null confidence → not auto-confirmed.
     # High/medium confidence answers from a real LLM would be auto-confirmed.
@@ -176,7 +186,9 @@ async def test_prefill_choice_answers_are_valid_options(client: httpx.AsyncClien
     or one of the LLM's system-defined outcomes (NOT_ENOUGH_INFORMATION, CONFLICT),
     which are valid answer values per questionnaire_answer.md but are not
     "configured" options (not part of QUESTION_OPTIONS)."""
-    from app.assessment_catalogue import QUESTION_OPTIONS
+    import json
+
+    from app.assessment_catalogue import QUESTION_OPTIONS, QUESTION_TYPES
 
     _SYSTEM_OUTCOMES = {"NOT_ENOUGH_INFORMATION", "CONFLICT"}
 
@@ -188,13 +200,20 @@ async def test_prefill_choice_answers_are_valid_options(client: httpx.AsyncClien
         q = by_key.get(key)
         if q is None:
             continue
-        # A valid configured option verbatim, a system-defined outcome, or empty
-        # (stub didn't answer this question).
-        assert (
-            q["answer"] in options
-            or q["answer"] in _SYSTEM_OUTCOMES
-            or q["answer"] in ("", None)
-        ), f"{key} filled with {q['answer']!r}, not one of {options}"
+        # MULTISELECT answers are stored as a JSON array (the frontend JSON.parse()s
+        # them); every other type stores the plain value.
+        raw = q["answer"]
+        values = (
+            json.loads(raw)
+            if raw and QUESTION_TYPES.get(key) == "MULTISELECT"
+            else [raw]
+        )
+        # Each value is a valid configured option verbatim, a system-defined outcome,
+        # or empty (the stub didn't answer this question).
+        for value in values:
+            assert (
+                value in options or value in _SYSTEM_OUTCOMES or value in ("", None)
+            ), f"{key} filled with {value!r}, not one of {options}"
 
 
 @pytest.mark.asyncio

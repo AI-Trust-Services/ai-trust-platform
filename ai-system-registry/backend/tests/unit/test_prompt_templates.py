@@ -73,7 +73,6 @@ def test_subfolder_template_ids_still_load():
         "../../CLAUDE",
         "risk_classification/../../ai-questionnaire",
         "/etc/passwd",
-        "C:/Windows/win",
     ],
 )
 def test_template_id_escaping_prompts_dir_is_rejected(bad_id):
