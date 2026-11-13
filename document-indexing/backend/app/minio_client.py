@@ -58,6 +58,24 @@ def bucket_name() -> str:
     return name
 
 
+def _public_secure() -> bool:
+    """Whether the *public* presign endpoint speaks HTTPS.
+
+    The in-cluster client talks plain HTTP to ``minio:9000`` (``MINIO_SECURE``
+    is ``false`` on every deploy), but the browser-facing ``MINIO_PUBLIC_ENDPOINT``
+    is served over **HTTPS** through the Gardener ingress. Presigning with
+    ``secure=false`` there emits an ``http://`` URL whose request the HTTPS-only
+    ingress can't serve (and a redirect would break the query-string signature),
+    so the browser tab that opens it stays blank. ``MINIO_PUBLIC_SECURE`` lets
+    the public scheme be set independently; it defaults to ``MINIO_SECURE`` so
+    kind/local (plain-HTTP ``localhost`` public endpoint) is unaffected.
+    """
+    return (
+        os.environ.get("MINIO_PUBLIC_SECURE", os.environ["MINIO_SECURE"]).lower()
+        == "true"
+    )
+
+
 def _get_client() -> Minio:
     global _client
     if _client is None:
@@ -77,7 +95,7 @@ def _get_presign_client() -> Minio:
             os.environ["MINIO_PUBLIC_ENDPOINT"],
             access_key=os.environ["MINIO_ROOT_USER"],
             secret_key=os.environ["MINIO_ROOT_PASSWORD"],
-            secure=os.environ["MINIO_SECURE"].lower() == "true",
+            secure=_public_secure(),
             region=os.environ["MINIO_REGION"],
         )
     return _presign_client
