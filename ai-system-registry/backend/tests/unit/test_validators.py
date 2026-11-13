@@ -98,7 +98,10 @@ def test_non_string_question_type_raises():
 def test_non_string_answer_strength_raises():
     raw = {
         "results": [
-            {**_VALID_RESULT, "answer": [{"value": "YES", "answerStrength": [], "reason": None}]}
+            {
+                **_VALID_RESULT,
+                "answer": [{"value": "YES", "answerStrength": [], "reason": None}],
+            }
         ]
     }
     with pytest.raises(LLMParseError, match="answerStrength"):
@@ -110,9 +113,7 @@ def test_non_string_source_type_raises():
         "results": [
             {
                 **_VALID_RESULT,
-                "references": [
-                    {**_VALID_REFERENCE, "sourceType": []}
-                ],
+                "references": [{**_VALID_REFERENCE, "sourceType": []}],
             }
         ]
     }
@@ -320,7 +321,11 @@ def test_descriptive_with_two_answer_items_raises():
     raw = _result_with(
         [
             {"value": "Some description", "answerStrength": "HIGH", "reason": None},
-            {"value": "Another description", "answerStrength": "MEDIUM", "reason": None},
+            {
+                "value": "Another description",
+                "answerStrength": "MEDIUM",
+                "reason": None,
+            },
         ],
         questionType="DESCRIPTIVE",
     )
