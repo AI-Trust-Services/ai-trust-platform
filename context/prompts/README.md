@@ -42,6 +42,7 @@ or from the `PROMPTS_DIR` env var if set. The Docker image bakes this directory 
 | `classify_questionnaire` | AI-mode authoritative classification | `flag_names` |
 | `json_repair_system` | JSON auto-repair retry — system prompt | — |
 | `json_repair_user` | JSON auto-repair retry — user prompt | `malformed_response` |
+| `json_validation_retry` | Contract-violation retry — appended after the model's previous answer (original messages + previous answer + this) | `violations` |
 | `questionnaire_answer` | Questionnaire answer pipeline — system prompt | — (no placeholders; questionnaire config + evidence passed as user message) |
 | `compliance_advisor` | Compliance Advisor chatbot — agent system prompt | — (no placeholders; the PydanticAI agent supplies tool results + the user question) |
 

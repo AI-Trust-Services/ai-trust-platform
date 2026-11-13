@@ -294,93 +294,94 @@ def _classify_questionnaire(messages: list[dict]) -> dict:
     )
 
 
-def _questionnaire_answer(_messages: list[dict]) -> dict:
-    """Stub for the questionnaire answer pipeline task.
+def _questionnaire_answer(messages: list[dict]) -> dict:
+    """Stub for one questionnaire-answer batch (pipeline 1).
 
-    Returns a minimal valid response matching the output schema defined in the
-    questionnaire_answer prompt: one result for Scope_1 with NOT_ENOUGH_INFORMATION
-    (no evidence available in stub mode).
+    Follows the questionnaire_answer prompt contract so the strict validator
+    accepts it: one result per question of the batch — read from the
+    "Questionnaire Configuration" JSON in the user message — each answered
+    ``NOT_ENOUGH_INFORMATION`` with a null ``answerStrength`` (no evidence is
+    evaluated in stub mode).
     """
+    user = next(
+        (
+            m["content"]
+            for m in messages
+            if m.get("role") == "user" and isinstance(m.get("content"), str)
+        ),
+        "",
+    )
+    questions: list[dict] = []
+    try:
+        block = user.split("Questionnaire Configuration:\n", 1)[1].split(
+            "\n\nProvided Evidence:", 1
+        )[0]
+        questions = json.loads(block).get("questions", [])
+    except (IndexError, ValueError, AttributeError):
+        questions = []
+    if not questions:
+        questions = [
+            {
+                "id": "Scope_1",
+                "question": "Is your system an AI system within the meaning of the AI Act?",
+                "type": "PREDEFINED",
+            }
+        ]
+
+    results = [
+        {
+            "questionId": q["id"],
+            "question": q.get("question", ""),
+            "questionType": q.get("type", "PREDEFINED"),
+            "answer": [
+                {
+                    "value": "NOT_ENOUGH_INFORMATION",
+                    "answerStrength": None,
+                    "reason": "No sufficient evidence is available in stub mode to answer this question.",
+                }
+            ],
+            "explanation": "Stub mode: no real evidence was evaluated. Human verification required.",
+            "references": [],
+        }
+        for q in questions
+    ]
+    return _result(json.dumps({"results": results}))
+
+
+def _risk_role_classification(messages: list[dict]) -> dict:
+    """Stub for one active-label classification call (Step 2 pipeline).
+
+    Returns a minimal valid single-label result matching the LLM 2 output schema.
+    The label id is extracted from the user message if possible; defaults to HIGH_RISK.
+    """
+    blob = " ".join(
+        m.get("content", "") if isinstance(m.get("content"), str) else ""
+        for m in messages
+        if m.get("role") == "user"
+    )
+    # Try to extract the labelId from the CLASSIFICATION_CONFIG block in the user message.
+    label_id = "HIGH_RISK"
+    config_block = blob.split("CLASSIFICATION_CONFIG:", 1)[-1]
+    match = re.search(r'"id"\s*:\s*"([A-Z_]+)"', config_block)
+    if match:
+        label_id = match.group(1)
     return _result(
         json.dumps(
             {
-                "results": [
+                "classifications": [
                     {
-                        "questionId": "Scope_1",
-                        "question": "Is your system an AI system within the meaning of the AI Act?",
-                        "questionType": "PREDEFINED",
-                        "answer": [
-                            {
-                                "value": "NOT_ENOUGH_INFORMATION",
-                                "answerStrength": None,
-                                "reason": "No sufficient evidence is available in stub mode to determine whether the system qualifies as an AI system under the AI Act.",
-                            }
-                        ],
-                        "explanation": "Stub mode: no real evidence was evaluated. Human verification required.",
-                        "references": [],
+                        "labelId": label_id,
+                        "result": False,
+                        "confidence": 60.00,
+                        "explanation": (
+                            "Stub mode: no evidence evaluated. "
+                            "Human verification required."
+                        ),
                     }
                 ]
             }
         )
     )
-
-
-def _assessment_prefill(messages: list[dict]) -> dict:
-    """Deterministic assessment prefill: propose an answer + confidence per question.
-
-    Parses the question keys out of the catalogue block in the system prompt
-    ("<key> — <label>" lines) and emits a stable answer per key so stub/CI runs
-    exercise the confidence bands and the attention count. A constrained question
-    (one whose catalogue entry carries an "Answer with EXACTLY one of: ..." line)
-    is answered with its FIRST allowed option verbatim, so the frontend's
-    exact-match radios select it. A deterministic subset of free-text keys is left
-    low-confidence/empty to represent "not enough information".
-    """
-    system = " ".join(
-        m["content"]
-        for m in messages
-        if m["role"] == "system" and isinstance(m["content"], str)
-    )
-    # Catalogue lines look like: "Scope_1 — Is your system an AI system...".
-    keys = re.findall(r"^([A-Za-z0-9_]+) — ", system, flags=re.MULTILINE)
-    # Constrained keys carry a continuation line "Answer with EXACTLY one of: a | b | ...".
-    # Map each such key → its first allowed option (verbatim) so the UI selects it.
-    opts_by_key: dict[str, str] = {}
-    for k, opts in re.findall(
-        r"^([A-Za-z0-9_]+) — .*\n\s*Answer with EXACTLY one of: (.+)$",
-        system,
-        flags=re.MULTILINE,
-    ):
-        opts_by_key[k] = opts.split(" | ")[0].strip()
-    # Free-text keys left empty/low → keeps a non-zero attention count in stub runs.
-    low_keys = {"planned_modifications"}
-    med_keys = {"technologies", "automation_and_oversight"}
-    answers = []
-    for k in keys:
-        if k in opts_by_key:
-            # Constrained (select/boolean) → a valid, UI-selectable option string.
-            answers.append(
-                {"question_key": k, "answer": opts_by_key[k], "confidence": "high"}
-            )
-        elif k in low_keys:
-            answers.append({"question_key": k, "answer": "", "confidence": "low"})
-        elif k in med_keys:
-            answers.append(
-                {
-                    "question_key": k,
-                    "answer": f"Proposed answer for {k} (see documents).",
-                    "confidence": "medium",
-                }
-            )
-        else:
-            answers.append(
-                {
-                    "question_key": k,
-                    "answer": f"Proposed answer for {k} from the uploaded documents.",
-                    "confidence": "high",
-                }
-            )
-    return _result(json.dumps({"answers": answers}))
 
 
 def chat(messages: list[dict], *, task: str = "chat") -> dict:
@@ -393,8 +394,6 @@ def chat(messages: list[dict], *, task: str = "chat") -> dict:
         return _infer_flags(messages)
     if task == "classify_questionnaire":
         return _classify_questionnaire(messages)
-    if task == "assessment_prefill":
-        return _assessment_prefill(messages)
     if task == "questionnaire_turn_business":
         return _questionnaire_business_turn(messages)
     if task == "questionnaire_turn_technical":
@@ -403,5 +402,7 @@ def chat(messages: list[dict], *, task: str = "chat") -> dict:
         return _questionnaire_doc_extract(messages)
     if task == "questionnaire_answer" or task.startswith("questionnaire_answer_batch"):
         return _questionnaire_answer(messages)
+    if task.startswith("risk_role_classification_"):
+        return _risk_role_classification(messages)
     # Repair or unknown task: return a harmless empty object.
     return _result("{}")

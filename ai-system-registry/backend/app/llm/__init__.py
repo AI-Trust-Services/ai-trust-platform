@@ -29,7 +29,6 @@ from app.llm.prompts import (
     build_questionnaire_turn_messages,
     build_questionnaire_extract_messages,
     build_classify_questionnaire_messages,
-    build_assessment_prefill_messages,
 )
 
 __all__ = [
@@ -48,7 +47,6 @@ __all__ = [
     "build_questionnaire_turn_messages",
     "build_questionnaire_extract_messages",
     "build_classify_questionnaire_messages",
-    "build_assessment_prefill_messages",
     "REQUIRED_FIELD_KEYS",
     "TARGET_FIELDS",
     "ENGINEER_REQUIRED_FIELD_KEYS",

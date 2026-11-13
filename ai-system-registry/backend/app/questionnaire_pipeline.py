@@ -1,8 +1,13 @@
-"""AI-powered questionnaire answer pipeline.
+"""Pipeline 1 — AI-powered questionnaire answer pipeline.
 
 Reads AI system registration data and optional RAG documents, calls the LLM
 using the configured system prompt and questionnaire, and persists the result
 as a versioned JSON file in MinIO.
+
+This is the **only** implementation of the questionnaire run. It is called by
+``POST /questionnaire-llm-run`` (no callback) and by the AI-assessment prefill
+pipeline (``app/assessment_prefill_pipeline.py``, with a per-batch callback that
+saves answers as they arrive).
 
 Storage key layout:
     questionnaire-results/{system_id}/{questionnaire_id}/{iso_timestamp}.json
@@ -15,10 +20,10 @@ system data update).
 from __future__ import annotations
 
 import asyncio
-import io
 import json
 import os
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any
 
 import httpx
@@ -28,8 +33,9 @@ from ai_trust_persistence.models.ai_system import AISystem
 from sqlalchemy import select
 
 from app.llm.client import chat
-from app.llm.parsing import LLMParseError, parse_json_response
+from app.llm.parsing import LLMParseError, parse_with_retry
 from app.llm.templates import load_questionnaire, load_template
+from app.llm.validators import validate_questionnaire_batch
 from app import minio_client
 
 logger = get_logger(__name__)
@@ -38,33 +44,14 @@ _INDEXING_URL = os.environ.get(
     "INDEXING_BACKEND_URL", "http://document-indexing-backend:8011"
 ).rstrip("/")
 
-_QUESTIONNAIRE_BUCKET = "registration-docs"
+# Defaults shared by every caller (the endpoint and the assessment prefill), so an
+# empty-body request runs exactly the parameters the assessment runs.
+DEFAULT_QUESTIONNAIRE_ID = "ai-questionnaire"
+DEFAULT_QUESTIONNAIRE_PROMPT_ID = "questionnaire_answer"
+
 _RAG_QUERY = "AI system description purpose capabilities deployment risks"
 _RAG_K = 10
 _QUESTIONNAIRE_MAX_TOKENS = int(os.environ.get("QUESTIONNAIRE_MAX_TOKENS", "24000"))
-
-
-def _validate_llm_output(raw: dict) -> dict:
-    """Validate the minimum structural contract: non-empty results list with questionIds.
-
-    Field-level strictness is intentionally relaxed — real LLMs occasionally
-    emit string fragments inside array fields, and we prefer to persist a
-    slightly malformed result over returning a 502 to the user.
-    """
-    results = raw.get("results")
-    if not isinstance(results, list) or len(results) == 0:
-        raise LLMParseError("LLM output missing or empty 'results' list")
-    missing_ids = [
-        i
-        for i, r in enumerate(results)
-        if not isinstance(r, dict) or not r.get("questionId")
-    ]
-    if missing_ids:
-        raise LLMParseError(
-            f"LLM output has {len(missing_ids)} result(s) missing 'questionId' "
-            f"at indices {missing_ids[:5]}"
-        )
-    return raw
 
 
 def _system_evidence(row: AISystem) -> str:
@@ -248,8 +235,10 @@ async def _run_batch(
 ) -> list[dict]:
     """Run one LLM call for a batch (category slice) of the questionnaire.
 
-    Returns the ``results`` list from the LLM response.
-    Raises ``LLMParseError`` on truncation or unparseable output.
+    Returns the ``results`` list from the LLM response, validated against this
+    batch's question config (ids, completeness, allowed values, strength rules).
+    Raises ``LLMParseError`` on truncation or unparseable/invalid output after
+    up to 3 total LLM attempts.
     """
     task = f"questionnaire_answer_batch_{batch_idx}"
     user_message = _build_user_message(batch, registration_evidence, rag_chunks)
@@ -273,161 +262,53 @@ async def _run_batch(
             f"output={llm_response.get('output_tokens', '?')} tokens."
         )
 
-    parsed = await parse_json_response(
+    parsed = await parse_with_retry(
         llm_response["text"],
         task=task,
+        validator=partial(validate_questionnaire_batch, batch=batch),
+        chat_fn=chat,
+        messages=messages,
+        max_attempts=3,
         max_tokens=_QUESTIONNAIRE_MAX_TOKENS,
     )
-    _validate_llm_output(parsed)
     return parsed.get("results", [])
 
 
-async def _upload_result(
-    system_id: str,
-    questionnaire_id: str,
-    result: dict,
-    timestamp: datetime,
-) -> str:
-    """Upload the result JSON to MinIO. Returns the object key."""
+def _result_key(system_id: str, questionnaire_id: str, timestamp: datetime) -> str:
     iso = timestamp.strftime("%Y-%m-%dT%H-%M-%S-%fZ")
-    key = f"questionnaire-results/{system_id}/{questionnaire_id}/{iso}.json"
-    data = json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")
-
-    await minio_client.ensure_bucket()
-
-    from app.minio_client import _get_client  # reuse existing singleton
-
-    def _put() -> None:
-        _get_client().put_object(
-            _QUESTIONNAIRE_BUCKET,
-            key,
-            io.BytesIO(data),
-            length=len(data),
-            content_type="application/json",
-        )
-
-    await asyncio.to_thread(_put)
-    logger.info(
-        "questionnaire_pipeline.result_stored",
-        extra={"system_id": system_id, "key": key, "size": len(data)},
-    )
-    return key
+    return f"questionnaire-results/{system_id}/{questionnaire_id}/{iso}.json"
 
 
-async def run_pipeline_streaming(
+async def run_questionnaire_pipeline(
     system_id: str,
     questionnaire_id: str,
     prompt_id: str,
     username: str,
-    batch_callback: Any,  # async callable(batch_results: list[dict]) -> None
-) -> dict[str, Any]:
-    """Like ``run_pipeline`` but calls ``batch_callback(results)`` as each batch
-    completes.
-
-    Batches (independent dependency groups) run **in parallel**, but invocations
-    of ``batch_callback`` are **serialised** by an internal lock, so a callback
-    may safely do a read-modify-write of shared state (e.g. the
-    ``questionnaire_answers`` JSONB column) without losing a concurrent batch's
-    writes. This lets callers persist partial results after each batch so they
-    are visible via polling before the full pipeline finishes.
-
-    ``batch_callback`` is ``async``.  If a batch or callback raises, the
-    exception propagates out of the ``gather``.
-
-    Returns ``{run_key, presigned_url, result}`` exactly like ``run_pipeline``.
-    """
-    # 1. Load system row.
-    async with SessionLocal() as session:
-        row = (
-            await session.execute(select(AISystem).where(AISystem.id == system_id))
-        ).scalar_one_or_none()
-    if row is None:
-        raise KeyError(f"AI system '{system_id}' not found")
-
-    # 2. Load questionnaire config and system prompt.
-    questionnaire = load_questionnaire(questionnaire_id)
-    system_prompt = load_template(prompt_id)
-
-    # 3. Evidence.
-    registration_evidence = _system_evidence(row)
-    rag_chunks = await _retrieve_rag_documents(system_id, username)
-    if rag_chunks:
-        logger.info(
-            "questionnaire_pipeline.rag_retrieved",
-            extra={"system_id": system_id, "chunks": len(rag_chunks)},
-        )
-    else:
-        logger.info(
-            "questionnaire_pipeline.rag_skipped",
-            extra={"system_id": system_id},
-        )
-
-    # 4. Split and run PARALLEL — all independent dependency groups fire at once.
-    # Each batch calls batch_callback as soon as it finishes so partial results
-    # land in the DB and are visible via polling before the slowest batch completes.
-    batches = _split_by_dependency_groups(questionnaire)
-    logger.info(
-        "questionnaire_pipeline.batched_parallel",
-        extra={"system_id": system_id, "batches": len(batches)},
-    )
-
-    callback_lock = asyncio.Lock()
-
-    async def _run_and_callback(idx: int, batch: dict) -> list[dict]:
-        results = await _run_batch(
-            batch, system_prompt, registration_evidence, rag_chunks, idx
-        )
-        async with callback_lock:
-            await batch_callback(results)
-        return results
-
-    batch_results_list = await asyncio.gather(
-        *[_run_and_callback(idx, batch) for idx, batch in enumerate(batches)]
-    )
-    merged: list[dict] = []
-    for br in batch_results_list:
-        merged.extend(br)
-
-    result = {"results": merged}
-
-    # 5. Persist to MinIO.
-    timestamp = datetime.now(timezone.utc)
-    run_key = await _upload_result(system_id, questionnaire_id, result, timestamp)
-    presigned_url = await minio_client.get_presigned_url(run_key, expires_hours=24)
-
-    logger.info(
-        "questionnaire_pipeline.completed",
-        extra={
-            "system_id": system_id,
-            "questionnaire_id": questionnaire_id,
-            "prompt_id": prompt_id,
-            "questions_answered": len(result.get("results", [])),
-            "run_key": run_key,
-        },
-    )
-
-    return {
-        "run_key": run_key,
-        "presigned_url": presigned_url,
-        "result": result,
-    }
-
-
-async def run_pipeline(
-    system_id: str,
-    questionnaire_id: str,
-    prompt_id: str,
-    username: str,
+    batch_callback: Any = None,  # async callable(batch_results: list[dict]) -> None
 ) -> dict[str, Any]:
     """Run the questionnaire answer pipeline for a given AI system.
 
-    Returns ``{run_key, presigned_url, result}`` where ``result`` is the full
-    parsed LLM output ``{"results": [...]}``.
+    Steps: load the system + questionnaire + prompt, build the evidence
+    (allowlisted registration data + best-effort RAG chunks), split the
+    questionnaire into independent dependency groups, run one LLM call per group
+    **in parallel** (each validated against its group's question config, with
+    retries), merge, and store the result in MinIO.
+
+    ``batch_callback`` (optional) is awaited with each batch's validated
+    ``results`` as soon as that batch completes, so callers can persist partial
+    answers while slower batches are still running. Invocations are **serialised**
+    by an internal lock, so a callback may safely read-modify-write shared state
+    (e.g. the ``questionnaire_answers`` JSONB column). A batch whose LLM call,
+    validation **or callback** raises is logged (``questionnaire_pipeline.
+    batch_failed``) and skipped — it does not abort the other batches.
+
+    Returns ``{run_key, presigned_url, result}`` where ``result`` is
+    ``{"results": [...]}`` merged in category order.
 
     Raises:
         KeyError: system not found (caller maps to 404).
         PromptTemplateError: questionnaire or prompt file not found (caller maps to 404).
-        LLMParseError: LLM returned unparseable JSON after repair retry (caller maps to 502).
+        LLMParseError: **no** batch produced a valid result (caller maps to 502).
     """
     # 1. Load system row.
     async with SessionLocal() as session:
@@ -455,29 +336,59 @@ async def run_pipeline(
             extra={"system_id": system_id},
         )
 
-    # 4. Split questionnaire into dependency-independent groups and run in parallel.
+    # 4. Split into dependency-independent groups and run them in parallel.
     batches = _split_by_dependency_groups(questionnaire)
     logger.info(
         "questionnaire_pipeline.batched",
         extra={"system_id": system_id, "batches": len(batches)},
     )
 
-    batch_results = await asyncio.gather(
-        *[
-            _run_batch(batch, system_prompt, registration_evidence, rag_chunks, idx)
-            for idx, batch in enumerate(batches)
-        ]
+    callback_lock = asyncio.Lock()
+
+    async def _run_and_callback(idx: int, batch: dict) -> list[dict]:
+        results = await _run_batch(
+            batch, system_prompt, registration_evidence, rag_chunks, idx
+        )
+        if batch_callback is not None:
+            async with callback_lock:
+                await batch_callback(results)
+        return results
+
+    outcomes = await asyncio.gather(
+        *[_run_and_callback(idx, batch) for idx, batch in enumerate(batches)],
+        return_exceptions=True,
     )
 
-    # Merge in category order — each batch result is a list[dict].
+    # Merge in category order — each outcome is a list[dict]. Failed batches are
+    # logged and skipped; their questions stay unanswered.
     merged: list[dict] = []
-    for batch_list in batch_results:
-        merged.extend(batch_list)
+    failures: list[Exception] = []
+    for idx, outcome in enumerate(outcomes):
+        if isinstance(outcome, BaseException) and not isinstance(outcome, Exception):
+            raise outcome
+        if isinstance(outcome, Exception):
+            failures.append(outcome)
+            logger.warning(
+                "questionnaire_pipeline.batch_failed",
+                extra={"system_id": system_id, "batch_idx": idx, "error": str(outcome)},
+            )
+        else:
+            merged.extend(outcome)
+
+    if batches and len(failures) == len(batches):
+        # Nothing usable came back — surface it instead of reporting an empty run
+        # as a success (the caller would otherwise show "0 answers" as done).
+        raise LLMParseError(
+            f"no questionnaire batch produced a valid result "
+            f"({len(failures)}/{len(batches)} failed); first error: {failures[0]}"
+        ) from failures[0]
+
     result = {"results": merged}
 
     # 5. Persist to MinIO.
     timestamp = datetime.now(timezone.utc)
-    run_key = await _upload_result(system_id, questionnaire_id, result, timestamp)
+    run_key = _result_key(system_id, questionnaire_id, timestamp)
+    await minio_client.put_json(run_key, result)
     presigned_url = await minio_client.get_presigned_url(run_key, expires_hours=24)
 
     logger.info(
@@ -486,7 +397,8 @@ async def run_pipeline(
             "system_id": system_id,
             "questionnaire_id": questionnaire_id,
             "prompt_id": prompt_id,
-            "questions_answered": len(result.get("results", [])),
+            "questions_answered": len(result["results"]),
+            "batches_failed": len(failures),
             "run_key": run_key,
         },
     )

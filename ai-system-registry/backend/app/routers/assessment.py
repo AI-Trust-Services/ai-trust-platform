@@ -43,10 +43,10 @@ from app.assessment_catalogue import (
     ASSESSMENT_QUESTION_KEYS,
     QUESTION_TYPES,
 )
+from app.assessment_prefill_pipeline import run_assessment_prefill_pipeline
 from app.classifier import classify_ai_questionnaire
 from app.ids import new_id
 from app.llm import LLMParseError
-from app.questionnaire_pipeline import run_pipeline_streaming
 from app.questionnaire_required import QUESTION_LABEL
 from app.schemas.assessment import (
     AnswerRequest,
@@ -75,12 +75,6 @@ _AI_UNAVAILABLE = "AI classification is unavailable. Please try again shortly."
 # creates is therefore always under this framework (seeded by persistence
 # migration 0003). Named here rather than inlined as a magic string.
 _EU_AI_ACT_FRAMEWORK_ID = "FRM-EU-AI-ACT"
-
-# The questionnaire + answer prompt `/open` runs through the questionnaire-answer
-# pipeline (context/prompts/<id>.json / <id>.md) — same defaults as
-# POST /systems/{id}/questionnaire-run.
-_QUESTIONNAIRE_ID = "ai-questionnaire"
-_QUESTIONNAIRE_PROMPT_ID = "questionnaire_answer"
 
 # answerStrength (pipeline) → confidence band; the lowest wins for MULTISELECT.
 _STRENGTH_RANK = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
@@ -370,13 +364,24 @@ async def _run_prefill_background(
     assessment_id: str,
     username: str,
 ) -> None:
-    """Background task: run the questionnaire-answer pipeline (batches run in
-    parallel; their callbacks are serialised), writing each batch's answers into question_states as they arrive, then
-    classify and clear ``assessment.llm_status``.
+    """Background task started by ``/open``: run the AI-assessment prefill pipeline
+    (questionnaire run → classification run) with this assessment's persistence hooks.
 
-    Each batch is one LLM call covering a connected dependency group. After
-    each call we flush its answers to the DB so the frontend can poll
-    GET /state and see them before all batches are done.
+    The pipelines themselves (``app/questionnaire_pipeline.py``,
+    ``app/classification_pipeline.py``) are the same functions ``POST
+    /questionnaire-llm-run`` and ``POST /classification-llm-run`` trigger; only
+    these hooks are specific to the assessment:
+
+    * ``_on_batch`` — after each questionnaire batch, write its answers into the
+      existing ``question_states`` so the frontend sees them while polling
+      ``GET /state``.
+    * ``_finalize_tier`` — once the questionnaire is done (concurrently with the
+      label classification), derive the tier, ``org_role`` and sources and clear
+      ``assessment.llm_status`` in one transaction.
+
+    A failure of the questionnaire run or of ``_finalize_tier`` sets
+    ``llm_status="failed"`` (the frontend's retry banner); a failure of the label
+    classification is only logged by the pipeline (its output is not shown yet).
     """
 
     async def _on_batch(batch_results: list) -> None:
@@ -427,30 +432,22 @@ async def _run_prefill_background(
                 },
             )
 
-    try:
-        output = await run_pipeline_streaming(
-            system_id=system_id,
-            questionnaire_id=_QUESTIONNAIRE_ID,
-            prompt_id=_QUESTIONNAIRE_PROMPT_ID,
-            username=username,
-            batch_callback=_on_batch,
-        )
-        proposals = _proposals_from_results(
-            (output.get("result") or {}).get("results") or []
-        )
+    async def _finalize_tier(questionnaire_output: dict) -> None:
+        """Tier step: classify from the persisted answers, then clear llm_status.
 
-        # Classify and clear llm_status in one transaction.
+        Raises on a classifier failure so the surrounding handler marks the
+        prefill failed (nothing is written, the next ``/open`` retries).
+        """
+        proposals = _proposals_from_results(
+            (questionnaire_output.get("result") or {}).get("results") or []
+        )
         async with SessionLocal() as session:
             row = await _get_system(session, system_id)
             try:
                 classification, rationale = await classify_ai_questionnaire(row)
             except Exception as exc:  # noqa: BLE001
                 logger.error("assessment.classify_failed", extra={"error": str(exc)})
-                assessment = await _current_assessment(session, system_id)
-                if assessment:
-                    assessment.llm_status = "failed"
-                await session.commit()
-                return
+                raise
             row.tier = classification.tier
             row.basis = classification.basis
             row.annex_iii_area = classification.annex_iii_area
@@ -468,6 +465,14 @@ async def _run_prefill_background(
                 "assessment.prefill_completed",
                 extra={"system_id": system_id, "tier": row.tier},
             )
+
+    try:
+        await run_assessment_prefill_pipeline(
+            system_id,
+            username,
+            batch_callback=_on_batch,
+            on_questionnaire_done=_finalize_tier,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "assessment.prefill_background_failed",
