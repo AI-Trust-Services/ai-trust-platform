@@ -97,13 +97,16 @@ make test-int                       # kind cluster, namespace ai-trust
 - Details → [tests/integration/README.md](tests/integration/README.md).
 
 ### On-demand label workflows (deployed-namespace, OIDC)
-Three workflows run against a PR author's **already-deployed** namespace on `ai-trust-test` (add
-`garden-deploy` first), triggered by a PR label. All authenticate through oauth2-proxy with a real
-Keycloak OIDC session — no kubeconfig or port-forward (contrast `tests/integration/`). None
-is a PR gate.
-- **`e2e-test`** → `.github/workflows/e2e-system-tests.yml` runs `tests/e2e_system/` (black-box OIDC
+Two workflows run automatically after a successful deployment, exactly like `integration-tests.yml`
+(`workflow_run` after `PR Deployment Test` / `Deployment Workflow`, plus `workflow_dispatch`; result
+reported as a commit status — `e2e-system-tests` / `playwright-tests` — seeded pending by the deploy
+workflows). Both authenticate through oauth2-proxy with a real Keycloak OIDC session — no kubeconfig
+or port-forward (contrast `tests/integration/`). Neither is a PR gate. Playwright can also be
+(re-)run on a PR via the `playwright-test` label (runs the branch's copy of the workflow). The third
+(`langfuse-test`) is label-triggered against the PR author's deployed namespace on `ai-trust-test`.
+- **`e2e-system-tests`** → `.github/workflows/e2e-system-tests.yml` runs `tests/e2e_system/` (black-box OIDC
   E2E: auth, registration, self-assessment, classification) against the deployed namespace.
-- **`playwright-test`** → `.github/workflows/playwright-frontend-tests.yml` runs `tests/playwright/`
+- **`playwright-tests`** → `.github/workflows/playwright-frontend-tests.yml` runs `tests/playwright/`
   (`@playwright/test`, TypeScript): a real browser logs in via OIDC, smoke-tests that each MVP MFE
   mounts + its backend is healthy, and registers an AI system end-to-end. A `setup` project
   provisions personas and captures one `storageState` each; a `teardown` project cleans up. The HTML
