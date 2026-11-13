@@ -1,72 +1,216 @@
 name: Playwright Frontend Tests
 
-# Triggered by adding the "playwright-test" label to a PR.
-# Runs tests/playwright/ (browser E2E) against the PR author's already-deployed namespace on
-# ai-trust-test.
+# Three ways in:
+#   1. workflow_run — automatic, after a successful deployment (the main path)
+#        PR   — "PR Deployment Test" (garden-deploy label) → ai-trust-test / <pr-author>
+#        main — "Deployment Workflow" (push to main)       → ai-trust-main  / ai-trust
+#   2. pull_request [labeled] — optional: add the "playwright-test" label to a PR to (re-)run
+#      against the PR author's already-deployed ai-trust-test namespace (add "garden-deploy"
+#      first). Unlike 1 and 3 this runs the PR BRANCH's copy of this file, so it is also the
+#      way to test changes to this workflow before merging.
+#   3. workflow_dispatch — optional manual run / re-run against a live namespace,
+#      no redeploy. Both inputs are defaulted, so it is one click.
 #
-# Prerequisites:
-#   1. Namespace must already be deployed (add "garden-deploy" label first).
-#   2. Namespace must be initialised once via:
-#        bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-username>
+# Runs in parallel with Integration Tests and E2E System Tests — all three trigger directly
+# on a successful deployment.
 #
-# Like tests/e2e_system/, this suite needs no kubeconfig or port-forward — it drives a real browser
-# through oauth2-proxy with a real Keycloak OIDC login.
+# How the PR reporting works (the `playwright-tests` commit status):
+#   Results are published to ONE commit status context, `playwright-tests`, which
+#   is keyed by name and overwritten in place, so the PR shows a single entry that
+#   transitions rather than a pile of separate results:
 #
-# Usage: add the "playwright-test" label to an open PR (after "garden-deploy" has deployed it).
-
+#     garden-deploy added  → pr-deployment-test.yml seeds it PENDING
+#     deployment finishes  → this workflow overwrites it with success/failure
+#
+#   A commit status is used rather than a check run because workflow_run runs are
+#   attached to the DEFAULT BRANCH, not the PR head, so their native checks never
+#   appear on the PR at all. Same pattern as the `deploy-test` status in
+#   pr-deployment-test.yml.
+#
+# Trade-off of the optional label trigger: every job in a pull_request-triggered
+# workflow is pinned to the PR as its own check run, and `pull_request: [labeled]`
+# fires for EVERY label (GitHub has no label-name filter in `on:`) — so the PR shows a
+# "Skipped" Playwright check whenever some other label is added. It is harmless; the
+# `playwright-tests` commit status (seeded by a STEP in pr-deployment-test.yml, since
+# steps create no check runs) remains the authoritative result.
+#
+# Like tests/e2e_system/, this suite needs no kubeconfig or port-forward — it drives a real
+# browser through oauth2-proxy with a real Keycloak OIDC login.
+#
+# Authorization: the workflow_run path only runs after a deployment that
+# pr-deployment-test.yml already gated on repo write access. The label path has no such
+# deployment in front of it, so it re-checks write access itself (the job injects the
+# platform-admin password into PR-head test code).
+#
+# EDITING THIS FILE: workflow_run does not just attach its runs to the default
+# branch, it also RUNS THE DEFAULT BRANCH'S COPY of this file. Changes here
+# therefore do nothing until they are merged to main — a branch cannot test them,
+# and a run triggered from a PR will silently execute main's version instead.
+# Validate the shell logic locally (it is plain bash; the runner is bash 5) and
+# merge before expecting any behaviour change. The same applies to workflow_dispatch:
+# the "Run workflow" button only appears once the trigger exists on main.
 on:
+  workflow_run:
+    workflows:
+      - "PR Deployment Test"
+      - "Deployment Workflow"
+    types:
+      - completed
+  # Optional: add the "playwright-test" label to re-test the PR author's deployed namespace.
   pull_request:
     types: [labeled]
+  # Optional on-demand run: re-test an already-deployed namespace without
+  # redeploying. Both inputs have defaults, so "Run workflow" works with no edits.
+  workflow_dispatch:
+    inputs:
+      gardener_cluster:
+        description: "Cluster to test against"
+        required: false
+        default: ai-trust-test
+        type: choice
+        options:
+          - ai-trust-test
+          - ai-trust-main
+      namespace:
+        description: "Namespace to test (blank = ai-trust on ai-trust-main, else your username)"
+        required: false
+        type: string
 
 permissions:
   contents: read
-  pull-requests: write
+  statuses: write
+  actions: read  # required to download artifacts from a different run (deployment-context)
 
 # Do NOT cancel in progress: a run provisions Keycloak users + registry systems in a shared
 # namespace and removes them in a Playwright teardown project. Cancelling mid-run would kill the
 # process before teardown, and the replacement run (new random suffix) cannot find the orphans.
 concurrency:
-  group: playwright-${{ github.event.pull_request.user.login }}
+  group: playwright-${{ github.event.pull_request.user.login || github.event.workflow_run.pull_requests[0].user.login || github.event.workflow_run.actor.login || github.actor }}
   cancel-in-progress: false
 
 jobs:
   playwright:
     name: Playwright Frontend Tests
     runs-on: ubuntu-latest
-    if: github.event.label.name == 'playwright-test'
-    env:
-      PR_NUMBER: ${{ github.event.pull_request.number }}
-      PR_SHA: ${{ github.event.pull_request.head.sha }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    # workflow_run fires on completion regardless of outcome — only test a
+    # deployment that actually succeeded.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.label.name == 'playwright-test') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
-      # The job injects APP_ADMIN_PASSWORD (platform-admin) into PR-head test code, so gate it on
-      # repo write access — same check as the deployment workflow (pr-deployment-test.yml). Adding
-      # the label already requires triage/write, but this also blocks a label added before a
-      # malicious push lands, and fails loudly rather than relying on the label alone.
-      - name: Check authorization (org members only)
+      - name: Check authorization (label trigger only)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" \
-            --jq '.permission' 2>/dev/null || echo "none")
+          PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission"             --jq '.permission' 2>/dev/null || echo "none")
           if [[ "$PERMISSION" != "admin" && "$PERMISSION" != "write" && "$PERMISSION" != "maintain" ]]; then
             echo "::error::${{ github.actor }} lacks write access — refusing to run privileged tests on PR-head code."
             exit 1
           fi
 
-      - name: Check out PR head
+      - name: Download deployment context (Deployment Workflow only)
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deployment Workflow'
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-context
+          path: /tmp/deployment-context
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive cluster and namespace
+        id: vars
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            cluster="${{ inputs.gardener_cluster }}"
+            cluster="${cluster:-ai-trust-test}"
+            namespace="${{ inputs.namespace }}"
+            if [[ -z "${namespace}" ]]; then
+              if [[ "${cluster}" == "ai-trust-main" ]]; then
+                namespace="ai-trust"
+              else
+                namespace="${GITHUB_ACTOR,,}"
+              fi
+            fi
+            head_sha="${GITHUB_SHA}"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # Label trigger — the PR author's namespace on ai-trust-test, PR head commit.
+            cluster="ai-trust-test"
+            namespace="${{ github.event.pull_request.user.login }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+          else
+            WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+            if [[ "${WORKFLOW_NAME}" == "Deployment Workflow" ]]; then
+              # Read cluster/namespace/head_sha from the artifact uploaded by build-push-deploy.yml.
+              # head_sha identifies the deployed commit — use it for checkout and commit status,
+              # not workflow_run.head_sha which points to the workflow file's commit.
+              cluster=$(cat /tmp/deployment-context/cluster 2>/dev/null | tr -d '[:space:]' || echo "ai-trust-main")
+              namespace=$(cat /tmp/deployment-context/namespace 2>/dev/null | tr -d '[:space:]' || echo "ai-trust")
+              head_sha=$(cat /tmp/deployment-context/head_sha 2>/dev/null | tr -d '[:space:]' || echo "${{ github.event.workflow_run.head_sha }}")
+            else
+              # PR Deployment Test — namespace is the PR author's login.
+              # Use pull_requests[0].head.sha (the actual PR head commit) rather
+              # than workflow_run.head_sha (the merge commit the workflow ran on).
+              # pr-deployment-test.yml seeds the status on pull_request.head.sha,
+              # so we must publish to the same SHA or the seeded status stays pending.
+              PR_AUTHOR="${{ github.event.workflow_run.pull_requests[0].user.login }}"
+              ACTOR="${{ github.event.workflow_run.actor.login }}"
+              namespace="${PR_AUTHOR:-${ACTOR}}"
+              cluster="ai-trust-test"
+              head_sha="${{ github.event.workflow_run.pull_requests[0].head.sha }}"
+              # Fall back to workflow_run.head_sha only if there is no pull_request
+              # attached (e.g. a manual re-run of the deployment workflow).
+              head_sha="${head_sha:-${{ github.event.workflow_run.head_sha }}}"
+            fi
+          fi
+          namespace="${namespace,,}"
+
+          if [[ "${cluster}" == "ai-trust-main" ]]; then
+            app_url="https://ai-trust-main.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          else
+            app_url="https://${namespace}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
+          fi
+
+          echo "cluster=${cluster}"     >> "$GITHUB_OUTPUT"
+          echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${head_sha}"   >> "$GITHUB_OUTPUT"
+          echo "app_url=${app_url}"     >> "$GITHUB_OUTPUT"
+          echo "==> cluster=${cluster}, namespace=${namespace}, app_url=${app_url}, head_sha=${head_sha}"
+
+      - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ env.PR_SHA }}
+          ref: ${{ steps.vars.outputs.head_sha }}
 
-      - name: Compute APP_URL
-        id: vars
+      - name: Summary
         run: |
-          NAMESPACE="${{ github.event.pull_request.user.login }}"
-          NAMESPACE="${NAMESPACE,,}"
-          APP_URL="https://${NAMESPACE}.ai-trust-test.ai-trust.shoot.gardener.cc-one.showroom.apeirora.eu"
-          echo "namespace=${NAMESPACE}" >> "$GITHUB_OUTPUT"
-          echo "app_url=${APP_URL}"     >> "$GITHUB_OUTPUT"
-          echo "==> namespace=${NAMESPACE}, app_url=${APP_URL}"
+          echo "### Playwright test variables" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| cluster | ${{ steps.vars.outputs.cluster }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| namespace | ${{ steps.vars.outputs.namespace }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| app_url | ${{ steps.vars.outputs.app_url }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| head_sha | ${{ steps.vars.outputs.head_sha }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| triggered_by | ${{ github.event_name }} |" >> "$GITHUB_STEP_SUMMARY"
+
+      # Publishes a "playwright-tests" status onto the triggering commit so the
+      # result is visible on the PR (and on the main commit) instead of only in
+      # the Actions tab.
+      - name: Set pending commit status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.vars.outputs.head_sha }}
+        run: |
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${HEAD_SHA} \
+            -f state=pending \
+            -f context=playwright-tests \
+            -f description="Running against ${{ steps.vars.outputs.cluster }}/${{ steps.vars.outputs.namespace }}..." \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Set up Node 24
         uses: actions/setup-node@v4
@@ -100,16 +244,23 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-      - name: Post success comment
-        if: success()
+      - name: Report final commit status
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.vars.outputs.head_sha }}
+          JOB_STATUS: ${{ job.status }}
         run: |
-          gh pr comment "${PR_NUMBER}" \
-            --repo "${{ github.repository }}" \
-            --body "✅ Playwright frontend tests passed against namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\` (\`${PR_SHA::12}\`)."
+          case "${JOB_STATUS}" in
+            success)   state=success; desc="All Playwright frontend tests passed on the live deployment." ;;
+            cancelled) state=error;   desc="Playwright frontend tests cancelled." ;;
+            *)         state=failure; desc="Playwright frontend tests failed — see the run log and report artifact." ;;
+          esac
 
-      - name: Post failure comment
-        if: failure()
-        run: |
-          gh pr comment "${PR_NUMBER}" \
-            --repo "${{ github.repository }}" \
-            --body "❌ Playwright frontend tests failed against namespace \`${{ steps.vars.outputs.namespace }}\` — see [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) (report + screenshots in the run artifacts)."
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${HEAD_SHA} \
+            -f state="${state}" \
+            -f context=playwright-tests \
+            -f description="${desc}" \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

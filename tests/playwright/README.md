@@ -5,7 +5,7 @@ platform through the single entry point (oauth2-proxy on `APP_URL`). Authenticat
 Keycloak OIDC login** — the same auth model as [`tests/e2e_system/`](../e2e_system/), but through a
 real browser instead of `httpx`.
 
-Not a PR gate. Runs locally on demand, and in CI via the **`playwright-test`** PR label (see below).
+Not a PR gate. Runs locally on demand, and in CI automatically after each successful deployment (see below).
 
 ## What it covers (MVP baseline)
 
@@ -83,7 +83,11 @@ npx playwright show-report        # open the HTML report after a run
 ## CI
 
 [`.github/workflows/playwright-frontend-tests.yml`](../../.github/workflows/playwright-frontend-tests.yml)
-runs this suite against the PR author's **already-deployed** namespace on `ai-trust-test`, triggered
-by the **`playwright-test`** PR label. Prerequisites: deploy the namespace first (add `garden-deploy`)
-and initialise it once with `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`.
+runs this suite against the just-deployed namespace, triggered (like `integration-tests.yml` and
+`e2e-system-tests.yml`) by `workflow_run` after a successful `PR Deployment Test` (the PR author's
+namespace on `ai-trust-test`) or `Deployment Workflow` (push to main → `ai-trust-main`), or manually via
+**Run workflow** (`workflow_dispatch`), or by adding the **`playwright-test`** label to a PR whose
+namespace is already deployed (this runs the PR branch's copy of the workflow). The result is the `playwright-tests` commit status on the PR /
+main commit. For PRs, add the `garden-deploy` label and initialise the namespace once with
+`shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`.
 The HTML report and `test-results/` (traces, failure screenshots, videos) are uploaded as artifacts.
