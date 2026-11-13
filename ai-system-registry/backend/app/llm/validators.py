@@ -124,7 +124,12 @@ def validate_questionnaire_batch(raw: dict, batch: dict | None = None) -> dict:
             errors.append(f"{prefix}.question: must be a string")
 
         q_type = item.get("questionType")
-        if q_type not in _QUESTION_TYPES:
+        if not isinstance(q_type, str):
+            errors.append(
+                f"{prefix}.questionType: must be a string, got {type(q_type).__name__}"
+            )
+            q_type = None
+        elif q_type not in _QUESTION_TYPES:
             errors.append(
                 f"{prefix}.questionType: must be one of {sorted(_QUESTION_TYPES)}, got {q_type!r}"
             )
@@ -189,7 +194,9 @@ def _answer_item_errors(ans: object, path: str) -> list[str]:
         errors.append(f"{path}.value: must be a non-empty string")
 
     strength = ans.get("answerStrength")
-    if strength is not None and strength not in _ANSWER_STRENGTHS:
+    if strength is not None and (
+        not isinstance(strength, str) or strength not in _ANSWER_STRENGTHS
+    ):
         errors.append(
             f"{path}.answerStrength: must be one of {sorted(_ANSWER_STRENGTHS)} or null, got {strength!r}"
         )
@@ -276,7 +283,7 @@ def _reference_errors(ref: object, path: str) -> list[str]:
 
     errors: list[str] = []
     source_type = ref.get("sourceType")
-    if source_type not in _SOURCE_TYPES:
+    if not isinstance(source_type, str) or source_type not in _SOURCE_TYPES:
         errors.append(
             f"{path}.sourceType: must be one of {sorted(_SOURCE_TYPES)}, got {source_type!r}"
         )

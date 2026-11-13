@@ -89,6 +89,37 @@ def test_descriptive_type_accepted():
     validate_questionnaire_batch(raw)
 
 
+def test_non_string_question_type_raises():
+    raw = {"results": [{**_VALID_RESULT, "questionType": []}]}
+    with pytest.raises(LLMParseError, match="questionType"):
+        validate_questionnaire_batch(raw)
+
+
+def test_non_string_answer_strength_raises():
+    raw = {
+        "results": [
+            {**_VALID_RESULT, "answer": [{"value": "YES", "answerStrength": [], "reason": None}]}
+        ]
+    }
+    with pytest.raises(LLMParseError, match="answerStrength"):
+        validate_questionnaire_batch(raw)
+
+
+def test_non_string_source_type_raises():
+    raw = {
+        "results": [
+            {
+                **_VALID_RESULT,
+                "references": [
+                    {**_VALID_REFERENCE, "sourceType": []}
+                ],
+            }
+        ]
+    }
+    with pytest.raises(LLMParseError, match="sourceType"):
+        validate_questionnaire_batch(raw)
+
+
 # ---------------------------------------------------------------------------
 # validate_questionnaire_batch — missing / wrong fields
 # ---------------------------------------------------------------------------
